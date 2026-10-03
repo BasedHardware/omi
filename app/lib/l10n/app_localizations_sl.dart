@@ -12254,6 +12254,24 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Glas';
+
+  @override
+  String get assistantVoice => 'Glas pomočnika';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vaša izbira glasu je skupna mobilni in namizni aplikaciji.';
+
+  @override
+  String get readChatRepliesAloud => 'Naglas beri odgovore klepeta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Govori le, ko to dovoli \"Glasovni odgovor\".';
+
+  @override
+  String get voicePreviewSample => 'Živjo, sem Omi. To je moj glas.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration tega glasu';
   }

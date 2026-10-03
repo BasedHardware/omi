@@ -147,11 +147,10 @@ class OmiBleForegroundService : Service() {
          *  callback reports CONNECTED. Used to distinguish fail-to-connect from
          *  an established link dropping. Independent of hasEverConnected which
          *  tracks the full device lifetime. */
-        var currentAttemptEstablished: Boolean = false,
-        /** Timestamp of the last persisted unexpected disconnect event, used to
-         *  backfill time-to-reconnect on the next successful connect. */
-        var pendingReconnectMarkerTs: Long? = null
-    )
+        var currentAttemptEstablished: Boolean = false
+    ) {
+        internal val reconnectDiagnostics = BleReconnectDiagnostics()
+    }
 
     private val managedDevices = ConcurrentHashMap<String, ManagedDevice>()
     private val handler = Handler(Looper.getMainLooper())
@@ -177,8 +176,8 @@ class OmiBleForegroundService : Service() {
             Log.i(TAG, "onGattConnected: $addr")
             if (managed.hasEverConnected) {
                 incrementReconnectionCount(addr)
-                backfillTimeToReconnect(addr, managed)
             }
+            backfillTimeToReconnect(addr, managed)
             managed.retryCount = 0
             managed.hasEverConnected = true
             managed.currentAttemptEstablished = true
@@ -990,25 +989,16 @@ class OmiBleForegroundService : Service() {
             put("rssiTrend", trend)
         }
         history.put(event)
-
-        for (i in history.length() - 1 downTo 0) {
-            if ((history.optJSONObject(i)?.optLong("timestamp", 0L) ?: 0L) < now - DISCONNECT_RETENTION_MS) {
-                history.remove(i)
-            }
-        }
-
-        // Keep only the last MAX_DISCONNECT_HISTORY entries
-        while (history.length() > MAX_DISCONNECT_HISTORY) {
-            history.remove(0)
-        }
-
-        prefs.edit().putString(key, history.toString()).apply()
+        val recovery = managed?.reconnectDiagnostics ?: BleReconnectDiagnostics()
+        recovery.record(now, eventType, isManual)
+        val retained = recovery.retainedHistory(
+            (0 until history.length()).mapNotNull { history.optJSONObject(it) },
+            now, DISCONNECT_RETENTION_MS, MAX_DISCONNECT_HISTORY,
+        ) { it.optLong("timestamp", 0L) }
+        prefs.edit().putString(key, JSONArray(retained).toString()).apply()
         logBle(addr, eventType, event.optString("reason"))
 
-        // Remember the event timestamp so the next successful connect can backfill
-        // the time-to-reconnect latency on this record.
         if (!isManual && managed != null) {
-            managed.pendingReconnectMarkerTs = now
             if (eventType == "disconnect") pendingAudioRecovery[addr] = now
         }
     }
@@ -1039,24 +1029,17 @@ class OmiBleForegroundService : Service() {
     }
 
     private fun backfillTimeToReconnect(address: String, managed: ManagedDevice) {
-        val markerTs = managed.pendingReconnectMarkerTs ?: return
-        managed.pendingReconnectMarkerTs = null
-
         val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
         val key = historyKey(address)
         val historyJson = prefs.getString(key, "[]") ?: "[]"
-        val history = try { JSONArray(historyJson) } catch (_: Exception) { return }
-
-        val now = System.currentTimeMillis()
-        // Walk backwards; history is small (≤ MAX_DISCONNECT_HISTORY).
-        for (i in history.length() - 1 downTo 0) {
-            val obj = history.getJSONObject(i)
-            if (obj.optLong("timestamp", 0L) == markerTs) {
-                obj.put("timeToReconnectMs", (now - markerTs).coerceAtLeast(0L))
-                prefs.edit().putString(key, history.toString()).apply()
-                return
-            }
-        }
+        val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
+        val updated = managed.reconnectDiagnostics.backfilledHistory(
+            (0 until history.length()).mapNotNull { history.optJSONObject(it) },
+            System.currentTimeMillis(), managed.hasEverConnected,
+            timestampOf = { it.optLong("timestamp", 0L) },
+            withDuration = { event, duration -> event.put("timeToReconnectMs", duration) },
+        ) ?: return
+        prefs.edit().putString(key, JSONArray(updated).toString()).apply()
     }
 
     private fun incrementReconnectionCount(address: String) {

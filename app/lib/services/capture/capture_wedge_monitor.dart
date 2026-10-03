@@ -34,13 +34,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     Future<void> Function()? transferRetry,
     required String Function() appBuild,
     required String Function() platform,
-  })  : _now = now ?? DateTime.now,
-        _featureGate = featureGate,
-        _track = track,
-        _bleRetry = bleRetry,
-        _transferRetry = transferRetry,
-        _appBuild = appBuild,
-        _platform = platform;
+  }) : _now = now ?? DateTime.now,
+       _featureGate = featureGate,
+       _track = track,
+       _bleRetry = bleRetry,
+       _transferRetry = transferRetry,
+       _appBuild = appBuild,
+       _platform = platform;
 
   static CaptureWedgeMonitor? _instance;
   static CaptureWedgeMonitor get instance => _instance ??= composeCaptureWedgeMonitor();
@@ -103,7 +103,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       _nativeIngressDevices.remove(deviceId);
     }
     if (health != null) {
-      final event = '${health.generation}:${health.phase}:${health.reason}:'
+      final event =
+          '${health.generation}:${health.phase}:${health.reason}:'
           '${health.subscriptionConfirmed}:${health.recoveryOutcome}:${health.recoverySpent}:${health.reconnectSpent}';
       if (_ingressEvents[deviceId] != event) {
         _ingressEvents[deviceId] = event;
@@ -255,9 +256,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     );
   }
 
-  /// Surfaces a bounded-retention eviction once per cap-engagement event.
-  void observeStorageAtRisk({required DateTime engagedAt, required int evictedCount, required int retainedCount}) {
-    final fingerprint = '${engagedAt.microsecondsSinceEpoch}:$evictedCount:$retainedCount';
+  void observeStorageAtRisk({
+    required DateTime engagedAt,
+    required int blockedCount,
+    required int retainedCount,
+    required String reason,
+  }) {
+    final fingerprint = '${engagedAt.microsecondsSinceEpoch}:$blockedCount:$retainedCount:$reason';
     if (_lastRetentionRiskFingerprint == fingerprint) return;
     _lastRetentionRiskFingerprint = fingerprint;
     final state = _stateFor(localWalDeviceId);
@@ -269,9 +274,10 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         trigger: triggerStorageAtRisk,
         requireFeatureGate: false,
         extraProperties: {
-          'evicted_wal_count': evictedCount,
+          'blocked_wal_count': blockedCount,
           'retained_wal_count': retainedCount,
-          'retention_policy': 'oldest_first_count_cap',
+          'retention_policy': 'admission_count_cap',
+          'block_reason': reason,
         },
       ),
     );

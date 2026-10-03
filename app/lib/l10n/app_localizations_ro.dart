@@ -12279,6 +12279,24 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Voce';
+
+  @override
+  String get assistantVoice => 'Vocea asistentului';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vocea aleasă este partajată între mobil și desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Citește răspunsurile din chat cu voce tare';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Vorbește doar când \"Răspuns vocal\" permite.';
+
+  @override
+  String get voicePreviewSample => 'Bună, sunt Omi. Aceasta este vocea mea.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }

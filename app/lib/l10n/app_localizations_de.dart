@@ -5832,7 +5832,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Möchtest du die verarbeiteten Dateien von der SD-Karte behalten oder löschen?';
+    return '$count Aufnahme(n) werden verarbeitet. Die Dateien werden danach von der SD-Karte entfernt.';
   }
 
   @override
@@ -5846,12 +5846,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String processingProgress(int current, int total) {
-    return 'Verarbeitungsfortschritt';
+    return 'Verarbeitung $current/$total';
   }
 
   @override
   String conversationsCreated(int count) {
-    return 'Gespräche erstellt';
+    return '$count Gespräche erstellt';
   }
 
   @override
@@ -6530,7 +6530,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Sprecher markieren';
+    return 'Sprecher $speakerId markieren';
   }
 
   @override
@@ -6547,7 +6547,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Andere Segmente von diesem Sprecher markieren?';
+    return 'Andere Segmente von diesem Sprecher markieren ($selected/$total)';
   }
 
   @override
@@ -6648,7 +6648,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Auf dem Gerät gespeichert';
+    return 'Speicherort: $deviceName';
   }
 
   @override
@@ -6723,7 +6723,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String transferFailedMessage(String error) {
-    return 'Übertragung fehlgeschlagen. Bitte versuche es erneut.';
+    return 'Übertragung fehlgeschlagen: $error';
   }
 
   @override
@@ -6840,7 +6840,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Deine Daten sind geschützt mit deinen aktuellen Datenschutzeinstellungen';
+    return 'Deine Daten sind jetzt mit den neuen $level-Einstellungen geschützt.';
   }
 
   @override
@@ -12318,6 +12318,24 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Stimme';
+
+  @override
+  String get assistantVoice => 'Assistentenstimme';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Deine Stimmauswahl wird auf Mobilgerät und Desktop geteilt.';
+
+  @override
+  String get readChatRepliesAloud => 'Chat-Antworten laut vorlesen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Spricht nur, wenn die Sprachantwort es zulässt.';
+
+  @override
+  String get voicePreviewSample => 'Hallo, ich bin Omi. Das ist meine Stimme.';
 
   @override
   String speakerLabelTalkTime(String duration) {

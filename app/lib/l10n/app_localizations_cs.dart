@@ -12228,6 +12228,24 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => 'Hlas';
+
+  @override
+  String get assistantVoice => 'Hlas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Váš výběr hlasu je sdílen mezi mobilní a desktopovou aplikací.';
+
+  @override
+  String get readChatRepliesAloud => 'Číst odpovědi chatu nahlas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Mluví pouze tehdy, když to povolí \"Hlasová odpověď\".';
+
+  @override
+  String get voicePreviewSample => 'Ahoj, jsem Omi. Tohle je můj hlas.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration tohoto hlasu';
   }

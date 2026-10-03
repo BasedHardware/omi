@@ -143,9 +143,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     BleDiagnosticsLoader? bleDiagnosticsLoader,
     FindDeviceRunner? findDeviceRunner,
     CaptureWedgeMonitor? captureWedgeMonitor,
-  })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
-        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
-        _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
+  }) : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+       _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
+       _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _handlePairingLost;
   }
@@ -254,7 +254,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final now = DateTime.now();
     final capture = captureProvider;
     final liveCaptureDevice = capture?.recordingDevice;
-    final endedDeviceWasLiveCapture = endedDevice != null &&
+    final endedDeviceWasLiveCapture =
+        endedDevice != null &&
         endedDevice.id == liveCaptureDevice?.id &&
         capture!.recordingState == RecordingState.deviceRecord &&
         !capture.isPaused &&
@@ -405,13 +406,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   static Future<bool> _defaultFindDeviceRunner(BtDevice device) async {
-    final connection = await ServiceManager.instance().device.ensureConnection(device.id).timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        Logger.debug('DeviceProvider: Timed out finding the active device connection');
-        return null;
-      },
-    );
+    final connection = await ServiceManager.instance().device
+        .ensureConnection(device.id)
+        .timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            Logger.debug('DeviceProvider: Timed out finding the active device connection');
+            return null;
+          },
+        );
     return await connection?.playFindDevicePattern() ?? false;
   }
 
@@ -564,8 +567,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -973,15 +977,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (WalSyncs.isRingBufferFirmware(fwVersion)) {
         final ringStatus = await connection.getRingStatus();
         if (!_isCurrent(generation)) return;
-        if (ringStatus != null) {
-          _ringStatus = ringStatus;
+        final info = connection.lastRingInfo;
+        final coherent = _coherentRingStatus(ringStatus, info);
+        if (coherent != null) {
+          _ringStatus = coherent;
           notifyListeners();
         }
-        if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
+        if (coherent == null || coherent.unreadPackets <= 0) return;
         Logger.debug(
-          'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
+          'DeviceProvider: Ring auto-sync detected ${coherent.unreadPackets} unread packets (${coherent.usedBytes} bytes)',
         );
-        onOfflineDataDetected?.call(device, ringStatus.unreadPackets, ringStatus.usedBytes);
+        onOfflineDataDetected?.call(device, coherent.unreadPackets, coherent.usedBytes);
         return;
       }
 
@@ -1010,16 +1016,36 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       if (!_isCurrent(generation)) return;
       if (connection == null) return;
+      final info = await connection.getRingInfo();
+      if (!_isCurrent(generation)) return;
       final status = await connection.getRingStatus();
       if (!_isCurrent(generation)) return;
-      if (status != null) {
-        _ringStatus = status;
+      final coherent = _coherentRingStatus(status, info ?? connection.lastRingInfo);
+      if (coherent != null) {
+        _ringStatus = coherent;
         notifyListeners();
       }
     } catch (e) {
       if (!_isCurrent(generation)) return;
       Logger.debug('DeviceProvider: refreshRingStorageStatus failed: $e');
     }
+  }
+
+  static RingStatus? _coherentRingStatus(RingStatus? status, RingInfo? info) {
+    if (info == null) return status;
+    final pkt = info.packetSize > 0 ? info.packetSize : 444;
+    final infoUnread = info.unreadPackets;
+    final infoFree = (info.capacityPackets - infoUnread).clamp(0, info.capacityPackets) * pkt;
+    if (status == null) {
+      return RingStatus(usedBytes: infoUnread * pkt, unreadPackets: infoUnread, freeBytes: infoFree, rtcValid: 0);
+    }
+    final free = status.freeBytes > 0 ? status.freeBytes : infoFree;
+    return RingStatus(
+      usedBytes: status.usedBytes,
+      unreadPackets: status.unreadPackets,
+      freeBytes: free,
+      rtcValid: status.rtcValid,
+    );
   }
 
   Future<void> _ensureCompanionAssociation(BtDevice device, int generation) async {

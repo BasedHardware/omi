@@ -17,6 +17,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/voice_playback/chat_reply_read_aloud.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
@@ -34,8 +35,14 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
-typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(String text,
-    {String? appId, List<String>? filesId, ChatPageContext? context, String? chatSessionId});
+typedef ChatReplyStreamer =
+    Stream<ServerMessageChunk> Function(
+      String text, {
+      String? appId,
+      List<String>? filesId,
+      ChatPageContext? context,
+      String? chatSessionId,
+    });
 typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files, {String? language});
 typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
@@ -71,11 +78,13 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     VoiceReplyStreamer? voiceReplyStreamer,
     VoiceAudioFileSaver? voiceAudioFileSaver,
     Duration voiceReplyTimeout = const Duration(seconds: 60),
-  })  : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
-        _filesUploader = filesUploader ?? uploadFilesServer,
-        _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
-        _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
-        _voiceReplyTimeout = voiceReplyTimeout;
+    ChatReplyReadAloud? readAloud,
+  }) : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
+       _filesUploader = filesUploader ?? uploadFilesServer,
+       _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
+       _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
+       _voiceReplyTimeout = voiceReplyTimeout,
+       _readAloud = readAloud ?? ChatReplyReadAloud.instance;
 
   @override
   final ChatSessionsApi chatSessionsApi;
@@ -83,6 +92,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   bool get chatMutationInProgress => sendingMessage || showTypingIndicator || _voiceSendInFlight || isUploadingFiles;
   @override
   void resetChatDraft() {
+    _readAloud.revoke();
     _failedReplies.clear();
     clearSelectedFiles();
     clearUploadedFiles();
@@ -92,6 +102,9 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   final VoiceReplyStreamer _voiceReplyStreamer;
   final VoiceAudioFileSaver _voiceAudioFileSaver;
   final Duration _voiceReplyTimeout;
+  final ChatReplyReadAloud _readAloud;
+
+  ChatReplyReadAloud get readAloud => _readAloud;
 
   /// Test seam — replaces [sendMessageStreamServer] for typed messages.
   @visibleForTesting
@@ -429,6 +442,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   }
 
   void clearUserData() {
+    _readAloud.revoke();
     messages = [];
     chatApps = [];
     selectedFiles = [];
@@ -553,6 +567,9 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       return;
     }
     _voiceSendInFlight = true;
+    _readAloud.newQuery();
+    final readAloudGeneration = _readAloud.generation;
+    var readAloudDelivered = false;
     // Pendant voice addresses the server-current conversation. Its playback may continue while
     // Past chats is open, but its transient reply must never become a row in an archived thread.
     final voiceMessages = chatSessionId == null && !isFreshChat ? messages : <ServerMessage>[];
@@ -659,6 +676,9 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
               fullText: message.text,
               isFinal: true,
             );
+          } else if (!readAloudDelivered) {
+            readAloudDelivered = true;
+            unawaited(_readAloud.readFinalReply(message.text, generation: readAloudGeneration));
           }
           notifyListeners();
           continue;
@@ -685,7 +705,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           }
           if (_tryParseQuotaError(chunk.text)) {
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.quotaError);
@@ -732,6 +753,9 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   Future<void> _streamReply(String text, {ChatPageContext? context, List<String>? retryFileIds}) async {
     _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
+    _readAloud.newQuery();
+    final readAloudGeneration = _readAloud.generation;
+    var readAloudDelivered = false;
     // If Omi was still speaking a prior voice reply, stop it — the user's
     // typed message takes precedence.
     if (OmiVoicePlaybackService.instance.isSpeaking) {
@@ -839,6 +863,10 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
           nameChatSession();
           chatAttemptCompleted = true;
+          if (!readAloudDelivered) {
+            readAloudDelivered = true;
+            unawaited(_readAloud.readFinalReply(message.text, generation: readAloudGeneration));
+          }
           notifyListeners();
           continue;
         }
@@ -847,7 +875,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           if (_tryParseQuotaError(chunk.text)) {
             // Keep the user's message visible; replace AI placeholder with quota message
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
             notifyListeners();
@@ -927,6 +956,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
   @override
   void dispose() {
+    _readAloud.revoke();
     for (final state in _chatTelemetryAttempts.values) {
       state.dispose();
       if (!state.attempt.isComplete) state.attempt.complete(ProductOutcome.unobserved);

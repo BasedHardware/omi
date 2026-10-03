@@ -12039,6 +12039,24 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get assistantVoiceSettingsTitle => '음성';
+
+  @override
+  String get assistantVoice => '어시스턴트 음성';
+
+  @override
+  String get voiceSharedAcrossDevices => '선택한 음성은 모바일과 데스크톱에서 공유됩니다.';
+
+  @override
+  String get readChatRepliesAloud => '채팅 답장 소리 내어 읽기';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"음성 응답\"이 허용할 때만 말합니다.';
+
+  @override
+  String get voicePreviewSample => '안녕하세요, 저는 Omi입니다. 이것이 제 목소리입니다.';
+
+  @override
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }

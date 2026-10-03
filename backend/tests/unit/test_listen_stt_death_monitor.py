@@ -14,7 +14,13 @@ import pytest
 
 from routers.listen import receiver as receiver_mod
 from routers.listen.receiver import ListenReceiver
+from utils.stt.recovery_state import LiveRecoveryController, RecoveryState
 from utils.stt.streaming import STTService
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 @pytest.fixture
@@ -39,11 +45,14 @@ def _monitor_self(*, dead: bool, stt_service=STTService.parakeet):
         wait=wait,
     )
     monitor_self = SimpleNamespace(host=host, stt_socket=SimpleNamespace(is_connection_dead=dead))
+    monitor_self.recovery = LiveRecoveryController(host)
+    monitor_self._candidate_token = None
     monitor_self._serving_provider = lambda: ListenReceiver._serving_provider(monitor_self)
 
     # The monitor now offers the session to the next provider before terminating.
     # These cases cover the terminal path, so failover declines.
     async def _no_failover():
+        monitor_self.recovery.exhaust()
         return False
 
     monitor_self._failover_stt_socket = _no_failover
@@ -77,6 +86,8 @@ async def test_monitor_does_not_terminate_a_live_socket():
     with patch.object(receiver_mod, 'terminate_live_stt_session', new=AsyncMock()) as terminate:
         await ListenReceiver._monitor_stt_death(monitor_self)
     terminate.assert_not_awaited()
+    assert monitor_self.recovery.state is RecoveryState.serving
+    assert monitor_self.recovery.dial_attempts == 0
 
 
 @pytest.mark.anyio
