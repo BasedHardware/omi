@@ -309,6 +309,8 @@ def pusher_env(monkeypatch):
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
     monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
+    monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
+    monkeypatch.setattr(pusher, 'run_authorized_person_learning', _async_noop)
 
     def update_conversation(uid, conversation_id, data):
         row = audio_files_by_conversation.setdefault(conversation_id, {'audio_files': []})

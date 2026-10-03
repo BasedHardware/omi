@@ -21,7 +21,7 @@ from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.firestore_tier_context import invalidate_subscription, observe_subscription
 from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
-from database.speaker_learning_fields import voice_learning_fields
+from database.speaker_learning_fields import project_person_learning, speech_sample_source, voice_learning_fields
 from database.speaker_profile_authority import person_teaching_authorized
 from database.redis_db import (
     delete_cached_user_geolocation,
@@ -892,16 +892,16 @@ def get_person(uid: str, person_id: str):
         return None
     person_data = person_doc.to_dict()
     person_data.setdefault('id', person_doc.id)
-    return person_data
+    return project_person_learning(uid, person_data, firestore_client=db)
 
 
 def get_people(uid: str):
     people_ref = db.collection('users').document(uid).collection('people')
-    result = []
+    result, cache = [], {}
     for person in people_ref.stream():
         data = person.to_dict()
         data.setdefault('id', person.id)
-        result.append(data)
+        result.append(project_person_learning(uid, data, firestore_client=db, projection_cache=cache))
     return result
 
 
@@ -920,7 +920,7 @@ def get_person_by_name(uid: str, name: str):
     if docs:
         data = docs[0].to_dict()
         data.setdefault('id', docs[0].id)
-        return data
+        return project_person_learning(uid, data, firestore_client=db)
     return None
 
 
@@ -936,13 +936,13 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
     # Use document ID fetches instead of where("id", "in", ...) to handle
     # legacy docs that may not have a stored 'id' field.
     doc_refs = [people_ref.document(pid) for pid in person_ids]
-    all_people = []
+    all_people, cache = [], {}
     for doc in db.get_all(doc_refs):
         if doc.exists:
             data = doc.to_dict()
             data.setdefault('id', doc.id)
             if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
-                all_people.append(data)
+                all_people.append(project_person_learning(uid, data, firestore_client=db, projection_cache=cache))
     return all_people
 
 
@@ -1056,7 +1056,7 @@ def replace_person_speech_profile(
         'speech_sample_transcripts': [transcript],
         'speech_samples_version': 3,
         'speaker_embedding': embedding,
-        'speech_sample_source': {'conversation_id': conversation_id, 'segment_ids': segment_ids},
+        'speech_sample_source': speech_sample_source(conversation_id, segment_ids, expected_receipt_generation),
         **voice_learning_fields('learned', 'stored', speech_seconds),
     }
     return _replace_speech_profile_transaction(

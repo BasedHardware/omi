@@ -2675,7 +2675,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # conversations play exactly like realtime ones. Gated on the user's setting.
             if private_cloud_sync_enabled:
                 await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
-                schedule_person_voice_learning_retries(uid, response, _RESPONSE_FENCED_CONVERSATION_IDS)
+            schedule_person_voice_learning_retries(uid, response, _RESPONSE_FENCED_CONVERSATION_IDS)
 
             stage_timings['stt_llm_ms'] = int((time.monotonic() - t0) * 1000)
 

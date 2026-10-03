@@ -1118,7 +1118,7 @@ def _load_sync_router_for_fast_path():
     from utils.stt import speaker_match as actual_speaker_match
     from utils.stt import speaker_identity as actual_speaker_identity
     from utils import manual_speaker_assignments as actual_manual_assignments
-    from utils.sync import lanes as actual_sync_lanes
+    from utils.sync import lanes as actual_sync_lanes, rate_limit as actual_rl
     from utils import capture_evidence as actual_capture_evidence
 
     saved_modules = {}
@@ -1190,7 +1190,6 @@ def _load_sync_router_for_fast_path():
         'utils.sync.uid_sequencer',
         'utils.sync.backfill_cutover',
         'utils.sync.content_id',
-        'utils.sync.capture_manifest',
         'utils.speaker_assignment',
         'utils.speaker_permissions',
         'utils.speaker_identification',
@@ -1273,6 +1272,7 @@ def _load_sync_router_for_fast_path():
     sync_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'sync')]
     sys.modules['utils.sync'] = sync_pkg
     sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
+    sys.modules['utils.sync.rate_limit'].retry_after_until_next_utc_day = actual_rl.retry_after_until_next_utc_day
     sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
     sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
     sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})

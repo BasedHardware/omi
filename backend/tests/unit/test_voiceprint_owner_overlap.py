@@ -6,7 +6,7 @@ from copy import deepcopy
 import numpy as np
 import pytest
 
-from database import conversations, voice_profiles
+from database import conversations, speaker_learning_jobs, voice_profiles
 from models.speaker_tag_prompts import SpeakerTagPromptAnswerRequest
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.owner_voice_evidence import authorized_owner_segments
@@ -101,6 +101,7 @@ def world(monkeypatch):
     monkeypatch.setattr(
         conversations, 'assign_conversation_speaker', lambda *a, **kw: original_assign(*a, **kw, firestore_client=store)
     )
+    monkeypatch.setattr(speaker_learning_jobs, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(conversations, 'get_conversation', lambda *a: decoded(store))
     monkeypatch.setattr(voice_profiles, 'record_tag_prompt_answered', lambda *a: None)
     monkeypatch.setattr(service, 'emit_product_event', lambda **kw: None)
