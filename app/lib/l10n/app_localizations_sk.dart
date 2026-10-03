@@ -12253,4 +12253,19 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Pomenovať rečníka';
+
+  @override
+  String get playbackPreparingAudio => 'Pripravuje sa zvuk…';
+
+  @override
+  String get playbackBackToCurrent => 'Späť na aktuálne';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvuk nie je k dispozícii';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvuk sa nepodarilo načítať';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Skontrolujte pripojenie';
 }

@@ -12260,4 +12260,19 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Navngi taler';
+
+  @override
+  String get playbackPreparingAudio => 'Forbereder lyd…';
+
+  @override
+  String get playbackBackToCurrent => 'Tilbake til gjeldende';
+
+  @override
+  String get playbackAudioUnavailable => 'Lyd ikke tilgjengelig';
+
+  @override
+  String get playbackAudioLoadFailed => 'Kunne ikke laste lyden';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Sjekk tilkoblingen';
 }

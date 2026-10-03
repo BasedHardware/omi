@@ -3829,5 +3829,10 @@
     "unresolvedSpeakersNotice": "Konuşmacılar kayıtlar arasında ayrıştırılamadı.",
     "unresolvedSpeakersTitle": "Konuşmacı Etiketleri Hakkında",
     "unresolvedSpeakersMessage": "Omi, kayıtlar arasında diğer sesleri ayırt edemedi. Konuşanın kim olduğunu adlandırmak için bir konuşmacı etiketine dokunun.",
-    "nameSpeakerTitle": "Konuşmacıyı Adlandır"
+    "nameSpeakerTitle": "Konuşmacıyı Adlandır",
+    "playbackPreparingAudio": "Ses hazırlanıyor…",
+    "playbackBackToCurrent": "Geçerliye Dön",
+    "playbackAudioUnavailable": "Ses Kullanılamıyor",
+    "playbackAudioLoadFailed": "Ses Yüklenemedi",
+    "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin"
 }

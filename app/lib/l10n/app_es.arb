@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Las voces no están separadas entre grabaciones.",
     "unresolvedSpeakersTitle": "Acerca de las etiquetas de hablante",
     "unresolvedSpeakersMessage": "Omi no pudo distinguir las demás voces entre las grabaciones. Toca una etiqueta de hablante para nombrar a quién habla.",
-    "nameSpeakerTitle": "Nombrar hablante"
+    "nameSpeakerTitle": "Nombrar hablante",
+    "playbackPreparingAudio": "Preparando audio…",
+    "playbackBackToCurrent": "Volver a lo actual",
+    "playbackAudioUnavailable": "Audio no disponible",
+    "playbackAudioLoadFailed": "No se pudo cargar el audio",
+    "playbackAudioNetworkFailed": "Comprueba la conexión"
 }

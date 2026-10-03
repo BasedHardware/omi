@@ -12042,4 +12042,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => '命名说话者';
+
+  @override
+  String get playbackPreparingAudio => '正在准备音频…';
+
+  @override
+  String get playbackBackToCurrent => '回到当前位置';
+
+  @override
+  String get playbackAudioUnavailable => '音频不可用';
+
+  @override
+  String get playbackAudioLoadFailed => '无法加载音频';
+
+  @override
+  String get playbackAudioNetworkFailed => '请检查网络连接';
 }

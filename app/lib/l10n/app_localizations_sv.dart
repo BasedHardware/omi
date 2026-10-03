@@ -12268,4 +12268,19 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Namnge talare';
+
+  @override
+  String get playbackPreparingAudio => 'Förbereder ljud…';
+
+  @override
+  String get playbackBackToCurrent => 'Tillbaka till aktuell';
+
+  @override
+  String get playbackAudioUnavailable => 'Ljudet är inte tillgängligt';
+
+  @override
+  String get playbackAudioLoadFailed => 'Ljudet kunde inte laddas';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kontrollera anslutningen';
 }

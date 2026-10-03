@@ -12258,4 +12258,19 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Nimeta kõneleja';
+
+  @override
+  String get playbackPreparingAudio => 'Heli ettevalmistamine…';
+
+  @override
+  String get playbackBackToCurrent => 'Tagasi praeguse juurde';
+
+  @override
+  String get playbackAudioUnavailable => 'Heli pole saadaval';
+
+  @override
+  String get playbackAudioLoadFailed => 'Heli ei õnnestunud laadida';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kontrollige ühendust';
 }

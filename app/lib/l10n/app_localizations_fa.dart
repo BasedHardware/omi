@@ -12259,4 +12259,19 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'نام‌گذاری گوینده';
+
+  @override
+  String get playbackPreparingAudio => 'در حال آماده‌سازی صدا…';
+
+  @override
+  String get playbackBackToCurrent => 'بازگشت به مورد فعلی';
+
+  @override
+  String get playbackAudioUnavailable => 'صدا در دسترس نیست';
+
+  @override
+  String get playbackAudioLoadFailed => 'بارگیری صدا ممکن نشد';
+
+  @override
+  String get playbackAudioNetworkFailed => 'اتصال را بررسی کنید';
 }

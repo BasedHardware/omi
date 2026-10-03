@@ -12192,4 +12192,19 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'ตั้งชื่อผู้พูด';
+
+  @override
+  String get playbackPreparingAudio => 'กำลังเตรียมเสียง…';
+
+  @override
+  String get playbackBackToCurrent => 'กลับไปที่ปัจจุบัน';
+
+  @override
+  String get playbackAudioUnavailable => 'เสียงไม่พร้อมใช้งาน';
+
+  @override
+  String get playbackAudioLoadFailed => 'ไม่สามารถโหลดเสียงได้';
+
+  @override
+  String get playbackAudioNetworkFailed => 'ตรวจสอบการเชื่อมต่อ';
 }

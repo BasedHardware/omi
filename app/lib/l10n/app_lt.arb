@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Kalbėtojai neatskirti tarp įrašų.",
     "unresolvedSpeakersTitle": "Apie kalbėtojų žymas",
     "unresolvedSpeakersMessage": "Omi nepavyko atskirti kitų balsų tarp įrašų. Palieskite kalbėtojo žymą, kad pavadintumėte, kas kalba.",
-    "nameSpeakerTitle": "Pavadinti kalbėtoją"
+    "nameSpeakerTitle": "Pavadinti kalbėtoją",
+    "playbackPreparingAudio": "Ruošiamas garsas…",
+    "playbackBackToCurrent": "Atgal prie dabartinio",
+    "playbackAudioUnavailable": "Garsas nepasiekiamas",
+    "playbackAudioLoadFailed": "Nepavyko įkelti garso",
+    "playbackAudioNetworkFailed": "Patikrinkite ryšį"
 }

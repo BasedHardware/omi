@@ -12324,4 +12324,19 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Именувај говорник';
+
+  @override
+  String get playbackPreparingAudio => 'Се подготвува аудио…';
+
+  @override
+  String get playbackBackToCurrent => 'Назад кон тековното';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудиото не е достапно';
+
+  @override
+  String get playbackAudioLoadFailed => 'Аудиото не можеше да се вчита';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Проверете ја врската';
 }

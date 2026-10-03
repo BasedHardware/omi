@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "لا يتم الفصل بين المتحدثين عبر التسجيلات.",
     "unresolvedSpeakersTitle": "حول تسميات المتحدثين",
     "unresolvedSpeakersMessage": "تعذّر على Omi التمييز بين الأصوات الأخرى عبر التسجيلات. اضغط على تسمية متحدث لتسمية من يتحدث.",
-    "nameSpeakerTitle": "تسمية المتحدث"
+    "nameSpeakerTitle": "تسمية المتحدث",
+    "playbackPreparingAudio": "جارٍ تجهيز الصوت…",
+    "playbackBackToCurrent": "العودة إلى الحالي",
+    "playbackAudioUnavailable": "الصوت غير متوفر",
+    "playbackAudioLoadFailed": "تعذر تحميل الصوت",
+    "playbackAudioNetworkFailed": "تحقق من الاتصال"
 }

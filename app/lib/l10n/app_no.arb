@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Talerne er ikke adskilt på tvers av opptak.",
     "unresolvedSpeakersTitle": "Om taleretiketter",
     "unresolvedSpeakersMessage": "Omi klarte ikke å skille de andre stemmene på tvers av opptakene. Trykk på en taleretikett for å navngi hvem som snakker.",
-    "nameSpeakerTitle": "Navngi taler"
+    "nameSpeakerTitle": "Navngi taler",
+    "playbackPreparingAudio": "Forbereder lyd…",
+    "playbackBackToCurrent": "Tilbake til gjeldende",
+    "playbackAudioUnavailable": "Lyd ikke tilgjengelig",
+    "playbackAudioLoadFailed": "Kunne ikke laste lyden",
+    "playbackAudioNetworkFailed": "Sjekk tilkoblingen"
 }

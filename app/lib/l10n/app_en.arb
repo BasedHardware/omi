@@ -14623,5 +14623,25 @@
     "nameSpeakerTitle": "Name Speaker",
     "@nameSpeakerTitle": {
         "description": "Title of the name-speaker sheet when the speaker has no resolvable number"
+    },
+    "playbackPreparingAudio": "Preparing Audio…",
+    "@playbackPreparingAudio": {
+        "description": "Inline label on the detail audio player while playback is still being prepared"
+    },
+    "playbackBackToCurrent": "Back to Current",
+    "@playbackBackToCurrent": {
+        "description": "Pill above the player that scrolls the transcript back to the currently playing line"
+    },
+    "playbackAudioUnavailable": "Audio Unavailable",
+    "@playbackAudioUnavailable": {
+        "description": "Inline label when the conversation's audio cannot be played at all"
+    },
+    "playbackAudioLoadFailed": "Couldn't Load Audio",
+    "@playbackAudioLoadFailed": {
+        "description": "Inline label when loading the audio stream fails"
+    },
+    "playbackAudioNetworkFailed": "Check Connection",
+    "@playbackAudioNetworkFailed": {
+        "description": "Inline label when fetching the audio URLs fails on transport"
     }
 }

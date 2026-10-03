@@ -12246,4 +12246,19 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Navngiv taler';
+
+  @override
+  String get playbackPreparingAudio => 'Forbereder lyd…';
+
+  @override
+  String get playbackBackToCurrent => 'Tilbage til aktuel';
+
+  @override
+  String get playbackAudioUnavailable => 'Lyd ikke tilgængelig';
+
+  @override
+  String get playbackAudioLoadFailed => 'Lyden kunne ikke indlæses';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Tjek forbindelsen';
 }

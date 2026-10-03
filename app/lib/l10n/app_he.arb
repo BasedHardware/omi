@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "הדוברים אינם מופרדים בין ההקלטות.",
     "unresolvedSpeakersTitle": "על תוויות הדוברים",
     "unresolvedSpeakersMessage": "Omi לא הצליח להבדיל בין הקולות האחרים בין ההקלטות. הקשו על תווית דובר כדי לתת שם למי שמדבר.",
-    "nameSpeakerTitle": "תן שם לדובר"
+    "nameSpeakerTitle": "תן שם לדובר",
+    "playbackPreparingAudio": "מכין אודיו…",
+    "playbackBackToCurrent": "חזרה לנוכחי",
+    "playbackAudioUnavailable": "האודיו לא זמין",
+    "playbackAudioLoadFailed": "לא ניתן לטעון את האודיו",
+    "playbackAudioNetworkFailed": "בדקו את החיבור"
 }

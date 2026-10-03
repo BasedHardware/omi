@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "Hindi pinaghihiwalay ang mga speaker sa iba't ibang recording.",
     "unresolvedSpeakersTitle": "Tungkol sa mga Label ng Speaker",
     "unresolvedSpeakersMessage": "Hindi maipagkaiba ng Omi ang ibang mga boses sa mga recording. I-tap ang label ng speaker para pangalanan kung sino ang nagsasalita.",
-    "nameSpeakerTitle": "Pangalanan ang Speaker"
+    "nameSpeakerTitle": "Pangalanan ang Speaker",
+    "playbackPreparingAudio": "Inihahanda ang Audio…",
+    "playbackBackToCurrent": "Bumalik sa Kasalukuyan",
+    "playbackAudioUnavailable": "Hindi Magagamit ang Audio",
+    "playbackAudioLoadFailed": "Hindi Ma-load ang Audio",
+    "playbackAudioNetworkFailed": "Suriin ang Koneksyon"
 }

@@ -12253,4 +12253,19 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Đặt tên người nói';
+
+  @override
+  String get playbackPreparingAudio => 'Đang chuẩn bị âm thanh…';
+
+  @override
+  String get playbackBackToCurrent => 'Quay lại hiện tại';
+
+  @override
+  String get playbackAudioUnavailable => 'Âm thanh không khả dụng';
+
+  @override
+  String get playbackAudioLoadFailed => 'Không thể tải âm thanh';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kiểm tra kết nối';
 }

@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "रेकॉर्डिंगमध्ये वक्ते वेगळे केलेले नाहीत.",
     "unresolvedSpeakersTitle": "स्पीकर लेबलबद्दल",
     "unresolvedSpeakersMessage": "Omi रेकॉर्डिंगमध्ये इतर आवाज वेगळे करू शकला नाही. कोण बोलत आहे ते नाव देण्यासाठी स्पीकर लेबलवर टॅप करा.",
-    "nameSpeakerTitle": "वक्त्याला नाव द्या"
+    "nameSpeakerTitle": "वक्त्याला नाव द्या",
+    "playbackPreparingAudio": "ऑडिओ तयार होत आहे…",
+    "playbackBackToCurrent": "वर्तमानावर परत जा",
+    "playbackAudioUnavailable": "ऑडिओ उपलब्ध नाही",
+    "playbackAudioLoadFailed": "ऑडिओ लोड होऊ शकला नाही",
+    "playbackAudioNetworkFailed": "कनेक्शन तपासा"
 }

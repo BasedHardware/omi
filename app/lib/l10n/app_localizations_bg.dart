@@ -12305,4 +12305,19 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Наименувай говорителя';
+
+  @override
+  String get playbackPreparingAudio => 'Подготвяне на аудиото…';
+
+  @override
+  String get playbackBackToCurrent => 'Обратно към текущото';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудиото е недостъпно';
+
+  @override
+  String get playbackAudioLoadFailed => 'Аудиото не можа да се зареди';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Проверете връзката';
 }

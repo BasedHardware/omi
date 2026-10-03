@@ -12297,4 +12297,19 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Nazwij mówcę';
+
+  @override
+  String get playbackPreparingAudio => 'Przygotowywanie dźwięku…';
+
+  @override
+  String get playbackBackToCurrent => 'Wróć do bieżącego';
+
+  @override
+  String get playbackAudioUnavailable => 'Dźwięk niedostępny';
+
+  @override
+  String get playbackAudioLoadFailed => 'Nie udało się wczytać dźwięku';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Sprawdź połączenie';
 }

@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "Govornici nisu odvojeni kroz snimke.",
     "unresolvedSpeakersTitle": "O oznakama govornika",
     "unresolvedSpeakersMessage": "Omi nije mogao razlikovati ostale glasove kroz snimke. Dodirnite oznaku govornika da imenujete ko govori.",
-    "nameSpeakerTitle": "Imenuj govornika"
+    "nameSpeakerTitle": "Imenuj govornika",
+    "playbackPreparingAudio": "Priprema zvuka…",
+    "playbackBackToCurrent": "Natrag na trenutno",
+    "playbackAudioUnavailable": "Zvuk nije dostupan",
+    "playbackAudioLoadFailed": "Zvuk nije moguće učitati",
+    "playbackAudioNetworkFailed": "Provjerite vezu"
 }

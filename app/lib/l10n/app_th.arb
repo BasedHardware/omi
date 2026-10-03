@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "ผู้พูดไม่ได้ถูกแยกกันระหว่างการบันทึก",
     "unresolvedSpeakersTitle": "เกี่ยวกับป้ายกำกับผู้พูด",
     "unresolvedSpeakersMessage": "Omi ไม่สามารถแยกเสียงอื่น ๆ ออกจากกันระหว่างการบันทึก แตะป้ายกำกับผู้พูดเพื่อตั้งชื่อผู้ที่กำลังพูด",
-    "nameSpeakerTitle": "ตั้งชื่อผู้พูด"
+    "nameSpeakerTitle": "ตั้งชื่อผู้พูด",
+    "playbackPreparingAudio": "กำลังเตรียมเสียง…",
+    "playbackBackToCurrent": "กลับไปที่ปัจจุบัน",
+    "playbackAudioUnavailable": "เสียงไม่พร้อมใช้งาน",
+    "playbackAudioLoadFailed": "ไม่สามารถโหลดเสียงได้",
+    "playbackAudioNetworkFailed": "ตรวจสอบการเชื่อมต่อ"
 }

@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Голоси не розділені між записами.",
     "unresolvedSpeakersTitle": "Про мітки спікерів",
     "unresolvedSpeakersMessage": "Omi не змогла розрізнити інші голоси між записами. Торкніться мітки спікера, щоб назвати, хто говорить.",
-    "nameSpeakerTitle": "Назвати спікера"
+    "nameSpeakerTitle": "Назвати спікера",
+    "playbackPreparingAudio": "Підготовка аудіо…",
+    "playbackBackToCurrent": "Назад до поточного",
+    "playbackAudioUnavailable": "Аудіо недоступне",
+    "playbackAudioLoadFailed": "Не вдалося завантажити аудіо",
+    "playbackAudioNetworkFailed": "Перевірте з'єднання"
 }

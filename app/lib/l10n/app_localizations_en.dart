@@ -12247,4 +12247,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Name Speaker';
+
+  @override
+  String get playbackPreparingAudio => 'Preparing Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Back to Current';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio Unavailable';
+
+  @override
+  String get playbackAudioLoadFailed => 'Couldn\'t Load Audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Check Connection';
 }

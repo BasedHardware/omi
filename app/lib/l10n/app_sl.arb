@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "Govorci niso ločeni med posnetki.",
     "unresolvedSpeakersTitle": "O oznakah govorcev",
     "unresolvedSpeakersMessage": "Omi ni mogel ločiti drugih glasov med posnetki. Tapnite oznako govorca, da poimenujete, kdo govori.",
-    "nameSpeakerTitle": "Poimenujte govorca"
+    "nameSpeakerTitle": "Poimenujte govorca",
+    "playbackPreparingAudio": "Pripravljanje zvoka…",
+    "playbackBackToCurrent": "Nazaj na trenutno",
+    "playbackAudioUnavailable": "Zvok ni na voljo",
+    "playbackAudioLoadFailed": "Zvoka ni bilo mogoče naložiti",
+    "playbackAudioNetworkFailed": "Preverite povezavo"
 }

@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "రికార్డింగ్‌లలో స్పీకర్లు వేరుచేయబడలేదు.",
     "unresolvedSpeakersTitle": "స్పీకర్ లేబుల్స్ గురించి",
     "unresolvedSpeakersMessage": "రికార్డింగ్‌లలో ఇతర స్వరాలను Omi వేరుచేయలేకపోయింది. ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి స్పీకర్ లేబుల్‌ను నొక్కండి.",
-    "nameSpeakerTitle": "స్పీకర్‌కు పేరు పెట్టండి"
+    "nameSpeakerTitle": "స్పీకర్‌కు పేరు పెట్టండి",
+    "playbackPreparingAudio": "ఆడియో సిద్ధమవుతోంది…",
+    "playbackBackToCurrent": "ప్రస్తుతానికి తిరిగి వెళ్లండి",
+    "playbackAudioUnavailable": "ఆడియో అందుబాటులో లేదు",
+    "playbackAudioLoadFailed": "ఆడియో లోడ్ చేయలేకపోయింది",
+    "playbackAudioNetworkFailed": "కనెక్షన్‌ను తనిఖీ చేయండి"
 }

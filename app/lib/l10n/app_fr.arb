@@ -3829,5 +3829,10 @@
     "unresolvedSpeakersNotice": "Les locuteurs ne sont pas séparés d'un enregistrement à l'autre.",
     "unresolvedSpeakersTitle": "À propos des étiquettes de locuteur",
     "unresolvedSpeakersMessage": "Omi n'a pas pu distinguer les autres voix d'un enregistrement à l'autre. Touchez une étiquette de locuteur pour nommer qui parle.",
-    "nameSpeakerTitle": "Nommer le locuteur"
+    "nameSpeakerTitle": "Nommer le locuteur",
+    "playbackPreparingAudio": "Préparation de l'audio…",
+    "playbackBackToCurrent": "Revenir à l'actuel",
+    "playbackAudioUnavailable": "Audio indisponible",
+    "playbackAudioLoadFailed": "Impossible de charger l'audio",
+    "playbackAudioNetworkFailed": "Vérifiez la connexion"
 }

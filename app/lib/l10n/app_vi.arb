@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Người nói không được tách ra giữa các bản ghi.",
     "unresolvedSpeakersTitle": "Giới thiệu về nhãn người nói",
     "unresolvedSpeakersMessage": "Omi không thể phân biệt các giọng nói khác giữa các bản ghi. Chạm vào nhãn người nói để đặt tên cho người đang nói.",
-    "nameSpeakerTitle": "Đặt tên người nói"
+    "nameSpeakerTitle": "Đặt tên người nói",
+    "playbackPreparingAudio": "Đang chuẩn bị âm thanh…",
+    "playbackBackToCurrent": "Quay lại hiện tại",
+    "playbackAudioUnavailable": "Âm thanh không khả dụng",
+    "playbackAudioLoadFailed": "Không thể tải âm thanh",
+    "playbackAudioNetworkFailed": "Kiểm tra kết nối"
 }

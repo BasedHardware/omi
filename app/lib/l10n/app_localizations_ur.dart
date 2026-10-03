@@ -12271,4 +12271,19 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'مقرر کا نام رکھیں';
+
+  @override
+  String get playbackPreparingAudio => 'آڈیو تیار ہو رہا ہے…';
+
+  @override
+  String get playbackBackToCurrent => 'موجودہ پر واپس جائیں';
+
+  @override
+  String get playbackAudioUnavailable => 'آڈیو دستیاب نہیں';
+
+  @override
+  String get playbackAudioLoadFailed => 'آڈیو لوڈ نہیں ہو سکا';
+
+  @override
+  String get playbackAudioNetworkFailed => 'کنکشن چیک کریں';
 }

@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "녹음 전반에 걸쳐 화자가 구분되지 않았습니다.",
     "unresolvedSpeakersTitle": "화자 레이블 정보",
     "unresolvedSpeakersMessage": "Omi가 녹음 전반에서 다른 목소리를 구분하지 못했습니다. 말하는 사람의 이름을 지정하려면 화자 레이블을 탭하세요.",
-    "nameSpeakerTitle": "화자 이름 지정"
+    "nameSpeakerTitle": "화자 이름 지정",
+    "playbackPreparingAudio": "오디오 준비 중…",
+    "playbackBackToCurrent": "현재 위치로 돌아가기",
+    "playbackAudioUnavailable": "오디오를 사용할 수 없음",
+    "playbackAudioLoadFailed": "오디오를 불러올 수 없음",
+    "playbackAudioNetworkFailed": "연결 확인"
 }

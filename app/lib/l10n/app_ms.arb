@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Pembicara tidak dipisahkan merentasi rakaman.",
     "unresolvedSpeakersTitle": "Perihal Label Pembicara",
     "unresolvedSpeakersMessage": "Omi tidak dapat membezakan suara lain merentasi rakaman. Ketik label pembicara untuk menamakan siapa yang bercakap.",
-    "nameSpeakerTitle": "Namakan Pembicara"
+    "nameSpeakerTitle": "Namakan Pembicara",
+    "playbackPreparingAudio": "Menyediakan Audio…",
+    "playbackBackToCurrent": "Kembali ke Semasa",
+    "playbackAudioUnavailable": "Audio Tidak Tersedia",
+    "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuatkan",
+    "playbackAudioNetworkFailed": "Semak Sambungan"
 }

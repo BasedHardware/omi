@@ -12299,4 +12299,19 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Spreker benoemen';
+
+  @override
+  String get playbackPreparingAudio => 'Audio wordt voorbereid…';
+
+  @override
+  String get playbackBackToCurrent => 'Terug naar huidige';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio niet beschikbaar';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio kon niet worden geladen';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Controleer verbinding';
 }

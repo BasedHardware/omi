@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "Говорниците не се одвоени низ снимките.",
     "unresolvedSpeakersTitle": "За ознаките на говорници",
     "unresolvedSpeakersMessage": "Omi не можеше да ги разликува другите гласови низ снимките. Допрете ознака на говорник за да именувате кој зборува.",
-    "nameSpeakerTitle": "Именувај говорник"
+    "nameSpeakerTitle": "Именувај говорник",
+    "playbackPreparingAudio": "Се подготвува аудио…",
+    "playbackBackToCurrent": "Назад кон тековното",
+    "playbackAudioUnavailable": "Аудиото не е достапно",
+    "playbackAudioLoadFailed": "Аудиото не можеше да се вчита",
+    "playbackAudioNetworkFailed": "Проверете ја врската"
 }

@@ -12187,4 +12187,19 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'تسمية المتحدث';
+
+  @override
+  String get playbackPreparingAudio => 'جارٍ تجهيز الصوت…';
+
+  @override
+  String get playbackBackToCurrent => 'العودة إلى الحالي';
+
+  @override
+  String get playbackAudioUnavailable => 'الصوت غير متوفر';
+
+  @override
+  String get playbackAudioLoadFailed => 'تعذر تحميل الصوت';
+
+  @override
+  String get playbackAudioNetworkFailed => 'تحقق من الاتصال';
 }

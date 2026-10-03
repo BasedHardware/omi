@@ -12165,4 +12165,19 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'תן שם לדובר';
+
+  @override
+  String get playbackPreparingAudio => 'מכין אודיו…';
+
+  @override
+  String get playbackBackToCurrent => 'חזרה לנוכחי';
+
+  @override
+  String get playbackAudioUnavailable => 'האודיו לא זמין';
+
+  @override
+  String get playbackAudioLoadFailed => 'לא ניתן לטעון את האודיו';
+
+  @override
+  String get playbackAudioNetworkFailed => 'בדקו את החיבור';
 }

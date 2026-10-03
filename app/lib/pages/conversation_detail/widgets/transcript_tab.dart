@@ -23,6 +23,7 @@ import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -37,6 +38,7 @@ class TranscriptWidgets extends StatefulWidget {
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
+  final ConversationPlaybackController? playbackController;
 
   const TranscriptWidgets({
     super.key,
@@ -44,6 +46,7 @@ class TranscriptWidgets extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
+    this.playbackController,
   });
 
   @override
@@ -353,36 +356,63 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                   },
                 ),
                 Expanded(
-                  child: getTranscriptWidget(
-                    false,
-                    segments,
-                    photos,
-                    null,
-                    conversationId: conversation.id,
-                    horizontalMargin: false,
-                    topMargin: false,
-                    canDisplaySeconds: provider.canDisplaySeconds,
-                    isConversationDetail: true,
-                    unresolvedSpeakers: conversation.speakerResolution?.status == 'unavailable',
-                    bottomMargin: 150,
-                    searchQuery: widget.searchQuery,
-                    currentResultIndex: widget.currentResultIndex,
-                    onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
-                    onSegmentTap: widget.onSegmentTap,
-                    onEditSegmentText: (segmentIndex) => _editSegmentText(provider, segmentIndex),
-                    editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
-                    onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
-                    onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
-                    startedAt: conversation.startedAt ?? conversation.createdAt,
-                    leadingItems: [if (segments.isNotEmpty) _TranscriptHeading(conversation: conversation)],
-                    leadingItemIds: [if (segments.isNotEmpty) 'transcript-heading'],
-                  ),
+                  child: widget.playbackController == null
+                      ? _buildTranscript(null)
+                      : ListenableBuilder(
+                          listenable: widget.playbackController!,
+                          builder: (context, _) => _buildTranscript(widget.playbackController),
+                        ),
                 ),
               ],
             );
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildTranscript(ConversationPlaybackController? controller) {
+    return Consumer<ConversationDetailProvider>(
+      builder: (context, provider, child) {
+        final conversation = provider.conversation;
+        final segments = conversation.transcriptSegments;
+        final photos = conversation.photos;
+        controller?.updateSegments(segments);
+        return getTranscriptWidget(
+          false,
+          segments,
+          photos,
+          null,
+          conversationId: conversation.id,
+          horizontalMargin: false,
+          topMargin: false,
+          canDisplaySeconds: provider.canDisplaySeconds,
+          isConversationDetail: true,
+          unresolvedSpeakers: conversation.speakerResolution?.status == 'unavailable',
+          bottomMargin: 150,
+          searchQuery: widget.searchQuery,
+          currentResultIndex: widget.currentResultIndex,
+          onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
+          onSegmentTap: widget.onSegmentTap,
+          onEditSegmentText: (segmentIndex) => _editSegmentText(provider, segmentIndex),
+          editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
+          onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
+          onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
+          startedAt: conversation.startedAt ?? conversation.createdAt,
+          leadingItems: [if (segments.isNotEmpty) _TranscriptHeading(conversation: conversation)],
+          leadingItemIds: [if (segments.isNotEmpty) 'transcript-heading'],
+          currentSegmentId: controller?.currentSegmentId,
+          followTargetSegmentId: controller?.followTargetSegmentId,
+          // Follow while the reader hasn't taken the scroll back AND playback
+          // is either running or a fresh explicit request (line tap, scrub,
+          // Play, back-to-current) asks for it — an idle first open does not.
+          followCurrentSegment:
+              controller != null && controller.isFollowing && (controller.isPlaying || controller.followRequest > 0),
+          playbackFollowRequest: controller?.followRequest ?? 0,
+          onUserScroll: controller?.suspendFollowing,
+          onTopVisibleSegmentChanged: controller?.readerMovedTo,
+        );
+      },
     );
   }
 }

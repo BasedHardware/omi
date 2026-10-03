@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "話者は録音間で分離されていません。",
     "unresolvedSpeakersTitle": "話者ラベルについて",
     "unresolvedSpeakersMessage": "Omiは録音間で他の声を区別できませんでした。話者ラベルをタップして、話している人の名前を付けてください。",
-    "nameSpeakerTitle": "話者に名前を付ける"
+    "nameSpeakerTitle": "話者に名前を付ける",
+    "playbackPreparingAudio": "音声を準備中…",
+    "playbackBackToCurrent": "現在の位置に戻る",
+    "playbackAudioUnavailable": "音声を利用できません",
+    "playbackAudioLoadFailed": "音声を読み込めませんでした",
+    "playbackAudioNetworkFailed": "接続を確認してください"
 }

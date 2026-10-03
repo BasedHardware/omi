@@ -12259,4 +12259,19 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'স্পিকারের নাম দিন';
+
+  @override
+  String get playbackPreparingAudio => 'অডিও প্রস্তুত হচ্ছে…';
+
+  @override
+  String get playbackBackToCurrent => 'বর্তমানে ফিরে যান';
+
+  @override
+  String get playbackAudioUnavailable => 'অডিও উপলব্ধ নয়';
+
+  @override
+  String get playbackAudioLoadFailed => 'অডিও লোড করা যায়নি';
+
+  @override
+  String get playbackAudioNetworkFailed => 'সংযোগ পরীক্ষা করুন';
 }

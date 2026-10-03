@@ -12298,4 +12298,19 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'ವಕ್ತಾವನ್ನು ಹೆಸರಿಸಿ';
+
+  @override
+  String get playbackPreparingAudio => 'ಆಡಿಯೋ ಸಿದ್ಧಗೊಳ್ಳುತ್ತಿದೆ…';
+
+  @override
+  String get playbackBackToCurrent => 'ಪ್ರಸ್ತುತಕ್ಕೆ ಹಿಂತಿರುಗಿ';
+
+  @override
+  String get playbackAudioUnavailable => 'ಆಡಿಯೋ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get playbackAudioLoadFailed => 'ಆಡಿಯೋ ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get playbackAudioNetworkFailed => 'ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ';
 }

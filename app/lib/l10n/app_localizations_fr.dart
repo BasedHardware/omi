@@ -12362,4 +12362,19 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Nommer le locuteur';
+
+  @override
+  String get playbackPreparingAudio => 'Préparation de l\'audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Revenir à l\'actuel';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio indisponible';
+
+  @override
+  String get playbackAudioLoadFailed => 'Impossible de charger l\'audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Vérifiez la connexion';
 }

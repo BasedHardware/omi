@@ -12264,4 +12264,19 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Nimeä puhuja';
+
+  @override
+  String get playbackPreparingAudio => 'Valmistellaan ääntä…';
+
+  @override
+  String get playbackBackToCurrent => 'Takaisin nykyiseen';
+
+  @override
+  String get playbackAudioUnavailable => 'Ääni ei saatavilla';
+
+  @override
+  String get playbackAudioLoadFailed => 'Ääntä ei voitu ladata';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Tarkista yhteys';
 }

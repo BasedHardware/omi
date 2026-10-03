@@ -21956,6 +21956,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Name Speaker'**
   String get nameSpeakerTitle;
+
+  /// Inline label on the detail audio player while playback is still being prepared
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing Audio…'**
+  String get playbackPreparingAudio;
+
+  /// Pill above the player that scrolls the transcript back to the currently playing line
+  ///
+  /// In en, this message translates to:
+  /// **'Back to Current'**
+  String get playbackBackToCurrent;
+
+  /// Inline label when the conversation's audio cannot be played at all
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Unavailable'**
+  String get playbackAudioUnavailable;
+
+  /// Inline label when loading the audio stream fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t Load Audio'**
+  String get playbackAudioLoadFailed;
+
+  /// Inline label when fetching the audio URLs fails on transport
+  ///
+  /// In en, this message translates to:
+  /// **'Check Connection'**
+  String get playbackAudioNetworkFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

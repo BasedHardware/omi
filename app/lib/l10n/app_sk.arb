@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Rečníci nie sú oddelení naprieč nahrávkami.",
     "unresolvedSpeakersTitle": "O popiskoch rečníkov",
     "unresolvedSpeakersMessage": "Omi nedokázalo naprieč nahrávkami rozlíšiť ostatné hlasy. Klepnutím na popisok rečníka pomenujete, kto hovorí.",
-    "nameSpeakerTitle": "Pomenovať rečníka"
+    "nameSpeakerTitle": "Pomenovať rečníka",
+    "playbackPreparingAudio": "Pripravuje sa zvuk…",
+    "playbackBackToCurrent": "Späť na aktuálne",
+    "playbackAudioUnavailable": "Zvuk nie je k dispozícii",
+    "playbackAudioLoadFailed": "Zvuk sa nepodarilo načítať",
+    "playbackAudioNetworkFailed": "Skontrolujte pripojenie"
 }

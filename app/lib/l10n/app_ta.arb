@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "பதிவுகளில் பேசுபவர்கள் பிரிக்கப்படவில்லை.",
     "unresolvedSpeakersTitle": "பேச்சாளர் லேபிள்கள் பற்றி",
     "unresolvedSpeakersMessage": "பதிவுகளில் மற்ற குரல்களை Omi வேறுபடுத்த முடியவில்லை. யார் பேசுகிறார்கள் எனப் பெயரிட பேச்சாளர் லேபிளைத் தட்டவும்.",
-    "nameSpeakerTitle": "பேச்சாளருக்கு பெயரிடவும்"
+    "nameSpeakerTitle": "பேச்சாளருக்கு பெயரிடவும்",
+    "playbackPreparingAudio": "ஆடியோ தயாராகிறது…",
+    "playbackBackToCurrent": "தற்போதையதற்குத் திரும்பு",
+    "playbackAudioUnavailable": "ஆடியோ கிடைக்கவில்லை",
+    "playbackAudioLoadFailed": "ஆடியோவை ஏற்ற முடியவில்லை",
+    "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்"
 }

@@ -12306,4 +12306,19 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Beszélő elnevezése';
+
+  @override
+  String get playbackPreparingAudio => 'Hang előkészítése…';
+
+  @override
+  String get playbackBackToCurrent => 'Vissza az aktuálishoz';
+
+  @override
+  String get playbackAudioUnavailable => 'A hang nem érhető el';
+
+  @override
+  String get playbackAudioLoadFailed => 'A hang nem tölthető be';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Ellenőrizze a kapcsolatot';
 }

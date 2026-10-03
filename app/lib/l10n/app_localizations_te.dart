@@ -12311,4 +12311,19 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'స్పీకర్‌కు పేరు పెట్టండి';
+
+  @override
+  String get playbackPreparingAudio => 'ఆడియో సిద్ధమవుతోంది…';
+
+  @override
+  String get playbackBackToCurrent => 'ప్రస్తుతానికి తిరిగి వెళ్లండి';
+
+  @override
+  String get playbackAudioUnavailable => 'ఆడియో అందుబాటులో లేదు';
+
+  @override
+  String get playbackAudioLoadFailed => 'ఆడియో లోడ్ చేయలేకపోయింది';
+
+  @override
+  String get playbackAudioNetworkFailed => 'కనెక్షన్‌ను తనిఖీ చేయండి';
 }

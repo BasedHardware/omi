@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Sprecher werden nicht aufnahmeübergreifend getrennt.",
     "unresolvedSpeakersTitle": "Über Sprecher-Bezeichnungen",
     "unresolvedSpeakersMessage": "Omi konnte die anderen Stimmen aufnahmeübergreifend nicht unterscheiden. Tippe auf eine Sprecher-Bezeichnung, um zu benennen, wer spricht.",
-    "nameSpeakerTitle": "Sprecher benennen"
+    "nameSpeakerTitle": "Sprecher benennen",
+    "playbackPreparingAudio": "Audio wird vorbereitet…",
+    "playbackBackToCurrent": "Zurück zum Aktuellen",
+    "playbackAudioUnavailable": "Audio nicht verfügbar",
+    "playbackAudioLoadFailed": "Audio konnte nicht geladen werden",
+    "playbackAudioNetworkFailed": "Verbindung prüfen"
 }

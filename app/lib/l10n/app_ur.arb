@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "مقررین ریکارڈنگز میں الگ نہیں کیے گئے۔",
     "unresolvedSpeakersTitle": "مقرر لیبلز کے بارے میں",
     "unresolvedSpeakersMessage": "Omi ریکارڈنگز میں دوسری آوازوں کو الگ نہیں کر سکا۔ کون بات کر رہا ہے اسے نام دینے کے لیے اسپیکر لیبل پر ٹیپ کریں۔",
-    "nameSpeakerTitle": "مقرر کا نام رکھیں"
+    "nameSpeakerTitle": "مقرر کا نام رکھیں",
+    "playbackPreparingAudio": "آڈیو تیار ہو رہا ہے…",
+    "playbackBackToCurrent": "موجودہ پر واپس جائیں",
+    "playbackAudioUnavailable": "آڈیو دستیاب نہیں",
+    "playbackAudioLoadFailed": "آڈیو لوڈ نہیں ہو سکا",
+    "playbackAudioNetworkFailed": "کنکشن چیک کریں"
 }

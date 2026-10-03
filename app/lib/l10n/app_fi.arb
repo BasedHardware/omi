@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Puhujia ei ole eroteltu äänitteiden välillä.",
     "unresolvedSpeakersTitle": "Tietoa puhujamerkinnöistä",
     "unresolvedSpeakersMessage": "Omi ei pystynyt erottamaan muita ääniä äänitteiden välillä. Napauta puhujamerkintää nimetäksesi, kuka puhuu.",
-    "nameSpeakerTitle": "Nimeä puhuja"
+    "nameSpeakerTitle": "Nimeä puhuja",
+    "playbackPreparingAudio": "Valmistellaan ääntä…",
+    "playbackBackToCurrent": "Takaisin nykyiseen",
+    "playbackAudioUnavailable": "Ääni ei saatavilla",
+    "playbackAudioLoadFailed": "Ääntä ei voitu ladata",
+    "playbackAudioNetworkFailed": "Tarkista yhteys"
 }

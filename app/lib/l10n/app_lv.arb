@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Runātāji nav atdalīti starp ierakstiem.",
     "unresolvedSpeakersTitle": "Par runātāju etiķetēm",
     "unresolvedSpeakersMessage": "Omi nevarēja atšķirt pārējās balsis starp ierakstiem. Pieskarieties runātāja etiķetei, lai nosauktu, kas runā.",
-    "nameSpeakerTitle": "Nosaukt runātāju"
+    "nameSpeakerTitle": "Nosaukt runātāju",
+    "playbackPreparingAudio": "Sagatavo audio…",
+    "playbackBackToCurrent": "Atpakaļ uz pašreizējo",
+    "playbackAudioUnavailable": "Audio nav pieejams",
+    "playbackAudioLoadFailed": "Audio neizdevās ielādēt",
+    "playbackAudioNetworkFailed": "Pārbaudiet savienojumu"
 }

@@ -12341,4 +12341,19 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Ονομασία ομιλητή';
+
+  @override
+  String get playbackPreparingAudio => 'Προετοιμασία ήχου…';
+
+  @override
+  String get playbackBackToCurrent => 'Πίσω στο τρέχον';
+
+  @override
+  String get playbackAudioUnavailable => 'Ο ήχος δεν είναι διαθέσιμος';
+
+  @override
+  String get playbackAudioLoadFailed => 'Δεν ήταν δυνατή η φόρτωση του ήχου';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Ελέγξτε τη σύνδεση';
 }

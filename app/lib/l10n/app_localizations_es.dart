@@ -12296,4 +12296,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Nombrar hablante';
+
+  @override
+  String get playbackPreparingAudio => 'Preparando audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Volver a lo actual';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio no disponible';
+
+  @override
+  String get playbackAudioLoadFailed => 'No se pudo cargar el audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Comprueba la conexión';
 }

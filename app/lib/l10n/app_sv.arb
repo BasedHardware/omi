@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Talarna är inte separerade mellan inspelningar.",
     "unresolvedSpeakersTitle": "Om talarmarkeringar",
     "unresolvedSpeakersMessage": "Omi kunde inte skilja de andra rösterna åt mellan inspelningarna. Tryck på en talarmarkering för att namnge vem som talar.",
-    "nameSpeakerTitle": "Namnge talare"
+    "nameSpeakerTitle": "Namnge talare",
+    "playbackPreparingAudio": "Förbereder ljud…",
+    "playbackBackToCurrent": "Tillbaka till aktuell",
+    "playbackAudioUnavailable": "Ljudet är inte tillgängligt",
+    "playbackAudioLoadFailed": "Ljudet kunde inte laddas",
+    "playbackAudioNetworkFailed": "Kontrollera anslutningen"
 }

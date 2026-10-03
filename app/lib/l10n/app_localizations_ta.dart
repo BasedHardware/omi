@@ -12342,4 +12342,19 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'பேச்சாளருக்கு பெயரிடவும்';
+
+  @override
+  String get playbackPreparingAudio => 'ஆடியோ தயாராகிறது…';
+
+  @override
+  String get playbackBackToCurrent => 'தற்போதையதற்குத் திரும்பு';
+
+  @override
+  String get playbackAudioUnavailable => 'ஆடியோ கிடைக்கவில்லை';
+
+  @override
+  String get playbackAudioLoadFailed => 'ஆடியோவை ஏற்ற முடியவில்லை';
+
+  @override
+  String get playbackAudioNetworkFailed => 'இணைப்பைச் சரிபார்க்கவும்';
 }

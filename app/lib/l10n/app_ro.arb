@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Vocile nu sunt separate între înregistrări.",
     "unresolvedSpeakersTitle": "Despre etichetele vorbitorilor",
     "unresolvedSpeakersMessage": "Omi nu a putut distinge celelalte voci între înregistrări. Atingeți o etichetă de vorbitor pentru a numi cine vorbește.",
-    "nameSpeakerTitle": "Denumiți vorbitorul"
+    "nameSpeakerTitle": "Denumiți vorbitorul",
+    "playbackPreparingAudio": "Se pregătește audio…",
+    "playbackBackToCurrent": "Înapoi la curent",
+    "playbackAudioUnavailable": "Audio indisponibil",
+    "playbackAudioLoadFailed": "Audio nu a putut fi încărcat",
+    "playbackAudioNetworkFailed": "Verificați conexiunea"
 }

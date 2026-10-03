@@ -11351,5 +11351,10 @@
     "unresolvedSpeakersNotice": "گویندگان در سراسر ضبط‌ها از یکدیگر جدا نشده‌اند.",
     "unresolvedSpeakersTitle": "درباره برچسب‌های گوینده",
     "unresolvedSpeakersMessage": "Omi نتوانست صداهای دیگر را در سراسر ضبط‌ها از هم تشخیص دهد. برای نام‌گذاری گوینده، روی برچسب گوینده بزنید.",
-    "nameSpeakerTitle": "نام‌گذاری گوینده"
+    "nameSpeakerTitle": "نام‌گذاری گوینده",
+    "playbackPreparingAudio": "در حال آماده‌سازی صدا…",
+    "playbackBackToCurrent": "بازگشت به مورد فعلی",
+    "playbackAudioUnavailable": "صدا در دسترس نیست",
+    "playbackAudioLoadFailed": "بارگیری صدا ممکن نشد",
+    "playbackAudioNetworkFailed": "اتصال را بررسی کنید"
 }

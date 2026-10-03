@@ -3794,5 +3794,10 @@
     "unresolvedSpeakersNotice": "Le voci non sono separate tra le registrazioni.",
     "unresolvedSpeakersTitle": "Informazioni sulle etichette dei relatori",
     "unresolvedSpeakersMessage": "Omi non è riuscito a distinguere le altre voci tra le registrazioni. Tocca un'etichetta di relatore per dare un nome a chi parla.",
-    "nameSpeakerTitle": "Nomina relatore"
+    "nameSpeakerTitle": "Nomina relatore",
+    "playbackPreparingAudio": "Preparazione dell'audio…",
+    "playbackBackToCurrent": "Torna all'attuale",
+    "playbackAudioUnavailable": "Audio non disponibile",
+    "playbackAudioLoadFailed": "Impossibile caricare l'audio",
+    "playbackAudioNetworkFailed": "Controlla la connessione"
 }

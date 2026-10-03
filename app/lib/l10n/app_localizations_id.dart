@@ -12272,4 +12272,19 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Beri Nama Pembicara';
+
+  @override
+  String get playbackPreparingAudio => 'Menyiapkan Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Kembali ke Saat Ini';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio Tidak Tersedia';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio Tidak Dapat Dimuat';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Periksa Koneksi';
 }

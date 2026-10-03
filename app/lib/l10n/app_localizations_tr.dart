@@ -12272,4 +12272,19 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Konuşmacıyı Adlandır';
+
+  @override
+  String get playbackPreparingAudio => 'Ses hazırlanıyor…';
+
+  @override
+  String get playbackBackToCurrent => 'Geçerliye Dön';
+
+  @override
+  String get playbackAudioUnavailable => 'Ses Kullanılamıyor';
+
+  @override
+  String get playbackAudioLoadFailed => 'Ses Yüklenemedi';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Bağlantıyı Kontrol Edin';
 }

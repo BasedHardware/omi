@@ -3890,5 +3890,10 @@
     "unresolvedSpeakersNotice": "A beszélők nincsenek elkülönítve a felvételek között.",
     "unresolvedSpeakersTitle": "A beszélőcímkékről",
     "unresolvedSpeakersMessage": "Omi nem tudta elkülöníteni a többi hangot a felvételek között. Koppintson egy beszélőcímkére, hogy megnevezze, ki beszél.",
-    "nameSpeakerTitle": "Beszélő elnevezése"
+    "nameSpeakerTitle": "Beszélő elnevezése",
+    "playbackPreparingAudio": "Hang előkészítése…",
+    "playbackBackToCurrent": "Vissza az aktuálishoz",
+    "playbackAudioUnavailable": "A hang nem érhető el",
+    "playbackAudioLoadFailed": "A hang nem tölthető be",
+    "playbackAudioNetworkFailed": "Ellenőrizze a kapcsolatot"
 }

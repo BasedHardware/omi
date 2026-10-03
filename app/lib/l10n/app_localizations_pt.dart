@@ -12278,4 +12278,19 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Nomear falante';
+
+  @override
+  String get playbackPreparingAudio => 'A preparar áudio…';
+
+  @override
+  String get playbackBackToCurrent => 'Voltar ao atual';
+
+  @override
+  String get playbackAudioUnavailable => 'Áudio indisponível';
+
+  @override
+  String get playbackAudioLoadFailed => 'Não foi possível carregar o áudio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Verifique a ligação';
 }

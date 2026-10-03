@@ -12286,4 +12286,19 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Nosaukt runātāju';
+
+  @override
+  String get playbackPreparingAudio => 'Sagatavo audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Atpakaļ uz pašreizējo';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio nav pieejams';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio neizdevās ielādēt';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Pārbaudiet savienojumu';
 }

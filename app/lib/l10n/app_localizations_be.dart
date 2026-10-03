@@ -12292,4 +12292,19 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Назваць дыктара';
+
+  @override
+  String get playbackPreparingAudio => 'Падрыхтоўка аўдыё…';
+
+  @override
+  String get playbackBackToCurrent => 'Назад да бягучага';
+
+  @override
+  String get playbackAudioUnavailable => 'Аўдыё недаступнае';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не ўдалося загрузіць аўдыё';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Праверце злучэнне';
 }

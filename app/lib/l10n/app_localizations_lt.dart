@@ -12280,4 +12280,19 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Pavadinti kalbėtoją';
+
+  @override
+  String get playbackPreparingAudio => 'Ruošiamas garsas…';
+
+  @override
+  String get playbackBackToCurrent => 'Atgal prie dabartinio';
+
+  @override
+  String get playbackAudioUnavailable => 'Garsas nepasiekiamas';
+
+  @override
+  String get playbackAudioLoadFailed => 'Nepavyko įkelti garso';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Patikrinkite ryšį';
 }

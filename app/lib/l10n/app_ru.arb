@@ -3829,5 +3829,10 @@
     "unresolvedSpeakersNotice": "Голоса не разделены между записями.",
     "unresolvedSpeakersTitle": "О метках говорящих",
     "unresolvedSpeakersMessage": "Omi не смогла различить остальные голоса в записях. Коснитесь метки говорящего, чтобы назвать, кто говорит.",
-    "nameSpeakerTitle": "Назвать говорящего"
+    "nameSpeakerTitle": "Назвать говорящего",
+    "playbackPreparingAudio": "Подготовка аудио…",
+    "playbackBackToCurrent": "К текущему",
+    "playbackAudioUnavailable": "Аудио недоступно",
+    "playbackAudioLoadFailed": "Не удалось загрузить аудио",
+    "playbackAudioNetworkFailed": "Проверьте соединение"
 }

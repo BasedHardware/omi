@@ -12259,4 +12259,19 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Pojmenovat mluvčího';
+
+  @override
+  String get playbackPreparingAudio => 'Připravuje se zvuk…';
+
+  @override
+  String get playbackBackToCurrent => 'Zpět na aktuální';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvuk není k dispozici';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvuk se nepodařilo načíst';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Zkontrolujte připojení';
 }

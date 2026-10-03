@@ -12291,4 +12291,19 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Poimenujte govorca';
+
+  @override
+  String get playbackPreparingAudio => 'Pripravljanje zvoka…';
+
+  @override
+  String get playbackBackToCurrent => 'Nazaj na trenutno';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvok ni na voljo';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvoka ni bilo mogoče naložiti';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Preverite povezavo';
 }

@@ -12285,4 +12285,19 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get nameSpeakerTitle => 'Назвати спікера';
+
+  @override
+  String get playbackPreparingAudio => 'Підготовка аудіо…';
+
+  @override
+  String get playbackBackToCurrent => 'Назад до поточного';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудіо недоступне';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не вдалося завантажити аудіо';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Перевірте з\'єднання';
 }
