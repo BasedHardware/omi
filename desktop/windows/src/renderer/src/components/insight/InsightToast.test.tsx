@@ -9,9 +9,17 @@ const meetingAction = vi.fn()
 const rewindFocusFrame = vi.fn()
 const insightDismiss = vi.fn()
 const proactivityNotificationOpen = vi.fn()
+const proactivityNotificationRendered = vi.fn()
+const proactivityNotificationFeedback = vi.fn()
+let frame: FrameRequestCallback | null = null
 let onInsightShow: ((payload: InsightPayload) => void) | null = null
 
 beforeEach(() => {
+  frame = null
+  proactivityNotificationRendered.mockReset()
+  proactivityNotificationFeedback.mockReset()
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frame = callback; return 1 })
+  vi.stubGlobal('cancelAnimationFrame', () => { frame = null })
   onMeetingToast = null
   onInsightShow = null
   proactivityNotificationOpen.mockReset()
@@ -25,6 +33,8 @@ beforeEach(() => {
         return () => {}
       },
       proactivityNotificationOpen,
+      proactivityNotificationRendered,
+      proactivityNotificationFeedback,
       onMeetingToast: (cb: (payload: MeetingToastPayload) => void) => {
         onMeetingToast = cb
         return () => {}
@@ -100,4 +110,20 @@ it('opens a v2 card by opaque ID without accepting a renderer-supplied destinati
   fireEvent.click(screen.getByRole('button', { name: 'Open' }))
   expect(proactivityNotificationOpen).toHaveBeenCalledWith('item-1')
   expect(meetingAction).not.toHaveBeenCalled()
+})
+
+it('acknowledges a mounted frame, reports feedback, and sends explicit dismiss separately', () => {
+  render(<InsightToast />)
+  expect(proactivityNotificationRendered).not.toHaveBeenCalled()
+  act(() => onInsightShow?.({ headline: 'Follow up', advice: 'Synthetic', reasoning: '',
+    category: 'other', sourceApp: 'Omi', confidence: 1, proactivityItemID: 'item-2' }))
+  expect(proactivityNotificationRendered).not.toHaveBeenCalled()
+  act(() => frame?.(0))
+  expect(proactivityNotificationRendered).toHaveBeenCalledWith('item-2')
+  fireEvent.click(screen.getByRole('button', { name: 'Helpful' }))
+  expect(proactivityNotificationFeedback).toHaveBeenCalledWith('item-2', 'thumbs_up')
+  fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }))
+  expect(proactivityNotificationFeedback).toHaveBeenCalledWith('item-2', 'thumbs_down')
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+  expect(insightDismiss).toHaveBeenCalledOnce()
 })

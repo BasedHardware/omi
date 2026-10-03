@@ -22,7 +22,7 @@ function context() {
     isOwnerCurrent: () => true,
     hasBeenPresented: () => false,
     onOutcome: vi.fn(),
-    openTarget: vi.fn()
+    openTarget: vi.fn().mockResolvedValue(true)
   }
 }
 beforeEach(() => {
@@ -30,7 +30,7 @@ beforeEach(() => {
   state.notify.mockReset().mockReturnValue(true)
 })
 describe('v2 shared-toast adapter', () => {
-  it('reports actual presentation once and opens the typed target', () => {
+  it('reports actual presentation once and opens the typed target', async () => {
     const ctx = context()
     expect(presentProactivityNotification(item, ctx)).toBe(true)
     expect(ctx.onOutcome).not.toHaveBeenCalled()
@@ -38,6 +38,7 @@ describe('v2 shared-toast adapter', () => {
     hooks.onPresented()
     hooks.onPresented()
     hooks.onOpened()
+    await Promise.resolve()
     expect(ctx.onOutcome.mock.calls.map((call) => call[1].action)).toEqual(['shown', 'opened'])
     expect(ctx.openTarget).toHaveBeenCalledWith(item.target)
   })
@@ -60,6 +61,31 @@ describe('v2 shared-toast adapter', () => {
       presentProactivityNotification(item, { ...context(), hasBeenPresented: () => true })
     ).toBe(false)
     expect(state.notify).not.toHaveBeenCalled()
+  })
+  it('ignores timeout, accepts explicit feedback, and waits for successful navigation', async () => {
+    const ctx = context()
+    ctx.openTarget.mockResolvedValue(false)
+    presentProactivityNotification(item, ctx)
+    const hooks = state.notify.mock.calls[0][2].deliveryHooks
+    hooks.onDismissed('timeout')
+    hooks.onOpened()
+    await Promise.resolve()
+    expect(ctx.onOutcome).not.toHaveBeenCalled()
+    hooks.onFeedback('thumbs_up')
+    hooks.onDismissed('dismissed')
+    expect(ctx.onOutcome.mock.calls.map((call) => call[1].action)).toEqual([
+      'thumbs_up',
+      'dismissed'
+    ])
+  })
+  it('rechecks expiry when the renderer acknowledges a queued item', () => {
+    const ctx = context()
+    const deadline = Date.now() + 100
+    presentProactivityNotification(item, { ...ctx, expiresAt: deadline })
+    vi.spyOn(Date, 'now').mockReturnValue(deadline + 1)
+    state.notify.mock.calls[0][2].deliveryHooks.onPresented()
+    expect(ctx.onOutcome).not.toHaveBeenCalled()
+    vi.restoreAllMocks()
   })
   it('separates owner and outcome identities while retries remain stable', () => {
     const id = proactivityEventID('a', 'item', 'shown')

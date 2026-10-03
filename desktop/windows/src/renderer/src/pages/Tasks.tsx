@@ -100,7 +100,7 @@ function moveSelection(
 }
 
 export function Tasks(): React.JSX.Element {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   // This panel stays mounted while the user is on another tab, so "mounted" is not
   // "on screen". Same signal the Conversations panel gates its fetches on.
   const tasksPanelIsActive = pathname === TASKS_PATH
@@ -366,6 +366,24 @@ export function Tasks(): React.JSX.Element {
     const el = scrollRef.current?.querySelector(`[data-task-id="${keyboardSelectedTaskId}"]`)
     el?.scrollIntoView({ block: 'nearest' })
   }, [keyboardSelectedTaskId])
+
+  useEffect(() => {
+    if (!tasksPanelIsActive) return
+    const id = new URLSearchParams(search).get('proactivity_task')
+    const item = items.find((item) => item.backendId === id)
+    if (!id || !item) return
+    setFilter('all')
+    setKeyboardSelectedTaskId(item.id)
+  }, [search, items, tasksPanelIsActive])
+
+  useEffect(() => {
+    const id = new URLSearchParams(search).get('proactivity_task')
+    const item = items.find((item) => item.backendId === id)
+    if (!tasksPanelIsActive || !id || !item || keyboardSelectedTaskId !== item.id) return
+    if (scrollRef.current?.querySelector(`[data-task-id="${item.id}"]`)) {
+      window.omi?.proactivityTargetRendered?.({ kind: 'action_item', id })
+    }
+  }, [search, items, tasksPanelIsActive, keyboardSelectedTaskId, filter])
 
   // Switching the filter can leave the selected row unrendered while it's still in
   // `items` (the filter just hides it), so `items.find` would keep resolving it and

@@ -75,6 +75,7 @@ import { registerAssistantSettingsHandlers } from './ipc/assistantSettings'
 import { registerBillingIpc } from './billing/checkoutWindow'
 import { registerAppsIpc } from './apps/checkAppSetup'
 import { helperProcess } from './ocr/helperProcess'
+import { registerProactivityConsumer } from './proactivity/register'
 import { registerInsightHandlers } from './ipc/insight'
 import {
   createInsightToastWindow,
@@ -919,6 +920,7 @@ app.whenReady().then(async () => {
     }
   })
   registerInsightHandlers()
+  registerProactivityConsumer(() => mainWindow)
   registerMeetingHandlers()
   // What's-new toast (Phase 8): the renderer pulls the pending payload on mount
   // (push-during-load race), and opens the release notes in the system browser.

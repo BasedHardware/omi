@@ -495,6 +495,19 @@ const omi: OmiBridgeApi = {
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
   insightDismiss: () => ipcRenderer.send('insight:dismiss'),
+  proactivityNotificationRendered: (id) => ipcRenderer.send('insight:proactivity-rendered', id),
+  proactivityNotificationFeedback: (id, action) =>
+    ipcRenderer.send('insight:proactivity-feedback', id, action),
+  proactivityNotificationPending: () => ipcRenderer.invoke('insight:proactivity-pending'),
+  onProactivityNavigate: (callback) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      target: { kind: string; id: string }
+    ): void => callback(target)
+    ipcRenderer.on('proactivity:navigate', listener)
+    return () => ipcRenderer.removeListener('proactivity:navigate', listener)
+  },
+  proactivityTargetRendered: (target) => ipcRenderer.send('proactivity:target-rendered', target),
   proactivityNotificationOpen: (itemID) => ipcRenderer.send('insight:proactivity-open', itemID),
   insightHoverStart: () => ipcRenderer.send('insight:hoverStart'),
   insightHoverEnd: () => ipcRenderer.send('insight:hoverEnd'),

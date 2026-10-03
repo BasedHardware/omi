@@ -1031,6 +1031,11 @@ export type OmiBridgeApi = {
   relaunchApp: () => void
   insightGetSettings: () => Promise<InsightSettings>
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
+  proactivityNotificationRendered: (itemID: string) => void
+  proactivityNotificationFeedback: (itemID: string, action: 'thumbs_up' | 'thumbs_down') => void
+  proactivityNotificationPending: () => Promise<InsightPayload | null>
+  onProactivityNavigate: (callback: (target: { kind: string; id: string }) => void) => () => void
+  proactivityTargetRendered: (target: { kind: string; id: string }) => void
   proactivityNotificationOpen: (itemID: string) => void
   insightDismiss: () => void
   /** Toast renderer → main: pause/resume the auto-dismiss while hovered. */
@@ -2581,7 +2586,6 @@ export type GoalGenerateResult =
 /** Shared toast presentation and screen privacy preferences. */
 export type InsightSettings = {
   notificationStyle: InsightNotificationStyle
-
 }
 
 // ───────────────────────── Desktop Automation Bridge ─────────────────────────

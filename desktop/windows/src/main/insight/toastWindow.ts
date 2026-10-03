@@ -35,7 +35,12 @@ const MEETING_ASK_DISMISS_MS = 30_000
 // longer than an insight so it isn't gone before it's read.
 const WHATS_NEW_DISMISS_MS = 20_000
 
-let activeDelivery: { itemID: string; hooks: ToastDeliveryHooks } | null = null
+let activeDelivery: {
+  itemID: string
+  hooks: ToastDeliveryHooks
+  payload: InsightPayload
+  rendered: boolean
+} | null = null
 let toastWindow: BrowserWindow | null = null
 let dismissTimer: ReturnType<typeof setTimeout> | null = null
 // Dismiss duration of the toast currently shown — hover-resume must re-arm
@@ -144,7 +149,9 @@ function position(win: BrowserWindow, height: number = HEIGHT): void {
 export function showInsightToast(payload: InsightPayload, hooks?: ToastDeliveryHooks): void {
   if (hooks && !hooks.isCurrent()) return
   activeDelivery =
-    hooks && payload.proactivityItemID ? { itemID: payload.proactivityItemID, hooks } : null
+    hooks && payload.proactivityItemID
+      ? { itemID: payload.proactivityItemID, hooks, payload, rendered: false }
+      : null
   const win = ensureWindow()
   position(win, payload.proactivityItemID ? PROACTIVITY_HEIGHT : HEIGHT)
   // An insight replaces whatever is on the shared toast — clear any meeting /
@@ -159,7 +166,6 @@ export function showInsightToast(payload: InsightPayload, hooks?: ToastDeliveryH
       return
     if (hooks) win.showInactive()
     win.webContents.send('insight:payload', payload)
-    hooks?.onPresented()
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
@@ -255,4 +261,34 @@ export function dismissInsightToast(reason: 'dismissed' | 'timeout'): void {
   const delivery = activeDelivery
   if (delivery?.hooks.isCurrent()) delivery.hooks.onDismissed(reason)
   hideInsightToast()
+}
+
+export function getCurrentProactivityToast(): InsightPayload | null {
+  return activeDelivery?.hooks.isCurrent() ? activeDelivery.payload : null
+}
+export function acknowledgeProactivityRender(itemID: string): void {
+  const delivery = activeDelivery
+  if (
+    !delivery ||
+    delivery.itemID !== itemID ||
+    delivery.rendered ||
+    !delivery.hooks.isCurrent() ||
+    !toastWindow?.isVisible()
+  )
+    return
+  delivery.rendered = true
+  delivery.hooks.onPresented()
+}
+export function feedbackProactivityToast(
+  itemID: string,
+  action: 'thumbs_up' | 'thumbs_down'
+): void {
+  const delivery = activeDelivery
+  if (delivery?.itemID === itemID && delivery.rendered && delivery.hooks.isCurrent())
+    delivery.hooks.onFeedback?.(action)
+}
+
+/** Session refresh only revokes the v2 delivery owned by this consumer. */
+export function hideProactivityToast(): void {
+  if (activeDelivery) hideInsightToast()
 }

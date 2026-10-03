@@ -4,6 +4,7 @@
 // meeting-detection notice ('meeting:toast' — Phase 5). Main owns visibility +
 // auto-dismiss; hover pause reuses the same IPC for both kinds.
 import { useEffect, useState } from 'react'
+import { ThumbsUp, ThumbsDown } from 'lucide-react'
 import type { InsightPayload, MeetingToastPayload, WhatsNewPayload } from '../../../../shared/types'
 import './insight-toast.css'
 
@@ -150,6 +151,9 @@ export function InsightToast(): React.JSX.Element {
     void window.omi.whatsNewGetPending?.().then((p) => {
       if (p) setContent((cur) => cur ?? { type: 'whatsnew', p })
     })
+    void window.omi.proactivityNotificationPending?.().then((p) => {
+      if (p) setContent((cur) => cur ?? { type: 'insight', p })
+    })
     return () => {
       document.body.classList.remove('insight-toast-body')
       offInsight()
@@ -158,6 +162,13 @@ export function InsightToast(): React.JSX.Element {
     }
   }, [])
 
+  useEffect(() => {
+    if (content?.type !== 'insight' || !content.p.proactivityItemID) return
+    const id = content.p.proactivityItemID
+    const frame = requestAnimationFrame(() => window.omi.proactivityNotificationRendered?.(id))
+    return () => cancelAnimationFrame(frame)
+  }, [content])
+
   if (!content) return <div className="insight-toast-body" />
   if (content.type === 'meeting') return <MeetingCard p={content.p} />
   if (content.type === 'whatsnew') return <WhatsNewCard p={content.p} />
@@ -165,7 +176,9 @@ export function InsightToast(): React.JSX.Element {
   const insight = content.p
   return (
     <div
-      className={insight.proactivityItemID ? "insight-card insight-card--proactivity" : "insight-card"}
+      className={
+        insight.proactivityItemID ? 'insight-card insight-card--proactivity' : 'insight-card'
+      }
       onMouseEnter={() => window.omi.insightHoverStart()}
       onMouseLeave={() => window.omi.insightHoverEnd()}
     >
@@ -183,12 +196,32 @@ export function InsightToast(): React.JSX.Element {
       <div className="insight-advice">{insight.advice}</div>
       <div className="insight-foot">{insight.sourceApp}</div>
       {insight.proactivityItemID ? (
-        <button
-          className="meeting-btn meeting-btn-primary"
-          onClick={() => window.omi.proactivityNotificationOpen(insight.proactivityItemID!)}
-        >
-          Open
-        </button>
+        <div className="meeting-actions">
+          <button
+            className="meeting-btn meeting-btn-primary"
+            onClick={() => window.omi.proactivityNotificationOpen(insight.proactivityItemID!)}
+          >
+            Open
+          </button>
+          <button
+            className="meeting-btn"
+            aria-label="Helpful"
+            onClick={() =>
+              window.omi.proactivityNotificationFeedback(insight.proactivityItemID!, 'thumbs_up')
+            }
+          >
+            <ThumbsUp size={14} />
+          </button>
+          <button
+            className="meeting-btn"
+            aria-label="Not helpful"
+            onClick={() =>
+              window.omi.proactivityNotificationFeedback(insight.proactivityItemID!, 'thumbs_down')
+            }
+          >
+            <ThumbsDown size={14} />
+          </button>
+        </div>
       ) : null}
     </div>
   )

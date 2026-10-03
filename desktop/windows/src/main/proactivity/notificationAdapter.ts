@@ -9,13 +9,15 @@ import { notifyProactive } from '../assistants/core/notify'
 import { getSessionEpoch } from '../assistants/core/session'
 
 export type ProactivityNotificationContext = {
+  channel?: 'feed' | 'push'
+  expiresAt?: number
   ownerID: string
   epoch: number
   isOwnerCurrent: () => boolean
   /** Durable owner-scoped receipt lookup, supplied by the feed consumer. */
   hasBeenPresented: (itemID: string) => boolean
   onOutcome: (itemID: string, request: ProactivityOutcomeRequest) => void
-  openTarget: (target: ProactivityTarget) => void
+  openTarget: (target: ProactivityTarget) => Promise<boolean> | boolean | void
 }
 
 export function proactivityEventID(ownerID: string, itemID: string, action: string): string {
@@ -31,7 +33,10 @@ export function presentProactivityNotification(
   item: ProactivityFeedItem,
   context: ProactivityNotificationContext
 ): boolean {
-  const isCurrent = (): boolean => context.isOwnerCurrent() && context.epoch === getSessionEpoch()
+  const isCurrent = (): boolean =>
+    context.isOwnerCurrent() &&
+    context.epoch === getSessionEpoch() &&
+    (context.expiresAt ?? Infinity) > Date.now()
   if (
     !context.ownerID ||
     !isCurrent() ||
@@ -46,12 +51,15 @@ export function presentProactivityNotification(
   )
     return false
   const emitted = new Set<string>()
-  const emit = (action: 'shown' | 'opened' | 'dismissed' | 'timeout'): void => {
+  const emit = (
+    action: 'shown' | 'opened' | 'dismissed' | 'timeout' | 'thumbs_up' | 'thumbs_down'
+  ): void => {
+    if (action === 'timeout') return
     if (!isCurrent() || emitted.has(action)) return
     emitted.add(action)
     context.onOutcome(item.id, {
       action,
-      channel: 'push',
+      channel: context.channel ?? 'feed',
       surface: 'windows',
       event_id: proactivityEventID(context.ownerID, item.id, action)
     })
@@ -71,10 +79,12 @@ export function presentProactivityNotification(
       onPresented: () => emit('shown'),
       onOpened: () => {
         if (isCurrent()) {
-          emit('opened')
-          context.openTarget(item.target)
+          void Promise.resolve(context.openTarget(item.target)).then((opened) => {
+            if (opened) emit('opened')
+          })
         }
       },
+      onFeedback: emit,
       onDismissed: emit
     }
   })
