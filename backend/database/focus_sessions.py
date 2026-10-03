@@ -129,7 +129,6 @@ def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, o
     return items
 
 
-
 def delete_focus_session(uid: str, session_id: str) -> bool:
     ref = _user_col(uid, 'focus_sessions').document(session_id)
     if not getattr(ref.get(), "exists", False):

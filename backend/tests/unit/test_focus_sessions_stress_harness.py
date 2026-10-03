@@ -99,7 +99,6 @@ with stub_modules(_fakes):
     from utils.other import endpoints as auth
 
 
-
 def _generate_10k_mixed_dataset() -> tuple[List[Any], int, int]:
     """Generate 10,000 mixed records: exactly 5,000 valid and 5,000 poisoned.
 
@@ -133,37 +132,45 @@ def _generate_10k_mixed_dataset() -> tuple[List[Any], int, int]:
         pid = f"fs-poison-{i:05d}"
         if archetype == 0:
             # Missing required field 'status'
-            records.append({
-                "id": pid,
-                "app_or_site": "IDE",
-                "description": "Missing status",
-                "created_at": now_iso,
-            })
+            records.append(
+                {
+                    "id": pid,
+                    "app_or_site": "IDE",
+                    "description": "Missing status",
+                    "created_at": now_iso,
+                }
+            )
         elif archetype == 1:
             # Missing required field 'description'
-            records.append({
-                "id": pid,
-                "status": "focused",
-                "app_or_site": "Terminal",
-                "created_at": now_iso,
-            })
+            records.append(
+                {
+                    "id": pid,
+                    "status": "focused",
+                    "app_or_site": "Terminal",
+                    "created_at": now_iso,
+                }
+            )
         elif archetype == 2:
             # Missing required field 'created_at'
-            records.append({
-                "id": pid,
-                "status": "focused",
-                "app_or_site": "Docs",
-                "description": "No timestamp",
-            })
+            records.append(
+                {
+                    "id": pid,
+                    "status": "focused",
+                    "app_or_site": "Docs",
+                    "description": "No timestamp",
+                }
+            )
         elif archetype == 3:
             # Invalid created_at string
-            records.append({
-                "id": pid,
-                "status": "focused",
-                "app_or_site": "Browser",
-                "description": "Unparseable timestamp",
-                "created_at": "not-a-timestamp-never-parseable",
-            })
+            records.append(
+                {
+                    "id": pid,
+                    "status": "focused",
+                    "app_or_site": "Browser",
+                    "description": "Unparseable timestamp",
+                    "created_at": "not-a-timestamp-never-parseable",
+                }
+            )
         elif archetype == 4:
             # Non-dict: None
             records.append(None)
@@ -176,32 +183,38 @@ def _generate_10k_mixed_dataset() -> tuple[List[Any], int, int]:
             records.append({})
         elif archetype == 7:
             # Invalid type for duration_seconds (negative)
-            records.append({
-                "id": pid,
-                "status": "focused",
-                "app_or_site": "Slack",
-                "description": "Negative duration",
-                "created_at": now_iso,
-                "duration_seconds": -500,  # ge=0 violation in Pydantic
-            })
+            records.append(
+                {
+                    "id": pid,
+                    "status": "focused",
+                    "app_or_site": "Slack",
+                    "description": "Negative duration",
+                    "created_at": now_iso,
+                    "duration_seconds": -500,  # ge=0 violation in Pydantic
+                }
+            )
         elif archetype == 8:
             # Corrupted nested object where primitive is expected
-            records.append({
-                "id": pid,
-                "status": {"nested": "corrupted_status"},
-                "app_or_site": "Code",
-                "description": "Nested dict status",
-                "created_at": now_iso,
-            })
+            records.append(
+                {
+                    "id": pid,
+                    "status": {"nested": "corrupted_status"},
+                    "app_or_site": "Code",
+                    "description": "Nested dict status",
+                    "created_at": now_iso,
+                }
+            )
         elif archetype == 9:
             # Log injection attempt in id and sensitive fields
-            records.append({
-                "id": f"{pid}\r\nINJECTED_LOG_LEVEL_CRITICAL: fake breach",
-                "status": "focused",
-                "app_or_site": "VulnerableApp",
-                "description": "Sensitive user password leaked here: P@ssw0rd123!",
-                "created_at": None,  # Causes validation error
-            })
+            records.append(
+                {
+                    "id": f"{pid}\r\nINJECTED_LOG_LEVEL_CRITICAL: fake breach",
+                    "status": "focused",
+                    "app_or_site": "VulnerableApp",
+                    "description": "Sensitive user password leaked here: P@ssw0rd123!",
+                    "created_at": None,  # Causes validation error
+                }
+            )
 
     # Interleave to simulate real-world chaotic database stream order
     interleaved: List[Any] = []
@@ -230,7 +243,6 @@ class CustomUserMapping(collections.abc.Mapping):
 
 @pytest.mark.slow
 class TestFocusSessionsStressAndThroughput(unittest.TestCase):
-
     """Rigorous stress and throughput benchmark for 10,000 mixed records."""
 
     def setUp(self):
@@ -261,7 +273,9 @@ class TestFocusSessionsStressAndThroughput(unittest.TestCase):
         # Empirical Assertions
         # 1. Correctness
         self.assertEqual(len(parsed), expected_valid, f"Expected {expected_valid} valid sessions, got {len(parsed)}")
-        self.assertEqual(len(error_calls), expected_poisoned, f"Expected {expected_poisoned} errors, got {len(error_calls)}")
+        self.assertEqual(
+            len(error_calls), expected_poisoned, f"Expected {expected_poisoned} errors, got {len(error_calls)}"
+        )
 
         # 2. Integrity of parsed data
         self.assertTrue(all(isinstance(s, FocusSession) for s in parsed))
@@ -285,11 +299,24 @@ class TestFocusSessionsStressAndThroughput(unittest.TestCase):
 
     def test_deserialize_many_safe_lazy_generator(self):
         """Verify deserialize_many_safe accepts lazy generators without buffering entire input first."""
+
         def lazy_stream():
             now_iso = datetime.now(timezone.utc).isoformat()
-            yield {"id": "g-1", "status": "focused", "app_or_site": "Git", "description": "Commit", "created_at": now_iso}
+            yield {
+                "id": "g-1",
+                "status": "focused",
+                "app_or_site": "Git",
+                "description": "Commit",
+                "created_at": now_iso,
+            }
             yield None
-            yield {"id": "g-2", "status": "distracted", "app_or_site": "YouTube", "description": "Music", "created_at": now_iso}
+            yield {
+                "id": "g-2",
+                "status": "distracted",
+                "app_or_site": "YouTube",
+                "description": "Music",
+                "created_at": now_iso,
+            }
 
         errors = []
         parsed = FocusSession.deserialize_many_safe(lazy_stream(), on_error=lambda r, e: errors.append(e))
@@ -300,13 +327,15 @@ class TestFocusSessionsStressAndThroughput(unittest.TestCase):
     def test_deserialize_many_safe_custom_mapping(self):
         """Verify custom collections.abc.Mapping types are processed safely."""
         now_iso = datetime.now(timezone.utc).isoformat()
-        mapping_data = CustomUserMapping({
-            "id": "map-1",
-            "status": "focused",
-            "app_or_site": "CustomMapApp",
-            "description": "Mapping test",
-            "created_at": now_iso,
-        })
+        mapping_data = CustomUserMapping(
+            {
+                "id": "map-1",
+                "status": "focused",
+                "app_or_site": "CustomMapApp",
+                "description": "Mapping test",
+                "created_at": now_iso,
+            }
+        )
         parsed = FocusSession.deserialize_many_safe([mapping_data])
         self.assertEqual(len(parsed), 1)
         self.assertEqual(parsed[0].id, "map-1")
@@ -314,7 +343,6 @@ class TestFocusSessionsStressAndThroughput(unittest.TestCase):
 
 @pytest.mark.slow
 class TestFocusSessionsRouterEndToEndStress(unittest.TestCase):
-
     """End-to-end FastAPI router integration test under 10,000 mixed records load."""
 
     def setUp(self):

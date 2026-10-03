@@ -77,7 +77,6 @@ def get_focus_sessions(
         except Exception:
             pass
 
-
     return FocusSession.deserialize_many_safe(raw_sessions, on_error=_log_skipped_session)
 
 

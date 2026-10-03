@@ -25,7 +25,6 @@ except ImportError:
     pass
 
 
-
 # Configure safe test environment
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
 os.environ.setdefault(
@@ -87,7 +86,6 @@ with stub_modules(_fakes):
     from models.focus_session import FocusSession
     import routers.focus_sessions as focus_sessions_router
     from utils.other import endpoints as auth
-
 
 
 class _FakeSnapshot:
@@ -303,7 +301,6 @@ class TestFocusSessionsNonPIILogging(unittest.TestCase):
         self.assertNotIn(sensitive_msg, log_text)
         self.assertNotIn("bearer_xyz123abc", log_text)
         self.assertNotIn("SecretApp", log_text)
-
 
 
 class TestDatabaseGetFocusSessionsStreamResilience(unittest.TestCase):

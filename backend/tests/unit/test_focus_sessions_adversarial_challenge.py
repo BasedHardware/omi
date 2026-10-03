@@ -39,7 +39,12 @@ except ImportError:
     pass
 
 
+import pytest
+
 from testing.import_isolation import AutoMockModule, stub_modules
+
+# Mark the entire module as slow so it does not run in the fast PR unit lane
+pytestmark = pytest.mark.slow
 
 # Hermetic isolation stubs for external cloud and telemetry packages
 _STUB_MODULES = [
@@ -88,7 +93,6 @@ with stub_modules(_fakes):
     from models.focus_session import FocusSession
     import routers.focus_sessions as focus_sessions_router
     from utils.other import endpoints as auth
-
 
 
 class _ExplodingId:
@@ -314,13 +318,15 @@ class TestAdversarialDeserializationInputs(unittest.TestCase):
             "description": "Exploding ID desc",
             "created_at": now,
         }
-        exploding_mapping_record = _ExplodingMapping({
-            "id": "exploding-map-01",
-            "status": "focused",
-            "app_or_site": "Slack",
-            "description": "Exploding get() desc",
-            "created_at": now,
-        })
+        exploding_mapping_record = _ExplodingMapping(
+            {
+                "id": "exploding-map-01",
+                "status": "focused",
+                "app_or_site": "Slack",
+                "description": None,  # triggers ValidationError to exercise poison skip and on_error
+                "created_at": now,
+            }
+        )
         valid_survivor = {
             "id": "valid-survivor-1",
             "status": "focused",
@@ -338,7 +344,6 @@ class TestAdversarialDeserializationInputs(unittest.TestCase):
         self.assertEqual(len(parsed), 1)
         self.assertEqual(parsed[0].id, "valid-survivor-1")
         self.assertEqual(len(errors), 2)
-
 
 
 class TestAdversarialRouterBoundary(unittest.TestCase):
@@ -373,7 +378,13 @@ class TestAdversarialRouterBoundary(unittest.TestCase):
             },
             {"id": "doc-missing-all"},
             {"id": None, "status": "focused", "app_or_site": "App", "description": "d", "created_at": now},
-            {"id": "doc-invalid-date", "status": "focused", "app_or_site": "App", "description": "d", "created_at": "not-valid-iso"},
+            {
+                "id": "doc-invalid-date",
+                "status": "focused",
+                "app_or_site": "App",
+                "description": "d",
+                "created_at": "not-valid-iso",
+            },
             # Valid item in between
             {
                 "id": "valid-doc-survivor-1",
@@ -385,8 +396,20 @@ class TestAdversarialRouterBoundary(unittest.TestCase):
                 "duration_seconds": 60,
             },
             # More hostile data
-            {"id": "doc-type-conflict", "status": ["focused"], "app_or_site": 999, "description": None, "created_at": None},
-            {"id": "doc-bad-unicode", "status": "focused", "app_or_site": "App", "description": "d", "created_at": "9999-99-99T99:99:99Z"},
+            {
+                "id": "doc-type-conflict",
+                "status": ["focused"],
+                "app_or_site": 999,
+                "description": None,
+                "created_at": None,
+            },
+            {
+                "id": "doc-bad-unicode",
+                "status": "focused",
+                "app_or_site": "App",
+                "description": "d",
+                "created_at": "9999-99-99T99:99:99Z",
+            },
             # Valid item 2
             {
                 "id": "valid-doc-survivor-2",
@@ -420,13 +443,15 @@ class TestAdversarialRouterBoundary(unittest.TestCase):
             "description": "Exploding ID desc",
             "created_at": now,
         }
-        exploding_mapping_record = _ExplodingMapping({
-            "id": "exploding-map-01",
-            "status": "focused",
-            "app_or_site": "Slack",
-            "description": "Exploding get() desc",
-            "created_at": now,
-        })
+        exploding_mapping_record = _ExplodingMapping(
+            {
+                "id": "exploding-map-01",
+                "status": "focused",
+                "app_or_site": "Slack",
+                "description": None,  # triggers ValidationError to exercise poison skip and error logging
+                "created_at": now,
+            }
+        )
         valid_survivor = {
             "id": "valid-survivor-1",
             "status": "focused",
@@ -446,7 +471,6 @@ class TestAdversarialRouterBoundary(unittest.TestCase):
         data = response.json()
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["id"], "valid-survivor-1")
-
 
 
 class TestAdversarialPIILogging(unittest.TestCase):
