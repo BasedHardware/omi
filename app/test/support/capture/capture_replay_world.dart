@@ -288,6 +288,9 @@ class CaptureReplayWorld {
 
   /// The server's answer to that request. Unset, it answers null, as a failed request does.
   Future<CreateConversationResponse?> Function()? processResponse;
+
+  /// The phone's location fix, with permission granted. Unset, location services are off.
+  Position? locationFix;
   int tokenRefreshCalls = 0;
   final List<String> timeline = [];
 
@@ -397,9 +400,12 @@ class CaptureReplayWorld {
       audioCodecLoader: (deviceId) async => pendantCodec,
       microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
-        isLocationServiceEnabled: () async => false,
-        checkPermission: () async => LocationPermission.denied,
+        isLocationServiceEnabled: () async => locationFix != null,
+        checkPermission: () async => locationFix != null ? LocationPermission.whileInUse : LocationPermission.denied,
         requestPermission: () async => LocationPermission.denied,
+        getCurrentPosition: () async => locationFix!,
+        getLastKnownPosition: () async => locationFix,
+        upload: (geolocation) async => true,
         now: clock.now,
       ),
     );

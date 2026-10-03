@@ -892,14 +892,17 @@ class CaptureController extends ChangeNotifier
     return (drained: drained, walsAtClose: walsAtClose, closedAt: _nowSeconds);
   }
 
+  /// Whether capture goes on into the next conversation when one closes: the socket outlives the close,
+  /// and a paused or interrupted capture resumes on it. A stopped or failed one sends nothing more.
+  bool get _captureOutlivesClose =>
+      _socket != null && recordingState != RecordingState.stop && recordingState != RecordingState.error;
+
   /// The socket outlives a conversation that closes, on silence or with Process now, and the session
   /// start is set only when a socket opens. Restart the window at the close, so the next conversation's
   /// audio is stamped and confirmed like the first one's instead of staying unstamped and being
   /// uploaded again later.
   void _startNextConversationWindow(int startSeconds) {
-    if (_socket == null) return;
-    // A stopped capture sends nothing more. A paused or interrupted one resumes on this socket.
-    if (recordingState == RecordingState.stop || recordingState == RecordingState.error) return;
+    if (!_captureOutlivesClose) return;
     _sessionStartSeconds = startSeconds;
     _nextConversationWindows++;
   }
@@ -3179,6 +3182,7 @@ class CaptureController extends ChangeNotifier
         conversationId,
         close.walsAtClose,
         after: _pendingFinalizeAndStamp,
+        keepLocation: _captureOutlivesClose,
       );
 
       _resetStateVariables();
@@ -3307,7 +3311,8 @@ class CaptureController extends ChangeNotifier
 
     final close = _drainClosingConversation();
     await close.drained;
-    _clearSessionLocation();
+    // The location snapshot belongs to the recording, so capture that goes on keeps it.
+    if (!_captureOutlivesClose) _clearSessionLocation();
 
     _resetStateVariables();
     _startNextConversationWindow(close.closedAt);
@@ -3352,12 +3357,15 @@ class CaptureController extends ChangeNotifier
   /// [drained] is the finalize that drained the closing conversation's tail. [walsAtClose], the WALs
   /// that existed right after that drain, fences the stamp to the audio recorded before the close. The
   /// stamp goes [after] the earlier closes' stamps, and the returned future never completes before them.
+  /// The location snapshot belongs to the recording: [keepLocation] keeps it when capture goes on into
+  /// the next conversation.
   Future<void> _finalizeAndStampSession(
     Future<void> drained,
     int sessionStartSeconds,
     String conversationId,
     Set<Wal>? walsAtClose, {
     Future<void>? after,
+    required bool keepLocation,
   }) async {
     final ownerToken = _sessionOwner?.token;
     final locationGeneration = _sessionGeolocationGeneration;
@@ -3377,7 +3385,9 @@ class CaptureController extends ChangeNotifier
     } catch (e) {
       Logger.debug('_finalizeAndStampSession error: $e');
     } finally {
-      if (_captureSessionIsCurrent(ownerToken) && locationGeneration == _sessionGeolocationGeneration) {
+      if (!keepLocation &&
+          _captureSessionIsCurrent(ownerToken) &&
+          locationGeneration == _sessionGeolocationGeneration) {
         _clearSessionLocation();
       }
     }

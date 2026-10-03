@@ -3,8 +3,10 @@
 // that every conversation's safety copy is stamped and released, not only the first one's.
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' show min;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -53,14 +55,14 @@ void main() {
     }
   }
 
-  /// A conversation whose saved transcript covers it in 15 s segments every 20 s.
+  /// A conversation whose saved transcript covers all of it, in segments of up to 15 s.
   ServerConversation conversation(String id, DateTime startedAt, int seconds) => ServerConversation(
         id: id,
         createdAt: startedAt,
         startedAt: startedAt,
         structured: Structured('fixture', 'fixture'),
         transcriptSegments: [
-          for (var t = 1; t + 15 < seconds; t += 20)
+          for (var t = 0; t < seconds; t += 15)
             TranscriptSegment(
               id: '$id-s$t',
               text: 'words',
@@ -68,7 +70,7 @@ void main() {
               isUser: false,
               personId: null,
               start: t.toDouble(),
-              end: t + 15.0,
+              end: min(t + 15, seconds).toDouble(),
               translations: [],
             ),
         ],
@@ -145,6 +147,36 @@ void main() {
     await recoveryPass();
     expect(world.socketCreates, sockets, reason: 'all three conversations share one live socket');
     expect(world.uploads.attempts, isEmpty, reason: 'audio the server already transcribed is not uploaded again');
+  });
+
+  test("pendant: the next conversation's copies keep the recording's location", () async {
+    world.locationFix = Position(
+      latitude: 37.77,
+      longitude: -122.42,
+      timestamp: world.clock.now(),
+      accuracy: 8,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
+    final link = await connectPendant();
+    final firstStart = world.clock.now();
+    await streamPendant(link, 140);
+    final firstCopies = await world.wal.syncs.phone.getAllWals();
+    expect(firstCopies, isNotEmpty, reason: 'c1 streamed into a copy before it closed');
+    expect(firstCopies.map((wal) => wal.geolocation?.latitude), everyElement(37.77),
+        reason: "c1's copies carry the location captured when the recording started");
+    await serverCloses(conversation('c1', firstStart, 140));
+    await walsReach('c1 released', (wals) => wals.isEmpty);
+
+    await streamPendant(link, 140);
+    final secondCopies = await world.wal.syncs.phone.getAllWals();
+    expect(secondCopies, isNotEmpty, reason: 'c2 streamed into a copy');
+    expect(secondCopies.map((wal) => wal.geolocation?.latitude), everyElement(37.77),
+        reason: "the recording goes on into c2, so c2's copies keep its location");
   });
 
   test('pendant: each conversation after the first gets its own capture identity', () async {
