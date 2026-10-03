@@ -1491,6 +1491,35 @@ def test_late_transcript_during_client_departure_latches_leaving():
     assert controller.deadline is not None
 
 
+def test_exhaust_does_not_overwrite_a_departed_client():
+    """A departure that wins the episode-deadline race stays client_leaving;
+    a terminal exhausted decision still stands if the client leaves after."""
+    host = SimpleNamespace(state=SimpleNamespace(active=True, shutdown_event=None), request=None)
+
+    departed = recovery_state.LiveRecoveryController(host)
+    departed.begin(family='modulate')
+    host.state.active = False
+    departed.exhaust()
+    assert departed.state is RecoveryState.client_leaving
+
+    leaving = recovery_state.LiveRecoveryController(
+        SimpleNamespace(state=SimpleNamespace(active=True, shutdown_event=None), request=None)
+    )
+    leaving.begin(family='modulate')
+    leaving.mark_client_leaving()
+    leaving.exhaust()
+    assert leaving.state is RecoveryState.client_leaving
+
+    settled = recovery_state.LiveRecoveryController(
+        SimpleNamespace(state=SimpleNamespace(active=True, shutdown_event=None), request=None)
+    )
+    settled.begin(family='modulate')
+    settled.exhaust()
+    assert settled.state is RecoveryState.exhausted
+    settled.mark_client_leaving()
+    assert settled.state is RecoveryState.exhausted
+
+
 @pytest.mark.asyncio
 async def test_abort_replay_socket_falls_back_to_inner_transport_abort(virtual_clock):
     """A real websockets connection exposes ``.transport.abort()`` instead of

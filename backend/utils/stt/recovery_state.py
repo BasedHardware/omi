@@ -157,7 +157,8 @@ class LiveRecoveryController:
         self._release()
 
     def exhaust(self) -> None:
-        self.state = RecoveryState.exhausted
+        if not self.client_has_left():
+            self.state = RecoveryState.exhausted
 
     @property
     def exhausted(self) -> bool:
