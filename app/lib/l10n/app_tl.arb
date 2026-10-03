@@ -11389,5 +11389,6 @@
     "playbackBackToCurrent": "Bumalik sa Kasalukuyan",
     "playbackAudioUnavailable": "Hindi Magagamit ang Audio",
     "playbackAudioLoadFailed": "Hindi Ma-load ang Audio",
-    "playbackAudioNetworkFailed": "Suriin ang Koneksyon"
+    "playbackAudioNetworkFailed": "Suriin ang Koneksyon",
+    "capturePendantDisconnectedShort": "Kusang kokonekta muli ang Omi"
 }

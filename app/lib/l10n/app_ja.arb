@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "現在の位置に戻る",
     "playbackAudioUnavailable": "音声を利用できません",
     "playbackAudioLoadFailed": "音声を読み込めませんでした",
-    "playbackAudioNetworkFailed": "接続を確認してください"
+    "playbackAudioNetworkFailed": "接続を確認してください",
+    "capturePendantDisconnectedShort": "Omiは自動で再接続します"
 }

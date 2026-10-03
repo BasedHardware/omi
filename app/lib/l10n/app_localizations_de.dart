@@ -11336,7 +11336,7 @@ class AppLocalizationsDe extends AppLocalizations {
       'Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.';
 
   @override
-  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+  String get capturePendantDisconnectedShort => 'Omi verbindet sich von selbst neu';
 
   @override
   String participantsSummaryUncounted(String name) {

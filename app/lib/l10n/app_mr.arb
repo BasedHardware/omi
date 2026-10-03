@@ -11389,5 +11389,6 @@
     "playbackBackToCurrent": "वर्तमानावर परत जा",
     "playbackAudioUnavailable": "ऑडिओ उपलब्ध नाही",
     "playbackAudioLoadFailed": "ऑडिओ लोड होऊ शकला नाही",
-    "playbackAudioNetworkFailed": "कनेक्शन तपासा"
+    "playbackAudioNetworkFailed": "कनेक्शन तपासा",
+    "capturePendantDisconnectedShort": "Omi आपोआप पुन्हा कनेक्ट होईल"
 }

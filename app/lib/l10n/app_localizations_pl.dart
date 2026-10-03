@@ -11283,7 +11283,7 @@ class AppLocalizationsPl extends AppLocalizations {
       'Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.';
 
   @override
-  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+  String get capturePendantDisconnectedShort => 'Omi połączy się ponownie samo';
 
   @override
   String participantsSummaryUncounted(String name) {

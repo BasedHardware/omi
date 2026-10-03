@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "Atgal prie dabartinio",
     "playbackAudioUnavailable": "Garsas nepasiekiamas",
     "playbackAudioLoadFailed": "Nepavyko įkelti garso",
-    "playbackAudioNetworkFailed": "Patikrinkite ryšį"
+    "playbackAudioNetworkFailed": "Patikrinkite ryšį",
+    "capturePendantDisconnectedShort": "Omi pats vėl prisijungs"
 }

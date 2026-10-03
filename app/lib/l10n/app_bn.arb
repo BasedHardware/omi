@@ -11389,5 +11389,6 @@
     "playbackBackToCurrent": "বর্তমানে ফিরে যান",
     "playbackAudioUnavailable": "অডিও উপলব্ধ নয়",
     "playbackAudioLoadFailed": "অডিও লোড করা যায়নি",
-    "playbackAudioNetworkFailed": "সংযোগ পরীক্ষা করুন"
+    "playbackAudioNetworkFailed": "সংযোগ পরীক্ষা করুন",
+    "capturePendantDisconnectedShort": "Omi নিজে থেকেই আবার সংযোগ করবে"
 }

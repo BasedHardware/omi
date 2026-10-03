@@ -11179,7 +11179,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.';
 
   @override
-  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+  String get capturePendantDisconnectedShort => 'سيعيد Omi الاتصال تلقائيًا';
 
   @override
   String participantsSummaryUncounted(String name) {

@@ -11310,7 +11310,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
 
   @override
-  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+  String get capturePendantDisconnectedShort => 'Omi es tornarà a connectar sol';
 
   @override
   String participantsSummaryUncounted(String name) {

@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "현재 위치로 돌아가기",
     "playbackAudioUnavailable": "오디오를 사용할 수 없음",
     "playbackAudioLoadFailed": "오디오를 불러올 수 없음",
-    "playbackAudioNetworkFailed": "연결 확인"
+    "playbackAudioNetworkFailed": "연결 확인",
+    "capturePendantDisconnectedShort": "Omi가 자동으로 다시 연결해요"
 }

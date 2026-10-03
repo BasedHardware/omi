@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "Zpět na aktuální",
     "playbackAudioUnavailable": "Zvuk není k dispozici",
     "playbackAudioLoadFailed": "Zvuk se nepodařilo načíst",
-    "playbackAudioNetworkFailed": "Zkontrolujte připojení"
+    "playbackAudioNetworkFailed": "Zkontrolujte připojení",
+    "capturePendantDisconnectedShort": "Omi se znovu připojí sám"
 }

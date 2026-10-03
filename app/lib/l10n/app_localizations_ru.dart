@@ -11285,7 +11285,7 @@ class AppLocalizationsRu extends AppLocalizations {
       'Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.';
 
   @override
-  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+  String get capturePendantDisconnectedShort => 'Omi переподключится сам';
 
   @override
   String participantsSummaryUncounted(String name) {

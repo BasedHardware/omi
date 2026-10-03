@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "回到当前位置",
     "playbackAudioUnavailable": "音频不可用",
     "playbackAudioLoadFailed": "无法加载音频",
-    "playbackAudioNetworkFailed": "请检查网络连接"
+    "playbackAudioNetworkFailed": "请检查网络连接",
+    "capturePendantDisconnectedShort": "Omi 会自动重新连接"
 }

@@ -11240,7 +11240,7 @@ class AppLocalizationsFa extends AppLocalizations {
       'آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.';
 
   @override
-  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+  String get capturePendantDisconnectedShort => 'Omi خودش دوباره وصل می‌شود';
 
   @override
   String participantsSummaryUncounted(String name) {

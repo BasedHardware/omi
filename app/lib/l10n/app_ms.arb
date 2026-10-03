@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "Kembali ke Semasa",
     "playbackAudioUnavailable": "Audio Tidak Tersedia",
     "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuatkan",
-    "playbackAudioNetworkFailed": "Semak Sambungan"
+    "playbackAudioNetworkFailed": "Semak Sambungan",
+    "capturePendantDisconnectedShort": "Omi akan bersambung semula sendiri"
 }

@@ -11389,5 +11389,6 @@
     "playbackBackToCurrent": "Назад да бягучага",
     "playbackAudioUnavailable": "Аўдыё недаступнае",
     "playbackAudioLoadFailed": "Не ўдалося загрузіць аўдыё",
-    "playbackAudioNetworkFailed": "Праверце злучэнне"
+    "playbackAudioNetworkFailed": "Праверце злучэнне",
+    "capturePendantDisconnectedShort": "Omi перападключыцца сам"
 }

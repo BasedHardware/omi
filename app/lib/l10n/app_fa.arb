@@ -11389,5 +11389,6 @@
     "playbackBackToCurrent": "بازگشت به مورد فعلی",
     "playbackAudioUnavailable": "صدا در دسترس نیست",
     "playbackAudioLoadFailed": "بارگیری صدا ممکن نشد",
-    "playbackAudioNetworkFailed": "اتصال را بررسی کنید"
+    "playbackAudioNetworkFailed": "اتصال را بررسی کنید",
+    "capturePendantDisconnectedShort": "Omi خودش دوباره وصل می‌شود"
 }

@@ -11389,5 +11389,6 @@
     "playbackBackToCurrent": "חזרה לנוכחי",
     "playbackAudioUnavailable": "האודיו לא זמין",
     "playbackAudioLoadFailed": "לא ניתן לטעון את האודיו",
-    "playbackAudioNetworkFailed": "בדקו את החיבור"
+    "playbackAudioNetworkFailed": "בדקו את החיבור",
+    "capturePendantDisconnectedShort": "Omi יתחבר מחדש מעצמו"
 }

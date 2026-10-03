@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "Zurück zum Aktuellen",
     "playbackAudioUnavailable": "Audio nicht verfügbar",
     "playbackAudioLoadFailed": "Audio konnte nicht geladen werden",
-    "playbackAudioNetworkFailed": "Verbindung prüfen"
+    "playbackAudioNetworkFailed": "Verbindung prüfen",
+    "capturePendantDisconnectedShort": "Omi verbindet sich von selbst neu"
 }

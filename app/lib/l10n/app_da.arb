@@ -3874,5 +3874,6 @@
     "playbackBackToCurrent": "Tilbage til aktuel",
     "playbackAudioUnavailable": "Lyd ikke tilgængelig",
     "playbackAudioLoadFailed": "Lyden kunne ikke indlæses",
-    "playbackAudioNetworkFailed": "Tjek forbindelsen"
+    "playbackAudioNetworkFailed": "Tjek forbindelsen",
+    "capturePendantDisconnectedShort": "Omi genopretter forbindelsen af sig selv"
 }

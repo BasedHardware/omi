@@ -3867,5 +3867,6 @@
     "playbackBackToCurrent": "Wróć do bieżącego",
     "playbackAudioUnavailable": "Dźwięk niedostępny",
     "playbackAudioLoadFailed": "Nie udało się wczytać dźwięku",
-    "playbackAudioNetworkFailed": "Sprawdź połączenie"
+    "playbackAudioNetworkFailed": "Sprawdź połączenie",
+    "capturePendantDisconnectedShort": "Omi połączy się ponownie samo"
 }

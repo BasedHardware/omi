@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "Обратно към текущото",
     "playbackAudioUnavailable": "Аудиото е недостъпно",
     "playbackAudioLoadFailed": "Аудиото не можа да се зареди",
-    "playbackAudioNetworkFailed": "Проверете връзката"
+    "playbackAudioNetworkFailed": "Проверете връзката",
+    "capturePendantDisconnectedShort": "Omi ще се свърже отново сам"
 }

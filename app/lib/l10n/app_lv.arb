@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "Atpakaļ uz pašreizējo",
     "playbackAudioUnavailable": "Audio nav pieejams",
     "playbackAudioLoadFailed": "Audio neizdevās ielādēt",
-    "playbackAudioNetworkFailed": "Pārbaudiet savienojumu"
+    "playbackAudioNetworkFailed": "Pārbaudiet savienojumu",
+    "capturePendantDisconnectedShort": "Omi pats atjaunos savienojumu"
 }

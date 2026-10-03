@@ -11273,7 +11273,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
 
   @override
-  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+  String get capturePendantDisconnectedShort => 'Omi pats atjaunos savienojumu';
 
   @override
   String participantsSummaryUncounted(String name) {

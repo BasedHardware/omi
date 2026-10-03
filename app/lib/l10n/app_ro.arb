@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "Înapoi la curent",
     "playbackAudioUnavailable": "Audio indisponibil",
     "playbackAudioLoadFailed": "Audio nu a putut fi încărcat",
-    "playbackAudioNetworkFailed": "Verificați conexiunea"
+    "playbackAudioNetworkFailed": "Verificați conexiunea",
+    "capturePendantDisconnectedShort": "Omi se va reconecta singur"
 }

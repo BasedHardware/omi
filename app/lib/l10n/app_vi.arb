@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "Quay lại hiện tại",
     "playbackAudioUnavailable": "Âm thanh không khả dụng",
     "playbackAudioLoadFailed": "Không thể tải âm thanh",
-    "playbackAudioNetworkFailed": "Kiểm tra kết nối"
+    "playbackAudioNetworkFailed": "Kiểm tra kết nối",
+    "capturePendantDisconnectedShort": "Omi sẽ tự kết nối lại"
 }

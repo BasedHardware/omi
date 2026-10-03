@@ -11389,5 +11389,6 @@
     "playbackBackToCurrent": "Natrag na trenutno",
     "playbackAudioUnavailable": "Zvuk nije dostupan",
     "playbackAudioLoadFailed": "Zvuk nije moguće učitati",
-    "playbackAudioNetworkFailed": "Provjerite vezu"
+    "playbackAudioNetworkFailed": "Provjerite vezu",
+    "capturePendantDisconnectedShort": "Omi će se sam ponovno povezati"
 }

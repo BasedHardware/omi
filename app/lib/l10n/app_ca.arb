@@ -3832,5 +3832,6 @@
     "playbackBackToCurrent": "Torna a l'actual",
     "playbackAudioUnavailable": "Àudio no disponible",
     "playbackAudioLoadFailed": "No s'ha pogut carregar l'àudio",
-    "playbackAudioNetworkFailed": "Comprova la connexió"
+    "playbackAudioNetworkFailed": "Comprova la connexió",
+    "capturePendantDisconnectedShort": "Omi es tornarà a connectar sol"
 }
