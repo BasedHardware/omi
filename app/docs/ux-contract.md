@@ -294,7 +294,9 @@ guidance.
 
 - Ask with a pre-prompt that says why — `OmiPermissionRow` (`lib/ui/components/omi_permission_row.dart`):
   title, one-sentence reason, and one action for its state (Allow → the system prompt; Allowed;
-  Open Settings) — then the system prompt. Continue never fires a system prompt by itself.
+  Open Settings) — then the system prompt. A screen's Continue asks, in row order, for every
+  permission still askable (`requestMissingOnboardingPermissions`), then moves on whatever the
+  reader chose.
 - Permanently denied → the row says so and offers **Open Settings** (`l10n.openSettings`).
 - Ask when a feature needs the permission ("Always" location only when a feature requires it).
 
