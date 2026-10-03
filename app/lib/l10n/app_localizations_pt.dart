@@ -12324,4 +12324,77 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Não foi possível carregar os aplicativos de chat. Tente novamente.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voz';
+
+  @override
+  String get assistantVoice => 'Voz do assistente';
+
+  @override
+  String get voiceSharedAcrossDevices => 'A tua escolha de voz é partilhada entre o telemóvel e o computador.';
+
+  @override
+  String get readChatRepliesAloud => 'Ler respostas do chat em voz alta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Só fala quando a Resposta por voz o permite.';
+
+  @override
+  String get voicePreviewSample => 'Olá, eu sou a Omi. Esta é a minha voz.';
+
+  @override
+  String get peopleStatsIncomplete => 'As contagens podem estar incompletas.';
+
+  @override
+  String get reprocessingConversationProgress => 'Reprocessando a conversa…';
+
+  @override
+  String get conversationReprocessed => 'Conversa atualizada';
+
+  @override
+  String get loadingTranscript => 'Carregando a transcrição…';
+
+  @override
+  String get transcriptLoadFailed => 'Não foi possível carregar a transcrição.';
+
+  @override
+  String get processingConversationProgress => 'Processando a conversa…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Não foi possível processar esta conversa.';
+
+  @override
+  String get waitForReprocessing => 'Aguarde o fim do reprocessamento.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Palestrante';
+
+  @override
+  String get unresolvedSpeakersNotice => 'As vozes não estão separadas entre as gravações.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Sobre as etiquetas de falante';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi não conseguiu distinguir as outras vozes entre as gravações. Toque numa etiqueta de falante para nomear quem está a falar.';
+
+  @override
+  String get nameSpeakerTitle => 'Nomear falante';
+
+  @override
+  String get playbackPreparingAudio => 'A preparar áudio…';
+
+  @override
+  String get playbackBackToCurrent => 'Voltar ao atual';
+
+  @override
+  String get playbackAudioUnavailable => 'Áudio indisponível';
+
+  @override
+  String get playbackAudioLoadFailed => 'Não foi possível carregar o áudio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Verifique a ligação';
 }

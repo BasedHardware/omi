@@ -12338,4 +12338,77 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Не ўдалося загрузіць праграмы чата. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Голас';
+
+  @override
+  String get assistantVoice => 'Голас памочніка';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Выбраны вамі голас выкарыстоўваецца на мабільнай прыладзе і на камп\'ютары.';
+
+  @override
+  String get readChatRepliesAloud => 'Чытаць адказы ў чаце ўголас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Агучвае толькі тады, калі гэта дазваляе «Галасавы адказ».';
+
+  @override
+  String get voicePreviewSample => 'Прывітанне, я Omi. Гэта мой голас.';
+
+  @override
+  String get peopleStatsIncomplete => 'Колькасць можа быць няпоўнай.';
+
+  @override
+  String get reprocessingConversationProgress => 'Паўторная апрацоўка размовы…';
+
+  @override
+  String get conversationReprocessed => 'Размова абноўлена';
+
+  @override
+  String get loadingTranscript => 'Загрузка транскрыпцыі…';
+
+  @override
+  String get transcriptLoadFailed => 'Не ўдалося загрузіць транскрыпцыю.';
+
+  @override
+  String get processingConversationProgress => 'Апрацоўка размовы…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Не ўдалося апрацаваць гэту размову.';
+
+  @override
+  String get waitForReprocessing => 'Пачакайце, пакуль скончыцца паўторная апрацоўка.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Дыктар';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Спікары не падзелены паміж запісамі.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Пра пазнакі спікераў';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi не змогла адрозніць іншыя галасы паміж запісамі. Націсніце пазнаку спікера, каб назваць таго, хто гаворыць.';
+
+  @override
+  String get nameSpeakerTitle => 'Назваць дыктара';
+
+  @override
+  String get playbackPreparingAudio => 'Падрыхтоўка аўдыё…';
+
+  @override
+  String get playbackBackToCurrent => 'Назад да бягучага';
+
+  @override
+  String get playbackAudioUnavailable => 'Аўдыё недаступнае';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не ўдалося загрузіць аўдыё';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Праверце злучэнне';
 }

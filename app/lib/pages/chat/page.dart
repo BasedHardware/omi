@@ -117,8 +117,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     });
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       var provider = context.read<MessageProvider>();
       _messageProvider = provider;
+      provider.readAloud.active = true;
       // Listen for quota exceeded from any send path (text or voice)
       provider.addListener(_onMessageProviderChanged);
       // Every entry resumes the current conversation, including while a reply or voice send is active.
@@ -199,8 +201,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final readAloud = _messageProvider?.readAloud;
+    if (readAloud == null) return;
+    readAloud.active = state == AppLifecycleState.resumed;
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _messageProvider?.readAloud.active = false;
     _messageProvider?.removeListener(_onMessageProviderChanged);
     _cancelOwnedLifecycleTimers();
     _latestJumpIdleTimer?.cancel();

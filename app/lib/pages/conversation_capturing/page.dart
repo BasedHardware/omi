@@ -113,7 +113,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     await provider.finishCapture();
     if (!mounted) return;
     switchHomeToConversationsTab(context);
-    Navigator.of(context).pop();
+    // A swipe back during the finish has already popped this route; it only stays mounted while it
+    // animates out, and a pop then would take Home with it and leave the navigator empty.
+    final route = ModalRoute.of(context);
+    if (route != null && route.isCurrent) Navigator.of(context).pop();
   }
 
   /// The live page's state, resolved exactly as the Home capture card resolves it
@@ -152,6 +155,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           key: scaffoldKey,
           backgroundColor: OmiColors.surface0,
           appBar: ConversationStateAppBar(
+            showStatus: effectivelyMuted || provider.pendantCaptureVerified,
             state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
             bufferingFor: provider.customSttBufferingDuration,
             sourceLabel: switch (provider.liveCaptureSource) {
@@ -642,6 +646,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     required bool photoChannelActive,
     required bool transcriptionInterrupted,
   }) {
+    if (!provider.pendantCaptureVerified) return '';
     if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
     if (provider.terminalTranscriptionFailure != null) {
       return context.l10n.transcriptionUnavailableRecordingContinues;

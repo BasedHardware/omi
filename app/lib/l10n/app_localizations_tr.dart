@@ -12318,4 +12318,77 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Sohbet uygulamaları yüklenemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Ses';
+
+  @override
+  String get assistantVoice => 'Asistan Sesi';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ses seçiminiz mobil ve masaüstü arasında paylaşılır.';
+
+  @override
+  String get readChatRepliesAloud => 'Sohbet yanıtlarını sesli oku';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Yalnızca Sesli yanıt izin verdiğinde konuşur.';
+
+  @override
+  String get voicePreviewSample => 'Merhaba, ben Omi. Bu benim sesim.';
+
+  @override
+  String get peopleStatsIncomplete => 'Sayımlar eksik olabilir.';
+
+  @override
+  String get reprocessingConversationProgress => 'Konuşma yeniden işleniyor…';
+
+  @override
+  String get conversationReprocessed => 'Konuşma güncellendi';
+
+  @override
+  String get loadingTranscript => 'Döküm yükleniyor…';
+
+  @override
+  String get transcriptLoadFailed => 'Döküm yüklenemedi.';
+
+  @override
+  String get processingConversationProgress => 'Konuşma işleniyor…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Bu konuşma işlenemedi.';
+
+  @override
+  String get waitForReprocessing => 'Yeniden işlemenin bitmesini bekleyin.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Konuşmacı';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Konuşmacılar kayıtlar arasında ayrıştırılamadı.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Konuşmacı Etiketleri Hakkında';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi, kayıtlar arasında diğer sesleri ayırt edemedi. Konuşanın kim olduğunu adlandırmak için bir konuşmacı etiketine dokunun.';
+
+  @override
+  String get nameSpeakerTitle => 'Konuşmacıyı Adlandır';
+
+  @override
+  String get playbackPreparingAudio => 'Ses hazırlanıyor…';
+
+  @override
+  String get playbackBackToCurrent => 'Geçerliye Dön';
+
+  @override
+  String get playbackAudioUnavailable => 'Ses Kullanılamıyor';
+
+  @override
+  String get playbackAudioLoadFailed => 'Ses Yüklenemedi';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Bağlantıyı Kontrol Edin';
 }

@@ -12294,4 +12294,77 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Couldn\'t load chat apps. Please try again.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voice';
+
+  @override
+  String get assistantVoice => 'Assistant Voice';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Your voice choice is shared across mobile and desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Read chat replies aloud';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Only speaks when Voice response allows it.';
+
+  @override
+  String get voicePreviewSample => 'Hi, I\'m Omi. This is my voice.';
+
+  @override
+  String get peopleStatsIncomplete => 'Counts may be incomplete.';
+
+  @override
+  String get reprocessingConversationProgress => 'Reprocessing conversation…';
+
+  @override
+  String get conversationReprocessed => 'Conversation updated';
+
+  @override
+  String get loadingTranscript => 'Loading transcript…';
+
+  @override
+  String get transcriptLoadFailed => 'Couldn\'t load the transcript.';
+
+  @override
+  String get processingConversationProgress => 'Processing conversation…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'This conversation couldn\'t be processed.';
+
+  @override
+  String get waitForReprocessing => 'Wait for reprocessing to finish.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Speaker';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Speakers aren\'t separated across recordings.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'About Speaker Labels';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi could not tell the other voices apart across the recordings. Tap a speaker label to name who is speaking.';
+
+  @override
+  String get nameSpeakerTitle => 'Name Speaker';
+
+  @override
+  String get playbackPreparingAudio => 'Preparing Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Back to Current';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio Unavailable';
+
+  @override
+  String get playbackAudioLoadFailed => 'Couldn\'t Load Audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Check Connection';
 }

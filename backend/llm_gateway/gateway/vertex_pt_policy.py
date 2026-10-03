@@ -8,6 +8,7 @@ Only declared, synthetic probes may confirm that the exclusive order moved.
 from __future__ import annotations
 
 import logging
+import json
 import os
 from contextvars import ContextVar
 from typing import TypeVar
@@ -16,6 +17,7 @@ from collections.abc import Callable
 from llm_gateway.gateway.provider_types import ProviderFailure
 from llm_gateway.gateway.schemas import FailureClass
 from llm_gateway.gateway.vertex_wire import _bounded_error_text  # pyright: ignore[reportPrivateUsage]
+from llm_gateway.gateway.vertex_wire import _vertex_rejection_reason  # pyright: ignore[reportPrivateUsage]
 from utils.llm import vertex_pt_routing as ptr
 from config.vertex_reservations import RESERVATIONS, State
 from utils.llm.vertex_reservation_state import effective_states
@@ -125,6 +127,20 @@ class VertexPTPolicyMixin:
         traffic_type: str | None = None,
     ) -> None:
         """Record strict positive capacity evidence in the request snapshot."""
+        if 400 <= status_code < 500:
+            # JSON stdout is parsed into jsonPayload by Cloud Logging. Values
+            # are allowlisted metadata; never include the raw provider error.
+            print(
+                json.dumps(
+                    {
+                        'severity': 'WARNING',
+                        'event': 'vertex_provider_rejection',
+                        'served_model': model if model in ptr.DESKTOP_TEXT_LANES else 'other',
+                        'status': status_code,
+                        'reason': _vertex_rejection_reason(preview),
+                    }
+                )
+            )
         if model not in RESERVATIONS or capacity != ptr.REQUEST_TYPE_DEDICATED:
             return
         if 200 <= status_code < 300 and traffic_type == 'PROVISIONED_THROUGHPUT':

@@ -12240,4 +12240,77 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'ไม่สามารถโหลดแอปแชทได้ โปรดลองอีกครั้ง';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'เสียง';
+
+  @override
+  String get assistantVoice => 'เสียงผู้ช่วย';
+
+  @override
+  String get voiceSharedAcrossDevices => 'เสียงที่คุณเลือกจะใช้ร่วมกันทั้งบนมือถือและเดสก์ท็อป';
+
+  @override
+  String get readChatRepliesAloud => 'อ่านคำตอบแชทออกเสียง';
+
+  @override
+  String get readChatRepliesAloudDescription => 'พูดเฉพาะเมื่อการตอบกลับด้วยเสียงอนุญาตเท่านั้น';
+
+  @override
+  String get voicePreviewSample => 'สวัสดี ฉันคือ Omi นี่คือเสียงของฉัน';
+
+  @override
+  String get peopleStatsIncomplete => 'จำนวนอาจไม่ครบถ้วน';
+
+  @override
+  String get reprocessingConversationProgress => 'กำลังประมวลผลการสนทนาอีกครั้ง…';
+
+  @override
+  String get conversationReprocessed => 'อัปเดตการสนทนาแล้ว';
+
+  @override
+  String get loadingTranscript => 'กำลังโหลดถอดความ…';
+
+  @override
+  String get transcriptLoadFailed => 'ไม่สามารถโหลดถอดความได้';
+
+  @override
+  String get processingConversationProgress => 'กำลังประมวลผลการสนทนา…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'ไม่สามารถประมวลผลการสนทนานี้ได้';
+
+  @override
+  String get waitForReprocessing => 'รอให้การประมวลผลอีกครั้งเสร็จสิ้น';
+
+  @override
+  String get unnamedSpeakerLabel => 'ผู้พูด';
+
+  @override
+  String get unresolvedSpeakersNotice => 'ผู้พูดไม่ได้ถูกแยกกันระหว่างการบันทึก';
+
+  @override
+  String get unresolvedSpeakersTitle => 'เกี่ยวกับป้ายกำกับผู้พูด';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ไม่สามารถแยกเสียงอื่น ๆ ออกจากกันระหว่างการบันทึก แตะป้ายกำกับผู้พูดเพื่อตั้งชื่อผู้ที่กำลังพูด';
+
+  @override
+  String get nameSpeakerTitle => 'ตั้งชื่อผู้พูด';
+
+  @override
+  String get playbackPreparingAudio => 'กำลังเตรียมเสียง…';
+
+  @override
+  String get playbackBackToCurrent => 'กลับไปที่ปัจจุบัน';
+
+  @override
+  String get playbackAudioUnavailable => 'เสียงไม่พร้อมใช้งาน';
+
+  @override
+  String get playbackAudioLoadFailed => 'ไม่สามารถโหลดเสียงได้';
+
+  @override
+  String get playbackAudioNetworkFailed => 'ตรวจสอบการเชื่อมต่อ';
 }

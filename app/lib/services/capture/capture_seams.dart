@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -49,8 +53,23 @@ abstract interface class CaptureBleListeners {
 }
 
 /// Production [CaptureBleListeners] over the shared [BleBridge] singleton.
-class BleBridgeCaptureListeners implements CaptureBleListeners {
+class BleBridgeCaptureListeners implements CaptureBleListeners, CaptureIngressPort {
   const BleBridgeCaptureListeners();
+
+  @override
+  bool get supportsIngressHealth => defaultTargetPlatform == TargetPlatform.iOS;
+  @override
+  CaptureIngressHealth? ingressHealth(String deviceId) => BleBridge.instance.ingressHealth(deviceId);
+  @override
+  void addIngressListener(VoidCallback listener) => BleBridge.instance.addIngressListener(listener);
+  @override
+  void removeIngressListener(VoidCallback listener) => BleBridge.instance.removeIngressListener(listener);
+  @override
+  Future<void> setCaptureAuthorized(String deviceId, bool authorized) async {
+    if (!supportsIngressHealth) return;
+    await BleHostApi().setCaptureAuthorized(deviceId, authorized);
+    BleBridge.instance.setNativeIngressOwner(deviceId, authorized);
+  }
 
   @override
   void addBatchRecordingFinalizedListener(void Function(String) callback) =>

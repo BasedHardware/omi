@@ -48,6 +48,7 @@ from utils.stt.live_failure import (
     terminate_live_stt_session,
 )
 from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome, bounded_provider
+from utils.stt.recovery_state import LiveRecoveryController
 from utils.stt.soniox import (
     SONIOX_DEATH_IDLE_TIMEOUT,
     SONIOX_DEATH_ROTATION,
@@ -58,6 +59,11 @@ from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
 from utils.stt.stream_close import PROVIDER_RATE_LIMITED
 from utils.stt.streaming import STTService, _fallback_failure_reason
 from utils.stt.vad_gate import GatedSTTSocket
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 class FakeWebSocket:
@@ -177,6 +183,8 @@ def test_zero_audio_finish_closes_without_end_frame_or_socket_death():
             )
             receiver = object.__new__(ListenReceiver)
             receiver.host = host
+            receiver.recovery = LiveRecoveryController(host)
+            receiver._candidate_token = None
             receiver.stt_socket = sock
             receiver._failover_stt_socket = AsyncMock()
             with patch.object(receiver_mod, 'terminate_live_stt_session', new=AsyncMock()) as terminate:

@@ -1794,12 +1794,12 @@
     "processedFilesDeleted": "Verarbeitete Dateien gelöscht",
     "deviceNotResponding": "Gerät reagiert nicht",
     "sdCardProcessing": "SD-Karten-Verarbeitung",
-    "sdCardProcessingMessage": "Möchtest du die verarbeiteten Dateien von der SD-Karte behalten oder löschen?",
+    "sdCardProcessingMessage": "{count} Aufnahme(n) werden verarbeitet. Die Dateien werden danach von der SD-Karte entfernt.",
     "process": "Verarbeiten",
     "processingFailed": "Verarbeitung fehlgeschlagen",
     "downloadingFromSdCard": "Wird von SD-Karte heruntergeladen",
-    "processingProgress": "Verarbeitungsfortschritt",
-    "conversationsCreated": "Gespräche erstellt",
+    "processingProgress": "Verarbeitung {current}/{total}",
+    "conversationsCreated": "{count} Gespräche erstellt",
     "internetRequired": "Internet erforderlich",
     "processAudio": "Audio verarbeiten",
     "start": "Starten",
@@ -2035,7 +2035,7 @@
             }
         }
     },
-    "tagSpeaker": "Sprecher markieren",
+    "tagSpeaker": "Sprecher {speakerId} markieren",
     "@tagSpeaker": {
         "placeholders": {
             "speakerId": {
@@ -2047,7 +2047,7 @@
     "selectYouFromList": "Wähle dich selbst aus der Liste",
     "enterPersonsName": "Namen der Person eingeben",
     "addPerson": "Person hinzufügen",
-    "tagOtherSegmentsFromSpeaker": "Andere Segmente von diesem Sprecher markieren?",
+    "tagOtherSegmentsFromSpeaker": "Andere Segmente von diesem Sprecher markieren ({selected}/{total})",
     "@tagOtherSegmentsFromSpeaker": {
         "placeholders": {
             "selected": {
@@ -2085,7 +2085,7 @@
     "storageLocationLimitlessPendant": "Limitless Pendant",
     "storageLocationPhone": "Telefon",
     "storageLocationPhoneMemory": "Telefon (Speicher)",
-    "storedOnDevice": "Auf dem Gerät gespeichert",
+    "storedOnDevice": "Speicherort: {deviceName}",
     "transferring": "Übertragung…",
     "transferRequired": "Übertragung erforderlich",
     "downloadingAudioFromSdCard": "Audio von der SD-Karte deines Geräts wird heruntergeladen",
@@ -2109,7 +2109,7 @@
     "statusProcessed": "Verarbeitet",
     "statusUnprocessed": "Unverarbeitet",
     "transferCompleteMessage": "Übertragung abgeschlossen! Du kannst diese Aufnahme jetzt abspielen.",
-    "transferFailedMessage": "Übertragung fehlgeschlagen. Bitte versuche es erneut.",
+    "transferFailedMessage": "Übertragung fehlgeschlagen: {error}",
     "transferCancelled": "Übertragung abgebrochen",
     "bluetoothSyncEnabled": "Bluetooth-Synchronisierung aktiviert",
     "bluetooth": "Bluetooth",
@@ -2143,7 +2143,7 @@
     "allObjectsMigratedFinalizing": "Alle Objekte migriert. Abschließen…",
     "migrationErrorOccurred": "Ein Fehler ist während der Migration aufgetreten. Bitte versuche es erneut.",
     "migrationComplete": "Migration abgeschlossen",
-    "dataProtectedWithSettings": "Deine Daten sind geschützt mit deinen aktuellen Datenschutzeinstellungen",
+    "dataProtectedWithSettings": "Deine Daten sind jetzt mit den neuen {level}-Einstellungen geschützt.",
     "chatsLowercase": "Chats",
     "dataLowercase": "Daten",
     "fallNotificationTitle": "Autsch",
@@ -3805,5 +3805,29 @@
     "chatReplyServerError": "Auf unserer Seite ist etwas schiefgelaufen. Bitte versuche es erneut.",
     "chatReplyTimeout": "Die Antwort hat zu lange gedauert. Bitte versuche es erneut.",
     "chatReplyNotSignedIn": "Du bist nicht angemeldet. Melde dich an und versuche es erneut.",
-    "chatAppsLoadFailed": "Chat-Apps konnten nicht geladen werden. Bitte versuche es erneut."
+    "chatAppsLoadFailed": "Chat-Apps konnten nicht geladen werden. Bitte versuche es erneut.",
+    "assistantVoiceSettingsTitle": "Stimme",
+    "assistantVoice": "Assistentenstimme",
+    "voiceSharedAcrossDevices": "Deine Stimmauswahl wird auf Mobilgerät und Desktop geteilt.",
+    "readChatRepliesAloud": "Chat-Antworten laut vorlesen",
+    "readChatRepliesAloudDescription": "Spricht nur, wenn die Sprachantwort es zulässt.",
+    "voicePreviewSample": "Hallo, ich bin Omi. Das ist meine Stimme.",
+    "peopleStatsIncomplete": "Die Angaben können unvollständig sein.",
+    "reprocessingConversationProgress": "Gespräch wird neu verarbeitet…",
+    "conversationReprocessed": "Gespräch aktualisiert",
+    "loadingTranscript": "Transkript wird geladen…",
+    "transcriptLoadFailed": "Das Transkript konnte nicht geladen werden.",
+    "processingConversationProgress": "Gespräch wird verarbeitet…",
+    "conversationProcessingFailedMessage": "Dieses Gespräch konnte nicht verarbeitet werden.",
+    "waitForReprocessing": "Warte, bis die Neuverarbeitung abgeschlossen ist.",
+    "unnamedSpeakerLabel": "Sprecher",
+    "unresolvedSpeakersNotice": "Sprecher werden nicht aufnahmeübergreifend getrennt.",
+    "unresolvedSpeakersTitle": "Über Sprecher-Bezeichnungen",
+    "unresolvedSpeakersMessage": "Omi konnte die anderen Stimmen aufnahmeübergreifend nicht unterscheiden. Tippe auf eine Sprecher-Bezeichnung, um zu benennen, wer spricht.",
+    "nameSpeakerTitle": "Sprecher benennen",
+    "playbackPreparingAudio": "Audio wird vorbereitet…",
+    "playbackBackToCurrent": "Zurück zum Aktuellen",
+    "playbackAudioUnavailable": "Audio nicht verfügbar",
+    "playbackAudioLoadFailed": "Audio konnte nicht geladen werden",
+    "playbackAudioNetworkFailed": "Verbindung prüfen"
 }

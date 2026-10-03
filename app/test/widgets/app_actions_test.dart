@@ -95,7 +95,7 @@ void main() {
     expect(find.text('View'), findsOneWidget);
 
     await pump(tester, _app(external: true, setupCompletedUrl: 'https://example.com/setup-done'));
-    expect(find.text('View'), findsOneWidget, reason: 'a setup-completed check means enable lives on the detail page');
+    expect(find.text('Enable'), findsOneWidget, reason: 'a completion probe alone does not provide a setup flow');
     await tearDownProvider(tester);
   });
 

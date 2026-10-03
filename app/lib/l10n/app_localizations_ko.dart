@@ -12121,4 +12121,76 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => '채팅 앱을 불러오지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get assistantVoiceSettingsTitle => '음성';
+
+  @override
+  String get assistantVoice => '어시스턴트 음성';
+
+  @override
+  String get voiceSharedAcrossDevices => '선택한 음성은 모바일과 데스크톱에서 공유됩니다.';
+
+  @override
+  String get readChatRepliesAloud => '채팅 답장 소리 내어 읽기';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"음성 응답\"이 허용할 때만 말합니다.';
+
+  @override
+  String get voicePreviewSample => '안녕하세요, 저는 Omi입니다. 이것이 제 목소리입니다.';
+
+  @override
+  String get peopleStatsIncomplete => '집계가 불완전할 수 있습니다.';
+
+  @override
+  String get reprocessingConversationProgress => '대화를 다시 처리하는 중…';
+
+  @override
+  String get conversationReprocessed => '대화가 업데이트됨';
+
+  @override
+  String get loadingTranscript => '스크립트를 불러오는 중…';
+
+  @override
+  String get transcriptLoadFailed => '스크립트를 불러올 수 없습니다.';
+
+  @override
+  String get processingConversationProgress => '대화를 처리하는 중…';
+
+  @override
+  String get conversationProcessingFailedMessage => '이 대화를 처리할 수 없습니다.';
+
+  @override
+  String get waitForReprocessing => '다시 처리가 끝날 때까지 기다려 주세요.';
+
+  @override
+  String get unnamedSpeakerLabel => '화자';
+
+  @override
+  String get unresolvedSpeakersNotice => '녹음 전반에 걸쳐 화자가 구분되지 않았습니다.';
+
+  @override
+  String get unresolvedSpeakersTitle => '화자 레이블 정보';
+
+  @override
+  String get unresolvedSpeakersMessage => 'Omi가 녹음 전반에서 다른 목소리를 구분하지 못했습니다. 말하는 사람의 이름을 지정하려면 화자 레이블을 탭하세요.';
+
+  @override
+  String get nameSpeakerTitle => '화자 이름 지정';
+
+  @override
+  String get playbackPreparingAudio => '오디오 준비 중…';
+
+  @override
+  String get playbackBackToCurrent => '현재 위치로 돌아가기';
+
+  @override
+  String get playbackAudioUnavailable => '오디오를 사용할 수 없음';
+
+  @override
+  String get playbackAudioLoadFailed => '오디오를 불러올 수 없음';
+
+  @override
+  String get playbackAudioNetworkFailed => '연결 확인';
 }

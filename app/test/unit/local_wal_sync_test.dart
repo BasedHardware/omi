@@ -456,26 +456,66 @@ void main() {
           status: WalStatus.miss,
         );
 
-    test('the documented count cap does not evict at the boundary', () async {
+    test('the count cap warns at the boundary but never deletes pending WALs', () async {
       sync.testWals = List.generate(maxRetainedCaptureWalCount, retained);
 
-      final evicted = await sync.enforceRetentionPolicyForTesting();
+      final excess = await sync.enforceRetentionPolicyForTesting();
 
-      expect(evicted, 0);
+      expect(excess, 0);
       expect(sync.testWals, hasLength(maxRetainedCaptureWalCount));
-      expect(sync.retentionRisk, isNull);
+      expect(sync.retentionRisk?.reason, 'count_cap');
+      expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount);
     });
 
-    test('dead-backend accumulation evicts oldest WALs and records storage risk', () async {
+    test('dead-backend accumulation never deletes and never refuses new audio for count', () async {
+      final sync = LocalWalSyncImpl(listener, freeDiskBytes: () async => 64 << 30);
       sync.testWals = List.generate(maxRetainedCaptureWalCount + 3, retained);
 
-      final evicted = await sync.enforceRetentionPolicyForTesting();
+      final excess = await sync.enforceRetentionPolicyForTesting();
 
-      expect(evicted, 3);
-      expect(sync.testWals, hasLength(maxRetainedCaptureWalCount));
-      expect(sync.testWals.map((wal) => wal.timerStart), isNot(contains(anyOf(0, 1, 2))));
-      expect(sync.retentionRisk?.evictedCount, 3);
-      expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount);
+      expect(excess, 3);
+      // No eviction: every pending WAL stays on disk/index.
+      expect(sync.testWals, hasLength(maxRetainedCaptureWalCount + 3));
+      expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount + 3);
+      // Over the count threshold is a warning only: with disk to spare, new audio is still admitted.
+      expect(
+        await sync.ensureStorageAdmission(bytes: 1024, admittedGeneration: sync.sessionGeneration),
+        isTrue,
+      );
+      expect(sync.retentionRisk?.reason, 'count_cap');
+    });
+
+    test('admission refuses when free space would breach the 512MiB reserve', () async {
+      const reserve = minFreeDiskReserveBytes;
+      final low = LocalWalSyncImpl(
+        listener,
+        freeDiskBytes: () async => reserve + 512,
+      );
+      expect(
+        await low.ensureStorageAdmission(bytes: 1024, admittedGeneration: low.sessionGeneration),
+        isFalse,
+      );
+      expect(low.retentionRisk?.reason, 'disk_reserve');
+      final ok = LocalWalSyncImpl(
+        listener,
+        freeDiskBytes: () async => reserve + 4096,
+      );
+      expect(
+        await ok.ensureStorageAdmission(bytes: 1024, admittedGeneration: ok.sessionGeneration),
+        isTrue,
+      );
+    });
+
+    test('admission fails closed when free space cannot be proven', () async {
+      final unknown = LocalWalSyncImpl(
+        listener,
+        freeDiskBytes: () async => null,
+      );
+      expect(
+        await unknown.ensureStorageAdmission(bytes: 16, admittedGeneration: unknown.sessionGeneration),
+        isFalse,
+      );
+      expect(unknown.retentionRisk?.reason, 'disk_space_unknown');
     });
   });
 
@@ -1873,5 +1913,46 @@ void main() {
 
       expect(result, isNull);
     });
+  });
+
+  test('a chunk colliding with an indexed disk WAL never mutates its file or data', () async {
+    const timerStart = 1700000000;
+    var persisted = <Wal>[];
+    final oldWal = Wal(
+      timerStart: timerStart,
+      codec: BleAudioCodec.opus,
+      seconds: 10,
+      totalFrames: 1000,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      device: 'dev',
+      filePath: 'old_disk.bin',
+    );
+    final local = LocalWalSyncImpl(
+      _MockListener(),
+      // _chunk computes timerStart = now/1000 - 15 - chunkSecs; pin now so the
+      // fresh 10s chunk lands exactly on the existing disk WAL's timerStart.
+      now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 25) * 1000),
+      persistWals: (wals) async => persisted = List<Wal>.from(wals),
+      loadWals: () async => [oldWal],
+    );
+    local.setDeviceInfo('dev', 'Omi');
+    local.start();
+    await local.walReady;
+
+    for (var i = 0; i < 2500; i++) {
+      local.onFrameCaptured(WalFrame(
+        payload: [0xAA, i & 0xFF],
+        syncKey: FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF, 0]),
+      ));
+    }
+    await local.stop();
+
+    expect(oldWal.filePath, 'old_disk.bin', reason: 'the indexed disk WAL keeps its file identity');
+    expect(oldWal.data, isEmpty, reason: 'no fresh frames may be appended into a durable disk WAL');
+    expect(oldWal.totalFrames, 1000);
+    final fresh = persisted.where((w) => w != oldWal && w.timerStart == timerStart).toList();
+    expect(fresh, isNotEmpty, reason: 'the colliding chunk becomes a distinct WAL, not an in-place append');
+    expect(fresh.every((w) => w.filePath != 'old_disk.bin'), isTrue);
   });
 }

@@ -12306,4 +12306,77 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'চ্যাট অ্যাপ লোড করা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'ভয়েস';
+
+  @override
+  String get assistantVoice => 'অ্যাসিস্ট্যান্টের ভয়েস';
+
+  @override
+  String get voiceSharedAcrossDevices => 'আপনার নির্বাচিত ভয়েস মোবাইল ও ডেস্কটপে শেয়ার করা হয়।';
+
+  @override
+  String get readChatRepliesAloud => 'চ্যাটের উত্তরগুলো জোরে পড়ুন';
+
+  @override
+  String get readChatRepliesAloudDescription => 'শুধুমাত্র \"ভয়েস রেসপন্স\" অনুমতি দিলেই কথা বলে।';
+
+  @override
+  String get voicePreviewSample => 'হাই, আমি Omi। এটাই আমার ভয়েস।';
+
+  @override
+  String get peopleStatsIncomplete => 'সংখ্যাগুলো অসম্পূর্ণ হতে পারে।';
+
+  @override
+  String get reprocessingConversationProgress => 'কথোপকথন আবার প্রক্রিয়া করা হচ্ছে…';
+
+  @override
+  String get conversationReprocessed => 'কথোপকথন আপডেট হয়েছে';
+
+  @override
+  String get loadingTranscript => 'ট্রান্সক্রিপ্ট লোড হচ্ছে…';
+
+  @override
+  String get transcriptLoadFailed => 'ট্রান্সক্রিপ্ট লোড করা যায়নি।';
+
+  @override
+  String get processingConversationProgress => 'কথোপকথন প্রক্রিয়া করা হচ্ছে…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'এই কথোপকথনটি প্রক্রিয়া করা যায়নি।';
+
+  @override
+  String get waitForReprocessing => 'পুনরায় প্রক্রিয়াকরণ শেষ হওয়া পর্যন্ত অপেক্ষা করুন।';
+
+  @override
+  String get unnamedSpeakerLabel => 'স্পিকার';
+
+  @override
+  String get unresolvedSpeakersNotice => 'রেকর্ডিং জুড়ে স্পিকাররা আলাদা করা হয়নি।';
+
+  @override
+  String get unresolvedSpeakersTitle => 'স্পিকার লেবেল সম্পর্কে';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'রেকর্ডিং জুড়ে Omi অন্য কণ্ঠস্বরগুলো আলাদা করতে পারেনি। কে কথা বলছে তা নাম দিতে স্পিকার লেবেলে ট্যাপ করুন।';
+
+  @override
+  String get nameSpeakerTitle => 'স্পিকারের নাম দিন';
+
+  @override
+  String get playbackPreparingAudio => 'অডিও প্রস্তুত হচ্ছে…';
+
+  @override
+  String get playbackBackToCurrent => 'বর্তমানে ফিরে যান';
+
+  @override
+  String get playbackAudioUnavailable => 'অডিও উপলব্ধ নয়';
+
+  @override
+  String get playbackAudioLoadFailed => 'অডিও লোড করা যায়নি';
+
+  @override
+  String get playbackAudioNetworkFailed => 'সংযোগ পরীক্ষা করুন';
 }

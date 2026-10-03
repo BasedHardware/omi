@@ -143,6 +143,7 @@ def _apply_fakes(monkeypatch):
     monkeypatch.setattr(app_int, 'deserialize_conversations', mock_deserialize_convos)
     monkeypatch.setattr(app_int, 'get_available_apps', mock_get_available_apps)
     monkeypatch.setattr(app_int, 'is_trial_paywalled', mock_is_trial_paywalled)
+    monkeypatch.setattr(app_int, 'mentor_plan_allows_evaluation', MagicMock(return_value=True))
     monkeypatch.setattr(app_int, 'send_notification', mock_send_notification)
     monkeypatch.setattr(app_int, 'dispatch_notification', mock_dispatch_notification)
     monkeypatch.setattr(app_int, 'incr_daily_notification_count', redis_mod.incr_daily_notification_count)
@@ -202,6 +203,36 @@ def _make_segments(count: int) -> list:
         text = f"Segment number {i} with some conversation content about topic {i}"
         segments.append({"text": text, "start": 1000 + i, "is_user": is_user})
     return segments
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('segments', [0, 9])
+async def test_buffer_threshold_skips_plan_and_model_work(monkeypatch, segments):
+    monkeypatch.setattr(mentor_mod, 'message_buffer', MessageBuffer())
+
+    async def inline(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(app_int, 'run_blocking', inline)
+    monkeypatch.setattr(app_int, 'process_mentor_notification', mentor_mod.process_mentor_notification)
+    monkeypatch.setattr(app_int, 'get_available_apps', MagicMock(return_value=[]))
+    calls = []
+    for name in [
+        'mentor_plan_allows_evaluation',
+        'evaluate_relevance',
+        'generate_notification',
+        'validate_notification',
+        'generate_embedding',
+    ]:
+        mock = MagicMock()
+        calls.append(mock)
+        monkeypatch.setattr(app_int, name, mock)
+    assert (
+        await app_int._async_trigger_realtime_integrations('synthetic-buffer', _make_segments(segments), 'synthetic')
+        == {}
+    )
+    for call in calls:
+        call.assert_not_called()
 
 
 # ── Source-level tests ──

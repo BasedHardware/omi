@@ -147,11 +147,10 @@ class OmiBleForegroundService : Service() {
          *  callback reports CONNECTED. Used to distinguish fail-to-connect from
          *  an established link dropping. Independent of hasEverConnected which
          *  tracks the full device lifetime. */
-        var currentAttemptEstablished: Boolean = false,
-        /** Timestamp of the last persisted unexpected disconnect event, used to
-         *  backfill time-to-reconnect on the next successful connect. */
-        var pendingReconnectMarkerTs: Long? = null
-    )
+        var currentAttemptEstablished: Boolean = false
+    ) {
+        internal val reconnectDiagnostics = BleReconnectDiagnostics()
+    }
 
     private val managedDevices = ConcurrentHashMap<String, ManagedDevice>()
     private val handler = Handler(Looper.getMainLooper())
@@ -177,8 +176,8 @@ class OmiBleForegroundService : Service() {
             Log.i(TAG, "onGattConnected: $addr")
             if (managed.hasEverConnected) {
                 incrementReconnectionCount(addr)
-                backfillTimeToReconnect(addr, managed)
             }
+            backfillTimeToReconnect(addr, managed)
             managed.retryCount = 0
             managed.hasEverConnected = true
             managed.currentAttemptEstablished = true
@@ -461,6 +460,10 @@ class OmiBleForegroundService : Service() {
      */
     fun onConnectRequest(address: String, requiresBond: Boolean, source: String) {
         val addr = address.uppercase()
+        if (source != "Dart" && bleManager.cccdReconnectPolicy.isExhausted(addr)) {
+            reportCccdRecovery(addr, "restored", exhausted = true)
+            return
+        }
         when (routeConnectRequest(serviceRunning = true, peripheralConnected = bleManager.isPeripheralConnected(addr))) {
             ConnectRequestAction.ResyncReady -> {
                 Log.i(TAG, "onConnectRequest($source): $addr already connected, re-emitting ready")
@@ -552,7 +555,11 @@ class OmiBleForegroundService : Service() {
 
         val addr = address.uppercase()
 
+        val cccdTimeout = status == OmiBleManager.CCCD_TIMEOUT_STATUS
+        val retrying = handleRetryLogic(addr, status)
         val error = when {
+            cccdTimeout && !retrying -> "cccd_timeout_exhausted"
+            cccdTimeout -> "cccd_timeout"
             status == 137 -> "pairing_lost"
             status == 22 -> "paired_to_another_phone"
             status != 0 -> "gatt_status_$status"
@@ -576,13 +583,14 @@ class OmiBleForegroundService : Service() {
         }
 
         bleManager.mainHandler.post {
+            if (cccdTimeout) reportCccdRecovery(addr, gattHash.toString(), exhausted = !retrying)
             bleManager.flutterApi?.onPeripheralDisconnected(addr, error) {}
         }
 
         // #3328: only claim "Reconnecting..." when a retry is actually scheduled.
         // Pairing-lost (137), BT off, teardown, or status -1 never retry — an
         // honest "Disconnected" is better than a stuck reconnect nag.
-        if (handleRetryLogic(addr, status)) {
+        if (retrying) {
             updateNotification("Reconnecting...")
         } else if (!isDestroying) {
             updateNotification("Disconnected")
@@ -595,16 +603,33 @@ class OmiBleForegroundService : Service() {
 
         if (isDestroying || status == -1 || status == 137 || !isBluetoothEnabled) return false
 
+        val delayMs = bleManager.cccdReconnectPolicy.reconnectDelay(
+            addr, status == OmiBleManager.CCCD_TIMEOUT_STATUS, RECONNECT_DELAY_MS,
+        ) ?: return false
         managed.retryCount++
-        Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${RECONNECT_DELAY_MS}ms (status=$status)")
+        Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${delayMs}ms (status=$status)")
 
         val runnable = Runnable {
             managed.pendingReconnect = null
             connectToDevice(addr, "retry_${managed.retryCount}")
         }
         managed.pendingReconnect = runnable
-        handler.postDelayed(runnable, RECONNECT_DELAY_MS)
+        handler.postDelayed(runnable, delayMs)
         return true
+    }
+
+    private fun reportCccdRecovery(address: String, generation: String, exhausted: Boolean) {
+        val snapshot = JSONObject()
+            .put("phase", if (exhausted) "actionRequired" else "recovering")
+            .put("generation", generation)
+            .put("reason", "cccd_timeout_recovery")
+            .put("valid_until_ms", 0)
+            .put("subscription_confirmed", false)
+            .put("unverified_since_ms", System.currentTimeMillis())
+            .put("recovery_outcome", if (exhausted) "failed" else "none")
+            .put("recovery_spent", exhausted)
+            .put("reconnect_spent", exhausted)
+        bleManager.flutterApi?.onCaptureHealth(address, snapshot.toString()) {}
     }
 
     // ── Stability timer ──
@@ -782,14 +807,26 @@ class OmiBleForegroundService : Service() {
         val requiresBond = intent?.getBooleanExtra("requires_bond", false) ?: false
 
         if (address != null) {
-            manageDevice(address, requiresBond)
+            if (intent?.getStringExtra("caller") != "Dart" && bleManager.cccdReconnectPolicy.isExhausted(address)) {
+                managedDevices[address.uppercase()] = ManagedDevice(address.uppercase(), requiresBond)
+                reportCccdRecovery(address, "restored", exhausted = true)
+                updateNotification("Disconnected")
+            } else {
+                manageDevice(address, requiresBond)
+            }
         } else if (persistentMode) {
             // Restart after process death (sticky): restore the device we were managing.
             val saved = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREFS_KEY, null)
             val parts = saved?.split("|")
             if (parts?.size == 2) {
                 Log.i(TAG, "onStartCommand: restoring saved device ${parts[0]}")
-                manageDevice(parts[0], parts[1].toBoolean())
+                if (bleManager.cccdReconnectPolicy.isExhausted(parts[0])) {
+                    managedDevices[parts[0].uppercase()] = ManagedDevice(parts[0], parts[1].toBoolean())
+                    reportCccdRecovery(parts[0], "restored", exhausted = true)
+                    updateNotification("Disconnected")
+                } else {
+                    manageDevice(parts[0], parts[1].toBoolean())
+                }
             } else {
                 Log.i(TAG, "onStartCommand: no device address or saved device, stopping")
                 stopSelf()
@@ -855,6 +892,7 @@ class OmiBleForegroundService : Service() {
         34 -> "link_key_mismatch"
         62 -> "connection_failed_instant_passed"
         -1 -> "app_closed"
+        OmiBleManager.CCCD_TIMEOUT_STATUS -> "cccd_ack_timeout"
         else -> "gatt_error_$status"
     }
 
@@ -951,25 +989,16 @@ class OmiBleForegroundService : Service() {
             put("rssiTrend", trend)
         }
         history.put(event)
-
-        for (i in history.length() - 1 downTo 0) {
-            if ((history.optJSONObject(i)?.optLong("timestamp", 0L) ?: 0L) < now - DISCONNECT_RETENTION_MS) {
-                history.remove(i)
-            }
-        }
-
-        // Keep only the last MAX_DISCONNECT_HISTORY entries
-        while (history.length() > MAX_DISCONNECT_HISTORY) {
-            history.remove(0)
-        }
-
-        prefs.edit().putString(key, history.toString()).apply()
+        val recovery = managed?.reconnectDiagnostics ?: BleReconnectDiagnostics()
+        recovery.record(now, eventType, isManual)
+        val retained = recovery.retainedHistory(
+            (0 until history.length()).mapNotNull { history.optJSONObject(it) },
+            now, DISCONNECT_RETENTION_MS, MAX_DISCONNECT_HISTORY,
+        ) { it.optLong("timestamp", 0L) }
+        prefs.edit().putString(key, JSONArray(retained).toString()).apply()
         logBle(addr, eventType, event.optString("reason"))
 
-        // Remember the event timestamp so the next successful connect can backfill
-        // the time-to-reconnect latency on this record.
         if (!isManual && managed != null) {
-            managed.pendingReconnectMarkerTs = now
             if (eventType == "disconnect") pendingAudioRecovery[addr] = now
         }
     }
@@ -1000,24 +1029,17 @@ class OmiBleForegroundService : Service() {
     }
 
     private fun backfillTimeToReconnect(address: String, managed: ManagedDevice) {
-        val markerTs = managed.pendingReconnectMarkerTs ?: return
-        managed.pendingReconnectMarkerTs = null
-
         val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
         val key = historyKey(address)
         val historyJson = prefs.getString(key, "[]") ?: "[]"
-        val history = try { JSONArray(historyJson) } catch (_: Exception) { return }
-
-        val now = System.currentTimeMillis()
-        // Walk backwards; history is small (≤ MAX_DISCONNECT_HISTORY).
-        for (i in history.length() - 1 downTo 0) {
-            val obj = history.getJSONObject(i)
-            if (obj.optLong("timestamp", 0L) == markerTs) {
-                obj.put("timeToReconnectMs", (now - markerTs).coerceAtLeast(0L))
-                prefs.edit().putString(key, history.toString()).apply()
-                return
-            }
-        }
+        val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
+        val updated = managed.reconnectDiagnostics.backfilledHistory(
+            (0 until history.length()).mapNotNull { history.optJSONObject(it) },
+            System.currentTimeMillis(), managed.hasEverConnected,
+            timestampOf = { it.optLong("timestamp", 0L) },
+            withDuration = { event, duration -> event.put("timeToReconnectMs", duration) },
+        ) ?: return
+        prefs.edit().putString(key, JSONArray(updated).toString()).apply()
     }
 
     private fun incrementReconnectionCount(address: String) {

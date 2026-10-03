@@ -12334,4 +12334,77 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Neizdevās ielādēt tērzēšanas lietotnes. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Balss';
+
+  @override
+  String get assistantVoice => 'Asistenta balss';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Jūsu izvēlētā balss tiek koplietota mobilajā un datora lietotnē.';
+
+  @override
+  String get readChatRepliesAloud => 'Izlasīt tērzēšanas atbildes skaļi';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Runā tikai tad, kad to atļauj \"Balss atbilde\".';
+
+  @override
+  String get voicePreviewSample => 'Sveiki, esmu Omi. Šī ir mana balss.';
+
+  @override
+  String get peopleStatsIncomplete => 'Skaitļi var būt nepilnīgi.';
+
+  @override
+  String get reprocessingConversationProgress => 'Saruna tiek apstrādāta atkārtoti…';
+
+  @override
+  String get conversationReprocessed => 'Saruna atjaunināta';
+
+  @override
+  String get loadingTranscript => 'Ielādē transkripciju…';
+
+  @override
+  String get transcriptLoadFailed => 'Neizdevās ielādēt transkripciju.';
+
+  @override
+  String get processingConversationProgress => 'Saruna tiek apstrādāta…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Šo sarunu neizdevās apstrādāt.';
+
+  @override
+  String get waitForReprocessing => 'Uzgaidiet, līdz atkārtotā apstrāde beigsies.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Runātājs';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Runātāji nav atdalīti starp ierakstiem.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Par runātāju etiķetēm';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nevarēja atšķirt pārējās balsis starp ierakstiem. Pieskarieties runātāja etiķetei, lai nosauktu, kas runā.';
+
+  @override
+  String get nameSpeakerTitle => 'Nosaukt runātāju';
+
+  @override
+  String get playbackPreparingAudio => 'Sagatavo audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Atpakaļ uz pašreizējo';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio nav pieejams';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio neizdevās ielādēt';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Pārbaudiet savienojumu';
 }

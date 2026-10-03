@@ -18,8 +18,13 @@ import websockets
 
 from config.stt_provider_policy import normalized_stt_language, soniox_accepts_language_hint
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
+from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
+from config.live_stt_replay import ReplayLimits
+from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
+from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
+from utils.stt.send_queue import AudioSendQueue
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import (
@@ -140,7 +145,7 @@ def _rate_limit_persistent_error(message: str, *, force: bool = False) -> None:
         if now - _last_rate_limit_error_log < SONIOX_RATE_LIMIT_ERROR_LOG_SECONDS:
             return
         _last_rate_limit_error_log = now
-    logger.error('Soniox real-time rate limiting persists: %s', message)
+    logger.error('Soniox real-time rate limiting persists: %s', sanitize_provider_error(message, code=429))
 
 
 def _websocket_status(error: BaseException) -> Optional[int]:
@@ -165,6 +170,9 @@ class SafeSonioxSocket(STTSocket):
     what the listen pipeline expects from the other providers.
     """
 
+    max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
+    replay_limits = ReplayLimits()
+
     def __init__(
         self,
         ws: Any,
@@ -185,7 +193,12 @@ class SafeSonioxSocket(STTSocket):
         # terminal-failure vocabulary; None until the socket dies.
         self._typed_death_reason: Optional[str] = None
         self._lock = threading.Lock()
-        self._send_queue: asyncio.Queue[bytes | str] = asyncio.Queue(maxsize=2000)
+        self.recovery_enabled = recovery_enabled()
+        if self.recovery_enabled:
+            self._send_queue: Any = AudioSendQueue(maxsize=2000)
+        else:
+            self._send_queue = asyncio.Queue(maxsize=2000)
+        self._writer_pace: RecoveryWriterPace | None = None
         # A response can end in the middle of a word. Downstream joins distinct
         # segments with spaces, so retain the last word until its boundary is known.
         self._pending_segment: Optional[Dict[str, Any]] = None
@@ -244,6 +257,24 @@ class SafeSonioxSocket(STTSocket):
             self._mark_dead('send queue full', typed_reason='capacity_full')
             return False
         return True
+
+    def enable_writer_pacing(self, sample_rate: int, rate: float, budget: Any = None) -> None:
+        """Recovery legs only: pace wire writes at <=1x plus bounded jitter."""
+        if not self.recovery_enabled:
+            return
+        self._writer_pace = RecoveryWriterPace(sample_rate, rate, budget or (lambda: None))
+
+    async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        if not self.recovery_enabled:
+            return not (self._dead or self._closed or self._finishing)
+        try:
+            await self._send_queue.wait_for_capacity(
+                limit=limit if limit is not None else self.replay_limits.queue_packets,
+                timeout=timeout if timeout is not None else self.replay_limits.queue_wait_seconds,
+            )
+        except TimeoutError:
+            self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
+        return not (self._dead or self._closed or self._finishing)
 
     def finalize(self) -> None:
         def enqueue() -> None:
@@ -323,14 +354,55 @@ class SafeSonioxSocket(STTSocket):
                 except asyncio.TimeoutError:
                     await self._ws.send(json.dumps({'type': 'keepalive'}))
                     continue
+                if not self.recovery_enabled:
+                    if data == b'':
+                        # Documented end-of-audio signal: an empty text frame.
+                        if self._audio_sent:
+                            await self._ws.send('')
+                        break
+                    await self._ws.send(data)
+                    if isinstance(data, bytes):
+                        self._audio_sent = True
+                    continue
                 if data == b'':
+                    self._send_queue.discard(data)
                     # Documented end-of-audio signal: an empty text frame.
                     if self._audio_sent:
-                        await self._ws.send('')
+                        pace = self._writer_pace
+                        if pace is not None:
+                            async with asyncio.timeout(pace.write_bound()):
+                                await self._ws.send('')
+                        else:
+                            await self._ws.send('')
                     break
-                await self._ws.send(data)
+                pace = self._writer_pace
+                deadline = getattr(self._send_queue, 'inflight_deadline', None) if isinstance(data, bytes) else None
+                written = False
+                try:
+                    if pace is not None and isinstance(data, bytes):
+                        await pace.throttle(len(data), deadline=deadline)
+                        pace.note_write(len(data))
+                    if pace is not None:
+                        try:
+                            async with asyncio.timeout(pace.write_bound(deadline)):
+                                await self._ws.send(data)
+                        except TimeoutError:
+                            if deadline is not None and deadline <= clock():
+                                raise AudioDeliveryExpired('live audio delivery expired')
+                            raise
+                    else:
+                        await self._ws.send(data)
+                    self._send_queue.note_written(data)
+                    written = True
+                    if pace is not None and isinstance(data, bytes):
+                        pace.complete_write()
+                finally:
+                    if not written:
+                        self._send_queue.discard(data)
                 if isinstance(data, bytes):
                     self._audio_sent = True
+        except AudioDeliveryExpired:
+            self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
                 f'ws send closed: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
@@ -369,13 +441,21 @@ class SafeSonioxSocket(STTSocket):
                         # hiding behind the idle/rotation WARNING that hid this
                         # signature. Monthly budget used to miss the typed set
                         # and log at WARNING for 27.5h.
-                        logger.error(f'Soniox streaming error: {err}')
+                        logger.error(
+                            'Soniox streaming error: reason=%s %s',
+                            typed,
+                            sanitize_provider_error(err, code=msg.get('error_code')),
+                        )
                     else:
                         # Idle-timeout and documented rotation are the
                         # protocol answering how the session was used, not a
                         # provider fault; failing to discriminate kept this the
                         # top backend-listen error signature with no signal.
-                        logger.warning('Soniox stream closed: %s', err)
+                        logger.warning(
+                            'Soniox stream closed: reason=%s %s',
+                            typed,
+                            sanitize_provider_error(err, code=msg.get('error_code')),
+                        )
                         if typed == PROVIDER_RATE_LIMITED:
                             _rate_limit_persistent_error(err)
                     self._done_event.set()

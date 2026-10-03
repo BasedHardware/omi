@@ -12342,4 +12342,77 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Nije moguće učitati aplikacije za razgovor. Pokušajte ponovno.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Glas';
+
+  @override
+  String get assistantVoice => 'Glas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vaš odabir glasa dijeli se između mobilne i desktop aplikacije.';
+
+  @override
+  String get readChatRepliesAloud => 'Čitaj odgovore iz chata naglas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Govori samo kada to dopusti \"Glasovni odgovor\".';
+
+  @override
+  String get voicePreviewSample => 'Bok, ja sam Omi. Ovo je moj glas.';
+
+  @override
+  String get peopleStatsIncomplete => 'Brojevi možda nisu potpuni.';
+
+  @override
+  String get reprocessingConversationProgress => 'Ponovna obrada razgovora…';
+
+  @override
+  String get conversationReprocessed => 'Razgovor je ažuriran';
+
+  @override
+  String get loadingTranscript => 'Učitavanje transkripta…';
+
+  @override
+  String get transcriptLoadFailed => 'Nije moguće učitati transkript.';
+
+  @override
+  String get processingConversationProgress => 'Obrada razgovora…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Ovaj razgovor nije moguće obraditi.';
+
+  @override
+  String get waitForReprocessing => 'Pričekajte da se ponovna obrada završi.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Govornik';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Govornici nisu odvojeni kroz snimke.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O oznakama govornika';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nije mogao razlikovati ostale glasove kroz snimke. Dodirnite oznaku govornika da imenujete tko govori.';
+
+  @override
+  String get nameSpeakerTitle => 'Imenuj govornika';
+
+  @override
+  String get playbackPreparingAudio => 'Priprema zvuka…';
+
+  @override
+  String get playbackBackToCurrent => 'Natrag na trenutno';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvuk nije dostupan';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvuk nije moguće učitati';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Provjerite vezu';
 }

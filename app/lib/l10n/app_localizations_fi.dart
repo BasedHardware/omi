@@ -6796,7 +6796,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Tietosi on suojattu asetuksillasi';
+    return 'Tietosi on nyt suojattu uusilla $level-asetuksilla.';
   }
 
   @override
@@ -12310,4 +12310,77 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Chat-sovelluksia ei voitu ladata. Yritä uudelleen.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Ääni';
+
+  @override
+  String get assistantVoice => 'Avustajan ääni';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Äänivalintasi on yhteinen mobiilissa ja työpöydällä.';
+
+  @override
+  String get readChatRepliesAloud => 'Lue chat-vastaukset ääneen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Puhuu vain, kun Äänivastaus sen sallii.';
+
+  @override
+  String get voicePreviewSample => 'Hei, olen Omi. Tämä on ääneni.';
+
+  @override
+  String get peopleStatsIncomplete => 'Määrät voivat olla puutteellisia.';
+
+  @override
+  String get reprocessingConversationProgress => 'Keskustelua käsitellään uudelleen…';
+
+  @override
+  String get conversationReprocessed => 'Keskustelu päivitetty';
+
+  @override
+  String get loadingTranscript => 'Ladataan litterointia…';
+
+  @override
+  String get transcriptLoadFailed => 'Litterointia ei voitu ladata.';
+
+  @override
+  String get processingConversationProgress => 'Keskustelua käsitellään…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Tätä keskustelua ei voitu käsitellä.';
+
+  @override
+  String get waitForReprocessing => 'Odota, kunnes uudelleenkäsittely on valmis.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Puhuja';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Puhujia ei ole eroteltu äänitteiden välillä.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Tietoa puhujamerkinnöistä';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ei pystynyt erottamaan muita ääniä äänitteiden välillä. Napauta puhujamerkintää nimetäksesi, kuka puhuu.';
+
+  @override
+  String get nameSpeakerTitle => 'Nimeä puhuja';
+
+  @override
+  String get playbackPreparingAudio => 'Valmistellaan ääntä…';
+
+  @override
+  String get playbackBackToCurrent => 'Takaisin nykyiseen';
+
+  @override
+  String get playbackAudioUnavailable => 'Ääni ei saatavilla';
+
+  @override
+  String get playbackAudioLoadFailed => 'Ääntä ei voitu ladata';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Tarkista yhteys';
 }

@@ -5788,7 +5788,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Spracovávajú sa súbory z SD karty';
+    return 'Počet nahrávok na spracovanie: $count. Súbory sa potom odstránia z SD karty.';
   }
 
   @override
@@ -6484,7 +6484,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Označiť rečníka';
+    return 'Označiť rečníka $speakerId';
   }
 
   @override
@@ -6676,7 +6676,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String transferFailedMessage(String error) {
-    return 'Prenos zlyhal. Skúste to prosím znova.';
+    return 'Prenos zlyhal: $error';
   }
 
   @override
@@ -6794,7 +6794,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Vaše údaje sú chránené vašimi nastaveniami';
+    return 'Vaše údaje sú teraz chránené novými nastaveniami $level.';
   }
 
   @override
@@ -7123,7 +7123,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String failedToConnectServiceWithError(String serviceName, String error) {
-    return 'Nepodarilo sa pripojiť k službe: $error';
+    return 'Nepodarilo sa pripojiť k $serviceName: $error';
   }
 
   @override
@@ -12302,4 +12302,77 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Chatové aplikácie sa nepodarilo načítať. Skúste to znova.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hlas';
+
+  @override
+  String get assistantVoice => 'Hlas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Váš výber hlasu je zdieľaný medzi mobilnou a desktopovou aplikáciou.';
+
+  @override
+  String get readChatRepliesAloud => 'Čítať odpovede četu nahlas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hovorí iba vtedy, keď to povolí \"Hlasová odpoveď\".';
+
+  @override
+  String get voicePreviewSample => 'Ahoj, som Omi. Toto je môj hlas.';
+
+  @override
+  String get peopleStatsIncomplete => 'Počty môžu byť neúplné.';
+
+  @override
+  String get reprocessingConversationProgress => 'Konverzácia sa znova spracúva…';
+
+  @override
+  String get conversationReprocessed => 'Konverzácia aktualizovaná';
+
+  @override
+  String get loadingTranscript => 'Načítava sa prepis…';
+
+  @override
+  String get transcriptLoadFailed => 'Prepis sa nepodarilo načítať.';
+
+  @override
+  String get processingConversationProgress => 'Konverzácia sa spracúva…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Túto konverzáciu sa nepodarilo spracovať.';
+
+  @override
+  String get waitForReprocessing => 'Počkajte na dokončenie opätovného spracovania.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Hovorca';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Rečníci nie sú oddelení naprieč nahrávkami.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O popiskoch rečníkov';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nedokázalo naprieč nahrávkami rozlíšiť ostatné hlasy. Klepnutím na popisok rečníka pomenujete, kto hovorí.';
+
+  @override
+  String get nameSpeakerTitle => 'Pomenovať rečníka';
+
+  @override
+  String get playbackPreparingAudio => 'Pripravuje sa zvuk…';
+
+  @override
+  String get playbackBackToCurrent => 'Späť na aktuálne';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvuk nie je k dispozícii';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvuk sa nepodarilo načítať';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Skontrolujte pripojenie';
 }

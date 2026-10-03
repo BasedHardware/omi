@@ -91,7 +91,11 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: MENTOR_GATE_DEBOUNCE_ENABLED
+    value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
@@ -196,7 +200,7 @@ env:
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
-    value: "1"
+    value: "10"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
@@ -401,6 +405,8 @@ env:
   - name: STT_CONNECT_ORDER_FROM_CONFIG
     value: "true"
   - name: STT_RESILIENT_RECONNECT
+    value: "false"
+  - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "false"
   - name: STT_ROUTING_MODE
     value: "shadow"

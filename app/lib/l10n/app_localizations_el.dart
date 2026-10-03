@@ -12386,4 +12386,77 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Δεν ήταν δυνατή η φόρτωση των εφαρμογών συνομιλίας. Δοκιμάστε ξανά.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Φωνή';
+
+  @override
+  String get assistantVoice => 'Φωνή βοηθού';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Η επιλογή φωνής σας είναι κοινή σε κινητό και υπολογιστή.';
+
+  @override
+  String get readChatRepliesAloud => 'Ανάγνωση απαντήσεων συνομιλίας δυνατά';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Μιλά μόνο όταν το επιτρέπει η \"Φωνητική απάντηση\".';
+
+  @override
+  String get voicePreviewSample => 'Γεια, είμαι ο Omi. Αυτή είναι η φωνή μου.';
+
+  @override
+  String get peopleStatsIncomplete => 'Οι μετρήσεις μπορεί να είναι ελλιπείς.';
+
+  @override
+  String get reprocessingConversationProgress => 'Γίνεται επανεπεξεργασία της συνομιλίας…';
+
+  @override
+  String get conversationReprocessed => 'Η συνομιλία ενημερώθηκε';
+
+  @override
+  String get loadingTranscript => 'Φόρτωση απομαγνητοφώνησης…';
+
+  @override
+  String get transcriptLoadFailed => 'Δεν ήταν δυνατή η φόρτωση της απομαγνητοφώνησης.';
+
+  @override
+  String get processingConversationProgress => 'Επεξεργασία συνομιλίας…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Δεν ήταν δυνατή η επεξεργασία αυτής της συνομιλίας.';
+
+  @override
+  String get waitForReprocessing => 'Περιμένετε να ολοκληρωθεί η επανεπεξεργασία.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Ομιλητής';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Οι ομιλητές δεν διαχωρίζονται μεταξύ ηχογραφήσεων.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Σχετικά με τις ετικέτες ομιλητών';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Το Omi δεν μπόρεσε να διακρίνει τις άλλες φωνές μεταξύ των ηχογραφήσεων. Πατήστε μια ετικέτα ομιλητή για να ονομάσετε ποιος μιλάει.';
+
+  @override
+  String get nameSpeakerTitle => 'Ονομασία ομιλητή';
+
+  @override
+  String get playbackPreparingAudio => 'Προετοιμασία ήχου…';
+
+  @override
+  String get playbackBackToCurrent => 'Πίσω στο τρέχον';
+
+  @override
+  String get playbackAudioUnavailable => 'Ο ήχος δεν είναι διαθέσιμος';
+
+  @override
+  String get playbackAudioLoadFailed => 'Δεν ήταν δυνατή η φόρτωση του ήχου';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Ελέγξτε τη σύνδεση';
 }

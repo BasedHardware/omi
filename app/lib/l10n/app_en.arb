@@ -14695,5 +14695,98 @@
     "chatAppsLoadFailed": "Couldn't load chat apps. Please try again.",
     "@chatAppsLoadFailed": {
         "description": "Shown in the chat apps drawer when loading installed chat apps fails"
+    },
+    "assistantVoiceSettingsTitle": "Voice",
+    "@assistantVoiceSettingsTitle": {
+        "description": "Settings section title for assistant voice"
+    },
+    "assistantVoice": "Assistant Voice",
+    "@assistantVoice": {
+        "description": "Row label for the assistant voice picker"
+    },
+    "voiceSharedAcrossDevices": "Your voice choice is shared across mobile and desktop.",
+    "@voiceSharedAcrossDevices": {
+        "description": "Support line under the assistant voice picker"
+    },
+    "readChatRepliesAloud": "Read chat replies aloud",
+    "@readChatRepliesAloud": {
+        "description": "Toggle label for reading chat replies aloud"
+    },
+    "readChatRepliesAloudDescription": "Only speaks when Voice response allows it.",
+    "@readChatRepliesAloudDescription": {
+        "description": "Toggle helper text explaining replies are only spoken when Voice response mode allows it"
+    },
+    "voicePreviewSample": "Hi, I'm Omi. This is my voice.",
+    "@voicePreviewSample": {
+        "description": "Sample text synthesized when previewing an assistant voice"
+    },
+    "peopleStatsIncomplete": "Counts may be incomplete.",
+    "reprocessingConversationProgress": "Reprocessing conversation…",
+    "@reprocessingConversationProgress": {
+        "description": "Shown with a progress bar while the open conversation is reprocessed."
+    },
+    "conversationReprocessed": "Conversation updated",
+    "@conversationReprocessed": {
+        "description": "Toast after a reprocess finished and replaced the conversation."
+    },
+    "loadingTranscript": "Loading transcript…",
+    "@loadingTranscript": {
+        "description": "Transcript tab while the conversation's lines are being fetched."
+    },
+    "transcriptLoadFailed": "Couldn't load the transcript.",
+    "@transcriptLoadFailed": {
+        "description": "Transcript tab when fetching the conversation's lines failed; shown above Try Again."
+    },
+    "processingConversationProgress": "Processing conversation…",
+    "@processingConversationProgress": {
+        "description": "Shown while the server is still processing the conversation (transcript, summary)."
+    },
+    "conversationProcessingFailedMessage": "This conversation couldn't be processed.",
+    "@conversationProcessingFailedMessage": {
+        "description": "Transcript tab when the server marked the conversation as failed; shown above Try Again."
+    },
+    "waitForReprocessing": "Wait for reprocessing to finish.",
+    "@waitForReprocessing": {
+        "description": "Toast when the reader tries to edit the transcript or a speaker while the conversation is being reprocessed."
+    },
+    "unnamedSpeakerLabel": "Speaker",
+    "@unnamedSpeakerLabel": {
+        "description": "Neutral label for an unnamed voice when cross-recording speaker resolution is unavailable"
+    },
+    "unresolvedSpeakersNotice": "Speakers aren't separated across recordings.",
+    "@unresolvedSpeakersNotice": {
+        "description": "Quiet line under the transcript heading explaining that voices could not be separated across recordings"
+    },
+    "unresolvedSpeakersTitle": "About Speaker Labels",
+    "@unresolvedSpeakersTitle": {
+        "description": "Title of the sheet explaining unresolved speaker labels"
+    },
+    "unresolvedSpeakersMessage": "Omi could not tell the other voices apart across the recordings. Tap a speaker label to name who is speaking.",
+    "@unresolvedSpeakersMessage": {
+        "description": "Body of the About Speaker Labels sheet"
+    },
+    "nameSpeakerTitle": "Name Speaker",
+    "@nameSpeakerTitle": {
+        "description": "Title of the name-speaker sheet when the speaker has no resolvable number"
+    },
+    "playbackPreparingAudio": "Preparing Audio…",
+    "@playbackPreparingAudio": {
+        "description": "Inline label on the detail audio player while playback is still being prepared"
+    },
+    "playbackBackToCurrent": "Back to Current",
+    "@playbackBackToCurrent": {
+        "description": "Pill above the player that scrolls the transcript back to the currently playing line"
+    },
+    "playbackAudioUnavailable": "Audio Unavailable",
+    "@playbackAudioUnavailable": {
+        "description": "Inline label when the conversation's audio cannot be played at all"
+    },
+    "playbackAudioLoadFailed": "Couldn't Load Audio",
+    "@playbackAudioLoadFailed": {
+        "description": "Inline label when loading the audio stream fails"
+    },
+    "playbackAudioNetworkFailed": "Check Connection",
+    "@playbackAudioNetworkFailed": {
+        "description": "Inline label when fetching the audio URLs fails on transport"
     }
 }

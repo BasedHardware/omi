@@ -9,6 +9,7 @@ from copy import deepcopy
 import logging
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 
+from config.conversation_smart_merge import smart_merge_flatten_enabled
 from config.sync_lineage import sync_lineage_resolve_active_for
 from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
@@ -17,8 +18,10 @@ from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
+from config import merge_ancestry
 from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
 from utils.conversations.relevance import sync_intake_decision
+from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
@@ -115,6 +118,10 @@ def auto_mergeable(row: dict) -> bool:
     )
 
 
+def _smart_merge_lineage(row: dict | None) -> bool:
+    return bool(row and (row.get('smart_merge') or {}).get('role') in ('donor', 'survivor'))
+
+
 class _Plan(NamedTuple):
     """One complete, unwritten assignment: what the transaction would commit."""
 
@@ -126,6 +133,7 @@ class _Plan(NamedTuple):
     # Indices into incoming['transcript_segments'] that this plan found new.
     kept: tuple[int, ...]
     payload: dict
+    ancestor_updates: dict[str, dict]
     estimated_bytes: int
 
     @property
@@ -169,28 +177,56 @@ def assign_in_transaction(
 
     # Read the incoming key too: retries and deleted canonical anchors must never
     # overwrite a tombstone. Redirects are server-authored, not user deletions.
+    flatten = smart_merge_flatten_enabled()
+
     own = load(incoming['id'])
     if own and own.get('deleted') and not own.get('sync_merged_into'):
+        if flatten and (own.get('smart_merge') or {}).get('role') == 'donor':
+            raise SyncAssignmentConflict('smart merge donor tombstone lacks a redirect', subtype='other')
         raise SyncAssignmentSuperseded('sync anchor was deleted')
 
-    def resolve(cid: str | None) -> tuple[str | None, dict | None]:
+    def resolve(cid: str | None, *, one_hop: bool = False) -> tuple[str | None, dict | None]:
         row = load(cid) if cid else None
         seen = set()
+        has_smart_state = False
         while row and row.get('sync_merged_into'):
             if row['id'] in seen:
                 raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
+            has_smart_state = has_smart_state or (one_hop and _smart_merge_lineage(row))
             seen.add(row['id'])
             redirect_id: str = row['sync_merged_into']
             cid, row = redirect_id, load(redirect_id)
-        if seen and (not row or row.get('deleted')):
+            has_smart_state = has_smart_state or (one_hop and _smart_merge_lineage(row))
+            if has_smart_state and (len(seen) > 1 or (row and row.get('sync_merged_into') and row['id'] not in seen)):
+                raise SyncAssignmentConflict('sync redirect chain exceeds one hop', subtype='other')
+        if seen and (not row or row.get('deleted') or (has_smart_state and row.get('discarded'))):
             raise SyncAssignmentSuperseded('sync capture lineage was deleted')
         return cid, row
 
     # Check retry lineage independently of client hints: changing a target must
     # never allow an absorbed chunk to resurrect its user-deleted survivor.
-    own_id, own_anchor = resolve(incoming['id'])
+    own_id, own_anchor = resolve(incoming['id'], one_hop=flatten)
     target = load(target_id) if target_id else None
-    if target and target.get('deleted') and (target.get('smart_merge') or {}).get('role') == 'donor':
+    redirected = False
+    if flatten:
+        if target and target.get('sync_merged_into'):
+            redirect_id = target['sync_merged_into']
+            nxt = load(redirect_id)
+            smart_lineage = _smart_merge_lineage(target) or _smart_merge_lineage(nxt)
+            if smart_lineage:
+                if redirect_id == target_id:
+                    raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
+                if nxt and nxt.get('sync_merged_into'):
+                    raise SyncAssignmentConflict('sync redirect chain exceeds one hop', subtype='other')
+                if not nxt or nxt.get('deleted') or nxt.get('discarded'):
+                    raise SyncAssignmentSuperseded('sync target survivor was deleted')
+                target_id, target = redirect_id, nxt
+                redirected = True
+            else:
+                target_id, target = None, None
+        elif target and target.get('deleted') and (target.get('smart_merge') or {}).get('role') == 'donor':
+            raise SyncAssignmentConflict('smart merge donor tombstone lacks a redirect', subtype='other')
+    elif target and target.get('deleted') and (target.get('smart_merge') or {}).get('role') == 'donor':
         # A live conversation folded into its predecessor (database/smart_merge.py)
         # redirects its late repair audio to the survivor; temporal fallback would
         # recreate the donor as a duplicate row. A deleted survivor supersedes it.
@@ -201,6 +237,8 @@ def assign_in_transaction(
         # words. Only timestamp hints must exclude live-owned rows.
         mismatch = capture_mismatch(target, incoming)
         if mismatch != 'none':
+            if redirected:
+                raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
             recover = sync_assignment_recovery_enabled()
             logger.warning(
                 'event=sync_assignment_target outcome=%s mismatch=%s',
@@ -408,8 +446,25 @@ def assign_in_transaction(
             if any((row.get('data_protection_level') or 'enhanced') == 'enhanced' for row in [incoming, *records])
             else incoming['data_protection_level']
         )
-        ancestors = {cid for row in records for cid in row.get('sync_merged_from', [])}
-        ancestors.update(cid for cid in matched if cid != canonical)
+        ancestor_updates: dict[str, dict] = {}
+        flatten_donors = (
+            {cid: raw for cid, raw in matched.items() if cid != canonical} if flatten and smart_live_target else {}
+        )
+        if flatten_donors:
+            survivor_row = dict(current or {}, id=canonical)
+            reason, union_ids = merge_ancestry.ancestry_union(survivor_row, flatten_donors)
+            if reason is not None:
+                raise SyncAssignmentConflict('sync ancestry flatten rejected', subtype='other')
+            ancestor_rows = {aid: load(aid) for aid in union_ids if aid not in flatten_donors}
+            reason, union, ancestor_updates = merge_ancestry.flatten_updates(
+                survivor_row, flatten_donors, ancestor_rows, user_managed=_policy_user_managed
+            )
+            if reason is not None:
+                raise SyncAssignmentConflict('sync ancestry flatten rejected', subtype='other')
+            ancestors = set(union)
+        else:
+            ancestors = {cid for row in records for cid in row.get('sync_merged_from', [])}
+            ancestors.update(cid for cid in matched if cid != canonical)
         result['sync_merged_from'] = sorted(ancestors)
         if incoming.get('geolocation') and not result.get('geolocation'):
             result['geolocation'] = incoming['geolocation']
@@ -426,6 +481,7 @@ def assign_in_transaction(
             survivors,
             kept,
             payload,
+            ancestor_updates,
             _stored_document_bytes(collection.document(canonical), payload, current, invalidate),
         )
 
@@ -515,6 +571,8 @@ def assign_in_transaction(
                     'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
                 },
             )
+    for ancestor_id, patch in chosen.ancestor_updates.items():
+        transaction.update(collection.document(ancestor_id), patch)
     index.write(result, set(matched) | {canonical})
     return result, created, survivors
 

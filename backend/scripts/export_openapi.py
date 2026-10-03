@@ -93,6 +93,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/sync',
     '/v1/task-integrations',
     '/v1/task-intelligence',
+    '/v1/tts',
     '/v1/users',
     '/v1/wrapped',
     '/v1/work-intents',

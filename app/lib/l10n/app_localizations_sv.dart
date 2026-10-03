@@ -12311,4 +12311,77 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Kunde inte ladda chattappar. Försök igen.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Röst';
+
+  @override
+  String get assistantVoice => 'Assistentens röst';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ditt röstval delas mellan mobil och dator.';
+
+  @override
+  String get readChatRepliesAloud => 'Läs chattsvar högt';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Talar bara när Röstsvar tillåter det.';
+
+  @override
+  String get voicePreviewSample => 'Hej, jag är Omi. Det här är min röst.';
+
+  @override
+  String get peopleStatsIncomplete => 'Antalen kan vara ofullständiga.';
+
+  @override
+  String get reprocessingConversationProgress => 'Bearbetar samtalet igen…';
+
+  @override
+  String get conversationReprocessed => 'Samtalet har uppdaterats';
+
+  @override
+  String get loadingTranscript => 'Läser in transkription…';
+
+  @override
+  String get transcriptLoadFailed => 'Det gick inte att läsa in transkriptionen.';
+
+  @override
+  String get processingConversationProgress => 'Bearbetar samtalet…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Det gick inte att bearbeta samtalet.';
+
+  @override
+  String get waitForReprocessing => 'Vänta tills bearbetningen är klar.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Talare';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Talarna är inte separerade mellan inspelningar.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Om talarmarkeringar';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi kunde inte skilja de andra rösterna åt mellan inspelningarna. Tryck på en talarmarkering för att namnge vem som talar.';
+
+  @override
+  String get nameSpeakerTitle => 'Namnge talare';
+
+  @override
+  String get playbackPreparingAudio => 'Förbereder ljud…';
+
+  @override
+  String get playbackBackToCurrent => 'Tillbaka till aktuell';
+
+  @override
+  String get playbackAudioUnavailable => 'Ljudet är inte tillgängligt';
+
+  @override
+  String get playbackAudioLoadFailed => 'Ljudet kunde inte laddas';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kontrollera anslutningen';
 }

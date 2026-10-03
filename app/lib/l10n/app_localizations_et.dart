@@ -12300,4 +12300,77 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get chatAppsLoadFailed => 'Vestlusrakendusi ei õnnestunud laadida. Palun proovi uuesti.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hääl';
+
+  @override
+  String get assistantVoice => 'Assistendi hääl';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Sinu häälevalik on ühine mobiilis ja töölaual.';
+
+  @override
+  String get readChatRepliesAloud => 'Loe vestluse vastused ette';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Räägib ainult siis, kui \"Häälvastus\" seda lubab.';
+
+  @override
+  String get voicePreviewSample => 'Tere, mina olen Omi. See on minu hääl.';
+
+  @override
+  String get peopleStatsIncomplete => 'Arvud võivad olla puudulikud.';
+
+  @override
+  String get reprocessingConversationProgress => 'Vestlust töödeldakse uuesti…';
+
+  @override
+  String get conversationReprocessed => 'Vestlus on uuendatud';
+
+  @override
+  String get loadingTranscript => 'Transkriptsiooni laadimine…';
+
+  @override
+  String get transcriptLoadFailed => 'Transkriptsiooni ei õnnestunud laadida.';
+
+  @override
+  String get processingConversationProgress => 'Vestlust töödeldakse…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Seda vestlust ei õnnestunud töödelda.';
+
+  @override
+  String get waitForReprocessing => 'Oota, kuni uuesti töötlemine lõpeb.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Kõneleja';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Kõnelejaid ei ole salvestuste vahel eraldatud.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Kõnelejate siltidest';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ei suutnud teisi hääli salvestuste vahel eristada. Puudutage kõneleja silti, et nimetada, kes räägib.';
+
+  @override
+  String get nameSpeakerTitle => 'Nimeta kõneleja';
+
+  @override
+  String get playbackPreparingAudio => 'Heli ettevalmistamine…';
+
+  @override
+  String get playbackBackToCurrent => 'Tagasi praeguse juurde';
+
+  @override
+  String get playbackAudioUnavailable => 'Heli pole saadaval';
+
+  @override
+  String get playbackAudioLoadFailed => 'Heli ei õnnestunud laadida';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kontrollige ühendust';
 }

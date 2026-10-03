@@ -54,7 +54,7 @@ def _pair(gap_minutes=5.0, *, survivor_minutes=10, new_minutes=10):
     return survivor, s_segments, new, n_segments
 
 
-def test_new_conversation_exclusions():
+def test_new_conversation_exclusions(monkeypatch):
     good = _row('n', 0, 5)
     segments = _segments()
     assert policy.new_conversation_skip(good, segments, capture_end=True) is None
@@ -73,12 +73,16 @@ def test_new_conversation_exclusions():
         {'deleted': True},
         {'smart_merge': {'role': 'donor'}},
         {'smart_merge': {'role': 'survivor', 'revision': 1}},  # a merge target never becomes a donor
-        {'sync_merged_from': ['bridge-donor']},
     ):
         assert (
             policy.new_conversation_skip(dict(good, **change), segments, capture_end=True)
             == 'conversation_not_eligible'
         )
+    bridged = dict(good, sync_merged_from=['bridge-donor'])
+    assert policy.new_conversation_skip(bridged, segments, capture_end=True) is None
+    monkeypatch.setenv(config.SMART_MERGE_FLATTEN_ENV, 'off')
+    assert policy.new_conversation_skip(bridged, segments, capture_end=True) == 'conversation_not_eligible'
+    monkeypatch.delenv(config.SMART_MERGE_FLATTEN_ENV, raising=False)
     assert policy.new_conversation_skip(good, [], capture_end=True) == 'conversation_not_eligible'
     wake = [dict(segments[0], text='hey omi what is on my calendar')]
     assert policy.new_conversation_skip(good, wake, capture_end=True) == 'wake_word'

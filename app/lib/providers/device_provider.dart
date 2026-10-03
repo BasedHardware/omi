@@ -741,7 +741,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsConnected(false);
     updateConnectingStatus(false);
 
-    captureProvider?.updateRecordingDevice(null);
+    // Recovery changes the link, not the user's capture intent. Retain the
+    // session (and Resume control) while native reports the physical link down.
+    if (disconnectedDeviceId == null || !BleBridge.instance.preservesCaptureIntent(disconnectedDeviceId)) {
+      captureProvider?.updateRecordingDevice(null);
+    }
 
     // Batch mode: the native writer finalizes the in-progress recording on
     // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes
@@ -969,15 +973,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (WalSyncs.isRingBufferFirmware(fwVersion)) {
         final ringStatus = await connection.getRingStatus();
         if (!_isCurrent(generation)) return;
-        if (ringStatus != null) {
-          _ringStatus = ringStatus;
+        final info = connection.lastRingInfo;
+        final coherent = _coherentRingStatus(ringStatus, info);
+        if (coherent != null) {
+          _ringStatus = coherent;
           notifyListeners();
         }
-        if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
+        if (coherent == null || coherent.unreadPackets <= 0) return;
         Logger.debug(
-          'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
+          'DeviceProvider: Ring auto-sync detected ${coherent.unreadPackets} unread packets (${coherent.usedBytes} bytes)',
         );
-        onOfflineDataDetected?.call(device, ringStatus.unreadPackets, ringStatus.usedBytes);
+        onOfflineDataDetected?.call(device, coherent.unreadPackets, coherent.usedBytes);
         return;
       }
 
@@ -1006,16 +1012,32 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       if (!_isCurrent(generation)) return;
       if (connection == null) return;
+      final info = await connection.getRingInfo();
+      if (!_isCurrent(generation)) return;
       final status = await connection.getRingStatus();
       if (!_isCurrent(generation)) return;
-      if (status != null) {
-        _ringStatus = status;
+      final coherent = _coherentRingStatus(status, info ?? connection.lastRingInfo);
+      if (coherent != null) {
+        _ringStatus = coherent;
         notifyListeners();
       }
     } catch (e) {
       if (!_isCurrent(generation)) return;
       Logger.debug('DeviceProvider: refreshRingStorageStatus failed: $e');
     }
+  }
+
+  static RingStatus? _coherentRingStatus(RingStatus? status, RingInfo? info) {
+    if (info == null) return status;
+    final pkt = info.packetSize > 0 ? info.packetSize : 444;
+    final infoUnread = info.unreadPackets;
+    final infoFree = (info.capacityPackets - infoUnread).clamp(0, info.capacityPackets) * pkt;
+    if (status == null) {
+      return RingStatus(usedBytes: infoUnread * pkt, unreadPackets: infoUnread, freeBytes: infoFree, rtcValid: 0);
+    }
+    final free = status.freeBytes > 0 ? status.freeBytes : infoFree;
+    return RingStatus(
+        usedBytes: status.usedBytes, unreadPackets: status.unreadPackets, freeBytes: free, rtcValid: status.rtcValid);
   }
 
   Future<void> _ensureCompanionAssociation(BtDevice device, int generation) async {

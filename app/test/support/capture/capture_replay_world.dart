@@ -174,6 +174,7 @@ class UploadAttempt {
   final int totalBytes;
   final String? conversationId;
   final bool claimLiveCapture;
+  final String? captureEvidence;
 
   UploadAttempt({
     required this.at,
@@ -181,6 +182,7 @@ class UploadAttempt {
     required this.totalBytes,
     required this.conversationId,
     required this.claimLiveCapture,
+    required this.captureEvidence,
   });
 }
 
@@ -227,6 +229,7 @@ class ScriptedUploads {
             totalBytes: files.fold(0, (sum, f) => sum + f.lengthSync()),
             conversationId: conversationId,
             claimLiveCapture: claimLiveCapture,
+            captureEvidence: captureEvidence,
           ),
         );
         if (failAll) {
@@ -363,6 +366,9 @@ class CaptureReplayWorld {
       phonePeriodic: scheduler.periodic,
       phoneJobStatusFetcher: (jobId) async => jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound),
       phoneCoverageTelemetry: coverageEvents.add,
+      // The replay world has no real disk-space plugin; report ample space so
+      // the storage-admission gate proves capacity instead of failing closed.
+      phoneFreeDiskBytes: () async => 1 << 40,
     );
     wal.start();
     await wal.syncs.phone.walReady;
