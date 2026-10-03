@@ -3173,7 +3173,7 @@ class CaptureController extends ChangeNotifier
           _pendingAutoSyncNeedsRepair = false;
           Logger.debug(
               'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)');
-          unawaited(_confirmSessionWalsRetained(sessionStart, convId));
+          unawaited(_confirmSessionWalsRetained(sessionStart, convId, failClosedReason: 'missing_conversation_event'));
         }
       });
       return;
@@ -3193,7 +3193,7 @@ class CaptureController extends ChangeNotifier
         _pendingAutoSyncConversationId = null;
         _pendingAutoSyncNeedsRepair = false;
         Logger.debug('Conversation ${event.memory.id} closed — confirming WAL retention (needsRepair=$needsRepair)');
-        unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals));
+        unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals, needsRepair: needsRepair));
       }
       return;
     }
@@ -3344,21 +3344,68 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  /// Keeps every stamped safety copy of [conversation] and uploads it so the
-  /// server can repair what its transcript lost.
+  /// Moves the safety copies [conversation]'s saved transcript covers into synced retention, and
+  /// uploads the uncovered rest so the server can transcribe what it lost. When coverage cannot be
+  /// judged — an interrupted session, an empty or unusable transcript, or no anchor — confirmation
+  /// passes no spans and fails closed: every eligible stamped copy is kept for repair.
   Future<void> _confirmSessionTranscript(
     int sessionStartSeconds,
     ServerConversation conversation,
-    Map<String, int> segmentArrivals,
-  ) {
-    // Live segment times are seconds from the conversation's start on the server's clock, while the
-    // copies carry the phone's, and saved-segment arrivals carry unbounded STT/network/replay delay —
-    // so no timestamp estimate can prove which audio the transcript covers. Confirmation therefore
-    // passes no spans: uncertain coverage fails closed and every stamped copy is kept for repair.
-    return _confirmSessionWalsRetained(sessionStartSeconds, conversation.id);
+    Map<String, int> segmentArrivals, {
+    bool needsRepair = false,
+  }) {
+    List<(int, int)>? spans;
+    int? origin;
+    String? failClosedReason;
+    final saved = conversation.transcriptSegments;
+    if (needsRepair) {
+      failClosedReason = 'needs_repair';
+    } else if (saved.isEmpty) {
+      failClosedReason = 'empty_transcript';
+    } else {
+      final valid = [
+        for (final segment in saved)
+          if (segment.start.isFinite && segment.end.isFinite && segment.end > segment.start) segment,
+      ];
+      if (valid.isEmpty) {
+        failClosedReason = 'no_spans';
+      } else {
+        // Live segment times are seconds from the conversation's start on the server's clock, while
+        // the copies carry the phone's. Anchor that start to the phone through the moments the live
+        // segments arrived; without any, use the server's start, or this session's when the row has
+        // none.
+        final startedAt = conversation.startedAt;
+        final anchor = transcriptStartOnDevice(
+              [for (final segment in valid) (segment.id, segment.end)],
+              segmentArrivals,
+            ) ??
+            (startedAt != null
+                ? startedAt.millisecondsSinceEpoch ~/ 1000
+                : (sessionStartSeconds > 0 ? sessionStartSeconds : null));
+        if (anchor == null || anchor <= 0) {
+          failClosedReason = 'anchor_unavailable';
+        } else {
+          origin = anchor;
+          spans = [for (final segment in valid) (anchor + segment.start.floor(), anchor + segment.end.ceil())];
+        }
+      }
+    }
+    return _confirmSessionWalsRetained(
+      sessionStartSeconds,
+      conversation.id,
+      transcriptSpans: spans,
+      conversationStartSeconds: origin,
+      failClosedReason: failClosedReason,
+    );
   }
 
-  Future<void> _confirmSessionWalsRetained(int sessionStartSeconds, String conversationId) async {
+  Future<void> _confirmSessionWalsRetained(
+    int sessionStartSeconds,
+    String conversationId, {
+    List<(int, int)>? transcriptSpans,
+    int? conversationStartSeconds,
+    String? failClosedReason,
+  }) async {
     final token = _sessionOwner?.token;
     final phone = _wal.getSyncs().phone;
     final walGeneration = phone is LocalWalSync ? phone.sessionGeneration : null;
@@ -3367,24 +3414,27 @@ class CaptureController extends ChangeNotifier
       await pending;
       if (identical(_pendingFinalizeAndStamp, pending)) _pendingFinalizeAndStamp = null;
     }
-    if (!_captureSessionIsCurrent(token)) return;
-    if (walGeneration != null && phone is LocalWalSync && phone.sessionGeneration != walGeneration) {
-      return;
-    }
+    bool stillCurrent() =>
+        _captureSessionIsCurrent(token) &&
+        (walGeneration == null || phone is! LocalWalSync || phone.sessionGeneration == walGeneration);
+    if (!stillCurrent()) return;
     var kept = 0;
     if (phone is LocalWalSyncImpl) {
       try {
-        final outcome = await phone.confirmSessionTranscription(sessionStartSeconds, conversationId);
+        final outcome = await phone.confirmSessionTranscription(
+          sessionStartSeconds,
+          conversationId,
+          transcriptSpans: transcriptSpans,
+          conversationStartSeconds: conversationStartSeconds,
+          failClosedReason: failClosedReason,
+        );
         kept = outcome.kept;
       } catch (e) {
         Logger.debug('_confirmSessionWalsRetained error: $e');
         kept = 1;
       }
     }
-    if (!_captureSessionIsCurrent(token)) return;
-    if (walGeneration != null && phone is LocalWalSync && phone.sessionGeneration != walGeneration) {
-      return;
-    }
+    if (!stillCurrent()) return;
     if (kept > 0 || phone is! LocalWalSyncImpl) {
       _autoSyncSessionWals(trigger: WakeTrigger.dataStalled);
     }
@@ -3393,9 +3443,10 @@ class CaptureController extends ChangeNotifier
   Future<void> _autoSyncSessionWals({WakeTrigger trigger = WakeTrigger.cooldownElapsed}) async {
     final token = _sessionOwner?.token;
     // Wait for finalize+stamp to complete so tail buffer WALs are on disk before querying.
-    if (_pendingFinalizeAndStamp != null) {
-      await _pendingFinalizeAndStamp;
-      _pendingFinalizeAndStamp = null;
+    final pending = _pendingFinalizeAndStamp;
+    if (pending != null) {
+      await pending;
+      if (identical(_pendingFinalizeAndStamp, pending)) _pendingFinalizeAndStamp = null;
     }
     if (!_captureSessionIsCurrent(token)) return;
     final owner = _sessionOwner;

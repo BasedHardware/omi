@@ -150,44 +150,45 @@ String? _walLocationBatchKey(Wal wal) {
 bool isAutoUploadEligible(Wal wal) =>
     wal.status == WalStatus.miss && wal.storage == WalStorage.disk && wal.retryCount < walMaxAutoRetries;
 
-/// Historical tolerance for matching saved transcript segments to WALs. It
-/// never licenses deletion: any positive uncovered gap keeps the copy because
-/// silence cannot be told apart from lost speech.
-const walTranscriptSlackSeconds = 30;
+/// Boundary slack when matching saved transcript spans to a WAL's outer edges: it absorbs the
+/// live-arrival anchor error, and never expands a span or bridges an interior gap.
+const walTranscriptSlackSeconds = 3;
 
-/// Whether the saved transcript covers [wal]: [transcriptSpans] — absolute
-/// epoch seconds sharing the WAL's clock — must cover every second of it.
+/// Whether the saved transcript covers [wal]: the union of [transcriptSpans] — absolute epoch
+/// seconds sharing the WAL's clock — must reach both WAL edges within [walTranscriptSlackSeconds],
+/// with no positive interior hole and at least one actually overlapping span.
 @visibleForTesting
 bool walCoveredByTranscript(Wal wal, List<(int, int)> transcriptSpans, int conversationStartSeconds) {
-  if (wal.seconds <= 0) return false;
-  if (wal.totalFrames > 0) {
-    final framesPerSecond = wal.codec.getFramesPerSecond();
-    if (framesPerSecond <= 0 ||
-        wal.totalFrames % framesPerSecond != 0 ||
-        wal.totalFrames ~/ framesPerSecond != wal.seconds) {
-      return false;
-    }
+  final framesPerSecond = wal.codec.getFramesPerSecond();
+  if (wal.seconds <= 0 ||
+      (wal.totalFrames > 0 &&
+          (framesPerSecond <= 0 ||
+              wal.totalFrames % framesPerSecond != 0 ||
+              wal.totalFrames ~/ framesPerSecond != wal.seconds))) {
+    return false;
   }
+  final start = wal.timerStart, end = wal.timerStart + wal.seconds;
   final spans = transcriptSpans.where((span) => span.$2 > span.$1).toList()..sort((a, b) => a.$1.compareTo(b.$1));
-  var cursor = wal.timerStart;
-  final end = cursor + wal.seconds;
-  for (final span in spans) {
-    if (span.$2 <= cursor) continue;
-    if (span.$1 > cursor) return false;
-    cursor = max(cursor, span.$2);
-    if (cursor >= end) return true;
+  final first = spans.indexWhere((span) => span.$2 > start); // first span that can touch the WAL
+  if (first < 0 || spans[first].$1 >= end) return false; // nothing actually overlaps it
+  var unionStart = spans[first].$1, unionEnd = spans[first].$2;
+  for (final span in spans.skip(first + 1)) {
+    if (unionEnd >= end || span.$1 >= end) break; // coverage finished, or no later span can touch the WAL
+    if (span.$1 > unionEnd) return false; // a positive interior hole, slack or not
+    unionEnd = max(unionEnd, span.$2);
   }
-  return false;
+  return unionStart <= start + walTranscriptSlackSeconds && unionEnd >= end - walTranscriptSlackSeconds;
 }
 
 /// Where a saved transcript starts on the phone's clock, from when its live segments last arrived:
 /// each arrives a moment after the segment's end, so arrival minus end is that start plus the
-/// transcription delay. The median ignores stray matches, and null means no segment arrived live —
-/// an estimate for diagnostics only, never proof enough to delete audio.
+/// transcription delay. The median ignores stray matches; non-finite ends and non-positive arrivals
+/// are skipped, and null means no usable live arrival.
 int? transcriptStartOnDevice(Iterable<(String, double)> segmentEnds, Map<String, int> lastArrivals) {
   final estimates = [
     for (final (id, end) in segmentEnds)
-      if (lastArrivals[id] case final arrived?) arrived - end.ceil(),
+      if (end.isFinite)
+        if (lastArrivals[id] case final arrived? when arrived > 0) arrived - end.ceil(),
   ]..sort();
   return estimates.isEmpty ? null : estimates[estimates.length ~/ 2];
 }
@@ -833,24 +834,26 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
   }
 
+  /// In the `upload` phase [kept] holds only the members an upload accepted (HTTP 200/202).
   void _emitWalTranscriptCoverage({
     required int generation,
     required String phase,
-    required int releasedCount,
-    required double releasedSeconds,
-    required int keptCount,
-    required double keptSeconds,
-    required double keptUploadedSeconds,
+    List<Wal> covered = const [],
+    List<Wal> kept = const [],
+    String? failClosedReason,
   }) {
     if (!_isCurrent(generation)) return;
+    double audioSeconds(List<Wal> wals) => wals.fold(0.0, (sum, wal) => sum + _walAudioSeconds(wal));
     final fields = <String, Object?>{
-      'policy': 'retain_uncertain_coverage',
+      'policy': 'retain_covered_upload_gaps',
       'phase': phase,
-      'released_count': releasedCount,
-      'released_seconds': releasedSeconds,
-      'kept_count': keptCount,
-      'kept_seconds': keptSeconds,
-      'kept_uploaded_seconds': keptUploadedSeconds,
+      'retained_covered_count': covered.length,
+      'retained_covered_seconds': audioSeconds(covered),
+      'kept_count': kept.length,
+      'kept_seconds': audioSeconds(kept),
+      'kept_uploaded_count': phase == 'upload' ? kept.length : 0,
+      'kept_uploaded_seconds': phase == 'upload' ? audioSeconds(kept) : 0.0,
+      if (failClosedReason != null) 'fail_closed_reason': failClosedReason,
     };
     final override = _coverageTelemetryOverride;
     if (override != null) {
@@ -1125,68 +1128,74 @@ class LocalWalSyncImpl implements LocalWalSync {
     return reset;
   }
 
-  /// Delete the durable safety copy of the audio the saved transcript covers.
-  /// Until this acknowledgement arrives, socket writes are transport
-  /// attempts—not delivery confirmation. A nonempty transcript does not cover
-  /// the whole session: the server can lose text and still save the rest, so
-  /// a WAL the transcript does not reach is kept for repair. [transcriptSpans]
-  /// are absolute epoch seconds sharing the WAL's clock; without them — or with
-  /// an empty list — every stamped WAL is kept, because timestamp estimates can
-  /// never prove coverage.
+  /// Judges each stamped WAL of [conversationId] against the saved transcript: a covered WAL moves
+  /// into synced retention (the `autoRemoveSyncedCopies` lifecycle) and is not uploaded — the saved
+  /// text suppresses the repair upload, never deletes the copy; an uncovered WAL stays `miss`,
+  /// marked `keptForTranscriptRecovery`, and uploads for repair. Without [transcriptSpans], or with
+  /// an explicit [failClosedReason], every eligible stamped WAL fails closed into repair.
   Future<({int released, int kept})> confirmSessionTranscription(
     int sessionStartSeconds,
     String conversationId, {
     List<(int, int)>? transcriptSpans,
     int? conversationStartSeconds,
+    String? failClosedReason,
   }) async {
     final generation = _sessionGeneration;
-    // A WAL stamped by its recording id can start before the session window, because its
-    // timerStart is backdated from its frame count. The transcript evidence judges every
-    // stamped copy instead.
+    // A stamped WAL can start before the session window — its timerStart is backdated from its
+    // frame count — so the transcript evidence judges every stamped copy instead.
     final stamped = _wals.where((wal) => wal.conversationId == conversationId).toList();
     if (stamped.isEmpty) return (released: 0, kept: 0);
 
-    var released = 0;
-    var kept = 0;
-    var releasedSeconds = 0.0;
-    var keptSeconds = 0.0;
+    final spans =
+        failClosedReason == null && transcriptSpans != null && transcriptSpans.isNotEmpty ? transcriptSpans : null;
+    final reason = failClosedReason ?? (spans != null ? null : 'no_spans');
+    final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
+    final covered = <Wal>[], kept = <Wal>[];
     for (final wal in stamped) {
-      if (!_isCurrent(generation)) break;
-      final covered = transcriptSpans != null &&
-          transcriptSpans.isNotEmpty &&
-          walCoveredByTranscript(wal, transcriptSpans, conversationStartSeconds ?? sessionStartSeconds);
-      if (covered && !wal.isSyncing && wal.status != WalStatus.uploaded) {
-        if (await _deleteWal(wal, generation: generation)) {
-          released++;
-          releasedSeconds += _walAudioSeconds(wal);
-          continue;
-        }
-        if (!_isCurrent(generation)) break;
+      // Only phone-side pending copies and transport-only synced ones (socket sends, never
+      // server-confirmed) are judged; in-flight, durable and terminal copies never regress.
+      final eligible = !wal.isSyncing &&
+          (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
+          (wal.status == WalStatus.miss || wal.status == WalStatus.synced && wal.syncedAt == 0);
+      if (!eligible) continue;
+      if (spans != null && walCoveredByTranscript(wal, spans, conversationStartSeconds ?? sessionStartSeconds)) {
+        wal.status = WalStatus.synced;
+        wal.syncedAt = nowSeconds;
+        wal.keptForTranscriptRecovery = false;
+        covered.add(wal);
+      } else {
+        // An uncovered transport-only synced copy reclassifies to miss so
+        // fail-closed recovery uploads it instead of status-skipping it.
+        _keepForTranscriptRepair(wal);
+        kept.add(wal);
       }
-      wal.keptForTranscriptRecovery = true;
-      kept++;
-      keptSeconds += _walAudioSeconds(wal);
     }
-    if (released > 0 || kept > 0) {
-      await _saveWalsToFile(generation);
+    if (covered.isNotEmpty || kept.isNotEmpty) {
+      try {
+        await _saveWalsToFile(generation);
+      } catch (_) {
+        // The durable index never recorded the coverage, so covered copies fail closed too.
+        if (_isCurrent(generation)) {
+          covered.where((wal) => _wals.any((tracked) => identical(tracked, wal))).forEach(_keepForTranscriptRepair);
+        }
+        rethrow;
+      }
     }
-    if (released > 0 && _isCurrent(generation)) {
-      _notifyUpdated(generation);
-      DebugLogManager.logInfo('Pruned transcript-confirmed live-capture WALs', {'count': released});
-    }
-    if (kept > 0) {
-      DebugLogManager.logInfo('Kept live-capture WALs the transcript does not cover', {'count': kept});
-    }
+    if (_isCurrent(generation) && covered.isNotEmpty) _notifyUpdated(generation);
     _emitWalTranscriptCoverage(
       generation: generation,
       phase: 'confirmation',
-      releasedCount: released,
-      releasedSeconds: releasedSeconds,
-      keptCount: kept,
-      keptSeconds: keptSeconds,
-      keptUploadedSeconds: 0,
+      covered: covered,
+      kept: kept,
+      failClosedReason: reason,
     );
-    return (released: released, kept: kept);
+    return (released: 0, kept: kept.length);
+  }
+
+  void _keepForTranscriptRepair(Wal wal) {
+    wal.status = WalStatus.miss;
+    wal.syncedAt = 0;
+    wal.keptForTranscriptRecovery = true;
   }
 
   /// Returns the approximate duration (in seconds) of UNSYNCED audio frames
@@ -1297,20 +1306,10 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (!_isCurrent(generation)) return;
     final marked = accepted.where((wal) => wal.keptForTranscriptRecovery).toList();
     if (marked.isEmpty) return;
-    var seconds = 0.0;
     for (final wal in marked) {
       wal.keptForTranscriptRecovery = false;
-      seconds += _walAudioSeconds(wal);
     }
-    _emitWalTranscriptCoverage(
-      generation: generation,
-      phase: 'upload',
-      releasedCount: 0,
-      releasedSeconds: 0,
-      keptCount: marked.length,
-      keptSeconds: seconds,
-      keptUploadedSeconds: seconds,
-    );
+    _emitWalTranscriptCoverage(generation: generation, phase: 'upload', kept: marked);
   }
 
   @override
