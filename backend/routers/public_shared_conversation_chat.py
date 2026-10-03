@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import os
 import re
 from collections.abc import Mapping, Sequence
@@ -9,6 +10,7 @@ from inspect import isawaitable
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 import firebase_admin.auth
@@ -143,16 +145,24 @@ class _BoundedSharedChatRoute(APIRoute):
 
             content_length = request.headers.get('content-length')
             if content_length is not None:
-                # Defensively handle proxy-duplicated or whitespace-padded lengths
-                raw_len = content_length.split(',')[0].strip()
-                try:
-                    declared_length = int(raw_len)
-                except (ValueError, TypeError) as exc:
+                # Require every comma-separated length to be valid and agree
+                parts = [p.strip() for p in content_length.split(',')]
+                lengths: list[int] = []
+                for p in parts:
+                    try:
+                        val = int(p)
+                        if val < 0:
+                            raise ValueError('negative length')
+                        lengths.append(val)
+                    except (ValueError, TypeError) as exc:
+                        raise _route_http_exception(
+                            400, 'Invalid Content-Length'
+                        ) from exc
+                if not lengths or any(l != lengths[0] for l in lengths):
                     raise _route_http_exception(
-                        400, 'Invalid Content-Length'
-                    ) from exc
-                if declared_length < 0:
-                    raise _route_http_exception(400, 'Invalid Content-Length')
+                        400, 'Conflicting Content-Length values'
+                    )
+                declared_length = lengths[0]
                 if declared_length > _MAX_REQUEST_BODY_BYTES:
                     raise _route_http_exception(413, 'Request body too large')
 
@@ -176,7 +186,16 @@ class _BoundedSharedChatRoute(APIRoute):
                 return message
 
             bounded_request = Request(request.scope, receive=bounded_receive)
-            return await route_handler(bounded_request)
+            try:
+                return await route_handler(bounded_request)
+            except RequestValidationError as exc:
+                # Map request validation errors (e.g. blank question) to 400
+                detail = (
+                    exc.errors()[0].get('msg', 'Invalid request payload')
+                    if exc.errors()
+                    else 'Invalid request payload'
+                )
+                raise _route_http_exception(400, detail) from exc
 
         return bounded_route_handler
 
@@ -255,10 +274,34 @@ async def _trusted_frontend_subject_for_preparse(request: Request) -> str:
     )
     if override is None:
         return require_trusted_frontend_subject(request)
+
+    # Determine the callable's arity before invoking it
+    takes_request = True
     try:
-        subject = override(request)
-    except TypeError:
-        subject = override()
+        sig = inspect.signature(override)
+        params = list(sig.parameters.values())
+        has_varargs = any(
+            p.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            )
+            for p in params
+        )
+        positional_params = [
+            p
+            for p in params
+            if p.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        ]
+        if not has_varargs and len(positional_params) == 0:
+            takes_request = False
+    except (ValueError, TypeError):
+        takes_request = True
+
+    subject = override(request) if takes_request else override()
+
     if isawaitable(subject):
         subject = await subject
     if (
@@ -359,13 +402,6 @@ async def public_shared_conversation_chat(
     if not _gateway_mode_enabled():
         raise _route_http_exception(
             503, 'Public shared conversation chat unavailable'
-        )
-
-    # Defensive question verification
-    sanitized_question = (data.question or '').strip()
-    if not sanitized_question:
-        raise _route_http_exception(
-            400, 'Question must not be empty or whitespace only'
         )
 
     signed_uid = getattr(request.state, _SIGNED_UID_STATE_ATTR, None)
