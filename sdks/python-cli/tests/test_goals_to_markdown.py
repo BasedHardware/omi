@@ -19,11 +19,8 @@ import sys
 import tempfile
 import unittest
 
-
 # Dynamically load goals_to_markdown recipe
-script_path = (
-    Path(__file__).resolve().parent.parent / "examples" / "goals_to_markdown.py"
-)
+script_path = Path(__file__).resolve().parent.parent / "examples" / "goals_to_markdown.py"
 spec = importlib.util.spec_from_file_location("goals_to_markdown", script_path)
 if spec is None or spec.loader is None:
     raise ImportError(f"Cannot load module from {script_path}")
@@ -358,14 +355,16 @@ class TestGoalsToMarkdown(unittest.TestCase):
             out_dir = Path(tmp_dir) / "notes"
 
             # Test --group-by type into directory
-            ret = g2m.main([
-                str(input_file),
-                "-d",
-                str(out_dir),
-                "--group-by",
-                "type",
-                "-f",
-            ])
+            ret = g2m.main(
+                [
+                    str(input_file),
+                    "-d",
+                    str(out_dir),
+                    "--group-by",
+                    "type",
+                    "-f",
+                ]
+            )
             self.assertEqual(ret, 0)
             self.assertTrue((out_dir / "numeric_goals.md").exists())
             self.assertTrue((out_dir / "scale_goals.md").exists())
@@ -378,14 +377,16 @@ class TestGoalsToMarkdown(unittest.TestCase):
             out_file = Path(tmp_dir) / "filtered.md"
 
             # Filter by status: achieved
-            ret = g2m.main([
-                str(input_file),
-                "-o",
-                str(out_file),
-                "--status",
-                "achieved",
-                "-f",
-            ])
+            ret = g2m.main(
+                [
+                    str(input_file),
+                    "-o",
+                    str(out_file),
+                    "--status",
+                    "achieved",
+                    "-f",
+                ]
+            )
             self.assertEqual(ret, 0)
             content = out_file.read_text(encoding="utf-8")
             self.assertIn("total: 1", content)
@@ -394,16 +395,18 @@ class TestGoalsToMarkdown(unittest.TestCase):
 
     def test_subprocess_stdin_pipeline(self) -> None:
         """Verify real CLI subprocess invocation via Unix-like stdin pipeline."""
-        payload = json.dumps([
-            {
-                "id": "subp_goal",
-                "title": "Subprocess Pipe Goal",
-                "goal_type": "numeric",
-                "current_value": 42,
-                "target_value": 100,
-                "unit": "%",
-            }
-        ]).encode("utf-8")
+        payload = json.dumps(
+            [
+                {
+                    "id": "subp_goal",
+                    "title": "Subprocess Pipe Goal",
+                    "goal_type": "numeric",
+                    "current_value": 42,
+                    "target_value": 100,
+                    "unit": "%",
+                }
+            ]
+        ).encode("utf-8")
 
         proc = subprocess.run(
             [sys.executable, str(script_path), "-"],
@@ -430,7 +433,6 @@ class TestGoalsToMarkdown(unittest.TestCase):
         self.assertIn("Path traversal sequence '..' is forbidden", err_msg)
 
     def test_safe_float_overflow_protection(self) -> None:
-
         """Verify safe_float gracefully handles massive integers and overflow strings without crashing."""
         huge_int = 10**1000
         self.assertEqual(g2m.safe_float(huge_int, default=42.0), 42.0)
