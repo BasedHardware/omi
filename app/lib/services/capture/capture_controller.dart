@@ -384,7 +384,7 @@ class CaptureController extends ChangeNotifier
               _socket?.send(frame.payload);
             }
             _recordingTelemetry.observeSent(frame.payload.length);
-            _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+            _wal.getSyncs().phone.markFrameStreamed(frame.syncKey);
           }
         }
       },
@@ -2416,7 +2416,7 @@ class CaptureController extends ChangeNotifier
                 _socket?.send(frame.payload);
               }
               _recordingTelemetry.observeSent(frame.payload.length);
-              _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+              _wal.getSyncs().phone.markFrameStreamed(frame.syncKey);
             }
           }
         },
@@ -3626,7 +3626,7 @@ class CaptureController extends ChangeNotifier
           _socket?.send(frame.payload);
         }
         _recordingTelemetry.observeSent(frame.payload.length);
-        _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+        _wal.getSyncs().phone.markFrameStreamed(frame.syncKey);
       }
     }
   }

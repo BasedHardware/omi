@@ -90,9 +90,10 @@ abstract class LocalWalSync implements IWalSync {
   /// The frame contains headerless payload and a source-specific sync key.
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot});
 
-  /// Mark a frame as synced (sent to server via WebSocket).
-  /// Matches frames by sync key (source-agnostic).
-  void markFrameSynced(FrameSyncKey key);
+  /// Records that a frame reached a connected live socket, so the capture screen does not count it
+  /// as audio at risk. It does not release the frame: a send is not a save, so the WAL keeps it until
+  /// a transcript confirms it. Matches frames by sync key (source-agnostic).
+  void markFrameStreamed(FrameSyncKey key);
 
   /// Notify WAL that the audio codec has changed (resets frame state).
   Future onAudioCodecChanged(BleAudioCodec codec);

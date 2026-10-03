@@ -1956,7 +1956,7 @@ void main() {
 
       connection.emitAudio(value: 42);
       expect(world.socket?.sentBinary, hasLength(1));
-      expect(world.wal.syncs.phone.testFrameSynced, everyElement(isFalse));
+      expect(world.wal.syncs.phone.testFrameStreamed, everyElement(isFalse));
 
       await world.wal.syncs.phone.finalizeCurrentSession();
       final durable = await world.wal.syncs.phone.getAllWals();

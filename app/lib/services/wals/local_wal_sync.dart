@@ -179,7 +179,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   String? _captureEvidenceRoot;
   int _nextSourceFramePosition = 0;
   int _sourceClockEpoch = 0;
-  List<bool> _frameSynced = [];
+  List<bool> _frameStreamed = [];
 
   Timer? _chunkingTimer;
   Timer? _flushingTimer;
@@ -198,6 +198,11 @@ class LocalWalSyncImpl implements LocalWalSync {
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
     _activeRecordingSessionId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    // Only a change of recording counts, so rebinding the same one can't push out a window's start.
+    if (_recordingBindings.isEmpty || _recordingBindings.last.$2 != _activeRecordingSessionId) {
+      _recordingBindings.add((_now().millisecondsSinceEpoch ~/ 1000, _activeRecordingSessionId));
+      if (_recordingBindings.length > 16) _recordingBindings.removeAt(0);
+    }
   }
 
   /// Recording id captured before a flush. [stampConversationId] keeps its
@@ -285,10 +290,11 @@ class LocalWalSyncImpl implements LocalWalSync {
     _retiredWals.addAll(_wals);
     _wals = [];
     _frames = [];
-    _frameSynced = [];
+    _frameStreamed = [];
     _captureEvidenceRoot = null;
     _nextSourceFramePosition = 0;
     _sourceClockEpoch = 0;
+    _recordingBindings.clear();
   }
 
   /// Completes when _initializeWals() finishes loading WALs from disk.
@@ -341,7 +347,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   List<WalFrame> get testFrames => _frames;
 
   @visibleForTesting
-  List<bool> get testFrameSynced => _frameSynced;
+  List<bool> get testFrameStreamed => _frameStreamed;
 
   @visibleForTesting
   List<Wal> get testWals => _wals;
@@ -470,7 +476,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     await _flush(generation);
 
     _frames = [];
-    _frameSynced = [];
+    _frameStreamed = [];
   }
 
   @override
@@ -481,7 +487,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     await _chunk(generation);
     await _flush(generation);
     _frames = [];
-    _frameSynced = [];
+    _frameStreamed = [];
 
     _framesPerSecond = codec.getFramesPerSecond();
     _codec = codec;
@@ -534,88 +540,74 @@ class LocalWalSyncImpl implements LocalWalSync {
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
 
-    bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
-    if (!shouldStored) {
-      shouldStored = _frameSynced.sublist(low, high).any((synced) => !synced);
-    }
+    // Every live chunk is kept until a transcript confirms it: a socket send is not a save. The
+    // streamed count only tells the capture screen which audio is not at risk.
+    final syncedOffset = _leadingStreamedFrames(low, high);
+    Logger.debug("$low - $high - $syncedOffset - $chunkFrameCount - $_framesPerSecond");
 
-    if (shouldStored) {
-      int syncedOffset = 0;
-      for (var i = low; i < high; i++) {
-        if (_frameSynced[i]) {
-          syncedOffset++;
-        } else {
-          break;
-        }
-      }
-      Logger.debug("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount} - ${_framesPerSecond}");
-
-      Wal wal;
-      var walIdx = _wals.indexWhere(
-        (w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec,
+    Wal wal;
+    var walIdx = _wals.indexWhere(
+      (w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec,
+    );
+    if (walIdx < 0) {
+      wal = Wal(
+        codec: _codec,
+        timerStart: timerStart,
+        data: chunk,
+        storage: WalStorage.mem,
+        status: WalStatus.miss,
+        device: _deviceId ?? "omi",
+        deviceModel: _deviceModel ?? "Omi",
+        seconds: chunkFrameCount ~/ _framesPerSecond,
+        totalFrames: chunkFrameCount,
+        syncedFrameOffset: syncedOffset,
+        ownerUid: _currentWalOwnerUid(),
+        captureRoot: stableEvidence ? evidenceRoot : null,
+        sourceFrameStart: stableEvidence ? evidenceStart : null,
+        sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
+        geolocation: _copyGeolocation(_sessionGeolocation),
+        recordingSessionId: _activeRecordingSessionId,
       );
-      if (walIdx < 0) {
-        wal = Wal(
-          codec: _codec,
-          timerStart: timerStart,
-          data: chunk,
-          storage: WalStorage.mem,
-          status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
-          device: _deviceId ?? "omi",
-          deviceModel: _deviceModel ?? "Omi",
-          seconds: chunkFrameCount ~/ _framesPerSecond,
-          totalFrames: chunkFrameCount,
-          syncedFrameOffset: syncedOffset,
-          ownerUid: _currentWalOwnerUid(),
-          captureRoot: stableEvidence ? evidenceRoot : null,
-          sourceFrameStart: stableEvidence ? evidenceStart : null,
-          sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
-          geolocation: _copyGeolocation(_sessionGeolocation),
-          recordingSessionId: _activeRecordingSessionId,
-        );
-        // Transport-only sync (socket send) must NOT start the retention
-        // clock: syncedAt stays 0 so the sweep never treats an
-        // unacknowledged streamed copy as server-confirmed.
-        _wals.add(wal);
-      } else {
-        wal = _wals[walIdx];
-        final contiguousEvidence = stableEvidence &&
-            wal.captureRoot == evidenceRoot &&
-            wal.sourceClockEpoch == evidenceEpoch &&
-            wal.sourceFrameStart != null &&
-            wal.sourceFrameStart! + wal.totalFrames == evidenceStart;
-        final oldFrameCount = wal.totalFrames;
-        wal.data.addAll(chunk);
-        wal.storage = WalStorage.mem;
-        wal.totalFrames = contiguousEvidence ? oldFrameCount + chunkFrameCount : chunkFrameCount;
-        if (!contiguousEvidence) {
-          wal.captureRoot = null;
-          wal.sourceFrameStart = null;
-          wal.sourceClockEpoch = null;
-        }
+      // Transport-only sync (socket send) must NOT start the retention
+      // clock: syncedAt stays 0 so the sweep never treats an
+      // unacknowledged streamed copy as server-confirmed.
+      _wals.add(wal);
+    } else {
+      wal = _wals[walIdx];
+      final contiguousEvidence = stableEvidence &&
+          wal.captureRoot == evidenceRoot &&
+          wal.sourceClockEpoch == evidenceEpoch &&
+          wal.sourceFrameStart != null &&
+          wal.sourceFrameStart! + wal.totalFrames == evidenceStart;
+      final oldFrameCount = wal.totalFrames;
+      wal.data.addAll(chunk);
+      wal.storage = WalStorage.mem;
+      wal.totalFrames = contiguousEvidence ? oldFrameCount + chunkFrameCount : chunkFrameCount;
+      if (!contiguousEvidence) {
+        wal.captureRoot = null;
+        wal.sourceFrameStart = null;
+        wal.sourceClockEpoch = null;
+      }
+      // The streamed run counts from the WAL's first frame, so it carries into the new chunk only
+      // when the socket took every earlier frame.
+      if (!contiguousEvidence) {
         wal.syncedFrameOffset = syncedOffset;
-        wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
-        if (wal.status != WalStatus.synced) {
-          // New unacknowledged frames invalidate the retention clock: the
-          // next server-confirmed transition must re-stamp syncedAt so the
-          // whole WAL ages from fresh confirmation, not a prior one.
-          wal.syncedAt = 0;
-        }
-        // Transport-only sync (socket send) never starts the retention clock:
-        // syncedAt stays 0 until a server-confirmed transition stamps it.
-        _wals[walIdx] = wal;
+      } else if (wal.syncedFrameOffset >= oldFrameCount) {
+        wal.syncedFrameOffset = oldFrameCount + syncedOffset;
       }
-
-      if (wal.status == WalStatus.synced && _isCurrent(generation)) {
-        listener.onWalSynced(wal);
-      }
-      _notifyUpdated(generation);
+      wal.status = WalStatus.miss;
+      // New unacknowledged frames invalidate the retention clock: the next
+      // server-confirmed transition must re-stamp syncedAt so the whole WAL
+      // ages from fresh confirmation, not a prior one.
+      wal.syncedAt = 0;
+      _wals[walIdx] = wal;
     }
+    _notifyUpdated(generation);
 
     Logger.debug("_chunk wals ${_wals.length}");
 
     _frames.removeRange(0, pivot);
-    _frameSynced.removeRange(0, pivot);
+    _frameStreamed.removeRange(0, pivot);
   }
 
   Future _flush(int generation) async {
@@ -802,27 +794,39 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   /// Returns unsynced WALs whose timerStart falls within [sessionStartSeconds, now].
   /// Used by the live capture screen to show inline audio safety indicators.
-  List<Wal> getSessionUnsyncedWals(int sessionStartSeconds) {
+  List<Wal> getSessionUnsyncedWals(int sessionStartSeconds) =>
+      getSessionWals(sessionStartSeconds).where((w) => w.status == WalStatus.miss).toList();
+
+  /// All disk WALs of the session window — synced ones included — so callers
+  /// can render a pending/total backlog count that drains as uploads finish.
+  /// A copy of audio the live socket took in full is left out: it waits for
+  /// transcript confirmation, but it is not at risk and not a backlog.
+  List<Wal> getSessionWals(int sessionStartSeconds) {
     final now = _now().millisecondsSinceEpoch ~/ 1000;
     return _wals
         .where(
           (w) =>
-              w.status == WalStatus.miss &&
               w.storage == WalStorage.disk &&
               w.timerStart >= sessionStartSeconds &&
-              w.timerStart <= now,
+              w.timerStart <= now &&
+              !(w.totalFrames > 0 && w.syncedFrameOffset >= w.totalFrames),
         )
         .toList();
   }
 
-  /// All disk WALs of the session window — synced ones included — so callers
-  /// can render a pending/total backlog count that drains as uploads finish.
-  /// Same window and storage scope as [getSessionUnsyncedWals].
-  List<Wal> getSessionWals(int sessionStartSeconds) {
-    final now = _now().millisecondsSinceEpoch ~/ 1000;
-    return _wals
-        .where((w) => w.storage == WalStorage.disk && w.timerStart >= sessionStartSeconds && w.timerStart <= now)
-        .toList();
+  /// When the store was bound to each recording, oldest first. The last few cover any conversation
+  /// still closing, since a recording lasts minutes. Logout clears them with the account's WALs.
+  final List<(int, String?)> _recordingBindings = [];
+
+  /// The recording the store was bound to at [seconds], the start of a conversation's window. A phone
+  /// recording stopped before the server closed its conversation has no active id left, and the store
+  /// may have bound a newer recording since; the binding still says which recording the window began
+  /// under, whatever has happened to that recording's WALs.
+  String? _recordingBoundAt(int seconds) {
+    for (final (since, id) in _recordingBindings.reversed) {
+      if (since <= seconds) return id;
+    }
+    return null;
   }
 
   /// Mark a WAL as synced and persist the change to disk.
@@ -863,56 +867,41 @@ class LocalWalSyncImpl implements LocalWalSync {
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
 
-    // Same shouldStored check as _chunk(): one unconfirmed frame is enough to
-    // retain the session. A transport send is not transcript confirmation.
-    bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
-    if (!shouldStored) {
-      shouldStored = _frameSynced.sublist(0, high).any((synced) => !synced);
-    }
+    // Kept like every _chunk() WAL: a transport send is not transcript confirmation.
+    final syncedOffset = _leadingStreamedFrames(0, high);
 
-    if (shouldStored) {
-      int syncedOffset = 0;
-      for (var i = 0; i < high; i++) {
-        if (_frameSynced[i]) {
-          syncedOffset++;
-        } else {
-          break;
-        }
-      }
-
-      // Use a distinct timerStart so we don't collide with WALs from _chunk().
-      // This is the tail buffer that _chunk() left behind.
-      final tailWal = Wal(
-        codec: _codec,
-        timerStart: timerStart,
-        data: chunk,
-        storage: WalStorage.mem,
-        status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
-        device: _deviceId ?? "omi",
-        deviceModel: _deviceModel ?? "Omi",
-        seconds: chunkFrameCount ~/ _framesPerSecond,
-        totalFrames: chunkFrameCount,
-        syncedFrameOffset: syncedOffset,
-        ownerUid: _currentWalOwnerUid(),
-        captureRoot: stableEvidence ? evidenceRoot : null,
-        sourceFrameStart: stableEvidence ? evidenceStart : null,
-        sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
-        geolocation: _copyGeolocation(_sessionGeolocation),
-        recordingSessionId: _activeRecordingSessionId,
-      );
-      // Transport-only sync (socket send) must NOT start the retention
-      // clock: syncedAt stays 0 so the sweep never treats an
-      // unacknowledged streamed tail copy as server-confirmed.
-      _wals = List.from(_wals)..add(tailWal);
-    }
+    // Use a distinct timerStart so we don't collide with WALs from _chunk().
+    // This is the tail buffer that _chunk() left behind.
+    final tailWal = Wal(
+      codec: _codec,
+      timerStart: timerStart,
+      data: chunk,
+      storage: WalStorage.mem,
+      status: WalStatus.miss,
+      device: _deviceId ?? "omi",
+      deviceModel: _deviceModel ?? "Omi",
+      seconds: chunkFrameCount ~/ _framesPerSecond,
+      totalFrames: chunkFrameCount,
+      syncedFrameOffset: syncedOffset,
+      ownerUid: _currentWalOwnerUid(),
+      captureRoot: stableEvidence ? evidenceRoot : null,
+      sourceFrameStart: stableEvidence ? evidenceStart : null,
+      sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
+      geolocation: _copyGeolocation(_sessionGeolocation),
+      recordingSessionId: _activeRecordingSessionId,
+    );
+    // Transport-only sync (socket send) must NOT start the retention
+    // clock: syncedAt stays 0 so the sweep never treats an
+    // unacknowledged streamed tail copy as server-confirmed.
+    _wals = List.from(_wals)..add(tailWal);
 
     _frames = [];
-    _frameSynced = [];
+    _frameStreamed = [];
 
     // Flush all in-memory WALs to disk immediately
     await _flush(generation);
     _notifyUpdated(generation);
-    Logger.debug('finalizeCurrentSession: drained $chunkFrameCount frames (stored=$shouldStored), flushed to disk');
+    Logger.debug('finalizeCurrentSession: drained $chunkFrameCount frames, flushed to disk');
   }
 
   /// Stamp all session WALs with the given conversationId and persist to disk.
@@ -922,11 +911,12 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// stamped even when its backdated [Wal.timerStart] is earlier than
   /// [sessionStartSeconds]. A WAL that already belongs to a different recording
   /// is left alone, so a session roll during the flush cannot attach the next
-  /// recording to this conversation.
+  /// recording to this conversation. Without a prepared recording, the stamp uses
+  /// the one the store was bound to when the window began.
   Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
     final generation = _sessionGeneration;
     final now = _now().millisecondsSinceEpoch ~/ 1000;
-    final recordingId = _conversationStampRecordingId;
+    final recordingId = _conversationStampRecordingId ?? _recordingBoundAt(sessionStartSeconds);
     _conversationStampRecordingId = null;
     final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
@@ -1006,16 +996,13 @@ class LocalWalSyncImpl implements LocalWalSync {
     return deleted;
   }
 
-  /// Returns the approximate duration (in seconds) of UNSYNCED audio frames
-  /// still in memory. Frames already delivered via WebSocket are excluded so
-  /// the "Audio Saved Locally" indicator only appears when data is at risk.
+  /// Returns the approximate duration (in seconds) of audio frames still in
+  /// memory that no live socket took. Streamed frames are excluded so the
+  /// "Audio Saved Locally" indicator only appears when data is at risk.
   int getInFlightSeconds() {
     if (_framesPerSecond <= 0) return 0;
-    int unsyncedCount = 0;
-    for (int i = 0; i < _frameSynced.length; i++) {
-      if (!_frameSynced[i]) unsyncedCount++;
-    }
-    return unsyncedCount ~/ _framesPerSecond;
+    final unstreamedCount = _frameStreamed.where((streamed) => !streamed).length;
+    return unstreamedCount ~/ _framesPerSecond;
   }
 
   @override
@@ -1093,18 +1080,28 @@ class LocalWalSyncImpl implements LocalWalSync {
       sourceClockEpoch: captureRoot == null ? null : _sourceClockEpoch,
     );
     _frames.add(positioned);
-    _frameSynced.add(false);
+    _frameStreamed.add(false);
     return positioned;
   }
 
   @override
-  void markFrameSynced(FrameSyncKey key) {
+  void markFrameStreamed(FrameSyncKey key) {
     for (int i = _frames.length - 1; i >= 0; i--) {
       if (_frames[i].syncKey == key) {
-        _frameSynced[i] = true;
+        _frameStreamed[i] = true;
         break;
       }
     }
+  }
+
+  /// How many frames from [low] a live socket took without a gap, stored as a WAL's
+  /// [Wal.syncedFrameOffset] so the capture screen can tell streamed copies from audio at risk.
+  int _leadingStreamedFrames(int low, int high) {
+    var count = 0;
+    while (low + count < high && _frameStreamed[low + count]) {
+      count++;
+    }
+    return count;
   }
 
   @override
