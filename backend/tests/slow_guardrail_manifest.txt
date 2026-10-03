@@ -38,6 +38,7 @@ tests/unit/test_firestore_query_contract.py
 tests/unit/test_firestore_query_shapes.py
 tests/unit/test_flush_pending_batch1.py
 tests/unit/test_live_gate_replay.py
+tests/unit/test_live_recovery_matrix.py
 tests/unit/test_llm_gateway_coverage_guardrails.py
 tests/unit/test_managed_spend_ledger.py
 tests/unit/test_memories_validation.py

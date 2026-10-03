@@ -60,8 +60,14 @@ from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_
 from utils.stt.streaming import get_stt_service_for_language
 from utils.stt.live_failure import terminate_live_stt_backoff
 from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
-from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME, COST_CANARY_OUTCOME
+from utils.stt.live_metrics import (
+    COST_CANARY_OUTCOME,
+    LIVE_SESSION_TERMINAL_AFTER_TEXT,
+    WINDOW_CANARY_OUTCOME,
+    provider_family,
+)
 from config.live_stt_registry import routing_on
+from config.live_stt_recovery import current_recovery_enabled, recovery_enabled, session_recovery_enabled
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -125,6 +131,7 @@ class ListenSessionRuntime:
     """Stateful session coordinator; subcomponents only communicate through this surface."""
 
     def __init__(self, request: ListenRequest):
+        self.recovery_enabled = recovery_enabled()
         self.request = request
         self.declared_codec = request.codec
         self.limits = ListenLimits()
@@ -399,6 +406,18 @@ class ListenSessionRuntime:
             arm = getattr(self, '_cost_routing_arm', None)
             if arm is not None:
                 COST_CANARY_OUTCOME.labels(arm=arm, outcome=outcome).inc()
+            if (
+                session_recovery_enabled(self)
+                and self.state.live_transcript_delivered
+                and self.state.stt_terminal_failure
+            ):
+                provider = (
+                    getattr(getattr(self, 'stt_service', None), 'value', None)
+                    or getattr(self.state, 'stt_provider', None)
+                    or getattr(self.state, 'requested_provider', None)
+                    or 'unknown'
+                )
+                LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=provider_family(provider)).inc()
         except Exception as error:
             logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
@@ -899,6 +918,15 @@ class ListenSessionRuntime:
         )
 
     async def run(self) -> None:
+        if not isinstance(getattr(self, 'recovery_enabled', None), bool):
+            self.recovery_enabled = session_recovery_enabled(self)
+        token = current_recovery_enabled.set(self.recovery_enabled)
+        try:
+            await self._run()
+        finally:
+            current_recovery_enabled.reset(token)
+
+    async def _run(self) -> None:
         if not await self._admit() or not await self._bootstrap():
             return
         register_listen_session(self)
