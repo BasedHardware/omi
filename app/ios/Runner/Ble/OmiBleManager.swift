@@ -97,6 +97,7 @@ final class OmiBleManager: NSObject {
     private var audioExpected: [String: Int64] = [:]
     private var pendingAudioRecovery: [String: Int64] = [:]
     private var chargingState: [String: Bool] = [:]
+    private var lastDiagnosticsReadUptime: [String: TimeInterval] = [:]
     private static let diagnosticsServiceUuid = CBUUID(string: "19B10040-E8F2-537E-4F6C-D104768A1214")
     private static let diagnosticsCharUuid = CBUUID(string: "19B10041-E8F2-537E-4F6C-D104768A1214")
     private static let audioCharUuid = CBUUID(string: "19B10001-E8F2-537E-4F6C-D104768A1214")
@@ -389,10 +390,7 @@ final class OmiBleManager: NSObject {
             }
         }
         LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
-        if let diagnostic = services.first(where: { $0.uuid == Self.diagnosticsServiceUuid })?
-            .characteristics?.first(where: { $0.uuid == Self.diagnosticsCharUuid }) {
-            peripheral.readValue(for: diagnostic)
-        }
+        readFirmwareDiagnosticsIfDue(peripheral, uuid: uuid)
         if source == "restored_cache" { logBle(uuid: uuid, event: "ready_from_restored_cache", detail: "") }
     }
 
@@ -749,7 +747,8 @@ final class OmiBleManager: NSObject {
     private static func reconnectKey(_ uuid: String) -> String { "\(reconnectCountKeyPrefix)\(uuid)" }
     private static func failToConnectKey(_ uuid: String) -> String { "\(failToConnectCountKeyPrefix)\(uuid)" }
 
-    private func persistPropertyListRecords(_ records: [[String: Any]], forKey key: String, in defaults: UserDefaults) {
+    @discardableResult
+    private func persistPropertyListRecords(_ records: [[String: Any]], forKey key: String, in defaults: UserDefaults) -> Bool {
         func value(_ object: Any) -> PlistValue? {
             if let string = object as? String { return .string(string) }
             if let date = object as? Date { return .date(date) }
@@ -783,8 +782,13 @@ final class OmiBleManager: NSObject {
             }
             return result
         }
-        guard typed.count == records.count else { return }
-        try? SafeDefaults.setPlistRecords(typed, forKey: key, in: defaults)
+        guard typed.count == records.count else { return false }
+        do {
+            try SafeDefaults.setPlistRecords(typed, forKey: key, in: defaults)
+            return true
+        } catch {
+            return false
+        }
     }
 
     @objc private func markCleanExit() {
@@ -847,10 +851,29 @@ final class OmiBleManager: NSObject {
         }
     }
 
+    private func readFirmwareDiagnosticsIfDue(_ peripheral: CBPeripheral, uuid: String) {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let last = lastDiagnosticsReadUptime[uuid], now - last < 15 * 60 { return }
+        guard let diagnostic = peripheral.services?.first(where: { $0.uuid == Self.diagnosticsServiceUuid })?
+            .characteristics?.first(where: { $0.uuid == Self.diagnosticsCharUuid }) else { return }
+        // Throttle attempts too: unsupported/failed reads must not create a retry storm.
+        lastDiagnosticsReadUptime[uuid] = now
+        peripheral.readValue(for: diagnostic)
+    }
+
     private func recordFirmwareDiagnostics(uuid: String, data: Data) {
         guard let value = OmiBleFirmwareDiagnostics.parse(data, timestampMs: CheckedIntegerConversion.epochMs()) else { return }
         let defaults = UserDefaults.standard
         chargingState[uuid] = value["charging"] as? Bool
+        if let charging = chargingState[uuid] {
+            rehydrateBatteryBaselineIfNeeded(uuid: uuid)
+            let batteryKey = Self.batteryHistoryKey(uuid)
+            let history = defaults.array(forKey: batteryKey) as? [[String: Any]] ?? []
+            if let updated = OmiBleEnergyPolicy.backfillLatestBatteryCharging(history, charging: charging),
+               persistPropertyListRecords(updated, forKey: batteryKey, in: defaults) {
+                lastPersistedBatteryCharging[uuid] = charging
+            }
+        }
         let key = "ble_diagnostics_firmware_\(uuid)"
         var reads = defaults.array(forKey: key) as? [[String: Any]] ?? []
         reads.append(value)
@@ -1434,7 +1457,7 @@ extension OmiBleManager: CBPeripheralDelegate {
         let uuid = peripheralUuidString(peripheral)
         guard let service = characteristic.service else { return }
 
-        if OmiBleConnectionPolicy.requiresPairingRecovery(error) {
+        if characteristic.uuid != Self.diagnosticsCharUuid && OmiBleConnectionPolicy.requiresPairingRecovery(error) {
             beginPairingRecovery(for: peripheral, uuid: uuid)
         }
 
@@ -1481,6 +1504,7 @@ extension OmiBleManager: CBPeripheralDelegate {
 
         if characteristic.uuid == OmiBleManager.batteryLevelCharUuid, let firstByte = data.first {
             persistBatteryReading(uuid: uuid, level: Int(firstByte))
+            readFirmwareDiagnosticsIfDue(peripheral, uuid: uuid)
         }
 
         // Limitless Transcribe Later: while batch mode targets this pendant's RX

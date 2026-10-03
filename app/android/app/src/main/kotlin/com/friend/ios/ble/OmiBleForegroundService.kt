@@ -58,8 +58,7 @@ class OmiBleForegroundService : Service() {
         private const val KEY_FAIL_TO_CONNECT_COUNT = "fail_to_connect_count"
         private const val MAX_DISCONNECT_HISTORY = 500
         private const val DISCONNECT_RETENTION_MS = 7L * 24 * 3600 * 1000
-        private const val DIAGNOSTICS_SERVICE = "19b10040-e8f2-537e-4f6c-d104768a1214"
-        private const val DIAGNOSTICS_CHAR = "19b10041-e8f2-537e-4f6c-d104768a1214"
+        private const val BATTERY_LEVEL_CHAR = "00002a19-0000-1000-8000-00805f9b34fb"
         private const val AUDIO_CHAR = "19b10001-e8f2-537e-4f6c-d104768a1214"
 
         @Volatile
@@ -215,20 +214,7 @@ class OmiBleForegroundService : Service() {
             if (services.isEmpty()) {
                 Log.w(TAG, "No services discovered for $addr")
             }
-            val hasDiagnostics = services.any { it.uuid.equals(DIAGNOSTICS_SERVICE, ignoreCase = true) &&
-                it.characteristicUuids.any { characteristic -> characteristic.equals(DIAGNOSTICS_CHAR, ignoreCase = true) }
-            }
-            val readDiagnostics = {
-                if (hasDiagnostics) bleManager.readCharacteristic(addr, DIAGNOSTICS_SERVICE, DIAGNOSTICS_CHAR) { result ->
-                    result.getOrNull()?.let { value ->
-                        FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())?.let { parsed ->
-                            if (!parsed.isNull("charging")) bleManager.chargingState[addr] = parsed.getBoolean("charging")
-                            appendJsonRing("firmware_$addr", parsed, 20, DISCONNECT_RETENTION_MS)
-                            logBle(addr, "firmware_diagnostics_read", "v${parsed.optInt("version")}")
-                        }
-                    }
-                }
-            }
+            val readDiagnostics = { readFirmwareDiagnosticsIfDue(addr) }
 
             if (managed.requiresBond) {
                 bleManager.requestBond(addr) { result ->
@@ -251,6 +237,22 @@ class OmiBleForegroundService : Service() {
     }
 
     // ── Post-discovery pipeline ──
+
+    private fun readFirmwareDiagnosticsIfDue(address: String) {
+        bleManager.readFirmwareDiagnosticsIfDue(address) { result ->
+            try {
+                result.getOrNull()?.let { value ->
+                    FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())?.let { parsed ->
+                        if (!parsed.isNull("charging")) bleManager.recordChargingState(address, parsed.getBoolean("charging"))
+                        appendJsonRing("firmware_$address", parsed, 20, DISCONNECT_RETENTION_MS)
+                        logBle(address, "firmware_diagnostics_read", "v${parsed.optInt("version")}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not record firmware diagnostics: ${e.message}")
+            }
+        }
+    }
 
     private fun requestMtuThenNotifyReady(address: String, services: List<BleService>, afterReady: () -> Unit = {}) {
         val addr = address.uppercase()
@@ -778,6 +780,9 @@ class OmiBleForegroundService : Service() {
                 value: ByteArray
             ) {
                 if (characteristicUuid.equals(AUDIO_CHAR, ignoreCase = true)) recordAudioPacket(address, value)
+                if (characteristicUuid.equals(BATTERY_LEVEL_CHAR, ignoreCase = true) && value.isNotEmpty()) {
+                    readFirmwareDiagnosticsIfDue(address)
+                }
                 // Batch mode and background streaming are mutually exclusive (gated by
                 // their respective prefs); calling all sinks is safe — each self-gates.
                 batchAudioWriter.handleCharacteristic(address, serviceUuid, characteristicUuid, value)

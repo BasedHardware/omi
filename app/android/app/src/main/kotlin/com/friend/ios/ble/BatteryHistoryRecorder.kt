@@ -17,6 +17,17 @@ internal class BatteryHistoryRecorder(
     private val baselines = mutableMapOf<String, Point?>()
 
     @Synchronized
+    fun backfillCharging(key: String, charging: Boolean) {
+        val history = history(key)
+        val latest = history.optJSONObject(history.length() - 1) ?: return
+        val sample = point(latest) ?: return
+        if (!latest.isNull("charging")) return
+        latest.put("charging", charging)
+        write(key, history.toString())
+        baselines[key] = sample.copy(charging = charging)
+    }
+
+    @Synchronized
     fun record(key: String, level: Int, nowMs: Long, charging: Boolean? = null) {
         var history: JSONArray? = null
         if (!baselines.containsKey(key)) {
