@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "aproximativ {count} pe oră",
     "diagnosticsLongestGap": "Cea mai lungă întrerupere",
     "diagnosticsSincePairingSummary": "De la asociere: {drops} întreruperi, {failed} conexiuni eșuate.",
-    "diagnosticsLastDuration": "Ultimele {duration}"
+    "diagnosticsLastDuration": "Ultimele {duration}",
+    "peopleStatsIncomplete": "Numărătorile pot fi incomplete."
 }

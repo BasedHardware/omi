@@ -12106,4 +12106,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '최근 $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => '집계가 불완전할 수 있습니다.';
 }

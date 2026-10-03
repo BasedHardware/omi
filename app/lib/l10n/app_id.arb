@@ -3835,5 +3835,6 @@
     "diagnosticsDropsPerHour": "sekitar {count} per jam",
     "diagnosticsLongestGap": "Jeda terlama",
     "diagnosticsSincePairingSummary": "Sejak penyambungan: {drops} pemutusan, {failed} koneksi gagal.",
-    "diagnosticsLastDuration": "{duration} terakhir"
+    "diagnosticsLastDuration": "{duration} terakhir",
+    "peopleStatsIncomplete": "Jumlah mungkin belum lengkap."
 }

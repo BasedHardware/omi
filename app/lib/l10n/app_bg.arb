@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "около {count} на час",
     "diagnosticsLongestGap": "Най-дълго прекъсване",
     "diagnosticsSincePairingSummary": "От сдвояването: {drops} прекъсвания, {failed} неуспешни връзки.",
-    "diagnosticsLastDuration": "Последните {duration}"
+    "diagnosticsLastDuration": "Последните {duration}",
+    "peopleStatsIncomplete": "Бройките може да са непълни."
 }

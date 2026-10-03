@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "aptuveni {count} stundā",
     "diagnosticsLongestGap": "Garākais pārtraukums",
     "diagnosticsSincePairingSummary": "Kopš savienošanas pārī: pārrāvumi {drops}, neveiksmīgi savienojumi {failed}.",
-    "diagnosticsLastDuration": "Pēdējās {duration}"
+    "diagnosticsLastDuration": "Pēdējās {duration}",
+    "peopleStatsIncomplete": "Skaitļi var būt nepilnīgi."
 }

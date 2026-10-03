@@ -12392,4 +12392,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Nakaraang $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Maaaring hindi kumpleto ang mga bilang.';
 }

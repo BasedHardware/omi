@@ -12323,4 +12323,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Апошнія $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Колькасць можа быць няпоўнай.';
 }

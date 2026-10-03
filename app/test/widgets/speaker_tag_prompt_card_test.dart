@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
@@ -88,7 +89,7 @@ Future<_Harness> _pumpCard(
     emit: (_) {},
     answeredHold: Duration.zero,
   );
-  final peopleProvider = PeopleProvider(loadPeople: () async => people);
+  final peopleProvider = PeopleProvider(loadPeople: () async => PeopleListResponse(people: people));
   if (loadPeople) await peopleProvider.setPeople();
   await tester.pumpWidget(
     MultiProvider(
@@ -405,7 +406,8 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => [])),
+          ChangeNotifierProvider(
+              create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))),
           ChangeNotifierProvider.value(value: provider),
         ],
         child: const MaterialApp(

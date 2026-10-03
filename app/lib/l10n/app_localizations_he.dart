@@ -12200,4 +12200,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration אחרונות';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'הספירות עשויות להיות חלקיות.';
 }

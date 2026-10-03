@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "приблизно {count} на годину",
     "diagnosticsLongestGap": "Найдовша перерва",
     "diagnosticsSincePairingSummary": "З моменту спарування: обривів — {drops}, невдалих підключень — {failed}.",
-    "diagnosticsLastDuration": "Останні {duration}"
+    "diagnosticsLastDuration": "Останні {duration}",
+    "peopleStatsIncomplete": "Підрахунки можуть бути неповними."
 }

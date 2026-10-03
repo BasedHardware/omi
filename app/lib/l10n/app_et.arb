@@ -3800,5 +3800,6 @@
     "diagnosticsDropsPerHour": "umbes {count} tunnis",
     "diagnosticsLongestGap": "Pikim paus",
     "diagnosticsSincePairingSummary": "Pärast sidumist: katkestusi {drops}, ebaõnnestunud ühendusi {failed}.",
-    "diagnosticsLastDuration": "Viimased {duration}"
+    "diagnosticsLastDuration": "Viimased {duration}",
+    "peopleStatsIncomplete": "Arvud võivad olla puudulikud."
 }

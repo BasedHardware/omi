@@ -12303,4 +12303,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Последњих $duration';
   }
+
+  @override
+  String get peopleStatsIncomplete => 'Бројеви можда нису потпуни.';
 }
