@@ -362,13 +362,12 @@ void turnoff_all()
     // Delays for stability
     k_msleep(1000);
 
+    // Always turn off microphone
+    mic_off();
+
     // // Enter the low power mode
     transport_off();
     k_msleep(300);
-
-    // Always turn off microphone
-    mic_off();
-    k_msleep(100);
 
     // Turn off speaker if enabled
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
