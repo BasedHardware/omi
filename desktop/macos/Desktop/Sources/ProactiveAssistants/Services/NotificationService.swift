@@ -108,10 +108,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let assistantId: String
     let context: FloatingBarNotificationContext?
     let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    var action: FloatingBarNotificationAction? = nil
+    var onInteraction: ((NotificationInteraction) -> Void)? = nil
   }
-
-  /// The only payload kept on a system banner for a JIT notice. These are
-  /// owner-scoped identifiers, never trigger text, OCR, or evidence.
 
   /// Interaction provenance is bound to the exact authorization generation
   /// that delivered the banner, not only to a reusable user ID.
@@ -257,9 +256,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let notificationId = response.notification.request.identifier
 
     Task { @MainActor in
-      // Retrieve stored metadata. The user can tap a banner after the app was
-      // relaunched, so recover the bounded opaque JIT join keys from the
-      // notification itself when the in-memory entry is gone.
+      // Only the session that delivered a banner may dispatch its interaction.
       let metadata =
         self.notificationMetadata[notificationId]
       guard let metadata,
@@ -283,6 +280,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
           surface: "system_notification"
         )
 
+        metadata.onInteraction?(.opened)
+        if case .openProactivityItem(let target) = metadata.action {
+          ProactivityNotificationAdapter.open(target)
+          break
+        }
         switch Self.openAction(
           assistantId: assistantId,
           title: title,
@@ -301,6 +303,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
 
       case UNNotificationDismissActionIdentifier:
+        metadata.onInteraction?(.dismissed)
         // User explicitly dismissed the notification (X button, swipe, or Clear)
         print("[\(assistantId)] Notification dismissed: \(title)")
         AnalyticsManager.shared.notificationDismissed(
@@ -429,7 +432,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     deliveryMode: NotificationDeliveryMode = .standard,
     respectFrequency: Bool = true,
     isPersistent: Bool = false,
-    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    onPresented: (() -> Void)? = nil,
+    notificationID: UUID = UUID(),
+    onInteraction: ((NotificationInteraction) -> Void)? = nil
   ) {
     guard !ownerID.isEmpty,
       let authorizationSnapshot = suppliedAuthorizationSnapshot
@@ -522,6 +528,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // must never be spoken.
     let speech = NotificationSpeechOnDelivery(message: message, isProactive: respectFrequency)
     let recordPresentation = { [weak self] in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+      onPresented?()
       speech.notificationWasPresented()
       if respectFrequency {
         self?.recordProactiveNotificationPresented(
@@ -558,7 +566,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         suggestionTelemetryIdentity: suggestionTelemetryIdentity,
         screenshotData: screenshotData,
         isPersistent: isPersistent,
-        onPresented: recordPresentation
+        onPresented: recordPresentation,
+        notificationID: notificationID,
+        onInteraction: onInteraction
       )
       switch presentation {
       case .presented:
@@ -638,7 +648,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         sound: sound,
         context: context,
         authorizationSnapshot: authorizationSnapshot,
-        onPresented: recordPresentation
+        onPresented: recordPresentation,
+        notificationID: notificationID,
+        action: action,
+        onInteraction: onInteraction
       )
     }
   }
@@ -687,7 +700,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // Functional system notices, the never-journaled product cards, and the
     // recap announcement sit outside the five-category taxonomy and are
     // ungated by it.
-    case .general, .functional, .trial, .onboarding, .dailyRecap: return true
+    case .general, .functional, .trial, .onboarding, .dailyRecap, .proactivityV2: return true
     }
   }
 
@@ -794,7 +807,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     context: FloatingBarNotificationContext? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onPresented: (() -> Void)? = nil,
-    onDropped: (() -> Void)? = nil
+    onDropped: (() -> Void)? = nil,
+    notificationID: UUID = UUID(),
+    action: FloatingBarNotificationAction? = nil,
+    onInteraction: ((NotificationInteraction) -> Void)? = nil
   ) {
     let content = UNMutableNotificationContent()
     content.title = title
@@ -808,7 +824,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       content.categoryIdentifier = Self.trackableCategoryId  // Enable dismiss tracking
     }
 
-    let notificationId = UUID().uuidString
+    let notificationId = notificationID.uuidString
     let request = UNNotificationRequest(
       identifier: notificationId,
       content: content,
@@ -825,6 +841,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       context: context,
       authorizationSnapshot: authorizationSnapshot
     )
+
+    notificationMetadata[notificationId]?.action = action
+    notificationMetadata[notificationId]?.onInteraction = onInteraction
 
     print("[\(assistantId)] Sending notification: \(title) - \(message)")
     UserNotificationCallbackBridge.add(request) { [weak self] result in

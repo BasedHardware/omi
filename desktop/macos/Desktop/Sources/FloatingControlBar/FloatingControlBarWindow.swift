@@ -3734,7 +3734,9 @@ class FloatingControlBarManager {
     isPersistent: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onPresented: (() -> Void)? = nil,
-    onDropped: (() -> Void)? = nil
+    onDropped: (() -> Void)? = nil,
+    notificationID: UUID = UUID(),
+    onInteraction: ((NotificationInteraction) -> Void)? = nil
   ) -> OwnerBoundNotificationPresentationResult {
     guard !ownerID.isEmpty,
       let authorizationSnapshot = suppliedAuthorizationSnapshot
@@ -3752,6 +3754,8 @@ class FloatingControlBarManager {
       message: message,
       assistantId: assistantId,
       kind: kind,
+      id: notificationID,
+      onInteraction: onInteraction,
       context: context,
       action: action,
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
@@ -3763,6 +3767,10 @@ class FloatingControlBarManager {
       onDropped?()
       return .windowUnavailable
     }
+
+    // Feed refresh and push can race with the same stable presentation identity.
+    if window.state.currentNotification?.id == notification.id { return .presented }
+    if pendingNotifications.contains(where: { $0.id == notification.id }) { return .queued }
 
     notificationAuthorizationSnapshots[notification.id] = authorizationSnapshot
 
@@ -4497,6 +4505,12 @@ class FloatingControlBarManager {
       let window
     else { return }
 
+    if case .openProactivityItem = notification.action {
+      guard let authorization = notificationAuthorizationSnapshots[notification.id],
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+      else { return }
+    }
+    notification.onInteraction?(.opened)
     DesktopUsageDailyReporter.shared.recordProactiveCardActed()
 
     AnalyticsManager.shared.notificationClicked(
@@ -4510,6 +4524,9 @@ class FloatingControlBarManager {
     cancelNotificationDismissTimer()
     dismissNotificationAndAdvanceQueue(trackDismissal: false, kind: .user)
     switch notification.action {
+    case .openProactivityItem(let target):
+      ProactivityNotificationAdapter.open(target)
+      return
     case .openWhatMattersNow(let recommendationID):
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
@@ -4661,6 +4678,10 @@ class FloatingControlBarManager {
     }
 
     if trackDismissal, let dismissedNotification {
+      if dismissedNotification.ownerID == RuntimeOwnerIdentity.currentOwnerId() {
+        if kind == .user { dismissedNotification.onInteraction?(.dismissed) }
+        if kind == .timeout { dismissedNotification.onInteraction?(.timeout) }
+      }
       if kind == .user {
         SuggestionTaskNudgeEngagement.record(from: dismissedNotification)
       }

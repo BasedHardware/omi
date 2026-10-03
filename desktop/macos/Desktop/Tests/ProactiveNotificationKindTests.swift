@@ -71,7 +71,7 @@ final class ProactiveNotificationKindTests: XCTestCase {
     XCTAssertFalse(ProactiveNotificationKind.onboarding.isJournaled)
     XCTAssertFalse(ProactiveNotificationKind.dailyRecap.isJournaled)
     for kind in ProactiveNotificationKind.allCases
-    where kind != .trial && kind != .onboarding && kind != .dailyRecap {
+    where kind != .trial && kind != .onboarding && kind != .dailyRecap && kind != .proactivityV2 {
       XCTAssertTrue(kind.isJournaled, "\(kind.rawValue) is something Omi observed")
     }
   }
