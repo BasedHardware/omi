@@ -3801,5 +3801,22 @@
     "diagnosticsLongestGap": "Nejdelší výpadek",
     "diagnosticsSincePairingSummary": "Od spárování: výpadků {drops}, neúspěšných připojení {failed}.",
     "diagnosticsLastDuration": "Posledních {duration}",
-    "peopleStatsIncomplete": "Počty mohou být neúplné."
+    "peopleStatsIncomplete": "Počty mohou být neúplné.",
+    "reprocessingConversationProgress": "Konverzace se znovu zpracovává…",
+    "conversationReprocessed": "Konverzace aktualizována",
+    "loadingTranscript": "Načítání přepisu…",
+    "transcriptLoadFailed": "Přepis se nepodařilo načíst.",
+    "processingConversationProgress": "Konverzace se zpracovává…",
+    "conversationProcessingFailedMessage": "Tuto konverzaci se nepodařilo zpracovat.",
+    "waitForReprocessing": "Počkejte na dokončení opětovného zpracování.",
+    "unnamedSpeakerLabel": "Mluvčí",
+    "unresolvedSpeakersNotice": "Mluvčí nejsou napříč nahrávkami odděleni.",
+    "unresolvedSpeakersTitle": "O popiscích mluvčích",
+    "unresolvedSpeakersMessage": "Omi nedokázalo napříč nahrávkami rozeznat ostatní hlasy. Klepnutím na popisek mluvčího pojmenujete, kdo mluví.",
+    "nameSpeakerTitle": "Pojmenovat mluvčího",
+    "playbackPreparingAudio": "Připravuje se zvuk…",
+    "playbackBackToCurrent": "Zpět na aktuální",
+    "playbackAudioUnavailable": "Zvuk není k dispozici",
+    "playbackAudioLoadFailed": "Zvuk se nepodařilo načíst",
+    "playbackAudioNetworkFailed": "Zkontrolujte připojení"
 }

@@ -12322,4 +12322,56 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Підрахунки можуть бути неповними.';
+
+  @override
+  String get reprocessingConversationProgress => 'Повторна обробка розмови…';
+
+  @override
+  String get conversationReprocessed => 'Розмову оновлено';
+
+  @override
+  String get loadingTranscript => 'Завантаження транскрипції…';
+
+  @override
+  String get transcriptLoadFailed => 'Не вдалося завантажити транскрипцію.';
+
+  @override
+  String get processingConversationProgress => 'Обробка розмови…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Не вдалося обробити цю розмову.';
+
+  @override
+  String get waitForReprocessing => 'Зачекайте, доки завершиться повторна обробка.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Доповідач';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Голоси не розділені між записами.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Про мітки спікерів';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi не змогла розрізнити інші голоси між записами. Торкніться мітки спікера, щоб назвати, хто говорить.';
+
+  @override
+  String get nameSpeakerTitle => 'Назвати спікера';
+
+  @override
+  String get playbackPreparingAudio => 'Підготовка аудіо…';
+
+  @override
+  String get playbackBackToCurrent => 'Назад до поточного';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудіо недоступне';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не вдалося завантажити аудіо';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Перевірте з\'єднання';
 }

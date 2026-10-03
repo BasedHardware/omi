@@ -12306,4 +12306,56 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get peopleStatsIncomplete => 'Sayımlar eksik olabilir.';
+
+  @override
+  String get reprocessingConversationProgress => 'Konuşma yeniden işleniyor…';
+
+  @override
+  String get conversationReprocessed => 'Konuşma güncellendi';
+
+  @override
+  String get loadingTranscript => 'Döküm yükleniyor…';
+
+  @override
+  String get transcriptLoadFailed => 'Döküm yüklenemedi.';
+
+  @override
+  String get processingConversationProgress => 'Konuşma işleniyor…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Bu konuşma işlenemedi.';
+
+  @override
+  String get waitForReprocessing => 'Yeniden işlemenin bitmesini bekleyin.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Konuşmacı';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Konuşmacılar kayıtlar arasında ayrıştırılamadı.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Konuşmacı Etiketleri Hakkında';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi, kayıtlar arasında diğer sesleri ayırt edemedi. Konuşanın kim olduğunu adlandırmak için bir konuşmacı etiketine dokunun.';
+
+  @override
+  String get nameSpeakerTitle => 'Konuşmacıyı Adlandır';
+
+  @override
+  String get playbackPreparingAudio => 'Ses hazırlanıyor…';
+
+  @override
+  String get playbackBackToCurrent => 'Geçerliye Dön';
+
+  @override
+  String get playbackAudioUnavailable => 'Ses Kullanılamıyor';
+
+  @override
+  String get playbackAudioLoadFailed => 'Ses Yüklenemedi';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Bağlantıyı Kontrol Edin';
 }
