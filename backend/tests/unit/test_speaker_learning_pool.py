@@ -805,8 +805,8 @@ def test_model_derives_learning_state_from_readiness():
         Person(
             id='p1', name='Alex', voice_learning_state='learned', voice_learning_outcome='stored'
         ).voice_learning_state
-        == 'pending'
-    ), 'a learned claim with no usable print but a recorded outcome stays pending'
+        == 'unknown'
+    ), 'a learned claim with no usable print and no live durable job stays unknown'
     assert Person(id='p1', name='Alex', voice_learning_state='learned').voice_learning_state == 'unknown'
 
 

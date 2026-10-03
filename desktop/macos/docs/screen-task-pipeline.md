@@ -62,7 +62,15 @@ client reads the public flag-evaluation endpoint and authenticated
 `GET /v1/screen-task/admission`; a failed refresh leaves existing leases to expire.
 `SCREEN_TASK_STOP=true` is a backend ops stop read at each gate and flagged
 screenshot dispatch. The admission endpoint reports it; gate/proxy return typed
-409 `screen_task_stopped`, never an ordinary provider error. The running client
+409 `screen_task_stopped`, never an ordinary provider error. Identified macOS
+builds below `SCREEN_TASK_MIN_MACOS_BUILD` (default 12435; invalid values keep
+that default) get a separate typed 409 `screen_task_build_below_floor` with
+`X-Omi-Retryable: false` on the gate, admission, and flagged screenshot proxy.
+Unidentified, conflicting, Windows, and other callers are unchanged, and an
+unflagged proxy request stays on its existing lane. Builds 12433 and 12434
+fail open on that gate error into flagged extraction, then take one legacy
+extraction when the proxy refuses; they do not retry the 409 or show it as a
+user error. The running client
 stops new feature gate/extraction dispatches and feature-result mutations within
 55 seconds of its last admission request (within the 60-second requirement),
 even if refresh hangs. It rechecks before every dispatch and mutation. Queued
@@ -134,6 +142,8 @@ an account swap cannot attribute a prior owner’s delivery to the incoming user
 `omi_fallback_total{component="screen_task_gate",reason="gate_unavailable"}`.
 `omi_screen_task_gate_frames_total{outcome}` counts backend gate admissions,
 including terminal plan/quota/stop states;
+`omi_screen_task_build_floor_refusals_total{surface}` counts build-floor refusals
+on `gate`, `admission`, and `proxy` with no build number or user agent;
 `omi_screen_task_client_bypass_total` counts flagged screenshot requests carrying
 client-bypass metadata. Client terminal events are the authoritative eligible
 frame denominator, since rejected and pre-upload-failed frames send no screenshot.

@@ -240,7 +240,10 @@ def test_person_publication_rechecks_source_in_transaction(monkeypatch, mutation
     if mutation in {'unchanged', 'legacy', 'other_voice_edit'}:
         assert result == []
         assert store.rows[PERSON]['speaker_embedding'] == [1, 0]
-        assert store.rows[PERSON]['speech_sample_source'] == {'conversation_id': 'c', 'segment_ids': ['s']}
+        provenance = store.rows[PERSON]['speech_sample_source']
+        assert provenance['conversation_id'] == 'c' and provenance['segment_ids'] == ['s']
+        assert provenance['generation'] == (0 if mutation == 'legacy' else 1)
+        assert provenance['stored_at'] is not None
     else:
         assert result is None
         assert not store.rows[PERSON].get('speaker_embedding')
