@@ -9,6 +9,7 @@ transcription check before it is pooled into the owner's voiceprint.
 """
 
 import asyncio
+import contextvars
 import hashlib
 import json
 import logging
@@ -55,7 +56,6 @@ from utils.executors import (
     db_executor,
     run_blocking,
     speaker_tag_verify_executor,
-    submit_with_context,
     sync_executor,
 )
 from utils.conversations.audio_placement import CAPTURE_RETRY_MIN_SHIFT_SECONDS, capture_shift
@@ -231,22 +231,34 @@ def _submit_list_verification(
         existing = _inflight_verifications.get(key)
         if existing is not None:
             return existing
-        future = submit_with_context(
-            speaker_tag_verify_executor,
-            verified_clip_pcm,
-            uid,
-            conversation,
-            start,
-            end,
-            expected_text,
-            verification_deadline=deadline,
-        )
+        context = contextvars.copy_context()
+
+        def verify_in_context() -> Optional[bytes]:
+            return context.run(
+                verified_clip_pcm,
+                uid,
+                conversation,
+                start,
+                end,
+                expected_text,
+                verification_deadline=deadline,
+            )
+
+        future = speaker_tag_verify_executor.submit(verify_in_context)
         _inflight_verifications[key] = future
 
         def clear(done: Future[Optional[bytes]]) -> None:
             with _inflight_lock:
                 if _inflight_verifications.get(key) is done:
                     del _inflight_verifications[key]
+            if not done.cancelled():
+                error = done.exception()
+                if isinstance(error, FutureTimeoutError):
+                    logger.info('speaker tag list verification deadline reached')
+                elif error is not None:
+                    logger.error(
+                        'speaker tag list verification failed error_type=%s', type(error).__name__, exc_info=error
+                    )
 
         future.add_done_callback(clear)
         return future

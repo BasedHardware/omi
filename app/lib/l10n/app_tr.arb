@@ -3836,5 +3836,22 @@
     "diagnosticsLongestGap": "En uzun kesinti",
     "diagnosticsSincePairingSummary": "Eşleştirmeden beri: {drops} kopma, {failed} başarısız bağlantı.",
     "diagnosticsLastDuration": "Son {duration}",
-    "peopleStatsIncomplete": "Sayımlar eksik olabilir."
+    "peopleStatsIncomplete": "Sayımlar eksik olabilir.",
+    "reprocessingConversationProgress": "Konuşma yeniden işleniyor…",
+    "conversationReprocessed": "Konuşma güncellendi",
+    "loadingTranscript": "Döküm yükleniyor…",
+    "transcriptLoadFailed": "Döküm yüklenemedi.",
+    "processingConversationProgress": "Konuşma işleniyor…",
+    "conversationProcessingFailedMessage": "Bu konuşma işlenemedi.",
+    "waitForReprocessing": "Yeniden işlemenin bitmesini bekleyin.",
+    "unnamedSpeakerLabel": "Konuşmacı",
+    "unresolvedSpeakersNotice": "Konuşmacılar kayıtlar arasında ayrıştırılamadı.",
+    "unresolvedSpeakersTitle": "Konuşmacı Etiketleri Hakkında",
+    "unresolvedSpeakersMessage": "Omi, kayıtlar arasında diğer sesleri ayırt edemedi. Konuşanın kim olduğunu adlandırmak için bir konuşmacı etiketine dokunun.",
+    "nameSpeakerTitle": "Konuşmacıyı Adlandır",
+    "playbackPreparingAudio": "Ses hazırlanıyor…",
+    "playbackBackToCurrent": "Geçerliye Dön",
+    "playbackAudioUnavailable": "Ses Kullanılamıyor",
+    "playbackAudioLoadFailed": "Ses Yüklenemedi",
+    "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin"
 }

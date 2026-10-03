@@ -1024,17 +1024,11 @@ adjudicates whether a short marked utterance is meaningful, and the structured
 extractor still decides whether it is a concrete command; the marker never
 creates a task by itself.
 
-When and only when the matcher found a phrase, a separately framed,
-extended-reasoning classifier receives the full marked transcript, matched
-segment IDs, content-free extraction references, and speaker labels. Its
-validated discrete verdict and the extractor must agree before an intersecting
-item keeps `explicit_command`; rejection demotes the item to the confidence
-floor and review path. A `task_command` verdict can promote an intersecting
-non-explicit extraction, but it never synthesizes a missing item or changes
-capture confidence. Non-intersecting ambient items are untouched. Question
-verdicts are measured but deliberately produce nothing in v1 because the task
-extractor and capture policy have no question-routing destination. This path
-has no realtime wake-word state or notification surface.
+The shared prompt prefix separately reports whether the capture carries model-usable source content: transcript text beyond the compact `[<segment-id> <cluster>]` turn headers, or a nonblank described photo. `get_conversation_notes` returns an empty `Structured` without constructing the notes model when a capture is metadata- or header-only; actual screen frames under the rich-context flag still count as content on their own. The volatile task instructions travel as a user message, not system — Vertex maps system messages to `systemInstruction`, so an all-system request would reach Gemini with empty `contents`. Ordinary empty captures are rule-discarded before this point; a restored blank capture keeps `relevance_discarded=False` and falls back to the deterministic minimum title without a model call.
+
+When and only when the matcher found a phrase, a separately framed, extended-reasoning classifier receives the full marked transcript, matched segment IDs, content-free extraction references, and speaker labels. Its validated discrete verdict and the extractor must agree before an intersecting item keeps `explicit_command`; rejection demotes the item to the confidence floor and review path.
+A `task_command` verdict can promote an intersecting non-explicit extraction, but it never synthesizes a missing item or changes capture confidence. Non-intersecting ambient items are untouched.
+Question verdicts are measured but deliberately produce nothing in v1 because the task extractor and capture policy have no question-routing destination. This path has no realtime wake-word state or notification surface.
 
 After `_write_action_items` persists extracted tasks, its background
 `auto_sync_action_items_batch` worker exports them to the configured default
@@ -1654,6 +1648,12 @@ carry only closed-enum labels. `quality` turns answers into precision
 (`owner_auto_confirmed|rejected`, `person_auto_confirmed|corrected`) and recall
 (`owner_missed`, `person_missed_known`) observations — biased toward what was
 asked, so compare trends per kind rather than reading absolute accuracy.
+
+### People-stats aggregate cache
+
+`GET /v1/users/people?include_stats=true` aggregates the newest conversations (locked/discarded excluded, `started_at` else `created_at`, per-segment `person_id`/`start`/`end`/`speaker_match_source`) into one `person_id -> {conversation_count, last_heard_at, talk_seconds, auto_conversation_count}` map per call. `database.people_stats_cache` caches only that map — Person rows and signed speech-sample URLs stay fresh reads. Entries live at `users/{uid}/people_stats/v1/{generation}/{scan_cap}` in the generic Redis cache (60 s TTL, 262144-byte serialized cap on read and write; oversize/corrupt/nonfinite payloads are misses). A per-uid generation token at `people_stats:v1:{uid}:generation` (86400 s TTL, fetch-or-create via `SET NX`) namespaces every entry: a writer-side bump retires all outstanding entries at once, so the 60 s entry TTL is only a safety cap for a failed invalidation — normal writes invalidate immediately. `collect_people_stats` resolves generation and entry before consuming the scan iterator, so a hit performs zero Firestore reads; it re-checks the generation before writing. If invalidation happens after that check, a fill may still be written under the retired key, which is unreachable. A `ListReadBudget`-truncated scan is never stored — only a full capped pass is cached. For N repeat loads within one unchanged 60 s generation, one capped scan serves all N: a fully populated first scan means a hit avoids all 1000 conversation reads (raw reads can reach 2000 because tombstones and invisible rows consume the document budget without yielding). Every operation fails open to the uncached scan; generation and invalidation failures log uid + error type and count `other`/`cached`->`uncached`/`connection_lost`/`recovered`.
+
+Durable mutation boundaries bump the generation outside the Firestore transaction, before best-effort search-index observers: conversation lifecycle upsert/persist/create, `update_conversation`, delete, status transition/claim, discard/restore, `finished_at`, manual speaker assignment, segment rewrites (manual, inferred, streaming), sync assignment, per-batch unlocks, smart-merge absorption, empty-generation cleanup, and finalization intent creation (which accepts snapshot-bound extra updates). Intentionally not hooked: deadletter/orphan/BYOK completions that only touch status/title on an already-counted row, first-open obligation patches (folder/apps), sync-bridge/listen-continuation/recording-session marker writes, text/summary/events/photos/translation-only helpers, person CRUD/renaming/pinning/evidence (presentation reads stay fresh), and speech-sample signed URLs. A writer that changes visibility, timestamps, segments, attribution, or delete/merge state must hook in; without one the stale map is evicted only by the 60 s entry TTL.
 
 ## 5. Private Cloud Sync (Audio Upload)
 

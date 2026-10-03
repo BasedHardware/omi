@@ -3801,5 +3801,22 @@
     "diagnosticsLongestGap": "Найдовша перерва",
     "diagnosticsSincePairingSummary": "З моменту спарування: обривів — {drops}, невдалих підключень — {failed}.",
     "diagnosticsLastDuration": "Останні {duration}",
-    "peopleStatsIncomplete": "Підрахунки можуть бути неповними."
+    "peopleStatsIncomplete": "Підрахунки можуть бути неповними.",
+    "reprocessingConversationProgress": "Повторна обробка розмови…",
+    "conversationReprocessed": "Розмову оновлено",
+    "loadingTranscript": "Завантаження транскрипції…",
+    "transcriptLoadFailed": "Не вдалося завантажити транскрипцію.",
+    "processingConversationProgress": "Обробка розмови…",
+    "conversationProcessingFailedMessage": "Не вдалося обробити цю розмову.",
+    "waitForReprocessing": "Зачекайте, доки завершиться повторна обробка.",
+    "unnamedSpeakerLabel": "Доповідач",
+    "unresolvedSpeakersNotice": "Голоси не розділені між записами.",
+    "unresolvedSpeakersTitle": "Про мітки спікерів",
+    "unresolvedSpeakersMessage": "Omi не змогла розрізнити інші голоси між записами. Торкніться мітки спікера, щоб назвати, хто говорить.",
+    "nameSpeakerTitle": "Назвати спікера",
+    "playbackPreparingAudio": "Підготовка аудіо…",
+    "playbackBackToCurrent": "Назад до поточного",
+    "playbackAudioUnavailable": "Аудіо недоступне",
+    "playbackAudioLoadFailed": "Не вдалося завантажити аудіо",
+    "playbackAudioNetworkFailed": "Перевірте з'єднання"
 }
