@@ -518,7 +518,7 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
     if embeddable:
         raw_files = conversation.audio_files or []
         audio_timeline = conversation.audio_timeline
-        if hasattr(audio_timeline, 'model_dump'):
+        if audio_timeline is not None:
             audio_timeline = audio_timeline.model_dump(mode='python')
 
         def placement_mapping(audio_files: List[Any]) -> Dict[str, Any]:
