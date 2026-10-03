@@ -249,6 +249,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   List<WalFrame> _frames = [];
   String? _captureEvidenceRoot;
+  int _captureEvidenceGeneration = 0;
   int _nextSourceFramePosition = 0;
   int _sourceClockEpoch = 0;
   List<bool> _frameSynced = [];
@@ -378,6 +379,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frames = [];
     _frameSynced = [];
     _captureEvidenceRoot = null;
+    _captureEvidenceGeneration++;
     _nextSourceFramePosition = 0;
     _sourceClockEpoch = 0;
     _admissionReservations.clear();
@@ -442,6 +444,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   int get sessionGeneration => _sessionGeneration;
+
+  @override
+  int get captureEvidenceGeneration => _captureEvidenceGeneration;
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
@@ -629,6 +634,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     await _drainPendantTail(generation);
     await _enqueueBuffer(() => _chunk(generation));
     await _enqueueBuffer(() => _flush(generation));
+    if (!_isCurrent(generation)) return;
     _frames = [];
     _frameSynced = [];
 
@@ -636,6 +642,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _codec = codec;
     _sourceClockEpoch++;
     _nextSourceFramePosition = 0;
+    _captureEvidenceGeneration++;
   }
 
   @override
