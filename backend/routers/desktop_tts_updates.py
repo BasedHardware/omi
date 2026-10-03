@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from database import redis_db
 from database._client import get_firestore_client
+from database.voice_preferences import get_assistant_voice
 from database.serving_query_reads import list_desktop_release_snapshots
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -42,7 +43,7 @@ _RELEASES_COLLECTION = "desktop_releases"
 
 class TtsSynthesizeRequest(BaseModel):
     text: str
-    voice_id: str
+    voice_id: str | None = None
     instructions: str | None = None
 
 
@@ -189,14 +190,18 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
         raise HTTPException(status_code=400, detail="text is required")
     if len(text) > _MAX_TTS_CHARS:
         raise HTTPException(status_code=400, detail="text is too long")
-    voice_id = request.voice_id.strip()
+    voice_id = (request.voice_id or '').strip()
     try:
         provider = get_tts_provider()
     except TtsConfigurationError as exc:
         raise HTTPException(status_code=503, detail="TTS service is not configured") from exc
+    if not voice_id:
+        voice_id = await run_blocking(db_executor, get_assistant_voice, uid)
     if provider == 'legacy':
         if not _is_allowed_openai_voice(voice_id):
-            raise HTTPException(status_code=400, detail="voice_id is not supported")
+            if not _is_valid_voice_name(voice_id):
+                raise HTTPException(status_code=400, detail="voice_id is not supported")
+            voice_id = "cedar"
     elif not _is_valid_voice_name(voice_id):
         raise HTTPException(status_code=400, detail="voice_id is not supported")
     legacy_openai = provider == 'legacy'
