@@ -26,11 +26,7 @@ import main
 
 class TestNullOptionalsAndValidation(unittest.IsolatedAsyncioTestCase):
     def test_search_papers_request_coerces_null_max_results_and_min_year(self):
-        req = models.SearchPapersRequest(
-            query="  deep learning  ",
-            max_results=None,
-            min_year=None
-        )
+        req = models.SearchPapersRequest(query="  deep learning  ", max_results=None, min_year=None)
         self.assertEqual(req.query, "deep learning")
         self.assertEqual(req.max_results, 5)
         self.assertIsNone(req.min_year)
@@ -48,10 +44,7 @@ class TestNullOptionalsAndValidation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(req_clamp_low.max_results, 1)
 
     def test_get_author_papers_request_coerces_null_max_results(self):
-        req = models.GetAuthorPapersRequest(
-            author_id="  1741101  ",
-            max_results=None
-        )
+        req = models.GetAuthorPapersRequest(author_id="  1741101  ", max_results=None)
         self.assertEqual(req.author_id, "1741101")
         self.assertEqual(req.max_results, 5)
 
@@ -69,7 +62,7 @@ class TestNullOptionalsAndValidation(unittest.IsolatedAsyncioTestCase):
                     "authors": [{"name": "Ashish Vaswani"}, {"name": "Noam Shazeer"}],
                     "venue": "NeurIPS",
                     "citationCount": 90000,
-                    "url": "https://www.semanticscholar.org/paper/204e3073870fae3d05bcbc2f6a8e263c9b72e776"
+                    "url": "https://www.semanticscholar.org/paper/204e3073870fae3d05bcbc2f6a8e263c9b72e776",
                 }
             ]
         }
@@ -88,9 +81,9 @@ class TestNullOptionalsAndValidation(unittest.IsolatedAsyncioTestCase):
                     "title": "Deep Learning",
                     "year": 2015,
                     "citationCount": 50000,
-                    "url": "https://semanticscholar.org/paper/xyz"
+                    "url": "https://semanticscholar.org/paper/xyz",
                 }
-            ]
+            ],
         }
         with patch.object(main, "api_get", new=AsyncMock(return_value=mock_payload)):
             response = await main.get_author_papers(req)

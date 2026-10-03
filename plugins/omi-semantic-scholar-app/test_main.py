@@ -169,7 +169,6 @@ def _install_module_stubs():
     sys.modules["pydantic"] = pydantic
 
 
-
 _saved_modules = {name: sys.modules.get(name) for name in _STUBBED_MODULES}
 _install_module_stubs()
 try:
