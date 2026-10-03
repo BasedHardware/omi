@@ -1025,4 +1025,37 @@ void main() {
       expect(result, isNull);
     });
   });
+
+  group('stamping the conversation of a stopped recording', () {
+    test('takes the recording its window began under, not a newer one', () async {
+      var nowSeconds = 1000;
+      final store = LocalWalSyncImpl(
+        listener,
+        now: () => DateTime.fromMillisecondsSinceEpoch(nowSeconds * 1000),
+        persistWals: (_) async {},
+      );
+      Wal copy(int timerStart, String recording, WalStatus status) => Wal(
+            timerStart: timerStart,
+            codec: BleAudioCodec.opus,
+            seconds: 60,
+            storage: WalStorage.disk,
+            status: status,
+            recordingSessionId: recording,
+          );
+      // The window opens at 1000 under the first recording, which stops and uploads its copy before the
+      // server closes its conversation. A newer recording binds and records in the meantime.
+      store.setActiveRecordingSessionId('stopped');
+      final stopped = copy(1000, 'stopped', WalStatus.uploaded);
+      nowSeconds = 1100;
+      store.setActiveRecordingSessionId('newer');
+      final newer = copy(1100, 'newer', WalStatus.miss);
+      store.testWals = [stopped, newer];
+      nowSeconds = 1200;
+
+      store.prepareConversationStamp(null);
+      await store.stampConversationId(1000, 'c1');
+
+      expect(newer.conversationId, isNull, reason: "the newer recording's audio is not c1's");
+    });
+  });
 }

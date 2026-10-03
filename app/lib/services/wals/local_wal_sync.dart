@@ -198,6 +198,8 @@ class LocalWalSyncImpl implements LocalWalSync {
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
     _activeRecordingSessionId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    _recordingBindings.add((_now().millisecondsSinceEpoch ~/ 1000, _activeRecordingSessionId));
+    if (_recordingBindings.length > 16) _recordingBindings.removeAt(0);
   }
 
   /// Recording id captured before a flush. [stampConversationId] keeps its
@@ -808,18 +810,19 @@ class LocalWalSyncImpl implements LocalWalSync {
         .toList();
   }
 
-  /// The recording the session's audio was captured under: the id on its earliest unstamped WAL.
-  /// A phone recording stopped before the server closed its conversation has no active id left,
-  /// and the store may have bound a newer recording since, but the session's own WALs still say.
-  String? _recordingSessionIdFrom(int sessionStartSeconds) {
-    Wal? earliest;
-    for (final wal in _wals) {
-      final id = wal.recordingSessionId;
-      if (wal.status != WalStatus.miss || wal.conversationId != null || id == null || id.isEmpty) continue;
-      if (wal.timerStart < sessionStartSeconds) continue;
-      if (earliest == null || wal.timerStart < earliest.timerStart) earliest = wal;
+  /// When the store was bound to each recording, oldest first. The last few cover any conversation
+  /// still closing, since a recording lasts minutes.
+  final List<(int, String?)> _recordingBindings = [];
+
+  /// The recording the store was bound to at [seconds], the start of a conversation's window. A phone
+  /// recording stopped before the server closed its conversation has no active id left, and the store
+  /// may have bound a newer recording since; the binding still says which recording the window began
+  /// under, whatever has happened to that recording's WALs.
+  String? _recordingBoundAt(int seconds) {
+    for (final (since, id) in _recordingBindings.reversed) {
+      if (since <= seconds) return id;
     }
-    return earliest?.recordingSessionId;
+    return null;
   }
 
   /// Mark a WAL as synced and persist the change to disk.
@@ -904,11 +907,12 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// stamped even when its backdated [Wal.timerStart] is earlier than
   /// [sessionStartSeconds]. A WAL that already belongs to a different recording
   /// is left alone, so a session roll during the flush cannot attach the next
-  /// recording to this conversation.
+  /// recording to this conversation. Without a prepared recording, the stamp uses
+  /// the one the store was bound to when the window began.
   Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
     final generation = _sessionGeneration;
     final now = _now().millisecondsSinceEpoch ~/ 1000;
-    final recordingId = _conversationStampRecordingId ?? _recordingSessionIdFrom(sessionStartSeconds);
+    final recordingId = _conversationStampRecordingId ?? _recordingBoundAt(sessionStartSeconds);
     _conversationStampRecordingId = null;
     final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
