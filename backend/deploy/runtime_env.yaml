@@ -139,6 +139,9 @@ environments:
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
+          STT_FAILOVER_RECOVERY_ENABLED:
+            value: 'false'
+            category: rollout
           STT_ROUTING_MODE:
             value: shadow
             category: rollout
@@ -2173,6 +2176,9 @@ environments:
             value: 'true'
             category: rollout
           STT_RESILIENT_RECONNECT:
+            value: 'false'
+            category: rollout
+          STT_FAILOVER_RECOVERY_ENABLED:
             value: 'false'
             category: rollout
           STT_ROUTING_MODE:

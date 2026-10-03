@@ -11,7 +11,6 @@ from routers.listen import transcripts
 from tests.unit.test_listen_speaker_id_failover import (
     CONV,
     FailoverStack,
-    FakeListenWebSocket,
     _frames_for,
     _owner,
     _provider_segment,
@@ -42,6 +41,7 @@ def telemetry():
 async def _stop(stack):
     stack.state.active = False
     stack.state.shutdown_event.set()
+    await stack.finish()
     for task in stack.tasks:
         task.cancel()
     await asyncio.gather(*stack.tasks, return_exceptions=True)
@@ -137,7 +137,7 @@ async def test_unknown_window_and_forged_names_store_nothing(monkeypatch, teleme
     stack.tasks.append(loop_task)
     try:
         await stack.host.speakers.refresh_for_conversation(CONV)
-        stack.request.websocket = FakeListenWebSocket([], stack.clock)
+        stack.request.websocket = stack.websocket
         stack.state.first_audio_byte_timestamp = T0
         forged = dict(
             id='seg-forged',

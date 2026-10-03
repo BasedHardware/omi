@@ -471,4 +471,42 @@ void main() {
       );
     });
   });
+
+  test('a held custody gate defers native audio subscribe past the liveness watch and dies with its generation', () {
+    fakeAsync((async) {
+      transport.dispose();
+      final host = _FakeBleHostApi();
+      transport = NativeBleTransport(uuid, hostApi: host);
+
+      final gate = Completer<void>();
+      transport.beforeAudioResubscribe = (_) => gate.future;
+      BleBridge.instance.onDeviceReady(uuid, services);
+      transport.getCharacteristicStream(serviceUuid, charUuid).listen((_) {});
+      async.flushMicrotasks();
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(host.subscribed, isEmpty,
+          reason: 'a held gate must outlive repeated 4s liveness watches with no native audio subscribe');
+
+      BleBridge.instance.onPeripheralDisconnected(uuid, 'test');
+      async.flushMicrotasks();
+      gate.complete();
+      async.flushMicrotasks();
+      expect(host.subscribed, isEmpty,
+          reason: 'the stale generation gate completing after disconnect must not subscribe the old link');
+
+      final gate2 = Completer<void>();
+      transport.beforeAudioResubscribe = (_) => gate2.future;
+      BleBridge.instance.onDeviceReady(uuid, services);
+      async.flushMicrotasks();
+      expect(host.subscribed, isEmpty, reason: 'the new physical link waits for its own custody gate');
+      gate2.complete();
+      async.flushMicrotasks();
+      expect(host.subscribed.where((s) => s.endsWith(charUuid.toLowerCase())), hasLength(1),
+          reason: 'exactly one current-generation audio subscribe after the gate completes');
+    });
+  });
 }
