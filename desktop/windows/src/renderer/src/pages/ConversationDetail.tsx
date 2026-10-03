@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   Copy,
+  FileText,
   Link2,
   Loader2,
   PanelRightClose,
@@ -36,6 +37,7 @@ import { fetchPeople } from '../lib/conversations/people'
 import { fetchFolders } from '../lib/conversations/folders'
 import { friendlyConversationError } from '../lib/conversations/detailErrors'
 import { buildTranscriptText } from '../lib/conversations/transcript'
+import { formatConversationSummaryMarkdown } from '../lib/conversations/summaryMarkdown'
 import {
   getConversationShareLink,
   moveConversationToFolder,
@@ -228,7 +230,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
   const [renaming, setRenaming] = useState(false)
   const [naming, setNaming] = useState<TranscriptSegment | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [copied, setCopied] = useState<'link' | 'transcript' | null>(null)
+  const [copied, setCopied] = useState<'link' | 'transcript' | 'markdown' | null>(null)
   const [reprocessing, setReprocessing] = useState(false)
   const [pickingApp, setPickingApp] = useState(false)
 
@@ -309,6 +311,8 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
         const next = await fetchConversation()
         if (cancelled) return
         setConv(next)
+        // A regenerated summary replaces the snapshot used by list-row exports.
+        if (!isEnriching(next)) invalidateConversationsCache()
         if (shouldStopPolling(next.status, attempt)) return
       } catch {
         if (cancelled) return
@@ -335,7 +339,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
     return buildTranscriptText(segments)
   }, [local, segments])
 
-  const flash = (what: 'link' | 'transcript'): void => {
+  const flash = (what: 'link' | 'transcript' | 'markdown'): void => {
     setCopied(what)
     setTimeout(() => setCopied((c) => (c === what ? null : c)), 1500)
   }
@@ -343,6 +347,24 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
   const onCopyTranscript = async (): Promise<void> => {
     await navigator.clipboard.writeText(transcriptText)
     flash('transcript')
+  }
+
+  const onCopyMarkdown = async (): Promise<void> => {
+    if (!conv) return
+    try {
+      await navigator.clipboard.writeText(
+        formatConversationSummaryMarkdown({
+          title: conv.structured?.title,
+          capturedAt: conv.started_at ?? conv.created_at,
+          overview: conv.structured?.overview,
+          actionItems: conv.structured?.action_items
+        })
+      )
+      flash('markdown')
+      toast('Summary copied', { tone: 'success' })
+    } catch (e) {
+      toast('Could not copy summary', { tone: 'error', body: (e as Error).message })
+    }
   }
 
   const onCopyLink = async (): Promise<void> => {
@@ -477,6 +499,9 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
           values: [next]
         })
       }
+      // The list now exports cached action items. Revalidate it after a saved
+      // toggle so returning to the list does not keep exporting the old state.
+      invalidateConversationsCache()
     } catch (e) {
       apply(!next)
       toast('Could not update task', { tone: 'error', body: (e as Error).message })
@@ -657,6 +682,13 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
                   <Check className="h-4 w-4" />
                 ) : (
                   <Copy className="h-4 w-4" />
+                )}
+              </ToolbarButton>
+              <ToolbarButton onClick={onCopyMarkdown} title="Copy as Markdown">
+                {copied === 'markdown' ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <FileText className="h-4 w-4" />
                 )}
               </ToolbarButton>
               {folders.length > 0 && (
