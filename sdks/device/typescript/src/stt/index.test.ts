@@ -346,6 +346,29 @@ describe('createWhisperTranscriber', () => {
 
     expect(transcripts).toEqual(['final transcript']);
   });
+
+  test('contains first and final callback errors while delivering the next batch', async () => {
+    const attempted: string[] = [];
+    const transcripts: string[] = [];
+    let calls = 0;
+    const transcriber = createWhisperTranscriber({
+      runner: () => ['first', 'second', 'tail'][calls++]!,
+      onTranscript: (text) => {
+        attempted.push(text);
+        if (text !== 'second') throw new Error('synthetic callback failure');
+        transcripts.push(text);
+      },
+      batchSeconds: 1,
+    });
+    transcriber.appendPcm(new Uint8Array(32000));
+    transcriber.appendPcm(new Uint8Array(32000));
+    transcriber.appendPcm(new Uint8Array([1, 0]));
+    transcriber.stop();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(attempted).toEqual(['first', 'second', 'tail']);
+    expect(transcripts).toEqual(['second']);
+  });
 });
 
 describe('parakeetWsUrl', () => {

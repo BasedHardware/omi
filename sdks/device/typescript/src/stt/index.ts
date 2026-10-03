@@ -185,13 +185,12 @@ export function createWhisperTranscriber(opts: {
     const pcm = buffer;
     buffer = new Uint8Array(0);
     const job = async () => {
-      let text = '';
       try {
-        text = await opts.runner(pcm);
+        const text = await opts.runner(pcm);
+        if (text) opts.onTranscript(text);
       } catch {
         return;
       }
-      if (text) opts.onTranscript(text);
     };
     queue = queue.then(job, job);
   }
