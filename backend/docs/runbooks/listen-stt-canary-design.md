@@ -67,9 +67,9 @@ that also builds it. Do not hand-build/push a production image outside Actions.
 
 ## Request to #20391's author (not implemented on this branch)
 
-The report's earlier `9271b67fcc` head has since advanced; GitHub on 2026-10-03
-reported `52213d8f29a845014469c69aa74667def594203e`. Preserve report §8 gates
-and review the actual final diff/CI. The latest PR still has no complete
+The report's earlier `9271b67fcc` head has since advanced and the branch is
+still moving. Resolve its final head/CI at qualification time; preserve report
+§8 gates and review the actual final diff. The inspected branch has no complete
 default-off switch. Existing `STT_ROUTING_MODE=shadow`, on0 and
 `STT_RESILIENT_RECONNECT=false` do not disable cross-provider recovery changes.
 
