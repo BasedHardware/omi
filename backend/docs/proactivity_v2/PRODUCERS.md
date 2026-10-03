@@ -82,9 +82,9 @@ Claims younger than five minutes return 503; after five minutes a claimed item
 with no durable attempt can rotate its claim token and resume. An abandoned claim
 with any attempt is closed failed, preserving every reservation and unknown cost
 for accounting reconciliation; it never re-dispatches. Deterministic gateway call
-IDs fence late workers, and rotated claim tokens fence their publication. Errors
-after claim attempt a failed/suppressed terminal write; if that write fails, the
-callback returns 503 and this same recovery path reconciles it.
+IDs fence late workers, and rotated claim tokens fence their publication. Infrastructure errors after claim return 503 and retain the claim for this
+same recovery path. Terminal policy denials close failed/suppressed; if that
+bookkeeping write fails, the callback returns 503 for reconciliation.
 
 The worker is off unless all three deployment settings exist:
 

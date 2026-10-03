@@ -23,6 +23,9 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 ModelResult = TypeVar('ModelResult', bound=BaseModel)
+RETRYABLE_FOLLOWUP_DENIALS = frozenset(
+    {'unavailable', 'flag_unavailable', 'health_unavailable', 'claim_in_progress', 'gateway_admission_denied'}
+)
 
 SAME_POINT_QUESTION = (
     'Does the NEW notification make the same point or ask for the same action as any EARLIER notification? '
@@ -323,15 +326,13 @@ async def produce_followup(uid: str, action_item_id: str, due_revision: str) -> 
             source_guard={'completed': False, 'status': 'active', 'due_at': due, 'deleted': False, 'is_deleted': False},
         )
     except Exception as exc:
+        if not isinstance(exc, ProactivityDenied) or exc.reason in RETRYABLE_FOLLOWUP_DENIALS:
+            # Before claim, retry the deterministic due event. After claim, keep it
+            # for five-minute recovery: resume only without an attempt, otherwise
+            # reconcile failed with money retained and no ambiguous provider replay.
+            raise
         if item is None:
-            if isinstance(exc, ProactivityDenied) and exc.reason not in {
-                'unavailable',
-                'flag_unavailable',
-                'health_unavailable',
-                'claim_in_progress',
-            }:
-                return  # Terminal policy denial or duplicate terminal event.
-            raise  # No durable claim/provider attempt: retry the deterministic due event.
+            return  # Terminal policy denial or duplicate terminal event.
         if item is not None:
             try:
                 changed = isinstance(exc, ProactivityDenied) and exc.reason == 'source_changed'
