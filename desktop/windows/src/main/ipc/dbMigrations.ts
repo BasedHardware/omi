@@ -89,6 +89,23 @@ export const MIGRATIONS: Migration[] = [
       if (!hasFts) return
       d.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
     }
+  },
+  {
+    version: 3,
+    name: 'memories_fts_backfill',
+    up: (d) => {
+      // Same one-time backfill as v2, for the memories index added alongside it.
+      // memories_fts + its triggers are created in db.ts's bootstrap block, which
+      // runs BEFORE runMigrations, so the table exists here in production; the
+      // triggers only fire on new writes, so without this an existing install
+      // would search an empty index and quietly find none of its own memories.
+      // Guard on existence: a migration-only harness seeds only local_conversation.
+      const hasFts = d
+        .prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='memories_fts'")
+        .get() as { x: number } | undefined
+      if (!hasFts) return
+      d.exec("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
+    }
   }
 ]
 
