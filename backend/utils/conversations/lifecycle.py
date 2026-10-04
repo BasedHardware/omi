@@ -17,6 +17,7 @@ from typing import Any, Mapping
 
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
+from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
@@ -275,10 +276,9 @@ def close_oversized_in_progress_conversation(uid: str, conversation_id: str, *, 
     normal ``in_progress -> processing`` admission is rejected on every attempt
     and the row would stay invisible while each reconnect retried it. Content is
     kept as-is; the row becomes a visible conversation without a generated
-    summary. Returns a bounded outcome token (see
-    ``jobs_db.OversizedInProgressOutcome``).
+    summary. Returns a bounded outcome token (``OversizedInProgressOutcome``).
     """
-    return jobs_db.complete_oversized_in_progress_conversation(uid, conversation_id, quiet_for=quiet_for)
+    return oversized_terminal_db.complete_oversized_in_progress_conversation(uid, conversation_id, quiet_for=quiet_for)
 
 
 def rollback_processing_admission(uid: str, conversation_id: str) -> bool:

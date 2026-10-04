@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 from google.api_core.exceptions import Aborted, InvalidArgument
 
-from database import conversation_finalization_jobs as jobs_db
+from database import oversized_conversation_terminal as oversized_terminal_db
 from database._client import firestore_failure_reason
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.conversations import lifecycle as lifecycle_service
@@ -83,7 +83,9 @@ def _at_ceiling(**overrides) -> dict:
 def _close(data: dict | None, *, update_time: datetime | None = _QUIET_BEFORE - timedelta(days=5)):
     ref = _Ref(_Snapshot(data, update_time))
     transaction = _Transaction()
-    outcome = jobs_db._complete_oversized_in_progress_conversation_txn(transaction, ref, _QUIET_BEFORE, 'uid-1')
+    outcome = oversized_terminal_db._complete_oversized_in_progress_conversation_txn(
+        transaction, ref, _QUIET_BEFORE, 'uid-1'
+    )
     return outcome, transaction.updates
 
 
@@ -144,7 +146,7 @@ def test_lifecycle_owner_delegates_with_the_quiet_window(monkeypatch):
         calls.append((uid, conversation_id, quiet_for))
         return 'closed'
 
-    monkeypatch.setattr(jobs_db, 'complete_oversized_in_progress_conversation', fake)
+    monkeypatch.setattr(oversized_terminal_db, 'complete_oversized_in_progress_conversation', fake)
 
     outcome = lifecycle_service.close_oversized_in_progress_conversation(
         'uid-1', 'conv-1', quiet_for=timedelta(hours=1)
