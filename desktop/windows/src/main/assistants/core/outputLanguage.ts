@@ -1,6 +1,6 @@
 // The language proactive assistants write user-visible text in. The backend stores
 // one preferred language per account (/v1/users/language); every assistant whose
-// output the user reads (tasks, memories, insights, goals, focus) appends
+// output the user reads (tasks, memories, goals, focus) appends
 // outputLanguageInstruction() to its system prompt so a Spanish-speaking user does
 // not get English tasks. English needs no instruction — the prompts are English.
 import { net } from 'electron'
