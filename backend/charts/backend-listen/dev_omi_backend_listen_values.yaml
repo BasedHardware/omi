@@ -106,6 +106,8 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
   - name: MENTOR_GATE_DEBOUNCE_ENABLED
     value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
@@ -557,6 +559,14 @@ env:
     value: "false"
   - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "false"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
+  # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
+  # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
+  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
+    value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

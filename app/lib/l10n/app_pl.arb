@@ -3868,6 +3868,7 @@
     "playbackAudioUnavailable": "Dźwięk niedostępny",
     "playbackAudioLoadFailed": "Nie udało się wczytać dźwięku",
     "playbackAudioNetworkFailed": "Sprawdź połączenie",
+    "capturePendantDisconnectedShort": "Omi połączy się ponownie samo",
     "forYou": "Dla Ciebie",
     "stopThese": "Zatrzymaj te",
     "dismiss": "Ukryj",

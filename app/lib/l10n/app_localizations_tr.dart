@@ -11267,6 +11267,9 @@ class AppLocalizationsTr extends AppLocalizations {
       'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi kendiliğinden yeniden bağlanır';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name ve diğerleri';
   }

@@ -11390,6 +11390,7 @@
     "playbackAudioUnavailable": "صدا در دسترس نیست",
     "playbackAudioLoadFailed": "بارگیری صدا ممکن نشد",
     "playbackAudioNetworkFailed": "اتصال را بررسی کنید",
+    "capturePendantDisconnectedShort": "Omi خودش دوباره وصل می‌شود",
     "forYou": "برای شما",
     "stopThese": "توقف این موارد",
     "dismiss": "رد کردن",

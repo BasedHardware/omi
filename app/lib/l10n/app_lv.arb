@@ -3833,6 +3833,7 @@
     "playbackAudioUnavailable": "Audio nav pieejams",
     "playbackAudioLoadFailed": "Audio neizdevās ielādēt",
     "playbackAudioNetworkFailed": "Pārbaudiet savienojumu",
+    "capturePendantDisconnectedShort": "Omi pats atjaunos savienojumu",
     "forYou": "Jums",
     "stopThese": "Apturēt šos",
     "dismiss": "Paslēpt",

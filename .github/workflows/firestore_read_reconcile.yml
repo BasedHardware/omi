@@ -1,0 +1,43 @@
+name: Firestore read ledger reconcile
+
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: Closed UTC day to reconcile (YYYY-MM-DD; blank uses yesterday UTC)
+        required: false
+        type: string
+  schedule:
+    - cron: '30 16 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate for read-only reconciliation
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+          project_id: based-hardware
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Reconcile closed UTC day
+        env:
+          REQUESTED_DAY: ${{ inputs.day }}
+        run: |
+          set -euo pipefail
+          day="$REQUESTED_DAY"
+          if [[ -z "$day" ]]; then
+            day="$(date -u -d yesterday +%F)"
+          fi
+          python3 backend/scripts/firestore_read_reconcile.py --day "$day"

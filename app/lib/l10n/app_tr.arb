@@ -3868,6 +3868,7 @@
     "playbackAudioUnavailable": "Ses Kullanılamıyor",
     "playbackAudioLoadFailed": "Ses Yüklenemedi",
     "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin",
+    "capturePendantDisconnectedShort": "Omi kendiliğinden yeniden bağlanır",
     "forYou": "Sizin İçin",
     "stopThese": "Bunları Durdur",
     "dismiss": "Gizle",

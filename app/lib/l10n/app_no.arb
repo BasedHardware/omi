@@ -3833,6 +3833,7 @@
     "playbackAudioUnavailable": "Lyd ikke tilgjengelig",
     "playbackAudioLoadFailed": "Kunne ikke laste lyden",
     "playbackAudioNetworkFailed": "Sjekk tilkoblingen",
+    "capturePendantDisconnectedShort": "Omi kobler til igjen av seg selv",
     "forYou": "For deg",
     "stopThese": "Stopp disse",
     "dismiss": "Avvis",

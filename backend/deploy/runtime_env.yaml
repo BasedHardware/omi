@@ -20,6 +20,15 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
+          CAPTURE_EVIDENCE_V1_DARK_WRITE:
+            value: 'true'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -474,6 +483,15 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
+          CAPTURE_EVIDENCE_V1_DARK_WRITE:
+            value: 'true'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -865,11 +883,24 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: backend
             AUDIO_TIMELINE_SPANS:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -1177,11 +1208,24 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: backend-sync
             AUDIO_TIMELINE_SPANS:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -1451,11 +1495,24 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: backend-sync-backfill
             AUDIO_TIMELINE_SPANS:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -1678,11 +1735,24 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: backend-integration
             AUDIO_TIMELINE_SPANS:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -1847,6 +1917,10 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: notifications-job
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1896,6 +1970,8 @@ environments:
             --cpu: '2'
             --memory: 2Gi
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: dev-omi-frame-requests
@@ -1968,6 +2044,10 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: frame-request-retention-job
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -2005,6 +2085,10 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: daily-memory-sweep-job
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -2069,6 +2153,10 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: knowledge-ledger-drain-job
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -2104,6 +2192,10 @@ environments:
               secret: LIFECYCLE_EMAIL_SIGNING_SECRET
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: day3-reengagement-email-job
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -2176,6 +2268,15 @@ environments:
             value: 'true'
             category: rollout
           LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'true'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
+          CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
@@ -2665,6 +2766,15 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
+          CAPTURE_EVIDENCE_V1_DARK_WRITE:
+            value: 'true'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2970,10 +3080,23 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: backend
             AUDIO_TIMELINE_SPANS:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'true'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
@@ -3302,10 +3425,23 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: backend-sync
             AUDIO_TIMELINE_SPANS:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'true'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
@@ -3569,10 +3705,23 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: backend-sync-backfill
             AUDIO_TIMELINE_SPANS:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'true'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
@@ -3810,10 +3959,23 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: backend-integration
             AUDIO_TIMELINE_SPANS:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'true'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
@@ -3975,6 +4137,10 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: notifications-job
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -4020,6 +4186,8 @@ environments:
             --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             --task-timeout: 3600s
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: prod-omi-frame-requests
@@ -4094,6 +4262,10 @@ environments:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: frame-request-retention-job
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -4132,6 +4304,10 @@ environments:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: daily-memory-sweep-job
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -4198,6 +4374,10 @@ environments:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: knowledge-ledger-drain-job
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -4233,6 +4413,10 @@ environments:
               secret: LIFECYCLE_EMAIL_SIGNING_SECRET
               version: latest
           env:
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: day3-reengagement-email-job
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity

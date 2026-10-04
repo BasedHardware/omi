@@ -123,7 +123,7 @@ from utils.stt.streaming import (
     process_audio_soniox,
     process_audio_parakeet,
 )
-from routers.listen.stt_callbacks import build_stt_callbacks
+from routers.listen.stt_callbacks import attach_legacy_capture_window, build_stt_callbacks
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.transcribe_decisions import (
@@ -530,19 +530,11 @@ class ListenReceiver(ReplayFilterMixin):
                 segment.pop('_capture_start_sample', None)
                 segment.pop('_capture_end_sample', None)
                 segment['_capture_window_unavailable'] = True
+                segment['_capture_window_reason'] = 'kill_switch'
             self._enqueue_stt_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
             return
         for segment in segments:
-            start_sample = segment.pop('_capture_start_sample', None)
-            end_sample = segment.pop('_capture_end_sample', None)
-            if start_sample is not None and end_sample is not None and end_sample >= start_sample:
-                abs_start = self.capture_timeline.wall_strict(start_sample)
-                abs_end = self.capture_timeline.wall_strict(end_sample)
-                if abs_start is not None and abs_end is not None:
-                    segment['_capture_abs_start'] = abs_start
-                    segment['_capture_abs_end'] = abs_end
-                    continue
-            segment['_capture_window_unavailable'] = True
+            attach_legacy_capture_window(segment, self.capture_timeline)
         self._enqueue_stt_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
 
     def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
