@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from zoneinfo import ZoneInfo
 from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
 from utils.conversations.meeting_participants import MeetingRoster, is_silent_recorder, bind_speakers_with_roster
+from utils.llm.meeting_notes_validation import strip_speaker_placeholders
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.shaped_agent import route_for_uid
 
@@ -91,6 +93,11 @@ TITLE_PERSON_MIN_TALK_SHARE = 0.1
 _OWNER_IDENTITY = '\x00owner'
 
 
+def _one_line(name: str) -> str:
+    """A stored name as one line of plain text, so it cannot add a line to the prompt."""
+    return ' '.join(''.join(' ' if unicodedata.category(ch) == 'Cc' else ch for ch in name).split())
+
+
 def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Return ``(title_people, owner_names)`` for the general notes path.
 
@@ -112,7 +119,7 @@ def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tu
     clusters = getattr(source_map, 'clusters', None)
     if clusters is None:
         return (), ()
-    owner_name = (getattr(source_map, 'owner_name', None) or '').strip()
+    owner_name = _one_line(getattr(source_map, 'owner_name', None) or '')
     owner_fold = owner_name.casefold()
     owner_first = owner_fold.split()[0] if owner_fold else ''
 
@@ -138,13 +145,14 @@ def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tu
     for cluster in clusters:
         if cluster.speaker_id not in nameable or not cluster.names:
             continue
-        name = cluster.names[0]
-        if strip_speaker_placeholders(name) != name:
+        name = _one_line(cluster.names[0])
+        if not name or strip_speaker_placeholders(name) != name:
             continue
         fold = name.casefold()
         display.setdefault(fold, name)
         spoken[fold] = spoken.get(fold, 0) + talk(cluster)
-    people = [fold for fold in spoken if not total or spoken[fold] / total >= TITLE_PERSON_MIN_TALK_SHARE]
+    # No talk at all names nobody: a share of nothing is no evidence of who spoke.
+    people = [fold for fold in spoken if total and spoken[fold] / total >= TITLE_PERSON_MIN_TALK_SHARE]
     people.sort(key=lambda fold: -spoken[fold])  # stable: ties keep first-appearance order
     return tuple(display[fold] for fold in people), (owner_name,) if owner_name else ()
 

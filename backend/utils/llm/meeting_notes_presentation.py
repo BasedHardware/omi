@@ -10,6 +10,7 @@ from utils.llm.meeting_notes_validation import (
     PRESENTATION_CONTRACT_VERSION,
     enforce_structured_presentation_contract,
     lead_title_with_people,
+    presentable_title_people,
 )
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,9 @@ def enforce_conversation_note_presentation(
     elif report.repairs:
         outcome = 'static_repair'
 
-    structured.title, led = lead_title_with_people(structured.title, title_people)
+    structured.title, led = lead_title_with_people(
+        structured.title, presentable_title_people(title_people, transcript_segment_ids)
+    )
     if led:
         report.repairs.add('title_people_lead')
         if outcome == 'passed':

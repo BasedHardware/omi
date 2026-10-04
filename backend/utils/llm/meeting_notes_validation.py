@@ -324,6 +324,22 @@ def title_names_any_person(title: str, people: Iterable[str]) -> bool:
     return False
 
 
+def presentable_title_people(people: Sequence[str], transcript_segment_ids: Optional[Iterable[object]]) -> list[str]:
+    """The title people whose names presentation would keep: no speaker placeholder, no transcript ID.
+
+    The title lead runs after presentation sanitization, so a name that sanitization
+    would strip must not reach the title through it.
+    """
+    valid_ids = [
+        segment_id for segment_id in (transcript_segment_ids or ()) if isinstance(segment_id, str) and segment_id
+    ]
+    return [
+        name
+        for name in people
+        if strip_speaker_placeholders(name) == name and not any(_id_pattern(i).search(name) for i in valid_ids)
+    ]
+
+
 def lead_title_with_people(title: str, people: Sequence[str]) -> tuple[str, bool]:
     """Lead a title that names none of the identified people with their names (#3602).
 
