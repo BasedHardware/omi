@@ -11390,6 +11390,7 @@
     "playbackAudioUnavailable": "ఆడియో అందుబాటులో లేదు",
     "playbackAudioLoadFailed": "ఆడియో లోడ్ చేయలేకపోయింది",
     "playbackAudioNetworkFailed": "కనెక్షన్‌ను తనిఖీ చేయండి",
+    "capturePendantDisconnectedShort": "Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది",
     "forYou": "మీ కోసం",
     "stopThese": "వీటిని ఆపండి",
     "dismiss": "దాచు",

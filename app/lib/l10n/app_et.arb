@@ -3833,6 +3833,7 @@
     "playbackAudioUnavailable": "Heli pole saadaval",
     "playbackAudioLoadFailed": "Heli ei õnnestunud laadida",
     "playbackAudioNetworkFailed": "Kontrollige ühendust",
+    "capturePendantDisconnectedShort": "Omi loob ühenduse ise uuesti",
     "forYou": "Sulle",
     "stopThese": "Peata need",
     "dismiss": "Peida",

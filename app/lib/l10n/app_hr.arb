@@ -11390,6 +11390,7 @@
     "playbackAudioUnavailable": "Zvuk nije dostupan",
     "playbackAudioLoadFailed": "Zvuk nije moguće učitati",
     "playbackAudioNetworkFailed": "Provjerite vezu",
+    "capturePendantDisconnectedShort": "Omi će se sam ponovno povezati",
     "forYou": "Za vas",
     "stopThese": "Zaustavi ovo",
     "dismiss": "Sakrij",

@@ -11282,6 +11282,9 @@ class AppLocalizationsMs extends AppLocalizations {
       'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi akan bersambung semula sendiri';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name dan lain-lain';
   }

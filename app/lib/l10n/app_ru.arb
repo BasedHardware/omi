@@ -3868,6 +3868,7 @@
     "playbackAudioUnavailable": "Аудио недоступно",
     "playbackAudioLoadFailed": "Не удалось загрузить аудио",
     "playbackAudioNetworkFailed": "Проверьте соединение",
+    "capturePendantDisconnectedShort": "Omi переподключится сам",
     "forYou": "Для вас",
     "stopThese": "Отключить такие",
     "dismiss": "Скрыть",

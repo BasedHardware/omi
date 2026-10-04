@@ -3833,6 +3833,7 @@
     "playbackAudioUnavailable": "Zvuk není k dispozici",
     "playbackAudioLoadFailed": "Zvuk se nepodařilo načíst",
     "playbackAudioNetworkFailed": "Zkontrolujte připojení",
+    "capturePendantDisconnectedShort": "Omi se znovu připojí sám",
     "forYou": "Pro vás",
     "stopThese": "Zastavit tyto",
     "dismiss": "Skrýt",
