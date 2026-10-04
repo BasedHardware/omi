@@ -138,3 +138,51 @@ Add **MWDATMockDevice** to `RunnerRayBanDat` in Debug and follow Meta's
 MockDeviceKit docs to simulate a paired device, permissions, and photo
 capture. Useful for exercising the pairing sheet and photo pipeline in CI-less
 environments; founder acceptance still requires real glasses.
+
+## Android
+
+The Android counterpart of `RunnerRayBanDat` is the **`raybanDat` product
+flavor** (`app/android/app/build.gradle`). It is the only Android variant that
+links the toolkit (`com.meta.wearable:mwdat-core` / `mwdat-camera` 1.0.0 from
+Maven Central — no GitHub token needed); `dev` and `prod` compile
+`src/noDat/` and stay audio-only.
+
+Prerequisites: an Android 10+ phone with the Meta AI app, paired glasses on
+current firmware, and glasses **Developer Mode** enabled in the Meta AI app.
+
+1. Run `bash setup.sh android` once in a fresh checkout (seeds Firebase files
+   and generated Dart sources), then stop its default launch.
+2. Build and run the flavor — no wrapper script and no `--dart-define` are
+   needed (Android has no plugin conflict to work around, and Dart detects the
+   toolkit through `getAvailabilityMode()`):
+
+   ```bash
+   cd app
+   flutter run --flavor raybanDat \
+     --dart-define=OMI_APP_PROFILE=local_dev \
+     --dart-define=OMI_API_BASE_URL=http://<lan-ip>:<port>/
+   ```
+
+   The flavor reuses the dev identity (`com.friend.ios.dev`) and Firebase
+   project: `setup.sh` seeds the git-ignored
+   `android/app/src/raybanDat/google-services.json`; with a real dev config,
+   copy `src/dev/google-services.json` there. Dart sees an unknown flavor name
+   and runs as dev (`lib/flavors.dart`).
+3. Authorize and pair inside Omi exactly as in Step 4 above. The camera
+   permission prompt is Meta AI's; its result returns through
+   `MainActivity.onActivityResult`.
+
+Credentials: Developer Mode needs none (the manifest placeholders default to
+`0`). For a Wearables Developer Center beta-channel build, set
+`mwdat.applicationId` and `mwdat.clientToken` in `app/android/local.properties`
+and register the `omirayban` callback scheme for the Android package there.
+
+The flavor also opts out of the toolkit's default analytics and crash
+reporting to Meta (`src/raybanDat/AndroidManifest.xml`).
+
+Audio uses the platform Bluetooth SCO route in every flavor
+(`RayBanMetaAudioCapture.kt`): `setCommunicationDevice` on Android 12+,
+`startBluetoothSco` on Android 10–11, an `AudioRecord` pinned to the glasses
+input at 16 kHz, and a microphone foreground service so capture survives
+backgrounding. It never falls back to the phone mic — a lost route stops
+capture and reports `audio_route_lost`.

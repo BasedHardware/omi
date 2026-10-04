@@ -2,7 +2,8 @@
 
 ## "Ray-Ban Meta" doesn't appear in the device list
 
-- **Android**: not supported yet — iOS only.
+- **Android**: the default dev/prod builds are audio-only; camera/photos need
+  the `raybanDat` flavor (`app/docs/rayban-meta-dat-setup.md` → Android).
 - **Audio-only build** (default repo build): the entry appears only when the
   glasses are connected to the phone as a Bluetooth audio device whose name
   matches a Meta product ("Ray-Ban…", "Oakley Meta…", "Meta Glasses"). Check

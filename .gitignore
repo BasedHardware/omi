@@ -58,6 +58,7 @@ dist/
 **/android/app/google-services.json
 **/android/app/src/dev/google-services.json
 **/android/app/src/prod/google-services.json
+**/android/app/src/raybanDat/google-services.json
 **/android/app/.cxx/
 
 # iOS specific

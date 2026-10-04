@@ -217,6 +217,13 @@
             android:stopWithTask="false"
             android:exported="false" />
 
+        <!-- Ray-Ban Meta glasses — keeps HFP mic capture / DAT session alive in background -->
+        <service
+            android:name="com.friend.ios.raybanmeta.RayBanMetaForegroundService"
+            android:foregroundServiceType="microphone|connectedDevice"
+            android:stopWithTask="true"
+            android:exported="false" />
+
         <!-- Recording file-transfer keep-alive — dataSync FGS + wake lock for BLE/cloud sync (#5221) -->
         <service
             android:name="com.friend.ios.sync.SyncTransferForegroundService"
