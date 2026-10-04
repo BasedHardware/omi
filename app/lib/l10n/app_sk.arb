@@ -3832,5 +3832,8 @@
     "playbackBackToCurrent": "Späť na aktuálne",
     "playbackAudioUnavailable": "Zvuk nie je k dispozícii",
     "playbackAudioLoadFailed": "Zvuk sa nepodarilo načítať",
-    "playbackAudioNetworkFailed": "Skontrolujte pripojenie"
+    "playbackAudioNetworkFailed": "Skontrolujte pripojenie",
+    "forYou": "Pre vás",
+    "stopThese": "Zastaviť tieto",
+    "dismiss": "Skryť"
 }

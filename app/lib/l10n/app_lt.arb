@@ -3832,5 +3832,8 @@
     "playbackBackToCurrent": "Atgal prie dabartinio",
     "playbackAudioUnavailable": "Garsas nepasiekiamas",
     "playbackAudioLoadFailed": "Nepavyko įkelti garso",
-    "playbackAudioNetworkFailed": "Patikrinkite ryšį"
+    "playbackAudioNetworkFailed": "Patikrinkite ryšį",
+    "forYou": "Jums",
+    "stopThese": "Sustabdyti šiuos",
+    "dismiss": "Slėpti"
 }

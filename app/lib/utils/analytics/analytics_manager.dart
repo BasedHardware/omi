@@ -2546,6 +2546,11 @@ class AnalyticsManager {
     setUserProperty('Daily Summary Hour', hour);
   }
 
+  /// Shape-only dimensions: no advice, source identities or arbitrary producer text.
+  void proactivityOutcome({required String action, required String channel, required String surface}) {
+    track('proactivity_v2_outcome', properties: {'action': action, 'channel': channel, 'surface': surface});
+  }
+
   void dailySummaryDetailViewed({required String summaryId, required String date, String? source}) {
     track(
       'Daily Summary Detail Viewed',

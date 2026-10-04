@@ -12402,4 +12402,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Bağlantıyı Kontrol Edin';
+
+  @override
+  String get forYou => 'Sizin İçin';
+
+  @override
+  String get stopThese => 'Bunları Durdur';
+
+  @override
+  String get dismiss => 'Gizle';
 }

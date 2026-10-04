@@ -610,7 +610,14 @@ extension AppState {
     case "photo_described":
       log("Transcription: Photo described event (not used on desktop)")
 
+    case "proactivity_v2":
+      ProactivityFeedConsumer.shared.handleListenEvent(event.raw)
+
     case "proactive_message":
+      if event.raw["notification_type"] as? String == "proactivity_v2" {
+        ProactivityFeedConsumer.shared.handleListenEvent(event.raw)
+        return
+      }
       let appId = event.raw["app_id"] as? String ?? ""
       let title = event.raw["title"] as? String ?? "Omi"
       let message = event.raw["message"] as? String ?? ""

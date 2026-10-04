@@ -3832,5 +3832,8 @@
     "playbackBackToCurrent": "Zurück zum Aktuellen",
     "playbackAudioUnavailable": "Audio nicht verfügbar",
     "playbackAudioLoadFailed": "Audio konnte nicht geladen werden",
-    "playbackAudioNetworkFailed": "Verbindung prüfen"
+    "playbackAudioNetworkFailed": "Verbindung prüfen",
+    "forYou": "Für dich",
+    "stopThese": "Diese stoppen",
+    "dismiss": "Ausblenden"
 }

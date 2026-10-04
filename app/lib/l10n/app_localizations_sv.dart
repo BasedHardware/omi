@@ -12395,4 +12395,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Kontrollera anslutningen';
+
+  @override
+  String get forYou => 'För dig';
+
+  @override
+  String get stopThese => 'Stoppa dessa';
+
+  @override
+  String get dismiss => 'Avvisa';
 }

@@ -12408,4 +12408,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Verifique a ligação';
+
+  @override
+  String get forYou => 'Para você';
+
+  @override
+  String get stopThese => 'Parar estes';
+
+  @override
+  String get dismiss => 'Dispensar';
 }

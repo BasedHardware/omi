@@ -12204,4 +12204,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => '연결 확인';
+
+  @override
+  String get forYou => '나를 위한 추천';
+
+  @override
+  String get stopThese => '이 유형 중지';
+
+  @override
+  String get dismiss => '닫기';
 }

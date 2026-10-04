@@ -3832,5 +3832,8 @@
     "playbackBackToCurrent": "กลับไปที่ปัจจุบัน",
     "playbackAudioUnavailable": "เสียงไม่พร้อมใช้งาน",
     "playbackAudioLoadFailed": "ไม่สามารถโหลดเสียงได้",
-    "playbackAudioNetworkFailed": "ตรวจสอบการเชื่อมต่อ"
+    "playbackAudioNetworkFailed": "ตรวจสอบการเชื่อมต่อ",
+    "forYou": "สำหรับคุณ",
+    "stopThese": "หยุดรายการแบบนี้",
+    "dismiss": "ปิด"
 }

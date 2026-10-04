@@ -3,6 +3,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/gen/proactivity_wire.g.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import '../../../test/helpers/proactivity_fakes.dart';
+
 import 'package:omi/models/announcement.dart';
 import 'package:omi/pages/announcements/announcement_dialog.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
@@ -11,6 +17,51 @@ import 'package:omi/startup_failure_app.dart';
 import '../harness.dart';
 
 final homeScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'home-proactivity-v2',
+    title: 'Daily Recaps and For You',
+    page: 'lib/pages/home/widgets/home_daily_recaps.dart (HomeDailyRecaps)',
+    state: 'Synthetic recap, conversation mentor and commitment follow-up; no network or account data',
+    run: (a) async {
+      final h = OutcomeHarness();
+      addTearDown(h.outbox.dispose);
+      await h.bind();
+      await a.pump(SingleChildScrollView(
+          child: HomeDailyRecaps(
+        outbox: h.outbox,
+        load: () async => (
+          items: [
+            DailySummary(
+                id: 'recap',
+                date: '2026-10-03',
+                createdAt: DateTime.utc(2026, 10, 3),
+                headline: 'A day of progress',
+                overview: 'Synthetic recap',
+                stats: DayStats(totalConversations: 3, actionItemsCount: 2))
+          ],
+          ok: true
+        ),
+        loadFeed: (_) async => ApiSuccess(feedResponse(items: [
+          const GeneratedProactivityFeedItem(
+              id: 'mentor-item',
+              producer: 'conversation_mentor_v2',
+              title: 'A connection worth revisiting',
+              body: 'Revisit the decision in your conversation.',
+              createdAt: '2026-10-03T09:00:00Z',
+              acted: false,
+              dismissed: false,
+              feedback: 'none',
+              target: GeneratedProactivityTarget(kind: 'conversation', id: 'synthetic-conversation')),
+          feedItem(producer: 'commitment_followup'),
+        ])),
+        openTarget: (_, {canOpen}) async => true,
+      )));
+      expect(find.text('Daily Recaps'), findsOneWidget);
+      expect(find.text('For You'), findsOneWidget);
+      expect(find.text('A connection worth revisiting'), findsOneWidget);
+      await a.shot('Render both producer cards below Daily Recaps');
+    },
+  ),
   AuditScenario(
     id: 'home-record-options',
     title: 'Recording source sheet',

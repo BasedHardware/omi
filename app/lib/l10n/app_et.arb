@@ -3832,5 +3832,8 @@
     "playbackBackToCurrent": "Tagasi praeguse juurde",
     "playbackAudioUnavailable": "Heli pole saadaval",
     "playbackAudioLoadFailed": "Heli ei õnnestunud laadida",
-    "playbackAudioNetworkFailed": "Kontrollige ühendust"
+    "playbackAudioNetworkFailed": "Kontrollige ühendust",
+    "forYou": "Sulle",
+    "stopThese": "Peata need",
+    "dismiss": "Peida"
 }

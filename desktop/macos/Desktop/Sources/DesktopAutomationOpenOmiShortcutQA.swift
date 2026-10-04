@@ -28,7 +28,7 @@ extension DesktopAutomationActionRegistry {
         return [
           "gemini_proxy_base_url": GeminiClient.proxyBaseURL,
           "embedding_proxy_base_url": EmbeddingService.proxyBaseURL,
-          "proactivity_base_url": ProactiveLaneClient.backendBaseURL,
+          "proactivity_base_url": JITRolloutClient.backendBaseURL,
           "gemini_helper_sample_lane": geminiRequest.value(forHTTPHeaderField: "X-Omi-Lane") ?? "",
           "gemini_helper_sample_workload": geminiRequest.value(forHTTPHeaderField: "X-Omi-Workload") ?? "",
           "gemini_helper_sample_client_platform": geminiRequest.value(forHTTPHeaderField: "X-App-Platform") ?? "",
@@ -60,118 +60,7 @@ extension DesktopAutomationActionRegistry {
           ],
           hasAuthoritativeSnapshot: true
         ).render(userName: "Test")
-        let triggerCondition: [String: Any] = [
-          "schema_version": "jit_trigger.v1",
-          "keywords": ["focus"],
-        ]
-        guard
-          let triggerConditionJSON = MemoryLedgerMetadata.canonicalJSONString(
-            triggerCondition,
-            maximumCharacters: MemoryLedgerMetadata.maxTriggerConditionCharacters)
-        else {
-          return ["error": "knowledge ledger trigger fixture was not canonical JSON"]
-        }
-        var triggerMetadata = [
-          MemoryLedgerMetadata.schemaVersionKey: KnowledgeLedgerTriggerRow.schemaVersion,
-          "kind": "trigger",
-          "subject_scope": "primary_user",
-          "intent_backed": "true",
-          "status": "active",
-          MemoryLedgerMetadata.triggerConditionJSONKey: triggerConditionJSON,
-        ]
-        let triggerMemory = ServerMemory(
-          id: "trigger_focus",
-          content: "Focus trigger",
-          category: .workflow,
-          tier: .longTerm,
-          tierIsExplicit: true,
-          createdAt: Date(timeIntervalSince1970: 1),
-          updatedAt: Date(timeIntervalSince1970: 2),
-          conversationId: nil,
-          reviewed: false,
-          userReview: nil,
-          visibility: "private",
-          manuallyAdded: false,
-          scoring: nil,
-          source: "desktop",
-          confidence: nil,
-          sourceApp: nil,
-          contextSummary: nil,
-          isRead: false,
-          isDismissed: false,
-          tags: [],
-          reasoning: nil,
-          currentActivity: nil,
-          inputDeviceName: nil,
-          windowTitle: nil,
-          headline: nil,
-          ledgerMetadata: triggerMetadata
-        )
-        triggerMetadata[MemoryLedgerMetadata.schemaVersionKey] = "knowledge_ledger.v2"
-        let futureMemory = ServerMemory(
-          id: "trigger_future",
-          content: "Future trigger",
-          category: .workflow,
-          tier: .longTerm,
-          tierIsExplicit: true,
-          createdAt: Date(timeIntervalSince1970: 1),
-          updatedAt: Date(timeIntervalSince1970: 3),
-          conversationId: nil,
-          reviewed: false,
-          userReview: nil,
-          visibility: "private",
-          manuallyAdded: false,
-          scoring: nil,
-          source: "desktop",
-          confidence: nil,
-          sourceApp: nil,
-          contextSummary: nil,
-          isRead: false,
-          isDismissed: false,
-          tags: [],
-          reasoning: nil,
-          currentActivity: nil,
-          inputDeviceName: nil,
-          windowTitle: nil,
-          headline: nil,
-          ledgerMetadata: triggerMetadata
-        )
-        let projection = KnowledgeLedgerTriggerCompiler.project(memories: [triggerMemory, futureMemory])
-        guard !projection.entries.isEmpty else {
-          return ["error": "knowledge ledger trigger projection did not compile"]
-        }
-        let mirroredTriggerCondition = MemoryLedgerMetadata.triggerConditionJSON(
-          from: triggerMemory.ledgerMetadata)
-        let runtime = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
-          projection: projection,
-          observation: .init(text: "focus now"),
-          day: "2026-08-23",
-          authority: .init(
-            mode: .enabled,
-            killSwitchEnabled: false,
-            ownerID: "qa-owner",
-            accountGeneration: 1,
-            snapshotOwnerID: "qa-owner",
-            snapshotAccountGeneration: 1,
-            snapshotIsAuthoritative: true,
-            authorizationIsCurrent: true)
-        )
-        guard let decision = runtime.matches.first?.decision else {
-          return ["error": "knowledge ledger trigger runtime did not produce the planned match"]
-        }
-        return [
-          "prompt_contains_profile_fact": prompt?.contains("home_city: Paris") == true ? "true" : "false",
-          "trigger_metadata_roundtrip":
-            mirroredTriggerCondition.flatMap { String(data: $0, encoding: .utf8) } == triggerConditionJSON
-            ? "true" : "false",
-          "trigger_projection_count": "\(projection.entries.count)",
-          "trigger_projection_quarantine_count": "\(projection.quarantined.count)",
-          "trigger_runtime_status": runtime.status.rawValue,
-          "trigger_runtime_next_lane": runtime.nextLane.rawValue,
-          "trigger_runtime_match_count": "\(runtime.matches.count)",
-          "trigger_status": decision.status.rawValue,
-          "trigger_wakeups_used": "\(decision.wakeupsUsed)",
-        ]
+        return ["prompt_contains_profile_fact": prompt?.contains("home_city: Paris") == true ? "true" : "false"]
       }
 
       register(

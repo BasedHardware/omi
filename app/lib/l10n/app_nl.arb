@@ -3832,5 +3832,8 @@
     "playbackBackToCurrent": "Terug naar huidige",
     "playbackAudioUnavailable": "Audio niet beschikbaar",
     "playbackAudioLoadFailed": "Audio kon niet worden geladen",
-    "playbackAudioNetworkFailed": "Controleer verbinding"
+    "playbackAudioNetworkFailed": "Controleer verbinding",
+    "forYou": "Voor jou",
+    "stopThese": "Deze stoppen",
+    "dismiss": "Verbergen"
 }

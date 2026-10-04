@@ -1,0 +1,44 @@
+version: 2
+name: task-context-dogfood
+tier: manual
+description: Retained task binding, screen extraction and Rewind privacy after legacy context proactivity retirement
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AsyncFirstResolved.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenCandidateAdapter.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskDeduplicationService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPrioritizationService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+RewindCapture.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketSchema.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDetection.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerMirrorSnapshot.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/EnvironmentalSpeakerContext.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextSubjectBindingService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextTitleNormalizer.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/WorkHistoryHandle.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/WorkHistoryHandleExtractor.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationSettingsSyncCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/TaskContextualResurfacingService.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindCaptureExclusion.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer+CaptureExclusion.swift
+preconditions:
+  - signed_in_dogfood_account
+  - screen_recording_enabled
+  - notifications_enabled
+steps:
+  - id: S1
+    name: Distinguish task contexts
+    do: "In a named non-production bundle with a synthetic dogfood account, visit two documents with distinct numbered identifiers. Create a screen-visible task in each and revisit them. Verify subject bindings and resurfaced tasks remain attached to the correct document and owner."
+  - id: S2
+    name: Keep task extraction and deduplication
+    do: "With screen_task_jev_gate enabled, revisit a concrete task using a harmless paraphrase. Verify observations reconcile to one suggested task; a different task identifier remains distinct. Confirm Focus and Memory still receive app context switches."
+  - id: S3
+    name: Keep excluded-app privacy
+    do: "Exclude the synthetic source app, wait for purge, then query its screen content through chat/Rewind. Confirm excluded OCR, images and video are unavailable. Restore the fixture exclusion afterward."
+  - id: S4
+    name: Keep session boundaries
+    do: "Start a screen extraction, then sign out before completion. Sign in to another synthetic owner and verify no prior-owner task, binding or notification appears."
+  - id: S5
+    name: Keep document handle retrieval
+    do: "Ask chat for a synthetic document by its handle. Confirm retained get_work_context/Rewind retrieval resolves the document without querying retired bucket, director or visit tables."
