@@ -42,14 +42,17 @@ def _evaluate(rule, series):
     return accepted, ratio, accepted >= int(threshold[1]) and ratio > float(threshold[2])
 
 
-def _series(metric, track, increase, *, pod='one', job='backend-listen-metrics'):
+def _series(metric, track, increase, *, pod='one', job='backend-listen-metrics', labels=None):
     # Nonzero starts prove this evaluates counter increases, not raw totals.
-    return metric, {'listen_track': track, 'job': job, 'pod': pod}, [100 + increase * i / 10 for i in range(11)]
+    sample_labels = {'listen_track': track, 'job': job, 'pod': pod}
+    if labels:
+        sample_labels.update(labels)
+    return metric, sample_labels, [100 + increase * i / 10 for i in range(11)]
 
 
 @pytest.mark.parametrize('export', ['alerts/live-stt.json', 'alert-rules.json'])
 @pytest.mark.parametrize(
-    'canary_accepted,canary_failures,stable_accepted,stable_failures,expected_ratio,fires',
+    'canary_transcribed,canary_failures,stable_transcribed,stable_failures,expected_ratio,fires',
     [
         (100, 2, 10000, 0, 0.02, True),  # Recovery-off traffic cannot dilute 2% canary failure.
         (100, 2, 0, 0, 0.02, True),
@@ -61,24 +64,29 @@ def _series(metric, track, increase, *, pod='one', job='backend-listen-metrics')
     ],
 )
 def test_recovery_alert_evaluates_only_canary_cohort(
-    export, canary_accepted, canary_failures, stable_accepted, stable_failures, expected_ratio, fires
+    export, canary_transcribed, canary_failures, stable_transcribed, stable_failures, expected_ratio, fires
 ):
     rule = next(
         rule for rule in json.loads((MONITORING / export).read_text()) if rule['uid'] == 'omi-stt-terminal-after-text'
     )
+    transcribed_metric = 'omi_live_session_transcript_outcome_total'
     accepted_metric = 'omi_listen_accepted_total'
     failure_metric = 'omi_live_session_terminal_after_text_total'
     series = [
-        _series(accepted_metric, 'canary', canary_accepted / 2),
-        _series(accepted_metric, 'canary', canary_accepted / 2, pod='two'),
+        _series(transcribed_metric, 'canary', canary_transcribed / 2, labels={'outcome': 'transcribed'}),
+        _series(transcribed_metric, 'canary', canary_transcribed / 2, pod='two', labels={'outcome': 'transcribed'}),
         _series(failure_metric, 'canary', canary_failures),
-        _series(accepted_metric, 'stable', stable_accepted),
+        _series(transcribed_metric, 'stable', stable_transcribed, labels={'outcome': 'transcribed'}),
         _series(failure_metric, 'stable', stable_failures),
-        _series(accepted_metric, 'canary', 10000, job='other-job'),
+        # Admitted sessions and too-short sessions are not the ratio cohort: a
+        # flood of either must not satisfy the floor or dilute the failure ratio.
+        _series(accepted_metric, 'canary', 10000),
+        _series(transcribed_metric, 'canary', 10000, labels={'outcome': 'too_short'}),
+        _series(transcribed_metric, 'canary', 10000, job='other-job', labels={'outcome': 'transcribed'}),
         _series(failure_metric, 'canary', 1000, job='other-job'),
     ]
-    accepted, ratio, actual_fires = _evaluate(rule, series)
-    assert accepted == canary_accepted
+    transcribed, ratio, actual_fires = _evaluate(rule, series)
+    assert transcribed == canary_transcribed
     assert ratio == pytest.approx(expected_ratio)
     assert actual_fires is fires
 

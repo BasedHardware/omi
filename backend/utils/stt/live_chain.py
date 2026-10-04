@@ -394,42 +394,50 @@ async def connect_configured_chain(
             return (routing_models or {}).get('parakeet') or 'parakeet'
         return DEFAULT_IDS.get(service.value) or service.value
 
-    async def attempt(
-        service: STTService, connect: Connect, target=None, *, force_backoff: bool = False, rescue: bool = False
-    ) -> tuple[STTSocket, STTService] | None:
-        nonlocal origin, prior_reason, prior_capacity_subtype, primary_open
-        if (
+    async def _restore_configured_chain() -> tuple[STTSocket, STTService]:
+        record_fallback(
+            component='stt_selection',
+            from_mode=origin,
+            to_mode=primary_service.value,
+            reason='config_incomplete',
+            outcome='degraded',
+        )
+        return await connect_configured_chain(
+            primary_service=primary_service,
+            connect_primary=connect_primary,
+            callbacks=callbacks,
+            failed=failed,
+            models=models,
+            routing_uid=routing_uid,
+            routing_language=routing_language,
+            routing_languages=routing_languages,
+            routing_models=routing_models,
+            failed_targets=failed_targets,
+            _routing_static=True,
+        )
+
+    def _paid_spillover_scope(service: STTService) -> bool:
+        return (
             active
             and paid_admission.enabled()
             and service.value in {'soniox', 'modulate', 'deepgram'}
             and (parakeet_capacity_refused or prior_reason == 'capacity_full')
-            and not await paid_admission.admit(service.value)
-        ):
-            # Release any half-open probe acquired by the route loop. Budget
-            # denial is policy, never a provider-health failure.
-            _, release = target_circuit(target, _circuit_for_primary(service)).deferred_result_callbacks()
-            release()
-            record_fallback(
-                component='stt_selection',
-                from_mode=origin,
-                to_mode=primary_service.value,
-                reason='config_incomplete',
-                outcome='degraded',
-            )
-            return await connect_configured_chain(
-                primary_service=primary_service,
-                connect_primary=connect_primary,
-                callbacks=callbacks,
-                failed=failed,
-                models=models,
-                routing_uid=routing_uid,
-                routing_language=routing_language,
-                routing_languages=routing_languages,
-                routing_models=routing_models,
-                failed_targets=failed_targets,
-                _routing_static=True,
-            )
+        )
+
+    async def attempt(
+        service: STTService, connect: Connect, target=None, *, force_backoff: bool = False, rescue: bool = False
+    ) -> tuple[STTSocket, STTService] | None:
+        nonlocal origin, prior_reason, prior_capacity_subtype, primary_open
         if not recovery_on:
+            # Legacy dialing has no backoff lease or recovery reservation
+            # between here and its connect(), so this is already the last
+            # policy gate before the dial.
+            if _paid_spillover_scope(service) and not await paid_admission.admit(service.value):
+                # Release any half-open probe acquired by the route loop.
+                # Budget denial is policy, never a provider-health failure.
+                _, release = target_circuit(target, _circuit_for_primary(service)).deferred_result_callbacks()
+                release()
+                return await _restore_configured_chain()
             return await _attempt_legacy(service, connect, target)
         circuit = target_circuit(target, _circuit_for_primary(service))
         on_success, on_close = circuit.deferred_result_callbacks()
@@ -451,6 +459,19 @@ async def connect_configured_chain(
             )
             return None
         try:
+            # The spillover budget admits paid dials, not selection attempts:
+            # spend it only after the backoff lease exists and the episode
+            # still has dial time, so skipped or expired attempts cannot burn
+            # the per-minute cap without any provider traffic.
+            episode = current_recovery.get()
+            if episode is not None and episode.dial_budget() <= 0:
+                on_close()
+                return None
+            if _paid_spillover_scope(service) and not await paid_admission.admit(service.value):
+                # Release any half-open probe acquired for this attempt.
+                # Budget denial is policy, never a provider-health failure.
+                on_close()
+                return await _restore_configured_chain()
             return await _attempt_dial(service, connect, target, circuit, on_success, on_close, backoff_lease)
         finally:
             backoff_lease.finish()

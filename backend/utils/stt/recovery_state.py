@@ -308,6 +308,11 @@ class LiveRecoveryController:
             if len(self.attempted_targets) >= MAX_RECOVERY_TARGETS:
                 return False
             self.attempted_targets.add(identity)
+            # The no-text lease failback authorizes exactly one Parakeet dial,
+            # whatever endpoint identity the connected socket reports; consume
+            # the grant here so a mismatch retry cannot dial Parakeet twice.
+            if self._cheap_reentry_granted and not self._cheap_reentry_used and provider_family(identity) == 'parakeet':
+                self._cheap_reentry_used = True
         self.dial_attempts += 1
         if self._deadline is not None and self.state is RecoveryState.provider_died:
             self.state = RecoveryState.recovering

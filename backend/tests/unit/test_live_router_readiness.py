@@ -262,7 +262,7 @@ def test_failback_does_not_bench_paid_or_reset_attempt_accounting(monkeypatch):
 
 
 def test_rebuild_cap_tracks_registry_without_changing_shadow(monkeypatch):
-    assert MAX_RECOVERY_TARGETS >= MAX_REGISTRY_TARGETS
+    assert MAX_RECOVERY_TARGETS >= MAX_REGISTRY_TARGETS + 4
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     host = SimpleNamespace(
@@ -288,4 +288,112 @@ def test_rebuild_cap_tracks_registry_without_changing_shadow(monkeypatch):
     select = Mock(return_value=(STTService.modulate, 'en', 'velma-2'))
     assert live_recovery.select_live_replacement(receiver, 'modulate', select, managed=True)[0] is not None
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    assert live_recovery.select_live_replacement(receiver, 'modulate', select, managed=True) == (None, None, None)
+
+
+@pytest.mark.asyncio
+async def test_budget_denial_skipped_attempt_spends_no_admission(monkeypatch, isolated):
+    """A backoff-gated (skipped) paid promotion must not burn the Redis budget:
+    admission is spent only after the backoff lease exists for a real dial."""
+    from utils.stt import connect_backoff as connect_backoff_module
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('STT_PAID_SPILLOVER_BUDGET_ENABLED', 'true')
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
+    monkeypatch.setenv('PARAKEET_FULL', 'true')
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+    _prime_chain(
+        monkeypatch,
+        [
+            dict(id='parakeet-window', family='parakeet', cost_per_audio_hour=0.02, capacity_env='PARAKEET_FULL'),
+            dict(id='soniox', family='soniox', cost_per_audio_hour=0.04),
+            dict(id='modulate-velma-2', family='modulate', cost_per_audio_hour=0.05),
+        ],
+    )
+    monkeypatch.setattr(live_chain.health, 'cost_snapshot', lambda targets, _: {t.id: GateState() for t in targets})
+    admission = AsyncMock(return_value=True)
+    monkeypatch.setattr(paid_admission, 'admit', admission)
+
+    # Soniox (the cost-ordered paid promotion after Parakeet capacity refusal)
+    # sits inside an open connect-backoff window, so its route is skipped.
+    backoff = connect_backoff_module.ConnectRefusalBackoff(clock=lambda: 0.0)
+    monkeypatch.setattr(live_chain, 'connect_backoff', lambda: backoff)
+    soniox_state = backoff._state('soniox', 'soniox')
+    soniox_state.refusals.extend([0.0, 0.0, 0.0])
+    soniox_state.open = True
+    soniox_state.cooldown_until = 60.0
+
+    async def paid():
+        return SimpleNamespace(is_connection_dead=False)
+
+    _, service = await live_chain.connect_configured_chain(
+        primary_service=STTService.modulate,
+        connect_primary=paid,
+        callbacks={STTService.parakeet: paid, STTService.soniox: paid},
+        failed=set(),
+        models=['modulate-velma-2', 'parakeet-window', 'soniox'],
+        routing_uid='synthetic',
+        routing_language='en',
+        routing_models={'parakeet': 'parakeet-window'},
+    )
+    assert service.value == 'modulate'  # configured order restored without any dial on Soniox
+    # The skipped Soniox promotion never reaches Redis: the only admission is
+    # the real Modulate dial. (The pre-fix gate spent a second admission on the
+    # backoff-skipped Soniox attempt before any lease existed.)
+    assert admission.await_count == 1
+    admission.assert_awaited_once_with('modulate')
+
+
+@pytest.mark.asyncio
+async def test_cheap_reentry_grant_consumed_by_new_identity_dial(monkeypatch, isolated):
+    """The no-text lease failback authorizes exactly one Parakeet dial: after
+    the first Parakeet reservation (even under a new endpoint identity), the
+    configured-chain retry after TargetEngineMismatch cannot dial Parakeet
+    again through the grant."""
+    host = SimpleNamespace(state=SimpleNamespace(active=True), stt_language='en')
+    recovery = LiveRecoveryController(host)
+    recovery.mark_attempted('parakeet-window')
+    recovery.mark_attempted('soniox')
+    recovery.begin(family='soniox')
+    assert recovery.grant_cheap_reentry('parakeet-window')
+    # Lease-return dial lands on a different Parakeet endpoint identity.
+    assert recovery.reserve('parakeet-custom-endpoint', 'parakeet')
+    assert 'parakeet-custom-endpoint' in recovery.attempted_targets
+    # The grant is consumed by the first Parakeet-family reservation...
+    assert not recovery._cheap_reentry_available('parakeet-window')
+    # ...so the original window identity cannot re-enter through the grant.
+    assert not recovery.can_attempt('parakeet-window')
+    assert not recovery.reserve('parakeet-window', 'parakeet')
+
+
+def test_malformed_routing_percent_keeps_legacy_failover_alive(monkeypatch):
+    """A malformed STT_ROUTING_ON_PERCENT must degrade the rebuild cap to the
+    router-off policy, not abort legacy failover selection with ValueError."""
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', 'not-a-number')
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic'),
+        stt_language='en',
+        language='en',
+        multi_lang_enabled=False,
+        language_profile=None,
+        stt_service=STTService.modulate,
+    )
+    receiver = SimpleNamespace(
+        host=host,
+        stt_socket=SimpleNamespace(routing_target='fourth', _routing_active=True),
+        _stt_failed_targets=set(),
+        _stt_failed_providers=set(),
+        _stt_failed_reasons={},
+        _stt_rebuild_attempts=3,
+        _settle_pending_live_failover_failure=Mock(),
+        _stt_rescue_retries=set(),
+    )
+    monkeypatch.setattr(live_recovery, 'note_typed_provider_death', lambda *_: None)
+    monkeypatch.setattr(live_recovery, 'window_selection_kwargs', lambda *_: {})
+    select = Mock(return_value=(STTService.modulate, 'en', 'velma-2'))
+    # Router-on cap (MAX_RECOVERY_TARGETS=20) would allow the rebuild; the
+    # malformed percent must fall back to the managed router-off cap of 3,
+    # which this receiver has already exhausted.
     assert live_recovery.select_live_replacement(receiver, 'modulate', select, managed=True) == (None, None, None)

@@ -12,6 +12,17 @@ from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
 from config.live_stt_registry import routing_on
 
 
+def _router_active(managed: bool, receiver: Any) -> bool:
+    """Router-on eligibility for the rebuild cap; malformed rollout percent
+    must not abort legacy failover — it degrades to the router-off cap."""
+    if not managed:
+        return False
+    try:
+        return routing_on(receiver.host.request.uid)
+    except ValueError:
+        return False
+
+
 def allow_healthy_soniox_rescue(receiver: Any, *, managed: bool) -> None:
     """One extra transport recovery on a currently healthy last rescue leg."""
     if (
@@ -42,7 +53,7 @@ def _select_live_replacement_legacy(
     receiver._stt_rebuild_attempts += 1
     if dead_provider:
         receiver._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
-    router_active = managed and routing_on(receiver.host.request.uid)
+    router_active = _router_active(managed, receiver)
     cap = MAX_RECOVERY_TARGETS if router_active else (3 if managed else MAX_STT_FAILOVERS)
     if max(failures, receiver._stt_rebuild_attempts) > cap:
         receiver._settle_pending_live_failover_failure()
