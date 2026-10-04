@@ -19,6 +19,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import java.util.UUID
@@ -40,6 +41,8 @@ class OmiBleManager private constructor(private val application: Application) {
         private const val BOND_TIMEOUT_MS = 15000L // 15s — bond request timeout
         private const val PREFS_BATTERY = "battery_history"
         private val BATTERY_LEVEL_CHAR_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
+        private const val DIAGNOSTICS_SERVICE = "19b10040-e8f2-537e-4f6c-d104768a1214"
+        private const val DIAGNOSTICS_CHAR = "19b10041-e8f2-537e-4f6c-d104768a1214"
 
         @Volatile
         private var _instance: OmiBleManager? = null
@@ -135,6 +138,7 @@ class OmiBleManager private constructor(private val application: Application) {
     /// Synchronized on the deque itself for reader/writer safety.
     val rssiHistory = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Pair<Long, Int>>>()
     val chargingState = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    private val lastDiagnosticsReadUptime = mutableMapOf<String, Long>()
 
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
@@ -359,6 +363,49 @@ class OmiBleManager private constructor(private val application: Application) {
     }
 
     // ── Characteristic operations ──
+
+    fun readFirmwareDiagnosticsIfDue(address: String, completion: (Result<ByteArray>) -> Unit) {
+        mainHandler.post {
+            val addr = address.uppercase()
+            val gatt = connectedGatts[addr] ?: return@post
+            val characteristic = findCharacteristic(gatt, DIAGNOSTICS_SERVICE, DIAGNOSTICS_CHAR) ?: return@post
+            val now = SystemClock.elapsedRealtime()
+            val last = lastDiagnosticsReadUptime[addr]
+            if (last != null && now - last < 15 * 60_000L) return@post
+            val key = "$addr:$DIAGNOSTICS_SERVICE:$DIAGNOSTICS_CHAR".lowercase()
+            if (readCompletions.containsKey(key)) return@post
+            lastDiagnosticsReadUptime[addr] = now
+            lateinit var command: Runnable
+            lateinit var timeout: Runnable
+            val callback: (Result<ByteArray>) -> Unit = { result ->
+                mainHandler.removeCallbacks(timeout)
+                completion(result)
+            }
+            timeout = Runnable {
+                if (readCompletions.remove(key, callback)) {
+                    callback(Result.failure(Exception("Diagnostics read timed out")))
+                    completeCommand(command)
+                }
+            }
+            command = Runnable {
+                readCompletions[key] = callback
+                try {
+                    if (connectedGatts[addr] !== gatt || !gatt.readCharacteristic(characteristic)) {
+                        readCompletions.remove(key, callback)
+                        callback(Result.failure(Exception("Diagnostics read rejected")))
+                        completeCommand(command)
+                    } else {
+                        mainHandler.postDelayed(timeout, 10_000L)
+                    }
+                } catch (e: Exception) {
+                    readCompletions.remove(key, callback)
+                    callback(Result.failure(e))
+                    completeCommand(command)
+                }
+            }
+            enqueueCommand(command)
+        }
+    }
 
     fun readCharacteristic(
         address: String,
@@ -667,8 +714,16 @@ class OmiBleManager private constructor(private val application: Application) {
         )
     }
 
+    @Synchronized
     private fun persistBatteryReading(address: String, level: Int) {
         batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis(), chargingState[address.uppercase()])
+    }
+
+    @Synchronized
+    fun recordChargingState(address: String, charging: Boolean) {
+        val addr = address.uppercase()
+        chargingState[addr] = charging
+        batteryHistoryRecorder.backfillCharging(batteryHistoryKey(addr), charging)
     }
 
     fun getBatteryHistory(address: String): List<BleBatteryPoint> {
@@ -815,6 +870,8 @@ class OmiBleManager private constructor(private val application: Application) {
             val key = "$address:$serviceUuid:$charUuid".lowercase()
 
             val completion = readCompletions.remove(key)
+            // A diagnostics callback arriving after its timeout no longer owns the queue.
+            if (charUuid == DIAGNOSTICS_CHAR && completion == null) return@dispatchGattCallback
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 completion?.invoke(Result.success(value))
             } else {
