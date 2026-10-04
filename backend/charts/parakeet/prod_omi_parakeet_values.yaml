@@ -195,18 +195,19 @@ autoscaling:
       policies:
       - type: Pods
         value: 1
-        periodSeconds: 300
+        periodSeconds: 60
     scaleDown:
       stabilizationWindowSeconds: 600
       policies:
       - type: Pods
         value: 1
         periodSeconds: 600
-  # Live window admission refuses new sessions at ~3 active requests per pod and ~27% GPU
-  # (measured 2026-10-01 evening peak: 6.7% refusals while the old 20 / 70 targets never
-  # fired). Scale before the live gate refuses, not after.
-  requestsPerPod: 2
-  targetGPUUtilization: 35
+  # Dev L4 mixed-load qualification: plan for eight paced live sessions per GPU.
+  # Active HTTP requests include backfill; these are scaling signals, not leases.
+  # Keep headroom below the failed 16-session step and react before cold-start lag.
+  # Receipts and limitations: docs/operational/parakeet-live-admission-loadtest.md.
+  requestsPerPod: 3
+  targetGPUUtilization: 45
 
 # Additional volumes on the output Deployment definition.
 volumes: []

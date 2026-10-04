@@ -104,6 +104,14 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
     )
     assert hpa['spec']['minReplicas'] == 3
     assert hpa['spec']['maxReplicas'] == 7
+    metrics = hpa['spec']['metrics']
+    request_metric = next(metric['pods'] for metric in metrics if metric['type'] == 'Pods')
+    gpu_metric = next(metric['external'] for metric in metrics if metric['type'] == 'External')
+    assert request_metric['metric']['name'] == 'parakeet_active_requests_total'
+    assert request_metric['target'] == {'type': 'AverageValue', 'averageValue': '3'}
+    assert gpu_metric['metric']['name'] == 'parakeet_gpu_utilization'
+    assert gpu_metric['target'] == {'type': 'Value', 'value': '45'}
+    assert hpa['spec']['behavior']['scaleUp']['policies'] == [{'type': 'Pods', 'value': 1, 'periodSeconds': 60}]
     assert 'progressDeadlineSeconds' not in deployment['spec']
     container = deployment['spec']['template']['spec']['containers'][0]
     assert container['readinessProbe']['httpGet']['path'] == '/health'
@@ -189,3 +197,26 @@ def test_headless_batch_pressure_service_selects_each_ready_gpu_pod(environment)
     assert services[f'{name}-headless']['spec']['clusterIP'] == 'None'
     assert services[f'{name}-headless']['spec']['selector'] == services[name]['spec']['selector']
     assert services[f'{name}-headless']['spec']['ports'][0]['port'] == 8080
+
+
+def test_prod_mixed_load_headroom_is_consistent_across_runtime_and_helm():
+    listen = yaml.safe_load((ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text())
+    env = _literal_env(listen)
+    overlay = yaml.safe_load((ROOT / 'backend/deploy/runtime_env/prod.overlay.yaml').read_text())
+    runtime = overlay['overlay']['gke']['backend-listen']['env']
+    expected = {
+        'PARAKEET_WINDOW_MAX_SESSIONS': '16',
+        'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS': '3',
+        'PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA': '8',
+        'PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS': '1.5',
+    }
+    for name, value in expected.items():
+        assert env[name] == runtime[name]['value'] == value
+    hpa = _values('prod')['autoscaling']
+    assert hpa['requestsPerPod'] == 3
+    assert hpa['targetGPUUtilization'] == 45
+    assert hpa['requestsPerPod'] < int(env['PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA'])
+    assert float(env['PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS']) < float(
+        env['PARAKEET_WINDOW_POST_TIMEOUT_SECONDS']
+    )
+    assert hpa['minReplicas'] == int(env['PARAKEET_BATCH_PRESSURE_MIN_REPLICAS'])

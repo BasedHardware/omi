@@ -1,6 +1,9 @@
 """Real cached fleet refresh and admission policy, with synthetic metrics only."""
 
 import asyncio
+from pathlib import Path
+
+import yaml
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -485,3 +488,36 @@ async def test_invalid_pressure_configuration_stands_down(fleet, monkeypatch, na
         await fleet.pressure._refresh('synthetic.invalid', 2, client)
     assert not fleet.pressure.allows('synthetic.invalid', 2)
     assert fleet.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pending,oldest', [(8, 0), (0, 1.5)])
+async def test_checked_in_prod_thresholds_allow_short_burst_but_refuse_hot_majority(
+    fleet, monkeypatch, pending, oldest
+):
+    root = Path(__file__).resolve().parents[3]
+    values = yaml.safe_load((root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text())
+    env = {entry['name']: str(entry['value']) for entry in values['env'] if 'value' in entry}
+    for name, value in env.items():
+        if name.startswith('PARAKEET_BATCH_PRESSURE_'):
+            monkeypatch.setenv(name, value)
+    fleet.ips[:] = fleet.ips[:3]
+    host = env['PARAKEET_BATCH_PRESSURE_POOL_HOST']
+    minimum = int(env['PARAKEET_BATCH_PRESSURE_MIN_REPLICAS'])
+    async with httpx.AsyncClient(transport=fleet.transport) as client:
+        for ip in fleet.ips:
+            fleet.payloads[ip] = {'live_pending_requests': 7, 'live_oldest_pending_seconds': 1.49}
+        await fleet.pressure._refresh(host, minimum, client)
+        assert fleet.pressure.allows(host, minimum)
+        for count in (1, 2):
+            fleet.payloads[fleet.ips[count - 1]] = {
+                'live_pending_requests': pending,
+                'live_oldest_pending_seconds': oldest,
+            }
+            await fleet.pressure._refresh(host, minimum, client)
+            assert fleet.pressure.allows(host, minimum) is (count == 1)
+        # A missing replica cannot turn pressure into healthy headroom.
+        fleet.failed.add(fleet.ips[-1])
+        fleet.clock[0] += 16
+        await fleet.pressure._refresh(host, minimum, client)
+        assert not fleet.pressure.allows(host, minimum)

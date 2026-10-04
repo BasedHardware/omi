@@ -180,6 +180,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            # Live window queue admission belongs to listen; pusher consumes no audio.
+            "PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS",
+            "PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA",
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",

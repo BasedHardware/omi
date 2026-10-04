@@ -460,6 +460,10 @@ env:
     value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
   - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
     value: "3"
+  - name: PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA
+    value: "8"
+  - name: PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS
+    value: "1.5"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION

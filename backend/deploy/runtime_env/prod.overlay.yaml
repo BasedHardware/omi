@@ -87,6 +87,12 @@ overlay:
           category: reliability
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
           value: '3'
+        PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA:
+          value: '8'
+          category: reliability
+        PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS:
+          value: '1.5'
+          category: reliability
         STT_SERVICE_MODELS:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:

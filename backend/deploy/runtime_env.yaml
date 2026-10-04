@@ -2573,6 +2573,12 @@ environments:
           PARAKEET_WINDOW_MAX_EMPTY_STREAK:
             value: '4'
             category: reliability
+          PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA:
+            value: '8'
+            category: reliability
+          PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS:
+            value: '1.5'
+            category: reliability
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BUCKET_SCREEN_FRAMES:

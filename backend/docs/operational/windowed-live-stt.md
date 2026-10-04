@@ -99,6 +99,24 @@ excluded listen shapes drop only the `parakeet-window` token from the configured
 list; they keep the rest of `STT_SERVICE_MODELS` (they are not rewritten onto
 code-default Modulate).
 
+## Mixed-load capacity proposal (2026-10-04)
+
+The [dev L4 capacity qualification](parakeet-live-admission-loadtest.md) maps
+all admission boundaries and records the concurrency sweep. Its draft proposes
+HPA targets of 3 active HTTP requests / 45% GPU, retaining 3–7 replicas and zone
+spread, with scale-up limited to one pod per 60 s. Listen's proposed prod-only
+busy thresholds are 8 pending live requests or 1.5 s oldest live wait; code
+fallback defaults remain 4 / 0.75. The 50% busy-plus-unknown refusal and fresh
+quorum of three remain enforced.
+
+Plan for eight paced live sessions per GPU under the tested diarized batch mix.
+`PARAKEET_WINDOW_MAX_SESSIONS=16` is a **listen-process lease cap**, not a GPU-pod
+cap. Increasing it would not directly increase GPU admission. There is no
+GPU-owner lease for v1 windows; the pending/age gate is the admission mechanism.
+This proposal needs a separately authorized production bake of POST p95 <3 s,
+first delivered text <30 s, refusals, and batch progress. It has not been
+deployed to production. The original rollout instructions below are historical.
+
 ## Production ramp: 1% → 5% → 25% → 50% → 100%
 
 Deploy the Parakeet server revision and its 3–6 replica HPA first. Wait until
