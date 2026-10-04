@@ -912,6 +912,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         wal.syncStartedAt = null;
         wal.syncEtaSeconds = null;
         wal.syncSpeedKBps = null;
+        wal.deviceDownloadFraction = null;
         wal.syncMethod = SyncMethod.ble;
         listener.onWalUpdated();
         _resetSyncState();
@@ -922,6 +923,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       wal.syncStartedAt = null;
       wal.syncEtaSeconds = null;
       wal.syncSpeedKBps = null;
+      wal.deviceDownloadFraction = null;
       wal.syncMethod = SyncMethod.ble;
       listener.onWalUpdated();
     }
@@ -984,6 +986,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
       walToSync.syncSpeedKBps = null;
+      walToSync.deviceDownloadFraction = null;
       walToSync.syncMethod = SyncMethod.ble;
       listener.onWalUpdated();
       _resetSyncState();
@@ -994,6 +997,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     wal.syncStartedAt = null;
     wal.syncEtaSeconds = null;
     wal.syncSpeedKBps = null;
+    wal.deviceDownloadFraction = null;
     wal.syncMethod = SyncMethod.ble;
 
     listener.onWalUpdated();

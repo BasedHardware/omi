@@ -565,11 +565,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   /// Phone-local "Waiting to sync" rows stay null so they do not grow a bar.
   /// Percent and speed are not returned here; those stay on the status card.
   double? _rowDownloadFraction(Wal wal) {
-    if (wal.deviceDownloadFraction != null) return wal.deviceDownloadFraction;
     final sync = context.read<SyncProvider>();
-    if (sync.syncState.phase != SyncPhase.downloadingFromDevice) return null;
+    if (!sync.syncState.isSyncing || sync.syncState.phase != SyncPhase.downloadingFromDevice) return null;
     final onDevice = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
     if (!onDevice || wal.status != WalStatus.miss) return null;
+    if (wal.deviceDownloadFraction != null) return wal.deviceDownloadFraction;
     if (wal.isSyncing) return sync.syncState.progress;
     if (wal.syncDisplayState != WalSyncDisplayState.waiting) return null;
     final peers = sync.allWals.where(

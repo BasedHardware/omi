@@ -352,6 +352,9 @@ class RingStorageSyncImpl implements RingStorageSync {
       DebugLogManager.logError(e, null, 'RingStorageSync failed', {'device': _device?.id});
     } finally {
       _isSyncing = false;
+      for (final w in _wals) {
+        w.deviceDownloadFraction = null;
+      }
     }
 
     progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
@@ -374,6 +377,9 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug('RingStorageSync.syncWal: error: $e');
     } finally {
       _isSyncing = false;
+      for (final w in _wals) {
+        w.deviceDownloadFraction = null;
+      }
     }
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
   }

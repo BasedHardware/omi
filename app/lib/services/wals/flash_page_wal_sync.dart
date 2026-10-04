@@ -274,6 +274,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         wal.syncStartedAt = null;
         wal.syncEtaSeconds = null;
         wal.syncSpeedKBps = null;
+        wal.deviceDownloadFraction = null;
         listener.onWalUpdated();
 
         if (!completed && _cancelRequested) {
@@ -330,6 +331,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     walToSync.syncStartedAt = null;
     walToSync.syncEtaSeconds = null;
     walToSync.syncSpeedKBps = null;
+    walToSync.deviceDownloadFraction = null;
 
     listener.onWalUpdated();
     return null;
@@ -577,6 +579,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           _isSyncing = false;
           wal.syncEtaSeconds = null;
           wal.syncSpeedKBps = null;
+          wal.deviceDownloadFraction = null;
           listener.onWalUpdated();
 
           await limitlessConnection.enableRealTimeMode();
@@ -618,6 +621,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       // Clear sync progress info
       wal.syncEtaSeconds = null;
       wal.syncSpeedKBps = null;
+      wal.deviceDownloadFraction = null;
 
       listener.onWalUpdated();
 
@@ -700,6 +704,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       // Clear sync progress info on error
       wal.syncEtaSeconds = null;
       wal.syncSpeedKBps = null;
+      wal.deviceDownloadFraction = null;
 
       listener.onWalUpdated();
       try {

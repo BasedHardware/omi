@@ -631,6 +631,7 @@ class StorageSyncImpl implements StorageSync {
       await _storageStream?.cancel();
       _storageStream = null;
       timeoutTimer.cancel();
+      if (!endReached || hasError) wal.deviceDownloadFraction = null;
     }
 
     bool transferComplete = endReached &&

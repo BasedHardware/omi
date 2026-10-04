@@ -39,7 +39,10 @@ class DeviceDownloadMeter extends StatelessWidget {
         : !known
             ? null
             : hasSpeed
-                ? context.l10n.syncCardDownloadPercentSpeed(percent, speed.toStringAsFixed(0))
+                ? context.l10n.syncCardDownloadPercentSpeed(
+                    percent,
+                    speed < 10 ? speed.toStringAsFixed(1) : speed.toStringAsFixed(0),
+                  )
                 : context.l10n.syncCardDownloadPercent(percent);
 
     return Column(

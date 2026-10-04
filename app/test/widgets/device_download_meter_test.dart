@@ -1,9 +1,4 @@
-import 'dart:io';
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -31,25 +26,9 @@ Widget _app(Widget child) {
   );
 }
 
-Future<void> _loadSf() async {
-  final bytes = await File('/System/Library/Fonts/SFNS.ttf').readAsBytes();
-  final loader = FontLoader('SFNS')..addFont(Future.value(ByteData.sublistView(bytes)));
-  await loader.load();
-}
-
-Future<void> _save(WidgetTester tester, Finder finder, String path) async {
-  final boundary = tester.renderObject<RenderRepaintBoundary>(finder);
-  await tester.runAsync(() async {
-    final image = await boundary.toImage(pixelRatio: 3);
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    await File(path).writeAsBytes(data!.buffer.asUint8List());
-  });
-}
-
 void main() {
-  setUpAll(() async {
+  setUpAll(() {
     OmiColors.active = OmiPalette.light;
-    await _loadSf();
   });
 
   testWidgets('total card shows a bar plus percent and speed; the row bar has neither', (tester) async {
@@ -93,7 +72,7 @@ void main() {
                 const SizedBox(height: 12),
                 Container(
                   decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
-                  child: Column(
+                  child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _Row(title: 'Today  ·  1:42 PM  ·  1m 15s', subtitle: 'Waiting to sync'),
@@ -127,12 +106,6 @@ void main() {
 
     final cardBar = tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator).at(0));
     expect(cardBar.value, closeTo(0.38, 0.001));
-
-    await _save(
-      tester,
-      find.byKey(const Key('offline-sync-render')),
-      '/Users/david/.hermes/cache/scratch/offline-sync-real-render.png',
-    );
   });
 
   testWidgets('a waiting row does not invent a percent', (tester) async {
