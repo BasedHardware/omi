@@ -136,7 +136,15 @@ disconnects in the rollback drill; abrupt process death can lose in-memory tail.
 
 ## Monitoring prerequisite (coordinator only)
 
-Before any canary exists, deploy the reviewed main monitoring configuration.
+Before any canary exists, **reconcile the production adapter values with live
+and review the local render before any Helm upgrade**. The adapter is shared
+by listen, Parakeet, pusher, VAD, diarizer and Deepgram HPAs. An incomplete
+values file replaces its rule lists and can remove metrics used by another
+service. Production values preserve all 18 live rules; NLLB's unused external
+rule is excluded (the live NLLB HPA scales on CPU). If live changes again,
+reconcile it in a reviewed PR first. Do not add an unreviewed metric or drop a
+live rule as part of canary preparation.
+
 The scrape must copy `track` to `listen_track`, and the adapter must exclude
 `listen_track="canary"` in **both** listen queries. A listen Helm upgrade does
 not install these changes. The existing monitoring workflow can install the
@@ -145,30 +153,99 @@ dispatch); it also deploys the Cloud Run exporter and provisions live alerts,
 so review that scope. It does not deploy the adapter. Alternatively the
 coordinator can use the monitoring README's pinned stack Helm procedure.
 
+Use a checkout at the reviewed merged monitoring revision. Run this read-only
+preflight from the repository root; keep captures outside Git. Clear the GKE
+auth plugin cache before every kubectl call and always use an explicit context.
+`helm template` is local; do not substitute a cluster dry-run or apply for it.
+
 ```bash
 export PROD_CTX=gke_based-hardware_us-central1_prod-omi-gke
 export MON_NS=prod-omi-monitoring
-source ~/.local/bin/gcp-agent-env.sh prod-operator
-# Save the DEPLOYED revision of each release for rollback; inspect history.
+export ADAPTER_VERSION=4.14.2
+export ADAPTER_REVIEW_DIR=$(mktemp -d /tmp/omi-adapter-review.XXXXXX)
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
+kubectl --context "$PROD_CTX" -n "$MON_NS" get configmap prod-omi-prometheus-adapter -o yaml > "$ADAPTER_REVIEW_DIR/configmap.yaml"
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
+kubectl --context "$PROD_CTX" -n "$MON_NS" get deployment prod-omi-prometheus-adapter -o yaml > "$ADAPTER_REVIEW_DIR/deployment.yaml"
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
+kubectl --context "$PROD_CTX" get apiservices v1beta1.external.metrics.k8s.io v1beta1.custom.metrics.k8s.io -o yaml > "$ADAPTER_REVIEW_DIR/apiservices.yaml"
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update prometheus-community
+helm template prod-omi-prometheus-adapter prometheus-community/prometheus-adapter \
+  --version 4.14.2 --namespace "$MON_NS" \
+  --values backend/charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml \
+  > "$ADAPTER_REVIEW_DIR/rendered.yaml"
+backend/.venv/bin/python backend/scripts/diff_prod_adapter.py \
+  --rendered "$ADAPTER_REVIEW_DIR/rendered.yaml" \
+  --configmap "$ADAPTER_REVIEW_DIR/configmap.yaml" \
+  --deployment "$ADAPTER_REVIEW_DIR/deployment.yaml" \
+  --apiservices "$ADAPTER_REVIEW_DIR/apiservices.yaml"
+backend/.venv/bin/python -m pytest -q backend/tests/unit/test_monitoring_adapter_hpa_contract.py
+```
+
+The comparator normalizes YAML and rule ordering, prints the rule diff, and
+fails on any difference beyond the two reviewed listen canary selectors.
+Deployment arguments and both APIService specs must also match (the API server
+defaults an omitted service port to 443). A PASS does not review every object:
+inspect the remaining rendered resources against read-only live captures,
+including RBAC and the full Deployment. HOLD on unexplained drift. The
+2026-10-04 reconciliation found matching Deployment arguments/image and
+APIService specs; the config checksum changes, live has a historical
+`kubectl.kubernetes.io/restartedAt` annotation, and Kubernetes fills default
+fields absent from the render. Two rendered custom-metrics RBAC objects were absent live:
+ClusterRole `prometheus-adapter-server-resources` (get/list/watch on custom
+metrics) and ClusterRoleBinding `prometheus-adapter-hpa-controller` (binds that
+role to the HPA controller). The upgrade will create them. All other rendered
+RBAC content and the ServiceAccount matched; Service differences were assigned
+cluster IPs and Kubernetes defaults. Review these additions before approving
+the upgrade and recheck live state immediately beforehand.
+
+Only after reconciliation is merged, the preflight passes, and the coordinator
+approves the reviewed object diff, use an identity authorized for GKE writes.
+The `prod-operator` agent tier currently has no GKE write permission. Helm
+history reads release secrets, which `ro-prod` cannot list; the authorized
+coordinator must inspect history and capture the **deployed**, known-good
+revision immediately before the upgrade (do not assume the latest row is
+healthy). Confirm the adapter chart is still 4.14.2; if it changed, HOLD and
+repeat the pinned render review.
+
+```bash
+# Coordinator identity with Helm release-secret reads and approved GKE writes.
 helm --kube-context "$PROD_CTX" -n "$MON_NS" history prod-omi-kube-prometheus-stack
 helm --kube-context "$PROD_CTX" -n "$MON_NS" history prod-omi-prometheus-adapter
 export STACK_BEFORE=<deployed-stack-revision>
 export ADAPTER_BEFORE=<deployed-adapter-revision>
-export ADAPTER_VERSION=<currently-deployed-prometheus-adapter-chart-version>
 gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=prod
 # Find the exact main run, then gh run watch RUN_ID --exit-status; proceed only on success.
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update prometheus-community
 helm upgrade prod-omi-prometheus-adapter prometheus-community/prometheus-adapter \
-  --version "$ADAPTER_VERSION" --namespace "$MON_NS" --kube-context "$PROD_CTX" \
+  --version 4.14.2 --namespace "$MON_NS" --kube-context "$PROD_CTX" \
   --values backend/charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml \
   --atomic --wait --timeout 10m
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
 kubectl --context "$PROD_CTX" -n "$MON_NS" get secret prod-omi-kube-prometheus-s-prometheus-scrape-confg \
   -o jsonpath='{.data.additional-scrape-configs\.yaml}' | base64 --decode
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
 kubectl --context "$PROD_CTX" -n "$MON_NS" get configmap prod-omi-prometheus-adapter -o yaml
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
 kubectl --context "$PROD_CTX" -n "$MON_NS" rollout status deployment/prod-omi-prometheus-adapter --timeout=5m
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
+kubectl --context "$PROD_CTX" get --raw /apis/external.metrics.k8s.io/v1beta1/namespaces/prod-omi-backend/backend_listen_requests_per_pod
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
 kubectl --context "$PROD_CTX" get --raw /apis/external.metrics.k8s.io/v1beta1/namespaces/prod-omi-backend/backend_listen_active_ws_connections_per_pod
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
+kubectl --context "$PROD_CTX" get --raw /apis/external.metrics.k8s.io/v1beta1/namespaces/prod-omi-backend/parakeet_gpu_utilization
+# Parakeet's requests metric uses the custom (Pods) API, not the external API.
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
+kubectl --context "$PROD_CTX" get --raw '/apis/custom.metrics.k8s.io/v1beta1/namespaces/prod-omi-backend/pods/*/parakeet_active_requests_total?labelSelector=app.kubernetes.io%2Fname%3Dparakeet%2Capp.kubernetes.io%2Finstance%3Dprod-omi-parakeet'
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
+kubectl --context "$PROD_CTX" -n prod-omi-backend describe hpa prod-omi-backend-listen prod-omi-parakeet
 ```
+
+Require nonempty metric items and fresh timestamps, plus `ScalingActive=True`
+with no `FailedGetExternalMetric` / `FailedGetPodsMetric` errors on either HPA.
+Allow the adapter's one-minute relist interval after rollout; persistent missing
+metrics mean HOLD and rollback before canary creation.
 
 Use a checkout at the reviewed merged monitoring revision for the adapter values.
 Verify the live scrape relabel and adapter rules match this PR; after Prometheus
@@ -177,7 +254,8 @@ starts, verify each ready canary's `up` and connection gauge has the canary
 label, verify **zero** canary gauge samples match the adapter selector, and
 compare its main-only average with the external API value. Recheck on pod
 replacement/expansion and after any monitoring change. HOLD/abort on mismatch.
-No production config/metric verification was performed by this PR's author.
+The reconciliation used read-only production config/HPA captures; no upgrade or
+post-upgrade metric verification was performed by its author.
 
 Rollback: remove canary and wait for its pods to terminate first, then roll back
 the adapter and, if needed, the stack to the captured deployed revisions. Never
@@ -186,7 +264,9 @@ alert changes from the workflow separately; these Helm rollbacks cover only the
 two releases named here.
 
 ```bash
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
 kubectl --context "$PROD_CTX" -n prod-omi-backend delete deployment prod-omi-backend-listen-canary --wait=true --timeout=5m
+rm -f ~/.kube/gke_gcloud_auth_plugin_cache
 kubectl --context "$PROD_CTX" -n prod-omi-backend wait --for=delete pod \
   -l app.kubernetes.io/name=backend-listen,track=canary --timeout=5m
 helm rollback prod-omi-prometheus-adapter "$ADAPTER_BEFORE" \
