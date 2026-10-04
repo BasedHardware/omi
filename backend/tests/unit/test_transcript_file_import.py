@@ -260,6 +260,38 @@ def test_a_numbered_srt_saved_as_txt_is_read_as_srt():
     assert as_txt.cues == as_srt.cues
 
 
+@pytest.mark.parametrize(
+    'text',
+    [
+        pytest.param(
+            'Call with Acme, notes\n\n00:01:02,000 --> 00:01:09,000\nClip: customer said onboarding was confusing.\n\n'
+            'Alice: we should simplify step two.\nBob: agreed, I will draft a proposal.\nAlice: great, review Friday.\n',
+            id='notes-quoting-one-clip',
+        ),
+        pytest.param(
+            'Weekly sync\nAgenda\n10:00 --> 10:15 Updates\n10:15 --> 10:30 Roadmap\n\n'
+            'Alice: hi everyone.\nBob: morning.\nAlice: let us start.\n',
+            id='agenda-with-times',
+        ),
+    ],
+)
+def test_a_txt_that_only_mentions_a_cue_timing_is_not_read_as_srt(text):
+    """Only a file that opens like SRT is SRT; parsing other text as SRT would drop most of it."""
+    parsed = tf.parse_transcript_file('notes.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert {'Alice', 'Bob'} <= {cue.speaker for cue in parsed.cues}
+
+
+def test_a_txt_that_opens_like_srt_but_holds_no_cues_is_read_as_text():
+    text = '00:00:01,000 --> 00:00:02,000\n\nAlice: hi there.\nBob: hello.\nAlice: shall we start?\n'
+
+    parsed = tf.parse_transcript_file('notes.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert {'Alice', 'Bob'} <= {cue.speaker for cue in parsed.cues}
+
+
 def test_file_dispatch_uses_extension_title_and_filename_date():
     parsed = tf.parse_transcript_file('2026-09-12 14_30_05 Vendor quote call.srt', SRT.encode('utf-8'), tz='UTC')
 
@@ -1233,6 +1265,60 @@ def test_a_future_zip_entry_date_is_clamped_to_now(tmp_path, job):
     buf = io.BytesIO()
     with ZipFile(buf, 'w') as zf:
         zf.writestr(zipfile.ZipInfo('call.srt', date_time=(2099, 1, 1, 0, 0, 0)), SRT)
+    before = datetime.now(timezone.utc)
+
+    _run(tmp_path, 'export.zip', buf.getvalue())
+
+    (stored,) = job.store.docs.values()
+    assert before <= stored['started_at'] <= datetime.now(timezone.utc)
+
+
+def _zip64_archive(monkeypatch) -> bytearray:
+    with monkeypatch.context() as patched:
+        patched.setattr(zipfile, 'ZIP_FILECOUNT_LIMIT', 0)  # force zipfile to write the zip64 records
+        return bytearray(_zip({'a.srt': SRT}))
+
+
+@pytest.mark.parametrize('pointer', [2**64 - 1, 2**62 + 12345], ids=['max', 'past-seekable'])
+def test_a_zip64_locator_pointing_past_the_file_is_refused_as_invalid(tmp_path, job, monkeypatch, pointer):
+    """zipfile refuses a locator that points past its own position; the gate must not crash on it."""
+    raw = _zip64_archive(monkeypatch)
+    struct.pack_into('<Q', raw, raw.rfind(b'PK\x06\x07') + 8, pointer)
+
+    _run(tmp_path, 'export.zip', bytes(raw))
+
+    assert job.final()['error'] == 'The upload is not a valid ZIP archive.'
+
+
+@pytest.mark.parametrize(
+    'patch',
+    [
+        # Version needed to extract above what zipfile supports: NotImplementedError.
+        pytest.param(lambda raw, at: struct.pack_into('<B', raw, at + 6, 64), id='future-version'),
+        # The UTF-8 name flag on bytes that are not UTF-8: UnicodeDecodeError.
+        pytest.param(
+            lambda raw, at: (
+                struct.pack_into('<H', raw, at + 8, struct.unpack_from('<H', raw, at + 8)[0] | 0x800),
+                raw.__setitem__(slice(at + 46, at + 47), b'\xff'),
+            ),
+            id='bad-utf8-name',
+        ),
+    ],
+)
+def test_an_archive_zipfile_cannot_read_is_refused_as_invalid(tmp_path, job, patch):
+    raw = bytearray(_zip({'a.srt': SRT}))
+    patch(raw, raw.rfind(b'PK\x01\x02'))
+
+    _run(tmp_path, 'export.zip', bytes(raw))
+
+    assert job.final()['error'] == 'The upload is not a valid ZIP archive.'
+
+
+def test_a_zip_entry_at_the_dos_epoch_is_dated_by_the_upload_instead(tmp_path, job):
+    """1980-01-01 is the ZIP format's zero date (ZipInfo's default), not a recording time."""
+    buf = io.BytesIO()
+    with ZipFile(buf, 'w') as zf:
+        zf.writestr(zipfile.ZipInfo('call.srt'), SRT)
     before = datetime.now(timezone.utc)
 
     _run(tmp_path, 'export.zip', buf.getvalue())

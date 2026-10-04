@@ -126,8 +126,6 @@ class ParsedTranscript:
 _TIMESTAMP = r'(?:\d{1,3}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?'
 _TIMESTAMP_RE = re.compile(r'(?:(\d{1,3}):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?')
 _CUE_TIMING_RE = re.compile(rf'^\s*({_TIMESTAMP})\s*-->\s*({_TIMESTAMP})')
-# A cue timing on any line: a numbered SRT puts its cue number on the first one.
-_SRT_TIMING_LINE_RE = re.compile(rf'^\s*{_TIMESTAMP}\s*-->', re.MULTILINE)
 _LABEL_RE = re.compile(r"^(?P<label>[^\W\d_][^:\n]{0,39}?)\s*:\s+(?P<rest>\S.*)$")
 _SPEAKER_N_RE = re.compile(r'^(?:speaker|participant|person|spk)\s*\d+$', re.IGNORECASE)
 # These run on uploaded lines of up to a few MB while holding the GIL, so each
@@ -398,6 +396,14 @@ def _decode_transcript(data: bytes) -> Optional[str]:
         return data.decode('cp1252', errors='replace')
 
 
+def _opens_like_srt(head: str) -> bool:
+    """Whether text opens the way an SRT does: a cue timing on the first block's first
+    or second line (after a cue number). A timing further in (a quoted clip, an agenda)
+    does not make notes an SRT, whose parser keeps only timed blocks."""
+    first = _blocks(head)[:1]
+    return bool(first) and any(_CUE_TIMING_RE.match(line) for line in first[0][:2])
+
+
 def parse_transcript_file(filename: str, data: bytes, *, tz: Optional[str] = 'UTC') -> Optional[ParsedTranscript]:
     """Parse one transcript file, or ``None`` when it is not a usable transcript."""
     extension = PurePosixPath(filename).suffix.lower()
@@ -409,8 +415,10 @@ def parse_transcript_file(filename: str, data: bytes, *, tz: Optional[str] = 'UT
     head = _normalize(text).lstrip()
     if head.startswith('WEBVTT'):
         cues = parse_vtt(text)
-    elif extension == '.srt' or (extension == '.txt' and _SRT_TIMING_LINE_RE.search(head[:500])):
+    elif extension == '.srt' or (extension == '.txt' and _opens_like_srt(head[:500])):
         cues = parse_srt(text)
+        if extension == '.txt' and not any(cue.text.strip() for cue in cues):
+            cues = parse_text_transcript(text)
     elif extension == '.vtt':
         cues = parse_vtt(text)
     else:
@@ -656,8 +664,11 @@ def _declared_zip_directory(path: str) -> Optional[tuple[int, int]]:
             locator = handle.read(_ZIP64_LOCATOR.size)
             if locator.startswith(_ZIP64_LOCATOR_SIGNATURE):
                 pointed_at = int(_ZIP64_LOCATOR.unpack(locator)[2])
-                for record_at in {pointed_at, locator_at - _ZIP64_END_OF_DIRECTORY.size}:
-                    if record_at < 0:
+                last_record_at = locator_at - _ZIP64_END_OF_DIRECTORY.size
+                for record_at in {pointed_at, last_record_at}:
+                    # zipfile never reads a record past the one just before the locator:
+                    # a pointer beyond it is refused as corrupt (or ignored by older versions).
+                    if not 0 <= record_at <= last_record_at:
                         continue
                     handle.seek(record_at)
                     record = handle.read(_ZIP64_END_OF_DIRECTORY.size)
@@ -709,7 +720,9 @@ def _open_upload(upload_path: str, original_filename: str, tz: Optional[str]) ->
             )
         try:
             archive = ZipFile(upload_path)
-        except BadZipFile as exc:
+        # zipfile also raises these for archives it cannot read: a UTF-8 name flag on
+        # bytes that are not UTF-8, or a newer format version than it supports.
+        except (BadZipFile, UnicodeDecodeError, NotImplementedError) as exc:
             raise TranscriptImportError('The upload is not a valid ZIP archive.') from exc
         try:
             return _Upload(entries=_archive_entries(archive, tz), archive=archive)
@@ -754,6 +767,9 @@ def _archive_entries(archive: ZipFile, tz: Optional[str]) -> List[_Entry]:
                 datetime(*info.date_time, tzinfo=zone).astimezone(timezone.utc), datetime.now(timezone.utc)
             )
         except ValueError:
+            archived_at = None
+        # The ZIP zero date (1980-01-01, ZipInfo's default) is not a recording time.
+        if archived_at is not None and archived_at.year < MIN_FILENAME_YEAR:
             archived_at = None
         entries.append(
             _Entry(
