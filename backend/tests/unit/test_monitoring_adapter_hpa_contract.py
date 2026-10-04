@@ -87,7 +87,18 @@ def _comparison_inputs():
     listen['seriesQuery'] = 'backend_listen_active_ws_connections'
     listen['metricsQuery'] = 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})'
     deployment = {'kind': 'Deployment', 'spec': {'template': {'spec': {'containers': [{'args': ['--config=x']}]}}}}
-    api = {'kind': 'APIService', 'metadata': {'name': 'external'}, 'spec': {'service': {'name': 'adapter'}}}
+    api = {
+        'kind': 'APIService',
+        'metadata': {
+            'name': 'external',
+            'labels': {'app.kubernetes.io/managed-by': 'Helm'},
+            'annotations': {
+                'meta.helm.sh/release-name': 'prod-omi-prometheus-adapter',
+                'meta.helm.sh/release-namespace': 'prod-omi-monitoring',
+            },
+        },
+        'spec': {'service': {'name': 'adapter'}},
+    }
     rendered = [{'kind': 'ConfigMap', 'data': {'config.yaml': yaml.safe_dump(config)}}, deployment, api]
     live_api = copy.deepcopy(api)
     live_api['spec']['service']['port'] = 443
@@ -113,6 +124,12 @@ def test_rollback_manifest_must_preserve_exact_live_rules():
     assert compare(rendered, live, deployment, apiservices, allow_canary_filter=False)[1]
     rendered[0]['data']['config.yaml'] = live['data']['config.yaml']
     assert compare(rendered, live, deployment, apiservices, allow_canary_filter=False)[1] == []
+
+
+def test_diff_rejects_api_service_without_release_ownership():
+    rendered, live, deployment, apiservices = _comparison_inputs()
+    apiservices['items'][0]['metadata'] = {'name': 'external'}
+    assert any('Helm ownership' in error for error in compare(rendered, live, deployment, apiservices)[1])
 
 
 @pytest.mark.parametrize('drift', ['missing-rule', 'extra-rule', 'query', 'args', 'apiservice'])

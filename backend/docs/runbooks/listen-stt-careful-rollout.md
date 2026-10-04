@@ -187,7 +187,8 @@ backend/.venv/bin/python -m pytest -q backend/tests/unit/test_monitoring_adapter
 The comparator normalizes YAML and rule ordering, prints the rule diff, and
 fails on any difference beyond the two reviewed listen canary selectors.
 Deployment arguments and both APIService specs must also match (the API server
-defaults an omitted service port to 443). A PASS does not review every object:
+defaults an omitted service port to 443). It also checks the live APIService
+Helm ownership metadata and fails closed when adoption would be rejected. A PASS does not review every object:
 inspect the remaining rendered resources against read-only live captures,
 including RBAC and the full Deployment. HOLD on unexplained drift. The
 2026-10-04 reconciliation found matching Deployment arguments/image and
@@ -199,7 +200,15 @@ metrics) and ClusterRoleBinding `prometheus-adapter-hpa-controller` (binds that
 role to the HPA controller). The upgrade will create them. All other rendered
 RBAC content and the ServiceAccount matched; Service differences were assigned
 cluster IPs and Kubernetes defaults. Review these additions before approving
-the upgrade and recheck live state immediately beforehand.
+the upgrade and recheck live state immediately beforehand. The live custom
+APIService `v1beta1.custom.metrics.k8s.io` was manually created and lacks
+`app.kubernetes.io/managed-by: Helm`, `meta.helm.sh/release-name` and
+`meta.helm.sh/release-namespace`; its spec matches, but Helm will reject
+adoption by this release. **HOLD: the live comparator currently fails on this
+ownership drift.** The coordinator must reconcile ownership as a separately
+reviewed production action, establish the complete rollback baseline below,
+and repeat the capture/comparison before any upgrade. Do not bypass ownership
+checks with a blanket takeover flag.
 
 Only after reconciliation is merged, the preflight passes, and the coordinator
 approves the reviewed object diff, use an identity authorized for GKE writes.

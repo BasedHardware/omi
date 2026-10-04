@@ -458,7 +458,9 @@ capture live config, Deployment and APIService objects read-only, render chart
 4.14.2 locally and run `backend/scripts/diff_prod_adapter.py`. Reconcile any
 missing live rules in a reviewed PR first. The only intended config difference
 for #20418 is `listen_track!="canary"` in both listen connection queries. Review
-all other object drift and capture the deployed Helm revision for rollback.
+all other object drift, including the manually created custom APIService's
+missing Helm ownership, and verify the deployed Helm rollback manifest retains
+all live rules. The linked prerequisite documents these remaining live HOLDs.
 The prod NLLB external rule is intentionally absent: the live NLLB HPA uses CPU,
 and adding a metric should be a separate reviewed change.
 

@@ -82,6 +82,15 @@ def compare(rendered, configmap, deployment, apiservices, allow_canary_filter=Tr
     if actual_apis != live_apis:
         reports.append(diff('APIService.spec', live_apis, actual_apis))
         errors.append('APIService specs differ')
+    for api in apiservices['items']:
+        metadata = api['metadata']
+        annotations = metadata.get('annotations', {})
+        if (
+            metadata.get('labels', {}).get('app.kubernetes.io/managed-by') != 'Helm'
+            or annotations.get('meta.helm.sh/release-name') != 'prod-omi-prometheus-adapter'
+            or annotations.get('meta.helm.sh/release-namespace') != 'prod-omi-monitoring'
+        ):
+            errors.append(f'APIService {metadata["name"]} lacks this release\'s Helm ownership; HOLD the upgrade')
     return reports, errors
 
 
