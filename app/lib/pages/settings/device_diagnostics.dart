@@ -93,14 +93,19 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
   }
 
+  int _recentWindowStart(int countersSinceMs) {
+    final cutoff = clock.now().millisecondsSinceEpoch - const Duration(days: 7).inMilliseconds;
+    return countersSinceMs > cutoff ? countersSinceMs : cutoff;
+  }
+
   /// The connection summary the page shows, over the window since [_countersSinceMs] (bounded by
   /// the native history's 7-day retention). Its window counts mirror `reconnection_count_window`
   /// and `fail_to_connect_count_window` in [_buildBundle].
   DiagnosticsSummary get _summary => summarizeDiagnostics(
-        _diagnostics?.disconnectHistory ?? const [],
-        nowMs: clock.now().millisecondsSinceEpoch,
-        sinceMs: _countersSinceMs,
-      );
+    _diagnostics?.disconnectHistory ?? const [],
+    nowMs: clock.now().millisecondsSinceEpoch,
+    sinceMs: _countersSinceMs == null ? null : _recentWindowStart(_countersSinceMs!),
+  );
 
   Future<void> _loadBatteryHistory() async {
     try {
@@ -138,6 +143,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final disconnects = (extended['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList();
     final since = extended['counters_since'] as num?;
     final sinceMs = since?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+    final windowStart = _recentWindowStart(sinceMs);
     return {
       'schema_version': 2,
       'device_id': widget.deviceId,
@@ -158,13 +164,14 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'fail_to_connect_count': diagnostics.failToConnectCount,
       'counters_since': {'reconnection_count': sinceMs, 'fail_to_connect_count': sinceMs},
       'reconnection_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= sinceMs && (e['timeToReconnectMs'] as num? ?? 0) > 0)
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && (e['timeToReconnectMs'] as num? ?? 0) > 0)
           .length,
       'fail_to_connect_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= sinceMs && e['eventType'] == 'fail_to_connect')
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && e['eventType'] == 'fail_to_connect')
           .length,
       'rssi_samples': extended['rssi_samples'] ?? [],
-      'battery_history': extended['battery_history_v2'] ??
+      'battery_history':
+          extended['battery_history_v2'] ??
           _batteryHistory.map((p) => {'ts': p.timestamp, 'level': p.level, 'charging': null}).toList(),
       'disconnect_history': disconnects
           .map(
@@ -486,8 +493,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           ),
         OmiSettingsRow(
           title: l10n.diagnosticsDrops,
-          value:
-              rate == null ? (windowed ? '${summary.drops}' : l10n.diagnosticsCountSincePairing(lifetimeDrops)) : null,
+          value: rate == null
+              ? (windowed ? '${summary.drops}' : l10n.diagnosticsCountSincePairing(lifetimeDrops))
+              : null,
           trailing: rate == null ? null : _valueStack('${summary.drops}', detail: l10n.diagnosticsDropsPerHour(rate)),
         ),
         OmiSettingsRow(title: l10n.diagnosticsLongestGap, value: longest == null ? '--' : _formatDurationMs(longest)),
@@ -971,10 +979,10 @@ DiagnosticsSignal diagnosticsSignalFor(int rssi) {
 /// Excellent and Good are success, Fair is warning, Weak is danger.
 @visibleForTesting
 Color diagnosticsSignalColor(int rssi) => switch (diagnosticsSignalFor(rssi)) {
-      DiagnosticsSignal.excellent || DiagnosticsSignal.good => OmiColors.success,
-      DiagnosticsSignal.fair => OmiColors.warning,
-      DiagnosticsSignal.weak => OmiColors.danger,
-    };
+  DiagnosticsSignal.excellent || DiagnosticsSignal.good => OmiColors.success,
+  DiagnosticsSignal.fair => OmiColors.warning,
+  DiagnosticsSignal.weak => OmiColors.danger,
+};
 
 /// Success above 20%, warning at 11–20%, danger at 10% and below.
 @visibleForTesting

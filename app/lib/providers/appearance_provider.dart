@@ -3,17 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 
 Brightness resolveAppearanceBrightness(ThemeMode mode, Brightness systemBrightness) => switch (mode) {
-      ThemeMode.light => Brightness.light,
-      ThemeMode.dark => Brightness.dark,
-      ThemeMode.system => systemBrightness,
-    };
+  ThemeMode.light => Brightness.light,
+  ThemeMode.dark => Brightness.dark,
+  ThemeMode.system => systemBrightness,
+};
 
-/// Persists the user's appearance choice. The app is light until someone picks Dark or System;
-/// an unknown stored value is light too.
+/// Persists the user's appearance choice. Preference initialization preserves
+/// System for existing installs and pins Light for new ones; unknown values use Light.
 class AppearanceProvider extends ChangeNotifier {
   AppearanceProvider({String Function()? read, Future<void> Function(String)? write})
-      : _read = read ?? (() => SharedPreferencesUtil().appearanceMode),
-        _write = write ?? ((value) => SharedPreferencesUtil().setAppearanceMode(value)) {
+    : _read = read ?? (() => SharedPreferencesUtil().appearanceMode),
+      _write = write ?? ((value) => SharedPreferencesUtil().setAppearanceMode(value)) {
     _mode = parse(_read());
   }
 
@@ -24,15 +24,16 @@ class AppearanceProvider extends ChangeNotifier {
   ThemeMode get mode => _mode;
 
   static ThemeMode parse(String? value) => switch (value) {
-        'dark' => ThemeMode.dark,
-        'system' => ThemeMode.system,
-        _ => ThemeMode.light,
-      };
+    'dark' => ThemeMode.dark,
+    'system' => ThemeMode.system,
+    _ => ThemeMode.light,
+  };
 
   Future<void> setMode(ThemeMode mode) async {
-    if (_mode == mode) return;
-    _mode = mode;
-    notifyListeners();
+    if (_mode != mode) {
+      _mode = mode;
+      notifyListeners();
+    }
     await _write(mode.name);
   }
 }

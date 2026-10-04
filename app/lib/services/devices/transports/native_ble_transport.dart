@@ -41,14 +41,14 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   final _audioSubscriptionErrors = StreamController<Object>.broadcast();
   @override
   Stream<Object> get audioSubscriptionErrors => Stream.multi((consumer) {
-        final subscription = _audioSubscriptionErrors.stream.listen(consumer.add, onDone: consumer.close);
-        // Some adapters subscribe during connection setup, before capture binds.
-        // Replay only failures belonging to the current connection generation.
-        for (final entry in subscriptionFailures.entries) {
-          if (isBleAudioCharacteristicUuid(entry.key.split(':').last)) consumer.add(entry.value);
-        }
-        consumer.onCancel = subscription.cancel;
-      }, isBroadcast: true);
+    final subscription = _audioSubscriptionErrors.stream.listen(consumer.add, onDone: consumer.close);
+    // Some adapters subscribe during connection setup, before capture binds.
+    // Replay only failures belonging to the current connection generation.
+    for (final entry in subscriptionFailures.entries) {
+      if (isBleAudioCharacteristicUuid(entry.key.split(':').last)) consumer.add(entry.value);
+    }
+    consumer.onCancel = subscription.cancel;
+  }, isBroadcast: true);
   final Map<String, int> _pendingSubscriptions = {};
 
   bool _nativeOwnsAudioHealth(String characteristicUuid) =>
@@ -57,7 +57,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
       characteristicUuid.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214';
 
   NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
-      : _hostApi = hostApi ?? BleHostApi() {
+    : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.addIngressListener(_ingressOwnershipChanged);
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
@@ -86,6 +86,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     _updateState(DeviceTransportState.connecting);
 
     _deviceReadyCompleter = Completer<List<BleService>>();
+    final deviceReady = _deviceReadyCompleter!.future;
+    // A disconnect can arrive while the platform's manageDevice reply is pending.
+    // Observe that error immediately; the await below still delivers it to connect's caller.
+    deviceReady.ignore();
 
     try {
       await _hostApi.manageDevice(_peripheralUuid, requiresBond);
@@ -97,7 +101,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     }
 
     try {
-      _services = await _deviceReadyCompleter!.future.timeout(
+      _services = await deviceReady.timeout(
         const Duration(seconds: 60),
         onTimeout: () => throw TimeoutException('Device ready timeout after 60s'),
       );
@@ -208,13 +212,16 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
         if (gate != null) await gate(characteristicUuid);
         if (generation != _subscriptionGeneration) return;
       }
-      await _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid).then((_) {
-        if (generation == _subscriptionGeneration &&
-            failure is TimeoutException &&
-            identical(subscriptionFailures[key], failure)) {
-          subscriptionFailures.remove(key);
-        }
-      }).timeout(subscriptionTimeout);
+      await _hostApi
+          .subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid)
+          .then((_) {
+            if (generation == _subscriptionGeneration &&
+                failure is TimeoutException &&
+                identical(subscriptionFailures[key], failure)) {
+              subscriptionFailures.remove(key);
+            }
+          })
+          .timeout(subscriptionTimeout);
       if (generation != _subscriptionGeneration) return;
       _subscribedSubscriptionKeys.add(key);
       subscriptionFailures.remove(key);

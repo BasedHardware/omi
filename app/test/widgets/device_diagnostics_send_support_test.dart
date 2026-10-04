@@ -37,29 +37,29 @@ class _NoConnectivityPlatform extends ConnectivityPlatform {
 class _TestDeviceInfoPlatform extends DeviceInfoPlatform {
   @override
   Future<BaseDeviceInfo> deviceInfo() async => BaseDeviceInfo(const {
-        'model': 'Pixel Test',
-        'version': {'sdkInt': 34, 'release': '14', 'incremental': 'test', 'codename': 'REL'},
-        'board': 'test',
-        'bootloader': 'test',
-        'brand': 'test',
-        'device': 'test',
-        'display': 'test',
-        'fingerprint': 'test',
-        'hardware': 'test',
-        'host': 'test',
-        'id': 'test',
-        'manufacturer': 'test',
-        'product': 'test',
-        'tags': 'test',
-        'type': 'test',
-        'isPhysicalDevice': true,
-        'isLowRamDevice': false,
-        'freeDiskSize': 1,
-        'totalDiskSize': 1,
-        'physicalRamSize': 1,
-        'availableRamSize': 1,
-        'serialNumber': 'test',
-      });
+    'model': 'Pixel Test',
+    'version': {'sdkInt': 34, 'release': '14', 'incremental': 'test', 'codename': 'REL'},
+    'board': 'test',
+    'bootloader': 'test',
+    'brand': 'test',
+    'device': 'test',
+    'display': 'test',
+    'fingerprint': 'test',
+    'hardware': 'test',
+    'host': 'test',
+    'id': 'test',
+    'manufacturer': 'test',
+    'product': 'test',
+    'tags': 'test',
+    'type': 'test',
+    'isPhysicalDevice': true,
+    'isLowRamDevice': false,
+    'freeDiskSize': 1,
+    'totalDiskSize': 1,
+    'physicalRamSize': 1,
+    'availableRamSize': 1,
+    'serialNumber': 'test',
+  });
 }
 
 /// Scripted replies for the support-upload HTTP call. The canned client
@@ -151,8 +151,9 @@ class _CannedResponse extends Stream<List<int>> implements HttpClientResponse {
     void Function()? onDone,
     bool? cancelOnError,
   }) {
-    return Stream<List<int>>.fromIterable([utf8.encode(body)])
-        .listen(onData, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+    return Stream<List<int>>.fromIterable([
+      utf8.encode(body),
+    ]).listen(onData, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
   }
 
   @override
@@ -191,9 +192,9 @@ class _SyntheticGateway implements AuthTokenGateway {
 
   @override
   Future<RefreshedAuthToken?> forceRefresh() async => RefreshedAuthToken(
-        token: 'synthetic-bearer',
-        expirationTime: DateTime.now().toUtc().add(const Duration(hours: 1)),
-      );
+    token: 'synthetic-bearer',
+    expirationTime: DateTime.now().toUtc().add(const Duration(hours: 1)),
+  );
 
   @override
   Future<void> signOut() async {}
@@ -276,7 +277,12 @@ void main() {
     ConnectivityPlatform.instance = _NoConnectivityPlatform();
     DeviceInfoPlatform.instance = _TestDeviceInfoPlatform();
     PackageInfo.setMockInitialValues(
-        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
+      appName: 'Omi Test',
+      packageName: 'com.omi.test',
+      version: '1.0.543',
+      buildNumber: '992',
+      buildSignature: '',
+    );
     try {
       await ServiceManager.init();
     } catch (_) {
@@ -341,6 +347,45 @@ void main() {
     await tester.tap(find.byTooltip('Send to support'));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('support bundle recent counters exclude expired retained events', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const dayMs = 24 * 3600 * 1000;
+    final since = now - 14 * dayMs;
+    mockBleHostApi(
+      'getExtendedDeviceDiagnostics',
+      jsonEncode({
+        'counters_since': since,
+        'disconnect_history_v2': [
+          for (final daysAgo in [8, 1]) ...[
+            {'timestamp': now - daysAgo * dayMs, 'eventType': 'disconnect', 'timeToReconnectMs': 5000},
+            {'timestamp': now - daysAgo * dayMs, 'eventType': 'fail_to_connect', 'timeToReconnectMs': 0},
+          ],
+        ],
+      }),
+    );
+    await pumpPage(tester);
+    await openSupportDialog(tester);
+
+    final json = tester.widget<SelectableText>(find.byType(SelectableText)).data!;
+    final bundle = jsonDecode(json) as Map<String, dynamic>;
+    expect(bundle['reconnection_count_window'], 1);
+    expect(bundle['fail_to_connect_count_window'], 1);
+    expect(bundle['reconnection_count'], 3);
+    expect(bundle['counters_since'], {'reconnection_count': since, 'fail_to_connect_count': since});
+    final retainedHistory = (bundle['disconnect_history'] as List).cast<Map<String, dynamic>>();
+    expect(retainedHistory, hasLength(4));
+    expect(retainedHistory.map((event) => event['ts']), [now - 8 * dayMs, now - 8 * dayMs, now - dayMs, now - dayMs]);
+    expect(retainedHistory.map((event) => event['event_type']), [
+      'disconnect',
+      'fail_to_connect',
+      'disconnect',
+      'fail_to_connect',
+    ]);
+    expect(_CannedUpload.requests, 0);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('cancelling the review dialog tracks dialog_cancelled', (tester) async {
     await pumpPage(tester);
@@ -435,10 +480,7 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
 
     expect(find.text('OMI-TKT-42'), findsOneWidget);
-    analytics.expectSingle('Diagnostics Sent', {
-      'schema_version': 2,
-      'disconnect_count': 1,
-    });
+    analytics.expectSingle('Diagnostics Sent', {'schema_version': 2, 'disconnect_count': 1});
     expect(analytics.propertiesOf('Diagnostics Sent').single['bundle_bytes'] as int, greaterThan(0));
     expect(analytics.names, isNot(contains('Diagnostics Send Failed')));
   });
