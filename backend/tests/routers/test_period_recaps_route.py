@@ -1,8 +1,10 @@
 """GET /v1/users/recaps/{period}: weekly and monthly recaps (#4468).
 
 The route resolves the period in the user's timezone, reads the daily recaps for
-it and the period before in one bounded query, ranks people from the period's
-conversations, and fails open (without people) if that scan breaks.
+it and the period before in one bounded query, reads the live open tasks, ranks
+people from the period's conversations under one request budget, reports a cut
+scan through the list-truncation header, and fails open (without people) if
+that scan breaks.
 """
 
 import os
@@ -10,13 +12,19 @@ import os
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test")
 
+import logging
+import time
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 
+from database.conversation_scan import RECAP_PEOPLE_SCAN_CAP
 from routers import recaps as recaps_mod
+from utils.observability.fallback import ALLOWED_COMPONENTS
+from utils.other.list_budget import OMI_LIST_TRUNCATED_HEADER, ListReadBudget
 
 UID = 'u1'
 
@@ -37,34 +45,71 @@ def _conversation(person_id: str, seconds: float):
     }
 
 
+def _budget():
+    return ListReadBudget(deadline_monotonic=time.monotonic() + 60)
+
+
 @pytest.fixture
 def deps(monkeypatch):
-    calls = {}
+    calls = {'people_by_ids': [], 'budgets': []}
     summaries = MagicMock(
         return_value=[
             _summary('2026-10-01', 6, 120),
             _summary('2026-09-28', 3, 50),
             _summary('2026-09-24', 4, 90),
+            _summary('2026-09-02', 2, 30),
         ]
     )
 
     def people_scan(uid, *, start_date, end_date, budget):
-        calls['people_scan'] = (uid, start_date, end_date)
+        calls['people_scan'] = (uid, start_date, end_date, budget)
         return iter([_conversation('p-sam', 300.0), _conversation('p-ana', 60.0)])
+
+    def action_items(uid, **kwargs):
+        calls['action_items'] = (uid, kwargs)
+        return [
+            {
+                'id': 'task-1',
+                'description': 'Send revised numbers',
+                'created_at': datetime(2026, 9, 29, 14, tzinfo=timezone.utc),
+                'conversation_id': 'c1',
+                'due_at': None,
+                'completed': False,
+            }
+        ]
+
+    def people_by_ids(uid, person_ids):
+        calls['people_by_ids'].append(list(person_ids))
+        names = {'p-sam': 'Sam', 'p-ana': 'Ana'}
+        return [{'id': pid, 'name': names.get(pid, pid.upper())} for pid in person_ids]
+
+    def budget_for(_request, *, route):
+        budget = _budget()
+        calls['budgets'].append((route, budget))
+        return budget
+
+    def no_full_people_read(_uid):
+        raise AssertionError('the recap must not read every person')
 
     monkeypatch.setattr(recaps_mod.notification_db, 'get_user_time_zone', lambda _uid: 'America/New_York')
     monkeypatch.setattr(recaps_mod.daily_summaries_db, 'get_daily_summaries', summaries)
     monkeypatch.setattr(recaps_mod, 'recap_people_scan', people_scan)
-    monkeypatch.setattr(
-        recaps_mod.users_db, 'get_people', lambda _uid: [{'id': 'p-sam', 'name': 'Sam'}, {'id': 'p-ana', 'name': 'Ana'}]
-    )
-    monkeypatch.setattr(recaps_mod, 'conversation_scan_budget', lambda _request, route: MagicMock(truncated=False))
+    monkeypatch.setattr(recaps_mod.action_items_db, 'get_action_items', action_items)
+    monkeypatch.setattr(recaps_mod.users_db, 'get_people', no_full_people_read)
+    monkeypatch.setattr(recaps_mod.users_db, 'get_people_by_ids', people_by_ids)
+    monkeypatch.setattr(recaps_mod, 'conversation_scan_budget', budget_for)
     monkeypatch.setattr(recaps_mod, 'local_today', lambda _tz: date(2026, 10, 4))
     return summaries, calls
 
 
-def _get(period='week', day=None):
-    return recaps_mod.get_period_recap(request=MagicMock(), period=period, date=day, uid=UID)
+def _get(period='week', day=None, response=None):
+    return recaps_mod.get_period_recap(
+        request=SimpleNamespace(state=SimpleNamespace()),
+        response=response if response is not None else Response(),
+        period=period,
+        date=day,
+        uid=UID,
+    )
 
 
 def test_week_recap_reads_both_periods_in_one_query_and_ranks_people(deps):
@@ -72,16 +117,21 @@ def test_week_recap_reads_both_periods_in_one_query_and_ranks_people(deps):
 
     recap = _get('week', '2026-10-01')
 
-    summaries.assert_called_once_with(UID, limit=62, offset=0, start_date='2026-09-21', end_date='2026-10-04')
+    summaries.assert_called_once_with(UID, limit=124, offset=0, start_date='2026-09-21', end_date='2026-10-04')
     assert (recap.start_date, recap.end_date) == ('2026-09-28', '2026-10-04')
     assert recap.stats.total_conversations == 9
+    # Today (Sunday) closes the week, so the whole previous week compares.
+    assert (recap.previous.start_date, recap.previous.end_date) == ('2026-09-21', '2026-09-27')
     assert recap.previous.total_conversations == 4
     assert recap.busiest_day.date == '2026-10-01'
     assert [(p.name, p.talk_minutes) for p in recap.top_people] == [('Sam', 5), ('Ana', 1)]
+    [(route, budget)] = calls['budgets']
+    assert route == 'period-recap'
     assert calls['people_scan'] == (
         UID,
         datetime(2026, 9, 28, 4, 0, tzinfo=timezone.utc),
         datetime(2026, 10, 5, 3, 59, 59, 999999, tzinfo=timezone.utc),
+        budget,
     )
 
 
@@ -92,9 +142,12 @@ def test_month_recap_defaults_to_the_current_month_in_the_users_timezone(deps):
 
     assert (recap.start_date, recap.end_date) == ('2026-10-01', '2026-10-31')
     assert summaries.call_args.kwargs['start_date'] == '2026-09-01'
+    # Four days into October compares with September 1-4, not all of September.
+    assert (recap.previous.start_date, recap.previous.end_date) == ('2026-09-01', '2026-09-04')
+    assert recap.previous.total_conversations == 2
 
 
-@pytest.mark.parametrize('day', ['2026-10-05', '2026-13-01', 'yesterday'])
+@pytest.mark.parametrize('day', ['2026-10-05', '2026-13-01', 'yesterday', '0001-01-01', '1999-12-31'])
 def test_future_or_malformed_dates_are_rejected(deps, day):
     with pytest.raises(HTTPException) as error:
         _get('week', day)
@@ -109,7 +162,7 @@ def test_unknown_period_is_rejected(deps):
     assert error.value.status_code == 422
 
 
-def test_people_scan_failure_still_serves_the_recap_and_records_the_fallback(deps, monkeypatch):
+def test_people_scan_failure_still_serves_the_recap_and_records_the_fallback(deps, monkeypatch, caplog):
     fallbacks = []
 
     def broken_scan(uid, **_kwargs):
@@ -118,8 +171,124 @@ def test_people_scan_failure_still_serves_the_recap_and_records_the_fallback(dep
     monkeypatch.setattr(recaps_mod, 'recap_people_scan', broken_scan)
     monkeypatch.setattr(recaps_mod, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
 
-    recap = _get('week', '2026-10-01')
+    with caplog.at_level(logging.WARNING, logger=recaps_mod.logger.name):
+        recap = _get('week', '2026-10-01')
 
     assert recap.stats.total_conversations == 9
     assert recap.top_people == []
-    assert fallbacks and fallbacks[0]['outcome'] == 'degraded'
+    assert [f['outcome'] for f in fallbacks] == ['degraded']
+    # A component outside the closed enum collapses to 'other' on the dashboard.
+    assert fallbacks[0]['component'] == 'daily_summary'
+    assert fallbacks[0]['component'] in ALLOWED_COMPONENTS
+    # record_fallback(log=logger) already logs; no second warning line.
+    assert [r for r in caplog.records if r.name == recaps_mod.logger.name] == []
+
+
+def test_the_earliest_supported_anchor_is_served(deps):
+    recap = _get('month', '2000-01-01')
+
+    assert (recap.start_date, recap.end_date) == ('2000-01-01', '2000-01-31')
+
+
+def test_open_tasks_are_the_live_open_tasks_created_in_the_period(deps):
+    _, calls = deps
+
+    recap = _get('week', '2026-10-01')
+
+    [(_, budget)] = calls['budgets']
+    assert calls['action_items'] == (
+        UID,
+        {
+            'completed': False,
+            'start_date': datetime(2026, 9, 28, 4, 0, tzinfo=timezone.utc),
+            'end_date': datetime(2026, 10, 5, 3, 59, 59, 999999, tzinfo=timezone.utc),
+            'limit': 10,
+            'budget': budget,
+        },
+    )
+    assert [item.model_dump() for item in recap.open_action_items] == [
+        {
+            'id': 'task-1',
+            'description': 'Send revised numbers',
+            'date': '2026-09-29',
+            'source_conversation_id': 'c1',
+            'due_at': None,
+        }
+    ]
+
+
+def test_names_come_from_the_top_ranked_people_only(deps, monkeypatch):
+    _, calls = deps
+    crowd = [_conversation(f'p-{i:02d}', 100.0 + i) for i in range(20)]
+    monkeypatch.setattr(recaps_mod, 'recap_people_scan', lambda uid, **_kwargs: iter(crowd))
+
+    recap = _get('week', '2026-10-01')
+
+    expected = [f'p-{i:02d}' for i in range(19, 4, -1)]
+    assert calls['people_by_ids'] == [expected]
+    assert [p.person_id for p in recap.top_people] == expected[:5]
+
+
+def test_a_full_read_of_daily_recaps_drops_the_comparison(deps):
+    summaries, _ = deps
+    summaries.return_value = [_summary('2026-10-01', 1, 10)] * recaps_mod.RECAP_SUMMARY_READ_LIMIT
+
+    recap = _get('week', '2026-10-01')
+
+    assert recap.stats.total_conversations == 1
+    assert recap.previous is None
+
+
+def test_a_complete_recap_has_no_truncation_header(deps):
+    response = Response()
+
+    _get('week', '2026-10-01', response=response)
+
+    assert OMI_LIST_TRUNCATED_HEADER not in response.headers
+
+
+def test_a_people_scan_that_hits_its_cap_is_reported_truncated(deps, monkeypatch):
+    closed = []
+
+    def full_scan(uid, **_kwargs):
+        try:
+            for i in range(RECAP_PEOPLE_SCAN_CAP + 5):
+                yield _conversation(f'p-{i % 3}', 10.0)
+        finally:
+            closed.append(True)
+
+    monkeypatch.setattr(recaps_mod, 'recap_people_scan', full_scan)
+    response = Response()
+
+    recap = _get('week', '2026-10-01', response=response)
+
+    assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
+    assert {p.person_id for p in recap.top_people} == {'p-0', 'p-1', 'p-2'}
+    assert closed == [True]
+
+
+def test_a_scan_cut_by_the_request_budget_is_reported_truncated(deps, monkeypatch):
+    def cut_scan(uid, *, budget, **_kwargs):
+        yield _conversation('p-sam', 300.0)
+        budget.mark_exhausted('deadline')
+
+    monkeypatch.setattr(recaps_mod, 'recap_people_scan', cut_scan)
+    response = Response()
+
+    recap = _get('week', '2026-10-01', response=response)
+
+    assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
+    assert [p.name for p in recap.top_people] == ['Sam']
+
+
+def test_a_task_read_cut_by_the_request_budget_is_reported_truncated(deps, monkeypatch):
+    def cut_tasks(uid, *, budget, **_kwargs):
+        budget.mark_exhausted('documents')
+        return []
+
+    monkeypatch.setattr(recaps_mod.action_items_db, 'get_action_items', cut_tasks)
+    response = Response()
+
+    _get('week', '2026-10-01', response=response)
+
+    assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'

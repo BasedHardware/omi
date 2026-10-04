@@ -100,7 +100,7 @@ def test_recap_totals_days_and_finds_the_busiest_one():
     }
 
 
-def test_recap_keeps_highlights_decisions_questions_and_open_actions_with_their_day():
+def test_recap_keeps_highlights_decisions_and_questions_with_their_day():
     recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), WEEK)
 
     assert [(h['date'], h['topic']) for h in recap['highlights']] == [
@@ -113,14 +113,57 @@ def test_recap_keeps_highlights_decisions_questions_and_open_actions_with_their_
     assert recap['open_questions'] == [
         {'date': '2026-09-28', 'question': 'Who owns the budget?', 'conversation_id': 'c1'}
     ]
+
+
+def test_open_tasks_come_from_the_live_task_list_not_the_daily_snapshots():
+    # A daily recap copies each task's `completed` flag when it is generated, so
+    # a task finished later still reads as open there. The live list is the truth.
+    live = [
+        {
+            'id': 'task-2',
+            'description': 'Book the venue',
+            'created_at': datetime(2026, 10, 2, 2, 30, tzinfo=timezone.utc),  # Oct 1 in New York
+            'conversation_id': 'c9',
+            'due_at': datetime(2026, 10, 3, 17, 0, tzinfo=timezone.utc),
+            'completed': False,
+        },
+        {'id': 'task-blank', 'description': '   ', 'created_at': datetime(2026, 9, 29, 12, tzinfo=timezone.utc)},
+        {
+            'id': 'task-1',
+            'description': 'Send revised numbers',
+            'created_at': datetime(2026, 9, 28, 15, 0, tzinfo=timezone.utc),
+            'conversation_id': None,
+            'due_at': None,
+            'completed': False,
+        },
+    ]
+
+    recap = pr.build_period_recap(
+        'week', date(2026, 9, 28), date(2026, 10, 4), WEEK, action_items=live, time_zone='America/New_York'
+    )
+
     assert recap['open_action_items'] == [
         {
-            'date': '2026-09-28',
+            'id': 'task-2',
+            'description': 'Book the venue',
+            'date': '2026-10-01',
+            'source_conversation_id': 'c9',
+            'due_at': '2026-10-03T17:00:00+00:00',
+        },
+        {
+            'id': 'task-1',
             'description': 'Send revised numbers',
-            'priority': 'high',
-            'source_conversation_id': 'c1',
-        }
+            'date': '2026-09-28',
+            'source_conversation_id': None,
+            'due_at': None,
+        },
     ]
+
+
+def test_the_daily_recaps_task_snapshots_are_ignored():
+    recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), WEEK)
+
+    assert recap['open_action_items'] == []
 
 
 def test_lists_are_capped_and_malformed_entries_skipped():
@@ -149,7 +192,54 @@ def test_previous_period_totals_give_the_trend():
 
     recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), WEEK, previous_summaries=previous)
 
-    assert recap['previous'] == {'total_conversations': 5, 'total_duration_minutes': 100}
+    assert recap['previous'] == {
+        'start_date': '2026-09-21',
+        'end_date': '2026-09-27',
+        'total_conversations': 5,
+        'total_duration_minutes': 100,
+    }
+
+
+def test_an_in_progress_period_compares_with_the_same_days_of_the_previous_one():
+    assert pr.comparable_previous_bounds('week', date(2026, 9, 28), date(2026, 10, 4), date(2026, 10, 1)) == (
+        date(2026, 9, 21),
+        date(2026, 9, 24),
+    )
+    assert pr.comparable_previous_bounds('month', date(2026, 10, 1), date(2026, 10, 31), date(2026, 10, 4)) == (
+        date(2026, 9, 1),
+        date(2026, 9, 4),
+    )
+    # Never past the previous period's own end (March 30 vs a 28-day February).
+    assert pr.comparable_previous_bounds('month', date(2026, 3, 1), date(2026, 3, 31), date(2026, 3, 30)) == (
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+    )
+
+
+def test_a_finished_period_compares_with_the_whole_previous_one():
+    assert pr.comparable_previous_bounds('week', date(2026, 9, 21), date(2026, 9, 27), date(2026, 10, 1)) == (
+        date(2026, 9, 14),
+        date(2026, 9, 20),
+    )
+    assert pr.comparable_previous_bounds('month', date(2026, 9, 1), date(2026, 9, 30), date(2026, 10, 4)) == (
+        date(2026, 8, 1),
+        date(2026, 8, 31),
+    )
+
+
+def test_previous_totals_only_count_the_comparable_days():
+    previous = [_day('2026-09-22', conversations=4, minutes=90), _day('2026-09-25', conversations=1, minutes=10)]
+
+    recap = pr.build_period_recap(
+        'week', date(2026, 9, 28), date(2026, 10, 4), WEEK, previous_summaries=previous, today=date(2026, 10, 1)
+    )
+
+    assert recap['previous'] == {
+        'start_date': '2026-09-21',
+        'end_date': '2026-09-24',
+        'total_conversations': 4,
+        'total_duration_minutes': 90,
+    }
 
 
 def test_people_are_ranked_by_talk_time_and_unnamed_people_are_left_out():
@@ -172,6 +262,19 @@ def test_people_are_ranked_by_talk_time_and_unnamed_people_are_left_out():
     ]
 
 
+def test_people_rank_is_talk_time_then_conversations_then_id():
+    stats = {
+        'p-b': {'conversation_count': 2, 'talk_seconds': 60.0},
+        'p-a': {'conversation_count': 2, 'talk_seconds': 60.0},
+        'p-c': {'conversation_count': 5, 'talk_seconds': 60.0},
+        'p-d': {'conversation_count': 1, 'talk_seconds': 900.0},
+        'p-e': {'conversation_count': 1},
+    }
+
+    assert pr.rank_people(stats) == ['p-d', 'p-c', 'p-a', 'p-b', 'p-e']
+    assert pr.rank_people({}) == []
+
+
 def test_empty_period_is_a_valid_recap():
     recap = pr.build_period_recap('month', date(2026, 11, 1), date(2026, 11, 30), [])
 
@@ -187,3 +290,103 @@ def test_local_period_bounds_become_utc_instants_in_the_users_timezone():
 
     assert start == datetime(2026, 9, 28, 4, 0, tzinfo=timezone.utc)
     assert end == datetime(2026, 10, 5, 3, 59, 59, 999999, tzinfo=timezone.utc)
+
+
+def test_a_malformed_stored_date_is_skipped_not_a_crash():
+    # '2026-10-0x' sorts between '2026-10-01' and '2026-10-31' as a string, so a
+    # string-bounds check alone lets it reach date.fromisoformat (busiest day).
+    days = [
+        _day('2026-10-02', conversations=2, minutes=20),
+        _day('2026-10-0x', conversations=9, minutes=900),
+        _day('2026-10-1', conversations=9, minutes=900),
+        {'date': None, 'stats': {'total_conversations': 9}},
+    ]
+
+    recap = pr.build_period_recap('month', date(2026, 10, 1), date(2026, 10, 31), days)
+
+    assert recap['days_recorded'] == 1
+    assert recap['busiest_day']['date'] == '2026-10-02'
+    assert recap['stats']['total_conversations'] == 2
+
+
+def _busy_month(entries_per_day=3, busiest='2026-10-31'):
+    return [
+        _day(
+            f'2026-10-{day:02d}',
+            conversations=1,
+            minutes=500 if f'2026-10-{day:02d}' == busiest else 10,
+            highlights=[{'topic': f'topic {day}-{i}', 'summary': 's'} for i in range(entries_per_day)],
+            decisions_made=[{'decision': f'decision {day}-{i}'} for i in range(entries_per_day)],
+            unresolved_questions=[{'question': f'question {day}-{i}'} for i in range(entries_per_day)],
+        )
+        for day in range(1, 32)
+    ]
+
+
+def test_month_lists_spread_across_the_period_instead_of_its_first_days():
+    recap = pr.build_period_recap('month', date(2026, 10, 1), date(2026, 10, 31), _busy_month())
+
+    for key in ('highlights', 'decisions', 'open_questions'):
+        dates = [item['date'] for item in recap[key]]
+        assert len(dates) == pr.MAX_RECAP_ITEMS, key
+        assert dates == sorted(dates), key
+        assert '2026-10-31' in dates, key
+        assert max(dates.count(day) for day in dates) <= pr.MAX_HIGHLIGHTS_PER_DAY, key
+    # Busiest day first, then the rest by date: one entry each before any day gets a second.
+    assert [h['date'] for h in recap['highlights']] == [f'2026-10-{day:02d}' for day in range(1, 10)] + ['2026-10-31']
+
+
+def test_few_days_fill_the_cap_by_depth_and_keep_each_days_order():
+    days = [
+        _day(
+            day,
+            conversations=1,
+            minutes=minutes,
+            highlights=[{'topic': f'{day} h{i}'} for i in range(5)],
+            decisions_made=[{'decision': f'{day} d{i}'} for i in range(5)],
+        )
+        for day, minutes in (('2026-10-01', 10), ('2026-10-02', 30), ('2026-10-03', 20))
+    ]
+
+    recap = pr.build_period_recap('month', date(2026, 10, 1), date(2026, 10, 31), days)
+
+    # Highlights stop at two per day.
+    assert [h['topic'] for h in recap['highlights']] == [
+        '2026-10-01 h0',
+        '2026-10-01 h1',
+        '2026-10-02 h0',
+        '2026-10-02 h1',
+        '2026-10-03 h0',
+        '2026-10-03 h1',
+    ]
+    # Decisions go three deep everywhere, and the busiest day (Oct 2) gets the tenth.
+    assert [d['decision'] for d in recap['decisions']] == [
+        '2026-10-01 d0',
+        '2026-10-01 d1',
+        '2026-10-01 d2',
+        '2026-10-02 d0',
+        '2026-10-02 d1',
+        '2026-10-02 d2',
+        '2026-10-02 d3',
+        '2026-10-03 d0',
+        '2026-10-03 d1',
+        '2026-10-03 d2',
+    ]
+
+
+def test_a_regenerated_daily_recap_replaces_the_older_copy_of_that_date():
+    days = [
+        {
+            **_day('2026-10-01', conversations=6, minutes=120),
+            'created_at': datetime(2026, 10, 2, 1, tzinfo=timezone.utc),
+        },
+        {**_day('2026-10-01', conversations=9, minutes=900)},  # no created_at: oldest
+        {**_day('2026-10-01', conversations=2, minutes=20), 'created_at': '2026-10-03T08:00:00+00:00'},
+        {**_day('2026-10-01', conversations=7, minutes=70), 'created_at': 'not-a-date'},
+    ]
+
+    recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), days)
+
+    assert recap['days_recorded'] == 1
+    assert recap['stats']['total_conversations'] == 2
+    assert recap['busiest_day']['total_duration_minutes'] == 20

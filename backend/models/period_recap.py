@@ -13,6 +13,10 @@ class PeriodRecapStats(BaseModel):
 
 
 class PeriodRecapPrevious(BaseModel):
+    start_date: str = Field(description='First local date compared (YYYY-MM-DD)')
+    end_date: str = Field(
+        description='Last local date compared (YYYY-MM-DD); while the current period is in progress, as many days in'
+    )
     total_conversations: int = 0
     total_duration_minutes: int = 0
 
@@ -45,10 +49,11 @@ class PeriodRecapQuestion(BaseModel):
 
 
 class PeriodRecapActionItem(BaseModel):
-    date: str
+    id: str
+    date: str = Field(description='Local date the task was created (YYYY-MM-DD)')
     description: str
-    priority: Optional[str] = None
     source_conversation_id: Optional[str] = None
+    due_at: Optional[str] = Field(default=None, description='When the task is due (ISO 8601), if it has a due date')
 
 
 class PeriodRecapPerson(BaseModel):
@@ -68,8 +73,11 @@ class PeriodRecapResponse(BaseModel):
     highlights: List[PeriodRecapHighlight] = Field(default_factory=list)
     decisions: List[PeriodRecapDecision] = Field(default_factory=list)
     open_questions: List[PeriodRecapQuestion] = Field(default_factory=list)
-    open_action_items: List[PeriodRecapActionItem] = Field(default_factory=list)
+    open_action_items: List[PeriodRecapActionItem] = Field(
+        default_factory=list, description='Tasks created in the period that are still open now'
+    )
     top_people: List[PeriodRecapPerson] = Field(default_factory=list)
     previous: Optional[PeriodRecapPrevious] = Field(
-        default=None, description='Totals for the period just before, for trends'
+        default=None,
+        description='Totals for the same stretch of the period just before, for trends; absent when unknown',
     )

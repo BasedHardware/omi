@@ -29,17 +29,28 @@ class _PeriodRecapPageState extends State<PeriodRecapPage> {
   late RecapPeriod _period = widget.initialPeriod;
   ApiResult<wire.GeneratedPeriodRecapResponse>? _result;
 
+  /// Bumped by every load: only the newest request's answer is shown, so a slow
+  /// week answer cannot land after Week → Month → Week was already answered.
+  int _generation = 0;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  @override
+  void dispose() {
+    _generation++;
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    final generation = ++_generation;
     final period = _period;
     setState(() => _result = null);
     final result = await widget.load(period);
-    if (!mounted || period != _period) return;
+    if (!mounted || generation != _generation) return;
     setState(() => _result = result);
   }
 
@@ -84,11 +95,28 @@ class _PeriodRecapPageState extends State<PeriodRecapPage> {
     final result = _result;
     return switch (result) {
       null => const OmiLoadingState(),
-      ApiFailure() => OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: _load),
-      ApiSuccess(:final data) when data.daysRecorded == 0 && (data.topPeople ?? const []).isEmpty =>
-        OmiEmptyState(icon: Icons.calendar_month_outlined, title: context.l10n.noRecapForPeriod),
-      ApiSuccess(:final data) => _RecapContent(recap: data),
+      ApiFailure(:final problem) =>
+        OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: problem.retryable ? _load : null),
+      ApiSuccess(:final data, :final truncated) => _withPartialNotice(
+          truncated,
+          data.daysRecorded == 0 && (data.topPeople ?? const []).isEmpty && (data.openActionItems ?? const []).isEmpty
+              ? OmiEmptyState(icon: Icons.calendar_month_outlined, title: context.l10n.noRecapForPeriod)
+              : _RecapContent(recap: data),
+        ),
     };
+  }
+
+  /// A recap the server had to cut short (its people or task read ran out of
+  /// budget) says so above what it has, with Try Again.
+  Widget _withPartialNotice(bool truncated, Widget body) {
+    if (!truncated) return body;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OmiPartialNotice(onRetry: _load),
+        Expanded(child: body),
+      ],
+    );
   }
 }
 
@@ -156,11 +184,7 @@ class _RecapContent extends StatelessWidget {
           OmiSettingsGroup(
             header: l10n.highlights,
             children: [
-              for (final highlight in highlights)
-                OmiSettingsRow(
-                  title: [highlight.emoji, highlight.topic].whereType<String>().join(' '),
-                  subtitle: highlight.summary,
-                ),
+              for (final highlight in highlights) _highlightRow(highlight),
             ],
           ),
         if (decisions.isNotEmpty)
@@ -179,6 +203,19 @@ class _RecapContent extends StatelessWidget {
             children: [for (final action in actions) OmiSettingsRow(title: action.description)],
           ),
       ],
+    );
+  }
+
+  /// The topic heads the row and the summary explains it; a highlight with no
+  /// topic is titled by its summary rather than showing an empty title.
+  static Widget _highlightRow(wire.GeneratedPeriodRecapHighlight highlight) {
+    final topic = highlight.topic?.trim() ?? '';
+    final summary = highlight.summary?.trim() ?? '';
+    final heading = topic.isNotEmpty ? topic : summary;
+    final emoji = highlight.emoji?.trim() ?? '';
+    return OmiSettingsRow(
+      title: emoji.isEmpty ? heading : '$emoji $heading',
+      subtitle: topic.isNotEmpty && summary.isNotEmpty ? summary : null,
     );
   }
 }
