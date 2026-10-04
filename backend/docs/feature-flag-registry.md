@@ -197,6 +197,7 @@ and an explicit empty literal renders as `''`.
 | `SELFHEAL_MODE` | Conversation self-heal sweeper mode: off/detect-only/nudge/heal | backend | env | closed | — | — | — | — | pending | 2026-10-15 | backend runtime_env (PR #18855) |
 | `SONIOX_CONTEXT_TERMS` | Send session vocabulary (Omi first) as Soniox context terms after dev config-frame validation | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
 | `SONIOX_ELAPSED_AXIS` | Measure Soniox elapsed timestamps before enabling speaker windows | backend | env | closed | — | — | — | — | pending | 2026-10-27 | dazheng |
+| `SONIOX_IDLE_CLOSE_SECONDS` | Close paid Soniox transports after continuous active-VAD silence; unset or zero off; suggested canary 45 seconds | backend | env | closed | — | — | — | — | pending | 2026-11-04 | backend |
 | `SONIOX_MONTHLY_CEILING_USD` | Enable Soniox monthly spend runway against a configured USD ceiling | backend | env | closed | 0 | 0 (backend-listen (chart), gke/backend-listen) | 10000 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | dazheng |
 | `STT_CONNECT_ORDER_FROM_CONFIG` | Use configured STT provider connection order | backend | env | closed | false | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | unowned |
 | `STT_FAILOVER_RECOVERY_ENABLED` | Enable canary live-STT failover recovery | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-11-03 | backend |
@@ -322,7 +323,7 @@ and an explicit empty literal renders as `''`.
 | `STT_SHED_CONNECT_FAILURES` | Real consecutive live STT connect failures required before all-open circuit shedding | backend | env | closed | 3 | 3 (backend-listen (chart), gke/backend-listen) | 3 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
 | `SYNC_DISPATCH_MODE` | Select sync dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `SYNC_LEDGER_FENCE_MODE` | Select sync ledger fence authority | backend | env | closed | env_var | env_var | env_var | — | keep | — | unowned |
-| `SYNC_PHASE_METRICS_EXPORT_ENABLED` | Export aggregate sync phase histograms during requests; default off, enabled by reviewed deploy overlays | backend | env | closed | — | {value: 'true', category: telemetry} | {value: 'true', category: telemetry} | — | keep | — | dazheng |
+| `SYNC_PHASE_METRICS_EXPORT_ENABLED` | Export aggregate sync phase histograms through a bounded background flush; default off, enabled by reviewed deploy overlays | backend | env | closed | — | {value: 'true', category: telemetry} | {value: 'true', category: telemetry} | — | keep | — | dazheng |
 | `TYPESENSE_CONVERSATION_INDEX_WRITES` | Write conversations to Typesense index | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `USE_VERTEX_AI` | Select Vertex AI model route | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | — | keep | — | unowned |
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | — | unowned |
@@ -373,6 +374,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SCREEN_TASK_STOP` — Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease (fail: inverted)
 - `SELFHEAL_MODE` — Conversation self-heal sweeper mode: off/detect-only/nudge/heal (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
+- `SONIOX_IDLE_CLOSE_SECONDS` — Close paid Soniox transports after continuous active-VAD silence; unset or zero off; suggested canary 45 seconds (fail: closed)
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
 - `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)

@@ -288,7 +288,6 @@ def _stub_router_create(monkeypatch, *, capture, saved_fields=None):
     monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_router, 'submit_with_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_router, 'send_action_item_data_message', lambda **kwargs: None)
-    monkeypatch.setattr(action_items_router, '_wake_task_changes', lambda *args, **kwargs: None)
 
     def _create(uid, data, idempotency_key=None, **kwargs):
         capture.append({'data': data, 'idempotency_key': idempotency_key})
@@ -387,7 +386,6 @@ def test_create_dispatches_auto_sync_outside_the_database_pool(monkeypatch):
     monkeypatch.setattr(legacy_db_executor, 'submit', lambda function: database_submissions.append(function))
     monkeypatch.setattr(action_items_router, 'db_executor', legacy_db_executor, raising=False)
     monkeypatch.setattr(action_items_router.task_links, 'validate_task_links', lambda *args, **kwargs: None)
-    monkeypatch.setattr(action_items_router, '_wake_task_changes', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_db, 'create_action_item', lambda *args, **kwargs: 'task-1')
     monkeypatch.setattr(
         action_items_db,
