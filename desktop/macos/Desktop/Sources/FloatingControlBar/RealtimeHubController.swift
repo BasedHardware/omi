@@ -38,7 +38,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   static let shared = RealtimeHubController()
 
   var session: RealtimeHubSession?
-  /// Copy of the Interject classification instruction so a replacement session
+  /// Copy of the trusted turn instruction so a replacement session
   /// can be armed before `beginInputTurn`. The inject often hits the old idle
   /// socket, which is then discarded.
   var pendingTrustedTurnInstruction: String?

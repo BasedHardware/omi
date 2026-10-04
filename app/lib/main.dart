@@ -1,5 +1,6 @@
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
+import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -327,8 +328,9 @@ Future _init() async {
   if (isAuth) {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     PlatformManager.instance.analytics.identify(
-      authMethod:
-          firebaseUser == null || firebaseUser.providerData.isEmpty ? null : firebaseUser.providerData.first.providerId,
+      authMethod: firebaseUser == null || firebaseUser.providerData.isEmpty
+          ? null
+          : firebaseUser.providerData.first.providerId,
       userCreatedAt: firebaseUser?.metadata.creationTime,
     );
     // Restore onboarding state from server if not already set locally
@@ -567,6 +569,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // legacy/allow projection cannot admit one offline upload.
     final resumeUser = FirebaseAuth.instance.currentUser;
     final resumeOwner = (resumeUser != null && !resumeUser.isAnonymous) ? resumeUser.uid : null;
+    await ProactivityRuntime.outbox.bindOwner(resumeOwner);
     await AccountCutoverRuntime.instance.bindAuthenticatedOwner(resumeOwner);
     SyncReconciler.instance.onForeground();
     unawaited(SyncUploadGate.instance.reconcileFairUseStatus());
@@ -577,6 +580,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      unawaited(ProactivityRuntime.outbox.flush());
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
         _performanceTelemetry.setForeground(true);
@@ -616,8 +620,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(

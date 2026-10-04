@@ -103,17 +103,17 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
 
 int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
-      WalSyncDisplayState.failed => 4,
-      WalSyncDisplayState.corrupted => 4,
-      WalSyncDisplayState.outsideRecoveryWindow => 4,
-      WalSyncDisplayState.unsupportedAudio => 4,
-      WalSyncDisplayState.uploadRejected => 4,
-      WalSyncDisplayState.retrying => 3,
-      WalSyncDisplayState.syncing => 2,
-      WalSyncDisplayState.uploaded => 1,
-      WalSyncDisplayState.synced => 1,
-      WalSyncDisplayState.waiting => 1,
-    };
+  WalSyncDisplayState.failed => 4,
+  WalSyncDisplayState.corrupted => 4,
+  WalSyncDisplayState.outsideRecoveryWindow => 4,
+  WalSyncDisplayState.unsupportedAudio => 4,
+  WalSyncDisplayState.uploadRejected => 4,
+  WalSyncDisplayState.retrying => 3,
+  WalSyncDisplayState.syncing => 2,
+  WalSyncDisplayState.uploaded => 1,
+  WalSyncDisplayState.synced => 1,
+  WalSyncDisplayState.waiting => 1,
+};
 
 /// Max automatic sync attempts before a recording is considered
 /// [WalSyncDisplayState.failed]. This is the budget itself, not a display
@@ -184,6 +184,11 @@ class Wal {
   DateTime? syncStartedAt;
   int? syncEtaSeconds;
   double? syncSpeedKBps;
+
+  /// 0..1 fraction of this recording's device transfer. Runtime only.
+  /// Null when this recording is not the active device download.
+  /// Zero means the transfer has started but no countable bytes have arrived.
+  double? deviceDownloadFraction;
   SyncMethod syncMethod = SyncMethod.ble;
 
   int frameSize = 160;
@@ -380,8 +385,9 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage:
-          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      originalStorage: json['original_storage'] != null
+          ? WalStorage.values.asNameMap()[json['original_storage']]
+          : null,
       conversationId: json['conversation_id'],
       recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],

@@ -24,6 +24,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from google.api_core.exceptions import PreconditionFailed
 
 import utils.other.storage as storage_module
 from database import conversations as conversations_db
@@ -47,9 +48,10 @@ def _pattern(marker: int, seconds: float) -> bytes:
 
 
 class _Writer:
-    def __init__(self, blob):
+    def __init__(self, blob, if_generation_match=None):
         self.blob = blob
         self.buf = bytearray()
+        self.if_generation_match = if_generation_match
 
     def write(self, data):
         self.buf.extend(data)
@@ -58,7 +60,7 @@ class _Writer:
         return self
 
     def __exit__(self, *exc):
-        self.blob._store(bytes(self.buf))
+        self.blob._store(bytes(self.buf), if_generation_match=self.if_generation_match)
 
 
 class FakeBlob:
@@ -67,25 +69,35 @@ class FakeBlob:
         self.name = name
         self._data = None
         self.metadata = None
+        self.generation = None
 
     @property
     def size(self):
         return len(self._data) if self._data is not None else None
 
-    def _store(self, data):
+    def _store(self, data, if_generation_match=None):
+        committed = self.bucket.blobs.get(self.name)
+        committed_generation = committed.generation if committed is not None else 0
+        if if_generation_match is not None and committed_generation != if_generation_match:
+            raise PreconditionFailed(f'generation mismatch for {self.name}')
         self._data = data
+        self.generation = self.bucket.next_generation()
         self.bucket.blobs[self.name] = self
 
     def exists(self):
         return self._data is not None
 
-    def open(self, mode, content_type=None):
+    def open(self, mode, content_type=None, if_generation_match=None):
         assert mode == 'wb'
-        return _Writer(self)
+        return _Writer(self, if_generation_match=if_generation_match)
 
-    def download_as_bytes(self):
+    def download_as_bytes(self, if_generation_match=None, end=None, **kwargs):
         if self._data is None:
             raise FileNotFoundError(self.name)
+        if if_generation_match is not None and self.generation != if_generation_match:
+            raise PreconditionFailed(f'generation mismatch for {self.name}')
+        if end is not None:
+            return self._data[: end + 1]
         return self._data
 
     def delete(self):
@@ -95,11 +107,16 @@ class FakeBlob:
 class FakeBucket:
     def __init__(self):
         self.blobs = {}
+        self._generation = 0
+
+    def next_generation(self):
+        self._generation += 1
+        return self._generation
 
     def blob(self, name):
         return self.blobs.get(name) or FakeBlob(self, name)
 
-    def list_blobs(self, prefix=None):
+    def list_blobs(self, prefix=None, **_kwargs):
         return [self.blobs[name] for name in sorted(self.blobs) if name.startswith(prefix)]
 
 
@@ -169,6 +186,18 @@ def _row(phrase_pre: bytes, phrase_post: bytes) -> dict:
             }
         ],
     }
+
+
+def test_fake_blob_create_only_write_refuses_an_existing_object(gcs):
+    bucket = gcs.bucket('b')
+    with bucket.blob('name').open('wb', if_generation_match=0) as writer:
+        writer.write(b'first')
+
+    with pytest.raises(PreconditionFailed):
+        with bucket.blob('name').open('wb', if_generation_match=0) as writer:
+            writer.write(b'second')
+
+    assert bucket.blob('name').download_as_bytes() == b'first'
 
 
 @pytest.mark.anyio

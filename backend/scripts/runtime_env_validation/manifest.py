@@ -51,6 +51,7 @@ from scripts.runtime_env_validation.common import (
     _validate_env_entries,
     _validate_forbidden_env_entries,
     data_plane_project,
+    validate_mentor_pipeline,
 )
 
 _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
@@ -733,6 +734,7 @@ def validate_runtime_env(
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
     errors = _validate_manifest_shape(env_config, env)
+    errors.extend(validate_mentor_pipeline(scope=env, config=env_config))
     errors.extend(validate_jev_uid_allowlist(stage=env, scope=env, config=env_config))
     if errors:
         return errors

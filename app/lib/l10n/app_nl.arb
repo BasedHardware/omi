@@ -3833,5 +3833,10 @@
     "playbackAudioUnavailable": "Audio niet beschikbaar",
     "playbackAudioLoadFailed": "Audio kon niet worden geladen",
     "playbackAudioNetworkFailed": "Controleer verbinding",
-    "capturePendantDisconnectedShort": "Omi maakt vanzelf opnieuw verbinding"
+    "capturePendantDisconnectedShort": "Omi maakt vanzelf opnieuw verbinding",
+    "forYou": "Voor jou",
+    "stopThese": "Deze stoppen",
+    "dismiss": "Verbergen",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

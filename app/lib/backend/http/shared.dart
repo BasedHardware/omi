@@ -121,9 +121,10 @@ Future<String> getAuthHeader({
       jwtExpiry(storedToken) ?? DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = storedToken.isNotEmpty;
 
-  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
-      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid =
+      !(expiry.isBefore(DateTime.now()) ||
+          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshResult = await AuthService.instance.refreshIdToken();
@@ -380,9 +381,9 @@ Future<void> _handleAuthUnavailable(
     AuthTokenMissingUser() => null,
     AuthTokenMissingToken() => const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
     AuthTokenTerminalFailure(:final code) => AuthSessionExpiredEvent(
-        reason: AuthSessionExpirationReason.terminalTokenFailure,
-        code: code,
-      ),
+      reason: AuthSessionExpirationReason.terminalTokenFailure,
+      code: code,
+    ),
     _ => null,
   };
   if (event != null) await AuthService.instance.expireSession(event);
@@ -481,10 +482,17 @@ Future<http.Response> sendUncaughtApiCall({
   int? retries,
   bool signOutOn401 = true,
   ApiExecutionSeams? execution,
+  bool Function()? canSend,
   void Function(AuthTokenResult refresh)? onAuthRefresh,
 }) async {
+  void ensureCurrentOwner() {
+    if (canSend != null && !canSend()) throw AuthTokenUnavailableException(const AuthTokenMissingUser());
+  }
+
+  ensureCurrentOwner();
   if (execution != null) {
     var builtHeaders = await execution.headers(ApiRequest(url: url, method: method, headers: headers, body: body));
+    ensureCurrentOwner();
     var response = await execution.transport(ApiRequest(url: url, method: method, headers: builtHeaders, body: body));
     if (response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -495,6 +503,7 @@ Future<http.Response> sendUncaughtApiCall({
         onAuthRefresh: onAuthRefresh,
         replay: () async {
           builtHeaders = await execution.headers(ApiRequest(url: url, method: method, headers: headers, body: body));
+          ensureCurrentOwner();
           return execution.transport(ApiRequest(url: url, method: method, headers: builtHeaders, body: body));
         },
       );
@@ -515,7 +524,10 @@ Future<http.Response> sendUncaughtApiCall({
   final effectiveRetries = retries ?? 1;
 
   http.Response response = await HttpPoolManager.instance.send(
-    () => _buildRequest(url, builtHeaders, body, method),
+    () {
+      ensureCurrentOwner();
+      return _buildRequest(url, builtHeaders, body, method);
+    },
     timeout: effectiveTimeout,
     retries: effectiveRetries,
   );
@@ -535,7 +547,10 @@ Future<http.Response> sendUncaughtApiCall({
           method: method,
         );
         return HttpPoolManager.instance.send(
-          () => _buildRequest(url, builtHeaders, body, method),
+          () {
+            ensureCurrentOwner();
+            return _buildRequest(url, builtHeaders, body, method);
+          },
           timeout: effectiveTimeout,
           retries: 0,
         );
@@ -922,7 +937,8 @@ Stream<String> makeStreamingApiCall({
   try {
     final requireAuthCheck = _isRequiredAuthCheck(url);
     final apiRequest = ApiRequest(url: url, method: method, headers: headers, body: body);
-    final send = seams?.transport ??
+    final send =
+        seams?.transport ??
         (request) => HttpPoolManager.instance.sendStreaming(request, timeout: ApiClient.streamSetupTimeout);
     Future<Map<String, String>> requestHeaders() => seams?.headers != null
         ? seams!.headers!(apiRequest)
@@ -1016,7 +1032,8 @@ Stream<String> makeMultipartStreamingApiCall({
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     final apiRequest = ApiRequest(url: url, method: 'POST', headers: headers, body: '');
-    final send = seams?.transport ??
+    final send =
+        seams?.transport ??
         (request) => HttpPoolManager.instance.sendStreaming(request, timeout: ApiClient.streamSetupTimeout);
     Future<Map<String, String>> requestHeaders() => seams?.headers != null
         ? seams!.headers!(apiRequest)
@@ -1031,14 +1048,14 @@ Stream<String> makeMultipartStreamingApiCall({
     Map<String, String> builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
 
     Future<http.MultipartRequest> buildRequest() => _buildMultipartRequest(
-          url: url,
-          files: files,
-          headers: builtHeaders,
-          fields: fields,
-          fileFieldName: fileFieldName,
-          method: 'POST',
-          abortTrigger: setupAbort.future,
-        );
+      url: url,
+      files: files,
+      headers: builtHeaders,
+      fields: fields,
+      fileFieldName: fileFieldName,
+      method: 'POST',
+      abortTrigger: setupAbort.future,
+    );
 
     var response = await send(await buildRequest()).timeout(ApiClient.streamSetupTimeout);
 

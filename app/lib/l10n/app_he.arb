@@ -11390,5 +11390,10 @@
     "playbackAudioUnavailable": "האודיו לא זמין",
     "playbackAudioLoadFailed": "לא ניתן לטעון את האודיו",
     "playbackAudioNetworkFailed": "בדקו את החיבור",
-    "capturePendantDisconnectedShort": "Omi יתחבר מחדש מעצמו"
+    "capturePendantDisconnectedShort": "Omi יתחבר מחדש מעצמו",
+    "forYou": "בשבילך",
+    "stopThese": "הפסקת אלה",
+    "dismiss": "סגירה",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

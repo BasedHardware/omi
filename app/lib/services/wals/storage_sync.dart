@@ -347,6 +347,7 @@ class StorageSyncImpl implements StorageSync {
         }
 
         wal.status = WalStatus.synced;
+        wal.deviceDownloadFraction = null;
 
         // Delete the file from device after successful BLE transfer (per PR #5905)
         if (wal.fileNum >= 0) {
@@ -556,6 +557,7 @@ class StorageSyncImpl implements StorageSync {
             if (wal.storageTotalBytes > 0) {
               double fileProgress = (offset / wal.storageTotalBytes).clamp(0.0, 1.0);
               double overallProgress = (fileIndex + fileProgress) / totalFiles;
+              wal.deviceDownloadFraction = fileProgress;
               progress?.onWalSyncedProgress(
                 overallProgress.clamp(0.0, 1.0),
                 speedKBps: _currentSpeedKBps,
@@ -629,9 +631,11 @@ class StorageSyncImpl implements StorageSync {
       await _storageStream?.cancel();
       _storageStream = null;
       timeoutTimer.cancel();
+      if (!endReached || hasError) wal.deviceDownloadFraction = null;
     }
 
-    bool transferComplete = endReached &&
+    bool transferComplete =
+        endReached &&
         offset >= wal.storageTotalBytes &&
         !hasError &&
         !hasParseGap &&
@@ -646,8 +650,9 @@ class StorageSyncImpl implements StorageSync {
     var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
     int totalFrames = bytesData.length;
     int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
-    int timerStart =
-        wal.timerStart > 0 ? wal.timerStart : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+    int timerStart = wal.timerStart > 0
+        ? wal.timerStart
+        : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
     int bytesLeft = 0;
 
     try {

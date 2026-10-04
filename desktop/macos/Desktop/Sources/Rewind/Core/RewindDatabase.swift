@@ -2579,6 +2579,7 @@ actor RewindDatabase {
     Self.registerConversationCaptureGroupMigration(on: &migrator)
     SiriMemoryExpirySchema.registerMigration(on: &migrator)
     LocalEmbeddingStore.registerMigration(on: &migrator)
+    ProactivityRetirementMigration.registerMigration(on: &migrator)
     return migrator
   }
 

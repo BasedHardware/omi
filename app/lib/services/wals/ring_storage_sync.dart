@@ -344,6 +344,7 @@ class RingStorageSyncImpl implements RingStorageSync {
           break;
         }
         wal.status = WalStatus.synced;
+        wal.deviceDownloadFraction = null;
         listener.onWalUpdated();
       }
     } catch (e) {
@@ -351,6 +352,9 @@ class RingStorageSyncImpl implements RingStorageSync {
       DebugLogManager.logError(e, null, 'RingStorageSync failed', {'device': _device?.id});
     } finally {
       _isSyncing = false;
+      for (final w in _wals) {
+        w.deviceDownloadFraction = null;
+      }
     }
 
     progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
@@ -373,6 +377,9 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug('RingStorageSync.syncWal: error: $e');
     } finally {
       _isSyncing = false;
+      for (final w in _wals) {
+        w.deviceDownloadFraction = null;
+      }
     }
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
   }
@@ -495,7 +502,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         final chunkTimerStart = (recordTimestamps.isNotEmpty && recordTimestamps.first > 0 && rtcValid)
             ? recordTimestamps.first
             : (firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
-                bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
+                  bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
         final flushStartedAt = DateTime.now().millisecondsSinceEpoch;
         try {
           if (chunk.isEmpty) {
@@ -692,6 +699,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         if (wal.storageTotalBytes > 0) {
           final consumedBytes = recordsConsumed * RingProtocol.recordSize;
           final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
+          wal.deviceDownloadFraction = pct;
           progress?.onWalSyncedProgress(pct, speedKBps: _currentSpeedKBps, phase: SyncPhase.downloadingFromDevice);
         }
       }
@@ -808,10 +816,12 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug('RingStorageSync: final flush error: $e');
     }
 
-    final beginConsistent = !beginAborted &&
+    final beginConsistent =
+        !beginAborted &&
         (beginStartSeq == null ||
             (beginStartSeq == readStart && (beginPacketCount == null || beginPacketCount == recordsConsumed)));
-    final doneConsistent = doneNextSeq != null &&
+    final doneConsistent =
+        doneNextSeq != null &&
         doneNextSeq == readStart + recordsConsumed &&
         reassembler.pendingBytes == 0 &&
         beginConsistent;

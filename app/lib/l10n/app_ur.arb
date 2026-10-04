@@ -11390,5 +11390,10 @@
     "playbackAudioUnavailable": "آڈیو دستیاب نہیں",
     "playbackAudioLoadFailed": "آڈیو لوڈ نہیں ہو سکا",
     "playbackAudioNetworkFailed": "کنکشن چیک کریں",
-    "capturePendantDisconnectedShort": "Omi خود دوبارہ جڑ جائے گا"
+    "capturePendantDisconnectedShort": "Omi خود دوبارہ جڑ جائے گا",
+    "forYou": "آپ کے لیے",
+    "stopThese": "یہ روکیں",
+    "dismiss": "چھپائیں",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

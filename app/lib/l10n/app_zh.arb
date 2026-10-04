@@ -3833,5 +3833,10 @@
     "playbackAudioUnavailable": "音频不可用",
     "playbackAudioLoadFailed": "无法加载音频",
     "playbackAudioNetworkFailed": "请检查网络连接",
-    "capturePendantDisconnectedShort": "Omi 会自动重新连接"
+    "capturePendantDisconnectedShort": "Omi 会自动重新连接",
+    "forYou": "为你推荐",
+    "stopThese": "停止此类推荐",
+    "dismiss": "忽略",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

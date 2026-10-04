@@ -90,6 +90,7 @@ _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_
 # ---------------------------------------------------------------------------
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
+    "proactivity:api": (120, 60),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),
     "conversations:reprocess": (3, 3600),

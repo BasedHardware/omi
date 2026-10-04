@@ -86,24 +86,6 @@ class SettingsSyncManager {
       if let v = task.browserKeywords { TaskAssistantSettings.shared.browserKeywords = v }
     }
 
-    // Insight settings
-    if let insight = remote.insight {
-      if let v = insight.enabled { InsightAssistantSettings.shared.isEnabled = v }
-      if let v = insight.analysisPrompt {
-        applyRemotePrompt(
-          v,
-          overLocalPrompt: InsightAssistantSettings.shared.analysisPrompt,
-          assistantName: "insight",
-          maximumLength: 10_000,
-          shippedDefault: InsightAssistantSettings.defaultAnalysisPrompt
-        ) { InsightAssistantSettings.shared.analysisPrompt = $0 }
-      }
-      if let v = insight.extractionInterval { InsightAssistantSettings.shared.extractionInterval = v }
-      if let v = insight.minConfidence { InsightAssistantSettings.shared.minConfidence = v }
-      if let v = insight.notificationsEnabled { InsightAssistantSettings.shared.notificationsEnabled = v }
-      if let v = insight.excludedApps { InsightAssistantSettings.shared.excludedApps = Set(v) }
-    }
-
     // Memory settings
     if let memory = remote.memory {
       if let v = memory.enabled { MemoryAssistantSettings.shared.isEnabled = v }
@@ -159,19 +141,6 @@ class SettingsSyncManager {
       browserKeywords: TaskAssistantSettings.shared.browserKeywords
     )
 
-    let insight = InsightSettingsResponse(
-      enabled: InsightAssistantSettings.shared.isEnabled,
-      analysisPrompt: Self.promptForSync(
-        InsightAssistantSettings.shared.analysisPrompt,
-        assistantName: "insight",
-        maximumLength: 10_000,
-        shippedDefault: InsightAssistantSettings.defaultAnalysisPrompt),
-      extractionInterval: InsightAssistantSettings.shared.extractionInterval,
-      minConfidence: InsightAssistantSettings.shared.minConfidence,
-      notificationsEnabled: InsightAssistantSettings.shared.notificationsEnabled,
-      excludedApps: Array(InsightAssistantSettings.shared.excludedApps)
-    )
-
     let memory = MemorySettingsResponse(
       enabled: MemoryAssistantSettings.shared.isEnabled,
       analysisPrompt: Self.promptForSync(
@@ -192,7 +161,6 @@ class SettingsSyncManager {
     return AssistantSettingsResponse(
       shared: shared,
       task: task,
-      insight: insight,
       memory: memory,
       floatingBar: floatingBar,
       updateChannel: UpdaterViewModel.shared.updateChannel.rawValue

@@ -1,7 +1,7 @@
 import hashlib
 import os
 import re
-from typing import Any, Mapping, Optional, cast
+from typing import Any, Mapping, Optional, Sequence, cast
 
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, Field
@@ -210,7 +210,7 @@ APPROVE only if ALL of these are true:
 _BCP47_LANGUAGE_RE = re.compile(r'[A-Za-z]{2,8}(-[A-Za-z0-9]{2,8})*')
 
 
-def _language_instruction(output_language: str, *, for_critic: bool = False) -> str:
+def language_instruction(output_language: str, *, for_critic: bool = False) -> str:
     """Instruction telling the model to write (or, for the critic, reject if not written in) the
     user's language (#5214).
 
@@ -324,7 +324,7 @@ def _str_value(value: object, default: str = "") -> str:
     return default
 
 
-def _format_goals(goals: list[Record]) -> str:
+def format_goals(goals: Sequence[Record]) -> str:
     if not goals:
         return "No active goals set."
     lines: list[str] = []
@@ -338,7 +338,7 @@ def _format_goals(goals: list[Record]) -> str:
     return "\n".join(lines)
 
 
-def _format_current_conversation(messages: list[Record], user_name: str) -> str:
+def format_current_conversation(messages: Sequence[Record], user_name: str) -> str:
     if not messages:
         return "No conversation in progress."
     lines: list[str] = []
@@ -348,7 +348,7 @@ def _format_current_conversation(messages: list[Record], user_name: str) -> str:
     return "\n".join(lines)
 
 
-def _format_recent_notifications(notifications: list[Record]) -> str:
+def format_recent_notifications(notifications: Sequence[Record]) -> str:
     if not notifications:
         return "No recent notifications sent."
     lines: list[str] = []
@@ -429,9 +429,9 @@ def evaluate_relevance(
     uid: Optional[str] = None,
 ) -> RelevanceResult:
     """Cheap first pass: is this conversation worth generating a notification for?"""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     resolved_date = current_date or current_date_in_tz(None)
 
     stable = GATE_PROMPT_STABLE.format(
@@ -481,9 +481,9 @@ def generate_notification(
     current_date: Optional[str] = None,
 ) -> NotificationDraft:
     """Generate the actual notification text, only called when gate passes."""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     guidance = FREQUENCY_GUIDANCE.get(frequency, FREQUENCY_GUIDANCE[3])
 
     prompt = GENERATE_PROMPT.format(
@@ -497,7 +497,7 @@ def generate_notification(
         recent_notifications=notifications_text,
         frequency_guidance=guidance,
         gate_reasoning=gate_reasoning,
-        language_instruction=_language_instruction(output_language),
+        language_instruction=language_instruction(output_language),
         current_date=current_date or current_date_in_tz(None),
     )
 
@@ -521,8 +521,8 @@ def validate_notification(
     current_date: Optional[str] = None,
 ) -> ValidationResult:
     """Final human-perspective check: would you actually want this on your phone?"""
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    goals_text = _format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    goals_text = format_goals(goals)
 
     prompt = CRITIC_PROMPT.format(
         user_name=user_name,
@@ -530,7 +530,7 @@ def validate_notification(
         draft_reasoning=draft_reasoning,
         current_conversation=current_conversation,
         goals_text=goals_text,
-        language_instruction=_language_instruction(output_language, for_critic=True),
+        language_instruction=language_instruction(output_language, for_critic=True),
         current_date=current_date or current_date_in_tz(None),
     )
 
@@ -623,9 +623,9 @@ def evaluate_proactive_notification(
     current_date: Optional[str] = None,
 ) -> ProactiveNotificationResult:
     """Legacy single-call evaluation. Kept for eval tests."""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     guidance = FREQUENCY_GUIDANCE.get(frequency, FREQUENCY_GUIDANCE[3])
 
     prompt = PROACTIVE_PROMPT_TEMPLATE.format(

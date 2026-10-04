@@ -3833,5 +3833,10 @@
     "playbackAudioUnavailable": "Zvuk nie je k dispozícii",
     "playbackAudioLoadFailed": "Zvuk sa nepodarilo načítať",
     "playbackAudioNetworkFailed": "Skontrolujte pripojenie",
-    "capturePendantDisconnectedShort": "Omi sa znova pripojí sám"
+    "capturePendantDisconnectedShort": "Omi sa znova pripojí sám",
+    "forYou": "Pre vás",
+    "stopThese": "Zastaviť tieto",
+    "dismiss": "Skryť",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

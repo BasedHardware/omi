@@ -160,7 +160,6 @@ describe('transport ownership ratchet', () => {
     const owners: [string, string][] = [
       ['main/assistants/focus/gemini.ts', 'GeminiLane.focus'],
       ['main/assistants/memory/gemini.ts', 'GeminiLane.memory'],
-      ['main/assistants/insight/gemini.ts', 'GeminiLane.insight'],
       ['main/assistants/goals/generate.ts', 'GeminiLane.goals'],
       ['main/assistants/tasks/geminiWire.ts', 'GeminiLane.taskExtraction'],
       ['main/rewind/embeddingClient.ts', 'GeminiLane.embedding'],
