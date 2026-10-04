@@ -26,12 +26,14 @@ from __future__ import annotations
 import logging
 import math
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 # Pure span helpers live in the database-layer module (stdlib only) so
 # database/ can share them without importing utils/.
-from config.audio_timeline import capture_anchor_limit, capture_send_span_limit
+from config.audio_timeline import capture_anchor_limit, capture_send_span_limit, live_capture_window_merge_union_enabled
+from models.capture_window_proof import CaptureWindowProof
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
 from utils.stt.committed_words import (
     CAPTURE_WORD_RANGES_KEY,
@@ -553,6 +555,7 @@ class ProviderEpochTranslator:
         self.timeline = timeline
         self.provider_sample_rate = provider_sample_rate
         self.send_map = SendMap(provider_sample_rate)
+        self._capture_merge_epoch = str(uuid.uuid4())
         self.rejected_segments = 0
         self._on_reject = on_reject
         self._on_mapped = on_mapped
@@ -579,6 +582,30 @@ class ProviderEpochTranslator:
         # timestamp axis at zero; replayed segments must use their original
         # capture positions instead.
         self.replay_origin_sample: Optional[int] = None
+
+    def capture_merge_proof(self, first: int, end: int) -> Optional[CaptureWindowProof]:
+        """Snapshot one accepted run, split at strict half-open wall hiatuses.
+
+        Coalesced send spans require adjacency on BOTH provider and capture
+        axes. Failed/missing sends, VAD skips and elapsed-axis holes break them.
+        No translator edge tolerance is used to extend this proof.
+        """
+        for _, start, length in self.send_map._spans:
+            last = start + length
+            if not start <= first < end <= last:
+                continue
+            start = max(start, self.timeline.compacted_below_sample or start)
+            for sample, _ in self.timeline.anchors[1:]:
+                if sample <= first:
+                    start = max(start, sample)
+                elif sample < last:
+                    last = sample
+                    break
+            window = self.timeline.project_window(first, end)
+            run = self.timeline.project_window(start, last)
+            if window is not None and run is not None:
+                return CaptureWindowProof(self._capture_merge_epoch, window, run)
+        return None
 
     def stitch_replayed_timestamps(self, segments: Sequence[Dict[str, Any]]) -> None:
         """Place replay-epoch segments on the original capture-relative axis.
@@ -807,6 +834,10 @@ class ProviderEpochTranslator:
             # these keys before the segment enters any buffer.
             segment['_capture_start_sample'] = interval[0]
             segment['_capture_end_sample'] = interval[1]
+            if live_capture_window_merge_union_enabled():
+                proof = self.capture_merge_proof(*interval)
+                if proof is not None:
+                    segment['_capture_merge_proof'] = proof
             if word_ranges_supplied:
                 segment[CAPTURE_WORD_RANGES_KEY] = word_ranges
             if self._project_times:

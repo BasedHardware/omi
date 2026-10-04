@@ -15,6 +15,8 @@ from fastapi.websockets import WebSocketDisconnect
 
 from config.capture_evidence import capture_evidence_dark_write_enabled, listen_committed_capture_coverage_enabled
 from config.translation import resolve_ondemand_config
+from routers.listen.capture_merges import snapshot_proofs, acknowledge_proofs
+from models.capture_window_proof import CaptureWindowProof
 from config.live_capture import capture_window_reason
 from utils.capture_evidence import unknown_envelope
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
@@ -110,6 +112,7 @@ class TranscriptProcessor:
         self.photo_buffer: deque[ConversationPhoto] = deque(maxlen=host.limits.max_photo_buffer_size)
         self.cache = ConversationCache(self._load_conversation)
         self.current_session_segments: Dict[str, bool] = {}
+        self._capture_merge_tails: Dict[str, Dict[str, CaptureWindowProof]] = {}
         self.suggested_segments: set[str] = set()
         self.speaker_id_allocator = ConversationSpeakerIdAllocator()
         self.language_cache = TranscriptSegmentLanguageCache()
@@ -419,6 +422,7 @@ class TranscriptProcessor:
             process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
             self._apply_speaker_identity_statuses(targets)
             fresh = [segment.model_dump() for segment in segments]
+            self._capture_merge_tails = getattr(self, "_capture_merge_tails", {})
             source_map = self.host.state.source_position_map if capture_evidence_dark_write_enabled() else None
             capture_evidence = None
             if capture_evidence_dark_write_enabled():
@@ -445,6 +449,7 @@ class TranscriptProcessor:
                 [segment.model_dump() for segment in targets],
                 live_segments=fresh,
                 live_capture_reasons={str(s.id): s.capture_window_reason for s in segments},
+                **snapshot_proofs(self._capture_merge_tails, conversation.id, segments),
                 started_at=started_at,
                 audio_timeline=audio_timeline,
                 **({'capture_evidence': capture_evidence} if capture_evidence_dark_write_enabled() else {}),
@@ -464,6 +469,7 @@ class TranscriptProcessor:
                 return None
             if getattr(self.host.state, 'capture_timeline_v2', False):
                 self._v2_committed_ids.update(str(segment.id) for segment in segments)
+            acknowledge_proofs(self._capture_merge_tails, conversation.id, written.capture_proofs)
             serialised = written.segments
             by_id = {s['id']: TranscriptSegment(**s) for s in serialised}
             if not getattr(self.host.state, 'capture_timeline_v2', False):
@@ -932,7 +938,10 @@ class TranscriptProcessor:
                         attribution = 'custom_stt'
                     elif getattr(self.host, 'is_multi_channel', False):
                         attribution = 'multi_channel'
+                    proof = raw.pop('_capture_merge_proof', None)
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
+                    if isinstance(proof, CaptureWindowProof) and proof.matches(segment.capture_window_bounds()):
+                        segment._capture_merge_proof = proof
                     segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
@@ -1188,7 +1197,10 @@ class TranscriptProcessor:
                         attribution = 'custom_stt'
                     elif getattr(self.host, 'is_multi_channel', False):
                         attribution = 'multi_channel'
+                    proof = raw.pop('_capture_merge_proof', None)
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
+                    if isinstance(proof, CaptureWindowProof) and proof.matches(segment.capture_window_bounds()):
+                        segment._capture_merge_proof = proof
                     segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None

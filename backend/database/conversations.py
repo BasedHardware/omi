@@ -17,6 +17,7 @@ from models.audio_file import AudioFile, ChunkSpan
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
+from models.capture_window_proof import CaptureWindowProof
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from utils.conversations.transcript_hash import (
@@ -2720,16 +2721,14 @@ def update_conversation_segments(
     preserve_unseen: bool = False,
     live_segments: Optional[List[dict]] = None,
     live_capture_reasons: Optional[Dict[str, str]] = None,
+    live_capture_proofs: Optional[Dict[str, CaptureWindowProof]] = None,
     segment_update_fields: Optional[tuple[str, ...]] = None,
 ):
     """Write a transcript using an explicit segment-set ownership mode.
 
-    ``live_segments`` supplies fresh, unmerged speech. Merge planning reads the
-    current receipt in this transaction; its LiveTranscriptMerge return value
-    owns both storage and the client deletion delta. ``segments`` then carries
-    only optional inference identity updates, not cached text or timestamps.
-    ``segment_update_fields`` patches existing IDs only (translation/inference);
-    absent IDs are ignored and current speech content and ordering survive.
+    ``live_segments`` plans fresh speech against this transaction's receipt;
+    LiveTranscriptMerge owns storage/client deltas. ``segments`` and ``segment_update_fields``
+    patch identities only. ``live_capture_proofs`` never enters storage.
 
     ``invalidate_client_processing`` defaults to TRUE, and that default is the
     point. This function's whole job is replacing the transcript, and a stored
@@ -2789,6 +2788,7 @@ def update_conversation_segments(
                 receipt,
                 absorbed_ids=[absorbed_id for commit in prior_commits for absorbed_id in commit],
                 capture_reasons=live_capture_reasons,
+                capture_proofs=live_capture_proofs,
             )
         remap = planned.absorbed_into if planned is not None else {}
         if remap:
