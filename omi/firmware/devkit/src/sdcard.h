@@ -39,7 +39,9 @@ int initialize_audio_file(uint8_t num);
  *
  *
  *
- * @return number of bytes written
+ * Caller must retain and retry identical data after an error. The append offset
+ * is retained across partial writes until the block has been synced and closed.
+ * @return number of bytes written, or a negative errno on failure
  */
 int write_to_file(uint8_t *data, uint32_t length);
 

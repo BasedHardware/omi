@@ -1,5 +1,6 @@
 #include "sdcard.h"
 
+#include <errno.h>
 #include <ff.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
@@ -30,6 +31,10 @@ uint8_t file_count = 0;
 static char current_full_path[MAX_PATH_LENGTH];
 static char read_buffer[MAX_PATH_LENGTH];
 static char write_buffer[MAX_PATH_LENGTH];
+/* Keep an append's original position until sync/close succeeds. Retrying the
+ * same retained block must overwrite a partial write, never append it twice.
+ */
+static off_t pending_write_offset = -1;
 
 uint32_t file_num_array[2];
 
@@ -214,13 +219,46 @@ int read_audio_data(uint8_t *buf, int amount, int offset)
 
 int write_to_file(uint8_t *data, uint32_t length)
 {
-    struct fs_file_t write_file;
-    fs_file_t_init(&write_file);
-    uint8_t *write_ptr = data;
-    fs_open(&write_file, write_buffer, FS_O_WRITE | FS_O_APPEND);
-    fs_write(&write_file, write_ptr, length);
-    fs_close(&write_file);
-    return 0;
+    struct fs_file_t file;
+    fs_file_t_init(&file);
+    int result = fs_open(&file, write_buffer, FS_O_WRITE);
+    if (result < 0) {
+        return result;
+    }
+
+    if (pending_write_offset < 0) {
+        result = fs_seek(&file, 0, FS_SEEK_END);
+        if (result == 0) {
+            pending_write_offset = fs_tell(&file);
+            if (pending_write_offset < 0) {
+                result = (int) pending_write_offset;
+            }
+        }
+    }
+    if (result == 0) {
+        result = fs_seek(&file, pending_write_offset, FS_SEEK_SET);
+    }
+    uint32_t written = 0;
+    while (result == 0 && written < length) {
+        int count = fs_write(&file, data + written, length - written);
+        if (count <= 0) {
+            result = count < 0 ? count : -ENOSPC;
+        } else {
+            written += count;
+        }
+    }
+    if (result == 0) {
+        result = fs_sync(&file);
+    }
+    int close_result = fs_close(&file);
+    if (result == 0) {
+        result = close_result;
+    }
+    if (result < 0) {
+        return result;
+    }
+    pending_write_offset = -1;
+    return (int) length;
 }
 
 int initialize_audio_file(uint8_t num)
@@ -229,9 +267,9 @@ int initialize_audio_file(uint8_t num)
     if (header == NULL) {
         return -1;
     }
+    int result = create_file(header);
     k_free(header);
-    create_file(header);
-    return 0;
+    return result;
 }
 
 char *generate_new_audio_header(uint8_t num)
@@ -302,6 +340,7 @@ int clear_audio_file(uint8_t num)
         return -1;
     }
 
+    pending_write_offset = -1;
     return 0;
 }
 

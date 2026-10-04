@@ -622,6 +622,7 @@ static bool push_to_gatt(struct bt_conn *conn)
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
+static bool storage_retry_pending;
 // bool write_to_storage(void)
 // {
 //     if (!load_tx_frame())
@@ -653,7 +654,12 @@ bool write_to_storage(void)
     }
 
     uint8_t *buffer = tx_buffer + 2;
-    uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
+    /* The legacy SD record has a one-byte frame length. Do not truncate it. */
+    if (tx_buffer_size > UINT8_MAX) {
+        LOG_ERR("Opus frame too large for SD record: %u", tx_buffer_size);
+        return false;
+    }
+    uint16_t packet_size = tx_buffer_size + OPUS_PREFIX_LENGTH;
 
     // buffer_offset = buffer_offset+amount_to_fill;
     // check if adding the new packet will cause a overflow
@@ -661,7 +667,11 @@ bool write_to_storage(void)
 
         storage_temp_data[buffer_offset] = tx_buffer_size;
         uint8_t *write_ptr = storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
+        storage_retry_pending = true;
+        if (write_to_file(write_ptr, MAX_WRITE_SIZE) != MAX_WRITE_SIZE) {
+            return false;
+        }
+        storage_retry_pending = false;
 
         buffer_offset = packet_size;
         storage_temp_data[0] = tx_buffer_size;
@@ -670,9 +680,13 @@ bool write_to_storage(void)
     } else if (buffer_offset + packet_size == MAX_WRITE_SIZE - 1) { // exact frame needed
         storage_temp_data[buffer_offset] = tx_buffer_size;
         memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
-        buffer_offset = 0;
         uint8_t *write_ptr = (uint8_t *) storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
+        storage_retry_pending = true;
+        if (write_to_file(write_ptr, MAX_WRITE_SIZE) != MAX_WRITE_SIZE) {
+            return false;
+        }
+        storage_retry_pending = false;
+        buffer_offset = 0;
 
     } else {
         storage_temp_data[buffer_offset] = tx_buffer_size;
@@ -728,8 +742,14 @@ void pusher(void)
                 valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
             }
 
+            /* A failed append owns this pending frame until its identical
+             * block is retried; switching it to BLE would change retry data.
+             */
+            if (storage_retry_pending) {
+                valid = false;
+            }
             bool progressed = false;
-            if (!valid && !storage_is_on) {
+            if ((!valid && !storage_is_on) || storage_retry_pending) {
                 bool result = false;
                 if (file_num_array[1] < MAX_STORAGE_BYTES) {
                     k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
