@@ -537,12 +537,6 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project, gemini_secret):
         'METRICS_SECRET=METRICS_SECRET:latest\n'
         'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest'
     )
-    if env == 'prod':
-        expected_secrets += (
-            '\nREDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest'
-            '\nREDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest'
-            '\nREDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest'
-        )
     assert _MODULE['_render_secrets'](desktop['secrets']) == expected_secrets
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
     assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')
@@ -736,14 +730,14 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': ''} in entries
 
 
-def test_phase_a_v2_redis_is_explicit_on_producer_hosts_and_preserves_reservation_bindings():
+def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
     prod = _MANIFEST['environments']['prod']
     gke = [prod['llm_gateway'], prod['gke']['backend-listen'], prod['gke']['pusher']]
     run = list(prod['cloud_run']['services'].values())
     for host in gke + run + [prod['desktop_backend']]:
         assert host['env']['MENTOR_PIPELINE']['value'] == 'cohort'
         assert not any(k.startswith('COMMITMENT_FOLLOWUP_TASKS_') for k in host['env'])
-    for host in gke + run:
+    for host in gke:
         assert host['env']['PROACTIVITY_REDIS_PORT']['value'] == '13151'
     for host in gke:
         assert host['env']['PROACTIVITY_REDIS_HOST']['config_map'] == {
@@ -754,17 +748,18 @@ def test_phase_a_v2_redis_is_explicit_on_producer_hosts_and_preserves_reservatio
             'name': 'prod-omi-backend-secrets',
             'key': 'REDIS_DB_PASSWORD',
         }
+    for host in run + [prod['desktop_backend']]:
+        for block in ('env', 'secrets'):
+            assert not any(key.startswith('PROACTIVITY_REDIS_') for key in host[block])
     for host in run:
-        assert host['env']['PROACTIVITY_REDIS_HOST']['value'] == (
-            'redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com'
-        )
-        assert host['secrets']['PROACTIVITY_REDIS_PASSWORD'] == {'secret': 'REDIS_DB_PASSWORD', 'version': 'latest'}
+        assert 'POSTHOG_PROJECT_API_KEY' not in host['secrets']
+        assert 'POSTHOG_API_KEY' not in host['secrets']
+    # Desktop's existing normal Redis mounts remain owned by its workflow,
+    # rather than introducing extra refs in the manifest's rendered subset.
     desktop = prod['desktop_backend']
-    for block in ('env', 'secrets'):
-        assert not any(key.startswith('PROACTIVITY_REDIS_') for key in desktop[block])
     for key in ('HOST', 'PORT', 'PASSWORD'):
-        assert desktop['secrets'][f'REDIS_DB_{key}'] == {'secret': f'DESKTOP_REDIS_DB_{key}', 'version': 'latest'}
         assert f'REDIS_DB_{key}' not in desktop['env']
+        assert f'REDIS_DB_{key}' not in desktop['secrets']
     # Gateway reservation bindings live in chart-only optional runtime references.
     chart = yaml.safe_load((_REPO_ROOT / 'backend/charts/llm-gateway/prod_omi_llm_gateway_values.yaml').read_text())
     env = {row['name']: row for row in chart['env']}
@@ -778,4 +773,41 @@ def test_phase_a_v2_redis_is_explicit_on_producer_hosts_and_preserves_reservatio
         'name': 'prod-omi-backend-secrets',
         'key': 'VERTEX_RESERVATION_REDIS_PASSWORD',
         'optional': True,
+    }
+
+
+def test_phase_a_cloud_run_secret_refs_match_pre_enablement_main():
+    # Main's declared mounts at cd3326b3a58d. Preserve the resource, env alias,
+    # and version together: a new alias can also introduce a startup dependency.
+    common = {'GOOGLE_CLIENT_SECRET', 'ENCRYPTION_SECRET', 'MODULATE_API_KEY', 'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
+    baseline = {
+        'backend': common
+        | {
+            'METRICS_SECRET',
+            'LIFECYCLE_EMAIL_SIGNING_SECRET',
+            'MEMORY_V3_CURSOR_SECRET',
+            'DESKTOP_PREVIEW_PUBLISH_KEY',
+            'BETA_PROMOTION_TOKEN',
+            'MCP_OAUTH_CLIENTS_JSON',
+            'SCREEN_FRAME_SIGNING_SECRET',
+        },
+        'backend-sync': common | {'GOOGLE_MAPS_API_KEY'},
+        'backend-sync-backfill': common,
+        'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
+    }
+    prod = _MANIFEST['environments']['prod']
+    for service, names in baseline.items():
+        refs = _MODULE['_render_secret_entries'](prod['cloud_run']['services'][service]['secrets'])
+        assert {
+            (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
+            for entry in refs
+        } == {(name, name, 'latest') for name in names}, service
+    desktop = _MODULE['_render_secret_entries'](prod['desktop_backend']['secrets'])
+    assert {
+        (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
+        for entry in desktop
+    } == {
+        ('GEMINI_API_KEY', 'DESKTOP_GEMINI_API_KEY', 'latest'),
+        ('METRICS_SECRET', 'METRICS_SECRET', 'latest'),
+        ('POSTHOG_PROJECT_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'latest'),
     }

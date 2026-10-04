@@ -2349,18 +2349,11 @@ def test_prod_cloud_run_secret_bindings_exclude_stale_optional_secrets():
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     prod_services = manifest['environments']['prod']['cloud_run']['services']
-    stale_secrets = {'SERVICE_ACCOUNT_JSON'}
+    stale_secrets = {'SERVICE_ACCOUNT_JSON', 'POSTHOG_PROJECT_API_KEY', 'PROACTIVITY_REDIS_PASSWORD'}
 
     for service_name, service_config in prod_services.items():
         secret_names = set((service_config.get('secrets') or {}).keys())
-        assert stale_secrets.isdisjoint(secret_names), f'{service_name} still binds stale secrets'
-        if service_name in {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}:
-            assert service_config['secrets']['POSTHOG_PROJECT_API_KEY'] == {
-                'secret': 'POSTHOG_PROJECT_API_KEY',
-                'version': 'latest',
-            }, f'{service_name} must bind the customer flag project for cohort admission'
-        else:
-            assert 'POSTHOG_PROJECT_API_KEY' not in secret_names
+        assert stale_secrets.isdisjoint(secret_names), f'{service_name} introduces an unnecessary runtime secret mount'
 
 
 def test_memory_maintenance_job_contract_passes_for_repo_manifest():
