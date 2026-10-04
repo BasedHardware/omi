@@ -26,10 +26,11 @@ from tests.unit.test_live_recovery_shutdown_tail import (
     wire_providers,
 )
 from utils.stt import parakeet_window as window, streaming as st
-from utils.stt.live_metrics import WINDOW_FIRST_TEXT
+from utils.stt.live_metrics import WINDOW_FIRST_TEXT, REPLAY_SKIPPED
 from utils.stt.live_failure import send_live_stt_audio
 from utils.stt.resilient_stream import ResilientAudio
 from utils.stt.replay_delivery import ReplayTailSocket
+from utils.stt import replay_delivery
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from config.live_stt_replay import ReplayLimits
@@ -131,16 +132,115 @@ async def test_stalled_paid_writer_keeps_bounded_capacity_failure(monkeypatch, p
         for n in range(4):
             actual._stt_buffer_start_sample = n * 640
             await actual._flush_stt_buffer(bytearray(b'\x01\x00' * 640), force=True)
-        assert raw.is_connection_dead
-        assert raw.typed_death_reason == 'capacity_full'
+        await until(lambda: actual.stt_socket.is_connection_dead)
+        assert actual.stt_socket.typed_death_reason == 'capacity_full'
+        await actual._monitor_stt_death()
         assert actual.host.state.stt_terminal_failure
         assert raw._send_queue.high_water <= 2
         # Local queue exhaustion is censored capacity evidence, not a
         # provider outage that should strand other healthy sessions.
         assert st._circuit_for_primary(actual.host.stt_service).state == 'closed'
     finally:
+        actual.stt_socket.finish()
         for leg in legs:
             leg.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('first,second', [('soniox', 'modulate-velma-2'), ('modulate-velma-2', 'soniox')])
+@pytest.mark.parametrize('written_before_failure', [False, True])
+async def test_ringless_failover_transfers_queued_empty_prefix_tail(monkeypatch, first, second, written_before_failure):
+    actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', first, second])
+    actual._window_replay_audio = None
+    monkeypatch.setattr(actual, '_capture', lambda *a, **k: None)
+    try:
+        actual.stt_socket.raw.fail('connection_lost')
+        assert await actual._failover_stt_socket()
+        previous = actual.stt_socket
+        assert isinstance(previous, ReplayTailSocket)
+        raw = raws[0]
+        raw._ws.gate.clear()
+        frozen, release = asyncio.Event(), asyncio.Event()
+        original_wait = replay_delivery.await_frozen_writes
+
+        async def hold_confirmation(socket, deadline):
+            if replay_delivery.raw_transport(socket) is raw:
+                frozen.set()
+                await release.wait()
+            return await original_wait(socket, deadline)
+
+        monkeypatch.setattr(replay_delivery, 'await_frozen_writes', hold_confirmation)
+        data = [b'\x11\x00' * 640, b'\x22\x00' * 640]
+        for n, packet in enumerate(data):
+            actual._stt_buffer_start_sample = n * 640
+            await actual._flush_stt_buffer(bytearray(packet), force=True)
+        await until(lambda: raw._send_queue.inflight == 1)
+        born = [packet.received for packet in previous.tail]
+        assert len(born) == 2 and raw._ws.pcm == b''
+        if written_before_failure:
+            await frozen.wait()
+            raw._ws.gate.set()
+            await until(lambda: raw._send_queue.written_audio == 1)
+            born = born[1:]
+        source = 'soniox' if first == 'soniox' else 'modulate'
+        successor = 'soniox' if second == 'soniox' else 'modulate'
+        skipped = REPLAY_SKIPPED.labels(source=source, successor=successor)
+        before = skipped._value.get()
+        raw._mark_dead('synthetic failure', 'connection_lost')
+        assert await actual._failover_stt_socket()
+        assert not previous.tail
+        assert [packet.received for packet in actual.stt_socket.tail] == born
+        expected = b''.join(data[1:] if written_before_failure else data)
+        await until(lambda: raws[-1]._ws.byte_count == len(expected))
+        assert raws[-1]._ws.pcm == expected
+        assert skipped._value.get() == before
+        assert actual._window_ring() is None
+    finally:
+        actual.stt_socket.finish()
+        for leg in legs:
+            leg.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider', ['soniox', 'modulate-velma-2'])
+async def test_initial_capacity_wait_does_not_delay_audio_or_disconnect(monkeypatch, provider):
+    monkeypatch.setattr(st, 'stt_service_models', [provider])
+    ws = ClientSocket()
+    rt = make_runtime(ws, monkeypatch)
+    rt.stt_service = st.STTService.soniox if provider == 'soniox' else st.STTService.modulate
+    rt.stt_model = provider
+    actual = rt.receiver
+    monkeypatch.setattr(actual, '_capture', lambda *a, **k: None)
+    monkeypatch.setattr(actual, '_bounded_teardown', AsyncMock())
+    raws, dials = [], []
+    wire_providers(monkeypatch, rt, raws, dials)
+    assert await actual.initialize_stt()
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def wait_capacity(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        return True
+
+    monkeypatch.setattr(actual.stt_socket, 'wait_send_capacity', wait_capacity)
+    receive = asyncio.create_task(actual.receive_data())
+    try:
+        ws.feed_audio(b'\x11\x00' * 640)
+        await asyncio.wait_for(entered.wait(), timeout=0.5)
+        for _ in range(4):
+            ws.feed_audio(b'\x22\x00' * 640)
+        ws.disconnect(1006)
+        await until(lambda: rt.state.close_code == 1006)
+        assert not release.is_set()
+        assert isinstance(actual.stt_socket, ReplayTailSocket)
+        assert len(actual.stt_socket.tail) == 5
+        assert raws[0]._ws.pcm == b''
+    finally:
+        receive.cancel()
+        await asyncio.gather(receive, return_exceptions=True)
+        actual.stt_socket.finish()
         await stop(raws)
 
 

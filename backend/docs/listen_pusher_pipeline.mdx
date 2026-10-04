@@ -924,12 +924,13 @@ separately enabled canary Deployment — the recovery paths below apply. No
 deployment or enablement is performed by this change. See the rollout gate in
 `backend/docs/operational/windowed-live-stt.md`.
 
-Recovery-armed initial paid legs wait for bounded send-queue headroom before
-enqueueing audio: immediately buffered client reads cannot fill 2,000 slots
-without letting the writer run. A stalled writer still times out within the
-adapter's two-second queue bound. Recovered successors always retain the
-independent paced tail, including when the replay prefix is empty, so capture
-and disconnect observation continue while wire delivery waits. This path
+Recovery-armed initial paid legs and recovered successors use the independent
+paced tail, including when the replay prefix is empty. Its supervised pump
+waits for bounded send-queue headroom; capture and disconnect observation
+continue while wire delivery waits. A stalled writer still times out within
+the adapter's two-second queue bound. On later failover without a window replay
+ring, the old wrapper transfers its unwritten tail to the next successor before
+abort, preserving capture timestamps and debiting confirmed writes. This path
 retains the 26-second tail admission cap and 28-second packet residence bound;
 overload/expired backlog keeps the existing failure/skipped-audio accounting. A synchronous enqueue that latches a typed
 capacity failure retains that cause; it does not open a provider-outage circuit
