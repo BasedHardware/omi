@@ -11974,7 +11974,7 @@ export async function reply_to_review_v1_apps__app_id__review_reply_patch(path: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function app_reviews_v1_apps__app_id__reviews_get(path: { app_id: string }, init?: OmiApiClientInit): Promise<Array<AppReview>> {
+export async function app_reviews_v1_apps__app_id__reviews_get(path: { app_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<AppReview>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/apps/${path.app_id}/reviews`;
   const _search = "";
@@ -11983,6 +11983,10 @@ export async function app_reviews_v1_apps__app_id__reviews_get(path: { app_id: s
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
