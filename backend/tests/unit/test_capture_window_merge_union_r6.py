@@ -1,4 +1,4 @@
-"""Conservative unknown boundaries and diagnostic bytes through the live receiver."""
+"""Legacy unknown absorption and diagnostic bytes through the live receiver."""
 
 import json
 import os
@@ -46,8 +46,7 @@ async def test_simulated_mixed_boundaries_rows_and_coverage(monkeypatch, provide
             json.dumps(report, indent=2) + '\n'
         )
     assert report['off']['rows'] == 1 and report['off']['known_window'] == 0
-    assert report['on']['texts'] == [texts[0] + ' ' + texts[1], texts[2], texts[3]]
-    assert report['on']['known_window'] == 1
+    assert report['on'] == report['off']
     assert report['on']['words'] == report['off']['words']
     assert all(d >= 1 for d in report['on']['durations'])
     assert all(len(t.split()) >= 2 for t in report['on']['texts'])
@@ -169,7 +168,7 @@ async def test_uncertain_or_short_sides_never_split(
 @pytest.mark.parametrize(
     'language,left,right', [('en', 'Lost sentence.', 'Next sentence.'), ('vi', 'Mất câu trước.', 'Câu tiếp theo.')]
 )
-async def test_clear_full_sentence_boundary_can_recover_window(
+async def test_full_sentence_punctuation_keeps_legacy_absorption(
     monkeypatch, enabled, known_first, language, left, right
 ):
     receiver, callback, epoch, sender, processor, store = harness(monkeypatch, enabled)
@@ -182,10 +181,8 @@ async def test_clear_full_sentence_boundary_can_recover_window(
         accept(receiver, sender, 0, 4)
     callback([raw('b', right, 2, 3.5)])
     rows = await tick(receiver, processor, store)
-    assert [s['text'] for s in rows] == ([left, right] if enabled else [left + ' ' + right])
-    assert known(rows) == int(enabled)
-    if enabled:
-        assert all(s['end'] - s['start'] >= 1 and len(s['text'].split()) >= 2 for s in rows)
+    assert [s['text'] for s in rows] == [left + ' ' + right]
+    assert known(rows) == 0
 
 
 async def test_inbound_cassette_and_public_storage_bytes_exclude_private_proof(monkeypatch, tmp_path):

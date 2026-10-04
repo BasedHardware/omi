@@ -452,7 +452,6 @@ def merge_live_segments(
         protected_segment_ids=covered,
         speaker_bound_ids=speaker_bound,
         preserve_capture_windows=live_capture_window_merge_preservation_enabled(),
-        bound_unknown_sentences=live_capture_window_merge_union_enabled(),
     )
     result = persisted[:-1] + [segment.model_dump() for segment in combined.segments]
     result.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))

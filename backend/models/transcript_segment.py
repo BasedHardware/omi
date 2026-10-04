@@ -29,38 +29,6 @@ CROSS_SPEAKER_REPAIR_MAX_GAP_SECONDS = 3
 
 AUDIO_SOURCE_MERGE_TOLERANCE_SECONDS = 0.001
 
-# Titles and common period-bearing abbreviations in English, Spanish and Vietnamese.
-# Dotted initials, decimals, URLs and ellipses are rejected structurally below.
-UNKNOWN_BOUNDARY_ABBREVIATIONS = frozenset(
-    'dr mr mrs ms prof sr sra srta jr st vs etc eg ie ts ths pgs gs bs ks tp th tr'.split()
-)
-
-
-def _unambiguous_unknown_boundary(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
-    """Abstain unless both already-sized rows have clear sentence-boundary text.
-
-    Provider word callbacks are not sentence boundaries. Do not isolate their first
-    word while waiting for a continuation; losing its window is safer than a short row.
-    Uncased sentence starts also abstain without explicit provider boundary evidence.
-    """
-    left, right = a.text.split(), b.text.split()
-    # Standalone punctuation is often delivered as its own provider token, then
-    # attached by formatting. It cannot make a one-word utterance substantial.
-    left_words = sum(any(char.isalnum() for char in token) for token in left)
-    right_words = sum(any(char.isalnum() for char in token) for token in right)
-    if left_words < 2 or right_words < 2 or not (a.end - a.start >= 1 and b.end - b.start >= 1):
-        return False
-    last = left[-1]
-    if last[-1:] not in SENTENCE_ENDERS or not right[0][0].isupper():
-        return False
-    preceding = last[:-1]
-    return (
-        len(preceding) >= 2
-        and preceding.isalpha()
-        and not preceding.isupper()
-        and preceding.casefold() not in UNKNOWN_BOUNDARY_ABBREVIATIONS
-    )
-
 
 def _sync_source_window(source: Any) -> Optional[Tuple[float, float]]:
     """Absolute ``(start, end)`` of a stored sync provenance marker, or None."""
@@ -370,7 +338,6 @@ class TranscriptSegment(BaseModel):
         protected_segment_ids: Optional[set[str]] = None,
         speaker_bound_ids: Optional[set[int]] = None,
         preserve_capture_windows: bool = False,
-        bound_unknown_sentences: bool = False,
     ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
             return CombineSegmentsResult(segments, [], [], {})
@@ -524,15 +491,6 @@ class TranscriptSegment(BaseModel):
             if b.audio_alignment != a.audio_alignment:
                 return a, b
             if b.audio_capture_run != a.audio_capture_run:
-                return a, b
-            if (
-                bound_unknown_sentences
-                and (a.capture_window_bounds() is None) != (b.capture_window_bounds() is None)
-                and _is_chronological_continuation(a, b)
-                and _unambiguous_unknown_boundary(a, b)
-            ):
-                # Only keep two substantial, unambiguous sentence pieces separate.
-                # Ambiguous punctuation and individual word callbacks still absorb.
                 return a, b
             preserve_known_window = preserve_capture_windows and (
                 a.capture_window_bounds() is not None or b.capture_window_bounds() is not None

@@ -125,7 +125,7 @@ async def test_positive_gap_requires_complete_same_epoch_send_proof(monkeypatch,
 
 
 @pytest.mark.parametrize('enabled', [False, True])
-async def test_unknown_absorption_ends_at_a_sentence_not_at_each_word(monkeypatch, enabled):
+async def test_unknown_absorption_keeps_legacy_rows(monkeypatch, enabled):
     receiver, callback, epoch, sender, processor, store = harness(monkeypatch, enabled)
     accept(receiver, sender, 0, 5)
     callback([raw('unknown', 'Lost', 0, 0)])
@@ -133,8 +133,7 @@ async def test_unknown_absorption_ends_at_a_sentence_not_at_each_word(monkeypatc
     for i, text in enumerate(['old', 'sentence.', 'Now', 'we', 'have', 'audio.']):
         callback([raw(str(i), text, 0.2 + i * 0.5, 0.5 + i * 0.5)])
         rows = await tick(receiver, processor, store)
-    # Neither the zero-duration left row nor the next single-word callback is
-    # enough evidence to isolate a substantial sentence row. Conservatively absorb.
+    # Unknown contributors retain exact legacy absorption across punctuation.
     assert [s['text'] for s in rows] == ['Lost old sentence. Now we have audio.']
     assert known(rows) == 0
 
@@ -147,9 +146,8 @@ async def test_unknown_sentence_boundary_locales(monkeypatch, ender):
     accept(receiver, sender, 0, 4)
     callback([raw('b', 'Next sentence' + ender, 2, 3.5)])
     rows = await tick(receiver, processor, store)
-    assert [s['text'] for s in rows] == ['Lost sentence' + ender, 'Next sentence' + ender]
-    assert known(rows) == 1
-    assert all(s['end'] - s['start'] >= 1 and len(s['text'].split()) >= 2 for s in rows)
+    assert [s['text'] for s in rows] == ['Lost sentence' + ender + ' Next sentence' + ender]
+    assert known(rows) == 0
 
 
 @pytest.mark.parametrize('enabled', [False, True])
@@ -252,7 +250,9 @@ async def test_simulated_word_stream_coverage_and_rows(monkeypatch, provider):
         )
     assert report['on']['words'] == report['off']['words'] == 72
     assert report['on']['known_window'] > report['off']['known_window']
-    assert report['on']['rows'] <= 12
+    assert report['on']['rows'] == report['off']['rows']
+    assert report['on']['texts'] == report['off']['texts']
+    assert report['on']['durations'] == report['off']['durations']
     assert all(len(t.split()) >= 6 for t in report['on']['texts'])
     assert all(d >= 1 for d in report['on']['durations'])
     if os.getenv('CAPTURE_R5_SIMULATION_OUTPUT'):

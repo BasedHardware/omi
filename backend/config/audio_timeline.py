@@ -87,5 +87,5 @@ def live_capture_window_strict_projection_enabled() -> bool:
 
 
 def live_capture_window_merge_union_enabled() -> bool:
-    """Union receiver-proven live windows and bound unknown sentence absorption. Default off."""
+    """Union known live windows across receiver-proven received gaps. Default off."""
     return os.getenv('LIVE_CAPTURE_WINDOW_MERGE_UNION', '').strip().lower() in _TRUTHY
