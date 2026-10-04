@@ -11544,6 +11544,34 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteMeetingScreenshotMessage => 'צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו.';
 
   @override
+  String get renameDevice => 'שינוי שם המכשיר';
+
+  @override
+  String get deviceRenameFailed => 'לא ניתן היה לשמור את השם על ה-Omi. ודאו שהוא מחובר ונסו שוב.';
+
+  @override
+  String get renameDeviceDescription => 'השם נשמר על ה-Omi עצמו, ולכן יופיע בכל טלפון שתצמידו אליו.';
+
+  @override
+  String get tapToRename => 'הקישו לשינוי השם';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'שם המכשיר לא יכול להיות ריק';
+
+  @override
+  String get deviceNameInvalidCharacters => 'השם מכיל תווים שאינם נתמכים';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'השם ארוך מדי (עד $maxBytes תווים; אמוג\'י וניקוד נספרים יותר)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'שם המכשיר שונה ל-$name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'יצירת הסיכום נכשלה';
 
   @override

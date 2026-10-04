@@ -21,6 +21,7 @@ import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/transports/rayban_meta_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/omi_glass_protocol.dart';
 
 /// Status of the device's offline storage (new multi-file firmware protocol).
 class StorageStatus {
@@ -137,13 +138,6 @@ class DeviceConnectionFactory {
     final locator = device.locator;
     if (locator == null) return null;
 
-    // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
-    final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
-        deviceName.contains('openglass') ||
-        deviceName.contains('omiglass') ||
-        deviceName.contains('glass');
-
     switch (locator.kind) {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
@@ -163,9 +157,8 @@ class DeviceConnectionFactory {
 
     switch (device.type) {
       case DeviceType.omi:
-        // Check if this is actually an OmiGlass device by name
-        if (isOmiGlass) {
-          Logger.debug('DeviceConnectionFactory: Device name suggests OmiGlass, creating OmiGlassConnection');
+        if (OmiGlassProtocol.usesOmiGlassProtocol(device)) {
+          Logger.debug('DeviceConnectionFactory: OmiGlass protocol detected, creating OmiGlassConnection');
           return OmiGlassConnection(device, transport);
         }
         return OmiDeviceConnection(device, transport);
@@ -735,6 +728,28 @@ abstract class DeviceConnection {
   }
 
   Future<int?> performGetMicGain();
+
+  /// Name stored on the device itself, or null when the device does not
+  /// expose one (older firmware, other vendors) or is disconnected.
+  Future<String?> getDeviceName() async {
+    if (await isConnected()) {
+      return await performGetDeviceName();
+    }
+    return null;
+  }
+
+  Future<String?> performGetDeviceName() async => null;
+
+  /// Persists [name] on the device. Returns true only when the device
+  /// confirmed the new name; false when unsupported, rejected, or disconnected.
+  Future<bool> setDeviceName(String name) async {
+    if (await isConnected()) {
+      return await performSetDeviceName(name);
+    }
+    return false;
+  }
+
+  Future<bool> performSetDeviceName(String name) async => false;
 
   /// Called when the server transcription WebSocket reconnects after a
   /// network-only outage (BLE stayed connected throughout). Override to

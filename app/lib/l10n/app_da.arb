@@ -3880,5 +3880,13 @@
     "stopThese": "Stop disse",
     "dismiss": "Afvis",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Navnet indeholder tegn, der ikke understøttes",
+    "deviceNameTooLong": "Navnet er for langt (op til {maxBytes} tegn; emoji og accenter tæller ekstra)",
+    "renameDevice": "Omdøb enhed",
+    "deviceRenameFailed": "Navnet kunne ikke gemmes på din Omi. Tjek, at den er forbundet, og prøv igen.",
+    "renameDeviceDescription": "Navnet gemmes på selve din Omi, så det vises på enhver telefon, du parrer den med.",
+    "deviceRenamed": "Enheden er omdøbt til {name}",
+    "tapToRename": "Tryk for at omdøbe",
+    "deviceNameCannotBeEmpty": "Enhedsnavnet må ikke være tomt"
 }

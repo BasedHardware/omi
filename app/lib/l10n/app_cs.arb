@@ -3838,5 +3838,13 @@
     "stopThese": "Zastavit tyto",
     "dismiss": "Skrýt",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Název obsahuje nepodporované znaky",
+    "deviceNameTooLong": "Název je příliš dlouhý (max. {maxBytes} znaků; emoji a diakritika se počítají víc)",
+    "renameDevice": "Přejmenovat zařízení",
+    "deviceRenameFailed": "Název se nepodařilo uložit do Omi. Zkontrolujte, že je připojeno, a zkuste to znovu.",
+    "renameDeviceDescription": "Název se ukládá přímo do Omi, takže se zobrazí na každém telefonu, se kterým ho spárujete.",
+    "deviceRenamed": "Zařízení přejmenováno na {name}",
+    "tapToRename": "Klepnutím přejmenujete",
+    "deviceNameCannotBeEmpty": "Název zařízení nemůže být prázdný"
 }

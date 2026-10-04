@@ -11712,6 +11712,36 @@ class AppLocalizationsTa extends AppLocalizations {
       'இது இந்தக் கூட்டத்தின் குறிப்பிலிருந்து திரைப்பிடிப்பை நீக்கும். இதைச் செயல்தவிர்க்க முடியாது.';
 
   @override
+  String get renameDevice => 'சாதனத்தின் பெயரை மாற்று';
+
+  @override
+  String get deviceRenameFailed =>
+      'உங்கள் Omi-யில் பெயரைச் சேமிக்க முடியவில்லை. அது இணைக்கப்பட்டுள்ளதா என்று சரிபார்த்து மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get renameDeviceDescription =>
+      'பெயர் உங்கள் Omi-யிலேயே சேமிக்கப்படுகிறது, எனவே நீங்கள் இணைக்கும் எந்த ஃபோனிலும் அது தோன்றும்.';
+
+  @override
+  String get tapToRename => 'பெயரை மாற்ற தட்டவும்';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'சாதனத்தின் பெயர் வெறுமையாக இருக்க முடியாது';
+
+  @override
+  String get deviceNameInvalidCharacters => 'பெயரில் ஆதரிக்கப்படாத எழுத்துகள் உள்ளன';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'பெயர் மிக நீளமானது (அதிகபட்சம் $maxBytes எழுத்துகள்; எமோஜிகள் மற்றும் உயிர்மெய் குறிகள் அதிகமாகக் கணக்கிடப்படும்)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'சாதனத்தின் பெயர் $name என மாற்றப்பட்டது';
+  }
+
+  @override
   String get conversationSummaryFailed => 'சுருக்கம் தோல்வியடைந்தது';
 
   @override

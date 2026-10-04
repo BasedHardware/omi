@@ -3838,5 +3838,13 @@
     "stopThese": "Apturēt šos",
     "dismiss": "Paslēpt",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Nosaukumā ir neatbalstītas rakstzīmes",
+    "deviceNameTooLong": "Nosaukums ir pārāk garš (līdz {maxBytes} rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)",
+    "renameDevice": "Pārdēvēt ierīci",
+    "deviceRenameFailed": "Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.",
+    "renameDeviceDescription": "Nosaukums tiek saglabāts pašā Omi, tāpēc tas parādās jebkurā tālrunī, ar kuru to savienosiet pārī.",
+    "deviceRenamed": "Ierīce pārdēvēta par {name}",
+    "tapToRename": "Pieskarieties, lai pārdēvētu",
+    "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs"
 }

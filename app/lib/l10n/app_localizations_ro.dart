@@ -11686,6 +11686,35 @@ class AppLocalizationsRo extends AppLocalizations {
       'Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată.';
 
   @override
+  String get renameDevice => 'Redenumește dispozitivul';
+
+  @override
+  String get deviceRenameFailed =>
+      'Numele nu a putut fi salvat pe Omi. Verifică dacă este conectat și încearcă din nou.';
+
+  @override
+  String get renameDeviceDescription => 'Numele este salvat pe Omi, așa că apare pe orice telefon cu care îl asociezi.';
+
+  @override
+  String get tapToRename => 'Atinge pentru a redenumi';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Numele dispozitivului nu poate fi gol';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Numele conține caractere neacceptate';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Numele este prea lung (până la $maxBytes caractere; emoji-urile și diacriticele contează mai mult)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Dispozitivul a fost redenumit în $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Rezumatul a eșuat';
 
   @override

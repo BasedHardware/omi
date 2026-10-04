@@ -11619,6 +11619,35 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteMeetingScreenshotMessage => 'Dette fjerner skærmbilledet fra mødets note. Det kan ikke fortrydes.';
 
   @override
+  String get renameDevice => 'Omdøb enhed';
+
+  @override
+  String get deviceRenameFailed => 'Navnet kunne ikke gemmes på din Omi. Tjek, at den er forbundet, og prøv igen.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Navnet gemmes på selve din Omi, så det vises på enhver telefon, du parrer den med.';
+
+  @override
+  String get tapToRename => 'Tryk for at omdøbe';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Enhedsnavnet må ikke være tomt';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Navnet indeholder tegn, der ikke understøttes';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Navnet er for langt (op til $maxBytes tegn; emoji og accenter tæller ekstra)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Enheden er omdøbt til $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Resuméet mislykkedes';
 
   @override

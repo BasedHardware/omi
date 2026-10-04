@@ -11730,6 +11730,36 @@ class AppLocalizationsTl extends AppLocalizations {
       'Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik.';
 
   @override
+  String get renameDevice => 'Palitan ang Pangalan ng Device';
+
+  @override
+  String get deviceRenameFailed =>
+      'Hindi ma-save ang pangalan sa iyong Omi. Tiyaking nakakonekta ito at subukang muli.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Naka-save ang pangalan sa mismong Omi, kaya lalabas ito sa anumang teleponong ipapares mo.';
+
+  @override
+  String get tapToRename => 'I-tap para palitan ang pangalan';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Hindi maaaring blangko ang pangalan ng device';
+
+  @override
+  String get deviceNameInvalidCharacters => 'May hindi sinusuportahang character ang pangalan';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Masyadong mahaba ang pangalan (hanggang $maxBytes character; mas malaki ang bilang ng emoji at accent)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Pinalitan ang pangalan ng device sa $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Nabigo ang buod';
 
   @override

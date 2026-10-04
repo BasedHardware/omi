@@ -11395,5 +11395,13 @@
     "stopThese": "یہ روکیں",
     "dismiss": "چھپائیں",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "renameDevice": "ڈیوائس کا نام بدلیں",
+    "deviceRenameFailed": "آپ کے Omi پر نام محفوظ نہیں ہو سکا۔ یقینی بنائیں کہ یہ منسلک ہے اور دوبارہ کوشش کریں۔",
+    "renameDeviceDescription": "نام آپ کے Omi پر ہی محفوظ ہوتا ہے، اس لیے یہ ہر اس فون پر نظر آتا ہے جس کے ساتھ آپ اسے جوڑتے ہیں۔",
+    "tapToRename": "نام بدلنے کے لیے ٹیپ کریں",
+    "deviceNameCannotBeEmpty": "ڈیوائس کا نام خالی نہیں ہو سکتا",
+    "deviceNameInvalidCharacters": "نام میں غیر معاون حروف شامل ہیں",
+    "deviceNameTooLong": "نام بہت لمبا ہے (زیادہ سے زیادہ {maxBytes} حروف؛ ایموجی اور اعراب زیادہ شمار ہوتے ہیں)",
+    "deviceRenamed": "ڈیوائس کا نام بدل کر {name} کر دیا گیا"
 }

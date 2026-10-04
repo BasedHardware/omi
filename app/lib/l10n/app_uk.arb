@@ -3838,5 +3838,13 @@
     "stopThese": "Вимкнути такі",
     "dismiss": "Приховати",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Ім'я містить непідтримувані символи",
+    "deviceNameTooLong": "Ім'я надто довге (до {maxBytes} символів; емодзі та кирилиця займають більше)",
+    "renameDevice": "Перейменувати пристрій",
+    "deviceRenameFailed": "Не вдалося зберегти ім'я на Omi. Перевірте, чи пристрій підключено, і спробуйте ще раз.",
+    "renameDeviceDescription": "Ім'я зберігається на самому Omi, тому воно з'явиться на будь-якому телефоні, з яким ви його з'єднаєте.",
+    "deviceRenamed": "Пристрій перейменовано на {name}",
+    "tapToRename": "Торкніться, щоб перейменувати",
+    "deviceNameCannotBeEmpty": "Ім'я пристрою не може бути порожнім"
 }

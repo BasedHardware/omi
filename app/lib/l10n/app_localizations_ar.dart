@@ -11564,6 +11564,34 @@ class AppLocalizationsAr extends AppLocalizations {
       'سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك.';
 
   @override
+  String get renameDevice => 'إعادة تسمية الجهاز';
+
+  @override
+  String get deviceRenameFailed => 'تعذّر حفظ الاسم على جهاز Omi. تأكد من أنه متصل وحاول مرة أخرى.';
+
+  @override
+  String get renameDeviceDescription => 'يُحفظ الاسم على جهاز Omi نفسه، لذا يظهر على أي هاتف تقرنه به.';
+
+  @override
+  String get tapToRename => 'انقر لإعادة التسمية';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'لا يمكن أن يكون اسم الجهاز فارغًا';
+
+  @override
+  String get deviceNameInvalidCharacters => 'يحتوي الاسم على أحرف غير مدعومة';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'الاسم طويل جدًا (حتى $maxBytes حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'تمت إعادة تسمية الجهاز إلى $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'فشل إنشاء الملخص';
 
   @override

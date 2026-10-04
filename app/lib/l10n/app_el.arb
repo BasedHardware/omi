@@ -3838,5 +3838,13 @@
     "stopThese": "Διακοπή αυτών",
     "dismiss": "Απόρριψη",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Το όνομα περιέχει μη υποστηριζόμενους χαρακτήρες",
+    "deviceNameTooLong": "Το όνομα είναι πολύ μεγάλο (έως {maxBytes} χαρακτήρες· τα emoji και οι τόνοι μετρούν περισσότερο)",
+    "renameDevice": "Μετονομασία συσκευής",
+    "deviceRenameFailed": "Δεν ήταν δυνατή η αποθήκευση του ονόματος στο Omi. Ελέγξτε ότι είναι συνδεδεμένο και δοκιμάστε ξανά.",
+    "renameDeviceDescription": "Το όνομα αποθηκεύεται στο ίδιο το Omi, ώστε να εμφανίζεται σε κάθε τηλέφωνο με το οποίο το συζευγνύετε.",
+    "deviceRenamed": "Η συσκευή μετονομάστηκε σε {name}",
+    "tapToRename": "Πατήστε για μετονομασία",
+    "deviceNameCannotBeEmpty": "Το όνομα της συσκευής δεν μπορεί να είναι κενό"
 }

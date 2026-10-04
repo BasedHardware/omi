@@ -11395,5 +11395,13 @@
     "stopThese": "توقف این موارد",
     "dismiss": "رد کردن",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "renameDevice": "تغییر نام دستگاه",
+    "deviceRenameFailed": "ذخیره نام روی Omi ممکن نشد. مطمئن شوید متصل است و دوباره تلاش کنید.",
+    "renameDeviceDescription": "نام روی خودِ Omi ذخیره می‌شود، بنابراین در هر گوشی‌ای که با آن جفت کنید نمایش داده می‌شود.",
+    "tapToRename": "برای تغییر نام ضربه بزنید",
+    "deviceNameCannotBeEmpty": "نام دستگاه نمی‌تواند خالی باشد",
+    "deviceNameInvalidCharacters": "نام شامل نویسه‌های پشتیبانی‌نشده است",
+    "deviceNameTooLong": "نام خیلی طولانی است (حداکثر {maxBytes} نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)",
+    "deviceRenamed": "نام دستگاه به {name} تغییر یافت"
 }

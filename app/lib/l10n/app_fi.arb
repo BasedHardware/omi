@@ -3838,5 +3838,13 @@
     "stopThese": "Lopeta nämä",
     "dismiss": "Hylkää",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Nimi sisältää merkkejä, joita ei tueta",
+    "deviceNameTooLong": "Nimi on liian pitkä (enintään {maxBytes} merkkiä; emojit ja ääkköset vievät enemmän)",
+    "renameDevice": "Nimeä laite uudelleen",
+    "deviceRenameFailed": "Nimeä ei voitu tallentaa Omiin. Tarkista, että se on yhdistetty, ja yritä uudelleen.",
+    "renameDeviceDescription": "Nimi tallennetaan itse Omiin, joten se näkyy jokaisessa puhelimessa, johon sen yhdistät.",
+    "deviceRenamed": "Laite nimettiin uudelleen: {name}",
+    "tapToRename": "Napauta nimetäksesi uudelleen",
+    "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä"
 }

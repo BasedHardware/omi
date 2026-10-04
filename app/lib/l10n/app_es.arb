@@ -3838,5 +3838,13 @@
     "stopThese": "Dejar de recibir esto",
     "dismiss": "Descartar",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "El nombre contiene caracteres no compatibles",
+    "deviceNameTooLong": "El nombre es demasiado largo (hasta {maxBytes} caracteres; los emojis y acentos cuentan más)",
+    "renameDevice": "Renombrar dispositivo",
+    "deviceRenameFailed": "No se pudo guardar el nombre en tu Omi. Comprueba que esté conectado e inténtalo de nuevo.",
+    "renameDeviceDescription": "El nombre se guarda en tu Omi, así que aparece en cualquier teléfono con el que lo emparejes.",
+    "deviceRenamed": "Dispositivo renombrado a {name}",
+    "tapToRename": "Toca para renombrar",
+    "deviceNameCannotBeEmpty": "El nombre del dispositivo no puede estar vacío"
 }

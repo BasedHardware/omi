@@ -3873,5 +3873,13 @@
     "stopThese": "Hentikan Ini",
     "dismiss": "Tutup",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Nama mengandung karakter yang tidak didukung",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimal {maxBytes} karakter; emoji dan aksen dihitung lebih)",
+    "renameDevice": "Ubah Nama Perangkat",
+    "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi Anda. Pastikan perangkat terhubung, lalu coba lagi.",
+    "renameDeviceDescription": "Nama disimpan di Omi itu sendiri, sehingga muncul di ponsel mana pun yang Anda pasangkan.",
+    "deviceRenamed": "Nama perangkat diubah menjadi {name}",
+    "tapToRename": "Ketuk untuk mengubah nama",
+    "deviceNameCannotBeEmpty": "Nama perangkat tidak boleh kosong"
 }

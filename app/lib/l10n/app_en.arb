@@ -13859,6 +13859,50 @@
     "@deleteMeetingScreenshotMessage": {
         "description": "Body of the dialog confirming deletion of one meeting screenshot"
     },
+    "@renameDevice": {
+        "description": "Title of the dialog that renames the connected Omi device"
+    },
+    "@deviceNameInvalidCharacters": {
+        "description": "Validation error when the device name has control characters"
+    },
+    "@deviceRenameFailed": {
+        "description": "Error shown when the device rejected or did not confirm the new name"
+    },
+    "renameDevice": "Rename Device",
+    "deviceRenameFailed": "Could not save the name to your Omi. Check that it is connected and try again.",
+    "renameDeviceDescription": "The name is saved on your Omi, so it shows up on any phone you pair with.",
+    "tapToRename": "Tap to rename",
+    "deviceNameCannotBeEmpty": "Device name cannot be empty",
+    "deviceNameInvalidCharacters": "Name contains unsupported characters",
+    "deviceNameTooLong": "Name is too long (up to {maxBytes} characters; emoji and accents count extra)",
+    "@renameDeviceDescription": {
+        "description": "Explains that the device name is stored on the device itself"
+    },
+    "@tapToRename": {
+        "description": "Subtitle of the device name row when renaming is supported"
+    },
+    "deviceRenamed": "Device renamed to {name}",
+    "@deviceNameTooLong": {
+        "description": "Validation error when the device name exceeds the byte limit",
+        "placeholders": {
+            "maxBytes": {
+                "type": "int",
+                "example": "20"
+            }
+        }
+    },
+    "@deviceRenamed": {
+        "description": "Confirmation after the device accepted the new name",
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "My Omi"
+            }
+        }
+    },
+    "@deviceNameCannotBeEmpty": {
+        "description": "Validation error when the device name is blank"
+    },
     "conversationSummaryFailed": "Summary failed",
     "@conversationSummaryFailed": {
         "description": "Conversation list row chip: the server could not summarize this conversation after its retries, and retrying can still succeed. Shown next to a Retry button."

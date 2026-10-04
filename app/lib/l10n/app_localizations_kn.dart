@@ -11666,6 +11666,36 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
 
   @override
+  String get renameDevice => 'ಸಾಧನದ ಹೆಸರು ಬದಲಿಸಿ';
+
+  @override
+  String get deviceRenameFailed =>
+      'ನಿಮ್ಮ Omi ನಲ್ಲಿ ಹೆಸರನ್ನು ಉಳಿಸಲಾಗಲಿಲ್ಲ. ಅದು ಸಂಪರ್ಕದಲ್ಲಿದೆಯೇ ಎಂದು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get renameDeviceDescription =>
+      'ಹೆಸರು ನಿಮ್ಮ Omi ನಲ್ಲಿಯೇ ಉಳಿಯುತ್ತದೆ, ಆದ್ದರಿಂದ ನೀವು ಜೋಡಿಸುವ ಯಾವುದೇ ಫೋನ್‌ನಲ್ಲಿ ಇದು ಕಾಣಿಸುತ್ತದೆ.';
+
+  @override
+  String get tapToRename => 'ಹೆಸರು ಬದಲಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'ಸಾಧನದ ಹೆಸರು ಖಾಲಿಯಾಗಿರಲು ಸಾಧ್ಯವಿಲ್ಲ';
+
+  @override
+  String get deviceNameInvalidCharacters => 'ಹೆಸರಿನಲ್ಲಿ ಬೆಂಬಲವಿಲ್ಲದ ಅಕ್ಷರಗಳಿವೆ';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'ಹೆಸರು ತುಂಬಾ ಉದ್ದವಾಗಿದೆ (ಗರಿಷ್ಠ $maxBytes ಅಕ್ಷರಗಳು; ಎಮೋಜಿ ಮತ್ತು ಒತ್ತಕ್ಷರಗಳು ಹೆಚ್ಚು ಎಣಿಸಲ್ಪಡುತ್ತವೆ)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'ಸಾಧನದ ಹೆಸರನ್ನು $name ಎಂದು ಬದಲಿಸಲಾಗಿದೆ';
+  }
+
+  @override
   String get conversationSummaryFailed => 'ಸಾರಾಂಶ ವಿಫಲವಾಗಿದೆ';
 
   @override

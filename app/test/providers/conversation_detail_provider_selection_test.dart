@@ -108,6 +108,39 @@ void main() {
     expect(detailProvider.conversationOrNull?.id, 'selected');
   });
 
+  test('a pinned fixture day is rejected until selectedDate is pinned to that same day', () {
+    // Regression for the j1 seeded-journey midnight flake: conversationOrNull
+    // compares conversationLocalDayKey(createdAt) to selectedDate, which
+    // defaults to DateTime.now(). A seed hardcoded to 2026-09-16 looked
+    // present on that UTC day and vanished on 2026-09-17 with
+    // "No valid conversation found". Both sides must be pinned to the same
+    // stable instant — never "today". Dates here match
+    // JourneyFixtureBackend.seededConversationAt; the other day is far
+    // enough away that no timezone offset can collapse them.
+    final fixtureAt = DateTime.utc(2026, 9, 16, 9, 0, 0);
+    final otherDay = DateTime.utc(2026, 9, 17, 12, 0, 0);
+    final convo = ServerConversation(
+      id: 'seeded-conv-j1-0001',
+      createdAt: fixtureAt,
+      structured: Structured('Journey one seeded conversation', 'Overview'),
+    );
+
+    final detailProvider = ConversationDetailProvider();
+    addTearDown(detailProvider.dispose);
+    detailProvider.selectedDate = conversationLocalDayKey(otherDay);
+    detailProvider.setCachedConversation(convo);
+
+    expect(detailProvider.conversationOrNull, isNull);
+    expect(
+      () => detailProvider.conversation,
+      throwsA(isA<StateError>().having((e) => e.message, 'message', 'No valid conversation found')),
+    );
+
+    detailProvider.selectedDate = conversationLocalDayKey(fixtureAt);
+    expect(detailProvider.conversationOrNull?.id, 'seeded-conv-j1-0001');
+    expect(detailProvider.conversation.structured.title, 'Journey one seeded conversation');
+  });
+
   test('selected conversation survives a transient empty day group', () {
     // A refresh can momentarily empty the group; the page must keep showing the
     // conversation it was opened with instead of blanking or retargeting.
