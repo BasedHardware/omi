@@ -175,7 +175,7 @@ def _busiest_day(summaries: Sequence[Mapping[str, Any]]) -> Optional[Dict[str, A
     )
     return {
         'date': busiest['date'],
-        'summary_id': busiest.get('id'),
+        'summary_id': _id(busiest.get('id')),
         'total_conversations': _stat(busiest, 'total_conversations'),
         'total_duration_minutes': _stat(busiest, 'total_duration_minutes'),
     }
