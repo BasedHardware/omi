@@ -60,7 +60,18 @@ import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/pages/settings/data_export.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/pages/settings/import_history_page.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
+import 'package:omi/pages/settings/transcription/json_editor_page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
+import 'package:omi/models/user_usage.dart';
+import 'package:omi/models/sync_state.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/pages/conversations/auto_sync_page.dart';
 part 'native_advanced_host_cases.dart';
+part 'native_remaining_host_cases.dart';
 
 class _NativePhoneOwner extends PhoneCallProvider {
   _NativePhoneOwner() : super.forTesting();
@@ -133,7 +144,8 @@ void main() {
     expect(await captureScreenshot(screenshot), isNotEmpty);
   }
 
-  if (!const bool.fromEnvironment('NATIVE_UI_ADVANCED_ONLY')) {
+  if (!const bool.fromEnvironment('NATIVE_UI_ADVANCED_ONLY') &&
+      !const bool.fromEnvironment('NATIVE_UI_REMAINING_ONLY')) {
     testWidgets('native conversation detail retains its player across summary, transcript and search', (tester) async {
       await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
       addTearDown(JourneyHermeticBoot.stop);
@@ -384,6 +396,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+  registerNativeRemainingHostChecks(checkNativeHost);
+  if (const bool.fromEnvironment('NATIVE_UI_REMAINING_ONLY')) return;
   registerNativeAdvancedHostChecks(checkNativeHost);
   if (const bool.fromEnvironment('NATIVE_UI_DETAILS_ONLY') || const bool.fromEnvironment('NATIVE_UI_ADVANCED_ONLY')) {
     return;

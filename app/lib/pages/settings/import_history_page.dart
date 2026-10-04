@@ -10,11 +10,15 @@ import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
+
+part 'import_history_native.dart';
 
 /// The label an import-history row shows for [createdAt]: the time today, "Yesterday at …", then
 /// the date and time — in the reader's locale and clock (docs/ux-contract.md §8).
@@ -606,7 +610,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return _nativeImportHistory(Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.importData),
@@ -660,7 +664,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 

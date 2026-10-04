@@ -1,6 +1,25 @@
 import XCTest
 
 final class PreviewUITests: XCTestCase {
+    func testPasswordInputIsSecureAndClearsWhenTheOwnerWithdrawsIt() {
+        let app = start(["surface", "secure-input"])
+        let input = app.secureTextFields["draft"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10))
+        input.tap()
+        input.typeText("fixture-key")
+        let typed = NSPredicate { _, _ in app.staticTexts["preview-last-action"].label == "draft:fixture-key" }
+        expectation(for: typed, evaluatedWith: nil)
+        waitForExpectations(timeout: 10)
+        app.buttons["reset_key"].tap()
+        let replacement = app.secureTextFields["replacement_key"]
+        XCTAssertTrue(replacement.waitForExistence(timeout: 5))
+        XCTAssertEqual(replacement.value as? String, "API key")
+        XCTAssertFalse(input.exists)
+        app.buttons["save"].tap()
+        XCTAssertTrue(app.staticTexts["saved:"].waitForExistence(timeout: 5))
+        capture(app, "native-secure-transcription-input")
+    }
+
     func testPhotoSupportsDoubleTapPinchPanAndReset() {
         let app = start(["surface", "photo"])
         let photo = app.scrollViews["photo"]

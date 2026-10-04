@@ -141,7 +141,8 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
             footer: widget.isResponseSchema ? l10n.quicklyPopulateResponse : l10n.quicklyPopulateRequest),
       NativeSection('json_editor', [
         if (_parseError != null) NativeRow('json_error', l10n.invalidJsonError, kind: 'label'),
-        NativeRow('json_text', widget.title, kind: 'text', value: _controller.text, action: (value) {
+        NativeRow('json_text', widget.title, kind: 'text', maximumLength: 262144, value: _controller.text,
+            action: (value) {
           _controller.text = value as String;
           _parseJson();
         }),

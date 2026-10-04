@@ -119,6 +119,12 @@ void main() {
   });
   test('native voice waveform rejects malformed amplitudes', () {
     expect(
+        const NativeRow('chart', 'Usage', kind: 'chart', points: [
+          {'x': 0, 'y': 1}
+        ]).valid,
+        false,
+        reason: 'The Swift decoder also requires an explicit point label');
+    expect(
         const NativeRow('wave', 'Recording', kind: 'waveform', points: [
           {'x': 0, 'y': .5, 'label': ''}
         ]).valid,
@@ -142,6 +148,15 @@ void main() {
     ])!;
     expect(groups.map((group) => group.id).toSet().length, 2);
     expect(groups.expand((group) => group.rows).map((row) => row.id).toSet().length, 2);
+  });
+
+  test('explicit JSON input bounds do not relax other fields or secure replacement limits', () {
+    final config = 'a' * 20000;
+    expect(NativeRow('json', 'JSON', kind: 'text', value: config, maximumLength: 262144).valid, true);
+    expect(NativeRow('message', 'Message', kind: 'text', value: config).valid, false);
+    expect(const NativeRow('password', 'API key', kind: 'text', keyboard: 'password', value: '').valid, true);
+    expect(const NativeRow('bad', 'Bad', keyboard: 'password').valid, false);
+    expect(const NativeRow('oversized', 'Oversized', kind: 'text', value: '', maximumLength: 262145).valid, false);
   });
 
   test('native text preserves the original grapheme limit', () {

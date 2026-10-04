@@ -9,6 +9,14 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/add_mcp_server_page.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
+import 'package:omi/pages/settings/import_history_page.dart';
+import 'package:omi/pages/conversations/auto_sync_page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
+import 'package:omi/models/user_usage.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
@@ -18,6 +26,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 import 'journeys/support/fixture_backend.dart';
 import 'visual_audit/screen_frame_fixtures.dart';
+import 'visual_audit/fakes.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 
 /// Interactive, seeded Simulator inspection through agent-flutter and native AX.
@@ -39,8 +48,20 @@ Future<void> main() async {
   Env.overrideApiBaseUrl(backend.baseUrl);
   PlatformManager.initializeForLocalHarness();
   AuthService.installLocalHarnessTokenGateway(_InspectionGateway());
-  runApp(ChangeNotifierProvider(
-      create: (_) => AppearanceProvider(),
+  await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.openai, apiKey: 'synthetic-only-inspection-key'));
+  final usage = UsageProvider(deviceTimeZone: () async => 'Asia/Kolkata');
+  usage.debugSetUsage(
+      'today',
+      UsageStats(
+          transcriptionSeconds: 600, speechSeconds: 500, wordsTranscribed: 100, insightsGained: 2, memoriesCreated: 1),
+      []);
+  runApp(MultiProvider(
+      providers: [
+        ...defaultAuditProviders(),
+        ChangeNotifierProvider(create: (_) => AppearanceProvider()),
+        ChangeNotifierProvider<UsageProvider>.value(value: usage)
+      ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: const [Locale('en')],
@@ -55,6 +76,25 @@ class _InspectionRoutes extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Synthetic native UI inspection')),
         body: ListView(children: [
+          ListTile(
+              key: const Key('inspect_transcription'),
+              title: const Text('Transcription'),
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute<void>(builder: (_) => const TranscriptionSettingsPage()))),
+          ListTile(
+              key: const Key('inspect_import'),
+              title: const Text('Import history'),
+              onTap: () =>
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ImportHistoryPage()))),
+          ListTile(
+              key: const Key('inspect_usage'),
+              title: const Text('Plan and usage'),
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute<void>(builder: (_) => const UsagePage(debugSkipFetch: true)))),
+          ListTile(
+              key: const Key('inspect_offline_sync'),
+              title: const Text('Offline Sync'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AutoSyncPage()))),
           ListTile(
               key: const Key('inspect_mcp'),
               title: const Text('MCP setup'),

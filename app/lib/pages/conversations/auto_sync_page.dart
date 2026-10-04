@@ -14,6 +14,9 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/sync_card_progress_line.dart';
@@ -21,6 +24,8 @@ import 'package:omi/utils/sync_confirmation.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
+
+part 'auto_sync_native.dart';
 
 /// The Manage Storage clear actions, each paired with the storage re-read.
 ///
@@ -71,6 +76,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // user is up to date). All is still one tap away — and the list below is
   // sliver-lazy, so visiting it is safe even with thousands of items.
   WalDisplayFilter _filter = WalDisplayFilter.pending;
+  void _updateNativeSync(VoidCallback update) => setState(update);
 
   @override
   void initState() {
@@ -100,63 +106,71 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         // itemBuilder would re-sort+re-filter on every visible row.
         final filteredWals = hasAnyRecording ? syncProvider.walsForDisplayFilter(_filter) : const <Wal>[];
 
-        return Scaffold(
-          // One name for the device-storage sync screen everywhere: "Offline Sync", as Settings calls it.
-          appBar: AppBar(
-            leading: const OmiBackButton(),
-            title: Text(context.l10n.offlineSync),
-            actions: [
-              OmiIconButton(
-                icon: const FaIcon(FontAwesomeIcons.circleInfo, size: 18),
-                label: context.l10n.howSyncingWorks,
-                color: OmiColors.textSecondary,
-                onPressed: () => _showInfoSheet(context),
+        return _nativeOfflineSync(
+            syncProvider,
+            userProvider,
+            deviceProvider,
+            filteredWals,
+            Scaffold(
+              // One name for the device-storage sync screen everywhere: "Offline Sync", as Settings calls it.
+              appBar: AppBar(
+                leading: const OmiBackButton(),
+                title: Text(context.l10n.offlineSync),
+                actions: [
+                  OmiIconButton(
+                    icon: const FaIcon(FontAwesomeIcons.circleInfo, size: 18),
+                    label: context.l10n.howSyncingWorks,
+                    color: OmiColors.textSecondary,
+                    onPressed: () => _showInfoSheet(context),
+                  ),
+                  if (syncProvider.clearableWalsCount > 0)
+                    OmiIconButton(
+                      icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 18),
+                      label: context.l10n.manageStorage,
+                      color: OmiColors.textSecondary,
+                      onPressed: () => _showManageStorageSheet(context, syncProvider),
+                    ),
+                  const SizedBox(width: OmiSpacing.xxs),
+                ],
               ),
-              if (syncProvider.clearableWalsCount > 0)
-                OmiIconButton(
-                  icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 18),
-                  label: context.l10n.manageStorage,
-                  color: OmiColors.textSecondary,
-                  onPressed: () => _showManageStorageSheet(context, syncProvider),
-                ),
-              const SizedBox(width: OmiSpacing.xxs),
-            ],
-          ),
-          body: CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate.fixed([
-                    const SizedBox(height: 8),
-                    _buildOverallStatusCard(syncProvider, syncState),
-                    if (syncProvider.syncCompleted && syncProvider.syncedConversationsPointers.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      _buildConversationsCard(syncProvider),
-                    ],
-                    if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
-                    if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
-                        deviceProvider.ringStatus != null) ...[
-                      const SizedBox(height: 32),
-                      DeviceStorageCard(status: deviceProvider.ringStatus!),
-                    ],
-                    const SizedBox(height: 32),
-                    _buildStorageSettings(userProvider),
-                    if (hasAnyRecording) ...[
-                      const SizedBox(height: 32),
-                      _buildRecordingsHeader(filteredWals.length),
-                      const SizedBox(height: 10),
-                      _buildFilterChips(),
-                      const SizedBox(height: 12),
-                    ],
-                  ]),
-                ),
+              body: CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate.fixed([
+                        const SizedBox(height: 8),
+                        _buildOverallStatusCard(syncProvider, syncState),
+                        if (syncProvider.syncCompleted && syncProvider.syncedConversationsPointers.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          _buildConversationsCard(syncProvider),
+                        ],
+                        if (syncState.hasError) ...[
+                          const SizedBox(height: 16),
+                          _buildErrorCard(syncState, syncProvider)
+                        ],
+                        if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
+                            deviceProvider.ringStatus != null) ...[
+                          const SizedBox(height: 32),
+                          DeviceStorageCard(status: deviceProvider.ringStatus!),
+                        ],
+                        const SizedBox(height: 32),
+                        _buildStorageSettings(userProvider),
+                        if (hasAnyRecording) ...[
+                          const SizedBox(height: 32),
+                          _buildRecordingsHeader(filteredWals.length),
+                          const SizedBox(height: 10),
+                          _buildFilterChips(),
+                          const SizedBox(height: 12),
+                        ],
+                      ]),
+                    ),
+                  ),
+                  if (hasAnyRecording) _buildWalListSliver(syncProvider, filteredWals),
+                  const SliverToBoxAdapter(child: SizedBox(height: 48)),
+                ],
               ),
-              if (hasAnyRecording) _buildWalListSliver(syncProvider, filteredWals),
-              const SliverToBoxAdapter(child: SizedBox(height: 48)),
-            ],
-          ),
-        );
+            ));
       },
     );
   }
@@ -166,86 +180,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // ─────────────────────────────────────────
 
   Widget _buildOverallStatusCard(SyncProvider p, SyncState s) {
-    final l = context.l10n;
-    final attention = p.needsAttentionWalsCount;
-    final uploaded = p.uploadedWals.length;
-    final readyToBackUp = p.displaySortedWals
-        .where(
-          (w) =>
-              w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying,
-        )
-        .length;
-    final hasAnyRecording = p.allWals.isNotEmpty;
-
-    final isActive = s.isSyncing || s.isFetchingConversations;
-    final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimited;
-
-    String title;
-    String? progressText;
-    Color titleColor = OmiColors.textPrimary;
-    Widget? action;
-
-    if (isActive) {
-      switch (s.phase) {
-        case SyncPhase.downloadingFromDevice:
-          title = l.syncCardDownloadingTitle;
-          // Percent and speed live on [DeviceDownloadMeter], not the file-count line.
-          // A ring download has no file index, so the old subtitle stayed blank.
-          break;
-        case SyncPhase.waitingForInternet:
-          title = l.syncCardWaitingInternet;
-          titleColor = Colors.orangeAccent;
-          break;
-        case SyncPhase.uploadingToCloud:
-          title = l.syncCardUploadingTitle;
-          progressText = SyncCardProgressLine.subtitle(
-            phase: s.phase,
-            currentFile: s.currentFile,
-            totalFiles: s.totalFiles,
-            counterLabel: (processed, total) => l.syncCardProgressOf(processed, total),
-          );
-          break;
-        case SyncPhase.processingOnServer:
-          title = l.syncCardProcessing;
-          break;
-        default:
-          title = s.isFetchingConversations ? l.syncCardProcessing : l.syncCardUploadingTitle;
-      }
-      action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
-    } else if (p.isRateLimited) {
-      title = syncCooldownTitle(p.rateLimitReason, l);
-      titleColor = Colors.orangeAccent;
-    } else if (uploaded > 0) {
-      // Uploads finished, reconciler is resolving jobs in the background.
-      title = l.syncCardProcessing;
-      final counts = p.offlineServerProcessingCounts;
-      progressText = SyncCardProgressLine.serverProcessingSubtitle(
-            processed: counts.processed,
-            total: counts.total,
-            counterLabel: (processed, total) => l.processingProgress(processed, total),
-          ) ??
-          l.syncProcessingBackgroundHint;
-    } else if (attention > 0) {
-      title = l.syncCardNeedsAttention(attention);
-      titleColor = Colors.orangeAccent;
-      action = statusActionPill(l.sync, OmiColors.accent, () async {
-        if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
-      });
-    } else if (readyToBackUp > 0) {
-      title = l.syncCardReadyCount(readyToBackUp);
-      action = statusActionPill(l.sync, OmiColors.accent, () async {
-        if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
-      });
-    } else if (hasAnyRecording) {
-      title = l.syncCardAllBackedUp;
-      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
-    } else {
-      // No recordings — same calm baseline; the card never pops in/out.
-      title = l.syncCardAllBackedUp;
-      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
-    }
-
-    final downloading = isActive && s.phase == SyncPhase.downloadingFromDevice;
+    final status = _offlineStatus(p, s);
+    final title = status.title;
+    final progressText = status.subtitle;
+    final titleColor = status.color;
+    final showSpinner = status.spinner;
+    final downloading = status.downloading;
+    final action =
+        status.action == null ? null : statusActionPill(status.actionLabel!, status.actionColor, status.action!);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),

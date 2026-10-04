@@ -21,7 +21,7 @@ same layout. Flutter no longer puts a small native list below its own Home heade
 | Search and People | Recent searches, folders, starred items, scoped results, People search/filters/pinning/confidence/voice samples/cleanup, create/edit/move/delete folder sheets | Advanced search result selection |
 | Tasks and Memories | Lists, dated Tasks, search, completion, menus, create/edit forms with explicit Save and discard guard; memory categories, belief collection, device filter and bulk management | List selection, hierarchy/reorder and Mind Map |
 | Apps | Catalog, app detail, owner add/edit/confirmation, gallery, Markdown/MCP setup, filters, declared permission disclosures, enable/disable/subscribe actions and guarded review editor | Secure API-key creation/reveal, AI generator and specialized payout screens |
-| Settings | Navigation, profile, display/notifications, language, privacy, permissions, recording groups, device settings, plan selection/management, integrations, Apple Health, vocabulary, JSON transcription editor, developer/webhook forms, export progress/cancel, fair-use status, phone/cloud storage settings and task service configuration (Asana/ClickUp/Todoist/Google Tasks) | Existing checkout/OAuth owners, custom transcription/secure developer credentials, detailed usage/import/wrapped, Shortcuts setup and device-specific controls |
+| Settings | Navigation, profile, display/notifications, language, privacy, permissions, recording groups, device settings, plan selection/management, integrations, Apple Health, vocabulary, JSON transcription editor, developer/webhook forms, export progress/cancel, fair-use status, detailed usage/periods/quotas/share, import history/actions, custom transcription setup, phone/cloud storage settings, Offline Sync and task service configuration (Asana/ClickUp/Todoist/Google Tasks) | Existing checkout/OAuth owners, secure developer credentials, wrapped, Shortcuts setup, recording-file detail/storage management and device-specific controls |
 | Diagnostics | Connection summaries, live signal and battery charts, day/week choice, disconnect history, export | Same Bluetooth polling and export owners |
 | Chat | Transcript/composer, send/retry, follow-up, scoped context, voice waveform/Stop/Send/Retry/Discard, attachment picker/removal/previews and app picker | Structured interactive message inspector and non-image attachment viewers |
 | First run | Sign-in actions, consent, name, primary language, acquisition survey, permission rows, guided voice prompts/waveform/review/edit/save receipts, step navigation and completion | Device discovery, interactive pendant setup and knowledge graph |
@@ -42,9 +42,9 @@ containment. Both Runner targets compile the same renderer.
   selection returns validated input to the current Dart owner; cancellation returns no mutation.
 - `com.omi.native_ui/home/<view id>`: localized Home/read snapshots and existing read/navigation
   callbacks (`detail`, `open`, `browse`, `refresh`, `loadMore`, capture and chrome actions).
-- `com.omi.native_ui/surface/<view id>`: typed lists, forms, chat and charts; `update`/`invalidate`
+- `com.omi.native_ui/surface/<view id>`: typed lists, forms, chat and charts; `update`/`invalidate`/bounded explicit `captureImage`
   and a whitelisted `action` command. Callbacks stay in Dart with their existing owner.
-- Native code receives no tokens and adds no backend client, database, recording coordinator or
+- Native code receives no app-auth tokens and adds no backend client, database, recording coordinator or
   persistent conversation cache. Auth/Firebase, HTTP, BLE, microphone, recovery, subscription
   checks, mutations and undo continue through current services and their existing contracts.
 - Native chat mounts the existing voice widget offstage only when the supported native renderer
@@ -92,6 +92,19 @@ containment. Both Runner targets compile the same renderer.
   controllers; submit/update occurs only after explicit confirmation. Secure key creation/reveal stays with its existing
   credential owner. Export cancellation completes the original abort signal and cleanup; developer URL edits keep the
   original explicit Save/discard semantics, while existing switches retain immediate persistence.
+- Custom transcription keeps the current provider/configuration owner and explicit Save/import/export.
+  A replacement key starts in a blank native SecureField; routine snapshots omit the saved key.
+  Explicit reveal shows the current draft, and provider changes or Clear withdraw the previous input.
+  Explicit JSON configuration editing can contain third-party provider credentials; it is not an
+  app-auth channel. Logs remain closed until requested. Native JSON input is capped at 262,144 text units;
+  larger configurations restore the complete original editor.
+- Usage keeps the existing period/timezone/bucket/quota owners. Explicit Share captures the visible
+  native view with size bounds, checks the account generation around asynchronous work, and hands
+  watermark/file/share cleanup back to the existing owner. Capture is unavailable after native
+  invalidation, detach or account-session change; no native screenshot cache is added.
+- Offline Sync uses the same extracted status-priority calculation for native and original cards.
+  Retry/cancel/download/import/storage/retention commands continue through the existing owners;
+  merely projecting status does not initiate sync or alter recordings.
 - Copy, dates and speaker names come from the current localization and formatting primitives.
   System/Dark/Light follows `AppearanceProvider`; native code does not store a second choice.
   The embedded UIKit host applies that choice to its traits too, including live changes and
@@ -147,3 +160,7 @@ For a focused advanced-host rerun, add `--dart-define=NATIVE_UI_ADVANCED_ONLY=tr
 `integration_test/native_ui_inspection.dart` is a separate local-dev Debug Simulator entry for
 agent-flutter/native accessibility inspection with synthetic Markdown, MCP and image routes.
 It never boots a real account or BLE device and refuses non-Debug/non-local-dev builds.
+
+For the focused Settings/Offline Sync host checks, add
+`--dart-define=NATIVE_UI_REMAINING_ONLY=true`. The interactive inspection entry also
+exposes synthetic import, usage and custom-transcription routes; its saved key is a fixture.

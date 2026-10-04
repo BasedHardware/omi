@@ -15,6 +15,14 @@ import 'native_navigation_chrome.dart';
 
 typedef NativeAction = FutureOr<void> Function(Object? value);
 
+/// Captures the currently visible native presentation for an explicit share action.
+/// No image is cached here; the existing share owner retains its file and privacy lifecycle.
+class NativeSurfaceController {
+  Future<Uint8List?> Function()? _capture;
+
+  Future<Uint8List?> captureImage() async => _capture?.call();
+}
+
 /// Normalize thumbnails already supplied by the existing image/file owner. Unsupported URLs
 /// render without a thumbnail; they do not introduce another authenticated API client.
 String? nativeImageUri(String? input) {
@@ -145,8 +153,9 @@ class NativeRow {
         return false;
       }
     }
-    if (maximumLength != null && (kind != 'text' || maximumLength! < 1 || maximumLength! > 10000)) return false;
-    if (keyboard != null && (kind != 'text' || !['phone', 'email', 'url', 'decimal', 'default'].contains(keyboard))) {
+    if (maximumLength != null && (kind != 'text' || maximumLength! < 1 || maximumLength! > 262144)) return false;
+    if (keyboard != null &&
+        (kind != 'text' || !['phone', 'email', 'url', 'decimal', 'default', 'password'].contains(keyboard))) {
       return false;
     }
     if (optionSearch != null || optionClose != null) {
@@ -164,6 +173,7 @@ class NativeRow {
           (point) =>
               point['x'] is! num ||
               point['y'] is! num ||
+              point['label'] is! String ||
               !(point['x'] as num).isFinite ||
               !(point['y'] as num).isFinite,
         )) {
@@ -348,8 +358,10 @@ class IosNativeSurface extends StatefulWidget {
     this.nativeWrapper,
     this.chat,
     this.reader,
+    this.controller,
   });
 
+  final NativeSurfaceController? controller;
   final NativeChat? chat;
   final NativeReader? reader;
   final String title, empty, searchValue, searchPlaceholder;
@@ -383,6 +395,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
   @override
   void initState() {
     super.initState();
+    widget.controller?._capture = _captureImage;
     if (!iosSwiftUiEnabled) {
       _session = NativeReadSession(isCurrent: () => false);
       return;
@@ -401,6 +414,23 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         if (mounted) setState(() {});
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(IosNativeSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.controller, oldWidget.controller)) {
+      if (oldWidget.controller?._capture == _captureImage) oldWidget.controller?._capture = null;
+      widget.controller?._capture = _captureImage;
+    }
+  }
+
+  Future<Uint8List?> _captureImage() async {
+    final channel = _channel;
+    if (channel == null || !mounted || !_session.active) return null;
+    final image = await channel.invokeMethod<Uint8List>('captureImage');
+    if (!mounted || !_session.active || !identical(channel, _channel)) return null;
+    return image != null && image.length <= 16 * 1024 * 1024 ? image : null;
   }
 
   Map<String, Object?> _snapshot() => {
@@ -549,6 +579,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
 
   @override
   void dispose() {
+    if (widget.controller?._capture == _captureImage) widget.controller?._capture = null;
     _session.dispose();
     unawaited(_invalidate());
     unawaited(_auth?.cancel());

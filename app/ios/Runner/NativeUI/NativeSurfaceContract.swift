@@ -194,8 +194,8 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && (row.kind == "keypad" || (row.keypadMode == nil && row.eraseLabel == nil && row.clearLabel == nil))
                       && row.hasValidImageURI
                       && (row.level == nil || (0...3).contains(row.level ?? -1))
-                      && (row.maximumLength == nil || (row.kind == "text" && (1...10000).contains(row.maximumLength ?? 0)))
-                      && (row.keyboard == nil || (row.kind == "text" && ["default", "phone", "email", "url", "decimal"].contains(row.keyboard ?? "")))
+                      && (row.maximumLength == nil || (row.kind == "text" && (1...262144).contains(row.maximumLength ?? 0)))
+                      && (row.keyboard == nil || (row.kind == "text" && ["default", "phone", "email", "url", "decimal", "password"].contains(row.keyboard ?? "")))
                       && ((row.optionSearch == nil && row.optionClose == nil)
                           || (row.kind == "choice" && !(row.optionSearch ?? "").isEmpty && !(row.optionClose ?? "").isEmpty))
                       && (row.minimumDate == nil || Double(row.minimumDate ?? "").map { $0.isFinite && abs($0) <= 8640000000000000 } == true)

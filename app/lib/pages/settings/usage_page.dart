@@ -27,9 +27,15 @@ import 'package:omi/pages/settings/widgets/usage/usage_stat_tile.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+
+part 'usage_native.dart';
+part 'usage_share.dart';
 
 class UsagePage extends StatefulWidget {
   final bool showUpgradeDialog;
@@ -50,6 +56,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   final GlobalKey _shareButtonKey = GlobalKey();
+  void _updateNativeUsage(VoidCallback update) => setState(update);
+
+  final _nativeUsage = NativeSurfaceController();
   UsageMetric _selectedMetric = UsageMetric.words;
   late AnimationController _waveController;
   late AnimationController _notesController;
@@ -74,165 +83,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
     await provider.loadAvailablePlans();
-  }
-
-  Future<void> _shareUsage() async {
-    // Capture context-dependent values before async gaps
-    final l10n = context.l10n;
-    final provider = context.read<UsageProvider>();
-    final localeName = l10n.localeName;
-    final sharePeriod = _getPeriodForIndex(_tabController.index);
-
-    final captureContext = _screenshotKeys[_tabController.index].currentContext;
-    if (captureContext == null || !mounted) return;
-    final RenderRepaintBoundary boundary = captureContext.findRenderObject() as RenderRepaintBoundary;
-    final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-    if (!mounted) return;
-
-    // Load logo
-    final ByteData logoData = await rootBundle.load('assets/images/herologo.png');
-    final ui.Codec codec = await ui.instantiateImageCodec(logoData.buffer.asUint8List());
-    final ui.FrameInfo fi = await codec.getNextFrame();
-    final ui.Image logoImage = fi.image;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    // Draw the original image
-    canvas.drawImage(image, Offset.zero, Paint());
-
-    // Prepare the watermark text
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: 'omi.me',
-        style: TextStyle(
-          color: OmiColors.textPrimary.withValues(alpha: 0.8),
-          fontSize: 14 * 3.0, // Scale font size with pixelRatio
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      textDirection: ui.TextDirection.ltr,
-    );
-    textPainter.layout();
-
-    // Define sizes and padding
-    const double logoHeight = 20 * 3.0; // Scaled logo height
-    final double logoWidth = (logoImage.width / logoImage.height) * logoHeight;
-    const double padding = 4 * 3.0;
-    final double totalWatermarkWidth = logoWidth + padding + textPainter.width;
-    final double totalWatermarkHeight = logoHeight > textPainter.height ? logoHeight : textPainter.height;
-
-    // Position and draw the watermark at the bottom right
-    final double xPos = image.width - totalWatermarkWidth - (16 * 3.0);
-    final double yPos = image.height - totalWatermarkHeight - (16 * 3.0);
-
-    // Draw logo
-    final logoRect = Rect.fromLTWH(xPos, yPos + (totalWatermarkHeight - logoHeight) / 2, logoWidth, logoHeight);
-    canvas.drawImageRect(
-      logoImage,
-      Rect.fromLTWH(0, 0, logoImage.width.toDouble(), logoImage.height.toDouble()),
-      logoRect,
-      Paint(),
-    );
-
-    // Draw text
-    textPainter.paint(
-      canvas,
-      Offset(xPos + logoWidth + padding, yPos + (totalWatermarkHeight - textPainter.height) / 2),
-    );
-
-    // Convert the canvas to a new image and then to bytes
-    final watermarkedImage = await recorder.endRecording().toImage(image.width, image.height);
-    final ByteData? byteData = await watermarkedImage.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData == null) {
-      if (mounted) OmiFeedback.error(context, l10n.wrappedFailedToShare);
-      return;
-    }
-    final Uint8List pngBytes = byteData.buffer.asUint8List();
-
-    final tempDir = await getTemporaryDirectory();
-    final file = await File('${tempDir.path}/omi_usage.png').create();
-    await file.writeAsBytes(pngBytes);
-
-    final period = _getPeriodForIndex(_tabController.index);
-    UsageStats? stats;
-    String periodTitle = l10n.today;
-    switch (period) {
-      case 'today':
-        stats = provider.todayUsage;
-        periodTitle = l10n.today;
-        break;
-      case 'monthly':
-        stats = provider.monthlyUsage;
-        periodTitle = l10n.thisMonth;
-        break;
-      case 'yearly':
-        stats = provider.yearlyUsage;
-        periodTitle = l10n.thisYear;
-        break;
-      case 'all_time':
-        stats = provider.allTimeUsage;
-        periodTitle = l10n.allTime;
-        break;
-    }
-
-    final numberFormatter = NumberFormat.decimalPattern(localeName);
-
-    String shareText;
-    final baseText = l10n.shareStatsMessage;
-
-    if (stats != null) {
-      final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
-      final List<String> funStats = [];
-
-      if (transcriptionMinutes > 0) {
-        funStats.add(l10n.shareStatsListened(numberFormatter.format(transcriptionMinutes)));
-      }
-      if (stats.wordsTranscribed > 0) {
-        funStats.add(l10n.shareStatsWords(numberFormatter.format(stats.wordsTranscribed)));
-      }
-      if (stats.insightsGained > 0) {
-        funStats.add(l10n.shareStatsInsights(numberFormatter.format(stats.insightsGained)));
-      }
-      if (stats.memoriesCreated > 0) {
-        funStats.add(l10n.shareStatsMemories(numberFormatter.format(stats.memoriesCreated)));
-      }
-
-      if (funStats.isNotEmpty) {
-        String periodText;
-        if (periodTitle == l10n.today) {
-          periodText = l10n.sharePeriodToday;
-        } else if (periodTitle == l10n.thisMonth) {
-          periodText = l10n.sharePeriodMonth;
-        } else if (periodTitle == l10n.thisYear) {
-          periodText = l10n.sharePeriodYear;
-        } else if (periodTitle == l10n.allTime) {
-          periodText = l10n.sharePeriodAllTime;
-        } else {
-          periodText = l10n.omiHas;
-        }
-        shareText = '$baseText\n\n$periodText\n${funStats.join('\n')}';
-      } else {
-        shareText = baseText;
-      }
-    } else {
-      shareText = baseText;
-    }
-
-    final outcome = await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        subject: periodTitle.isEmpty ? null : periodTitle,
-        text: shareText.isEmpty ? null : shareText,
-        sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
-      ),
-    );
-    final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
-    PlatformManager.instance.analytics.track('Usage Stats Shared', properties: {
-      'period': sharePeriod,
-      'share_status': outcome.status.name,
-      if (targetApp != null) 'target_app': targetApp,
-    });
   }
 
   String _getPeriodForIndex(int index) {
@@ -340,7 +190,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return _nativeUsageSurface(Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         // Matches the "Plan & Usage" row that opens this page.
@@ -451,7 +301,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
           );
         },
       ),
-    );
+    ));
   }
 
   Widget _buildSubscriptionInfo(BuildContext context, UsageProvider provider) {

@@ -133,6 +133,13 @@ String formatUsageDuration(int seconds) {
 
 String formatUsageCount(int value, String locale) => NumberFormat.compact(locale: locale).format(value);
 
+String usageBucketLabel(UsageBuckets buckets, String period, int index, String locale) => switch (period) {
+      'today' => DateFormat.j(locale).format(buckets.dates[index]),
+      'monthly' => DateFormat.MMMd(locale).format(buckets.dates[index]),
+      'yearly' => DateFormat.MMM(locale).format(buckets.dates[index]),
+      _ => DateFormat.y(locale).format(buckets.dates[index]),
+    };
+
 class UsageChart extends StatelessWidget {
   const UsageChart(
       {super.key,
@@ -179,12 +186,7 @@ class UsageChart extends StatelessWidget {
       'yearly' => context.l10n.usageBestMonth,
       _ => context.l10n.usageBestYear,
     };
-    String dateLabel(int i) => switch (period) {
-          'today' => DateFormat.j(locale).format(buckets.dates[i]),
-          'monthly' => DateFormat.MMMd(locale).format(buckets.dates[i]),
-          'yearly' => DateFormat.MMM(locale).format(buckets.dates[i]),
-          _ => DateFormat.y(locale).format(buckets.dates[i]),
-        };
+    String dateLabel(int i) => usageBucketLabel(buckets, period, i, locale);
     final groups = [
       for (var i = 0; i < buckets.points.length; i++)
         BarChartGroupData(x: i, barsSpace: 0, showingTooltipIndicators: i == debugTooltipIndex ? [0] : [], barRods: [

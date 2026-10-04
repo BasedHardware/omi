@@ -213,6 +213,15 @@ final class PreviewHarness: ObservableObject {
             reader["footer"] = footer
             next["reader"] = reader
         }
+        if id == "reset_key" {
+            self.lastDraft = ""
+            var sections = next["sections"] as! [[String: Any]]
+            var rows = sections[0]["rows"] as! [[String: Any]]
+            rows[0]["id"] = "replacement_key"
+            rows[0]["value"] = ""
+            sections[0]["rows"] = rows
+            next["sections"] = sections
+        }
         self.surfaceRaw = next
         self.surface.update(try NativeSurfaceSnapshot.decode(next))
     }
@@ -303,6 +312,16 @@ final class PreviewHarness: ObservableObject {
         if ProcessInfo.processInfo.arguments.contains("late-toolbar") {
             surfaceRaw["title"] = "Here is what I heard"
             surfaceRaw["toolbar"] = []
+        }
+        if ProcessInfo.processInfo.arguments.contains("secure-input") {
+            surfaceRaw["title"] = "Transcription"
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sections"] = [["id": "credential", "title": "", "footer": "", "rows": [
+                ["id": "draft", "title": "API key", "kind": "text", "keyboard": "password", "subtitle": "",
+                 "value": "", "options": [], "enabled": true, "destructive": false],
+                ["id": "reset_key", "title": "Clear key", "kind": "button", "subtitle": "",
+                 "options": [], "enabled": true, "destructive": false]
+            ]]]
         }
         if ProcessInfo.processInfo.arguments.contains("country") {
             surfaceRaw["title"] = "Enter your number"

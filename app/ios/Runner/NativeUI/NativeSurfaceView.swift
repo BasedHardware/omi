@@ -30,6 +30,12 @@ final class NativeSurfaceState: ObservableObject {
 
     func update(_ snapshot: NativeSurfaceSnapshot) {
         guard valid, revision.accept(snapshot.revision) else { return }
+        let editable = Set(snapshot.allRows.filter { $0.kind == "text" }.map(\.id))
+        latestEdits = latestEdits.filter { editable.contains($0.key) }
+        let current = Set(snapshot.allRows.map(\.id))
+        failedEdits = failedEdits.filter { current.contains($0) }
+        queued = queued.filter { current.contains($0.key) || $0.key == "_search" && snapshot.searchEnabled }
+        queuedKeys = queuedKeys.filter { current.contains($0.key) }
         self.snapshot = snapshot
     }
 
@@ -81,7 +87,7 @@ final class NativeSurfaceState: ObservableObject {
                 if valid && id == "chat_send" { completedChatSend += 1 }
             }
             catch {
-                if valid {
+                if valid && (!isEdit || snapshot.allRows.contains(where: { $0.id == id })) {
                     actionFailed = true
                     if isEdit { failedEdits.insert(id) }
                 }
@@ -792,7 +798,7 @@ private struct NativeTextRow: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField(row.title, text: $draft, axis: .vertical)
+        input
             .keyboardType(keyboardType)
             .autocorrectionDisabled(row.keyboard != nil && row.keyboard != "default")
             .focused($focused)
@@ -808,8 +814,16 @@ private struct NativeTextRow: View {
                     draft = String(value.prefix(row.maximumLength ?? 10000))
                     return
                 }
-                if focused && value != row.value?.text { Task { await state.send(row.id, value: value) } }
+                if focused && (value != row.value?.text || row.keyboard == "password") { Task { await state.send(row.id, value: value) } }
             }
+    }
+
+    @ViewBuilder private var input: some View {
+        if row.keyboard == "password" {
+            SecureField(row.title, text: $draft).textInputAutocapitalization(.never)
+        } else {
+            TextField(row.title, text: $draft, axis: .vertical)
+        }
     }
 
     private var keyboardType: UIKeyboardType {

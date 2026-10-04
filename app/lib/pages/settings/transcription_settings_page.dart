@@ -30,9 +30,14 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+
+part 'transcription_native.dart';
 
 /// Top-level transcription source the user picks from the single dropdown.
 enum TranscriptionMode { omi, onDevice, cloudProvider, omiParakeet }
@@ -45,6 +50,8 @@ class TranscriptionSettingsPage extends StatefulWidget {
 }
 
 class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
+  void _updateNativeStt(VoidCallback update) => setState(update);
+
   bool _useCustomStt = false;
   // "Omi Parakeet" is an Omi-hosted engine (not custom STT): _useCustomStt stays false and the
   // backend is told via transcriptionModel='parakeet'. This flag distinguishes it from plain Omi.
@@ -83,6 +90,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   int _configSyncVersion = 0;
 
   bool _showApiKey = false;
+  int _nativeKeyRevision = 0;
+  bool _nativeSttLogsExpanded = false;
 
   // Per-provider language override; a provider without one follows the primary language.
   final Map<SttProvider, bool> _languageOverridden = {};
@@ -673,7 +682,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return _nativeTranscriptionSurface(Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.transcription),
@@ -737,7 +746,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           TranscriptionSaveBar(onPressed: _isSaving ? null : _saveConfig, isLoading: _isSaving),
         ],
       ),
-    );
+    ));
   }
 
   Future<void> _switchToOnDevice() async {
@@ -927,25 +936,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         const SizedBox(height: OmiSpacing.sm),
         if (description != null) description,
       ],
-    );
-  }
-
-  Widget _buildCodecWarning() {
-    if (_isCodecCompatible || !_useCustomStt) return const SizedBox.shrink();
-
-    final codecReason = _connectedDeviceCodec?.customSttUnsupportedReason ?? 'unsupported format';
-    final warningText = _sendRawAudioToOmi
-        ? context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason)
-        : context.l10n.transcriptionUnavailable;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
-      child: Row(
-        children: [
-          Icon(Icons.warning_amber_rounded, color: OmiColors.warning, size: 14),
-          const SizedBox(width: 6),
-          Expanded(child: TranscriptionHelpText(warningText)),
-        ],
-      ),
     );
   }
 

@@ -54,6 +54,19 @@ private final class NativeSurfacePlatformView: NSObject, @preconcurrency Flutter
                     container?.updateAppearance(state.snapshot.appearance)
                     result(nil)
                 case "invalidate": state.invalidate(); result(nil)
+                case "captureImage":
+                    guard state.valid, let container, container.window != nil else { result(nil); return }
+                    let bounds = container.bounds
+                    let scale = container.traitCollection.displayScale
+                    guard bounds.width > 0, bounds.height > 0, scale > 0,
+                          bounds.width * bounds.height * scale * scale <= 16_000_000 else { result(nil); return }
+                    let format = UIGraphicsImageRendererFormat()
+                    format.scale = scale
+                    let image = UIGraphicsImageRenderer(bounds: bounds, format: format).image { _ in
+                        container.drawHierarchy(in: bounds, afterScreenUpdates: true)
+                    }
+                    guard let data = image.pngData(), data.count <= 16 * 1024 * 1024 else { result(nil); return }
+                    result(FlutterStandardTypedData(bytes: data))
                 #if targetEnvironment(simulator)
                 // Hermetic host tests inspect the received projection, without private text.
                 case "debugPresentation":
