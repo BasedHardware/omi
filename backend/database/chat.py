@@ -40,7 +40,7 @@ DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write p
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
 CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
 CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
-# Extra documents a visible page may stream *beyond* the rows it would need if none
+# Extra non-automatic documents a visible page may stream beyond the rows needed if none
 # were reported. The floor is the page itself, never this: the previous raw
 # ``.offset(n).limit(m)`` query already streamed n + m documents, so budgeting
 # ``needed + slack`` can only read more than before by the slack, and can never fail
@@ -261,9 +261,9 @@ def get_app_messages(
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
     # A clean page needs exactly ``visible_limit`` raw rows.  Bound only the
-    # extra rows needed to cross reported records, so this cannot become an
-    # unbounded history read while a deep run of reported rows still has a
-    # flat allowance to cross.
+    # extra non-automatic rows needed to cross reported records. Automatic
+    # history is scanned to exhaustion or a full page; capping it would look
+    # like EOF to offset clients, which have no continuation field.
     scan_budget = visible_limit + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
     scanned = 0
     hidden_row_seen = False
@@ -378,8 +378,8 @@ def get_messages(
     while scanned < scan_budget and len(messages) < limit:
         # Read exactly what the page needs before reading any slack. Without this the
         # first batch was a flat 100 documents, so the chat-send path's limit=5 and
-        # limit=15 reads streamed ~20x the documents they used to. Slack is only paid
-        # for by a page that actually met a reported row.
+        # limit=15 reads streamed ~20x the documents they used to. After a hidden
+        # row, use capped batches to cross dense prefixes efficiently.
         batch_limit = min(100, scan_budget - scanned)
         if not hidden_row_seen:
             batch_limit = min(batch_limit, max(1, needed - scanned))
