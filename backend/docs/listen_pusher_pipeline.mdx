@@ -2911,3 +2911,52 @@ Neither field contains transcript content. Do not retry unreadable blobs as
 provider outages. The existing `omi-journey-capture-fail` alert
 uses the durable terminal projection; inspect the current alert manifest for
 its 30-minute denominator and dwell rather than adding a raw-count page.
+
+### Live capture-window attribution
+
+`omi_live_audio_capture_windows_total` keeps its existing labels and committed-version
+semantics. The additive `omi_live_audio_capture_attribution_total{population,reason}`
+counts the same versions (`population="version"`) and first stored segment IDs
+(`population="segment"`) separately. An absorbed provider fragment that never exists
+as a stored segment is not a distinct segment. The transaction snapshot, including
+its replay receipt, determines first commits; no session ID is a metric label.
+Counters observe acknowledged successful writes, not an exactly-once durable ledger.
+
+Reasons are bounded in `config/live_capture.py`: translator refusals, send-map eviction,
+anchor compaction, merge unknown side/gap/invalid window, partial redistribution,
+custom STT, multi-channel, kill switch, and missing metadata. `inherited_unknown`
+identifies an already unknown stored contributor counted again; the original cause
+is not reconstructed after restart. A merge reason takes precedence over a fresh
+contributor's refusal. Attribution travels in transaction-local metadata and is never
+stored in a transcript or exposed through the public conversation API.
+
+### Delayed-final capture retention
+
+`LIVE_CAPTURE_WINDOW_RETENTION` defaults **off** in code, runtime overlays and GKE
+values. Off retains 64 capture anchors and 4096 accepted-send spans. On admits
+512 anchors and 16384 spans per map (including the Soniox shadow map). Clocks/maps
+snapshot their bounds at construction, so disabling the switch affects new clocks
+and provider epochs; existing ledgers remain bounded by their admitted limits.
+No PCM, text or IDs are added to these ledgers. Retained rows still originate only
+from decoded receiver observations and successful accepted sends. Compaction,
+eviction, discontinuity and invalid-interval refusals remain fail-closed beyond the
+new limits. Ownership history, audio format, embedding cache keys and resolution
+status policy do not change. This flag cannot repair unknown merged text or fill
+VAD gaps; measure first-commit attribution before promoting it.
+
+### Preserve original live provider pieces
+
+`LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION` is an independent default-off gate in the
+live transaction planner. When enabled, a merge with a known capture window stops
+if the other contributor is unknown or its known window is disjoint. Partial
+sentence redistribution also stops when either original piece has a known window.
+Original provider text, IDs, speakers, times and capture windows remain paired;
+contiguous/overlapping whole-piece unions still work. Both unknown pieces retain
+today's text merging, and manual protection/decisions retain precedence. Sync and
+other combine callers do not opt in. No word boundaries or windows are invented.
+
+This changes visible turn segmentation while enabled. It prevents future sticky
+unknown survivors and preserves windows during partial repairs, but cannot recover
+proof for already merged unknown text. A provider interval crossing a VAD gap still
+refuses in the translator. The resolver must still validate every candidate against
+stored span-bearing audio; field availability alone is not a resolved conversation.

@@ -20,6 +20,12 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -477,6 +483,12 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -881,6 +893,12 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1200,6 +1218,12 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1481,6 +1505,12 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1713,6 +1743,12 @@ environments:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -2234,6 +2270,12 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -2724,6 +2766,12 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -3041,6 +3089,12 @@ environments:
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
@@ -3381,6 +3435,12 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3655,6 +3715,12 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3902,6 +3968,12 @@ environments:
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'

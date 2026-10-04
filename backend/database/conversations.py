@@ -27,8 +27,7 @@ from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
-    LiveTranscriptMerge,
-    LiveTranscriptReplayReceipt,
+    replay_receipt_commits,
     apply_manual_assignments,
     donor_selected_ids,
     manual_assignment,
@@ -2720,6 +2719,7 @@ def update_conversation_segments(
     return_segments: bool = False,
     preserve_unseen: bool = False,
     live_segments: Optional[List[dict]] = None,
+    live_capture_reasons: Optional[Dict[str, str]] = None,
     segment_update_fields: Optional[tuple[str, ...]] = None,
 ):
     """Write a transcript using an explicit segment-set ownership mode.
@@ -2779,16 +2779,16 @@ def update_conversation_segments(
                 uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
             )
             if 'live_transcript_replay_receipt' in current:
-                prior_commits = parse_payload_strict(
-                    LiveTranscriptReplayReceipt,
+                prior_commits = replay_receipt_commits(
                     _reveal_json_value(current['live_transcript_replay_receipt'], uid, True),
-                    document_path=doc_ref.path,
-                ).commits
+                    doc_ref.path,
+                )
             planned = merge_live_segments(
                 persisted,
                 live_segments,
                 receipt,
                 absorbed_ids=[absorbed_id for commit in prior_commits for absorbed_id in commit],
+                capture_reasons=live_capture_reasons,
             )
         remap = planned.absorbed_into if planned is not None else {}
         if remap:
@@ -2886,7 +2886,7 @@ def update_conversation_segments(
             _invalidate_client_processing(prepared_payload)
         transaction.update(doc_ref, prepared_payload)
         if planned is not None:
-            return LiveTranscriptMerge(accepted, planned.updated_ids, planned.removed_ids, planned.absorbed_into)
+            return planned.with_segments(accepted)
         return accepted if return_segments else True
 
     result = run_transactional(client, _write_segments)

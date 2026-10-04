@@ -140,6 +140,11 @@ OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL = Counter(
     'Committed legacy live segment versions by capture-window availability',
     ['outcome', 'reason'],
 )
+OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL = Counter(
+    'omi_live_audio_capture_attribution_total',
+    'Committed legacy live capture windows by cause and population (version or first stored segment ID)',
+    ['population', 'reason'],
+)
 # Keep the established outcome metric stable for existing dashboards. This
 # companion metric exposes a fixed reason vocabulary for every rejected
 # provider interval, including clock-only sessions while the v2 flag is off.

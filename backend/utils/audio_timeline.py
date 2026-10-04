@@ -31,6 +31,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 # Pure span helpers live in the database-layer module (stdlib only) so
 # database/ can share them without importing utils/.
+from config.audio_timeline import capture_anchor_limit, capture_send_span_limit
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
 from utils.stt.committed_words import (
     CAPTURE_WORD_RANGES_KEY,
@@ -218,6 +219,8 @@ class CaptureTimeline:
     # retained interior anchor can no longer be projected truthfully; see
     # ``wall_strict``.
     compacted_below_sample: Optional[int] = None
+    # Snapshot admission at construction; runtime toggles affect new clocks.
+    max_anchors: int = field(default_factory=capture_anchor_limit)
 
     def accept(self, pcm: bytes, arrival_wall: float, arrival_monotonic: float) -> Tuple[int, int, bool]:
         """Account one accepted decoded frame; returns (start, end, new_anchor)."""
@@ -255,10 +258,10 @@ class CaptureTimeline:
         return (start, end, new_anchor)
 
     def _compact_anchors(self) -> None:
-        if len(self.anchors) <= MAX_ANCHORS:
+        if len(self.anchors) <= self.max_anchors:
             return
         # Keep the first anchor (early remaps) plus the most recent ones.
-        self.anchors = [self.anchors[0]] + self.anchors[-(MAX_ANCHORS - 1) :]
+        self.anchors = [self.anchors[0]] + self.anchors[-(self.max_anchors - 1) :]
         # Samples between the first anchor and the oldest retained interior
         # anchor have lost the anchors that described their wall projection;
         # strict readers must refuse them instead of extrapolating across the
@@ -308,15 +311,19 @@ class SendMap:
     new connection starts a new epoch (a new SendMap).
     """
 
-    def __init__(self, provider_sample_rate: int, max_spans: int = MAX_SEND_SPANS):
+    def __init__(self, provider_sample_rate: int, max_spans: Optional[int] = None):
         self.provider_sample_rate = provider_sample_rate
-        self._max_spans = max_spans
+        self._max_spans = capture_send_span_limit() if max_spans is None else max_spans
         self._spans: List[List[int]] = []  # [provider_first, capture_first, length]
         self.evicted_spans = 0
 
     @property
     def span_count(self) -> int:
         return len(self._spans)
+
+    def is_evicted_provider_sample(self, sample: float) -> bool:
+        """Whether a nonnegative point belonged to the now-evicted map prefix."""
+        return bool(self.evicted_spans and self._spans and 0 <= sample < self._spans[0][0])
 
     @property
     def last_capture_sample(self) -> Optional[int]:
@@ -797,6 +804,15 @@ class ProviderEpochTranslator:
         translated.append(segment)
 
     def _reject(self, segment: Dict, reason: str) -> None:
+        # Transient metadata only; the legacy refusal metric and text stay unchanged.
+        attribution = 'anchor_compacted' if reason == 'evicted_interval' else 'translator_' + reason
+        if reason == 'outside_accepted_sends':
+            try:
+                if self.send_map.is_evicted_provider_sample(float(segment['start']) * self.provider_sample_rate):
+                    attribution = 'send_map_evicted'
+            except (TypeError, ValueError, KeyError):
+                pass
+        segment['_capture_window_reason'] = attribution
         self.rejected_segments += 1
         if self._on_reject is not None:
             try:
