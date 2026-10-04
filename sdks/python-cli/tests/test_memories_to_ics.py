@@ -283,7 +283,7 @@ class TestMemoriesToIcsUnit(unittest.TestCase):
 
             # Overwrite permitted with force
             write_ics(str(dest), "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n", force=True)
-            self.assertEqual(dest.read_text(encoding="utf-8", newline=""), "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")
+            self.assertEqual(dest.read_bytes(), b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")
 
     def test_cli_stdin_to_stdout_pipeline(self) -> None:
         """Verify full CLI pipeline reading from stdin and writing to stdout."""
