@@ -8,7 +8,8 @@ import 'package:omi/env/env.dart';
 enum RecapPeriod { week, month }
 
 String periodRecapUrl(String baseUrl, RecapPeriod period, {DateTime? date}) {
-  final url = Uri.parse('${baseUrl}v1/users/recaps/${period.name}');
+  final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  final url = Uri.parse('${root}v1/users/recaps/${period.name}');
   if (date == null) return url.toString();
   final day = '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
