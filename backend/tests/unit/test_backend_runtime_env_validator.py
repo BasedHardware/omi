@@ -249,7 +249,9 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "AUDIO_TIMELINE_SPANS", "value": "false"},\n'
-        '        {"name": "LIVE_SPEAKER_SPAN_RESOLUTION", "value": "false"},',
+        '        {"name": "LIVE_SPEAKER_SPAN_RESOLUTION", "value": "false"},\n'
+        '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},\n'
+        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},',
     )
 
 
@@ -260,6 +262,20 @@ def with_capture_evidence_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "CAPTURE_EVIDENCE_V1_DARK_WRITE", "value": "true"},',
     )
+
+
+def with_firestore_read_ledger_env(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the per-service Firestore read ledger (#20655)."""
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
+            rf'\1\n        {{"name": "FIRESTORE_READ_LEDGER", "value": "1"}},'
+            rf'\n        {{"name": "FIRESTORE_READ_LEDGER_SERVICE", "value": "{service}"}},',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
 
 
 def with_sync_ledger_fence_mode(payload: str) -> str:
@@ -387,7 +403,9 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             )
         )
     )
-    payload = with_screen_frame_egress_env(with_capture_evidence_env(with_audio_timeline_span_env(payload)))
+    payload = with_firestore_read_ledger_env(
+        with_screen_frame_egress_env(with_capture_evidence_env(with_audio_timeline_span_env(payload)))
+    )
     # The final-pass shadow is dark by default on the dev finalization worker.
     # Its deployed-state fixture must carry every explicit runtime binding.
     payload = re.sub(

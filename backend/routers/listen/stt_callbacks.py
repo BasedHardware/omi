@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from utils.audio_timeline import ProviderEpochTranslator
+from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.metrics import (
     AUDIO_TIMELINE_REJECT_REASONS,
     OMI_AUDIO_TIMELINE_MAPPED_TOTAL,
@@ -140,3 +140,16 @@ def build_stt_callbacks(receiver: Any) -> Tuple[Any, Any, Optional[ProviderEpoch
         receiver._loop_hop(clock_only(True)),
         epoch,
     )
+
+
+def attach_legacy_capture_window(segment: Dict[str, Any], timeline: CaptureTimeline) -> None:
+    """Project translator-proven samples; preserve the original refusal when absent."""
+    start_sample = segment.pop('_capture_start_sample', None)
+    end_sample = segment.pop('_capture_end_sample', None)
+    if start_sample is not None and end_sample is not None and end_sample >= start_sample:
+        start, end = timeline.wall_strict(start_sample), timeline.wall_strict(end_sample)
+        if start is not None and end is not None:
+            segment['_capture_abs_start'], segment['_capture_abs_end'] = start, end
+            return
+        segment['_capture_window_reason'] = 'anchor_compacted'
+    segment['_capture_window_unavailable'] = True
