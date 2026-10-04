@@ -91,10 +91,12 @@ def convert(sources, destination, category_filter=None, prompt_template="What di
     buffer = io.StringIO()
     # Anki TSV file format: Front \t Back \t Tags
     writer = csv.writer(buffer, delimiter="\t", lineterminator="\n")
+    written_count = 0
     for m in memories:
         front, back, tags_str = format_anki_card(m, prompt_template=prompt_template)
         if back:  # Only export cards with content
             writer.writerow([front, back, tags_str])
+            written_count += 1
 
     payload = buffer.getvalue().encode("utf-8")
     try:
@@ -103,7 +105,7 @@ def convert(sources, destination, category_filter=None, prompt_template="What di
     except OSError:
         output_path.unlink(missing_ok=True)
         raise
-    return len(memories)
+    return written_count
 
 
 if __name__ == "__main__":

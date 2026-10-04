@@ -1,16 +1,28 @@
+from __future__ import annotations
+
 import csv
+import importlib.util
+import json
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
-from memories_to_anki import (
-    clean_text,
-    clean_tag,
-    parse_time,
-    load_memories,
-    format_anki_card,
-    convert
-)
+# Load memories_to_anki example script dynamically
+script_path = Path(__file__).resolve().parent.parent / "examples" / "memories_to_anki.py"
+if not script_path.exists():
+    script_path = Path(__file__).resolve().parent / "memories_to_anki.py"
+
+spec = importlib.util.spec_from_file_location("memories_to_anki", script_path)
+m2a = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m2a)
+
+clean_text = m2a.clean_text
+clean_tag = m2a.clean_tag
+parse_time = m2a.parse_time
+load_memories = m2a.load_memories
+format_anki_card = m2a.format_anki_card
+convert = m2a.convert
+
 
 class TestMemoriesToAnki(unittest.TestCase):
     def test_clean_text_and_tags(self):
@@ -45,7 +57,6 @@ class TestMemoriesToAnki(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             f1 = Path(tmpdir) / "m1.json"
             f2 = Path(tmpdir) / "m2.json"
-            import json
             f1.write_text(json.dumps([
                 {"id": "1", "content": "Fact 1", "category": "math"},
                 {"id": "2", "content": "Fact 2", "category": "history"}
@@ -62,14 +73,15 @@ class TestMemoriesToAnki(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             src = Path(tmpdir) / "m.json"
             out = Path(tmpdir) / "deck.tsv"
-            import json
             src.write_text(json.dumps([
                 {"id": "1", "content": "Learning 1", "category": "tech"},
-                {"id": "2", "content": "Learning 2", "category": "art"}
+                {"id": "2", "content": "Learning 2", "category": "art"},
+                {"id": "3", "content": "   ", "category": "tech"}  # Empty content should be skipped
             ]))
 
-            # Category filter
+            # Category filter and skipping empty content
             cnt = convert([str(src)], str(out), category_filter="tech")
+            # 2 tech items, but 1 is empty whitespace -> written count must be 1
             self.assertEqual(cnt, 1)
             self.assertTrue(out.exists())
             lines = out.read_text(encoding="utf-8").strip().splitlines()
@@ -81,6 +93,7 @@ class TestMemoriesToAnki(unittest.TestCase):
             # Protection against overwrite
             with self.assertRaises(FileExistsError):
                 convert([str(src)], str(out))
+
 
 if __name__ == '__main__':
     unittest.main()
