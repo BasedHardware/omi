@@ -256,7 +256,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "MEMORY_V3_CURSOR_SECRET",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
             "OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED",
-            "POSTHOG_PROJECT_API_KEY",
             # Only backend-listen serves api.omi.me; its shared-chat route
             # validates the frontend service OIDC identity at the API edge.
             "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE",

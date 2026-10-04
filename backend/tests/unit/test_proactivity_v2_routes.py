@@ -127,3 +127,61 @@ async def test_push_wakeup_obeys_admission_and_never_counts_exposure(monkeypatch
     await service.push_item(item=item)
     wakeup.assert_not_called()
     dispatch.assert_not_called()
+
+
+def test_feed_and_outcome_reuse_legacy_flag_key_without_v2_redis(store, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from database import proactivity_redis
+    from tests.unit.test_proactivity_v2_budget import NOW
+    from tests.unit.test_proactivity_v2_ledger import ready
+
+    flags = routes.proactivity_flags
+    flags.flag_client.cache_clear()
+    monkeypatch.delenv('POSTHOG_PROJECT_API_KEY', raising=False)
+    monkeypatch.setenv('POSTHOG_API_KEY', 'test-existing-posthog-key')
+    monkeypatch.setenv('POSTHOG_EVENTS_API_KEY', 'test-events-key-must-not-select-flags')
+    monkeypatch.setenv('POSTHOG_HOST', 'https://us.posthog.com')
+    monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
+    for key in ('HOST', 'PORT', 'PASSWORD'):
+        monkeypatch.delenv(f'PROACTIVITY_REDIS_{key}', raising=False)
+    v2_client = Mock(side_effect=AssertionError('feed/outcome must not acquire Redis'))
+    monkeypatch.setattr(proactivity_redis, 'get_client', v2_client)
+    flag_client = Mock()
+    flag_client.get_feature_variants.return_value = {'proactivity_v2': True}
+    factory = Mock(return_value=flag_client)
+    monkeypatch.setattr(
+        flags, 'importlib', SimpleNamespace(import_module=lambda name: SimpleNamespace(Posthog=factory))
+    )
+    item = ready(store)
+    monkeypatch.setattr(routes.ledger, 'client_or_default', lambda client=None: store)
+    monkeypatch.setattr(routes.ledger, 'utc_now', lambda: NOW)
+    feed_read = Mock(return_value=([], '', False))
+    monkeypatch.setattr(routes.ledger, 'list_feed', feed_read)
+    app = FastAPI()
+    app.include_router(routes.router)
+    for route in routes.router.routes:
+        for dep in route.dependant.dependencies:
+            app.dependency_overrides[dep.call] = lambda: 'u'
+    try:
+        with TestClient(app) as client:
+            response = client.get('/v1/proactivity/feed')
+            assert response.status_code == 200 and response.json()['enabled'] is True
+            response = client.post(
+                f"/v1/proactivity/items/{item['item_id']}/outcomes",
+                json=dict(event_id=str(uuid4()), action='opened', surface='macos', channel='feed'),
+            )
+            assert response.status_code == 200 and response.json()['recorded'] is True
+        assert flags.mentor_pipeline('u') == 'v2'
+        factory.assert_called_once_with(
+            project_api_key='test-existing-posthog-key',
+            host='https://us.posthog.com',
+            send=False,
+            sync_mode=True,
+            feature_flags_request_timeout_seconds=2,
+        )
+        feed_read.assert_called_once_with(uid='u', limit=20, cursor='')
+        v2_client.assert_not_called()
+    finally:
+        flags.flag_client.cache_clear()

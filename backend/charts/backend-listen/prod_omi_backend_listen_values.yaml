@@ -91,6 +91,22 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: PROACTIVITY_REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: REDIS_DB_HOST
+  - name: PROACTIVITY_REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: PROACTIVITY_REDIS_PORT
+    value: "13151"
+  - name: MENTOR_PIPELINE
+    value: cohort
+  - name: POSTHOG_HOST
+    value: https://us.posthog.com
   - name: MENTOR_GATE_DEBOUNCE_ENABLED
     value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
