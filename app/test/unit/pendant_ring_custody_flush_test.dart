@@ -4,6 +4,7 @@
 // failed the suite "after it has completed". `flush()` is the one completion a
 // caller can wait on before tearing storage down.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -78,6 +79,10 @@ void main() {
 
   File checkpointFile() => File('${tmp.path}/custody_omi-1.json');
 
+  /// The checkpoint as it is on disk right now, read synchronously so no queued
+  /// store work can run first.
+  int? ringIdOnDisk() => (jsonDecode(checkpointFile().readAsStringSync()) as Map<String, dynamic>)['ring_id'] as int?;
+
   test('flush waits for a fire-and-forget reincarnation write', () async {
     gated.close();
     // A new ring id resets the checkpoint and persists it without awaiting.
@@ -122,23 +127,37 @@ void main() {
     expect((await store.load('omi-1'))?.ringId, 0x77, reason: 'the later write must land before flush completes');
   });
 
+  test('flush also waits for a checkpoint queued while it waits on the store', () async {
+    gated.close();
+    // Occupy the I/O queue so flush gets past the idle checkpoint queue and waits on the store.
+    unawaited(store.load('omi-1'));
+    final flushed = custody.flush();
+    await Future<void>.delayed(Duration.zero);
+    custody.noteMismatch('omi-1', 1);
+    // Queued behind the mismatch write's checkpoint save, so it reaches the I/O queue last.
+    custody.noteInfo('omi-1', 1, _ringInfo(ringId: 0x99));
+    gated.open();
+    await flushed;
+
+    expect(ringIdOnDisk(), 0x99, reason: 'the last queued checkpoint must be on disk when flush completes');
+    expect(File('${checkpointFile().path}.tmp').existsSync(), isFalse);
+  });
+
   test('flush completes immediately when nothing is queued', () async {
     expect(await _completesWithoutWaiting(custody.flush()), isTrue);
     expect(await _completesWithoutWaiting(store.flush()), isTrue);
   });
 
   test('a teardown that flushes never leaves a custody write to outlive its directory', () async {
-    final errors = <Object>[];
-    await runZonedGuarded(() async {
-      gated.close();
-      custody.noteInfo('omi-1', 1, _ringInfo(ringId: 0x55));
-      gated.open();
-      // What every custody test teardown now does before deleting storage.
-      await custody.flush();
-      await tmp.delete(recursive: true);
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-    }, (error, _) => errors.add(error));
+    gated.close();
+    custody.noteInfo('omi-1', 1, _ringInfo(ringId: 0x55));
+    gated.open();
+    // What every custody test teardown now does before deleting storage. noteInfo logs and
+    // swallows a failed write, so the proof is what reached disk before the directory goes.
+    await custody.flush();
 
-    expect(errors, isEmpty);
+    expect(ringIdOnDisk(), 0x55);
+    expect(File('${checkpointFile().path}.tmp').existsSync(), isFalse);
+    await tmp.delete(recursive: true);
   });
 }

@@ -840,8 +840,10 @@ class PendantRingCustody {
     do {
       queued = _saveQueue;
       await queued;
+      // A checkpoint queued during the store wait reaches the I/O queue only after
+      // its predecessor's save, so the checkpoint queue is re-checked after it.
+      await _store.flush();
     } while (!identical(queued, _saveQueue));
-    await _store.flush();
   }
 
   Future<void> _persist(RingCustodyCheckpoint cp) {
