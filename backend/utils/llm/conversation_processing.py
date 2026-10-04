@@ -4,9 +4,10 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
+from importlib import import_module
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TYPE_CHECKING, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -20,7 +21,6 @@ from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Participant, Structured
 from models.structured_extraction import (
     ActionItemsExtraction,
-    EpisodeStructuredExtraction,
     RichStructuredExtraction,
     StructuredExtraction,
 )
@@ -29,21 +29,14 @@ from .discard_parser import DiscardConversation, LenientDiscardParser
 from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
 from utils.conversations.meeting_participants import MeetingRoster
-from utils.conversations.episode_evidence import (
-    EvidenceItem,
-    open_task_evidence,
-    render_episode_evidence,
-)
-from utils.llm.episode_notes_validation import parse_episode_response, repair_episode_note, sanitize_episode_ids
+
+if TYPE_CHECKING:
+    from utils.conversations.episode_evidence import EvidenceItem
+
 from utils.llm.conversation_notes_prompts import (
     conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
     SHARED_CONVERSATION_PREAMBLE,
-)
-from utils.llm.episode_notes_prompts import (
-    EPISODE_WAKE_WORD_RULES,
-    episode_static_instructions,
-    episode_volatile_instructions,
 )
 from utils.conversations.wake_word import (
     WAKE_WORD_DISCARD_PROMPT_RULES,
@@ -1170,7 +1163,7 @@ def get_conversation_notes(
     rich_context_enabled: bool = False,
     roster: Optional[MeetingRoster] = None,
     screen_frames: Sequence[NotesFrameImage] = (),
-    episode_evidence: Optional[Sequence[EvidenceItem]] = None,
+    episode_evidence: Optional[Sequence["EvidenceItem"]] = None,
 ) -> Structured:
     """Generate sections, actions, and events in one coherent model call.
 
@@ -1217,13 +1210,13 @@ def get_conversation_notes(
 
     extraction_parser = PydanticOutputParser(
         pydantic_object=(
-            EpisodeStructuredExtraction
+            import_module('models.episode_extraction').EpisodeStructuredExtraction
             if episode_mode
             else RichStructuredExtraction if rich_mode else StructuredExtraction
         )
     )
     if episode_mode:
-        static_instructions = episode_static_instructions(
+        static_instructions = import_module('utils.llm.episode_notes_prompts').episode_static_instructions(
             extraction_parser.get_format_instructions(), _conversation_notes_static_instructions
         )
     elif rich_mode:
@@ -1235,7 +1228,7 @@ def get_conversation_notes(
     wake_word_rules = ''
     if episode_mode:
         if any(item.wake_word_invocation for item in episode_evidence or ()):
-            wake_word_rules = EPISODE_WAKE_WORD_RULES
+            wake_word_rules = import_module('utils.llm.episode_notes_prompts').EPISODE_WAKE_WORD_RULES
     elif trusted_wake_word_markers and has_structural_wake_word_marker(prefix.context):
         wake_word_rules = WAKE_WORD_PROMPT_RULES
     volatile_kwargs = dict(
@@ -1250,16 +1243,20 @@ def get_conversation_notes(
         wake_word_rules=wake_word_rules,
     )
     evidence_items = list(episode_evidence or ()) + (
-        open_task_evidence(existing_action_items or []) if episode_mode else []
+        import_module('utils.conversations.episode_evidence').open_task_evidence(existing_action_items or [])
+        if episode_mode
+        else []
     )
     if episode_mode:
-        volatile_instructions = episode_volatile_instructions(
+        volatile_instructions = import_module('utils.llm.episode_notes_prompts').episode_volatile_instructions(
             **{
                 key: value
                 for key, value in volatile_kwargs.items()
                 if key not in {'existing_context', 'conversation_context'}
             },
-            evidence_block=render_episode_evidence(evidence_items),
+            evidence_block=import_module('utils.conversations.episode_evidence').render_episode_evidence(
+                evidence_items
+            ),
         )
     elif rich_mode:
         volatile_instructions = rich_volatile_instructions(
@@ -1288,8 +1285,12 @@ def get_conversation_notes(
     raw_response = _content_str(model.invoke(messages))
     episode_presentation_violations = set()
     if episode_mode:
-        structured, episode_presentation_violations = parse_episode_response(raw_response, extraction_parser)
-        episode_presentation_violations |= sanitize_episode_ids(structured)
+        structured, episode_presentation_violations = import_module(
+            'utils.llm.episode_notes_validation'
+        ).parse_episode_response(raw_response, extraction_parser)
+        episode_presentation_violations |= import_module('utils.llm.episode_notes_validation').sanitize_episode_ids(
+            structured
+        )
     else:
         structured = extraction_parser.parse(raw_response).to_structured()
     if rich_mode and not episode_mode:
@@ -1324,7 +1325,7 @@ def get_conversation_notes(
     )
 
     if episode_mode:
-        structured = repair_episode_note(
+        structured = import_module('utils.llm.episode_notes_validation').repair_episode_note(
             structured,
             evidence=evidence_items,
             model=model,

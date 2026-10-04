@@ -7,7 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from models.structured import ActionItem, NoteClaim, Participant, Section, Structured
-from models.structured_extraction import EpisodeStructuredExtraction, RichStructuredExtraction, StructuredExtraction
+from models.episode_extraction import EpisodeStructuredExtraction
+from models.structured_extraction import RichStructuredExtraction, StructuredExtraction
 from utils.conversations.episode_evidence import (
     EvidenceItem,
     capture_evidence,
@@ -329,6 +330,7 @@ def test_claim_error_receives_one_retry(processing, monkeypatch):
 
 
 def test_actual_flag_off_request_uses_pinned_prompts(processing, monkeypatch):
+    monkeypatch.setattr(processing, 'import_module', lambda name: pytest.fail('flag-off loaded episode runtime'))
     from langchain_core.output_parsers import PydanticOutputParser
     from utils.llm.conversation_prompt_context import ConversationPromptPrefix
     from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions

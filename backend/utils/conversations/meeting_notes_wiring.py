@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import logging
 import os
+from importlib import import_module
 from dataclasses import replace
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple, TYPE_CHECKING
 
 from models.calendar_context import CalendarMeetingContext
-from utils.conversations.episode_evidence import EvidenceItem, context_pack_evidence, meeting_evidence
+
+if TYPE_CHECKING:
+    from utils.conversations.episode_evidence import EvidenceItem
 from utils.conversations.meeting_context_pack import (
     gather_meeting_context_pack,
     load_people_documents,
@@ -161,7 +164,7 @@ def _rich_meeting_context_block(
             **({'preserve_screen_rows': True} if evidence_items is not None else {}),
         )
         if evidence_items is not None:
-            evidence_items.extend(context_pack_evidence(pack))
+            evidence_items.extend(import_module('utils.conversations.episode_evidence').context_pack_evidence(pack))
         return render_meeting_context_pack(pack) if pack else None
     except Exception as exc:  # noqa: BLE001 - background is best effort
         logger.warning('rich meeting context build failed uid=%s: %s', uid, type(exc).__name__)
@@ -201,7 +204,9 @@ def rich_notes_inputs(
         **({'include_frame_text': include_screen_text} if evidence_items is not None else {}),
     )
     if evidence_items is not None:
-        evidence_items.extend(meeting_evidence(roster, calendar_context, evidence))
+        evidence_items.extend(
+            import_module('utils.conversations.episode_evidence').meeting_evidence(roster, calendar_context, evidence)
+        )
     if roster is None or not include_background:
         return roster, None, desktop_capture, ()
     started_at = frame_evidence_started_at(conversation)

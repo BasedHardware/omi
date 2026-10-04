@@ -6,6 +6,7 @@ import sys
 import uuid
 import logging
 import asyncio
+from importlib import import_module
 from datetime import timezone, timedelta, datetime
 from collections.abc import Mapping, Sequence
 from enum import Enum
@@ -175,7 +176,6 @@ from utils.llm.conversation_processing import (
     get_conversation_notes,
     validate_structured_source_segment_ids,
 )
-from utils.conversations.episode_evidence import capture_evidence
 from utils.conversations.notes_task_context import fetch_dedup_candidates_for_query as _fetch_dedup_candidates_for_query
 from utils.llm.conversation_prompt_context import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
@@ -443,7 +443,13 @@ def _get_structured(
                     roster: Optional[MeetingRoster] = None
                     meeting_context_block: Optional[str] = None
                     episode_enabled = _meeting_notes_episode_evidence_enabled()
-                    episode_items = capture_evidence(conversation, transcript=ext_conv.text) if episode_enabled else []
+                    episode_items = (
+                        import_module('utils.conversations.episode_evidence').capture_evidence(
+                            conversation, transcript=ext_conv.text
+                        )
+                        if episode_enabled
+                        else []
+                    )
                     if _meeting_notes_rich_context_enabled() or episode_enabled:
                         roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
                             uid,
@@ -660,7 +666,7 @@ def _get_structured(
                     **({'evidence_items': episode_items} if episode_enabled else {}),
                 )
             if episode_enabled:
-                episode_items[:0] = capture_evidence(
+                episode_items[:0] = import_module('utils.conversations.episode_evidence').capture_evidence(
                     main_conv,
                     transcript=action_items_transcript,
                     speaker_map=speaker_map,

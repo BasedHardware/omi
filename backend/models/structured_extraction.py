@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from models.conversation_enums import CategoryEnum
-from models.structured import ActionItem, Event, Insight, MeetingType, NoteClaim, Participant, Section, Structured
+from models.structured import ActionItem, Event, Insight, MeetingType, Participant, Section, Structured
 
 logger = logging.getLogger(__name__)
 
@@ -398,17 +398,4 @@ class RichStructuredExtraction(StructuredExtraction):
             structured.participants = [participant.to_participant() for participant in self.participants]
         if self.insights:
             structured.insights = [insight.to_insight() for insight in self.insights]
-        return structured
-
-
-class EpisodeStructuredExtraction(RichStructuredExtraction):
-    """Additive claim metadata; only the episode flag selects this schema."""
-
-    note_claims: List[NoteClaim] = Field(
-        default_factory=list, description='Provenance for every visible factual clause'
-    )
-
-    def to_structured(self) -> Structured:
-        structured = super().to_structured()
-        structured.note_claims = self.note_claims
         return structured

@@ -5,7 +5,8 @@ from datetime import datetime
 from langchain_core.output_parsers import PydanticOutputParser
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-from models.structured_extraction import EpisodeStructuredExtraction, RichStructuredExtraction
+from models.episode_extraction import EpisodeStructuredExtraction
+from models.structured_extraction import RichStructuredExtraction
 from testing.episode_notes.schema import EpisodeFixture
 from utils.conversations.episode_evidence import EvidenceItem, render_episode_evidence
 from utils.conversations.meeting_context_render import (
