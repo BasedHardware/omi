@@ -19,6 +19,7 @@ from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database._client import document_id_from_seed, get_firestore_client
 from database.conversation_terminal_title import (
+    TERMINAL_SIZE_HEADROOM_BYTES,
     dead_letter_conversation_updates,
     kept_row_terminal_update,
     user_time_zone,
@@ -31,6 +32,7 @@ from database.firestore_index_registry import (
 from database.people_stats_cache import invalidate_people_stats_cache
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
     raw_transcript_bytes,
@@ -2061,6 +2063,71 @@ def complete_unstampable_orphan_conversation(
     transaction = client.transaction()
     transactional = firestore.transactional(_complete_unstampable_orphan_conversation_txn)
     return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now() - stale_after)
+
+
+# Outcomes of ``complete_oversized_in_progress_conversation``; a bounded log token.
+OversizedInProgressOutcome = Literal['closed', 'missing', 'not_in_progress', 'owned', 'recent_write', 'below_ceiling']
+
+
+def _complete_oversized_in_progress_conversation_txn(
+    transaction: Any,
+    conversation_ref: Any,
+    quiet_before: datetime,
+    uid: str,
+    time_zone_for_uid: Callable[[str], str | None] | None = None,
+) -> OversizedInProgressOutcome:
+    """Close an ``in_progress`` row whose document is at Firestore's 1 MiB ceiling.
+
+    Finalization starts by binding a durable job onto the conversation, which
+    grows the document; at the ceiling Firestore rejects that write on every
+    attempt, so the row stays ``in_progress`` (invisible) and every later listen
+    session retries it. ``in_progress`` -> ``completed`` is two bytes shorter,
+    so it is the one lifecycle write the document still accepts. The transcript
+    and every other field are kept as they are; only optional growth (the
+    deterministic title) is added, and only when it fits.
+
+    Fences, all read inside this transaction: the row is still ``in_progress``,
+    not discarded, deleted or deferred, has no durable finalization owner, no
+    writer has touched it since ``quiet_before`` (the server-owned
+    ``update_time``, the same stand-in for an ownership fence the processing
+    sweep uses), and its estimated size is genuinely within the terminal
+    headroom of the ceiling, so a row that has since shrunk keeps normal
+    finalization instead.
+    """
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return 'missing'
+    data = snapshot.to_dict() or {}
+    if data.get('status') != 'in_progress':
+        return 'not_in_progress'
+    if data.get('discarded') or data.get('deleted') or data.get('deferred') or data.get('finalization_job_id'):
+        return 'owned'
+    last_written = getattr(snapshot, 'update_time', None)
+    if not isinstance(last_written, datetime) or last_written > quiet_before:
+        return 'recent_write'
+    path = getattr(conversation_ref, 'path', None)
+    estimated = estimate_firestore_document_bytes(data, path if isinstance(path, str) else None)
+    if estimated + TERMINAL_SIZE_HEADROOM_BYTES < FIRESTORE_MAX_DOCUMENT_BYTES:
+        return 'below_ceiling'
+    terminal = kept_row_terminal_update(uid, data, conversation_ref, {'status': 'completed'}, time_zone_for_uid)
+    transaction.update(conversation_ref, terminal)
+    return 'closed'
+
+
+def complete_oversized_in_progress_conversation(
+    uid: str, conversation_id: str, *, quiet_for: timedelta, firestore_client: Any = None
+) -> OversizedInProgressOutcome:
+    """Terminalize an in_progress conversation too large to accept its finalization binding."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_complete_oversized_in_progress_conversation_txn)
+    return transactional(
+        transaction,
+        _conversation_ref(client, uid, conversation_id),
+        _now() - quiet_for,
+        uid,
+        lambda zone_uid: user_time_zone(client, zone_uid),
+    )
 
 
 def _complete_orphan_conversation_txn(
