@@ -619,18 +619,21 @@ def _overview(segments: Sequence[TranscriptSegment], max_chars: int = 500) -> st
 
 
 def load_people_names(uid: str) -> Dict[str, str]:
-    """Person name key (``_name_key``) -> person ID, so named speakers bind to known people."""
+    """Person name key (``_name_key``) -> person ID, so named speakers bind to known people.
+
+    A name two people share is left out: the label cannot say which of them spoke.
+    """
     try:
         people = users_db.get_people(uid)
     except Exception as exc:
         logger.warning('transcript import people lookup failed uid=%s error_class=%s', uid, type(exc).__name__)
         return {}
-    names: Dict[str, str] = {}
+    ids_by_name: Dict[str, set[str]] = {}
     for person in people:
         name, person_id = (person.get('name') or '').strip(), person.get('id')
         if name and person_id:
-            names.setdefault(_name_key(name), person_id)
-    return names
+            ids_by_name.setdefault(_name_key(name), set()).add(person_id)
+    return {name: next(iter(ids)) for name, ids in ids_by_name.items() if len(ids) == 1}
 
 
 def build_imported_conversation(

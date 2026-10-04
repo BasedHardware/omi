@@ -596,6 +596,28 @@ def test_the_owner_is_the_whole_name_or_the_first_name_alone(owner_name, label, 
         assert segments[0].person_id == 'person-jane-smith'
 
 
+@pytest.mark.parametrize('order', [1, -1], ids=['as-stored', 'reversed'])
+def test_a_name_two_people_share_binds_neither_of_them(monkeypatch, order):
+    """A "Sam:" label cannot say which Sam spoke, whichever one Firestore streams first."""
+    people = [
+        {'id': 'person-sam-1', 'name': 'Sam'},
+        {'id': 'person-jo', 'name': 'Jo'},
+        {'id': 'person-sam-2', 'name': ' sam '},
+        {'id': 'person-nameless', 'name': ''},
+    ]
+    monkeypatch.setattr(tf.users_db, 'get_people', lambda uid: people[::order])
+
+    names = tf.load_people_names(UID)
+
+    assert names == {'jo': 'person-jo'}
+    segments = tf.segments_from_cues(
+        [tf.TranscriptCue(text='Hi.', speaker='Sam'), tf.TranscriptCue(text='Hey.', speaker='Jo')],
+        owner_name=None,
+        people=names,
+    )
+    assert [s.person_id for s in segments] == [None, 'person-jo']
+
+
 def test_untimed_cues_get_ordered_estimated_times():
     segments = tf.segments_from_cues(tf.parse_text_transcript(PARAGRAPHS_TXT), owner_name=None, people={})
 
