@@ -54,6 +54,12 @@ every existing write path, with no database changes or additional reads.
 Coverage gaps and residual vacuity never fail processing. Episode IDs are stripped
 from visible prose without converting them to transcript citations.
 Existing presentation repair remains a separate bounded guard.
+Coverage includes action owners and participant names/emails/organizations/roles.
+Episode mode keeps the presentation guard, but skips the rich-only sanitizer:
+its legacy source restrictions and section/participant reordering would discard
+valid episode evidence and invalidate claim pointers. Gaps remain telemetry.
+Screen-derived roster entries inherit private sensitivity. With screen text off,
+frame evidence retains only image metadata; summaries and names are excluded.
 
 `note_claims` is optional and omitted when unset in both backend fallback and SDK
 models. Existing Dart explicit JSON decoding, Swift keyed decoding, and web typed

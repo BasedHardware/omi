@@ -1,11 +1,12 @@
 import json
+import importlib
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from models.structured import NoteClaim, Section, Structured
+from models.structured import ActionItem, NoteClaim, Participant, Section, Structured
 from models.structured_extraction import EpisodeStructuredExtraction, RichStructuredExtraction, StructuredExtraction
 from utils.conversations.episode_evidence import (
     EvidenceItem,
@@ -481,3 +482,77 @@ def test_empty_retry_keeps_initial_note(processing, monkeypatch, caplog):
     assert len(calls) == 2
     assert result.title == 'Quick chat' and result.overview == 'A brief exchange'
     assert 'to=empty_retry' in caplog.text
+
+
+@pytest.mark.parametrize('source,private', [('screen_activity', True), ('google', False)])
+def test_roster_claim_inherits_source_sensitivity(source, private):
+    from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
+
+    roster = MeetingRoster(
+        entries=(RosterEntry('Ari', None, None, 'human', source),),
+        display_title=None,
+        title_is_window_title=False,
+    )
+    item = meeting_evidence(roster, None, [])[0]
+    note = Structured(title='Ari', note_claims=[claim('/title', 'Ari', item.id, 'shown')])
+    assert not claim_violations(note, [item])
+    assert note.note_claims[0].private is private
+
+
+@pytest.mark.parametrize('field', ['owner_name', 'name', 'email', 'organization', 'role'])
+def test_claim_coverage_includes_owner_and_participant_fields(field):
+    item = EvidenceItem(id='roster:0', source_kind='roster', content='Synthetic identity', sensitivity='private')
+    note = Structured(title='Synthetic', note_claims=[claim('/title', 'Synthetic', item.id, 'shown')])
+    if field == 'owner_name':
+        note.action_items = [ActionItem(description='Send report', owner_name='Ari')]
+        note.note_claims.append(claim('/action_items/0/description', 'Send report', item.id, 'shown'))
+        target, text = '/action_items/0/owner_name', 'Ari'
+    else:
+        values = {'name': None, 'email': None, 'organization': None, 'role': None, 'source': 'roster'}
+        values[field] = 'Synthetic value'
+        note.participants = [Participant(**values)]
+        target, text = f'/participants/0/{field}', 'Synthetic value'
+    assert 'missing_claim_coverage' in claim_violations(note, [item], drop_invalid=True)
+    note.note_claims.append(claim(target, text, item.id, 'shown'))
+    assert not claim_violations(note, [item])
+    assert note.note_claims[-1].private
+
+
+@pytest.mark.parametrize('episode_mode', [True, False])
+def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch, episode_mode):
+    wiring = importlib.import_module('utils.conversations.meeting_notes_wiring')
+    frame_module = importlib.import_module('utils.conversations.screen_frame_evidence')
+    frame = frame_module.ScreenFrameEvidence('frame', START, 'strip', 0.5, ('Screen identity',), 'Private screen text')
+    monkeypatch.setattr(wiring, '_screen_frame_evidence', lambda *a: (frame,))
+    monkeypatch.setattr(wiring, 'load_people_documents', lambda *a: [])
+    monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda *a: (None, ()))
+    monkeypatch.setattr(wiring, '_rich_meeting_context_block', lambda *a, **k: None)
+    monkeypatch.setattr(wiring, 'meeting_notes_screen_frames_context_enabled', lambda: True)
+    observed = []
+    image = NotesFrameImage('frame', '+00:00', 'data:image/jpeg;base64,eA==')
+    monkeypatch.setattr(
+        wiring, 'load_notes_frame_images', lambda uid, cid, frames, start: observed.extend(frames) or (image,)
+    )
+    conv = SimpleNamespace(
+        id='synthetic', source='desktop', external_data={'conversation_role': 'meeting'}, started_at=START
+    )
+    items = [] if episode_mode else None
+    roster, _, _, images = wiring.rich_notes_inputs(
+        'synthetic',
+        conv,
+        None,
+        'UTC',
+        include_background=True,
+        include_screen_text=False,
+        evidence_items=items,
+    )
+    assert images == (image,)
+    assert observed[0].frame_id == frame.frame_id
+    if episode_mode:
+        assert observed[0].summary == '' and observed[0].names == ()
+        assert 'Private screen text' not in render_episode_evidence(items)
+        assert 'Screen identity' not in render_episode_evidence(items)
+        assert not roster.entries
+    else:
+        assert observed[0].summary == frame.summary
+        assert roster.entries[0].display_name == 'Screen identity'

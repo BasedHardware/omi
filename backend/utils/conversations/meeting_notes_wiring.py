@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from models.calendar_context import CalendarMeetingContext
@@ -75,6 +76,8 @@ def _rich_meeting_roster(
     uid: str,
     conversation: Any,
     calendar_context: Optional[CalendarMeetingContext],
+    *,
+    include_frame_text: bool = True,
 ) -> Tuple[Optional[MeetingRoster], List[Dict[str, Any]], bool, Tuple[ScreenFrameEvidence, ...]]:
     """Best-effort normalized roster plus the people-catalog read used for it.
 
@@ -101,6 +104,8 @@ def _rich_meeting_roster(
         if calendar_context is None and not desktop_capture and not gather:
             return None, [], desktop_capture, ()
         evidence = _screen_frame_evidence(uid, conversation)
+        if not include_frame_text:
+            evidence = tuple(replace(frame, names=(), summary='') for frame in evidence)
         # Names the judge read off approved frames are identity evidence for either
         # flag: with images attached, the roster must carry them too, or the notes
         # validator strips the names the model read from those images.
@@ -187,7 +192,12 @@ def rich_notes_inputs(
     evidence_items: Optional[List[EvidenceItem]] = None,
 ) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...]]:
     """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, and frame images for notes."""
-    roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(uid, conversation, calendar_context)
+    roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(
+        uid,
+        conversation,
+        calendar_context,
+        **({'include_frame_text': include_screen_text} if evidence_items is not None else {}),
+    )
     if evidence_items is not None:
         evidence_items.extend(meeting_evidence(roster, calendar_context, evidence))
     if roster is None or not include_background:

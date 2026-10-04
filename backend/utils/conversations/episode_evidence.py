@@ -160,6 +160,7 @@ def meeting_evidence(roster: Any, calendar: Any, frames: Sequence[Any]) -> list[
                     },
                     actor=entry.display_name,
                     ref=entry.person_id or entry.source,
+                    private=entry.source == 'screen_activity',
                 )
             )
     for frame in frames:
@@ -325,7 +326,8 @@ def claim_violations(structured: Structured, items: Sequence[EvidenceItem], *, d
         required.append('/overview')
     for field, attributes in (
         ('sections', ('heading', 'body_markdown')),
-        ('action_items', ('description', 'context')),
+        ('action_items', ('description', 'context', 'owner_name')),
+        ('participants', ('name', 'email', 'organization', 'role')),
         ('events', ('title', 'description')),
         ('insights', ('text',)),
     ):
