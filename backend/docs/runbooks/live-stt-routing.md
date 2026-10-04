@@ -387,8 +387,8 @@ different environment to clear a production alert.
 `STT_PAID_SPILLOVER_BUDGET_ENABLED=false` preserves existing selection. When
 true, router-on sessions encountering Parakeet capacity refusal must obtain a
 fleet admission before promoting a paid route. Redis TIME and one atomic Lua
-operation enforce a fixed UTC-minute budget across pods; aliases/endpoints on
-the same provider account share the budget. Defaults are 30 promotions each
+operation enforce a fixed UTC-minute budget across pods; all endpoints and credentials for
+the same provider share the budget; rotations do not reset it. Defaults are 30 promotions each
 for `STT_PAID_SPILLOVER_SONIOX_PER_MINUTE`,
 `STT_PAID_SPILLOVER_MODULATE_PER_MINUTE`, and
 `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` (range 0–10000). Zero refuses
@@ -402,12 +402,14 @@ billing headroom independently before enabling router traffic.
 `STT_NO_TEXT_RESCUE_ENABLED=false` preserves existing first-text handling.
 Enabling it also requires `STT_FAILOVER_RECOVERY_ENABLED=true`; the choice and
 `STT_NO_TEXT_RESCUE_SECONDS` are pinned when the managed session is created.
-The default 60-second lease (range 5–120) bounds both paid wall time and paid
+The default 60-second lease (range 5–120) bounds paid audio admission by wall time and paid
 admitted audio, including replay and successor switches, for one ambiguous
-no-text interval per listen session. A successor transcript records proof but
-does not renew the lease. At expiry or audio-budget refusal, the owner tries
+no-text interval per listen session. Capture-mapped successor text overlapping the stalled interval records
+evidence but does not renew the lease. Later or unmapped text is unproven. At expiry or audio-budget refusal, audio admission stops and the owner tries
 windowed Parakeet once, retaining unanswered capture and applying the normal
-replay/epoch fences. This policy retirement never benches the paid provider.
+replay/epoch fences. Transport cleanup uses the ordinary bounded abort; the admission deadline is
+not an exact provider billing or socket-close timestamp. This policy retirement
+never benches the paid provider.
 If cheap permission/capacity is unavailable, recovery terminates explicitly;
 it cannot quietly extend the paid lease. Returned cheap decoding suppresses
 further first-text/empty-streak rescues for the session. Normal transport
@@ -417,7 +419,8 @@ after emitted text so later speech without progress can also trigger rescue.
 
 `omi_stt_no_text_rescue_audio_seconds_total{provider}` measures admitted paid
 rescue audio; `omi_stt_no_text_rescue_total{outcome}` counts starts and completed
-intervals, distinguishing `successor_text` from `unproven`. Starts from sessions
+intervals, distinguishing `interval_text` from `unproven`. Overlap is evidence of some
+original-interval text, not a completeness or correctness claim. Starts from sessions
 that leave before lease completion remain censored; these metrics are not an
 invoice or a transcript-quality score. For a synthetic one-hour Soniox
 remainder, the declared $0.0754/audio-hour rate implies $0.0754 without a

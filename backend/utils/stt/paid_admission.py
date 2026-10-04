@@ -2,7 +2,7 @@
 
 Denial (including unavailable Redis) restores configured selection. This bounds
 router-induced spillover, not paid dials already required by the static chain.
-Redis TIME owns the minute boundary; endpoint aliases share an account budget.
+Redis TIME owns the minute boundary; all endpoints/accounts share a provider budget.
 """
 
 import asyncio
@@ -11,7 +11,7 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
-from config.live_stt_state import fleet_prefix
+from config.live_stt_state import stage
 from utils.stt.live_metrics import PAID_SPILLOVER_ADMISSIONS
 
 ADMIT = """
@@ -57,7 +57,8 @@ async def admit(provider: str) -> bool:
                 socket_timeout=0.1,
                 retry_on_timeout=False,
             )
-        key = f'{fleet_prefix(provider, account=True)}:paid-spillover-v1'
+        # Endpoint/credential rotations must not reset the fleet spend cap.
+        key = f'omi:live-stt:paid-spillover-v1:{stage()}:{provider}'
         allowed = bool(await asyncio.wait_for(_client.eval(ADMIT, 1, key, limit(provider)), timeout=0.15))
         outcome = 'admitted' if allowed else 'denied'
     except Exception:

@@ -80,7 +80,12 @@ def select_live_replacement(
     rescue = getattr(session, 'no_text_rescue', None)
     reason = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
     if rescue is not None and rescue.enabled:
-        rescue.start(reason)
+        if rescue.deadline is None and reason in {'first_text_deadline', 'empty_streak'}:
+            interval = receiver._window_ring().capture_bounds
+            pending = receiver.stt_socket.window_replay_pending_sample()
+            if pending is not None:
+                interval = (max(interval[0], pending), interval[1])
+            rescue.start(reason, capture_interval=interval)
         if reason == 'no_text_rescue_complete' and rescue.active:
             rescue.complete()
             receiver._stt_failed_providers.discard('parakeet')

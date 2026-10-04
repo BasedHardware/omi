@@ -87,6 +87,8 @@ async def test_fleet_budget_shared_by_pods_per_provider_and_minute(monkeypatch):
     monkeypatch.setenv('STT_PAID_SPILLOVER_MODULATE_PER_MINUTE', '2')
     # Independent sessions/pods call the same atomic shared counter.
     assert sum(await asyncio.gather(*(paid_admission.admit('modulate') for _ in range(12)))) == 2
+    monkeypatch.setenv('MODULATE_API_KEY', 'rotated-synthetic-account')
+    assert not await paid_admission.admit('modulate')
     assert await paid_admission.admit('soniox')
     redis.minute += 1
     assert await paid_admission.admit('modulate')
@@ -171,6 +173,21 @@ def test_rescue_default_off_and_requires_recovery(monkeypatch):
     assert not rescue.active
     monkeypatch.setenv('STT_NO_TEXT_RESCUE_ENABLED', 'true')
     assert not NoTextRescue(recovery_enabled=False).enabled
+
+
+def test_rescue_proof_requires_text_in_original_capture_interval(monkeypatch):
+    monkeypatch.setenv('STT_NO_TEXT_RESCUE_ENABLED', 'true')
+    rescue = NoTextRescue(recovery_enabled=True)
+    rescue.start('first_text_deadline', capture_interval=(16000, 64000))
+    rescue.note_transcript([{'text': 'Unmapped.'}])
+    rescue.note_transcript([{'text': 'Later.', '_capture_start_sample': 64000, '_capture_end_sample': 96000}])
+    rescue.note_transcript([{'text': 'Before.', '_capture_start_sample': 0, '_capture_end_sample': 16000}])
+    rescue.note_transcript([{'text': '', '_capture_start_sample': 32000, '_capture_end_sample': 48000}])
+    assert not rescue.text
+    rescue.start('empty_streak', capture_interval=(64000, 96000))
+    assert rescue.capture_interval == (16000, 64000)
+    rescue.note_transcript([{'text': 'Recovered.', '_capture_start_sample': 32000, '_capture_end_sample': 48000}])
+    assert rescue.text
 
 
 def test_failback_does_not_bench_paid_or_reset_attempt_accounting(monkeypatch):

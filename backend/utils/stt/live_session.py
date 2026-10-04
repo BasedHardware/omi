@@ -664,7 +664,7 @@ class LiveLegSocket(STTSocket):
         if any(str(segment.get('text') or '').strip() for segment in segments):
             self._cost_text_seen = True
             if self._no_text_rescue.active and not self.window:
-                self._no_text_rescue.text = True
+                self._no_text_rescue.note_transcript(segments)
         if self._tracks_window_replay:
             for segment in segments:
                 end = segment.get('_capture_end_sample')
