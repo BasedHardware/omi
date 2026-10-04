@@ -250,14 +250,17 @@ class TestConversationsToMarkdown(unittest.TestCase):
         """
         conv = {
             "id": "conv_\ud800",
-            "started_at": "2026-09-17T12:00:00Z",
+            "started_at": "2026-09-17T12:00:00Z\ud800",
             "structured": {"title": "bad \ud800 title", "category": "work\udfff"},
+            "source": "omi\udfff",
         }
         md = c2m.conversation_to_markdown(conv)
         frontmatter = md.split("---")[1]
         self.assertNotIn("\\ud800", frontmatter.lower())
         self.assertNotIn("\\udfff", frontmatter.lower())
         self.assertIn('title: "bad  title"', frontmatter)
+        self.assertIn('date: "2026-09-17T12:00:00Z"', frontmatter)
+        self.assertIn('source: "omi"', frontmatter)
 
     def test_lone_surrogate_in_transcript_does_not_abort_export(self):
         """The conversation still exports, minus only the unencodable code point."""

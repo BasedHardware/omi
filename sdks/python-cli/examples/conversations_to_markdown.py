@@ -108,7 +108,7 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         f"id: {json.dumps(strip_surrogates(str(conv_id)))}",
         f"title: {json.dumps(strip_surrogates(str(title)))}",
         f"category: {json.dumps(strip_surrogates(str(category)))}",
-        f"date: {json.dumps(str(started_at))}",
+        f"date: {json.dumps(strip_surrogates(str(started_at)))}",
         f"source: {json.dumps(strip_surrogates(str(source)))}",
         "tags:",
         "  - omi",
