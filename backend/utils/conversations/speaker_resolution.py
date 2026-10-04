@@ -214,12 +214,29 @@ class EmbeddingDiagnostics:
     attempted: int = 0
 
 
+def _inward_sample(bound: float, origin: float, *, exclusive_end: bool) -> int:
+    """Cut inward on this chunk's grid, snapping only arithmetic roundoff.
+
+    Subtracting epoch-sized floats loses low bits. Bound that uncertainty by
+    the operands' ULPs rather than treating a fractional sample as an integer.
+    An end index includes only complete samples before the exclusive end.
+    """
+    offset = (bound - origin) * SAMPLE_RATE
+    uncertainty = (math.ulp(bound) + math.ulp(origin)) * SAMPLE_RATE + math.ulp(offset)
+    nearest = round(offset)
+    if abs(offset - nearest) <= uncertainty:
+        offset = float(nearest)
+    return math.floor(offset) if exclusive_end else math.ceil(offset)
+
+
 def _verified_clip(session: AudioChunkReadSession, start: float, end: float) -> Tuple[Optional[bytes], str]:
     """Assemble at most 15s from the invocation's generation-pinned decoded cache.
 
     No downloads, padding, or interpolation. Only a tolerance-sized leading or
     trailing edge may be trimmed; an internal missing extent refuses the clip.
-    Inventory/decoded coverage validation has already admitted this session.
+    Used only when the exact base midpoint clip cannot embed. Inventory/decoded
+    coverage validation has already admitted this session. Cuts are inward and
+    the sum of pieces has an integer 240,000-sample budget, even on mixed grids.
     """
     if end - start > MAX_CLIP_SECONDS:
         middle = (start + end) / 2.0
@@ -228,6 +245,7 @@ def _verified_clip(session: AudioChunkReadSession, start: float, end: float) -> 
         return None, 'clip_too_short'
     position = start
     pieces = []
+    remaining_samples = int(MAX_CLIP_SECONDS * SAMPLE_RATE)
     for chunk in sorted(session.chunks, key=lambda c: c.get('span', {}).get('start', c['timestamp'])):
         chunk_start = chunk.get('span', {}).get('start', chunk['timestamp'])
         pcm, _ = session.cache.get(chunk['path'], (None, 'missing_blob'))
@@ -242,9 +260,12 @@ def _verified_clip(session: AudioChunkReadSession, start: float, end: float) -> 
                 return None, 'chunk_boundary' if pieces else 'no_clip'
             position = chunk_start
         stop = min(end, chunk_end)
-        first_sample = round((position - chunk_start) * SAMPLE_RATE)
-        last_sample = round((stop - chunk_start) * SAMPLE_RATE)
-        pieces.append(pcm[max(0, first_sample) * 2 : last_sample * 2])
+        first_sample = max(0, _inward_sample(position, chunk_start, exclusive_end=False))
+        last_sample = min(len(pcm) // 2, _inward_sample(stop, chunk_start, exclusive_end=True))
+        last_sample = min(last_sample, first_sample + remaining_samples)
+        piece = pcm[first_sample * 2 : last_sample * 2]
+        pieces.append(piece)
+        remaining_samples -= len(piece) // 2
         position = stop
         if position >= end - 1e-6:
             clip = b''.join(pieces)
@@ -300,22 +321,28 @@ def _embed_missing(
         return index < len(midpoints) and (next_start is None or midpoints[index] < next_start)
 
     def clips():
+        base_ids: set[str] = set()
         if session is not None:
-            for segment in pending:
-                if time.monotonic() > deadline or not session.in_budget():
-                    return
-                clip, reason = _verified_clip(session, *window_of(segment))
-                if clip is None:
-                    diagnostics.clip_skips += 1
-                    if reason == 'clip_too_short':
-                        diagnostics.clip_too_short += 1
-                    elif reason == 'chunk_boundary':
-                        diagnostics.chunk_boundary += 1
-                    continue
-                yield segment, clip
-            return
-        # Rollback/legacy sync path retains its single-midpoint-chunk policy.
-        iterator = iter_audio_chunk_pcm(uid, conversation.id, wanted, sample_rate=SAMPLE_RATE)
+
+            def cached_chunks():
+                # Mirror the base iterator's wanted/filter/order semantics, but
+                # read only the already generation-verified invocation cache.
+                chunks = sorted(session.chunks, key=lambda c: c.get('span', {}).get('start', c['timestamp']))
+                for index, chunk in enumerate(chunks):
+                    if time.monotonic() > deadline or not session.in_budget():
+                        return
+                    chunk_start = chunk.get('span', {}).get('start', chunk['timestamp'])
+                    following = chunks[index + 1] if index + 1 < len(chunks) else None
+                    next_start = following.get('span', {}).get('start', following['timestamp']) if following else None
+                    if wanted(chunk_start, next_start):
+                        pcm, _ = session.cache.get(chunk['path'], (None, 'missing_blob'))
+                        if pcm:
+                            yield chunk_start, pcm
+
+            iterator = cached_chunks()
+        else:
+            # Rollback/legacy sync path retains its single-midpoint-chunk policy.
+            iterator = iter_audio_chunk_pcm(uid, conversation.id, wanted, sample_rate=SAMPLE_RATE)
         for chunk_start, pcm in iterator:
             chunk_end = chunk_start + len(pcm) / (SAMPLE_RATE * 2)
             first = bisect.bisect_left(midpoints, chunk_start)
@@ -327,13 +354,35 @@ def _embed_missing(
                     middle = (begin + end) / 2.0
                     begin, end = middle - MAX_CLIP_SECONDS / 2, middle + MAX_CLIP_SECONDS / 2
                 if end - begin < MIN_EMBED_SECONDS:
-                    diagnostics.clip_skips += 1
-                    if abs_end - abs_start >= MIN_EMBED_SECONDS:
-                        diagnostics.chunk_boundary += 1
-                    else:
-                        diagnostics.clip_too_short += 1
+                    if session is None:
+                        diagnostics.clip_skips += 1
+                        if abs_end - abs_start >= MIN_EMBED_SECONDS:
+                            diagnostics.chunk_boundary += 1
+                        else:
+                            diagnostics.clip_too_short += 1
                     continue
-                yield segment, trim_pcm16(pcm, SAMPLE_RATE, begin - chunk_start, end - chunk_start)
+                clip = trim_pcm16(pcm, SAMPLE_RATE, begin - chunk_start, end - chunk_start)
+                if session is not None:
+                    if len(clip) < MIN_EMBED_SECONDS * SAMPLE_RATE * 2:
+                        continue
+                    if segment.id is not None:
+                        base_ids.add(segment.id)
+                yield segment, clip
+        if session is not None:
+            for segment in pending:
+                if segment.id in base_ids:
+                    continue
+                if time.monotonic() > deadline or not session.in_budget():
+                    return
+                clip, reason = _verified_clip(session, *window_of(segment))
+                if clip is None:
+                    diagnostics.clip_skips += 1
+                    if reason == 'clip_too_short':
+                        diagnostics.clip_too_short += 1
+                    elif reason == 'chunk_boundary':
+                        diagnostics.chunk_boundary += 1
+                    continue
+                yield segment, clip
 
     with httpx.Client(timeout=EMBED_TIMEOUT_SECONDS) as client:
         if session is not None and time.monotonic() > deadline:

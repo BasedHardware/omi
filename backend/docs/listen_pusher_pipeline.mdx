@@ -2497,14 +2497,19 @@ and
 each stage outcome down by `legacy|capture_span|sync|v2|mixed|cached|none`
 or the first refusal reason.
 
-With the consumer ON, embedding clips concatenate only already verified,
-generation-pinned decoded adjacent chunks from that invocation's cache. The
-middle 15 seconds remain the maximum clip. Only a leading or trailing missing edge
-of at most the existing 1 ms coverage tolerance may be trimmed to verified PCM,
-and the resulting clip must still contain at least one second of audio. Internal
-gaps always refuse; no padding or interpolation is allowed. Live, sync and v2
-placements share this assembly after inventory
-admission; consumer OFF retains the legacy single-midpoint-chunk clip policy.
+With the consumer ON, clip selection is strictly additive: compute the exact
+legacy midpoint-chunk clip first from the invocation's generation-pinned decoded
+cache. If it contains at least one second of verified PCM, embed those same bytes
+with the existing cuts, duration and cache key. A cache miss cannot replace that
+evidence with a longer clip. Only otherwise try adjacent-chunk assembly from the
+same cache. Recovery cuts inward on each half-open sample grid, snaps only
+floating arithmetic roundoff, and caps all pieces together at 240,000 samples
+(15 seconds at 16 kHz). Only a leading or trailing missing edge of at most the
+existing 1 ms coverage tolerance may be trimmed; at least one second of PCM
+must remain. Assembly refuses internal gaps beyond 1 microsecond wall-axis
+roundoff, without padding or interpolation. A gap outside an embeddable base
+subclip does not withdraw that subclip. Live, sync and v2 placements share this
+policy after inventory admission; consumer OFF retains legacy midpoint clips.
 Existing embedding/cache formats, keys and download/time/embedding caps stay intact.
 
 For `outcome="no_embeddings"`, `reason` is exactly one of `all_short`, `no_eligible`,

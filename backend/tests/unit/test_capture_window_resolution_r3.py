@@ -96,9 +96,9 @@ def test_continuous_sync_v2_edges_no_worse_than_base(
     if base_clips:
         assert conversation.speaker_resolution.status == base_conversation.speaker_resolution.status == 'resolved'
         assert env[0]['c1'] == base_store['c1']
-        assert len(clips[0]) >= len(base_clips[0])
+        assert clips == base_clips
     if clips:
-        expected = b''.join(session.cache[c['path']][0] for c in session.chunks)
+        expected = base_clips[0] if base_clips else b''.join(session.cache[c['path']][0] for c in session.chunks)
         assert clips == [expected]
         assert len(clips[0]) >= SR * 2
     else:

@@ -178,9 +178,10 @@ def test_verified_clip_bounded_and_exact_original_pcm(env, verified_audio, monke
 
     monkeypatch.setattr(stage, 'extract_embedding_from_bytes', embed)
     stage.resolve_speakers_for_processing('offline', conversation)
-    assert len(observed) == 1 and len(observed[0]) == 15 * SR
-    assert np.all(observed[0][: int(7.5 * SR)] == 1000)
-    assert np.all(observed[0][int(7.5 * SR) :] == 2000)
+    # The exact base midpoint clip embeds ten seconds from the second chunk;
+    # additive recovery must never replace it with a longer mixed-voice clip.
+    assert len(observed) == 1 and len(observed[0]) == 10 * SR
+    assert observed[0].tobytes() == session.cache['offline-1'][0]
 
 
 @pytest.mark.parametrize('scope', ['sync', 'v2'])
