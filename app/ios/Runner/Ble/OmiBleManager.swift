@@ -735,8 +735,11 @@ final class OmiBleManager: NSObject {
     private static let batteryHistoryRetentionMs: Int64 = 7 * 24 * 3600 * 1000
 
     private static let batteryLevelCharUuid = CBUUID(string: "2A19")
-    // 15-minute reads over the 7-day retention: 4/hour * 24 * 7 = 672.
-    private static let maxFirmwareDiagnosticsEntries = 672
+    // 15-minute reads over the worst-case catch-up window: 4/hour * 24 * 8.
+    // maybeEmit can roll up yesterday - 6, whose start is nearly eight days old
+    // when the app runs late in the current day, so the ring must cover the
+    // seven prior days plus the current partial day.
+    private static let maxFirmwareDiagnosticsEntries = 768
 
     private static let diagnosticsKeyPrefix = "ble_diagnostics_disconnect_history_"
     private static let reconnectCountKeyPrefix = "ble_diagnostics_reconnect_count_"
@@ -863,12 +866,6 @@ final class OmiBleManager: NSObject {
         peripheral.readValue(for: diagnostic)
     }
 
-    /// True while the 15-minute diagnostics cadence gate still suppresses reads.
-    private func isDiagnosticsReadThrottled(uuid: String) -> Bool {
-        guard let last = lastDiagnosticsReadUptime[uuid] else { return false }
-        return ProcessInfo.processInfo.systemUptime - last < 15 * 60
-    }
-
     private func recordFirmwareDiagnostics(uuid: String, data: Data) {
         guard let value = OmiBleFirmwareDiagnostics.parse(data, timestampMs: CheckedIntegerConversion.epochMs()) else { return }
         let defaults = UserDefaults.standard
@@ -887,9 +884,10 @@ final class OmiBleManager: NSObject {
         let key = "ble_diagnostics_firmware_\(uuid)"
         var reads = defaults.array(forKey: key) as? [[String: Any]] ?? []
         reads.append(value)
-        // 15-minute reads over the 7-day retention: 4/hour * 24 * 7 = 672. The
-        // daily rollup reports the previous calendar day, so a 20-entry ring
-        // could evict that day's samples before emission.
+        // 15-minute reads over the worst-case catch-up window: 4/hour * 24 * 8.
+        // maybeEmit can roll up yesterday - 6, whose start is nearly eight days old
+        // when the app runs late in the current day, so the ring must cover the
+        // seven prior days plus the current partial day.
         persistPropertyListRecords(Array(reads.suffix(Self.maxFirmwareDiagnosticsEntries)), forKey: key, in: defaults)
         logBle(uuid: uuid, event: "firmware_diagnostics_read", detail: "v\(data[0])")
     }
@@ -1278,12 +1276,13 @@ extension OmiBleManager: CBCentralManagerDelegate {
         connectionStartTimes[uuid] = connectionStartedAt
         lastRssi.removeValue(forKey: uuid)
         rssiHistory.removeValue(forKey: uuid)
-        // Keep the last-known charging flag while the 15-minute diagnostics
-        // cadence gate is still warm: a reconnect inside that window skips the
-        // read, and clearing here would leave battery points untagged.
-        if let retainedCharging = chargingState.removeValue(forKey: uuid), isDiagnosticsReadThrottled(uuid: uuid) {
-            chargingState[uuid] = retainedCharging
-        }
+        // The charging flag comes only from firmware diagnostics reads, and the
+        // state may have changed while disconnected. Clear it so new battery
+        // points stay unknown (counted conservatively as drain by the rollup)
+        // until the next read re-stamps the actual state; a retained stale
+        // charging=true would exclude real drain intervals and the backfill
+        // cannot correct an explicit flag.
+        chargingState.removeValue(forKey: uuid)
         lastPacketIndex.removeValue(forKey: uuid)
         audioReceived[uuid] = 0
         audioExpected[uuid] = 0
