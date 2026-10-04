@@ -15,7 +15,7 @@ final class ProactiveNotificationKindTests: XCTestCase {
   /// `.general` is not reachable from any of them — it is decode-only.
   private static let producerAssistantIDs = [
     "suggestion", "insight", "task", "memory-extraction", "goals", "meeting-notes",
-    "integration_connect", "context-director", "trial", "onboarding", "daily_recap",
+    "integration_connect", "trial", "onboarding", "daily_recap",
     "notch_receipt", "notch_end", "reach_error", "unknown-future-assistant",
   ]
 

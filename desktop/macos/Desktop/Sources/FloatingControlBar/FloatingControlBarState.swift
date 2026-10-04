@@ -314,7 +314,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
   }
 
   /// Identity every shown card can write. SuggestionAssistant supplies a real
-  /// pair; context-director and other cards synthesize from delivery id / card id
+  /// pair; other cards synthesize from delivery id / card id
   /// so the ledger is not gated on suggestion-only telemetry.
   var feedbackIdentity: SuggestionAssistantTelemetry.NotificationIdentity {
     if let suggestionTelemetryIdentity { return suggestionTelemetryIdentity }
