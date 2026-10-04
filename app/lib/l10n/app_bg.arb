@@ -3833,7 +3833,10 @@
     "playbackAudioUnavailable": "Аудиото е недостъпно",
     "playbackAudioLoadFailed": "Аудиото не можа да се зареди",
     "playbackAudioNetworkFailed": "Проверете връзката",
+    "capturePendantDisconnectedShort": "Omi ще се свърже отново сам",
     "forYou": "За вас",
     "stopThese": "Спри тези",
-    "dismiss": "Скрий"
+    "dismiss": "Скрий",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

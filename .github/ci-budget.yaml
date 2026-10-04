@@ -883,6 +883,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "firestore_read_reconcile.yml/reconcile": {
+      "budget_p50_minutes": 5,
+      "display_name": "reconcile",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Once-daily read-only Firestore bill reconcile. Five minutes covers one BigQuery query and 24 hourly log reads. Not a pull-request job.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "firmware_release.yml/build-cv1": {
       "budget_p50_minutes": 5,
       "display_name": "Omi CV1 (nRF5340)",
@@ -3377,6 +3395,27 @@
               ],
               "required": "false",
               "type": "choice"
+            }
+          }
+        }
+      }
+    },
+    "firestore_read_reconcile.yml": {
+      "name": "Firestore read ledger reconcile",
+      "owner": "CI maintainers",
+      "rationale": "Daily read-only reconcile of billed Firestore read ops against the in-process ledger. Schedule plus manual dispatch. Does not deploy or change audit config.",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "30 16 * * *"
+          }
+        ],
+        "workflow_dispatch": {
+          "inputs": {
+            "day": {
+              "description": "Closed UTC day to reconcile (YYYY-MM-DD; blank uses yesterday UTC)",
+              "required": "false",
+              "type": "string"
             }
           }
         }

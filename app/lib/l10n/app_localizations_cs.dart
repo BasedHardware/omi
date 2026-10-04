@@ -9262,6 +9262,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Stahování z vašeho zařízení';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current z $total';
   }
@@ -11246,6 +11256,9 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi se znovu připojí sám';
 
   @override
   String participantsSummaryUncounted(String name) {

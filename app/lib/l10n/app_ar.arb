@@ -3833,7 +3833,10 @@
     "playbackAudioUnavailable": "الصوت غير متوفر",
     "playbackAudioLoadFailed": "تعذر تحميل الصوت",
     "playbackAudioNetworkFailed": "تحقق من الاتصال",
+    "capturePendantDisconnectedShort": "سيعيد Omi الاتصال تلقائيًا",
     "forYou": "من أجلك",
     "stopThese": "إيقاف هذه",
-    "dismiss": "تجاهل"
+    "dismiss": "تجاهل",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

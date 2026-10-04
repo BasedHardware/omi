@@ -11390,7 +11390,10 @@
     "playbackAudioUnavailable": "ஆடியோ கிடைக்கவில்லை",
     "playbackAudioLoadFailed": "ஆடியோவை ஏற்ற முடியவில்லை",
     "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்",
+    "capturePendantDisconnectedShort": "Omi தானாகவே மீண்டும் இணையும்",
     "forYou": "உங்களுக்காக",
     "stopThese": "இவற்றை நிறுத்து",
-    "dismiss": "மறை"
+    "dismiss": "மறை",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

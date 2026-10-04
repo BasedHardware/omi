@@ -9265,6 +9265,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Mengunduh dari perangkat Anda';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current dari $total';
   }
@@ -11253,6 +11263,9 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi akan menyambung kembali sendiri';
 
   @override
   String participantsSummaryUncounted(String name) {

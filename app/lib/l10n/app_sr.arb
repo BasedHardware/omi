@@ -11390,7 +11390,10 @@
     "playbackAudioUnavailable": "Zvuk nije dostupan",
     "playbackAudioLoadFailed": "Zvuk nije moguće učitati",
     "playbackAudioNetworkFailed": "Proverite vezu",
+    "capturePendantDisconnectedShort": "Omi ће се сам поново повезати",
     "forYou": "За вас",
     "stopThese": "Заустави ово",
-    "dismiss": "Сакриј"
+    "dismiss": "Сакриј",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

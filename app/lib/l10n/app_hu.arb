@@ -3929,7 +3929,10 @@
     "playbackAudioUnavailable": "A hang nem érhető el",
     "playbackAudioLoadFailed": "A hang nem tölthető be",
     "playbackAudioNetworkFailed": "Ellenőrizze a kapcsolatot",
+    "capturePendantDisconnectedShort": "Az Omi magától újracsatlakozik",
     "forYou": "Önnek",
     "stopThese": "Ezek leállítása",
-    "dismiss": "Elrejtés"
+    "dismiss": "Elrejtés",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

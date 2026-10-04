@@ -3868,7 +3868,10 @@
     "playbackAudioUnavailable": "Audio indisponible",
     "playbackAudioLoadFailed": "Impossible de charger l'audio",
     "playbackAudioNetworkFailed": "Vérifiez la connexion",
+    "capturePendantDisconnectedShort": "Omi se reconnectera tout seul",
     "forYou": "Pour vous",
     "stopThese": "Ne plus recevoir ceci",
-    "dismiss": "Masquer"
+    "dismiss": "Masquer",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

@@ -3833,7 +3833,10 @@
     "playbackAudioUnavailable": "Àudio no disponible",
     "playbackAudioLoadFailed": "No s'ha pogut carregar l'àudio",
     "playbackAudioNetworkFailed": "Comprova la connexió",
+    "capturePendantDisconnectedShort": "Omi es tornarà a connectar sol",
     "forYou": "Per a tu",
     "stopThese": "Atura aquests",
-    "dismiss": "Descarta"
+    "dismiss": "Descarta",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

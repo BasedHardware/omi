@@ -115,6 +115,8 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
   - name: PROACTIVITY_REDIS_HOST
     valueFrom:
       configMapKeyRef:
@@ -185,7 +187,10 @@ env:
   - name: AUDIO_TIMELINE_SPANS
     value: "true"
   - name: LIVE_SPEAKER_SPAN_RESOLUTION
-    value: "false"
+    value: "true"
+  # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
+  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
+    value: "true"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_CHAT_AGENT_ROUTE

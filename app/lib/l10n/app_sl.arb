@@ -11390,7 +11390,10 @@
     "playbackAudioUnavailable": "Zvok ni na voljo",
     "playbackAudioLoadFailed": "Zvoka ni bilo mogoče naložiti",
     "playbackAudioNetworkFailed": "Preverite povezavo",
+    "capturePendantDisconnectedShort": "Omi se bo sam znova povezal",
     "forYou": "Za vas",
     "stopThese": "Ustavi te",
-    "dismiss": "Skrij"
+    "dismiss": "Skrij",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

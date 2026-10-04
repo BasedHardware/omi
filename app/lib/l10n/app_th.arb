@@ -3833,7 +3833,10 @@
     "playbackAudioUnavailable": "เสียงไม่พร้อมใช้งาน",
     "playbackAudioLoadFailed": "ไม่สามารถโหลดเสียงได้",
     "playbackAudioNetworkFailed": "ตรวจสอบการเชื่อมต่อ",
+    "capturePendantDisconnectedShort": "Omi จะเชื่อมต่อใหม่เอง",
     "forYou": "สำหรับคุณ",
     "stopThese": "หยุดรายการแบบนี้",
-    "dismiss": "ปิด"
+    "dismiss": "ปิด",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

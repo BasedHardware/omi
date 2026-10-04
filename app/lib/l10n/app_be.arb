@@ -11390,7 +11390,10 @@
     "playbackAudioUnavailable": "Аўдыё недаступнае",
     "playbackAudioLoadFailed": "Не ўдалося загрузіць аўдыё",
     "playbackAudioNetworkFailed": "Праверце злучэнне",
+    "capturePendantDisconnectedShort": "Omi перападключыцца сам",
     "forYou": "Для вас",
     "stopThese": "Спыніць гэта",
-    "dismiss": "Схаваць"
+    "dismiss": "Схаваць",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

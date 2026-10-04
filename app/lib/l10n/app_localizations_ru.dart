@@ -9293,6 +9293,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Загрузка с вашего устройства';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current из $total';
   }
@@ -11283,6 +11293,9 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi переподключится сам';
 
   @override
   String participantsSummaryUncounted(String name) {
