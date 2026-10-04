@@ -634,6 +634,7 @@ def test_followup_http_recovery_without_duplicate_spend(store, monkeypatch, faul
     from llm_gateway.gateway.auth import ServiceCaller
     from tests.unit.test_proactivity_v2_gateway import Provider, context
     from database.proactivity_budget import BudgetAuthority
+    from database import proactivity_budget as money
 
     clock = [NOW]
     due = NOW - timedelta(minutes=1)
@@ -657,10 +658,10 @@ def test_followup_http_recovery_without_duplicate_spend(store, monkeypatch, faul
     async def admit(*args):
         pass
 
-    monkeypatch.setattr(gate, 'ensure_admitted', admit)
+    monkeypatch.setattr(producers.spine, 'ensure_admitted', admit)
     monkeypatch.setenv('LLM_GATEWAY_ACCOUNTING_ENABLED', 'true')
     monkeypatch.setattr(
-        gate,
+        money,
         'BudgetAuthority',
         lambda: BudgetAuthority(firestore_client=store, redis_client=Redis(), clock=lambda: clock[0]),
     )

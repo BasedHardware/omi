@@ -2173,7 +2173,7 @@ environments:
         - memory.canonical.mutate
         env:
           AUDIO_TIMELINE_SPANS:
-            value: 'false'
+            value: 'true'
             category: rollout
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
@@ -2660,7 +2660,7 @@ environments:
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
           AUDIO_TIMELINE_SPANS:
-            value: 'false'
+            value: 'true'
             category: rollout
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
