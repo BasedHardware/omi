@@ -541,7 +541,7 @@ env:
   - name: AUDIO_TIMELINE_V2
     value: "false"
   - name: AUDIO_TIMELINE_SPANS
-    value: "false"
+    value: "true"
   - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "false"
   # Fair-use system (PR #5748)
