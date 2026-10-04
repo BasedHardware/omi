@@ -26,9 +26,7 @@ class CloudBackupProvider(Protocol):
 
     provider_id: str
 
-    def ensure_folder(
-        self, folder_path: str
-    ) -> Tuple[Optional[str | int], Optional[str]]:
+    def ensure_folder(self, folder_path: str) -> Tuple[Optional[str | int], Optional[str]]:
         """Ensures the destination folder hierarchy exists.
 
         Returns (folder_identifier, error_message).
