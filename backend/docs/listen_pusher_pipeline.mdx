@@ -601,17 +601,20 @@ in-window string, including whitespace-only text, counts toward the character
 budgets; missing or non-`is_user` attribution, malformed timing, and speech
 outside the shared window are never evidence. Work per pair is additionally
 bounded end to end: candidate windows are located by index lookups over the
-sorted target starts rather than a full rescan, the two-shared-bigram
-necessary condition is evaluated before any alignment so lexically disjoint
-candidates never reach the DP, and four pair-wide budgets — 4,096
+sorted target starts rather than a full rescan, the two-shared-bigram half of
+the acceptance conjunction (the pair still needs the 0.8 ordered-LCS coverage)
+is evaluated before any alignment so lexically disjoint candidates never reach
+the DP, and four pair-wide budgets — 4,096
 bundle-check span attempts, 128 matcher calls, 16,384 summed compared tokens,
 and 262,144 summed LCS cells — bound discovery and all alignments together, so
 even candidates that never qualify cannot rescan the target; any projected
 overflow returns its specific bound label (`bounds_bundle_checks`,
 `bounds_matcher_calls`, `bounds_tokens`, `bounds_cells`) with no partial
 evidence. When the smaller side carries more than 32 eligible utterances, the
-matcher inspects only an evenly strided 32-utterance sample spanning both
-endpoints — never a first-N prefix — and extrapolates coverage as
+matcher inspects only a deterministic sample of at most 32 unique utterances
+strided evenly by cumulative eligible word mass — quantile positions over the
+running word total, including both endpoints, never a first-N prefix — and
+extrapolates coverage as
 (matched/sampled) × (eligible/total in-window words); the sampled coverage is a
 heuristic estimate, not whole-transcript proof. The numeric evidence keeps
 `smaller_words` as the full in-window denominator while the matched fields

@@ -335,8 +335,18 @@ def _sample_utterances(
 ) -> list[tuple[datetime, datetime, tuple[str, ...]]]:
     if len(eligible) <= MAX_SMALLER_UTTERANCES:
         return list(eligible)
-    last = len(eligible) - 1
-    return [eligible[i * last // (MAX_SMALLER_UTTERANCES - 1)] for i in range(MAX_SMALLER_UTTERANCES)]
+    cumulative_ends = []
+    total_words = 0
+    for _, _, words in eligible:
+        total_words += len(words)
+        cumulative_ends.append(total_words)
+    indices = sorted(
+        {
+            bisect.bisect_right(cumulative_ends, i * (total_words - 1) // (MAX_SMALLER_UTTERANCES - 1))
+            for i in range(MAX_SMALLER_UTTERANCES)
+        }
+    )
+    return [eligible[index] for index in indices]
 
 
 def measure_capture_containment(first: Any, second: Any) -> CaptureContainment:

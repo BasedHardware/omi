@@ -826,6 +826,32 @@ def test_utterance_sample_is_evenly_strided_with_endpoints():
     assert indices[0] == 0 and indices[-1] == 99
 
 
+def test_utterance_sample_follows_word_mass_not_utterance_count():
+    eligible = [(T0, T0, ('w%03d' % index,) * (8 if index % 2 == 0 else 120)) for index in range(40)]
+    sample = cc._sample_utterances(eligible)
+    assert len(sample) <= cc.MAX_SMALLER_UTTERANCES
+    assert len(set(sample)) == len(sample)
+    assert sample[0] == eligible[0] and sample[-1] == eligible[-1]
+    indices = [index for index, item in enumerate(eligible) if item in sample]
+    assert indices != [i * 39 // 31 for i in range(len(indices))]
+
+
+def test_length_skewed_pair_cannot_confirm_under_word_mass_sampling():
+    pendant, desktop = long_pair.length_skewed_pair()
+    for first, second in ((pendant, desktop), (desktop, pendant)):
+        decision = cc.measure_capture_containment(first, second)
+        assert not decision.would_join and decision.coverage < cc.MIN_COVERAGE
+
+
+def test_filler_between_every_target_token_still_rejects():
+    pendant, laptop = complementary_pair()
+    laptop['transcript_segments'] = [
+        segment(' filler '.join(text.split()), start + 3.0) for text, start in zip(UTTERANCES, UTTERANCE_TIMES)
+    ]
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert not decision.would_join and decision.reason == 'timing' and decision.matched_words == 0
+
+
 def test_only_matching_prefix_of_a_long_capture_cannot_confirm():
     times = [40.0 + 20.0 * index for index in range(64)]
     pendant_texts = [' '.join('a%02dw%d' % (index, word) for word in range(16)) for index in range(64)]

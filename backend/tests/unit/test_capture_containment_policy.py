@@ -508,6 +508,19 @@ def test_shadow_logs_layout_overlap_from_detector_without_grouping(seam, monkeyp
     assert 'would_join=false' in lines[0] and 'reason=layout_overlap' in lines[0]
 
 
+def test_on_mode_rejects_length_skewed_sample(seam, monkeypatch, caplog):
+    monkeypatch.setenv(containment_module.MODE_ENV, 'on')
+    pendant, desktop = long_pair.length_skewed_pair()
+    shared = measure_shared_speech(pendant['transcript_segments'], desktop['transcript_segments'])
+    assert not shared.confirms() and shared.containment < 0.25
+    seam['store'].rows.update({path('pendant'): _policy_row(pendant), path('desktop'): _policy_row(desktop)})
+    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
+        policy.link_duplicate_captures(UID, Conversation(**seam['store'].rows[path('pendant')]))
+    assert all('capture_group' not in r for r in seam['store'].rows.values())
+    lines = containment_lines(caplog)
+    assert len(lines) == 1 and 'would_join=false' in lines[0]
+
+
 REPO = Path(__file__).resolve().parents[3]
 MODE_KEY = 'CAPTURE_GROUP_CONTAINMENT_MODE'
 GKE_HOSTS = ('backend-listen', 'pusher')

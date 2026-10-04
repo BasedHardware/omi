@@ -109,3 +109,33 @@ def long_unrelated_pair():
         segment(disjoint_utterance(index), index * SEGMENT_STEP * 2.0) for index in range(PENDANT_SEGMENTS)
     ]
     return pendant, desktop
+
+
+SKEW_SECONDS = 2100.0
+SKEW_UTTERANCES = 100
+SKEW_STEP = 20.0
+SKEW_DURATION = 2.0
+SKEW_COUNT_SAMPLE_INDICES = {index * (SKEW_UTTERANCES - 1) // 31 for index in range(32)}
+
+
+def length_skewed_pair():
+    """Count-strided sampling matched 32 short utterances; word-mass sampling sees the disjoint bulk."""
+    pendant_segments = []
+    desktop_segments = []
+    for index in range(SKEW_UTTERANCES):
+        start = index * SKEW_STEP
+        if index in SKEW_COUNT_SAMPLE_INDICES:
+            pendant_text = ' '.join('match%dword%d' % (index, word) for word in range(8))
+            desktop_text = pendant_text
+        else:
+            pendant_text = ' '.join('small%dword%d' % (index, word) for word in range(128))
+            desktop_text = ' '.join('other%dword%d' % (index, word) for word in range(128))
+        pendant_segments.append(segment(pendant_text, start, end=start + SKEW_DURATION))
+        desktop_segments.append(segment(desktop_text, start, end=start + SKEW_DURATION))
+    for extra in range(10):
+        start = extra * 200.0 + 5.0
+        desktop_segments.append(segment('extra remote words', start, is_user=False, end=start + SKEW_DURATION))
+    desktop_segments.sort(key=lambda item: item['start'])
+    pendant = row('pendant', 'omi', 0.0, SKEW_SECONDS, pendant_segments)
+    desktop = row('desktop', 'desktop', 0.0, SKEW_SECONDS, desktop_segments)
+    return pendant, desktop
