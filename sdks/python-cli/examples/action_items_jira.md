@@ -39,6 +39,17 @@ def clean_text(value):
     return " ".join(value.split())
 
 
+def spreadsheet_text(value):
+    """Avoid treating common formula prefixes as formulas on spreadsheet import."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
+        return "'" + value
+    return value
+
+
 def parse_time(value):
     """Parse an ISO-8601 timestamp into an aware UTC datetime, or None if unusable."""
     if not isinstance(value, str) or not value:
@@ -83,6 +94,7 @@ def load_action_items(sources):
 def format_jira_row(raw, offset=timedelta(0), default_status="To Do", default_priority="Medium", extra_labels=None):
     """Format single action item into Jira CSV compatible dictionary."""
     summary = clean_text(raw.get("description")) or "Untitled action item"
+    summary = spreadsheet_text(summary)
     is_completed = bool(raw.get("completed"))
     status = "Done" if is_completed else default_status
 
@@ -108,7 +120,7 @@ def format_jira_row(raw, offset=timedelta(0), default_status="To Do", default_pr
 
     return {
         "Summary": summary,
-        "Description": " ".join(description_lines),
+        "Description": spreadsheet_text(" ".join(description_lines)),
         "Issue Type": "Task",
         "Status": status,
         "Priority": default_priority,
@@ -123,7 +135,13 @@ def convert(sources, destination, offset=timedelta(0), default_status="To Do", d
     items = load_action_items(sources)
 
     if status_filter:
-        want_completed = (status_filter.lower() == "completed")
+        s_lower = status_filter.lower()
+        if s_lower in ("completed", "done"):
+            want_completed = True
+        elif s_lower in ("pending", "todo", "open"):
+            want_completed = False
+        else:
+            raise ValueError(f"Unknown status filter: {status_filter!r}")
         items = [it for it in items if bool(it.get("completed")) == want_completed]
 
     output_path = Path(destination)
