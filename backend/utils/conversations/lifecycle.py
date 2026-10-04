@@ -149,6 +149,7 @@ def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id
     return assigned, created, survivors
 
 
+@sync_phase('firestore')
 def persist_processed_conversation(
     uid: str, conversation_data: dict[str, Any], *, smart_merge_refresh: tuple[int, str] | None = None
 ) -> bool:

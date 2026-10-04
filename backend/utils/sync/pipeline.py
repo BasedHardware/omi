@@ -642,7 +642,6 @@ def _require_run_owner(mutation: FencedSyncJobMutation, *, job_id: str) -> Dict 
     raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={mutation.outcome.value}')
 
 
-@sync_phase('firestore')
 def _update_sync_job_for_run(job_id: str, run_lock_token: str | None, updates: Dict) -> Dict | None:
     if run_lock_token is None:
         # During the mixed-revision compatibility phase, the raw-CAS helper
@@ -673,7 +672,6 @@ def _mark_job_processing_for_run(job_id: str, run_lock_token: str | None) -> Dic
     return _require_run_owner(fenced_mark_job_processing(job_id, run_lock_token), job_id=job_id)
 
 
-@sync_phase('firestore')
 def _finalize_sync_job_for_run(
     job_id: str,
     run_lock_token: str | None,

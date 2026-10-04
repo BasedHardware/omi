@@ -20,10 +20,10 @@ Static source inventory for the shared app and sync-reachable producers, 2026-10
 | `backend/routers/sync.py:800` | `sync_local_files` | `schedule_person_voice_learning_retries` | `uid` |
 | `backend/routers/sync.py:1483` | `sync_local_files_v2` | `start_background_task` | `_run_full_pipeline_background_async(job_id, uid, owned_paths, source, should_lock, job_dir, conversation_id, geolocation=geolocation, client` |
 | `backend/routers/sync.py:1865` | `run_sync_job` | `start_background_task` | `_maintain_uid_sequencer_lease(uid, job_id, epoch, stop, asyncio.current_task())` |
-| `backend/utils/sync/pipeline.py:1087` | `_reprocess_conversation_after_update` | `submit_with_context` | `_run_conversation_created_webhook` |
-| `backend/utils/sync/pipeline.py:1981` | `_run_full_pipeline_background_async` | `start_background_task` | `_maintain_inline_run_lease(job_id, inline_run_lock_token, inline_lease_stop_event, inline_lease_lost_event, owner_task)` |
-| `backend/utils/sync/pipeline.py:2372` | `_run_full_pipeline_background_async` | `start_background_task` | `trigger_classifier_if_needed(uid, triggered_caps)` |
-| `backend/utils/sync/pipeline.py:2732` | `_run_full_pipeline_background_async` | `schedule_person_voice_learning_retries` | `uid` |
+| `backend/utils/sync/pipeline.py:1085` | `_reprocess_conversation_after_update` | `submit_with_context` | `_run_conversation_created_webhook` |
+| `backend/utils/sync/pipeline.py:1979` | `_run_full_pipeline_background_async` | `start_background_task` | `_maintain_inline_run_lease(job_id, inline_run_lock_token, inline_lease_stop_event, inline_lease_lost_event, owner_task)` |
+| `backend/utils/sync/pipeline.py:2370` | `_run_full_pipeline_background_async` | `start_background_task` | `trigger_classifier_if_needed(uid, triggered_caps)` |
+| `backend/utils/sync/pipeline.py:2730` | `_run_full_pipeline_background_async` | `schedule_person_voice_learning_retries` | `uid` |
 | `backend/utils/sync/playback.py:130` | `_run_parallel_precache` | `submit_with_context` | `precache_audio_file` |
 | `backend/utils/sync/playback.py:157` | `precache_audio_files` | `submit_with_context` | `_precache_all_parallel` |
 | `backend/utils/sync/playback.py:324` | `_get_audio_urls_inline` | `submit_with_context` | `_cache_uncached_parallel` |
@@ -36,7 +36,7 @@ Static source inventory for the shared app and sync-reachable producers, 2026-10
 | `backend/utils/conversations/process_conversation.py:3305` | `_emit_derived_effects` | `submit_with_context` | `_save_action_items` |
 | `backend/utils/conversations/process_conversation.py:3310` | `_emit_derived_effects` | `submit_with_context` | `update_goal_progress` |
 | `backend/utils/conversations/process_conversation.py:3342` | `_emit_derived_effects` | `submit_with_context` | `_run_webhook` |
-| `backend/utils/conversations/lifecycle.py:347` | `processing_admission_guard` | `threading.Thread` | `_run_processing_lease_heartbeat` |
+| `backend/utils/conversations/lifecycle.py:348` | `processing_admission_guard` | `threading.Thread` | `_run_processing_lease_heartbeat` |
 | `backend/utils/conversations/capture_jev_shadow.py:369` | `_submit` | `submit_with_context` | `_run` |
 | `backend/utils/conversations/jev_shadow.py:138` | `_submit` | `submit_with_context` | `_run` |
 | `backend/utils/conversations/transcription_shadow.py:47` | `<module>` | `ThreadPoolExecutor` | `` |
