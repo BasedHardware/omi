@@ -121,8 +121,8 @@ final class ContextReminderCoordinator {
       // The store await can straddle a newer context switch; presenting the
       // old context's reminders then would fire a card for a place already left.
       guard lastObservedIdentity == identity,
-        FocusLockController.shared.revision() == focusRevision,
-        FocusLockController.shared.allows(appName: context.appName, windowTitle: context.normalizedTitle)
+        FocusLockController.shared.allowsCapturedResult(
+          appName: context.appName, windowTitle: context.normalizedTitle, revision: focusRevision)
       else { return }
       for reminder in due where !deliveredInCurrentContext.contains(reminder.id) {
         guard let ownerID = ownerIDProvider() else { return }

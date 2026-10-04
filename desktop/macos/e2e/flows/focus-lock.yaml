@@ -23,35 +23,16 @@ preconditions:
 steps:
   - id: S1
     name: Pin the live source
-    do: >-
-      In an isolated named macOS dev bundle, enable Screen Capture and foreground a
-      harmless synthetic meeting window. Open the status-bar Focus Lock submenu,
-      choose 15 minutes, and verify that the menu and status item name that window
-      and show a decreasing remaining time. A private or excluded window must not
-      offer an enabled pin action.
+    do: "In an isolated named macOS dev bundle, enable Screen Capture and foreground a harmless synthetic meeting window. Open the status-bar Focus Lock submenu, choose 15 minutes, and verify that the menu and status item name that window and show a decreasing remaining time. A private or excluded window must not offer an enabled pin action."
   - id: S2
     name: Ignore another app without losing the pinned source
-    do: >-
-      Briefly foreground a second synthetic app/window, then return to the meeting.
-      Verify that the pin still names the meeting, unrelated task Candidates,
-      suggestions, reminders, memory banners, and resurfacing cards do not appear,
-      while permitted capture from the pinned window continues. Use fixture content
-      and inspect the resulting local events; do not infer suppression only from a
-      quiet screen.
+    do: "Briefly foreground a second synthetic app/window, then return to the meeting. Verify that the pin still names the meeting, unrelated task Candidates, suggestions, reminders, memory banners, and resurfacing cards do not appear, while permitted capture from the pinned window continues. Use fixture content and inspect the resulting local events; do not infer suppression only from a quiet screen."
   - id: S3
     name: Release, switch, and expire
-    do: >-
-      Release the lock from the menu and verify normal context switching resumes.
-      Pin another synthetic window for 30 minutes, switch the pin from the menu,
-      and verify the displayed source changes. Use the FocusLockTests clock-driven
-      expiry case for the 60-minute boundary instead of waiting in a live session.
-      Closing a selected window without quitting its app must not silently retarget
-      another window; explicit release or expiry restores normal behavior.
+    do: "Release the lock from the menu and verify normal context switching resumes. Pin another synthetic window for 30 minutes, switch the pin from the menu, and verify the displayed source changes. Use the FocusLockTests clock-driven expiry case for the 60-minute boundary instead of waiting in a live session. Closing a selected window without quitting its app must not silently retarget another window; explicit release or expiry restores normal behavior."
   - id: S4
     name: Revoke privacy and session authority
-    do: >-
-      Pin a synthetic window, then exclude its app in Rewind settings. Verify the
-      pin disappears immediately and no excluded evidence is delivered. Repeat
-      with monitoring stopped, app termination, and owner change; each must release
-      the pin. Verify lifecycle analytics contain only source_class, bounded
-      duration_minutes, and fixed release_reason values, never source text.
+    do: "Pin a synthetic window, then exclude its app in Rewind settings. Verify the pin disappears immediately and no excluded evidence is delivered. Repeat with monitoring stopped, app termination, and owner change; each must release the pin. Verify lifecycle analytics contain only source_class, bounded duration_minutes, and fixed release_reason values, never source text."
+  - id: S5
+    name: Fence in-flight extraction and delivery
+    do: "With synthetic source content and a pausable test backend, begin a pinned-source screen-task extraction and pause its gate or delivery response. Switch or release Focus Lock before resuming the response. Verify no stale Candidate is persisted or presented. Repeat with a queued canonical outbox retry and confirm that only a retry whose trusted captured app and focus generation still match can dispatch."

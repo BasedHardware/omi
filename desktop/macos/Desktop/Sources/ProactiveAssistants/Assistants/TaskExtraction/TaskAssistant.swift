@@ -289,7 +289,7 @@ actor TaskAssistant: ProactiveAssistant {
     for record in records {
       // Durable outbox retries are delivery, not new extraction. They still
       // need the same source and generation fence as a freshly captured frame.
-      let sourceApp = record.sourceApp ?? ""
+      let sourceApp = record.metadata?["captured_app_name"] as? String ?? ""
       let sourceWindow = record.windowTitle
       let focusRevision = FocusLockController.shared.revision()
       guard

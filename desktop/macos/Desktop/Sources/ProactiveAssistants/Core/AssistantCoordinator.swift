@@ -168,7 +168,8 @@ class AssistantCoordinator {
     for (identifier, assistant) in assistants {
       let focusRevision = FocusLockController.shared.revision()
       if identifier != "memory-extraction",
-        !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+        !FocusLockController.shared.allowsCapturedResult(
+          appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
       {
         continue
       }
@@ -188,12 +189,8 @@ class AssistantCoordinator {
         // Check if assistant is enabled
         guard await assistant.isEnabled else { return }
         if identifier != "memory-extraction",
-          FocusLockController.shared.revision() != focusRevision
-        {
-          return
-        }
-        if identifier != "memory-extraction",
-          !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+          !FocusLockController.shared.allowsCapturedResult(
+            appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
         {
           return
         }
@@ -213,12 +210,8 @@ class AssistantCoordinator {
         // Analyze and handle result
         if let result = await assistant.analyze(frame: frame) {
           if identifier != "memory-extraction",
-            FocusLockController.shared.revision() != focusRevision
-          {
-            return
-          }
-          if identifier != "memory-extraction",
-            !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+            !FocusLockController.shared.allowsCapturedResult(
+              appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
           {
             return
           }
@@ -226,9 +219,8 @@ class AssistantCoordinator {
             let dataBox = AssistantEventDataBox(data)
             Task { @MainActor in
               if identifier != "memory-extraction",
-                FocusLockController.shared.revision() != focusRevision
-                  || !FocusLockController.shared.allows(
-                    appName: frame.appName, windowTitle: frame.windowTitle)
+                !FocusLockController.shared.allowsCapturedResult(
+                  appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
               {
                 return
               }
@@ -246,7 +238,8 @@ class AssistantCoordinator {
     for (identifier, assistant) in assistants {
       let focusRevision = FocusLockController.shared.revision()
       if identifier != "memory-extraction",
-        !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+        !FocusLockController.shared.allowsCapturedResult(
+          appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
       {
         continue
       }
@@ -265,12 +258,8 @@ class AssistantCoordinator {
 
         guard await assistant.isEnabled else { return }
         if identifier != "memory-extraction",
-          FocusLockController.shared.revision() != focusRevision
-        {
-          return
-        }
-        if identifier != "memory-extraction",
-          !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+          !FocusLockController.shared.allowsCapturedResult(
+            appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
         {
           return
         }
@@ -287,18 +276,20 @@ class AssistantCoordinator {
 
         if let result = await assistant.analyze(frame: frame) {
           if identifier != "memory-extraction",
-            FocusLockController.shared.revision() != focusRevision
-          {
-            return
-          }
-          if identifier != "memory-extraction",
-            !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+            !FocusLockController.shared.allowsCapturedResult(
+              appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
           {
             return
           }
           await assistant.handleResult(result) { [weak self] type, data in
             let dataBox = AssistantEventDataBox(data)
             Task { @MainActor in
+              if identifier != "memory-extraction",
+                !FocusLockController.shared.allowsCapturedResult(
+                  appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
+              {
+                return
+              }
               self?.sendEvent(type: type, data: dataBox.value)
             }
           }

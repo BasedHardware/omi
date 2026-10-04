@@ -550,7 +550,8 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// call sites keep compiling unchanged.
   public func stopMonitoring(reason: MonitoringStopReason = .userToggle) {
     guard isMonitoring else { return }
-    if FocusLockController.shared.release(reason: .monitoringStopped) {
+    let releasedFocusLock = FocusLockController.shared.release(reason: .monitoringStopped)
+    if releasedFocusLock {
       Task { await TaskContextualResurfacingService.shared.resetForFocusChange() }
     }
 
@@ -604,6 +605,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     screenCaptureService = nil
 
     isMonitoring = false
+    if releasedFocusLock {
+      (NSApp.delegate as? AppDelegate)?.refreshFocusLockMenuState()
+    }
     isStartingMonitoring = false  // Reset in case stop was called during startup
     isProcessingRewindFrame = false
     if droppedFrameCount > 0 {

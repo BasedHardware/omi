@@ -38,7 +38,7 @@ actor MemoryAssistant: ProactiveAssistant {
   private var previousMemories: [ExtractedMemory] = []  // Last 20 extracted memories for deduplication
   private let maxPreviousMemories = 20
   private var currentApp: String?
-  private var pendingFrame: CapturedFrame?
+  private var pendingFrame: (frame: CapturedFrame, focusRevision: UInt64)?
   private var processingTask: Task<Void, Never>?
   private let frameSignal: AsyncStream<Void>
   private let frameSignalContinuation: AsyncStream<Void>.Continuation
@@ -133,12 +133,12 @@ actor MemoryAssistant: ProactiveAssistant {
       }
 
       // Grab the latest frame (may have been updated or cleared during sleep)
-      guard let frame = pendingFrame else { continue }
+      guard let pending = pendingFrame else { continue }
       let waited = Date().timeIntervalSince(lastAnalysisTime)
       log("Memory: Starting analysis (interval: \(Int(interval))s, waited: \(Int(waited))s)")
       pendingFrame = nil
       lastAnalysisTime = Date()
-      await processFrame(frame)
+      await processFrame(pending.frame, capturedFocusRevision: pending.focusRevision)
     }
 
     log("Memory assistant stopped")
@@ -154,6 +154,7 @@ actor MemoryAssistant: ProactiveAssistant {
   }
 
   func analyze(frame: CapturedFrame) async -> AssistantResult? {
+    let focusRevision = FocusLockController.shared.revision()
     // Skip apps excluded from memory extraction (built-in + user's custom list)
     let exclusion = await MainActor.run {
       let settings = MemoryAssistantSettings.shared
@@ -179,7 +180,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
     // Store the latest frame - we'll process it when the interval has passed
     let hadPending = pendingFrame != nil
-    pendingFrame = frame
+    pendingFrame = (frame, focusRevision)
     if !hadPending {
       log("Memory: Received frame from \(frame.appName), queued for analysis")
     }
@@ -382,8 +383,8 @@ actor MemoryAssistant: ProactiveAssistant {
 
   // MARK: - Analysis
 
-  func processFrame(_ frame: CapturedFrame) async {
-    let focusRevision = FocusLockController.shared.revision()
+  func processFrame(_ frame: CapturedFrame, capturedFocusRevision: UInt64? = nil) async {
+    let focusRevision = capturedFocusRevision ?? FocusLockController.shared.revision()
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     let enabled = await isEnabled
     guard enabled else {

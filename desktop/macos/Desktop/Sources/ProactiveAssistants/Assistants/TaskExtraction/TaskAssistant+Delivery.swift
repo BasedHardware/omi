@@ -76,6 +76,7 @@ extension TaskAssistant {
       task: task,
       screenshotId: screenshotId,
       contextSummary: taskResult.contextSummary,
+      capturedAppName: appName,
       windowTitle: windowTitle,
       provenance: provenance,
       authorization: mutation
@@ -143,6 +144,7 @@ extension TaskAssistant {
     task: ExtractedTask,
     screenshotId: Int64?,
     contextSummary: String,
+    capturedAppName: String,
     windowTitle: String? = nil,
     provenance: ScreenTaskDeliveryProvenance,
     authorization: LocalMutationAuthorization
@@ -159,6 +161,9 @@ extension TaskAssistant {
       "direct_mention": task.directMention ?? false,
       "already_done": task.alreadyDone ?? false,
       "ownership_confidence": task.ownershipConfidence ?? 0.5,
+      // Model-provided sourceApp remains display metadata. Retry admission must
+      // use the independently captured app that produced this screenshot.
+      "captured_app_name": capturedAppName,
     ]
     provenance.store(in: &metadata)
     if let duplicateOf = task.duplicateOf { metadata["duplicate_of"] = duplicateOf }

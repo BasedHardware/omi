@@ -16,8 +16,9 @@ extension TaskAssistant {
         guard let binding = frame.taskBinding else { throw ScreenTaskFailure.ownerRevoked }
         let focusRevision = FocusLockController.shared.revision()
         let validateFrame: @Sendable () throws -> Void = {
-          guard FocusLockController.shared.revision() == focusRevision else { throw ScreenTaskFailure.stopped }
-          guard FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+          guard
+            FocusLockController.shared.allowsCapturedResult(
+              appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
           else { throw ScreenTaskFailure.stopped }
           guard RuntimeOwnerIdentity.isAuthorizationCurrent(binding.authorization) else {
             throw ScreenTaskFailure.ownerRevoked
@@ -32,7 +33,8 @@ extension TaskAssistant {
         metrics.eligibleFrames = 1
         let extraction: ScreenTaskExtraction
         if let lease {
-          extraction = try await extractScreenTasks(frame: frame, binding: binding, lease: lease, metrics: metrics)
+          extraction = try await extractScreenTasks(
+            frame: frame, binding: binding, lease: lease, metrics: metrics, validateFrame: validateFrame)
         } else {
           let extractionStart = ProcessInfo.processInfo.systemUptime
           metrics.legacyAttempts = 1
@@ -102,16 +104,9 @@ extension TaskAssistant {
 
   func extractScreenTasks(
     frame: CapturedFrame, binding: ScreenTaskFrameBinding, lease: ScreenTaskLease,
-    metrics: ScreenTaskFrameMetrics
+    metrics: ScreenTaskFrameMetrics, validateFrame: @escaping @Sendable () throws -> Void
   ) async throws -> ScreenTaskExtraction {
     let authorization = binding.authorization
-    let validateFrame: @Sendable () throws -> Void = {
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-      guard binding.exclusion.appName == frame.appName, binding.isCurrent(),
-        !ScreenTaskPrivacy.isPrivateWindow(app: frame.appName, title: frame.windowTitle)
-      else { throw ScreenTaskFailure.privacyRevoked }
-      try Task.checkCancellation()
-    }
     let services = ScreenTaskPipelineServices(
       validateFrame: validateFrame,
       validateFeature: { guard lease.isCurrent() else { throw ScreenTaskFailure.stopped } },

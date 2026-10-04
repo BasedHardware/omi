@@ -266,6 +266,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   private var focusLockReleaseItem: NSMenuItem?
   private var focusLockDurationItems: [NSMenuItem] = []
   private var focusLockTimer: Timer?
+  private var lastPresentedFocusRevision: UInt64?
   private var focusLockMenuIsOpen = false
   private var focusLockTerminationObserver: NSObjectProtocol?
   private var focusLockOwnerObserver: NSObjectProtocol?
@@ -1350,12 +1351,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
   @MainActor private func startFocusLockStatusUpdatesIfNeeded() {
     if focusLockTimer == nil {
-      focusLockTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+      let timer = Timer(timeInterval: 15, repeats: true) { [weak self] _ in
         Task { @MainActor in
           guard let self else { return }
           self.refreshFocusLockMenuState(inspectCurrentWindow: self.focusLockMenuIsOpen)
         }
       }
+      RunLoop.main.add(timer, forMode: .common)
+      focusLockTimer = timer
     }
     if focusLockTerminationObserver == nil {
       focusLockTerminationObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -1388,9 +1391,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     }
   }
 
-  @MainActor private func refreshFocusLockMenuState(
+  @MainActor func refreshFocusLockMenuState(
     now: Date = Date(), inspectCurrentWindow: Bool = false
   ) {
+    let focusRevision = FocusLockController.shared.revision(now: now)
+    if let lastPresentedFocusRevision, lastPresentedFocusRevision != focusRevision {
+      Task { await TaskContextualResurfacingService.shared.resetForFocusChange() }
+    }
+    lastPresentedFocusRevision = focusRevision
     var session = FocusLockController.shared.snapshot(now: now)
     if let current = session, RewindSettings.shared.isAppExcluded(current.source.appName) {
       _ = FocusLockController.shared.release(reason: .privacyExcluded)

@@ -358,6 +358,8 @@ final class TaskContextualResurfacingTests: XCTestCase {
       client: client, debounceInterval: 60, ownerIDProvider: { "owner-1" })
     let event = try XCTUnwrap(TaskLocalContextEvent.appWindow(appName: "Slack", windowTitle: "DM"))
     await service.observe(event)
+    let pendingBeforeLock = await service.pendingWorkstreamCount()
+    XCTAssertEqual(pendingBeforeLock, 1)
     let source = try XCTUnwrap(FocusLockSource(appName: "Teams", windowTitle: "Planning"))
     _ = FocusLockController.shared.activate(source: source, duration: 15 * 60)
     defer { _ = FocusLockController.shared.release() }

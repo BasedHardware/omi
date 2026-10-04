@@ -3,6 +3,13 @@ import XCTest
 @testable import Omi_Computer
 
 final class FocusLockTests: XCTestCase {
+  private final class ExclusionProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var excluded = false
+    func setExcluded(_ value: Bool) { lock.withLock { excluded = value } }
+    func isExcluded(_ app: String) -> Bool { lock.withLock { excluded } }
+  }
+
   func testPinsNormalizedWindowAndRejectsUnrelatedSources() throws {
     let source = try XCTUnwrap(FocusLockSource(appName: "Teams", windowTitle: "Planning"))
     let controller = FocusLockController()
@@ -10,6 +17,7 @@ final class FocusLockTests: XCTestCase {
     XCTAssertNotNil(controller.activate(source: source, duration: 15 * 60, now: now))
 
     XCTAssertTrue(controller.allows(appName: "Teams", windowTitle: "Planning", now: now))
+    XCTAssertTrue(controller.allows(appName: "Teams", windowTitle: "Planning 3:00", now: now))
     XCTAssertFalse(controller.allows(appName: "Slack", windowTitle: "Planning", now: now))
     XCTAssertFalse(controller.allows(appName: "Teams", windowTitle: "Other meeting", now: now))
     XCTAssertTrue(
@@ -43,7 +51,7 @@ final class FocusLockTests: XCTestCase {
     XCTAssertTrue(controller.allows(appName: "Zoom", windowTitle: "Any call", now: now))
     XCTAssertFalse(controller.allows(appName: "Teams", windowTitle: "Planning", now: now))
 
-    XCTAssertTrue(controller.release())
+    XCTAssertTrue(controller.release(now: now))
     XCTAssertTrue(controller.allows(appName: "Slack", windowTitle: "DM", now: now))
     XCTAssertFalse(controller.release())
     XCTAssertNotNil(controller.activate(source: teams, duration: 15 * 60, now: now))
@@ -100,6 +108,11 @@ final class FocusLockTests: XCTestCase {
     XCTAssertNotEqual(teams.appReferenceHash, slack.appReferenceHash)
   }
 
+  func testDecorativeTitleCannotBecomeAppWideLock() {
+    XCTAssertNil(FocusLockSource(appName: "Teams", windowTitle: "3:00"))
+    XCTAssertNotNil(FocusLockSource(appName: "Teams", windowTitle: nil))
+  }
+
   func testLifecycleTelemetryContainsOnlyBoundedFields() throws {
     let controller = FocusLockController()
     let now = Date(timeIntervalSince1970: 5_000)
@@ -107,7 +120,7 @@ final class FocusLockTests: XCTestCase {
       FocusLockSource(
         appName: "Secret App", windowTitle: "Private client meeting"))
     _ = controller.activate(source: source, duration: 30 * 60, now: now)
-    XCTAssertTrue(controller.release(reason: .manual))
+    XCTAssertTrue(controller.release(reason: .manual, now: now))
     let events = controller.takeTelemetryEvents()
     XCTAssertEqual(events.map(\.eventName), ["Desktop Focus Lock Started", "Desktop Focus Lock Ended"])
     XCTAssertEqual(events[0].durationMinutes, 30)
@@ -117,6 +130,15 @@ final class FocusLockTests: XCTestCase {
     XCTAssertFalse(String(describing: events.map(\.properties)).contains("Private client meeting"))
     XCTAssertFalse(String(describing: events.map(\.properties)).contains("Secret App"))
     XCTAssertTrue(controller.takeTelemetryEvents().isEmpty)
+  }
+
+  func testLateManualReleaseRecordsExpiryInstead() throws {
+    let controller = FocusLockController()
+    let now = Date(timeIntervalSince1970: 6_000)
+    let source = try XCTUnwrap(FocusLockSource(appName: "Teams", windowTitle: "Planning"))
+    _ = controller.activate(source: source, duration: 15 * 60, now: now)
+    XCTAssertFalse(controller.release(reason: .manual, now: now.addingTimeInterval(15 * 60)))
+    XCTAssertEqual(controller.takeTelemetryEvents().last?.reason, .expired)
   }
 
   func testQueuedOutboxDeliveryIsFencedAcrossActivationAndRelease() throws {
@@ -167,15 +189,14 @@ final class FocusLockTests: XCTestCase {
         appName: "Teams", windowTitle: "Planning", revision: duringLock))
   }
 
-  @MainActor
   func testPrivacyExclusionImmediatelyRevokesPinnedSource() throws {
     let app = "FocusLockPrivate-\(UUID().uuidString)"
-    let controller = FocusLockController()
+    let exclusion = ExclusionProbe()
+    let controller = FocusLockController(isExcluded: { exclusion.isExcluded($0) })
     let source = try XCTUnwrap(FocusLockSource(appName: app, windowTitle: "Document"))
     _ = controller.activate(source: source, duration: 15 * 60)
     XCTAssertNotNil(controller.snapshot())
-    RewindSettings.shared.excludeApp(app)
-    defer { RewindSettings.shared.includeApp(app) }
+    exclusion.setExcluded(true)
     XCTAssertNil(controller.snapshot())
     XCTAssertFalse(
       controller.allowsQueuedDelivery(

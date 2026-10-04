@@ -10,9 +10,12 @@ struct FocusLockSource: Equatable, Sendable {
   init?(appName: String, windowTitle: String?) {
     let app = appName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !app.isEmpty else { return nil }
-    self.appName = app
-    normalizedTitle = ContextDetection.normalizeWindowTitle(windowTitle, appName: app)
     let title = windowTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalized = ContextDetection.normalizeWindowTitle(title, appName: app)
+    // A title made only of progress/timer decoration is not an app-wide pin.
+    guard title?.isEmpty != false || normalized != nil else { return nil }
+    self.appName = app
+    normalizedTitle = normalized
     displayTitle = title?.isEmpty == false ? title : nil
   }
 
@@ -87,10 +90,15 @@ extension AnalyticsManager {
 final class FocusLockController: @unchecked Sendable {
   static let shared = FocusLockController()
 
+  private let isExcluded: @Sendable (String) -> Bool
   private let lock = NSLock()
   private var session: FocusLockSession?
   private var generation: UInt64 = 0
   private var telemetryEvents: [FocusLockTelemetryEvent] = []
+
+  init(isExcluded: @escaping @Sendable (String) -> Bool = { RewindCaptureExclusionGeneration.isExcluded($0) }) {
+    self.isExcluded = isExcluded
+  }
 
   func snapshot(now: Date = Date()) -> FocusLockSession? {
     lock.lock()
@@ -113,7 +121,7 @@ final class FocusLockController: @unchecked Sendable {
       source: source, expiresAt: now.addingTimeInterval(duration), durationMinutes: Int(duration / 60))
     lock.lock()
     expireLocked(now: now)
-    guard !RewindCaptureExclusionGeneration.isExcluded(source.appName) else {
+    guard !isExcluded(source.appName) else {
       lock.unlock()
       return nil
     }
@@ -132,9 +140,10 @@ final class FocusLockController: @unchecked Sendable {
   }
 
   @discardableResult
-  func release(reason: FocusLockReleaseReason = .manual) -> Bool {
+  func release(reason: FocusLockReleaseReason = .manual, now: Date = Date()) -> Bool {
     lock.lock()
     defer { lock.unlock() }
+    expireLocked(now: now)
     guard let session else { return false }
     telemetryEvents.append(
       FocusLockTelemetryEvent(
@@ -148,6 +157,7 @@ final class FocusLockController: @unchecked Sendable {
   func releaseIfAppTerminated(_ appName: String) -> Bool {
     lock.lock()
     defer { lock.unlock() }
+    expireLocked(now: Date())
     guard let session, session.source.appName == appName else { return false }
     telemetryEvents.append(
       FocusLockTelemetryEvent(
@@ -190,6 +200,14 @@ final class FocusLockController: @unchecked Sendable {
     return session.source.matches(event)
   }
 
+  func allows(_ event: TaskLocalContextEvent, revision expectedRevision: UInt64, now: Date = Date()) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    expireLocked(now: now)
+    guard generation == expectedRevision else { return false }
+    return session?.source.matches(event) ?? true
+  }
+
   func takeTelemetryEvents() -> [FocusLockTelemetryEvent] {
     lock.lock()
     defer { lock.unlock() }
@@ -200,7 +218,7 @@ final class FocusLockController: @unchecked Sendable {
 
   private func expireLocked(now: Date) {
     if let session,
-      !session.isActive(at: now) || RewindCaptureExclusionGeneration.isExcluded(session.source.appName)
+      !session.isActive(at: now) || isExcluded(session.source.appName)
     {
       let reason: FocusLockReleaseReason = session.isActive(at: now) ? .privacyExcluded : .expired
       telemetryEvents.append(

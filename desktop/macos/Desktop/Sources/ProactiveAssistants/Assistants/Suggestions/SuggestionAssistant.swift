@@ -124,8 +124,11 @@ actor SuggestionAssistant: ProactiveAssistant {
   }
 
   func analyze(frame: CapturedFrame) async -> AssistantResult? {
+    let focusRevision = FocusLockController.shared.revision()
     guard pendingContextSwitchAt != nil else { return nil }
-    guard FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+    guard
+      FocusLockController.shared.allowsCapturedResult(
+        appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
     else { return nil }
 
     let enabled = await isEnabled
@@ -195,7 +198,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     commitmentsInFlight = grounding.commitmentRecords
 
     do {
-      return try await evaluate(frame: frame, grounding: grounding)
+      return try await evaluate(frame: frame, grounding: grounding, focusRevision: focusRevision)
     } catch {
       logError("Suggestion: evaluation failed", error: error)
       return nil
@@ -399,9 +402,12 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   // MARK: - Judgment
 
-  private func evaluate(frame: CapturedFrame, grounding: SuggestionGrounding) async throws -> SuggestionResult? {
-    let focusRevision = FocusLockController.shared.revision()
-    guard FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+  private func evaluate(
+    frame: CapturedFrame, grounding: SuggestionGrounding, focusRevision: UInt64
+  ) async throws -> SuggestionResult? {
+    guard
+      FocusLockController.shared.allowsCapturedResult(
+        appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
     else { return nil }
     let prompt = buildPrompt(frame: frame, grounding: grounding)
     let systemPrompt = await systemPrompt
@@ -418,6 +424,12 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     let startedAt = Date()
     do {
+      // Grounding, prompt setup, and telemetry each suspend. Fence the actual
+      // model request, not only the initial decision or eventual result.
+      guard
+        FocusLockController.shared.allowsCapturedResult(
+          appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
+      else { return nil }
       let response = try await geminiClient.sendRequest(
         prompt: prompt,
         imageData: preview,
@@ -553,14 +565,12 @@ actor SuggestionAssistant: ProactiveAssistant {
     sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
   ) async -> SuggestionAssistantTelemetry.DeliveryOutcome? {
     guard let result = result as? SuggestionResult else { return nil }
-    if let focusRevision = result.focusRevision,
-      FocusLockController.shared.revision() != focusRevision
-    {
-      return nil
-    }
-    if let session = FocusLockController.shared.snapshot(),
-      result.focusSource.map({ session.source.matches(appName: $0.appName, windowTitle: $0.normalizedTitle) }) != true
-    {
+    guard
+      FocusLockController.shared.allowsCapturedResult(
+        appName: result.focusSource?.appName,
+        windowTitle: result.focusSource?.normalizedTitle,
+        revision: result.focusRevision)
+    else {
       return nil
     }
     guard result.hasSuggestion, let suggestion = result.suggestion else {
@@ -616,17 +626,18 @@ actor SuggestionAssistant: ProactiveAssistant {
       return .rejectedOwner
     }
 
+    guard
+      await deliver(
+        suggestion,
+        result: result,
+        ownerID: ownerID,
+        telemetryIdentity: telemetryIdentity
+      )
+    else { return nil }
     recentSuggestions = SuggestionDeduplication.remembering(
       .init(text: suggestion.suggestion, category: suggestion.category),
       in: recentSuggestions,
       frequencyLevel: cachedFrequencyLevel
-    )
-
-    await deliver(
-      suggestion,
-      result: result,
-      ownerID: ownerID,
-      telemetryIdentity: telemetryIdentity
     )
     return .delivered
   }
@@ -646,7 +657,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     result: SuggestionResult,
     ownerID: String,
     telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
-  ) async {
+  ) async -> Bool {
     let taskId = SuggestionCommitmentGuard.groundedTaskId(
       suggestion: suggestion.suggestion,
       category: suggestion.category,
@@ -669,17 +680,13 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     log("Suggestion: delivering [\(Int(suggestion.confidence * 100))%] \"\(suggestion.suggestion)\"")
 
-    await MainActor.run {
-      if let focusRevision = result.focusRevision,
-        FocusLockController.shared.revision() != focusRevision
-      {
-        return
-      }
-      if let session = FocusLockController.shared.snapshot(),
-        result.focusSource.map({ session.source.matches(appName: $0.appName, windowTitle: $0.normalizedTitle) }) != true
-      {
-        return
-      }
+    return await MainActor.run {
+      guard
+        FocusLockController.shared.allowsCapturedResult(
+          appName: result.focusSource?.appName,
+          windowTitle: result.focusSource?.normalizedTitle,
+          revision: result.focusRevision)
+      else { return false }
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
         title: "Focus",
@@ -693,6 +700,7 @@ actor SuggestionAssistant: ProactiveAssistant {
         SuggestionTaskNudgePolicy.recordingDelivery(taskId: taskId, in: &ledger, now: Date())
         SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).save(ledger)
       }
+      return true
     }
   }
 
@@ -711,6 +719,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     frame: CapturedFrame,
     sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
   ) async -> [String: String] {
+    let focusRevision = FocusLockController.shared.revision()
     // The probe bypasses only timing gates for intentional QA. It retains every
     // privacy, user-choice, and spend boundary before the screenshot reaches a model.
     let assistantEnabled = await isEnabled
@@ -749,7 +758,7 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     let result: SuggestionResult?
     do {
-      result = try await evaluate(frame: frame, grounding: grounding)
+      result = try await evaluate(frame: frame, grounding: grounding, focusRevision: focusRevision)
     } catch {
       return ["outcome": "evaluation_failed", "error": "\(error)"]
     }

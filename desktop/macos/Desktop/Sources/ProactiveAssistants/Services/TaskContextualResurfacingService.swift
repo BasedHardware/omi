@@ -836,6 +836,7 @@ actor TaskContextualResurfacingService {
       _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
     ) -> Void
   private var accumulator = TaskContextEventAccumulator()
+  private var queuedFocusRevision: UInt64?
   private var debounceTask: Task<Void, Never>?
   private var ownerChangeTask: Task<Void, Never>?
   private var activeLease: OwnerLease?
@@ -888,7 +889,8 @@ actor TaskContextualResurfacingService {
   }
 
   func observe(_ event: TaskLocalContextEvent) async {
-    guard FocusLockController.shared.allows(event) else { return }
+    let focusRevision = FocusLockController.shared.revision()
+    guard FocusLockController.shared.allows(event, revision: focusRevision) else { return }
     ensureOwnerChangeObserver()
     guard let lease = captureOwnerLease() else {
       resetOwnerState()
@@ -898,6 +900,10 @@ actor TaskContextualResurfacingService {
       resetOwnerState()
       activeLease = lease
     }
+    if let queuedFocusRevision, queuedFocusRevision != focusRevision {
+      resetForFocusChange()
+    }
+    queuedFocusRevision = focusRevision
     accumulator.insert(event)
     debounceTask?.cancel()
     debounceTask = Task { [weak self] in
@@ -917,6 +923,7 @@ actor TaskContextualResurfacingService {
     debounceTask?.cancel()
     debounceTask = nil
     accumulator = TaskContextEventAccumulator()
+    queuedFocusRevision = nil
     lastMaterialHint = nil
     lastEvaluationAt = nil
   }
@@ -928,6 +935,10 @@ actor TaskContextualResurfacingService {
 
   private func flush(lease: OwnerLease) async {
     let focusRevision = FocusLockController.shared.revision()
+    guard queuedFocusRevision == focusRevision else {
+      resetForFocusChange()
+      return
+    }
     debounceTask?.cancel()
     debounceTask = nil
     guard isCurrent(lease), activeLease == lease else {
@@ -935,7 +946,10 @@ actor TaskContextualResurfacingService {
       return
     }
     let now = Date()
-    let events = accumulator.drain(now: now).filter { FocusLockController.shared.allows($0, now: now) }
+    let events = accumulator.drain(now: now).filter {
+      FocusLockController.shared.allows($0, revision: focusRevision, now: now)
+    }
+    queuedFocusRevision = nil
     guard !events.isEmpty else { return }
     let matches = Self.contextMatches(events)
     let semanticFingerprint = matches.map { match in
@@ -1068,6 +1082,7 @@ actor TaskContextualResurfacingService {
     debounceTask?.cancel()
     debounceTask = nil
     accumulator = TaskContextEventAccumulator()
+    queuedFocusRevision = nil
     activeLease = nil
     lastMaterialHint = nil
     lastEvaluationAt = nil
