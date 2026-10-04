@@ -155,7 +155,8 @@ final class PreviewUITests: XCTestCase {
     }
 
     func testNativeAttachmentMenuForwardsSelectedPayload() {
-        let app = start(["chat", "attachments"])
+        // Keep the fixture receipt away from the system menu/composer hit targets.
+        let app = start(["chat", "attachments", "chrome"])
         XCTAssertTrue(app.buttons["chat_attach"].waitForExistence(timeout: 10))
         app.buttons["chat_attach"].tap()
         app.buttons["Choose File"].tap()
