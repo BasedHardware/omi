@@ -34,10 +34,7 @@ TranscriptSegment _segment(String text) {
   );
 }
 
-ServerConversation _conversation({
-  String overview = '',
-  List<TranscriptSegment>? segments,
-}) {
+ServerConversation _conversation({String overview = '', List<TranscriptSegment>? segments}) {
   return ServerConversation(
     id: 'conversation-1',
     createdAt: DateTime.utc(2026, 9, 21, 12),
@@ -61,28 +58,17 @@ void main() {
   });
 
   test('keeps normal summarized conversations on Summary', () {
-    expect(
-      conversationDetailInitialTab(
-        _conversation(overview: 'A useful summary.'),
-      ),
-      ConversationTab.summary,
-    );
+    expect(conversationDetailInitialTab(_conversation(overview: 'A useful summary.')), ConversationTab.summary);
   });
 
-  test(
-    'preserves an explicit tab choice for transcript-only conversations',
-    () {
-      final conversation = _conversation();
-      expect(
-        conversationDetailInitialTab(conversation, requested: ConversationTab.summary),
-        ConversationTab.summary,
-      );
-      expect(
-        conversationDetailInitialTab(conversation, requested: ConversationTab.transcript),
-        ConversationTab.transcript,
-      );
-    },
-  );
+  test('preserves an explicit tab choice for transcript-only conversations', () {
+    final conversation = _conversation();
+    expect(conversationDetailInitialTab(conversation, requested: ConversationTab.summary), ConversationTab.summary);
+    expect(
+      conversationDetailInitialTab(conversation, requested: ConversationTab.transcript),
+      ConversationTab.transcript,
+    );
+  });
 
   test('re-evaluates after detail hydration adds a summary', () {
     final conversation = _conversation();
@@ -93,21 +79,13 @@ void main() {
   });
 
   test('does not treat blank transcript segments as meaningful content', () {
-    expect(
-      conversationDetailInitialTab(
-        _conversation(segments: [_segment('  ')]),
-      ),
-      ConversationTab.summary,
-    );
+    expect(conversationDetailInitialTab(_conversation(segments: [_segment('  ')])), ConversationTab.summary);
   });
 
-  test(
-    'keeps an in-progress capture on Summary until processing completes',
-    () {
-      final conversation = _conversation()..status = ConversationStatus.processing;
-      expect(conversationDetailInitialTab(conversation), ConversationTab.summary);
-    },
-  );
+  test('keeps an in-progress capture on Summary until processing completes', () {
+    final conversation = _conversation()..status = ConversationStatus.processing;
+    expect(conversationDetailInitialTab(conversation), ConversationTab.summary);
+  });
 
   testWidgets('tabs read Summary then Transcript, with no Tasks tab even when it has tasks', (tester) async {
     final initial = _conversation(overview: 'A useful summary.');
@@ -225,15 +203,12 @@ void main() {
   });
 }
 
-ConversationProvider _conversationProvider(
-  ServerConversation initial,
-  Completer<ServerConversation?> details,
-) {
+ConversationProvider _conversationProvider(ServerConversation initial, Completer<ServerConversation?> details) {
   final provider = ConversationProvider(isSignedIn: () => false);
   final date = conversationLocalDayKey(initial.createdAt);
   provider.conversations = [initial];
   provider.groupedConversations = {
-    date: [initial]
+    date: [initial],
   };
   provider.conversationDetailsFetcherOverride = (_) => details.future;
   return provider;

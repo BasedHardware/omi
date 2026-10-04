@@ -12322,4 +12322,112 @@ class AppLocalizationsMs extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration lepas';
   }
+
+  @override
+  String get chatReplyOffline => 'Tidak dapat menyambung. Semak sambungan anda dan cuba lagi.';
+
+  @override
+  String get chatReplyServerError => 'Sesuatu telah berlaku di pihak kami. Sila cuba lagi.';
+
+  @override
+  String get chatReplyTimeout => 'Respons mengambil masa terlalu lama. Sila cuba lagi.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Anda belum log masuk. Log masuk dan cuba lagi.';
+
+  @override
+  String get chatAppsLoadFailed => 'Tidak dapat memuatkan aplikasi sembang. Sila cuba lagi.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Suara';
+
+  @override
+  String get assistantVoice => 'Suara Pembantu';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Pilihan suara anda dikongsi merentas mudah alih dan desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Baca balasan sembang dengan kuat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hanya bercakap apabila Respons Suara membenarkannya.';
+
+  @override
+  String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
+
+  @override
+  String get peopleStatsIncomplete => 'Kiraan mungkin tidak lengkap.';
+
+  @override
+  String get previousDay => 'Hari sebelumnya';
+
+  @override
+  String get nextDay => 'Hari berikutnya';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Tiada tugas pada $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Memproses semula perbualan…';
+
+  @override
+  String get conversationReprocessed => 'Perbualan dikemas kini';
+
+  @override
+  String get loadingTranscript => 'Memuatkan transkrip…';
+
+  @override
+  String get transcriptLoadFailed => 'Tidak dapat memuatkan transkrip.';
+
+  @override
+  String get processingConversationProgress => 'Memproses perbualan…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Perbualan ini tidak dapat diproses.';
+
+  @override
+  String get waitForReprocessing => 'Tunggu sehingga pemprosesan semula selesai.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Penceramah';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Pembicara tidak dipisahkan merentasi rakaman.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Perihal Label Pembicara';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi tidak dapat membezakan suara lain merentasi rakaman. Ketik label pembicara untuk menamakan siapa yang bercakap.';
+
+  @override
+  String get nameSpeakerTitle => 'Namakan Pembicara';
+
+  @override
+  String get playbackPreparingAudio => 'Menyediakan Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Kembali ke Semasa';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio Tidak Tersedia';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio Tidak Dapat Dimuatkan';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Semak Sambungan';
+
+  @override
+  String get forYou => 'Untuk Anda';
+
+  @override
+  String get stopThese => 'Hentikan Ini';
+
+  @override
+  String get dismiss => 'Tutup';
 }

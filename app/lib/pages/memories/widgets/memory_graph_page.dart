@@ -17,6 +17,7 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -220,6 +221,23 @@ class ForceDirectedSimulation3D {
   }
 }
 
+/// Label of the user's own node: their given name, else the localized "You".
+/// The backend's English 'me' / 'the user' labels still identify that node.
+@visibleForTesting
+String memoryGraphUserLabel(String givenName, AppLocalizations l10n) {
+  final name = givenName.trim();
+  return name.isNotEmpty ? name : l10n.you;
+}
+
+/// Lowercased graph labels that identify the user's own node: the backend's English labels
+/// plus the given name. The localized display fallback is not one of them, so a concept
+/// node that happens to read "tú" or "you" stays a concept.
+@visibleForTesting
+Set<String> memoryGraphKnownUserLabels(String givenName) {
+  final name = givenName.trim().toLowerCase();
+  return {'me', 'the user', if (name.isNotEmpty) name};
+}
+
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
 
@@ -392,9 +410,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     final nodes = data['nodes'] as List<dynamic>? ?? [];
     final edges = data['edges'] as List<dynamic>? ?? [];
 
-    final userName = SharedPreferencesUtil().givenName;
-    final userLabel = userName.isNotEmpty ? userName : 'Me';
-    final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
+    final givenName = SharedPreferencesUtil().givenName;
+    final userLabel = memoryGraphUserLabel(givenName, context.l10n);
+    final knownUserLabels = memoryGraphKnownUserLabels(givenName);
     bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
       final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
       final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
@@ -675,7 +693,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     if (_error != null) {
       return SafeArea(
-        child: SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph)),
+        child: SingleChildScrollView(
+          child: OmiErrorState(message: _error!, onRetry: _loadGraph),
+        ),
       );
     }
 
@@ -1030,7 +1050,11 @@ class GraphPainter3D extends CustomPainter {
         radius * 1.2,
         [
           (OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white).withValues(alpha: p.alpha * 0.9),
-          Color.lerp(OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white, node.baseColor, 0.5)!
+          Color.lerp(
+            OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white,
+            node.baseColor,
+            0.5,
+          )!
               .withValues(alpha: p.alpha),
           node.baseColor.withValues(alpha: p.alpha),
         ],
@@ -1045,8 +1069,9 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white)
-                .withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
+            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white).withValues(
+              alpha: screenshotMode ? 0.95 : p.alpha * 0.9,
+            ),
             fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
             fontWeight: FontWeight.w600,
           ),
@@ -1054,8 +1079,12 @@ class GraphPainter3D extends CustomPainter {
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
         if (OmiColors.active == OmiPalette.light) {
-          final labelRect =
-              Rect.fromLTWH(centerOffset.dx - tp.width / 2 - 4, centerOffset.dy + radius, tp.width + 8, tp.height + 6);
+          final labelRect = Rect.fromLTWH(
+            centerOffset.dx - tp.width / 2 - 4,
+            centerOffset.dy + radius,
+            tp.width + 8,
+            tp.height + 6,
+          );
           canvas.drawRRect(
             RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
             Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
@@ -1099,8 +1128,11 @@ class MemoryGraphSkeleton extends StatefulWidget {
 }
 
 class _MemoryGraphSkeletonState extends State<MemoryGraphSkeleton> with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100), value: 1);
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+    value: 1,
+  );
   bool _started = false;
 
   @override

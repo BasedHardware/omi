@@ -23,7 +23,7 @@ vi.mock('../../ipc/db', () => ({
 
 import { runExtractionLoop, TASK_MAX_ITERS, type ExtractionLoopDeps } from './loop'
 import type { Content, ToolTurn } from './geminiWire'
-import type { ToolCall } from '../insight/models'
+import type { ToolCall } from '../core/geminiTypes'
 import type { BackendSession } from '../core/session'
 
 // --- Verbatim functionResponse strings (Mac TaskAssistant.swift), asserted below.

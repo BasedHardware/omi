@@ -185,7 +185,10 @@ class _PlansSheetState extends State<PlansSheet> {
               Text(l10n.downgradeLimitationsHeading, textAlign: TextAlign.start, style: OmiType.subhead),
               const SizedBox(height: OmiSpacing.xs),
               PlanDialogLine(
-                  icon: FontAwesomeIcons.carBattery, text: l10n.downgradeLimitBattery, color: OmiColors.danger),
+                icon: FontAwesomeIcons.carBattery,
+                text: l10n.downgradeLimitBattery,
+                color: OmiColors.danger,
+              ),
               PlanDialogLine(
                 icon: FontAwesomeIcons.triangleExclamation,
                 text: l10n.downgradeLimitQuality,
@@ -193,14 +196,20 @@ class _PlansSheetState extends State<PlansSheet> {
               ),
               PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.downgradeLimitDelay, color: OmiColors.danger),
               PlanDialogLine(
-                  icon: FontAwesomeIcons.userSlash, text: l10n.downgradeLimitSpeakers, color: OmiColors.danger),
+                icon: FontAwesomeIcons.userSlash,
+                text: l10n.downgradeLimitSpeakers,
+                color: OmiColors.danger,
+              ),
             ],
           ),
         ),
         actions: [
           OmiDialogAction(label: l10n.cancel, isDefault: true, onPressed: () => Navigator.of(ctx).pop(false)),
           OmiDialogAction(
-              label: l10n.downgradeAnyway, isDestructive: true, onPressed: () => Navigator.of(ctx).pop(true)),
+            label: l10n.downgradeAnyway,
+            isDestructive: true,
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
         ],
       ),
     );
@@ -449,9 +458,7 @@ class _PlansSheetState extends State<PlansSheet> {
   /// Plan cards, their loading placeholder, or the failure state with Try Again.
   Widget _plansOrPlaceholder(UsageProvider usageProvider) {
     if (usageProvider.isLoadingPlans) {
-      return const Column(
-        children: [PlanOptionShimmer(), SizedBox(height: 18), PlanOptionShimmer()],
-      );
+      return const Column(children: [PlanOptionShimmer(), SizedBox(height: 18), PlanOptionShimmer()]);
     }
     if (usageProvider.availablePlans != null) {
       return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
@@ -627,6 +634,7 @@ class _PlansSheetState extends State<PlansSheet> {
                         selectedTierId: selectedTierId,
                         currentTierId: sub?.plan.wireName,
                         currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
+                        selectedPriceIsCurrent: _selectedPriceIsCurrent(provider.availablePlans),
                       ))
                         // For basic users, show "Upgrade". For paid users upgrading, show "Continue".
                         _primaryAction(
@@ -823,8 +831,10 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Widget _buildPromoCodeField() {
-    OutlineInputBorder border(Color color) =>
-        OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide(color: color));
+    OutlineInputBorder border(Color color) => OutlineInputBorder(
+          borderRadius: OmiRadius.mdAll,
+          borderSide: BorderSide(color: color),
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -839,9 +849,7 @@ class _PlansSheetState extends State<PlansSheet> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ExcludeSemantics(
-                    child: Icon(Icons.local_offer_outlined, color: OmiColors.textSecondary, size: 18),
-                  ),
+                  ExcludeSemantics(child: Icon(Icons.local_offer_outlined, color: OmiColors.textSecondary, size: 18)),
                   const SizedBox(width: OmiSpacing.xs),
                   Text(l10n.promoCode, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                   const SizedBox(width: OmiSpacing.xxs),
@@ -900,6 +908,19 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   AppLocalizations get l10n => context.l10n;
+
+  /// Whether the selected tier and billing period is the price the user already pays (or has
+  /// scheduled), so there is nothing to switch to.
+  bool _selectedPriceIsCurrent(Map<String, dynamic>? availablePlans) {
+    final plans = (availablePlans?['plans'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final interval = selectedPlan == 'yearly' ? 'year' : 'month';
+    return plans.any(
+      (plan) =>
+          (selectedTierId == null || plan['plan_id'] == selectedTierId) &&
+          plan['interval'] == interval &&
+          plan['is_active'] == true,
+    );
+  }
 
   /// Groups available plans by plan_id and shows one card per tier.
   Widget _buildTierPlanCards({required Map<String, dynamic> availablePlans}) {
@@ -1030,7 +1051,7 @@ class _PlansSheetState extends State<PlansSheet> {
       title: planData['title'] as String,
       subtitle: interval == 'year' ? l10n.annualBillingSummary(12, '\$${unitAmount / 100}') : null,
       price: planData['price_string'] as String,
-      onTap: isActive ? () {} : onTap,
+      onTap: onTap,
       isActive: isActive && !isCancelled,
       endsOnDate: endsOnDate,
       featureSummary: featureSummary,

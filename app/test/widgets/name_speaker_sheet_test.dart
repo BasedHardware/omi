@@ -79,7 +79,12 @@ void main() {
       tester,
       people: [_person('maya', 'Maya'), _person('sam', 'Sam')],
       suggestion: SpeakerLabelSuggestionEvent(
-          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg0', suggestedPersonId: 'maya'),
+        speakerId: 0,
+        personId: '',
+        personName: 'Maya',
+        segmentId: 'seg0',
+        suggestedPersonId: 'maya',
+      ),
       onSpeakerAssigned: (_, id, __, ___, ____) async {
         assignments.add(id);
         return false;
@@ -245,6 +250,59 @@ void main() {
     await tester.pumpAndSettle();
     expect(calls.last.ids, ['first', 'wrong']);
     expect(calls.last.whole, isTrue);
+  });
+
+  testWidgets('unresolved speakers title reads "Name Speaker" instead of the dense tag number', (tester) async {
+    Future<void> open({required bool unresolvedSpeakers}) async {
+      await tester.pumpWidget(
+        ChangeNotifierProvider(
+          create: (_) => PeopleProvider(),
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => showNameSpeakerSheet(
+                    context,
+                    speakerId: 0,
+                    segmentId: 'only',
+                    segments: [
+                      TranscriptSegment(
+                        id: 'only',
+                        text: 'Only synthetic speech',
+                        speaker: 'SPEAKER_00',
+                        isUser: false,
+                        personId: null,
+                        start: 0,
+                        end: 2,
+                        translations: [],
+                      ),
+                    ],
+                    unresolvedSpeakers: unresolvedSpeakers,
+                    onSpeakerAssigned: (_, __, ___, ____, _____) async => true,
+                  ),
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+    }
+
+    await open(unresolvedSpeakers: true);
+    expect(find.text('Name Speaker'), findsOneWidget);
+    expect(find.text('Tag Speaker 1'), findsNothing);
+    await tester.tap(find.byType(OmiCloseButton));
+    await tester.pumpAndSettle();
+
+    await open(unresolvedSpeakers: false);
+    expect(find.text('Tag Speaker 1'), findsOneWidget);
+    await tester.tap(find.byType(OmiCloseButton));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('live default tags a single in-progress bubble as speaker-wide including later speech', (tester) async {

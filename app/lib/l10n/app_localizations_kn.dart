@@ -12328,4 +12328,112 @@ class AppLocalizationsKn extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'ಕಳೆದ $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'ಸಂಪರ್ಕ ಸಾಧ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get chatReplyServerError => 'ನಮ್ಮ ಬದೆಯಲ್ಲಿ ಏನೋ ತಪ್ಪಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get chatReplyTimeout => 'ಪ್ರತಿಕ್ರಿಯೆ ಬಹಳ ಸಮಯ ತೆಗೆದುಕೊಂಡಿತು. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get chatReplyNotSignedIn => 'ನೀವು ಸೈನ್ ಇನ್ ಮಾಡಿಲ್ಲ. ಸೈನ್ ಇನ್ ಮಾಡಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get chatAppsLoadFailed => 'ಚಾಟ್ ಅಪ್ಲಿಕೇಶನ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'ಧ್ವನಿ';
+
+  @override
+  String get assistantVoice => 'ಸಹಾಯಕ ಧ್ವನಿ';
+
+  @override
+  String get voiceSharedAcrossDevices => 'ನಿಮ್ಮ ಧ್ವನಿ ಆಯ್ಕೆಯನ್ನು ಮೊಬೈಲ್ ಮತ್ತು ಡೆಸ್ಕ್‌ಟಾಪ್‌ನಲ್ಲಿ ಹಂಚಿಕೊಳ್ಳಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get readChatRepliesAloud => 'ಚಾಟ್ ಉತ್ತರಗಳನ್ನು ಗಟ್ಟಿಯಾಗಿ ಓದಿ';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"ಧ್ವನಿ ಪ್ರತಿಕ್ರಿಯೆ\" ಅನುಮತಿಸಿದಾಗ ಮಾತ್ರ ಮಾತನಾಡುತ್ತದೆ.';
+
+  @override
+  String get voicePreviewSample => 'ಹಾಯ್, ನಾನು Omi. ಇದು ನನ್ನ ಧ್ವನಿ.';
+
+  @override
+  String get peopleStatsIncomplete => 'ಎಣಿಕೆಗಳು ಅಪೂರ್ಣವಾಗಿರಬಹುದು.';
+
+  @override
+  String get previousDay => 'ಹಿಂದಿನ ದಿನ';
+
+  @override
+  String get nextDay => 'ಮುಂದಿನ ದಿನ';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date ರಂದು ಯಾವುದೇ ಕಾರ್ಯಗಳಿಲ್ಲ';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'ಸಂಭಾಷಣೆಯನ್ನು ಮರುಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get conversationReprocessed => 'ಸಂಭಾಷಣೆಯನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ';
+
+  @override
+  String get loadingTranscript => 'ಪ್ರತಿಲೇಖನ ಲೋಡ್ ಆಗುತ್ತಿದೆ…';
+
+  @override
+  String get transcriptLoadFailed => 'ಪ್ರತಿಲೇಖನವನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get processingConversationProgress => 'ಸಂಭಾಷಣೆಯನ್ನು ಸಂಸ್ಕರಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'ಈ ಸಂಭಾಷಣೆಯನ್ನು ಸಂಸ್ಕರಿಸಲಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get waitForReprocessing => 'ಮರುಸಂಸ್ಕರಣೆ ಮುಗಿಯುವವರೆಗೆ ಕಾಯಿರಿ.';
+
+  @override
+  String get unnamedSpeakerLabel => 'ವಕ್ತಾ';
+
+  @override
+  String get unresolvedSpeakersNotice => 'ರೆಕಾರ್ಡಿಂಗ್‌ಗಳ ಉದ್ದಕ್ಕೂ ಸ್ಪೀಕರ್‌ಗಳು ಬೇರ್ಪಡಿಸಲಾಗಿಲ್ಲ.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'ಸ್ಪೀಕರ್ ಲೇಬಲ್‌ಗಳ ಬಗ್ಗೆ';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'ರೆಕಾರ್ಡಿಂಗ್‌ಗಳಲ್ಲಿ ಇತರ ಧ್ವನಿಗಳನ್ನು Omi ಗುರುತಿಸಲಾಗಲಿಲ್ಲ. ಯಾರು ಮಾತನಾಡುತ್ತಿದ್ದಾರೆ ಎಂದು ಹೆಸರಿಸಲು ಸ್ಪೀಕರ್ ಲೇಬಲ್ ಒತ್ತಿರಿ.';
+
+  @override
+  String get nameSpeakerTitle => 'ವಕ್ತಾವನ್ನು ಹೆಸರಿಸಿ';
+
+  @override
+  String get playbackPreparingAudio => 'ಆಡಿಯೋ ಸಿದ್ಧಗೊಳ್ಳುತ್ತಿದೆ…';
+
+  @override
+  String get playbackBackToCurrent => 'ಪ್ರಸ್ತುತಕ್ಕೆ ಹಿಂತಿರುಗಿ';
+
+  @override
+  String get playbackAudioUnavailable => 'ಆಡಿಯೋ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get playbackAudioLoadFailed => 'ಆಡಿಯೋ ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get playbackAudioNetworkFailed => 'ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ';
+
+  @override
+  String get forYou => 'ನಿಮಗಾಗಿ';
+
+  @override
+  String get stopThese => 'ಇವುಗಳನ್ನು ನಿಲ್ಲಿಸಿ';
+
+  @override
+  String get dismiss => 'ಮರೆಮಾಡಿ';
 }

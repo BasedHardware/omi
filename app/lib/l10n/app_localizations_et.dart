@@ -12285,4 +12285,112 @@ class AppLocalizationsEt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Viimased $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Ühendust ei saa luua. Kontrolli ühendust ja proovi uuesti.';
+
+  @override
+  String get chatReplyServerError => 'Meie poolel läks midagi valesti. Palun proovi uuesti.';
+
+  @override
+  String get chatReplyTimeout => 'Vastus võttis liiga kaua aega. Palun proovi uuesti.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Sa pole sisse logitud. Logi sisse ja proovi uuesti.';
+
+  @override
+  String get chatAppsLoadFailed => 'Vestlusrakendusi ei õnnestunud laadida. Palun proovi uuesti.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hääl';
+
+  @override
+  String get assistantVoice => 'Assistendi hääl';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Sinu häälevalik on ühine mobiilis ja töölaual.';
+
+  @override
+  String get readChatRepliesAloud => 'Loe vestluse vastused ette';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Räägib ainult siis, kui \"Häälvastus\" seda lubab.';
+
+  @override
+  String get voicePreviewSample => 'Tere, mina olen Omi. See on minu hääl.';
+
+  @override
+  String get peopleStatsIncomplete => 'Arvud võivad olla puudulikud.';
+
+  @override
+  String get previousDay => 'Eelmine päev';
+
+  @override
+  String get nextDay => 'Järgmine päev';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date pole ülesandeid';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Vestlust töödeldakse uuesti…';
+
+  @override
+  String get conversationReprocessed => 'Vestlus on uuendatud';
+
+  @override
+  String get loadingTranscript => 'Transkriptsiooni laadimine…';
+
+  @override
+  String get transcriptLoadFailed => 'Transkriptsiooni ei õnnestunud laadida.';
+
+  @override
+  String get processingConversationProgress => 'Vestlust töödeldakse…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Seda vestlust ei õnnestunud töödelda.';
+
+  @override
+  String get waitForReprocessing => 'Oota, kuni uuesti töötlemine lõpeb.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Kõneleja';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Kõnelejaid ei ole salvestuste vahel eraldatud.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Kõnelejate siltidest';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ei suutnud teisi hääli salvestuste vahel eristada. Puudutage kõneleja silti, et nimetada, kes räägib.';
+
+  @override
+  String get nameSpeakerTitle => 'Nimeta kõneleja';
+
+  @override
+  String get playbackPreparingAudio => 'Heli ettevalmistamine…';
+
+  @override
+  String get playbackBackToCurrent => 'Tagasi praeguse juurde';
+
+  @override
+  String get playbackAudioUnavailable => 'Heli pole saadaval';
+
+  @override
+  String get playbackAudioLoadFailed => 'Heli ei õnnestunud laadida';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kontrollige ühendust';
+
+  @override
+  String get forYou => 'Sulle';
+
+  @override
+  String get stopThese => 'Peata need';
+
+  @override
+  String get dismiss => 'Peida';
 }

@@ -18,15 +18,17 @@ A returned window proves coordinates, not decoded bytes. Everything here is
 pure: no environment, storage or provider access.
 """
 
+import bisect
 import math
 import re
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence, Tuple
 
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
-from utils.audio_timeline import covered_window, is_audio_timeline_v2
+from utils.audio_timeline import is_audio_timeline_v2
 from utils.text_utils import compute_text_containment
 
 TEXT_SEARCH_PAD_SECONDS = 10.0
@@ -97,6 +99,7 @@ def capture_window(
     end: float,
     *,
     segments: Optional[Sequence[Mapping[str, Any]]] = None,
+    tolerance: float = CAPTURE_CLOCK_TOLERANCE_SECONDS,
 ) -> Optional[Tuple[float, float]]:
     """Where the live receiver heard ``[start, end)``, when every contributor recorded it.
 
@@ -125,10 +128,10 @@ def capture_window(
         cap_end = _numeric(segment.get('audio_capture_end'))
         if seg_start is None or seg_end is None or cap_start is None or cap_end is None or cap_end <= cap_start:
             return None
-        if abs((cap_end - cap_start) - (seg_end - seg_start)) > CAPTURE_CLOCK_TOLERANCE_SECONDS:
+        if abs((cap_end - cap_start) - (seg_end - seg_start)) > tolerance:
             return None
         offsets.append(cap_start - seg_start)
-    if max(offsets) - min(offsets) > CAPTURE_CLOCK_TOLERANCE_SECONDS:
+    if max(offsets) - min(offsets) > tolerance:
         return None
     offset = sorted(offsets)[len(offsets) // 2]
     return (start_f + offset, end_f + offset)
@@ -177,24 +180,105 @@ def _overlapping_segments(conversation: Mapping[str, Any], start: float, end: fl
     return overlapping
 
 
-def _v2_manifest_valid(audio_files: Any) -> bool:
+@dataclass(frozen=True)
+class PreparedAudioCoverage:
+    """One-pass validated span index: merged union ``coverage`` plus merged
+    ``ambiguity`` intervals (regions two or more distinct ``chunk_spans``
+    entries cover). Immutable sorted ``(start, end)`` tuples for ``bisect``."""
+
+    validated: bool
+    coverage: Tuple[Tuple[float, float], ...] = ()
+    ambiguity: Tuple[Tuple[float, float], ...] = ()
+
+    def covers(self, start: float, end: float) -> bool:
+        if not self.validated or end <= start:
+            return False
+        index = bisect.bisect_right(self.coverage, (start, math.inf)) - 1
+        if index < 0:
+            return False
+        span_start, span_end = self.coverage[index]
+        return span_start <= start and span_end >= end - COVERAGE_TOLERANCE_SECONDS
+
+    def ambiguous(self, start: float, end: float) -> bool:
+        index = bisect.bisect_right(self.ambiguity, (start, math.inf)) - 1
+        if index >= 0 and self.ambiguity[index][1] > start:
+            return True
+        index += 1
+        return index < len(self.ambiguity) and self.ambiguity[index][0] < end
+
+
+def prepare_audio_coverage(
+    audio_files: Any,
+    *,
+    deadline: Optional[float] = None,
+    max_spans: Optional[int] = None,
+) -> PreparedAudioCoverage:
+    """Validate the manifest once and index coverage plus cross-span overlap.
+
+    Every file needs equally sized non-empty ``chunk_timestamps``/
+    ``chunk_spans`` arrays of finite values and well-formed spans; each
+    timestamp/span pair is checked in one pass. A ``monotonic`` ``deadline``
+    or a ``max_spans`` bound stops preparation anywhere — per file, per pair,
+    and around the sort and sweep — and yields ``validated=False`` rather
+    than a partial index. The clock is only consulted when a deadline is
+    supplied.
+    """
     if not isinstance(audio_files, Sequence) or isinstance(audio_files, (str, bytes)) or not audio_files:
-        return False
+        return PreparedAudioCoverage(validated=False)
+    spans = []
     for audio_file in audio_files:
+        if deadline is not None and time.monotonic() >= deadline:
+            return PreparedAudioCoverage(validated=False)
         if not isinstance(audio_file, Mapping):
-            return False
-        spans: Any = audio_file.get('chunk_spans')
+            return PreparedAudioCoverage(validated=False)
+        file_spans: Any = audio_file.get('chunk_spans')
         timestamps: Any = audio_file.get('chunk_timestamps')
-        for value in (spans, timestamps):
+        for value in (file_spans, timestamps):
             if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or not value:
-                return False
-        if len(spans) != len(timestamps):
-            return False
-        if any(_numeric(ts) is None for ts in timestamps):
-            return False
-        if any(chunk_span_bounds(span) is None for span in spans):
-            return False
-    return True
+                return PreparedAudioCoverage(validated=False)
+        if len(file_spans) != len(timestamps):
+            return PreparedAudioCoverage(validated=False)
+        if max_spans is not None and len(spans) + len(file_spans) > max_spans:
+            return PreparedAudioCoverage(validated=False)
+        for timestamp, span in zip(timestamps, file_spans):
+            if deadline is not None and time.monotonic() >= deadline:
+                return PreparedAudioCoverage(validated=False)
+            if _numeric(timestamp) is None:
+                return PreparedAudioCoverage(validated=False)
+            bounds = chunk_span_bounds(span)
+            if bounds is None:
+                return PreparedAudioCoverage(validated=False)
+            spans.append(bounds)
+    if deadline is not None and time.monotonic() >= deadline:
+        return PreparedAudioCoverage(validated=False)
+    spans.sort()
+    if deadline is not None and time.monotonic() >= deadline:
+        return PreparedAudioCoverage(validated=False)
+    coverage = []
+    ambiguity = []
+    max_prior_end: Optional[float] = None
+    for start, end in spans:
+        if deadline is not None and time.monotonic() >= deadline:
+            return PreparedAudioCoverage(validated=False)
+        if coverage and start <= coverage[-1][1] + COVERAGE_TOLERANCE_SECONDS:
+            coverage[-1] = (coverage[-1][0], max(coverage[-1][1], end))
+        else:
+            coverage.append((start, end))
+        if max_prior_end is not None and max_prior_end > start:
+            overlap = (start, min(end, max_prior_end))
+            if ambiguity and overlap[0] <= ambiguity[-1][1]:
+                ambiguity[-1] = (ambiguity[-1][0], max(ambiguity[-1][1], overlap[1]))
+            else:
+                ambiguity.append(overlap)
+        if max_prior_end is None or end > max_prior_end:
+            max_prior_end = end
+    if deadline is not None and time.monotonic() >= deadline:
+        return PreparedAudioCoverage(validated=False)
+    return PreparedAudioCoverage(
+        validated=True,
+        coverage=tuple(coverage),
+        ambiguity=tuple(ambiguity),
+    )
 
 
 def _union_covers(contributors: Sequence[Mapping[str, Any]], start: float, end: float) -> bool:
@@ -211,19 +295,56 @@ def _union_covers(contributors: Sequence[Mapping[str, Any]], start: float, end: 
     return False
 
 
+def saved_sync_window(segment: Mapping[str, Any], origin: float) -> bool:
+    """A stored ``audio_source`` marker that still matches this segment's position.
+
+    Proof only while it describes exactly where the segment sits now: finite
+    ordered endpoints equal to ``origin + segment.start/end``. A rebased donor
+    keeps its absolute endpoints; a retimed, malformed or non-sync marker is
+    no evidence at all.
+    """
+    source = segment.get('audio_source')
+    if not isinstance(source, Mapping) or source.get('type') != 'sync':
+        return False
+    src_start = _numeric(source.get('start'))
+    src_end = _numeric(source.get('end'))
+    seg_start = _numeric(segment.get('start'))
+    seg_end = _numeric(segment.get('end'))
+    if src_start is None or src_end is None or seg_start is None or seg_end is None or src_end <= src_start:
+        return False
+    return (
+        abs(src_start - (origin + seg_start)) <= COVERAGE_TOLERANCE_SECONDS
+        and abs(src_end - (origin + seg_end)) <= COVERAGE_TOLERANCE_SECONDS
+    )
+
+
 def locate(
     conversation: Mapping[str, Any],
     start: float,
     end: float,
     *,
     segments: Optional[Sequence[Mapping[str, Any]]] = None,
+    capture_spans: bool = False,
+    coverage: Optional[PreparedAudioCoverage] = None,
 ) -> AudioPlacement:
     """Map ``[start, end)`` (conversation-relative) onto stored audio, or refuse.
 
-    ``reason`` is one of ``v2`` / ``sync`` (a window is returned and may be
-    trusted), ``untrusted_clock`` (no window; a provisional candidate is the
-    caller's risk), ``uncovered_audio`` / ``unplaced`` / ``missing_origin`` /
-    ``invalid_window`` (no window; the caller must not guess).
+    ``reason`` is one of ``v2`` / ``sync`` / ``capture_span`` (a window is
+    returned and may be trusted), ``untrusted_clock`` (no window; a
+    provisional candidate is the caller's risk), ``uncovered_audio`` /
+    ``unplaced`` / ``missing_origin`` / ``invalid_window`` (no window; the
+    caller must not guess).
+
+    ``capture_spans`` admits a live segment's receiver-recorded capture
+    window as trusted only when the contributors cover the requested text
+    window, every contributor carries complete finite ordered capture fields
+    whose offset and duration agree within the strict 1 ms coverage
+    tolerance, the whole ``audio_files`` manifest passes the v2 validator
+    (every chunk has a finite span paired with a timestamp), and validated
+    span coverage fully contains the capture window. Any gap — a spanless or
+    malformed manifest, an uncovered hiatus, a missing or conflicting
+    contributor — stays ``untrusted_clock``; a real manifest that mixes
+    span-bearing and legacy chunks is refused rather than half-trusted.
     """
     start_f = _numeric(start)
     end_f = _numeric(end)
@@ -242,11 +363,12 @@ def locate(
         return AudioPlacement(None, 'invalid_window')
 
     if is_audio_timeline_v2(conversation):
-        normalized = dict(conversation)
-        normalized['started_at'] = origin
-        if not _v2_manifest_valid(normalized.get('audio_files')):
+        index = coverage if coverage is not None else prepare_audio_coverage(conversation.get('audio_files'))
+        if not index.validated:
             return AudioPlacement(None, 'uncovered_audio')
-        if covered_window(normalized.get('audio_files'), abs_start, abs_end):
+        if index.ambiguous(abs_start, abs_end):
+            return AudioPlacement(None, 'uncovered_audio')
+        if index.covers(abs_start, abs_end):
             return AudioPlacement((abs_start, abs_end), 'v2')
         return AudioPlacement(None, 'uncovered_audio')
 
@@ -255,13 +377,41 @@ def locate(
 
     if not contributors:
         return AudioPlacement(None, 'untrusted_clock')
+    all_sync = True
     for segment in contributors:
         scope = segment.get('speaker_id_scope')
-        if not isinstance(scope, str) or not scope.startswith('sync:') or len(scope) == len('sync:'):
+        is_sync_scope = isinstance(scope, str) and scope.startswith('sync:') and len(scope) > len('sync:')
+        if not is_sync_scope and not saved_sync_window(segment, origin):
+            all_sync = False
+            break
+    if all_sync:
+        if not _union_covers(contributors, start_f, end_f):
             return AudioPlacement(None, 'untrusted_clock')
-    if not _union_covers(contributors, start_f, end_f):
-        return AudioPlacement(None, 'untrusted_clock')
-    return AudioPlacement((abs_start, abs_end), 'sync')
+        index = coverage if coverage is not None else prepare_audio_coverage(conversation.get('audio_files'))
+        if index.validated and index.ambiguous(abs_start, abs_end):
+            return AudioPlacement(None, 'untrusted_clock')
+        return AudioPlacement((abs_start, abs_end), 'sync')
+    if capture_spans:
+        if not _union_covers(contributors, start_f, end_f):
+            return AudioPlacement(None, 'untrusted_clock')
+        window = capture_window(
+            conversation,
+            start_f,
+            end_f,
+            segments=contributors,
+            tolerance=COVERAGE_TOLERANCE_SECONDS,
+        )
+        if window is None:
+            return AudioPlacement(None, 'untrusted_clock')
+        index = coverage if coverage is not None else prepare_audio_coverage(conversation.get('audio_files'))
+        if not index.validated:
+            return AudioPlacement(None, 'untrusted_clock')
+        if index.ambiguous(window[0], window[1]):
+            return AudioPlacement(None, 'untrusted_clock')
+        if not index.covers(window[0], window[1]):
+            return AudioPlacement(None, 'untrusted_clock')
+        return AudioPlacement(window, 'capture_span')
+    return AudioPlacement(None, 'untrusted_clock')
 
 
 def _tokens(text: str) -> list:

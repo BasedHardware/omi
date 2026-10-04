@@ -64,7 +64,11 @@ class DeveloperApiKeysSection extends StatelessWidget {
               builder: (context, provider, child) {
                 if (provider.isLoading && provider.keys.isEmpty) {
                   return _card(
-                      const Padding(padding: EdgeInsets.all(OmiSpacing.xl), child: Center(child: OmiSpinner())));
+                    const Padding(
+                      padding: EdgeInsets.all(OmiSpacing.xl),
+                      child: Center(child: OmiSpinner()),
+                    ),
+                  );
                 }
                 if (provider.error != null) {
                   return _card(

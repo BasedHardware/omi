@@ -12392,4 +12392,112 @@ class AppLocalizationsTl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Nakaraang $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Hindi makakonekta. Suriin ang iyong koneksyon at subukan ulit.';
+
+  @override
+  String get chatReplyServerError => 'May nangyaring mali sa aming panig. Subukan muli.';
+
+  @override
+  String get chatReplyTimeout => 'Napakatagal ng sagot. Subukan muli.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Hindi ka naka-sign in. Mag-sign in at subukan muli.';
+
+  @override
+  String get chatAppsLoadFailed => 'Hindi ma-load ang mga chat app. Subukan muli.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Boses';
+
+  @override
+  String get assistantVoice => 'Boses ng Assistant';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ang napili mong boses ay ibinabahagi sa mobile at desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Basahin nang malakas ang mga sagot sa chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Magsasalita lamang kapag pinapayagan ng Voice response.';
+
+  @override
+  String get voicePreviewSample => 'Hi, ako si Omi. Ito ang boses ko.';
+
+  @override
+  String get peopleStatsIncomplete => 'Maaaring hindi kumpleto ang mga bilang.';
+
+  @override
+  String get previousDay => 'Nakaraang araw';
+
+  @override
+  String get nextDay => 'Susunod na araw';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Walang gawain noong $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Muling pinoproseso ang pag-uusap…';
+
+  @override
+  String get conversationReprocessed => 'Na-update ang pag-uusap';
+
+  @override
+  String get loadingTranscript => 'Kumakarga ng transcript…';
+
+  @override
+  String get transcriptLoadFailed => 'Hindi ma-load ang transcript.';
+
+  @override
+  String get processingConversationProgress => 'Pinoproseso ang pag-uusap…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Hindi maproseso ang pag-uusap na ito.';
+
+  @override
+  String get waitForReprocessing => 'Hintaying matapos ang muling pagproseso.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Speaker';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Hindi pinaghihiwalay ang mga speaker sa iba\'t ibang recording.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Tungkol sa mga Label ng Speaker';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Hindi maipagkaiba ng Omi ang ibang mga boses sa mga recording. I-tap ang label ng speaker para pangalanan kung sino ang nagsasalita.';
+
+  @override
+  String get nameSpeakerTitle => 'Pangalanan ang Speaker';
+
+  @override
+  String get playbackPreparingAudio => 'Inihahanda ang Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Bumalik sa Kasalukuyan';
+
+  @override
+  String get playbackAudioUnavailable => 'Hindi Magagamit ang Audio';
+
+  @override
+  String get playbackAudioLoadFailed => 'Hindi Ma-load ang Audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Suriin ang Koneksyon';
+
+  @override
+  String get forYou => 'Para Sa Iyo';
+
+  @override
+  String get stopThese => 'Itigil Ang Mga Ito';
+
+  @override
+  String get dismiss => 'Isara';
 }

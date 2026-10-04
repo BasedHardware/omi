@@ -6013,12 +6013,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Kích thước ước tính';
+    return 'Kích thước ước tính: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Không gian khả dụng';
+    return 'Dung lượng khả dụng: $space';
   }
 
   @override
@@ -6029,7 +6029,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Lỗi tải xuống';
+    return 'Lỗi tải xuống: $error';
   }
 
   @override
@@ -6382,7 +6382,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String failedToSendReply(String error) {
-    return 'Không thể gửi phản hồi';
+    return 'Không thể gửi phản hồi: $error';
   }
 
   @override
@@ -6390,7 +6390,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String starFilter(int count) {
-    return 'Lọc theo sao';
+    return '$count sao';
   }
 
   @override
@@ -12286,4 +12286,112 @@ class AppLocalizationsVi extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration gần nhất';
   }
+
+  @override
+  String get chatReplyOffline => 'Không thể kết nối. Hãy kiểm tra kết nối của bạn và thử lại.';
+
+  @override
+  String get chatReplyServerError => 'Đã xảy ra lỗi từ phía chúng tôi. Vui lòng thử lại.';
+
+  @override
+  String get chatReplyTimeout => 'Phản hồi mất quá nhiều thời gian. Vui lòng thử lại.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Bạn chưa đăng nhập. Đăng nhập và thử lại.';
+
+  @override
+  String get chatAppsLoadFailed => 'Không thể tải ứng dụng trò chuyện. Vui lòng thử lại.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Giọng nói';
+
+  @override
+  String get assistantVoice => 'Giọng trợ lý';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Giọng nói bạn chọn được dùng chung trên di động và máy tính.';
+
+  @override
+  String get readChatRepliesAloud => 'Đọc to câu trả lời trong chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Chỉ đọc to khi Phản hồi bằng giọng nói cho phép.';
+
+  @override
+  String get voicePreviewSample => 'Chào bạn, mình là Omi. Đây là giọng của mình.';
+
+  @override
+  String get peopleStatsIncomplete => 'Số đếm có thể chưa đầy đủ.';
+
+  @override
+  String get previousDay => 'Ngày trước';
+
+  @override
+  String get nextDay => 'Ngày sau';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Không có tác vụ vào $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Đang xử lý lại cuộc trò chuyện…';
+
+  @override
+  String get conversationReprocessed => 'Đã cập nhật cuộc trò chuyện';
+
+  @override
+  String get loadingTranscript => 'Đang tải bản ghi…';
+
+  @override
+  String get transcriptLoadFailed => 'Không thể tải bản ghi.';
+
+  @override
+  String get processingConversationProgress => 'Đang xử lý cuộc trò chuyện…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Không thể xử lý cuộc trò chuyện này.';
+
+  @override
+  String get waitForReprocessing => 'Hãy đợi quá trình xử lý lại hoàn tất.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Người nói';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Người nói không được tách ra giữa các bản ghi.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Giới thiệu về nhãn người nói';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi không thể phân biệt các giọng nói khác giữa các bản ghi. Chạm vào nhãn người nói để đặt tên cho người đang nói.';
+
+  @override
+  String get nameSpeakerTitle => 'Đặt tên người nói';
+
+  @override
+  String get playbackPreparingAudio => 'Đang chuẩn bị âm thanh…';
+
+  @override
+  String get playbackBackToCurrent => 'Quay lại hiện tại';
+
+  @override
+  String get playbackAudioUnavailable => 'Âm thanh không khả dụng';
+
+  @override
+  String get playbackAudioLoadFailed => 'Không thể tải âm thanh';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Kiểm tra kết nối';
+
+  @override
+  String get forYou => 'Dành Cho Bạn';
+
+  @override
+  String get stopThese => 'Dừng Loại Này';
+
+  @override
+  String get dismiss => 'Ẩn';
 }

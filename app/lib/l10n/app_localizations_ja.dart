@@ -12102,4 +12102,111 @@ class AppLocalizationsJa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '直近$duration';
   }
+
+  @override
+  String get chatReplyOffline => '接続できません。接続を確認してもう一度お試しください。';
+
+  @override
+  String get chatReplyServerError => 'こちら側で問題が発生しました。もう一度お試しください。';
+
+  @override
+  String get chatReplyTimeout => '応答に時間がかかりすぎました。もう一度お試しください。';
+
+  @override
+  String get chatReplyNotSignedIn => 'サインインしていません。サインインして、もう一度お試しください。';
+
+  @override
+  String get chatAppsLoadFailed => 'チャットアプリを読み込めませんでした。もう一度お試しください。';
+
+  @override
+  String get assistantVoiceSettingsTitle => '音声';
+
+  @override
+  String get assistantVoice => 'アシスタントの音声';
+
+  @override
+  String get voiceSharedAcrossDevices => '選択した音声はモバイルとデスクトップで共有されます。';
+
+  @override
+  String get readChatRepliesAloud => 'チャットの返信を読み上げる';
+
+  @override
+  String get readChatRepliesAloudDescription => '「音声応答」が許可する場合にのみ読み上げます。';
+
+  @override
+  String get voicePreviewSample => 'こんにちは、Omiです。これが私の声です。';
+
+  @override
+  String get peopleStatsIncomplete => '集計が不完全な場合があります。';
+
+  @override
+  String get previousDay => '前の日';
+
+  @override
+  String get nextDay => '次の日';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$dateのタスクはありません';
+  }
+
+  @override
+  String get reprocessingConversationProgress => '会話を再処理しています…';
+
+  @override
+  String get conversationReprocessed => '会話を更新しました';
+
+  @override
+  String get loadingTranscript => '文字起こしを読み込んでいます…';
+
+  @override
+  String get transcriptLoadFailed => '文字起こしを読み込めませんでした。';
+
+  @override
+  String get processingConversationProgress => '会話を処理しています…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'この会話を処理できませんでした。';
+
+  @override
+  String get waitForReprocessing => '再処理が終わるまでお待ちください。';
+
+  @override
+  String get unnamedSpeakerLabel => '話者';
+
+  @override
+  String get unresolvedSpeakersNotice => '話者は録音間で分離されていません。';
+
+  @override
+  String get unresolvedSpeakersTitle => '話者ラベルについて';
+
+  @override
+  String get unresolvedSpeakersMessage => 'Omiは録音間で他の声を区別できませんでした。話者ラベルをタップして、話している人の名前を付けてください。';
+
+  @override
+  String get nameSpeakerTitle => '話者に名前を付ける';
+
+  @override
+  String get playbackPreparingAudio => '音声を準備中…';
+
+  @override
+  String get playbackBackToCurrent => '現在の位置に戻る';
+
+  @override
+  String get playbackAudioUnavailable => '音声を利用できません';
+
+  @override
+  String get playbackAudioLoadFailed => '音声を読み込めませんでした';
+
+  @override
+  String get playbackAudioNetworkFailed => '接続を確認してください';
+
+  @override
+  String get forYou => 'あなたへのおすすめ';
+
+  @override
+  String get stopThese => 'この種類を停止';
+
+  @override
+  String get dismiss => '非表示';
 }

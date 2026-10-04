@@ -429,8 +429,10 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                     ? SizedBox(
                                         height: kOmiMinTapTarget,
                                         child: Container(
-                                          decoration:
-                                              BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                                          decoration: BoxDecoration(
+                                            color: OmiColors.surface1,
+                                            borderRadius: OmiRadius.mdAll,
+                                          ),
                                           child: OmiIconButton(
                                             icon: const Icon(Icons.search, size: 20),
                                             color: OmiColors.textSecondary,
@@ -465,13 +467,19 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                 hintText: context.l10n.searchApps,
                                                 leading: Padding(
                                                   padding: const EdgeInsets.only(left: OmiSpacing.xs),
-                                                  child: Icon(Icons.search, color: OmiColors.textSecondary, size: 20),
+                                                  child: Icon(
+                                                    Icons.search,
+                                                    color: OmiColors.textSecondary,
+                                                    size: 20,
+                                                  ),
                                                 ),
                                                 backgroundColor: WidgetStateProperty.all(OmiColors.surface1),
                                                 elevation: WidgetStateProperty.all(0),
                                                 padding: WidgetStateProperty.all(
                                                   const EdgeInsets.symmetric(
-                                                      horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
+                                                    horizontal: OmiSpacing.sm,
+                                                    vertical: OmiSpacing.xxs,
+                                                  ),
                                                 ),
                                                 focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
                                                 controller: searchController,
@@ -544,7 +552,10 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
                                           ),
                                           style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 0),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: OmiSpacing.sm,
+                                              vertical: 0,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -555,8 +566,10 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                       child: AnimatedContainer(
                                         duration: const Duration(milliseconds: 200),
                                         curve: Curves.easeInOut,
-                                        decoration:
-                                            BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                                        decoration: BoxDecoration(
+                                          color: OmiColors.surface1,
+                                          borderRadius: OmiRadius.mdAll,
+                                        ),
                                         child: OmiIconButton(
                                           icon: const FaIcon(FontAwesomeIcons.download, size: 16),
                                           label: context.l10n.installedApps,
@@ -603,7 +616,10 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
                                           ),
                                           style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 0),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: OmiSpacing.sm,
+                                              vertical: 0,
+                                            ),
                                           ),
                                         ),
                                       ),

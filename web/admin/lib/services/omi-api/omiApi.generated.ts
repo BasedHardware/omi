@@ -599,6 +599,14 @@ export interface AssistantSettingsResponse {
   [key: string]: unknown;
 }
 
+export interface AssistantVoicePreference {
+  voice_id: string;
+}
+
+export interface AssistantVoicePreferenceUpdate {
+  voice_id: string;
+}
+
 export interface AudioDownloadPendingResponse {
   poll_after_ms: number;
   status: string;
@@ -2616,40 +2624,6 @@ export type JITDecisionReason = "evaluated" | "rollout_enabled" | "rollout_disab
 
 export type JITErrorClass = "none" | "timeout" | "configuration" | "malformed" | "provider" | "absent";
 
-export interface JITProactivityEventReceipt {
-  account_generation: number;
-  budget_day: string;
-  budget_timezone?: string;
-  candidate_id: string;
-  created_at: string;
-  device_id: string;
-  event_id: string;
-  feedback_id?: string | null;
-  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
-  parent_event_id?: string | null;
-  request_hash: string;
-  schema_version?: "jit_proactivity_event.v1";
-  trigger_memory_id?: string | null;
-  trigger_revision?: number | null;
-  uid: string;
-}
-
-export interface JITProactivityReservationEnvelope {
-  receipt: JITProactivityEventReceipt;
-  reserved: boolean;
-}
-
-export interface JITProactivityReservationRequest {
-  account_generation: number;
-  candidate_id: string;
-  device_id: string;
-  event_id: string;
-  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
-  parent_event_id?: string | null;
-  trigger_memory_id?: string | null;
-  trigger_revision?: number | null;
-}
-
 export interface JITRolloutDecisionEnvelope {
   budget_contract_version?: string | null;
   cache_hit: boolean;
@@ -2664,40 +2638,6 @@ export interface JITRolloutDecisionEnvelope {
 export interface JITTriggerActionEnvelope {
   prompt: string;
   type: string;
-}
-
-export interface JITTriggerFeedbackEnvelope {
-  applied: boolean;
-  receipt: JITTriggerFeedbackReceipt;
-  trigger_memory_id: string;
-  trigger_revision: number;
-  trigger_status: string;
-}
-
-export interface JITTriggerFeedbackReceipt {
-  account_generation: number;
-  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
-  applied_trigger_revision?: number | null;
-  event_id: string;
-  expected_trigger_revision: number;
-  feedback_id: string;
-  recorded_at: string;
-  request_hash: string;
-  schema_version?: "jit_trigger_feedback.v1";
-  snoozed_until?: string | null;
-  trigger_memory_id: string;
-  uid: string;
-}
-
-export interface JITTriggerFeedbackRequest {
-  account_generation: number;
-  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
-  event_id: string;
-  feedback_id: string;
-  recorded_at: string;
-  snoozed_until?: string | null;
-  trigger_memory_id: string;
-  trigger_revision: number;
 }
 
 export interface JITTriggerSnapshotEnvelope {
@@ -3621,6 +3561,46 @@ export interface ProactiveMaterializationRejectionOutcome {
 
 export interface ProactiveNotification {
   scopes: Array<string>;
+}
+
+export interface ProactivityFeedItem {
+  acted: boolean;
+  body: string;
+  created_at: string;
+  dismissed: boolean;
+  feedback: "none" | "thumbs_up" | "thumbs_down";
+  id: string;
+  producer: string;
+  target: ProactivityTarget;
+  title: string;
+}
+
+export interface ProactivityFeedResponse {
+  enabled: boolean;
+  has_more: boolean;
+  items: Array<ProactivityFeedItem>;
+  next_cursor: string;
+  schema_version?: 1;
+  server_time: string;
+}
+
+export interface ProactivityOutcomeRequest {
+  action: "shown" | "opened" | "accepted" | "thumbs_up" | "replied" | "thumbs_down" | "producer_disabled" | "dismissed" | "timeout";
+  channel: "feed" | "push";
+  event_id: string;
+  surface: "ios" | "android" | "macos" | "windows";
+}
+
+export interface ProactivityOutcomeResponse {
+  acted_24h: boolean;
+  item_id: string;
+  negative: boolean;
+  recorded: boolean;
+}
+
+export interface ProactivityTarget {
+  id: string;
+  kind: "conversation" | "action_item";
 }
 
 export interface ProcessConversationRequest {
@@ -4927,6 +4907,16 @@ export interface TtsSynthesizeRequest {
   voice_settings?: TtsVoiceSettings | null;
 }
 
+export interface TtsVoice {
+  id: string;
+  name: string;
+}
+
+export interface TtsVoiceCatalog {
+  default_voice_id: string;
+  voices: Array<TtsVoice>;
+}
+
 export interface TtsVoiceSettings {
   similarity_boost?: number | null;
   stability?: number | null;
@@ -5328,6 +5318,12 @@ export interface WrappedStatusResponse {
   year?: number;
 }
 
+export interface routers__desktop_tts_updates__TtsSynthesizeRequest {
+  instructions?: string | null;
+  text: string;
+  voice_id?: string | null;
+}
+
 export interface routers__focus_sessions__ScreenActivityRow {
   appName?: string | null;
   id: string;
@@ -5435,6 +5431,8 @@ export interface OmiApiSchemas {
   "AsanaProjectsResponse": AsanaProjectsResponse;
   "AsanaWorkspacesResponse": AsanaWorkspacesResponse;
   "AssistantSettingsResponse": AssistantSettingsResponse;
+  "AssistantVoicePreference": AssistantVoicePreference;
+  "AssistantVoicePreferenceUpdate": AssistantVoicePreferenceUpdate;
   "AudioDownloadPendingResponse": AudioDownloadPendingResponse;
   "AudioFile": AudioFile;
   "AudioFileUrlInfo": AudioFileUrlInfo;
@@ -5710,14 +5708,8 @@ export interface OmiApiSchemas {
   "InterventionSurface": InterventionSurface;
   "JITDecisionReason": JITDecisionReason;
   "JITErrorClass": JITErrorClass;
-  "JITProactivityEventReceipt": JITProactivityEventReceipt;
-  "JITProactivityReservationEnvelope": JITProactivityReservationEnvelope;
-  "JITProactivityReservationRequest": JITProactivityReservationRequest;
   "JITRolloutDecisionEnvelope": JITRolloutDecisionEnvelope;
   "JITTriggerActionEnvelope": JITTriggerActionEnvelope;
-  "JITTriggerFeedbackEnvelope": JITTriggerFeedbackEnvelope;
-  "JITTriggerFeedbackReceipt": JITTriggerFeedbackReceipt;
-  "JITTriggerFeedbackRequest": JITTriggerFeedbackRequest;
   "JITTriggerSnapshotEnvelope": JITTriggerSnapshotEnvelope;
   "JITTriggerSnapshotRowEnvelope": JITTriggerSnapshotRowEnvelope;
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
@@ -5844,6 +5836,11 @@ export interface OmiApiSchemas {
   "ProactiveMaterializationRejection": ProactiveMaterializationRejection;
   "ProactiveMaterializationRejectionOutcome": ProactiveMaterializationRejectionOutcome;
   "ProactiveNotification": ProactiveNotification;
+  "ProactivityFeedItem": ProactivityFeedItem;
+  "ProactivityFeedResponse": ProactivityFeedResponse;
+  "ProactivityOutcomeRequest": ProactivityOutcomeRequest;
+  "ProactivityOutcomeResponse": ProactivityOutcomeResponse;
+  "ProactivityTarget": ProactivityTarget;
   "ProcessConversationRequest": ProcessConversationRequest;
   "ProductMemorySearchItem": ProductMemorySearchItem;
   "ProductMemorySearchResponse": ProductMemorySearchResponse;
@@ -6030,6 +6027,8 @@ export interface OmiApiSchemas {
   "TriggerRuntimePolicy": TriggerRuntimePolicy;
   "TriggerType": TriggerType;
   "TtsSynthesizeRequest": TtsSynthesizeRequest;
+  "TtsVoice": TtsVoice;
+  "TtsVoiceCatalog": TtsVoiceCatalog;
   "TtsVoiceSettings": TtsVoiceSettings;
   "UnapprovedPublicAppResponse": UnapprovedPublicAppResponse;
   "UpdateAIUserProfileRequest": UpdateAIUserProfileRequest;
@@ -6084,6 +6083,7 @@ export interface OmiApiSchemas {
   "WorkstreamStatus": WorkstreamStatus;
   "WorkstreamUpdate": WorkstreamUpdate;
   "WrappedStatusResponse": WrappedStatusResponse;
+  "routers__desktop_tts_updates__TtsSynthesizeRequest": routers__desktop_tts_updates__TtsSynthesizeRequest;
   "routers__focus_sessions__ScreenActivityRow": routers__focus_sessions__ScreenActivityRow;
   "routers__mcp__TranscriptMatchSnippet": routers__mcp__TranscriptMatchSnippet;
   "routers__memories__BatchMemoriesRequest": routers__memories__BatchMemoriesRequest;
@@ -8347,9 +8347,35 @@ export interface OmiApiPaths {
     post: {
       operationId: "reserve_jit_proactivity_v1_jit_proactivity_reservations_post";
       responses: {
-        "200": JITProactivityReservationEnvelope;
+        "200": {
+  receipt: {
+  account_generation: number;
+  budget_day: string;
+  budget_timezone?: string;
+  candidate_id: string;
+  created_at: string;
+  device_id: string;
+  event_id: string;
+  feedback_id?: string | null;
+  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
+  parent_event_id?: string | null;
+  request_hash: string;
+  schema_version?: "jit_proactivity_event.v1";
+  trigger_memory_id?: string | null;
+  trigger_revision?: number | null;
+  uid: string;
+};
+  reserved: boolean;
+};
         "401": void;
-        "422": HTTPValidationError;
+        "410": unknown;
+        "422": {
+  detail?: Array<{
+  loc: Array<string | number>;
+  msg: string;
+  type: string;
+}>;
+};
       };
     };
   };
@@ -8367,9 +8393,35 @@ export interface OmiApiPaths {
     post: {
       operationId: "post_jit_trigger_feedback_v1_jit_trigger_feedback_post";
       responses: {
-        "200": JITTriggerFeedbackEnvelope;
+        "200": {
+  applied: boolean;
+  receipt: {
+  account_generation: number;
+  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
+  applied_trigger_revision?: number | null;
+  event_id: string;
+  expected_trigger_revision: number;
+  feedback_id: string;
+  recorded_at: string;
+  request_hash: string;
+  schema_version?: "jit_trigger_feedback.v1";
+  snoozed_until?: string | null;
+  trigger_memory_id: string;
+  uid: string;
+};
+  trigger_memory_id: string;
+  trigger_revision: number;
+  trigger_status: string;
+};
         "401": void;
-        "422": HTTPValidationError;
+        "410": unknown;
+        "422": {
+  detail?: Array<{
+  loc: Array<string | number>;
+  msg: string;
+  type: string;
+}>;
+};
       };
     };
   };
@@ -8951,6 +9003,26 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/proactivity/feed": {
+    get: {
+      operationId: "get_proactivity_feed";
+      responses: {
+        "200": ProactivityFeedResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/proactivity/items/{item_id}/outcomes": {
+    post: {
+      operationId: "record_proactivity_outcome";
+      responses: {
+        "200": ProactivityOutcomeResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/screen-activity": {
     get: {
       operationId: "list_screen_activity_v1_screen_activity_get";
@@ -9391,6 +9463,26 @@ export interface OmiApiPaths {
       operationId: "create_outcome_v1_task_intelligence_outcomes_post";
       responses: {
         "200": OutcomeRecord;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/tts/synthesize": {
+    post: {
+      operationId: "tts_synthesize_v1_tts_synthesize_post";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/tts/voices": {
+    get: {
+      operationId: "list_tts_voices_v1_tts_voices_get";
+      responses: {
+        "200": TtsVoiceCatalog;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10137,6 +10229,24 @@ export interface OmiApiPaths {
       operationId: "update_transcription_preferences_endpoint_v1_users_transcription_preferences_patch";
       responses: {
         "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/voice": {
+    get: {
+      operationId: "get_user_voice_v1_users_voice_get";
+      responses: {
+        "200": AssistantVoicePreference;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_user_voice_v1_users_voice_patch";
+      responses: {
+        "200": AssistantVoicePreference;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15254,7 +15364,35 @@ export async function get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledg
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function reserve_jit_proactivity_v1_jit_proactivity_reservations_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: JITProactivityReservationRequest, init?: OmiApiClientInit): Promise<JITProactivityReservationEnvelope> {
+export async function reserve_jit_proactivity_v1_jit_proactivity_reservations_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: {
+  account_generation: number;
+  candidate_id: string;
+  device_id: string;
+  event_id: string;
+  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
+  parent_event_id?: string | null;
+  trigger_memory_id?: string | null;
+  trigger_revision?: number | null;
+}, init?: OmiApiClientInit): Promise<{
+  receipt: {
+  account_generation: number;
+  budget_day: string;
+  budget_timezone?: string;
+  candidate_id: string;
+  created_at: string;
+  device_id: string;
+  event_id: string;
+  feedback_id?: string | null;
+  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
+  parent_event_id?: string | null;
+  request_hash: string;
+  schema_version?: "jit_proactivity_event.v1";
+  trigger_memory_id?: string | null;
+  trigger_revision?: number | null;
+  uid: string;
+};
+  reserved: boolean;
+}> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/proactivity/reservations`;
   const _search = "";
@@ -15294,7 +15432,35 @@ export async function get_jit_rollout_decision_v1_jit_rollout_decision_get(heade
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function post_jit_trigger_feedback_v1_jit_trigger_feedback_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: JITTriggerFeedbackRequest, init?: OmiApiClientInit): Promise<JITTriggerFeedbackEnvelope> {
+export async function post_jit_trigger_feedback_v1_jit_trigger_feedback_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: {
+  account_generation: number;
+  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
+  event_id: string;
+  feedback_id: string;
+  recorded_at: string;
+  snoozed_until?: string | null;
+  trigger_memory_id: string;
+  trigger_revision: number;
+}, init?: OmiApiClientInit): Promise<{
+  applied: boolean;
+  receipt: {
+  account_generation: number;
+  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
+  applied_trigger_revision?: number | null;
+  event_id: string;
+  expected_trigger_revision: number;
+  feedback_id: string;
+  recorded_at: string;
+  request_hash: string;
+  schema_version?: "jit_trigger_feedback.v1";
+  snoozed_until?: string | null;
+  trigger_memory_id: string;
+  uid: string;
+};
+  trigger_memory_id: string;
+  trigger_revision: number;
+  trigger_status: string;
+}> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/trigger-feedback`;
   const _search = "";
@@ -16350,6 +16516,49 @@ export async function twiml_voice_webhook_v1_phone_twiml_post(init?: OmiApiClien
   return;
 }
 
+export async function get_proactivity_feed(query: { limit?: number, cursor?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ProactivityFeedResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/proactivity/feed`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function record_proactivity_outcome(path: { item_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ProactivityOutcomeRequest, init?: OmiApiClientInit): Promise<ProactivityOutcomeResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/proactivity/items/${path.item_id}/outcomes`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function list_screen_activity_v1_screen_activity_get(query: { date?: string | null, app_filter?: string | null, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<routers__focus_sessions__ScreenActivityRow>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/screen-activity`;
@@ -17187,6 +17396,25 @@ export async function create_outcome_v1_task_intelligence_outcomes_post(header: 
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function list_tts_voices_v1_tts_voices_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<TtsVoiceCatalog> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/tts/voices`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -18784,6 +19012,46 @@ export async function update_transcription_preferences_endpoint_v1_users_transcr
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_user_voice_v1_users_voice_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AssistantVoicePreference> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/voice`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function update_user_voice_v1_users_voice_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: AssistantVoicePreferenceUpdate, init?: OmiApiClientInit): Promise<AssistantVoicePreference> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/voice`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_voice_profile_settings_v1_users_voice_profile_settings_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<VoiceProfileSettings> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/voice-profile-settings`;
@@ -20161,4 +20429,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 470 client methods generated.
+// Total: 475 client methods generated.

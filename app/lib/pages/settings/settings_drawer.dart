@@ -16,7 +16,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-/// The Settings sheet: Account, then seven groups (Device, Recording & Transcription,
+/// The Settings sheet: Account, then eight groups (Device, Recording & Transcription, Voice,
 /// Notifications & Display, Integrations, Privacy & Data, Help & About, Developer Settings), plus
 /// search over every row in Settings and its pages ([settingsSearchEntries]).
 ///
@@ -130,76 +130,122 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       children: [
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.profile,
-                key: 'settings_account',
-                icon: FontAwesomeIcons.solidUser,
-                title: name.isEmpty ? l10n.account : name,
-                subtitle: email.isEmpty ? null : email),
+            _row(
+              SettingsDestination.profile,
+              key: 'settings_account',
+              icon: FontAwesomeIcons.solidUser,
+              title: name.isEmpty ? l10n.account : name,
+              subtitle: email.isEmpty ? null : email,
+            ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
         // Plan, referrals and feedback stay one tap from the sheet (David, 2026-09-24).
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.planAndUsage,
-                key: 'settings_row_planAndUsage',
-                icon: FontAwesomeIcons.chartLine,
-                title: l10n.planAndUsage,
-                value: planValue),
-            _row(SettingsDestination.referral,
-                key: 'settings_row_referral',
-                icon: FontAwesomeIcons.gift,
-                title: l10n.referralProgram,
-                tag: SettingsTag(l10n.newTag, OmiColors.success)),
+            _row(
+              SettingsDestination.planAndUsage,
+              key: 'settings_row_planAndUsage',
+              icon: FontAwesomeIcons.chartLine,
+              title: l10n.planAndUsage,
+              value: planValue,
+            ),
+            _row(
+              SettingsDestination.referral,
+              key: 'settings_row_referral',
+              icon: FontAwesomeIcons.gift,
+              title: l10n.referralProgram,
+              tag: SettingsTag(l10n.newTag, OmiColors.success),
+            ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.deviceGroup,
-                key: 'settings_group_device', icon: FontAwesomeIcons.bluetooth, title: l10n.device),
-            _row(SettingsDestination.recordingGroup,
-                key: 'settings_group_recording',
-                icon: FontAwesomeIcons.microphone,
-                title: l10n.recordingAndTranscription),
-            _row(SettingsDestination.notificationsGroup,
-                key: 'settings_group_notifications',
-                icon: FontAwesomeIcons.solidBell,
-                title: l10n.notificationsAndDisplay),
-            _row(SettingsDestination.integrations,
-                key: 'settings_group_integrations',
-                icon: FontAwesomeIcons.networkWired,
-                title: l10n.integrations,
-                tag: SettingsTag(l10n.beta, OmiColors.warning)),
-            _row(SettingsDestination.privacyGroup,
-                key: 'settings_group_privacy', icon: FontAwesomeIcons.shield, title: l10n.dataAndPrivacy),
+            _row(
+              SettingsDestination.deviceGroup,
+              key: 'settings_group_device',
+              icon: FontAwesomeIcons.bluetooth,
+              title: l10n.device,
+            ),
+            _row(
+              SettingsDestination.recordingGroup,
+              key: 'settings_group_recording',
+              icon: FontAwesomeIcons.microphone,
+              title: l10n.recordingAndTranscription,
+            ),
+            _row(
+              SettingsDestination.voice,
+              key: 'settings_group_voice',
+              icon: FontAwesomeIcons.volumeHigh,
+              title: l10n.assistantVoiceSettingsTitle,
+            ),
+            _row(
+              SettingsDestination.notificationsGroup,
+              key: 'settings_group_notifications',
+              icon: FontAwesomeIcons.solidBell,
+              title: l10n.notificationsAndDisplay,
+            ),
+            _row(
+              SettingsDestination.integrations,
+              key: 'settings_group_integrations',
+              icon: FontAwesomeIcons.networkWired,
+              title: l10n.integrations,
+              tag: SettingsTag(l10n.beta, OmiColors.warning),
+            ),
+            _row(
+              SettingsDestination.privacyGroup,
+              key: 'settings_group_privacy',
+              icon: FontAwesomeIcons.shield,
+              title: l10n.dataAndPrivacy,
+            ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
         // Memories and Goals left the Home tabs (David, 2026-09-29): one tap from the sheet.
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.memories,
-                key: 'settings_row_memories', icon: FontAwesomeIcons.brain, title: l10n.memories),
-            _row(SettingsDestination.goals,
-                key: 'settings_row_goals', icon: FontAwesomeIcons.bullseye, title: l10n.goals),
+            _row(
+              SettingsDestination.memories,
+              key: 'settings_row_memories',
+              icon: FontAwesomeIcons.brain,
+              title: l10n.memories,
+            ),
+            _row(
+              SettingsDestination.goals,
+              key: 'settings_row_goals',
+              icon: FontAwesomeIcons.bullseye,
+              title: l10n.goals,
+            ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.helpGroup,
-                key: 'settings_group_help', icon: FontAwesomeIcons.circleQuestion, title: l10n.helpAndAbout),
+            _row(
+              SettingsDestination.helpGroup,
+              key: 'settings_group_help',
+              icon: FontAwesomeIcons.circleQuestion,
+              title: l10n.helpAndAbout,
+            ),
             if (PlatformService.isIntercomSupported)
-              _row(SettingsDestination.feedback,
-                  key: 'settings_row_feedback', icon: FontAwesomeIcons.solidEnvelope, title: l10n.feedbackBug),
+              _row(
+                SettingsDestination.feedback,
+                key: 'settings_row_feedback',
+                icon: FontAwesomeIcons.solidEnvelope,
+                title: l10n.feedbackBug,
+              ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.developer,
-                key: 'settings_group_developer', icon: FontAwesomeIcons.code, title: l10n.developerSettings),
+            _row(
+              SettingsDestination.developer,
+              key: 'settings_group_developer',
+              icon: FontAwesomeIcons.code,
+              title: l10n.developerSettings,
+            ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),

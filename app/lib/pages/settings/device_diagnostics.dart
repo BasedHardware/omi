@@ -169,22 +169,24 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'battery_history': extended['battery_history_v2'] ??
           _batteryHistory.map((p) => {'ts': p.timestamp, 'level': p.level, 'charging': null}).toList(),
       'disconnect_history': disconnects
-          .map((e) => {
-                'ts': e['timestamp'],
-                'reason': e['reason'],
-                'code': e['reasonCode'],
-                'manual': e['isManual'],
-                'event_type': e['eventType'],
-                'last_rssi': e['lastRssi'],
-                'last_rssi_age_ms': e['lastRssiAgeMs'],
-                'connection_duration_ms': e['connectionDurationMs'],
-                'app_state': e['appState'],
-                'time_to_reconnect_ms': e['timeToReconnectMs'],
-                'rssi_trend': e['rssiTrend'],
-                'lost_audio_seconds': e['lostAudioSeconds'],
-                'audio_packets_received': e['audioPacketsReceived'],
-                'audio_packets_expected': e['audioPacketsExpected'],
-              })
+          .map(
+            (e) => {
+              'ts': e['timestamp'],
+              'reason': e['reason'],
+              'code': e['reasonCode'],
+              'manual': e['isManual'],
+              'event_type': e['eventType'],
+              'last_rssi': e['lastRssi'],
+              'last_rssi_age_ms': e['lastRssiAgeMs'],
+              'connection_duration_ms': e['connectionDurationMs'],
+              'app_state': e['appState'],
+              'time_to_reconnect_ms': e['timeToReconnectMs'],
+              'rssi_trend': e['rssiTrend'],
+              'lost_audio_seconds': e['lostAudioSeconds'],
+              'audio_packets_received': e['audioPacketsReceived'],
+              'audio_packets_expected': e['audioPacketsExpected'],
+            },
+          )
           .toList(),
       'audio_packets_received_current': extended['audio_packets_received'],
       'audio_packets_expected_current': extended['audio_packets_expected'],
@@ -195,6 +197,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'firmware_diagnostics_latest': (extended['firmware_diagnostics'] as List?)?.lastOrNull,
       'lifecycle_events': extended['lifecycle_events'] ?? [],
       'ble_log': extended['ble_log'] ?? [],
+      'capture_health': extended['capture_health'] ?? {},
+      'capture_health_history': extended['capture_health_history'] ?? [],
     };
   }
 
@@ -270,8 +274,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       json = const JsonEncoder.withIndent('  ').convert(bundle);
     } catch (e) {
       Logger.debug('Failed to build diagnostics bundle: $e');
-      PlatformManager.instance.analytics
-          .diagnosticsSendFailed(failureStage: DiagnosticsSendFailedFailureStage.buildBundle);
+      PlatformManager.instance.analytics.diagnosticsSendFailed(
+        failureStage: DiagnosticsSendFailedFailureStage.buildBundle,
+      );
       if (mounted) OmiFeedback.error(context, context.l10n.deviceDiagnosticsUploadFailed);
       return;
     }
@@ -283,11 +288,13 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         content: SizedBox(
           width: 520,
           height: 400,
-          child: Column(children: [
-            Text(context.l10n.deviceDiagnosticsUploadDescription),
-            const SizedBox(height: 12),
-            Expanded(child: SingleChildScrollView(child: SelectableText(json))),
-          ]),
+          child: Column(
+            children: [
+              Text(context.l10n.deviceDiagnosticsUploadDescription),
+              const SizedBox(height: 12),
+              Expanded(child: SingleChildScrollView(child: SelectableText(json))),
+            ],
+          ),
         ),
         actions: [
           OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
@@ -547,11 +554,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           value: latestRssi == null ? '--' : null,
           trailing: latestRssi == null
               ? null
-              : _valueStack(
-                  _rssiQuality(latestRssi),
-                  detail: '$latestRssi dBm',
-                  dot: _rssiColor(latestRssi),
-                ),
+              : _valueStack(_rssiQuality(latestRssi), detail: '$latestRssi dBm', dot: _rssiColor(latestRssi)),
         ),
       ],
     );
@@ -596,10 +599,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
               rate == null ? (windowed ? '${summary.drops}' : l10n.diagnosticsCountSincePairing(lifetimeDrops)) : null,
           trailing: rate == null ? null : _valueStack('${summary.drops}', detail: l10n.diagnosticsDropsPerHour(rate)),
         ),
-        OmiSettingsRow(
-          title: l10n.diagnosticsLongestGap,
-          value: longest == null ? '--' : _formatDurationMs(longest),
-        ),
+        OmiSettingsRow(title: l10n.diagnosticsLongestGap, value: longest == null ? '--' : _formatDurationMs(longest)),
         OmiSettingsRow(
           title: l10n.failedConnections,
           value: windowed ? '${summary.failed}' : l10n.diagnosticsCountSincePairing(lifetimeFails),
@@ -619,7 +619,11 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (dot != null) ...[
-              Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: dot)),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: dot),
+              ),
               const SizedBox(width: 6),
             ],
             Text(value, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
@@ -670,10 +674,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final spots = [
       for (final p in _rssiPoints)
         if (latest.difference(p.time).inMilliseconds <= _rssiWindowSecs * 1000)
-          FlSpot(
-            -latest.difference(p.time).inMilliseconds / 1000.0,
-            p.rssi.toDouble().clamp(_rssiMin, _rssiMax),
-          ),
+          FlSpot(-latest.difference(p.time).inMilliseconds / 1000.0, p.rssi.toDouble().clamp(_rssiMin, _rssiMax)),
     ];
     final color = _rssiColor(_rssiPoints.last.rssi);
 
@@ -1137,7 +1138,7 @@ DiagnosticsSummary summarizeDiagnostics(List<BleDisconnectEvent> history, {requi
   final window = sinceMs == null ? history : history.where((e) => e.timestamp >= sinceMs).toList();
   final gaps = [
     for (final e in window)
-      if (e.timeToReconnectMs > 0) e.timeToReconnectMs
+      if (e.timeToReconnectMs > 0) e.timeToReconnectMs,
   ]..sort();
   int? median;
   if (gaps.isNotEmpty) {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/http/user_data_export.dart' as export_user_data;
@@ -80,10 +81,7 @@ class MobileFeedbackReceipt {
   /// Parses the server's durable-write receipt. A 201 alone is insufficient:
   /// callers may only complete the product journey after the ledger confirms
   /// persistence and returns its bounded event coordinate.
-  static MobileFeedbackReceipt? fromJson(
-    Map<String, dynamic> payload, {
-    required String expectedFeedbackId,
-  }) {
+  static MobileFeedbackReceipt? fromJson(Map<String, dynamic> payload, {required String expectedFeedbackId}) {
     try {
       // The generated model applies OpenAPI defaults for these fields. Keep
       // the receipt gate strict: both markers must be present on the wire so
@@ -359,16 +357,14 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
-  var response = await makeApiCall(
-    url:
-        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return null;
-  if (response.statusCode == 200) {
+class PeopleListResponse {
+  const PeopleListResponse({required this.people, this.statsTruncated = false});
+
+  final List<Person> people;
+  final bool statsTruncated;
+
+  static PeopleListResponse? fromResponse(http.Response response) {
+    if (response.statusCode != 200) return null;
     List<dynamic> peopleJson = jsonDecode(response.body);
     List<Person> people = peopleJson.mapIndexed((idx, json) {
       return Person.fromGenerated(
@@ -378,9 +374,20 @@ Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool inclu
     }).toList();
     // sort by name
     people.sort((a, b) => a.name.compareTo(b.name));
-    return people;
+    return PeopleListResponse(people: people, statsTruncated: isOmiListTruncated(response));
   }
-  return null;
+}
+
+Future<PeopleListResponse?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
+  var response = await makeApiCall(
+    url:
+        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  return PeopleListResponse.fromResponse(response);
 }
 
 @visibleForTesting
@@ -586,16 +593,10 @@ Future<String?> getUsageDeviceTimeZone() async {
 }
 
 Future<UserUsageResponse?> getUserUsage({required String period, required String? timeZone}) async {
-  final url = Uri.parse('${Env.apiBaseUrl}v1/users/me/usage').replace(queryParameters: {
-    'period': period,
-    if (timeZone != null) 'time_zone': timeZone,
-  });
-  var response = await makeApiCall(
-    url: url.toString(),
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  final url = Uri.parse(
+    '${Env.apiBaseUrl}v1/users/me/usage',
+  ).replace(queryParameters: {'period': period, if (timeZone != null) 'time_zone': timeZone});
+  var response = await makeApiCall(url: url.toString(), headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('getUserUsage response: ${response.body}');
   if (response.statusCode == 200) {

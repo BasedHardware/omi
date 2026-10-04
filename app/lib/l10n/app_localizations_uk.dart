@@ -12319,4 +12319,112 @@ class AppLocalizationsUk extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Останні $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Не вдалося під\'єднатися. Перевірте з\'єднання та повторіть спробу.';
+
+  @override
+  String get chatReplyServerError => 'Щось пішло не так з нашого боку. Спробуйте ще раз.';
+
+  @override
+  String get chatReplyTimeout => 'Відповідь забрала забагато часу. Спробуйте ще раз.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Ви не ввійшли. Увійдіть і спробуйте ще раз.';
+
+  @override
+  String get chatAppsLoadFailed => 'Не вдалося завантажити застосунки чату. Спробуйте ще раз.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Голос';
+
+  @override
+  String get assistantVoice => 'Голос асистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ваш вибір голосу спільний для мобільної та комп\'ютерної версій.';
+
+  @override
+  String get readChatRepliesAloud => 'Читати відповіді в чаті вголос';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Озвучує лише тоді, коли це дозволяє \"Голосова відповідь\".';
+
+  @override
+  String get voicePreviewSample => 'Привіт, я Omi. Це мій голос.';
+
+  @override
+  String get peopleStatsIncomplete => 'Підрахунки можуть бути неповними.';
+
+  @override
+  String get previousDay => 'Попередній день';
+
+  @override
+  String get nextDay => 'Наступний день';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Немає завдань на $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Повторна обробка розмови…';
+
+  @override
+  String get conversationReprocessed => 'Розмову оновлено';
+
+  @override
+  String get loadingTranscript => 'Завантаження транскрипції…';
+
+  @override
+  String get transcriptLoadFailed => 'Не вдалося завантажити транскрипцію.';
+
+  @override
+  String get processingConversationProgress => 'Обробка розмови…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Не вдалося обробити цю розмову.';
+
+  @override
+  String get waitForReprocessing => 'Зачекайте, доки завершиться повторна обробка.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Доповідач';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Голоси не розділені між записами.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Про мітки спікерів';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi не змогла розрізнити інші голоси між записами. Торкніться мітки спікера, щоб назвати, хто говорить.';
+
+  @override
+  String get nameSpeakerTitle => 'Назвати спікера';
+
+  @override
+  String get playbackPreparingAudio => 'Підготовка аудіо…';
+
+  @override
+  String get playbackBackToCurrent => 'Назад до поточного';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудіо недоступне';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не вдалося завантажити аудіо';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Перевірте з\'єднання';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Вимкнути такі';
+
+  @override
+  String get dismiss => 'Приховати';
 }

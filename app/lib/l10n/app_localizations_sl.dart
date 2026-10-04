@@ -12321,4 +12321,112 @@ class AppLocalizationsSl extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Zadnjih $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Povezava ni uspela. Preverite povezavo in poskusite znova.';
+
+  @override
+  String get chatReplyServerError => 'Na naši strani je šlo nekaj narobe. Poskusite znova.';
+
+  @override
+  String get chatReplyTimeout => 'Odgovor je trajal predolgo. Poskusite znova.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Niste prijavljeni. Prijavite se in poskusite znova.';
+
+  @override
+  String get chatAppsLoadFailed => 'Aplikacij za klepet ni bilo mogoče naložiti. Poskusite znova.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Glas';
+
+  @override
+  String get assistantVoice => 'Glas pomočnika';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vaša izbira glasu je skupna mobilni in namizni aplikaciji.';
+
+  @override
+  String get readChatRepliesAloud => 'Naglas beri odgovore klepeta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Govori le, ko to dovoli \"Glasovni odgovor\".';
+
+  @override
+  String get voicePreviewSample => 'Živjo, sem Omi. To je moj glas.';
+
+  @override
+  String get peopleStatsIncomplete => 'Števila so lahko nepopolna.';
+
+  @override
+  String get previousDay => 'Prejšnji dan';
+
+  @override
+  String get nextDay => 'Naslednji dan';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ni opravil za $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Ponovna obdelava pogovora…';
+
+  @override
+  String get conversationReprocessed => 'Pogovor posodobljen';
+
+  @override
+  String get loadingTranscript => 'Nalaganje prepisa…';
+
+  @override
+  String get transcriptLoadFailed => 'Prepisa ni bilo mogoče naložiti.';
+
+  @override
+  String get processingConversationProgress => 'Obdelava pogovora…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Tega pogovora ni bilo mogoče obdelati.';
+
+  @override
+  String get waitForReprocessing => 'Počakajte, da se ponovna obdelava konča.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Govorec';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Govorci niso ločeni med posnetki.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'O oznakah govorcev';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi ni mogel ločiti drugih glasov med posnetki. Tapnite oznako govorca, da poimenujete, kdo govori.';
+
+  @override
+  String get nameSpeakerTitle => 'Poimenujte govorca';
+
+  @override
+  String get playbackPreparingAudio => 'Pripravljanje zvoka…';
+
+  @override
+  String get playbackBackToCurrent => 'Nazaj na trenutno';
+
+  @override
+  String get playbackAudioUnavailable => 'Zvok ni na voljo';
+
+  @override
+  String get playbackAudioLoadFailed => 'Zvoka ni bilo mogoče naložiti';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Preverite povezavo';
+
+  @override
+  String get forYou => 'Za vas';
+
+  @override
+  String get stopThese => 'Ustavi te';
+
+  @override
+  String get dismiss => 'Skrij';
 }

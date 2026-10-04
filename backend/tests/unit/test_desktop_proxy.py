@@ -20,6 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
 from routers import desktop_proxy
+from utils.llm import desktop_gemini_telemetry
 from utils.managed_compute import Decision
 from utils.observability import journeys
 from config.plan_catalog import PlanType
@@ -1956,7 +1957,7 @@ async def test_a_fallback_across_families_also_crosses_endpoints(monkeypatch):
     assert reserved.region == "us-central1"
     assert overflow.region == "us"
     # Multi-region labels must survive the telemetry sanitizer, not log as none.
-    assert desktop_proxy._safe_region(overflow.region) == "us"
+    assert desktop_gemini_telemetry._safe_region(overflow.region) == "us"
 
 
 # --- Generalized fallback chains -------------------------------------------
@@ -2293,7 +2294,7 @@ async def test_company_paid_generate_content_hops_the_gateway_never_vertex_direc
     class FakeResult:
         gemini_payload = {"candidates": [{"content": {"parts": [{"text": "gateway answer"}]}}]}
 
-    async def fake_chat(body, *, model, action, uid):
+    async def fake_chat(body, *, model, action, uid, request_id, product_lane, client_platform):
         captured.update(body=json.loads(body), model=model, action=action, uid=uid)
         return FakeResult()
 
@@ -2321,7 +2322,7 @@ async def test_company_paid_embed_content_hops_the_gateway_embeddings_surface(mo
     class FakeEmbedding:
         values = [0.1, 0.2]
 
-    async def fake_embed(body, *, uid):
+    async def fake_embed(body, *, uid, request_id, product_lane, client_platform):
         captured.update(body=json.loads(body), uid=uid)
         return FakeEmbedding()
 
@@ -2370,7 +2371,7 @@ async def test_gateway_error_maps_to_the_retryable_proxy_envelope(monkeypatch):
     _gateway_feature_mode(monkeypatch)
     _install_gateway_doubles(monkeypatch)
 
-    async def failing_chat(body, *, model, action, uid):
+    async def failing_chat(body, *, model, action, uid, request_id, product_lane, client_platform):
         raise DesktopGeminiGatewayError(
             status_code=503, code="provider_unavailable", message="Gemini gateway is temporarily unavailable"
         )

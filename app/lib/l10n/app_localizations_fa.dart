@@ -12289,4 +12289,112 @@ class AppLocalizationsFa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration گذشته';
   }
+
+  @override
+  String get chatReplyOffline => 'اتصال برقرار نشد. اتصال خود را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get chatReplyServerError => 'مشکلی از سمت ما پیش آمد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get chatReplyTimeout => 'پاسخ بیش از حد طول کشید. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get chatReplyNotSignedIn => 'شما وارد نشده‌اید. وارد شوید و دوباره تلاش کنید.';
+
+  @override
+  String get chatAppsLoadFailed => 'بارگیری برنامه‌های گفتگو ممکن نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'صدا';
+
+  @override
+  String get assistantVoice => 'صدای دستیار';
+
+  @override
+  String get voiceSharedAcrossDevices => 'صدای انتخابی شما در موبایل و دسکتاپ مشترک است.';
+
+  @override
+  String get readChatRepliesAloud => 'خواندن پاسخ‌های گفتگو با صدای بلند';
+
+  @override
+  String get readChatRepliesAloudDescription => 'فقط زمانی صحبت می‌کند که «پاسخ صوتی» اجازه دهد.';
+
+  @override
+  String get voicePreviewSample => 'سلام، من Omi هستم. این صدای من است.';
+
+  @override
+  String get peopleStatsIncomplete => 'شمارش‌ها ممکن است ناقص باشند.';
+
+  @override
+  String get previousDay => 'روز قبل';
+
+  @override
+  String get nextDay => 'روز بعد';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'هیچ وظیفه‌ای در $date نیست';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'در حال پردازش دوبارهٔ گفتگو…';
+
+  @override
+  String get conversationReprocessed => 'گفتگو به‌روز شد';
+
+  @override
+  String get loadingTranscript => 'در حال بارگیری متن…';
+
+  @override
+  String get transcriptLoadFailed => 'بارگیری متن ممکن نشد.';
+
+  @override
+  String get processingConversationProgress => 'در حال پردازش گفتگو…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'پردازش این گفتگو ممکن نشد.';
+
+  @override
+  String get waitForReprocessing => 'صبر کنید تا پردازش دوباره تمام شود.';
+
+  @override
+  String get unnamedSpeakerLabel => 'سخنران';
+
+  @override
+  String get unresolvedSpeakersNotice => 'گویندگان در سراسر ضبط‌ها از یکدیگر جدا نشده‌اند.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'درباره برچسب‌های گوینده';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi نتوانست صداهای دیگر را در سراسر ضبط‌ها از هم تشخیص دهد. برای نام‌گذاری گوینده، روی برچسب گوینده بزنید.';
+
+  @override
+  String get nameSpeakerTitle => 'نام‌گذاری گوینده';
+
+  @override
+  String get playbackPreparingAudio => 'در حال آماده‌سازی صدا…';
+
+  @override
+  String get playbackBackToCurrent => 'بازگشت به مورد فعلی';
+
+  @override
+  String get playbackAudioUnavailable => 'صدا در دسترس نیست';
+
+  @override
+  String get playbackAudioLoadFailed => 'بارگیری صدا ممکن نشد';
+
+  @override
+  String get playbackAudioNetworkFailed => 'اتصال را بررسی کنید';
+
+  @override
+  String get forYou => 'برای شما';
+
+  @override
+  String get stopThese => 'توقف این موارد';
+
+  @override
+  String get dismiss => 'رد کردن';
 }

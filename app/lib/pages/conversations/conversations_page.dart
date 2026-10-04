@@ -34,7 +34,16 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
+
 import 'package:omi/widgets/home_bottom_bar.dart';
+
+String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTime? end) {
+  final dates = OmiDateFormat.of(context);
+  if (end == null || (start.year == end.year && start.month == end.month && start.day == end.day)) {
+    return dates.date(start);
+  }
+  return '${dates.date(start)} – ${dates.date(end)}';
+}
 
 enum _ConversationListRowKind {
   topSpacer,
@@ -644,7 +653,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 32.0),
-                      child: EmptyConversationsWidget(isStarredFilterActive: convoProvider.showStarredOnly),
+                      child: EmptyConversationsWidget(
+                        isStarredFilterActive: convoProvider.showStarredOnly,
+                        dateFilterLabel: convoProvider.selectedStartDate == null
+                            ? null
+                            : _conversationDateRangeLabel(
+                                context,
+                                convoProvider.selectedStartDate!,
+                                convoProvider.selectedEndDate,
+                              ),
+                      ),
                     ),
                   ),
                 )

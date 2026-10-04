@@ -43,6 +43,10 @@ There are exactly two ways out, and they mean different things.
   (`lib/pages/chat/chat_route.dart`) rises over a blurred, dimmed page, carries an
   `OmiCloseButton`, and closes on the X, a swipe down on its header, or system back — from every
   entry point (home chat bar, mic, deep link, app detail, quick action, "Ask Omi").
+- **Custom non-opaque routes** (chat sheet, global search) get the iOS back gesture through
+  `OmiEdgeSwipeRoute` (`lib/ui/navigation/omi_edge_swipe.dart`): a 32 pt strip on the left edge
+  tracks the finger horizontally and pops on platform-style distance/velocity thresholds; it never reacts to centre or
+  right-edge drags, honours `PopScope`, and does nothing on Android.
 - **Conversation detail has no body-wide horizontal swipe to another conversation** (D2).
   Transcript / Summary tabs are swipeable where that does not fight a row's `Dismissible`. No
   prev/next controls replace it.
@@ -83,6 +87,7 @@ There are exactly two ways out, and they mean different things.
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
 | Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
 | A choice among people or answers (tag a speaker, a likely-speaker Yes / Not) | `OmiFilterChip` as above, with an optional leading `icon:` ("+ Add Person") | a Material `ChoiceChip` on a grey slab that reads as disabled |
+| A removable **date** filter | `OmiDateFilterChip(start:, end:, onClear:)` — calendar glyph, localized date or `start – end`, ×; remove semantics `removeFilter` + the date | a raw `InputChip`, a filter with no way off |
 | A level (how sure Omi is, how close a voice is) | `OmiLevelMeter(level: 0–3, semanticsLabel:)` — three neutral steps; a newly filled step animates in (`OmiMotion.standard`) | a percentage, a coloured or traffic-light bar |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
 | Locked card preview | `OmiLockedPreview(child:, label:, onPressed:)` — clips a child-only blur and a translucent surface beneath an `OmiButton.tertiary`; excludes the obscured content from touch and semantics | a dark strip with readable content overlapping its upgrade label |
@@ -206,6 +211,11 @@ participant lists, the speaker filter and every copied, shared or exported trans
 - Everyone else is **Speaker N**, N dense per conversation (1, 2, 3… in order of first
   appearance, skipping the owner and Omi). Never a raw id, never a gap. Naming a person does not
   renumber the others. `TranscriptSegment.getDisplaySpeakerId` returns the same N.
+- When the server could not resolve speakers across the conversation (`speaker_resolution.status`
+  is `unavailable`), raw ids from different recordings are not comparable, so an unnamed voice is
+  the plain **Speaker** (`l10n.unnamedSpeakerLabel`), never "Speaker ?" and never a number, and the
+  transcript heading omits its speaker count. A saved transcript names each speaker once per turn
+  (consecutive lines from the same voice), so a change of voice is still visible.
 - The speaker filter is "Filter by speaker" (`l10n.filterBySpeaker`), never the loudspeaker string
   `phoneSpeaker`.
 
@@ -267,6 +277,7 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 |---|---|---|
 | first load | `OmiLoadingState` (or a skeleton that previews the layout, with a timeout) | one `OmiSpinner` |
 | load failed | `OmiErrorState(message:, onRetry:)` | the cause in words and **Try Again** |
+| partially loaded / truncated | `OmiPartialNotice(onRetry:)` | a quiet notice above the kept rows and **Try Again** to reload |
 | nothing here / nothing matches | `OmiEmptyState(icon:, title:, message:, action:)` (`glyph: FaIcon(…)` instead of `icon:` where the screen's glyphs are FontAwesome) | Title Case title, one action when it is how the page gets its first row |
 
 - Pull-to-refresh refreshes what the page shows. A failed load always offers Try Again.
@@ -289,7 +300,9 @@ guidance.
 
 - Ask with a pre-prompt that says why — `OmiPermissionRow` (`lib/ui/components/omi_permission_row.dart`):
   title, one-sentence reason, and one action for its state (Allow → the system prompt; Allowed;
-  Open Settings) — then the system prompt. Continue never fires a system prompt by itself.
+  Open Settings) — then the system prompt. A screen's Continue asks, in row order, for every
+  permission still askable (`requestMissingOnboardingPermissions`), then moves on whatever the
+  reader chose.
 - Permanently denied → the row says so and offers **Open Settings** (`l10n.openSettings`).
 - Ask when a feature needs the permission ("Always" location only when a feature requires it).
 

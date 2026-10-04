@@ -5,7 +5,8 @@ import 'package:omi/backend/schema/geolocation.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
-const sdcardChunkSizeSecs = 180;
+
+const sdcardChunkSizeSecs = 60;
 const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
@@ -211,6 +212,12 @@ class Wal {
   int? sourceFrameStart;
   int? sourceClockEpoch;
 
+  int? liveRingId;
+  int? liveOrdinalStart;
+  int? liveOrdinalEnd;
+
+  int? liveConnectionEpoch;
+
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? geolocation;
 
@@ -342,6 +349,9 @@ class Wal {
     this.captureRoot,
     this.sourceFrameStart,
     this.sourceClockEpoch,
+    this.liveRingId,
+    this.liveOrdinalStart,
+    this.liveOrdinalEnd,
     this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
@@ -378,6 +388,9 @@ class Wal {
       captureRoot: json['capture_root'],
       sourceFrameStart: json['source_frame_start'],
       sourceClockEpoch: json['source_clock_epoch'],
+      liveRingId: json['live_ring_id'],
+      liveOrdinalStart: json['live_ordinal_start'],
+      liveOrdinalEnd: json['live_ordinal_end'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -414,6 +427,9 @@ class Wal {
       if (captureRoot != null) 'capture_root': captureRoot,
       if (sourceFrameStart != null) 'source_frame_start': sourceFrameStart,
       if (sourceClockEpoch != null) 'source_clock_epoch': sourceClockEpoch,
+      if (liveRingId != null) 'live_ring_id': liveRingId,
+      if (liveOrdinalStart != null) 'live_ordinal_start': liveOrdinalStart,
+      if (liveOrdinalEnd != null) 'live_ordinal_end': liveOrdinalEnd,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,

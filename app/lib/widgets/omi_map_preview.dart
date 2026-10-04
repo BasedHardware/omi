@@ -77,13 +77,7 @@ Color _mapLandColor(Brightness brightness) => brightness == Brightness.light
 /// The preview is non-interactive by design; wrap it in a GestureDetector that
 /// hands off to `MapsUtil.launchMap` (native map app) for interaction.
 class OmiMapPreview extends StatefulWidget {
-  const OmiMapPreview({
-    super.key,
-    required this.pins,
-    this.backgroundColor,
-    this.imageUrl,
-    this.authHeaderProvider,
-  });
+  const OmiMapPreview({super.key, required this.pins, this.backgroundColor, this.imageUrl, this.authHeaderProvider});
 
   final List<OmiMapPin> pins;
 
@@ -153,12 +147,7 @@ class _OmiMapPreviewState extends State<OmiMapPreview> {
           return fallback;
         }
         return _image(
-          url: buildOmiStaticMapUrl(
-            pins: pins,
-            width: width.round(),
-            height: height.round(),
-            brightness: brightness,
-          ),
+          url: buildOmiStaticMapUrl(pins: pins, width: width.round(), height: height.round(), brightness: brightness),
           width: width,
           height: height,
           fallback: fallback,

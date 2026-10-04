@@ -246,6 +246,78 @@ routes:
       owner: backend
   - route_type: http
     method: GET
+    path: /v1/tts/voices
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/users/voice
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: PATCH
+    path: /v1/users/voice
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
     path: /v1/users/voice-profile-settings
     policy:
       review_status: reviewed
@@ -1622,6 +1694,28 @@ routes:
       surface: internal_task
       visibility: internal
       data_domain: user_profile
+      deprecation:
+        state: active
+  - route_type: http
+    method: POST
+    path: /v1/commitment-followup-jobs/run
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - service_oidc
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: internal_task
+      visibility: internal
+      data_domain: action_items
       deprecation:
         state: active
   - route_type: http
@@ -3883,6 +3977,50 @@ routes:
       surface: developer_api
       visibility: public_documented
       data_domain: credentials
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/proactivity/feed
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms: [firebase_id_token, admin_key_uid_prefix]
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: proactivity:api
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/proactivity/items/{item_id}/outcomes
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms: [firebase_id_token, admin_key_uid_prefix]
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: proactivity:api
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
       deprecation:
         state: active
       owner: backend

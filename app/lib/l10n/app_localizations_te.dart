@@ -12342,4 +12342,112 @@ class AppLocalizationsTe extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'గత $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'కనెక్ట్ చేయలేకపోయింది. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get chatReplyServerError => 'మా వైపు ఏదో తప్పు జరిగింది. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get chatReplyTimeout => 'సమాధానం చాలా సమయం పట్టింది. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get chatReplyNotSignedIn => 'మీరు సైన్ ఇన్ చేయలేదు. సైన్ ఇన్ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get chatAppsLoadFailed => 'చాట్ యాప్‌లను లోడ్ చేయలేకపోయాం. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'వాయిస్';
+
+  @override
+  String get assistantVoice => 'అసిస్టెంట్ వాయిస్';
+
+  @override
+  String get voiceSharedAcrossDevices => 'మీ వాయిస్ ఎంపిక మొబైల్ మరియు డెస్క్‌టాప్‌లో షేర్ చేయబడుతుంది.';
+
+  @override
+  String get readChatRepliesAloud => 'చాట్ సమాధానాలను గట్టిగా చదవండి';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"వాయిస్ రెస్పాన్స్\" అనుమతించినప్పుడు మాత్రమే మాట్లాడుతుంది.';
+
+  @override
+  String get voicePreviewSample => 'హాయ్, నేను Omiని. ఇది నా వాయిస్.';
+
+  @override
+  String get peopleStatsIncomplete => 'లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.';
+
+  @override
+  String get previousDay => 'మునుపటి రోజు';
+
+  @override
+  String get nextDay => 'తదుపరి రోజు';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date నాటికి పనులు లేవు';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'సంభాషణను మళ్లీ ప్రాసెస్ చేస్తోంది…';
+
+  @override
+  String get conversationReprocessed => 'సంభాషణ నవీకరించబడింది';
+
+  @override
+  String get loadingTranscript => 'ట్రాన్స్‌క్రిప్ట్ లోడ్ అవుతోంది…';
+
+  @override
+  String get transcriptLoadFailed => 'ట్రాన్స్‌క్రిప్ట్‌ను లోడ్ చేయలేకపోయాం.';
+
+  @override
+  String get processingConversationProgress => 'సంభాషణను ప్రాసెస్ చేస్తోంది…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'ఈ సంభాషణను ప్రాసెస్ చేయలేకపోయాం.';
+
+  @override
+  String get waitForReprocessing => 'మళ్లీ ప్రాసెసింగ్ పూర్తయ్యే వరకు వేచి ఉండండి.';
+
+  @override
+  String get unnamedSpeakerLabel => 'స్పీకర్';
+
+  @override
+  String get unresolvedSpeakersNotice => 'రికార్డింగ్‌లలో స్పీకర్లు వేరుచేయబడలేదు.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'స్పీకర్ లేబుల్స్ గురించి';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'రికార్డింగ్‌లలో ఇతర స్వరాలను Omi వేరుచేయలేకపోయింది. ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి స్పీకర్ లేబుల్‌ను నొక్కండి.';
+
+  @override
+  String get nameSpeakerTitle => 'స్పీకర్‌కు పేరు పెట్టండి';
+
+  @override
+  String get playbackPreparingAudio => 'ఆడియో సిద్ధమవుతోంది…';
+
+  @override
+  String get playbackBackToCurrent => 'ప్రస్తుతానికి తిరిగి వెళ్లండి';
+
+  @override
+  String get playbackAudioUnavailable => 'ఆడియో అందుబాటులో లేదు';
+
+  @override
+  String get playbackAudioLoadFailed => 'ఆడియో లోడ్ చేయలేకపోయింది';
+
+  @override
+  String get playbackAudioNetworkFailed => 'కనెక్షన్‌ను తనిఖీ చేయండి';
+
+  @override
+  String get forYou => 'మీ కోసం';
+
+  @override
+  String get stopThese => 'వీటిని ఆపండి';
+
+  @override
+  String get dismiss => 'దాచు';
 }

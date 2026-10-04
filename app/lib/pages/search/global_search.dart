@@ -11,6 +11,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/search.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -27,14 +28,18 @@ import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/widgets/people_list.dart';
+import 'package:omi/pages/conversations/day_conversations_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/ui/navigation/omi_edge_swipe.dart';
+import 'package:omi/utils/conversations/date_query.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 
 /// How long the search panel takes to drop in, and to lift away.
 const Duration kSearchDropDuration = Duration(milliseconds: 440);
@@ -55,7 +60,7 @@ Future<void> showGlobalSearch(BuildContext context, {String? initialQuery, Globa
 }
 
 /// The search panel's route: not opaque, so the dimmed shell stays painted underneath.
-class SearchDropRoute<T> extends PageRoute<T> {
+class SearchDropRoute<T> extends PageRoute<T> with OmiEdgeSwipeRoute<T> {
   SearchDropRoute({required this.builder, super.settings}) : super(fullscreenDialog: true);
 
   final WidgetBuilder builder;
@@ -83,26 +88,36 @@ class SearchDropRoute<T> extends PageRoute<T> {
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
-      builder(context);
+      wrapEdgeSwipe(context, builder(context));
 
   @override
   Widget buildTransitions(
       BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
-    return SearchDropTransition(animation: animation, child: child);
+    return SearchDropTransition(animation: animation, horizontalMotion: edgeSwipeInProgress, child: child);
+  }
+
+  @override
+  void dispose() {
+    disposeEdgeSwipe();
+    super.dispose();
   }
 }
 
 /// The drop itself, separate from the route so tests and the visual audit can pump one frame of it.
 class SearchDropTransition extends StatelessWidget {
-  const SearchDropTransition({super.key, required this.animation, required this.child});
+  const SearchDropTransition({super.key, required this.animation, required this.child, this.horizontalMotion = false});
 
   final Animation<double> animation;
   final Widget child;
 
+  final bool horizontalMotion;
+
   @override
   Widget build(BuildContext context) {
-    final drop = CurvedAnimation(parent: animation, curve: kSearchDropCurve, reverseCurve: Curves.easeInCubic);
-    final dim = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+    final drop = horizontalMotion
+        ? animation
+        : CurvedAnimation(parent: animation, curve: kSearchDropCurve, reverseCurve: Curves.easeInCubic);
+    final dim = horizontalMotion ? animation : CurvedAnimation(parent: animation, curve: Curves.easeOut);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -110,7 +125,8 @@ class SearchDropTransition extends StatelessWidget {
           child: FadeTransition(opacity: dim, child: ColoredBox(color: Colors.black.withValues(alpha: 0.18))),
         ),
         SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(drop),
+          position: Tween<Offset>(begin: horizontalMotion ? const Offset(1, 0) : const Offset(0, -1), end: Offset.zero)
+              .animate(drop),
           child: child,
         ),
       ],
@@ -123,12 +139,17 @@ abstract class GlobalSearchSource {
   const GlobalSearchSource();
 
   Future<ApiResult<SearchOverview>> overview();
-  Future<ConversationSearchResult> conversations(String query, {String? speakerId});
+  Future<ConversationSearchResult> conversations(String query,
+      {String? speakerId, DateTime? startDate, DateTime? endDate});
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false});
   Future<ApiResult<List<DailySummary>>> recaps(String query);
+  Future<ApiResult<List<DailySummary>>> recapsInRange(String query, DateTime start, DateTime end) => recaps(query);
   Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query);
   Future<ApiResult<List<MemorySearchHit>>> memories(String query);
 }
+
+String _dayKey(DateTime day) =>
+    '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
 
 class ApiGlobalSearchSource extends GlobalSearchSource {
   const ApiGlobalSearchSource();
@@ -137,8 +158,10 @@ class ApiGlobalSearchSource extends GlobalSearchSource {
   Future<ApiResult<SearchOverview>> overview() => getSearchOverview();
 
   @override
-  Future<ConversationSearchResult> conversations(String query, {String? speakerId}) =>
-      searchConversationsServerResult(query, limit: 20, includeDiscarded: false, speakerId: speakerId);
+  Future<ConversationSearchResult> conversations(String query,
+          {String? speakerId, DateTime? startDate, DateTime? endDate}) =>
+      searchConversationsServerResult(query,
+          limit: 20, includeDiscarded: false, speakerId: speakerId, startDate: startDate, endDate: endDate);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) =>
@@ -146,6 +169,37 @@ class ApiGlobalSearchSource extends GlobalSearchSource {
 
   @override
   Future<ApiResult<List<DailySummary>>> recaps(String query) => searchDailySummaries(query);
+
+  @override
+  Future<ApiResult<List<DailySummary>>> recapsInRange(String query, DateTime start, DateTime end) async {
+    final firstDay = DateTime(start.year, start.month, start.day);
+    final lastDay = DateTime(end.year, end.month, end.day);
+    if (lastDay.isBefore(firstDay)) return const ApiSuccess(<DailySummary>[]);
+    final firstKey = _dayKey(firstDay);
+    final lastKey = _dayKey(lastDay);
+    // The list API has no date parameters, so page its reverse-chronological
+    // results once, collecting every recap whose day falls inside the range.
+    // Five pages cover the same 365-day history window as recap search with
+    // room for sparse days. The listing is newest-first, so a range is one
+    // contiguous block: keep paging until a page's oldest row predates the
+    // range (or the listing ends) so a block straddling a page boundary is
+    // still collected whole.
+    final byDay = <String, DailySummary>{};
+    for (var offset = 0; offset < 500; offset += 100) {
+      final result = await getDailySummaries(limit: 100, offset: offset);
+      if (!result.ok) return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+      for (final recap in result.items) {
+        final day = recap.date;
+        if (day.compareTo(lastKey) <= 0 && day.compareTo(firstKey) >= 0) byDay[day] = recap;
+      }
+      if (result.items.length < 100 || result.items.isEmpty || result.items.last.date.compareTo(firstKey) < 0) {
+        break;
+      }
+    }
+    if (byDay.isEmpty) return const ApiSuccess(<DailySummary>[]);
+    final collected = byDay.values.toList()..sort((a, b) => a.date.compareTo(b.date));
+    return ApiSuccess(collected);
+  }
 
   @override
   Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query) => searchActionItems(query);
@@ -216,12 +270,27 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   /// In the People scope the search field filters the shared people list instead of searching.
   String _peopleQuery = '';
 
+  ConversationDateQuery _dateQuery = const ConversationDateQuery(query: '');
+  DateTime? _pickedStart;
+  DateTime? _pickedEnd;
+
+  DateTime? get _activeStart => _dateQuery.startDate ?? _pickedStart;
+  DateTime? get _activeEnd => _dateQuery.endDate ?? _pickedEnd;
+
+  /// The query actually searched: the typed text with any date phrase
+  /// stripped. Rows match this text, so navigation that filters by query
+  /// (memories) must reuse it, not the raw field content.
+  String get _searchedQuery => _activeStart != null || _activeEnd != null ? _dateQuery.query : _query.text.trim();
+
   @override
   void initState() {
     super.initState();
     _recent = SharedPreferencesUtil().getStringList(_recentSearchesKey);
     unawaited(_loadOverview());
-    if (_query.text.trim().isNotEmpty) unawaited(_run(_query.text.trim()));
+    if (_query.text.trim().isNotEmpty) {
+      _dateQuery = parseConversationDateQuery(_query.text);
+      unawaited(_run());
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Folder tiles fall back to the loaded folders when the overview cannot be read.
@@ -240,7 +309,14 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   }
 
   Future<void> _loadOverview() async {
-    switch (await widget.source.overview()) {
+    final ApiResult<SearchOverview> result;
+    try {
+      result = await widget.source.overview();
+    } catch (e) {
+      Logger.debug('Search overview unavailable: $e');
+      return;
+    }
+    switch (result) {
       case ApiSuccess(:final data):
         if (mounted) setState(() => _overview = data);
       case ApiFailure(:final problem):
@@ -255,21 +331,34 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       return;
     }
     _debounce?.cancel();
+    final parsed = parseConversationDateQuery(value);
     final query = value.trim();
-    if (query.isEmpty) {
-      _generation++;
+    _generation++;
+    if (query.isEmpty && _pickedStart == null) {
       setState(() {
+        _dateQuery = parsed;
         _searching = false;
         _results = const _Results();
       });
       return;
     }
-    setState(() => _scope = null);
-    _debounce = Timer(const Duration(milliseconds: 300), () => _run(query));
+    setState(() {
+      _dateQuery = parsed;
+      _scope = null;
+      _searching = true;
+      _results = const _Results();
+    });
+    _debounce = Timer(const Duration(milliseconds: 300), () => _run());
   }
 
-  Future<void> _run(String query) async {
+  Future<void> _run() async {
     final generation = ++_generation;
+    final parsed = parseConversationDateQuery(_query.text);
+    _dateQuery = parsed;
+    final start = parsed.startDate ?? _pickedStart;
+    final end = parsed.endDate ?? _pickedEnd;
+    final hasDate = start != null;
+    final query = parsed.query;
     setState(() => _searching = true);
     final source = widget.source;
     var partial = false;
@@ -284,24 +373,117 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       }
     }
 
-    final (conversations, recaps, tasks, memories) = await (
-      source.conversations(query),
-      source.recaps(query),
-      source.tasks(query),
-      source.memories(query),
-    ).wait;
-    if (!mounted || generation != _generation) return;
-    if (conversations.outcome != ConversationSearchResultOutcome.success) partial = true;
-    setState(() {
-      _searching = false;
-      _results = _Results(
-        conversations: conversations.items,
-        recaps: rows(recaps),
-        tasks: rows(tasks),
-        memories: rows(memories),
-        partial: partial,
-      );
-    });
+    var conversations = const ConversationSearchResult(
+        items: [], currentPage: 0, totalPages: 0, outcome: ConversationSearchResultOutcome.failure);
+    var recaps = <DailySummary>[];
+    var tasks = <ActionItemWithMetadata>[];
+    var memories = <MemorySearchHit>[];
+    // The deadline completes Future.wait, it does not cancel the source futures.
+    // Mark the run settled once its results are committed so late responses
+    // cannot mutate the captured locals after the UI has settled on them.
+    var settled = false;
+    try {
+      await Future.wait<void>([
+        Future.sync(() => source.conversations(query, startDate: start, endDate: end)).then((r) {
+          if (!settled) conversations = r;
+        }).catchError((_) {
+          if (!settled) partial = true;
+        }),
+        Future.sync(() => hasDate ? source.recapsInRange(query, start, end ?? start) : source.recaps(query)).then((r) {
+          if (settled) return;
+          recaps = rows(r);
+        }).catchError((_) {
+          if (!settled) partial = true;
+        }),
+        Future.sync(() => source.tasks(query)).then((r) {
+          if (settled) return;
+          tasks = rows(r);
+        }).catchError((_) {
+          if (!settled) partial = true;
+        }),
+        Future.sync(() => source.memories(query)).then((r) {
+          if (settled) return;
+          memories = rows(r);
+        }).catchError((_) {
+          if (!settled) partial = true;
+        }),
+      ]).timeout(const Duration(seconds: 15), onTimeout: () {
+        partial = true;
+        return const [];
+      });
+    } catch (_) {
+      if (!settled) partial = true;
+    } finally {
+      settled = true;
+      if (mounted && generation == _generation) {
+        if (conversations.outcome != ConversationSearchResultOutcome.success) partial = true;
+        setState(() {
+          _searching = false;
+          _results = _Results(
+            conversations: conversations.items,
+            recaps: recaps,
+            tasks: tasks,
+            memories: memories,
+            partial: partial,
+          );
+        });
+      }
+    }
+  }
+
+  Future<void> _pickDate() async {
+    await showConversationDateRangePicker(
+      context,
+      initialStartDate: _activeStart,
+      initialEndDate: _activeEnd,
+      onSelected: (start, end) {
+        if (!mounted) return;
+        if (start.year == end.year && start.month == end.month && start.day == end.day) {
+          routeToPage(context, DayConversationsPage(date: start));
+          return;
+        }
+        _debounce?.cancel();
+        _generation++;
+        final remaining = parseConversationDateQuery(_query.text).query;
+        _pickedStart = dayDateBounds(start).$1;
+        _pickedEnd = dayDateBounds(end).$2;
+        _query.text = remaining;
+        _query.selection = TextSelection.collapsed(offset: remaining.length);
+        _debounce?.cancel();
+        _dateQuery = parseConversationDateQuery(remaining);
+        setState(() {
+          _scope = null;
+          _searching = true;
+          _results = const _Results();
+        });
+        unawaited(_run());
+      },
+      onClear: _clearDateFilter,
+    );
+  }
+
+  void _clearDateFilter() {
+    final remaining = _dateQuery.startDate != null ? _dateQuery.query : _query.text;
+    _debounce?.cancel();
+    _generation++;
+    _pickedStart = null;
+    _pickedEnd = null;
+    _query.text = remaining;
+    _query.selection = TextSelection.collapsed(offset: remaining.length);
+    _debounce?.cancel();
+    _dateQuery = parseConversationDateQuery(remaining);
+    if (remaining.isEmpty) {
+      setState(() {
+        _searching = false;
+        _results = const _Results();
+      });
+    } else {
+      setState(() {
+        _searching = true;
+        _results = const _Results();
+      });
+      unawaited(_run());
+    }
   }
 
   void _remember(String query) {
@@ -410,6 +592,12 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
                       onSubmitted: _remember,
                     ),
                   ),
+                  OmiIconButton(
+                    key: const ValueKey('global_search_calendar'),
+                    icon: const Icon(Icons.calendar_month_outlined),
+                    label: l10n.filterByDate,
+                    onPressed: _pickDate,
+                  ),
                   OmiButton.tertiary(
                     key: const ValueKey('global_search_cancel'),
                     label: l10n.cancel,
@@ -419,6 +607,19 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
                 ],
               ),
             ),
+            if (_activeStart != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OmiDateFilterChip(
+                    key: const ValueKey('global_search_date_filter'),
+                    start: _activeStart!,
+                    end: _activeEnd,
+                    onClear: _clearDateFilter,
+                  ),
+                ),
+              ),
             Expanded(child: _buildBody(context)),
           ],
         ),
@@ -545,7 +746,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   Widget _buildBody(BuildContext context) {
     final scope = _scope;
     if (scope != null) return _buildScope(context, scope);
-    if (_query.text.trim().isEmpty) return _buildBrowse(context);
+    if (_query.text.trim().isEmpty && _activeStart == null) return _buildBrowse(context);
     return _buildResults(context);
   }
 
@@ -656,7 +857,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       return const Center(child: OmiSpinner());
     }
     if (r.isEmpty && r.partial) {
-      return OmiErrorState(message: l10n.searchPartialFailure, onRetry: () => _run(_query.text.trim()));
+      return OmiErrorState(message: l10n.searchPartialFailure, onRetry: _run);
     }
     if (r.isEmpty) {
       return OmiEmptyState(icon: Icons.search_off_rounded, title: l10n.noResultsFound);
@@ -667,7 +868,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 24),
       children: [
         if (_searching) const LinearProgressIndicator(minHeight: 1),
-        if (r.partial) _PartialNotice(onRetry: () => _run(_query.text.trim())),
+        if (r.partial) OmiPartialNotice(onRetry: _run),
         if (r.recaps.isNotEmpty) ...[
           _SectionLabel(l10n.recaps),
           for (final recap in r.recaps)
@@ -719,8 +920,8 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
               title: memory.content,
               maxTitleLines: 2,
               onTap: () {
-                _remember(_query.text);
-                context.read<MemoriesProvider>().setSearchQuery(_query.text.trim());
+                _remember(_searchedQuery);
+                context.read<MemoriesProvider>().setSearchQuery(_searchedQuery);
                 routeToPage(context, const MemoriesPage());
               },
             ),
@@ -929,39 +1130,6 @@ class _Row extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A quiet line above incomplete results: one kind failed to load; retry runs the search again.
-class _PartialNotice extends StatelessWidget {
-  const _PartialNotice({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return Semantics(
-      liveRegion: true,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline_rounded, size: 16, color: OmiColors.textTertiary),
-            const SizedBox(width: OmiSpacing.xs),
-            Expanded(
-              child: Text(l10n.searchPartialFailure, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-            ),
-            OmiButton.secondary(
-              key: const ValueKey('search_partial_retry'),
-              label: l10n.tryAgain,
-              size: OmiButtonSize.compact,
-              onPressed: onRetry,
-            ),
-          ],
         ),
       ),
     );

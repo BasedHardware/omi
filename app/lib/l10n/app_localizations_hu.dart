@@ -12339,4 +12339,112 @@ class AppLocalizationsHu extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Utolsó $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Nem sikerült csatlakozni. Ellenőrizd a kapcsolatot, és próbáld újra.';
+
+  @override
+  String get chatReplyServerError => 'Valami hiba történt a mi oldalunkon. Kérlek, próbáld újra.';
+
+  @override
+  String get chatReplyTimeout => 'A válasz túl sokáig tartott. Kérlek, próbáld újra.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nem vagy bejelentkezve. Jelentkezz be, és próbáld újra.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nem sikerült betölteni a csevegőalkalmazásokat. Kérlek, próbáld újra.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hang';
+
+  @override
+  String get assistantVoice => 'Asszisztens hangja';
+
+  @override
+  String get voiceSharedAcrossDevices => 'A választott hang megosztott a mobil és az asztali verzió között.';
+
+  @override
+  String get readChatRepliesAloud => 'Chatválaszok felolvasása hangosan';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Csak akkor szólal meg, ha a Hangválasz engedi.';
+
+  @override
+  String get voicePreviewSample => 'Szia, Omi vagyok. Ez az én hangom.';
+
+  @override
+  String get peopleStatsIncomplete => 'A számok hiányosak lehetnek.';
+
+  @override
+  String get previousDay => 'Előző nap';
+
+  @override
+  String get nextDay => 'Következő nap';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nincsenek feladatok ezen a napon: $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'A beszélgetés újrafeldolgozása…';
+
+  @override
+  String get conversationReprocessed => 'A beszélgetés frissítve';
+
+  @override
+  String get loadingTranscript => 'Átirat betöltése…';
+
+  @override
+  String get transcriptLoadFailed => 'Nem sikerült betölteni az átiratot.';
+
+  @override
+  String get processingConversationProgress => 'A beszélgetés feldolgozása…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Ezt a beszélgetést nem sikerült feldolgozni.';
+
+  @override
+  String get waitForReprocessing => 'Várd meg, amíg az újrafeldolgozás befejeződik.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Beszélő';
+
+  @override
+  String get unresolvedSpeakersNotice => 'A beszélők nincsenek elkülönítve a felvételek között.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'A beszélőcímkékről';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi nem tudta elkülöníteni a többi hangot a felvételek között. Koppintson egy beszélőcímkére, hogy megnevezze, ki beszél.';
+
+  @override
+  String get nameSpeakerTitle => 'Beszélő elnevezése';
+
+  @override
+  String get playbackPreparingAudio => 'Hang előkészítése…';
+
+  @override
+  String get playbackBackToCurrent => 'Vissza az aktuálishoz';
+
+  @override
+  String get playbackAudioUnavailable => 'A hang nem érhető el';
+
+  @override
+  String get playbackAudioLoadFailed => 'A hang nem tölthető be';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Ellenőrizze a kapcsolatot';
+
+  @override
+  String get forYou => 'Önnek';
+
+  @override
+  String get stopThese => 'Ezek leállítása';
+
+  @override
+  String get dismiss => 'Elrejtés';
 }

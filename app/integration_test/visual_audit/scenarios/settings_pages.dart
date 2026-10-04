@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/goals/goals_page.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
@@ -45,13 +46,27 @@ final settingsPagesScenarios = <AuditScenario>[
     state: 'Two goals: one halfway, one just started',
     run: (a) async {
       final goals = GoalsProvider(
-          goalsFetcher: () async => [
-                Goal.fromJson({'id': 'g1', 'title': 'Read 12 books', 'current_value': 6, 'target_value': 12}),
-                Goal.fromJson({'id': 'g2', 'title': 'Run 100 km', 'current_value': 12, 'target_value': 100}),
-              ]);
+        goalsFetcher: () async => [
+          Goal.fromJson({
+            'id': 'g1',
+            'title': 'Read 12 books',
+            'current_value': 6,
+            'target_value': 12,
+          }),
+          Goal.fromJson({
+            'id': 'g2',
+            'title': 'Run 100 km',
+            'current_value': 12,
+            'target_value': 100,
+          }),
+        ],
+      );
       await a.tester.runAsync(goals.init);
-      await a.pump(const GoalsPage(),
-          scaffold: false, providers: [ChangeNotifierProvider<GoalsProvider>.value(value: goals)]);
+      await a.pump(
+        const GoalsPage(),
+        scaffold: false,
+        providers: [ChangeNotifierProvider<GoalsProvider>.value(value: goals)],
+      );
       await a.shot('Open Settings › Goals');
     },
   ),
@@ -82,7 +97,12 @@ final settingsPagesScenarios = <AuditScenario>[
     state: 'Signed-in fixture account; the fixture backend serves no plans; opened on a neutral host',
     run: (a) async {
       await a.pumpHost(
-          (context) => showOmiSheet(context: context, padding: EdgeInsets.zero, builder: (_) => _PlansHost()));
+        (context) => showOmiSheet(
+          context: context,
+          padding: EdgeInsets.zero,
+          builder: (_) => _PlansHost(),
+        ),
+      );
       await a.shot('Open the Plans sheet');
     },
   ),
@@ -97,10 +117,19 @@ final settingsPagesScenarios = <AuditScenario>[
       await a.tap(find.byType(LeaveFlowReasonTile).first);
       await a.tap(find.widgetWithText(OmiButton, 'Continue'));
       await a.tap(find.widgetWithText(OmiButton, 'Continue'));
-      await a.shot('Pick a reason, skip feedback, reach the typed confirmation', step: 'confirm');
-      await a.tester.enterText(find.byKey(const Key('delete_account_confirm_field')), 'DELETE');
+      await a.shot(
+        'Pick a reason, skip feedback, reach the typed confirmation',
+        step: 'confirm',
+      );
+      await a.tester.enterText(
+        find.byKey(const Key('delete_account_confirm_field')),
+        'DELETE',
+      );
       await a.settle();
-      await a.shot('Type DELETE: Delete Account becomes the live action', step: 'typed');
+      await a.shot(
+        'Type DELETE: Delete Account becomes the live action',
+        step: 'typed',
+      );
     },
   ),
   AuditScenario(
@@ -139,7 +168,13 @@ final settingsPagesScenarios = <AuditScenario>[
     page: 'lib/pages/settings/integration_settings_page.dart (IntegrationSettingsPage)',
     state: 'A connected Asana integration with no extra settings',
     run: (a) async {
-      await a.pump(IntegrationSettingsPage(appName: 'Asana', appKey: 'asana', disconnectService: () async {}));
+      await a.pump(
+        IntegrationSettingsPage(
+          appName: 'Asana',
+          appKey: 'asana',
+          disconnectService: () async {},
+        ),
+      );
       await a.shot('Open the Asana integration settings page');
     },
   ),
@@ -151,11 +186,19 @@ final settingsPagesScenarios = <AuditScenario>[
     run: (a) async {
       const channel = 'com.omi/phone_calls/events';
       final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      messenger.setMockMessageHandler(channel, (_) async => const StandardMethodCodec().encodeSuccessEnvelope(null));
+      messenger.setMockMessageHandler(
+        channel,
+        (_) async => const StandardMethodCodec().encodeSuccessEnvelope(null),
+      );
       addTearDown(() => messenger.setMockMessageHandler(channel, null));
-      await a.pump(const PhoneCallSettingsPage(), providers: [
-        ChangeNotifierProvider<PhoneCallProvider>.value(value: _NoNumbersPhoneCallProvider()),
-      ]);
+      await a.pump(
+        const PhoneCallSettingsPage(),
+        providers: [
+          ChangeNotifierProvider<PhoneCallProvider>.value(
+            value: _NoNumbersPhoneCallProvider(),
+          ),
+        ],
+      );
       await a.shot('Open Phone Call settings with no verified numbers');
     },
   ),
@@ -166,15 +209,26 @@ final settingsPagesScenarios = <AuditScenario>[
     state: 'Eleven people: two pinned and Confirmed, Likely people, and six Unverified misheard names',
     run: (a) async {
       final people = _auditPeople();
-      await a.pump(const UserPeoplePage(), providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      await a.pump(
+        const UserPeoplePage(),
+        providers: [
+          ChangeNotifierProvider<PeopleProvider>.value(value: people),
+        ],
+      );
       expect(find.text('Recent'), findsOneWidget);
       expect(find.byKey(const Key('people_clean_up_banner')), findsOneWidget);
       await a.shot('Open People');
       await a.tap(find.byKey(const Key('people_select')));
-      await a.shot('Tap Select: plain selection or Clean Up', step: 'select-menu');
+      await a.shot(
+        'Tap Select: plain selection or Clean Up',
+        step: 'select-menu',
+      );
       await a.tap(find.text('Select People'));
       await a.tap(find.byKey(const Key('people_select_all')));
-      await a.shot('Select People, then Select All (pinned people are skipped)', step: 'select');
+      await a.shot(
+        'Select People, then Select All (pinned people are skipped)',
+        step: 'select',
+      );
     },
   ),
   AuditScenario(
@@ -184,7 +238,12 @@ final settingsPagesScenarios = <AuditScenario>[
     state: 'Same eleven people; six Unverified and unpinned are preselected',
     run: (a) async {
       final people = _auditPeople();
-      await a.pump(const UserPeoplePage(), providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      await a.pump(
+        const UserPeoplePage(),
+        providers: [
+          ChangeNotifierProvider<PeopleProvider>.value(value: people),
+        ],
+      );
       await a.tap(find.byKey(const Key('people_clean_up_review')));
       await a.tap(find.byKey(const Key('people_clean_up_row_p-ines')));
       await a.shot('Review, then untick Inês (real, just not heard yet)');
@@ -199,7 +258,12 @@ final settingsPagesScenarios = <AuditScenario>[
     state: 'Sam: picked in two suggestions, one correction, three unchecked automatic matches, voice ready',
     run: (a) async {
       final people = _auditPeople();
-      await a.pump(const UserPeoplePage(), providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      await a.pump(
+        const UserPeoplePage(),
+        providers: [
+          ChangeNotifierProvider<PeopleProvider>.value(value: people),
+        ],
+      );
       await a.longPress(find.text('Sam Okafor'));
       await a.shot('Long-press Sam', step: 'row-menu');
       await a.tap(find.text('Why Likely?'));
@@ -217,12 +281,19 @@ final settingsPagesScenarios = <AuditScenario>[
         ..add(auditConversation('pd-2', title: 'Coffee catch-up').toJson());
       final people = _auditPeople();
       await people.refresh();
-      await a.pump(const PersonDetailPage(personId: 'p-maya'),
-          providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      await a.pump(
+        const PersonDetailPage(personId: 'p-maya'),
+        providers: [
+          ChangeNotifierProvider<PeopleProvider>.value(value: people),
+        ],
+      );
       expect(find.text('Roadmap review'), findsOneWidget);
       await a.shot('Open Maya from People');
       await a.tap(find.byTooltip('Delete person'));
-      await a.shot('Tap Delete: a pinned person is named in the confirm', step: 'delete-pinned');
+      await a.shot(
+        'Tap Delete: a pinned person is named in the confirm',
+        step: 'delete-pinned',
+      );
     },
   ),
   AuditScenario(
@@ -244,7 +315,10 @@ final settingsPagesScenarios = <AuditScenario>[
       await a.pump(const StripeConnectSetup());
       await a.shot('Open Stripe connect setup', step: 'setup');
       await a.tap(find.text('Select your country').first);
-      await a.shot('Open the titled country picker sheet', step: 'country-picker');
+      await a.shot(
+        'Open the titled country picker sheet',
+        step: 'country-picker',
+      );
     },
   ),
   AuditScenario(
@@ -253,9 +327,15 @@ final settingsPagesScenarios = <AuditScenario>[
     page: 'lib/pages/onboarding/speech_profile_widget.dart (SpeechProfileWidget)',
     state: 'Guided voice controller opened from Settings with a no-op microphone and network',
     run: (a) async {
-      await a.pump(_voiceProfile(GuidedVoiceController(_SilentGuidedVoiceIO(), flowSource: 'settings')),
-          scaffold: false);
-      await a.shot('Open Voice Profile from Settings: first prompt, progress and Start');
+      await a.pump(
+        _voiceProfile(
+          GuidedVoiceController(_SilentGuidedVoiceIO(), flowSource: 'settings'),
+        ),
+        scaffold: false,
+      );
+      await a.shot(
+        'Open Voice Profile from Settings: first prompt, progress and Start',
+      );
     },
   ),
   AuditScenario(
@@ -267,18 +347,34 @@ final settingsPagesScenarios = <AuditScenario>[
       final flow = GuidedVoiceController(_SilentGuidedVoiceIO(), flowSource: 'settings')
         ..promptIndex = GuidedVoiceController.promptCount
         ..answers.addAll([
-          IntroductionAnswer('I live in Austin and work on developer tools.', Uint8List(0), 'answer-1'),
-          IntroductionAnswer('Launch my own studio next year.', Uint8List(0), 'answer-2', isGoal: true),
+          IntroductionAnswer(
+            'I live in Austin and work on developer tools.',
+            Uint8List(0),
+            'answer-1',
+          ),
+          IntroductionAnswer(
+            'Launch my own studio next year.',
+            Uint8List(0),
+            'answer-2',
+            isGoal: true,
+          ),
         ]);
       await a.pump(_voiceProfile(flow), scaffold: false);
-      await a.shot('Every prompt answered: the review lists each answer, editable, with Save & Finish');
+      await a.shot(
+        'Every prompt answered: the review lists each answer, editable, with Save & Finish',
+      );
     },
   ),
 ];
 
 Widget _voiceProfile(GuidedVoiceController flow) => Scaffold(
       appBar: AppBar(leading: const OmiBackButton()),
-      body: SpeechProfileWidget(flowSource: 'settings', controller: flow, goNext: () {}, onSkip: () {}),
+      body: SpeechProfileWidget(
+        flowSource: 'settings',
+        controller: flow,
+        goNext: () {},
+        onSkip: () {},
+      ),
     );
 
 class _NoNumbersPhoneCallProvider extends PhoneCallProvider {
@@ -298,7 +394,10 @@ class _SilentGuidedVoiceIO implements GuidedVoiceIO {
   @override
   Future<void> prepare() async {}
   @override
-  Future<void> start(void Function(Uint8List) onAudio, VoidCallback onInterrupted) async {}
+  Future<void> start(
+    void Function(Uint8List) onAudio,
+    VoidCallback onInterrupted,
+  ) async {}
   @override
   Future<void> stop() async {}
   @override
@@ -320,11 +419,22 @@ class _PlansHost extends StatefulWidget {
 }
 
 class _PlansHostState extends State<_PlansHost> with TickerProviderStateMixin {
-  late final _wave = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-  late final _arrow = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
-  late final _notes = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-  late final _arrowAnimation =
-      Tween<double>(begin: 0, end: 10).animate(CurvedAnimation(parent: _arrow, curve: Curves.easeInOut));
+  late final _wave = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 2),
+  )..repeat();
+  late final _arrow = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 800),
+  )..repeat();
+  late final _notes = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 3),
+  )..repeat();
+  late final _arrowAnimation = Tween<double>(
+    begin: 0,
+    end: 10,
+  ).animate(CurvedAnimation(parent: _arrow, curve: Curves.easeInOut));
 
   @override
   void dispose() {
@@ -336,7 +446,11 @@ class _PlansHostState extends State<_PlansHost> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) => PlansSheet(
-      waveController: _wave, notesController: _notes, arrowController: _arrow, arrowAnimation: _arrowAnimation);
+        waveController: _wave,
+        notesController: _notes,
+        arrowController: _arrow,
+        arrowAnimation: _arrowAnimation,
+      );
 }
 
 PeopleProvider _auditPeople() {
@@ -359,8 +473,12 @@ PeopleProvider _auditPeople() {
         createdAt: DateTime.utc(2026, 9, 1),
         updatedAt: DateTime.utc(2026, 9, 1),
         voiceReadiness: voice,
-        speechSamples: [for (var i = 0; i < samples; i++) 'https://example.invalid/sample-$i.wav'],
-        speechSampleTranscripts: [for (var i = 0; i < samples; i++) 'Let us move the review to Thursday'],
+        speechSamples: [
+          for (var i = 0; i < samples; i++) 'https://example.invalid/sample-$i.wav',
+        ],
+        speechSampleTranscripts: [
+          for (var i = 0; i < samples; i++) 'Let us move the review to Thursday',
+        ],
         conversationCount: count,
         lastHeardAt: daysAgo == null ? null : now.subtract(Duration(days: daysAgo)),
         talkSeconds: count == null ? null : count * 245.0,
@@ -376,46 +494,89 @@ PeopleProvider _auditPeople() {
   return PeopleProvider(
     setPinned: (_, __) async => true,
     deletePersonById: (_) async => true,
-    loadPeople: () async => [
-      person('p-maya', 'Maya Chen',
+    loadPeople: () async => PeopleListResponse(
+      people: [
+        person(
+          'p-maya',
+          'Maya Chen',
           count: 24,
           daysAgo: 0,
           voice: 'ready',
           samples: 1,
           confidence: confirmed,
           reasons: {'manual_labels': 6, 'voice_ready': 1},
-          pinned: true),
-      person('p-jordan', 'Jordan Lee',
+          pinned: true,
+        ),
+        person(
+          'p-jordan',
+          'Jordan Lee',
           count: 9,
           daysAgo: 1,
           voice: 'ready',
           samples: 2,
           confidence: confirmed,
           reasons: {'manual_labels': 4, 'voice_ready': 1},
-          pinned: true),
-      person('p-because', 'Because', count: 3, daysAgo: 5, reasons: {'auto_unconfirmed': 3, 'never_confirmed': 1}),
-      person('p-sam', 'Sam Okafor',
+          pinned: true,
+        ),
+        person(
+          'p-because',
+          'Because',
+          count: 3,
+          daysAgo: 5,
+          reasons: {'auto_unconfirmed': 3, 'never_confirmed': 1},
+        ),
+        person(
+          'p-sam',
+          'Sam Okafor',
           count: 5,
           daysAgo: 7,
           voice: 'ready',
           samples: 1,
           confidence: likely,
-          reasons: {'card_picks': 2, 'auto_corrected': 1, 'voice_ready': 1, 'auto_unconfirmed': 3},
-          labelsToConfirm: 1),
-      person('p-alex', 'Alex Rivera',
+          reasons: {
+            'card_picks': 2,
+            'auto_corrected': 1,
+            'voice_ready': 1,
+            'auto_unconfirmed': 3,
+          },
+          labelsToConfirm: 1,
+        ),
+        person(
+          'p-alex',
+          'Alex Rivera',
           count: 4,
           daysAgo: 9,
           voice: 'ready',
           confidence: likely,
           reasons: {'manual_labels': 1, 'voice_ready': 1},
-          labelsToConfirm: 1),
-      person('p-american', 'American', count: 1, daysAgo: 13, reasons: {'auto_corrected': 1, 'never_confirmed': 1}),
-      person('p-cs', 'Cs', count: 2, daysAgo: 18),
-      person('p-priya', 'Priya Natarajan',
-          count: 2, daysAgo: 31, confidence: likely, reasons: {'manual_labels': 2, 'needs_voice': 1}),
-      person('p-leo', 'Leo', count: 1, daysAgo: 59, reasons: {'auto_unconfirmed': 1, 'never_confirmed': 1}),
-      person('p-ines', 'Inês Moreira', count: 0),
-      person('p-thanks', 'Thanks', count: 0),
-    ],
+          labelsToConfirm: 1,
+        ),
+        person(
+          'p-american',
+          'American',
+          count: 1,
+          daysAgo: 13,
+          reasons: {'auto_corrected': 1, 'never_confirmed': 1},
+        ),
+        person('p-cs', 'Cs', count: 2, daysAgo: 18),
+        person(
+          'p-priya',
+          'Priya Natarajan',
+          count: 2,
+          daysAgo: 31,
+          confidence: likely,
+          reasons: {'manual_labels': 2, 'needs_voice': 1},
+        ),
+        person(
+          'p-leo',
+          'Leo',
+          count: 1,
+          daysAgo: 59,
+          reasons: {'auto_unconfirmed': 1, 'never_confirmed': 1},
+        ),
+        person('p-ines', 'Inês Moreira', count: 0),
+        person('p-thanks', 'Thanks', count: 0),
+      ],
+    ),
   );
 }

@@ -93,10 +93,7 @@ void main() {
     test('discarded, locked and in-flight rows stay quiet', () {
       expect(_conversation(summaryRetryable: true, discarded: true).showsSummaryRetry, isFalse);
       expect(_conversation(summaryRetryable: true, isLocked: true).showsSummaryRetry, isFalse);
-      expect(
-        _conversation(summaryRetryable: true, status: ConversationStatus.processing).showsSummaryRetry,
-        isFalse,
-      );
+      expect(_conversation(summaryRetryable: true, status: ConversationStatus.processing).showsSummaryRetry, isFalse);
     });
   });
 
@@ -135,9 +132,12 @@ void main() {
 
     test('date fallback respects the supplied 24-hour formatter without changing the model', () {
       final conversation = _conversation(createdAt: DateTime(2026, 10, 1, 15, 12));
-      final title = conversationDisplayTitle(conversation, l10n,
-          surface: ConversationUntitledRenderedSurface.list,
-          dates: OmiDateFormat(locale: const Locale('en'), use24HourFormat: true, l10n: l10n));
+      final title = conversationDisplayTitle(
+        conversation,
+        l10n,
+        surface: ConversationUntitledRenderedSurface.list,
+        dates: OmiDateFormat(locale: const Locale('en'), use24HourFormat: true, l10n: l10n),
+      );
       expect(title, 'Oct 1, 2026 15:12');
       expect(conversation.structured.title, isEmpty);
       expect(conversation.showsSummaryRetry, isFalse);
@@ -158,8 +158,11 @@ void main() {
       for (var i = 0; i < 3; i++) {
         expect(
           conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.list),
-          OmiDateFormat(locale: const Locale('en'), use24HourFormat: false, l10n: l10n)
-              .dateTime(conversation.createdAt.toLocal()),
+          OmiDateFormat(
+            locale: const Locale('en'),
+            use24HourFormat: false,
+            l10n: l10n,
+          ).dateTime(conversation.createdAt.toLocal()),
         );
       }
       conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.map);

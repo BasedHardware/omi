@@ -12360,4 +12360,112 @@ class AppLocalizationsIt extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Ultimi $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'Impossibile connettersi. Controlla la connessione e riprova.';
+
+  @override
+  String get chatReplyServerError => 'Qualcosa è andato storto da parte nostra. Riprova.';
+
+  @override
+  String get chatReplyTimeout => 'La risposta ha impiegato troppo tempo. Riprova.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Non hai effettuato l\'accesso. Accedi e riprova.';
+
+  @override
+  String get chatAppsLoadFailed => 'Impossibile caricare le app di chat. Riprova.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voce';
+
+  @override
+  String get assistantVoice => 'Voce dell\'assistente';
+
+  @override
+  String get voiceSharedAcrossDevices => 'La voce scelta è condivisa tra mobile e desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Leggi le risposte della chat ad alta voce';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Parla solo quando \"Risposta vocale\" lo consente.';
+
+  @override
+  String get voicePreviewSample => 'Ciao, sono Omi. Questa è la mia voce.';
+
+  @override
+  String get peopleStatsIncomplete => 'I conteggi potrebbero essere incompleti.';
+
+  @override
+  String get previousDay => 'Giorno precedente';
+
+  @override
+  String get nextDay => 'Giorno successivo';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nessuna attività il $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Rielaborazione della conversazione…';
+
+  @override
+  String get conversationReprocessed => 'Conversazione aggiornata';
+
+  @override
+  String get loadingTranscript => 'Caricamento della trascrizione…';
+
+  @override
+  String get transcriptLoadFailed => 'Impossibile caricare la trascrizione.';
+
+  @override
+  String get processingConversationProgress => 'Elaborazione della conversazione…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Impossibile elaborare questa conversazione.';
+
+  @override
+  String get waitForReprocessing => 'Attendi il termine della rielaborazione.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Relatore';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Le voci non sono separate tra le registrazioni.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Informazioni sulle etichette dei relatori';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi non è riuscito a distinguere le altre voci tra le registrazioni. Tocca un\'etichetta di relatore per dare un nome a chi parla.';
+
+  @override
+  String get nameSpeakerTitle => 'Nomina relatore';
+
+  @override
+  String get playbackPreparingAudio => 'Preparazione dell\'audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Torna all\'attuale';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio non disponibile';
+
+  @override
+  String get playbackAudioLoadFailed => 'Impossibile caricare l\'audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Controlla la connessione';
+
+  @override
+  String get forYou => 'Per te';
+
+  @override
+  String get stopThese => 'Interrompi questi';
+
+  @override
+  String get dismiss => 'Ignora';
 }

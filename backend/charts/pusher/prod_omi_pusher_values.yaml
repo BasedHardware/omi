@@ -115,8 +115,37 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: PROACTIVITY_REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: REDIS_DB_HOST
+  - name: PROACTIVITY_REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: PROACTIVITY_REDIS_PORT
+    value: "13151"
+  - name: MENTOR_PIPELINE
+    value: cohort
+  - name: POSTHOG_HOST
+    value: https://us.posthog.com
+  - name: POSTHOG_PROJECT_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: POSTHOG_PROJECT_API_KEY
+  - name: MENTOR_GATE_DEBOUNCE_ENABLED
+    value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
+  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+    value: "true"
+  - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "shadow"
   - name: FREE_TIER_LOCAL_PROCESSING
     value: "false"
   - name: FREE_TIER_EMERGENCY_STOP
@@ -152,6 +181,10 @@ env:
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
+    value: "false"
+  - name: AUDIO_TIMELINE_SPANS
+    value: "true"
+  - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "false"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
@@ -212,7 +245,7 @@ env:
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
-    value: "1"
+    value: "10"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP

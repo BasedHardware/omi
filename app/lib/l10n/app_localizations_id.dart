@@ -6912,12 +6912,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Kesalahan membuka pemilih file';
+    return 'Kesalahan membuka pemilih file: $message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Kesalahan memilih gambar';
+    return 'Kesalahan memilih gambar: $error';
   }
 
   @override
@@ -6928,7 +6928,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Kesalahan memilih thumbnail';
+    return 'Kesalahan memilih thumbnail: $error';
   }
 
   @override
@@ -7054,12 +7054,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String importErrorOpeningFilePicker(String message) {
-    return 'Kesalahan membuka pemilih file';
+    return 'Kesalahan membuka pemilih file: $message';
   }
 
   @override
   String importErrorGeneric(String error) {
-    return 'Kesalahan mengimpor file';
+    return 'Kesalahan: $error';
   }
 
   @override
@@ -7067,7 +7067,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String mergeConversationsSuccessBody(int count) {
-    return 'Percakapan Anda telah berhasil digabungkan';
+    return '$count percakapan berhasil digabungkan';
   }
 
   @override
@@ -7075,12 +7075,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String deviceDisconnectedTitle(String deviceName) {
-    return 'Perangkat Terputus';
+    return '$deviceName Terputus';
   }
 
   @override
   String deviceDisconnectedBody(String deviceName) {
-    return 'Perangkat Omi Anda telah terputus';
+    return 'Silakan hubungkan kembali untuk terus menggunakan $deviceName Anda.';
   }
 
   @override
@@ -7136,7 +7136,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String failedToConnectServiceWithError(String serviceName, String error) {
-    return 'Gagal terhubung ke layanan: $error';
+    return 'Gagal terhubung ke $serviceName: $error';
   }
 
   @override
@@ -12303,4 +12303,112 @@ class AppLocalizationsId extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return '$duration terakhir';
   }
+
+  @override
+  String get chatReplyOffline => 'Tidak dapat terhubung. Periksa koneksi Anda dan coba lagi.';
+
+  @override
+  String get chatReplyServerError => 'Terjadi kesalahan di sisi kami. Silakan coba lagi.';
+
+  @override
+  String get chatReplyTimeout => 'Respons memakan waktu terlalu lama. Silakan coba lagi.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Anda belum masuk. Masuk dan coba lagi.';
+
+  @override
+  String get chatAppsLoadFailed => 'Tidak dapat memuat aplikasi chat. Silakan coba lagi.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Suara';
+
+  @override
+  String get assistantVoice => 'Suara Asisten';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Pilihan suara Anda dibagikan di seluler dan desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Bacakan balasan chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hanya berbicara saat Respons Suara mengizinkannya.';
+
+  @override
+  String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
+
+  @override
+  String get peopleStatsIncomplete => 'Jumlah mungkin belum lengkap.';
+
+  @override
+  String get previousDay => 'Hari sebelumnya';
+
+  @override
+  String get nextDay => 'Hari berikutnya';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Tidak ada tugas pada $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Memproses ulang percakapan…';
+
+  @override
+  String get conversationReprocessed => 'Percakapan diperbarui';
+
+  @override
+  String get loadingTranscript => 'Memuat transkrip…';
+
+  @override
+  String get transcriptLoadFailed => 'Tidak dapat memuat transkrip.';
+
+  @override
+  String get processingConversationProgress => 'Memproses percakapan…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Percakapan ini tidak dapat diproses.';
+
+  @override
+  String get waitForReprocessing => 'Tunggu hingga pemrosesan ulang selesai.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Pembicara';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Pembicara tidak dipisahkan di seluruh rekaman.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Tentang Label Pembicara';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi tidak dapat membedakan suara lain di seluruh rekaman. Ketuk label pembicara untuk menamai siapa yang berbicara.';
+
+  @override
+  String get nameSpeakerTitle => 'Beri Nama Pembicara';
+
+  @override
+  String get playbackPreparingAudio => 'Menyiapkan Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Kembali ke Saat Ini';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio Tidak Tersedia';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio Tidak Dapat Dimuat';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Periksa Koneksi';
+
+  @override
+  String get forYou => 'Untuk Anda';
+
+  @override
+  String get stopThese => 'Hentikan Ini';
+
+  @override
+  String get dismiss => 'Tutup';
 }

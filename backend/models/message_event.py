@@ -239,3 +239,17 @@ class ProactiveMessageEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
+
+class ProactivityV2Event(MessageEvent):
+    """Identity-only wakeup; clients fetch authenticated feed content."""
+
+    event_type: str = "proactivity_v2"
+    item_id: str
+    target_kind: str
+    target_id: str
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = j.pop("event_type")
+        return j

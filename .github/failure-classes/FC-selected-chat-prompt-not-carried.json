@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-selected-chat-prompt-not-carried",
+  "violated_contract": "A selected chat app's authored identity and style instructions must reach the active system prompt on every turn without replacing shared safety, authorization, retrieval scope, conversation history, memory, file, or tool rules. Applying the authored prompt only to the greeting, reducing later turns to catalog name/description beside a conflicting default identity, or routing personas through a tool-less replacement prompt breaks this contract.",
+  "canonical_prevention": "Route chat and persona apps through the same tool-enabled agentic path and append one selected-app identity/style overlay at the shared system-prompt assembly boundary, independently of remote template placeholders. Behavioral tests patch the agentic runner seam to capture the real agentic path's runner input — the second-turn system prompt, history, tools and scope — and preserve exact default-chat rendering.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_chat_app_personality.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/llm/chat.py",
+    "backend/utils/retrieval/graph.py",
+    "app/lib/backend/schema/app.dart"
+  ],
+  "status": "open"
+}

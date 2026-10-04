@@ -37,6 +37,7 @@ import utils.llm.working_observations as working_observations  # noqa: E402
 from models.transcript_segment import TranscriptSegment  # noqa: E402
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix  # noqa: E402
 from utils.llm.gateway_resilience import DEFAULT_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS  # noqa: E402
+from utils.llm.memories import extract_canonical_l1_memory_candidates  # noqa: E402
 
 PROVIDER_FIRST_BYTE_SECONDS = 25.0
 _REQUEST = httpx.Request("POST", "https://gateway.invalid/v1/chat/completions")
@@ -295,8 +296,6 @@ def test_foreground_deadline_stays_under_the_finalization_budget():
 
 
 def test_wrapper_seam_resolves_the_same_deadline_for_voice_transcripts(resolved_deadlines):
-    from utils.llm.memories import extract_canonical_l1_memory_candidates
-
     candidates = extract_canonical_l1_memory_candidates(
         "uid-l1-invariance",
         "conversation-l1-invariance",

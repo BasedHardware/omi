@@ -12361,4 +12361,112 @@ class AppLocalizationsCa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'Últims $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'No s\'ha pogut connectar. Comprova la connexió i torna-ho a provar.';
+
+  @override
+  String get chatReplyServerError => 'Alguna cosa ha fallat per part nostra. Torna-ho a provar.';
+
+  @override
+  String get chatReplyTimeout => 'La resposta ha trigat massa. Torna-ho a provar.';
+
+  @override
+  String get chatReplyNotSignedIn => 'No has iniciat sessió. Inicia sessió i torna-ho a provar.';
+
+  @override
+  String get chatAppsLoadFailed => 'No s\'han pogut carregar les apps de xat. Torna-ho a provar.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Veu';
+
+  @override
+  String get assistantVoice => 'Veu de l\'assistent';
+
+  @override
+  String get voiceSharedAcrossDevices => 'La veu que tries es comparteix entre el mòbil i l\'escriptori.';
+
+  @override
+  String get readChatRepliesAloud => 'Llegeix les respostes del xat en veu alta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Només parla quan la \"Resposta de veu\" ho permet.';
+
+  @override
+  String get voicePreviewSample => 'Hola, soc l\'Omi. Aquesta és la meva veu.';
+
+  @override
+  String get peopleStatsIncomplete => 'Els recomptes poden ser incomplets.';
+
+  @override
+  String get previousDay => 'Dia anterior';
+
+  @override
+  String get nextDay => 'Dia següent';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Cap tasca el $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'S\'està tornant a processar la conversa…';
+
+  @override
+  String get conversationReprocessed => 'Conversa actualitzada';
+
+  @override
+  String get loadingTranscript => 'S\'està carregant la transcripció…';
+
+  @override
+  String get transcriptLoadFailed => 'No s\'ha pogut carregar la transcripció.';
+
+  @override
+  String get processingConversationProgress => 'S\'està processant la conversa…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'No s\'ha pogut processar aquesta conversa.';
+
+  @override
+  String get waitForReprocessing => 'Espera que acabi el reprocessament.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Parlant';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Les veus no estan separades entre enregistraments.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Quant a les etiquetes de parlant';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi no ha pogut distingir les altres veus entre els enregistraments. Toca una etiqueta de parlant per posar nom a qui parla.';
+
+  @override
+  String get nameSpeakerTitle => 'Anomena el parlant';
+
+  @override
+  String get playbackPreparingAudio => 'S\'està preparant l\'àudio…';
+
+  @override
+  String get playbackBackToCurrent => 'Torna a l\'actual';
+
+  @override
+  String get playbackAudioUnavailable => 'Àudio no disponible';
+
+  @override
+  String get playbackAudioLoadFailed => 'No s\'ha pogut carregar l\'àudio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Comprova la connexió';
+
+  @override
+  String get forYou => 'Per a tu';
+
+  @override
+  String get stopThese => 'Atura aquests';
+
+  @override
+  String get dismiss => 'Descarta';
 }

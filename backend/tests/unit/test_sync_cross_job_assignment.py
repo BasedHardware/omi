@@ -496,9 +496,12 @@ def _smart_merge_pair(store):
 def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
     store = StrictFirestore()
     _smart_merge_pair(store)
+    from tests.unit.test_sync_lineage_dedupe_replay import prove
+
     repeat = chunk('wal-repeat', 1600, text='The pasta place is still open.')
+    prove(repeat, store.rows[('users', 'u', 'conversations', 'p')])
     result, created, survivors = intake(store, repeat, target_id='n')
-    assert result['id'] == 'p' and not created and not survivors  # same speech, deduplicated
+    assert result['id'] == 'p' and not created and len(survivors) == 1  # receipt-only proof drops nothing
     assert result['sync_live_target'] is True
     fresh = chunk('wal-new', 1620, text='Let us order the mushroom one.')
     result, created, survivors = intake(store, fresh, target_id='n')
@@ -506,16 +509,20 @@ def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
     assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
 
 
-def test_repeated_late_repair_to_revisioned_smart_survivor_deduplicates():
+def test_repeated_late_repair_to_revisioned_smart_survivor_appends():
     store = StrictFirestore()
     _smart_merge_pair(store)
     store.rows[('users', 'u', 'conversations', 'p')]['sync_content_revision'] = 1
+    from tests.unit.test_sync_lineage_dedupe_replay import prove
+
     first = chunk('wal-repeat-1', 1600, text='The pasta place is still open.')
     second = chunk('wal-repeat-2', 1600, text='The pasta place is still open.')
+    prove(first, store.rows[('users', 'u', 'conversations', 'p')])
     result, created, survivors = intake(store, first, target_id='n')
-    assert result['id'] == 'p' and not created and not survivors
+    assert result['id'] == 'p' and not created and len(survivors) == 1
+    prove(second, store.rows[('users', 'u', 'conversations', 'p')])
     result, created, survivors = intake(store, second, target_id='n')
-    assert result['id'] == 'p' and not created and not survivors
+    assert result['id'] == 'p' and not created and len(survivors) == 1
     assert result['sync_live_target'] is True
 
 
@@ -531,5 +538,6 @@ def test_sync_bridge_donor_targets_still_fall_back_to_temporal_assignment():
     store = StrictFirestore()
     _smart_merge_pair(store)
     store.rows[('users', 'u', 'conversations', 'n')].pop('smart_merge')
+    store.rows[('users', 'u', 'conversations', 'p')].pop('smart_merge')
     result, created, _ = intake(store, chunk('wal-other', 1620), target_id='n')
     assert created and result['id'] == 'wal-other'

@@ -12375,4 +12375,112 @@ class AppLocalizationsTa extends AppLocalizations {
   String diagnosticsLastDuration(String duration) {
     return 'கடந்த $duration';
   }
+
+  @override
+  String get chatReplyOffline => 'இணைக்க முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get chatReplyServerError => 'எங்கள் பக்கத்தில் ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get chatReplyTimeout => 'பதில் அதிக நேரம் எடுத்தது. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get chatReplyNotSignedIn => 'நீங்கள் உள்நுழையவில்லை. உள்நுழைந்து மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get chatAppsLoadFailed => 'அரட்டை செயலிகளை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'குரல்';
+
+  @override
+  String get assistantVoice => 'உதவியாளர் குரல்';
+
+  @override
+  String get voiceSharedAcrossDevices => 'நீங்கள் தேர்ந்தெடுத்த குரல் மொபைல் மற்றும் டெஸ்க்டாப்பில் பகிரப்படும்.';
+
+  @override
+  String get readChatRepliesAloud => 'அரட்டை பதில்களை சத்தமாக வாசி';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"குரல் பதில்\" அனுமதிக்கும்போது மட்டுமே பேசும்.';
+
+  @override
+  String get voicePreviewSample => 'ஹாய், நான் Omi. இது என் குரல்.';
+
+  @override
+  String get peopleStatsIncomplete => 'எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.';
+
+  @override
+  String get previousDay => 'முந்தைய நாள்';
+
+  @override
+  String get nextDay => 'அடுத்த நாள்';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date அன்று பணிகள் இல்லை';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'உரையாடல் மீண்டும் செயலாக்கப்படுகிறது…';
+
+  @override
+  String get conversationReprocessed => 'உரையாடல் புதுப்பிக்கப்பட்டது';
+
+  @override
+  String get loadingTranscript => 'டிரான்ஸ்கிரிப்ட் ஏற்றப்படுகிறது…';
+
+  @override
+  String get transcriptLoadFailed => 'டிரான்ஸ்கிரிப்டை ஏற்ற முடியவில்லை.';
+
+  @override
+  String get processingConversationProgress => 'உரையாடல் செயலாக்கப்படுகிறது…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'இந்த உரையாடலைச் செயலாக்க முடியவில்லை.';
+
+  @override
+  String get waitForReprocessing => 'மீண்டும் செயலாக்கம் முடியும் வரை காத்திருக்கவும்.';
+
+  @override
+  String get unnamedSpeakerLabel => 'பேச்சாளர்';
+
+  @override
+  String get unresolvedSpeakersNotice => 'பதிவுகளில் பேசுபவர்கள் பிரிக்கப்படவில்லை.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'பேச்சாளர் லேபிள்கள் பற்றி';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'பதிவுகளில் மற்ற குரல்களை Omi வேறுபடுத்த முடியவில்லை. யார் பேசுகிறார்கள் எனப் பெயரிட பேச்சாளர் லேபிளைத் தட்டவும்.';
+
+  @override
+  String get nameSpeakerTitle => 'பேச்சாளருக்கு பெயரிடவும்';
+
+  @override
+  String get playbackPreparingAudio => 'ஆடியோ தயாராகிறது…';
+
+  @override
+  String get playbackBackToCurrent => 'தற்போதையதற்குத் திரும்பு';
+
+  @override
+  String get playbackAudioUnavailable => 'ஆடியோ கிடைக்கவில்லை';
+
+  @override
+  String get playbackAudioLoadFailed => 'ஆடியோவை ஏற்ற முடியவில்லை';
+
+  @override
+  String get playbackAudioNetworkFailed => 'இணைப்பைச் சரிபார்க்கவும்';
+
+  @override
+  String get forYou => 'உங்களுக்காக';
+
+  @override
+  String get stopThese => 'இவற்றை நிறுத்து';
+
+  @override
+  String get dismiss => 'மறை';
 }

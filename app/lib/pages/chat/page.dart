@@ -121,8 +121,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     });
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       var provider = context.read<MessageProvider>();
       _messageProvider = provider;
+      provider.readAloud.active = true;
       // Listen for quota exceeded from any send path (text or voice)
       provider.addListener(_onMessageProviderChanged);
       // Every entry resumes the current conversation, including while a reply or voice send is active.
@@ -203,8 +205,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final readAloud = _messageProvider?.readAloud;
+    if (readAloud == null) return;
+    readAloud.active = state == AppLifecycleState.resumed;
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _messageProvider?.readAloud.active = false;
     _messageProvider?.removeListener(_onMessageProviderChanged);
     _cancelOwnedLifecycleTimers();
     _latestJumpIdleTimer?.cancel();
@@ -314,10 +324,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                   label: context.l10n.deletingMessages,
                                 )
                               : (provider.messages.isEmpty)
-                                  ? ChatGreeting(
-                                      isConnected: connectivityProvider.isConnected,
-                                      name: prefs.givenName,
-                                    )
+                                  ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
                                   : _buildTranscript(provider),
                     ),
                     _buildComposer(context, provider, connectivityProvider),
@@ -646,6 +653,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                   reason: reason,
                                 ),
                                 replyFailed: provider.isReplyFailed(message),
+                                replyFailure: provider.replyFailure(message),
                                 onRetry: provider.canRetryReply(message) ? () => _retryReply(message) : null,
                               )
                             : HumanMessage(
@@ -1024,7 +1032,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Guard against re-entry (rapid double-tap of send, voice→transcribeSuccess
     // race firing onTranscriptReady twice, etc.). Without this the chat could
     // submit the same text twice and the AI replies twice.
-    if (provider.chatMutationInProgress || provider.isLoadingMessages) return;
+    // `isSwitchingChatApp` fences the whole app-switch window (raised when the
+    // selection changes, cleared when the bootstrap read settles): a send in
+    // that window would append the turn to the previous app's transcript while
+    // the picker already shows the new app. Same-thread loading does not block
+    // sending.
+    if (provider.chatMutationInProgress || provider.isClearingChat || provider.isSwitchingChatApp) return;
     String? currentContext = _selectedContext;
     setState(() {
       _selectedContext = null;
@@ -1036,6 +1049,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     }
 
     provider.setSendingMessage(true);
+    provider.beginChatTurn();
     provider.addMessageLocally(text);
     textController.clear();
 
@@ -1052,7 +1066,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   /// Sends the message behind a failed reply again (the reply's Try Again).
   Future<void> _retryReply(ServerMessage failed) async {
     final provider = context.read<MessageProvider>();
-    if (provider.chatMutationInProgress || provider.isLoadingMessages) return;
+    if (provider.chatMutationInProgress || provider.isClearingChat || provider.isSwitchingChatApp) return;
     provider.setSendingMessage(true);
     _resumeFollowingAndScroll(animated: true);
     await provider.retryFailedReply(failed);
@@ -1335,6 +1349,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       return;
     }
 
+    // Fence sends for the whole switch, starting here: after the selection
+    // changes below there is a deliberate pre-read delay, and a send landing
+    // in that window would target the new app while the old app's transcript
+    // is still on screen (the later bootstrap read then returns early because
+    // the send made chatMutationInProgress true, leaving the mixed transcript).
+    messageProvider.markPendingAppSwitch();
+    messageProvider.notifySwitchingChatApp();
+
     // Set the selected app
     appProvider.setSelectedChatAppId(appId);
 
@@ -1475,13 +1497,7 @@ class _SelectedTextChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ExcludeSemantics(
-              child: Icon(
-                Icons.subdirectory_arrow_right,
-                size: 14,
-                color: OmiColors.textSecondary,
-              ),
-            ),
+            ExcludeSemantics(child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary)),
             const SizedBox(width: OmiSpacing.xs),
             Flexible(
               child: Text(

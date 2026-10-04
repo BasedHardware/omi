@@ -196,7 +196,10 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       final sid = newShareId();
       OmiHaptics.light();
       final outcome = await SharePlus.instance.share(
-        ShareParams(text: tagShareUrl(url, sid: sid), sharePositionOrigin: shareSheetOrigin()),
+        ShareParams(
+          text: tagShareUrl(url, sid: sid),
+          sharePositionOrigin: shareSheetOrigin(),
+        ),
       );
       final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
       PlatformManager.instance.analytics.track(
@@ -334,21 +337,26 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 ),
               ),
             ),
-            Wrap(spacing: OmiSpacing.xs, children: [
-              for (final days in [0, 1, 7])
-                ActionChip(
-                  key: ValueKey('task_quick_date_$days'),
-                  label: Text(days == 0
-                      ? l10n.today
-                      : days == 1
-                          ? l10n.tomorrow
-                          : l10n.nextWeek),
-                  onPressed: _isSaving ? null : () => _selectQuickDate(days),
-                  backgroundColor: OmiColors.surface2,
-                  labelStyle: OmiType.footnote,
-                  side: BorderSide(color: OmiColors.border),
-                ),
-            ]),
+            Wrap(
+              spacing: OmiSpacing.xs,
+              children: [
+                for (final days in [0, 1, 7])
+                  ActionChip(
+                    key: ValueKey('task_quick_date_$days'),
+                    label: Text(
+                      days == 0
+                          ? l10n.today
+                          : days == 1
+                              ? l10n.tomorrow
+                              : l10n.nextWeek,
+                    ),
+                    onPressed: _isSaving ? null : () => _selectQuickDate(days),
+                    backgroundColor: OmiColors.surface2,
+                    labelStyle: OmiType.footnote,
+                    side: BorderSide(color: OmiColors.border),
+                  ),
+              ],
+            ),
             // The counter only matters near the limit: it shows in the last 10%.
             if (_textController.text.characters.length >= _kTaskCounterThreshold)
               Align(

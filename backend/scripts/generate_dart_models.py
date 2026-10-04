@@ -15,6 +15,16 @@ DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.js
 DEFAULT_OUTPUT_DIR = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen'
 
 SCHEMA_GROUPS = {
+    'proactivity': {
+        'output': DEFAULT_OUTPUT_DIR / 'proactivity_wire.g.dart',
+        'schemas': (
+            'ProactivityTarget',
+            'ProactivityFeedItem',
+            'ProactivityFeedResponse',
+            'ProactivityOutcomeRequest',
+            'ProactivityOutcomeResponse',
+        ),
+    },
     'frame_requests': {
         'output': DEFAULT_OUTPUT_DIR / 'frame_requests_wire.g.dart',
         'schemas': (
@@ -291,6 +301,9 @@ SCHEMA_GROUPS = {
             'RebuildResponse',
             'ErrorResponse',
             'StatusResponse',
+            'TtsVoice',
+            'TtsVoiceCatalog',
+            'AssistantVoicePreference',
         ),
     },
     'wrapped_task_integrations': {
