@@ -34,6 +34,7 @@ def _fetch_review_config(platform: str, firestore_client: Any = None) -> dict[st
             client = firestore_client
         else:
             from database._client import db
+
             client = db
         doc = client.collection("app_review_config").document(platform).get()
         if not getattr(doc, "exists", False):
@@ -109,4 +110,3 @@ def should_hide_subscription_ui(
     except Exception as e:
         logger.warning(f"Error evaluating should_hide_subscription_ui: {e}")
         return False
-
