@@ -133,7 +133,7 @@ def _distribution(metric, lane, phase):
 
 
 def export_snapshot():
-    """Best-effort cumulative distributions, at most once/minute per instance.
+    """Best-effort cumulative distributions, at most once/five minutes per instance.
 
     Runtime ADC needs monitoring.timeSeries.create. Only fixed metric labels and
     platform process identity leave the instance. Failed writes are retried on
@@ -144,7 +144,7 @@ def export_snapshot():
         return
     try:
         now = time.monotonic()
-        if now - _last_export < 60:
+        if now - _last_export < 300:
             return
         project = os.getenv('SYNC_PHASE_METRICS_PROJECT', '')
         service = os.getenv('K_SERVICE', '')

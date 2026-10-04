@@ -10,7 +10,7 @@ stackdriver:
     filters:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend","backend-sync","backend-sync-backfill")'
       - 'custom.googleapis.com/omi_sync_phase_:resource.labels.job=one_of("backend-sync","backend-sync-backfill")'
-    interval: '2m'
+    interval: '10m'
     offset: '1m'
 
 serviceAccount:

@@ -98,9 +98,9 @@ def test_export_is_aggregate_rate_limited_and_best_effort(monkeypatch):
         value = series['points'][0]['value']['distributionValue']
         assert sum(map(int, value['bucketCounts'])) == int(value['count'])
 
-    monkeypatch.setattr(metrics.time, 'monotonic', lambda: 1061)
+    monkeypatch.setattr(metrics.time, 'monotonic', lambda: 1301)
     monkeypatch.setattr(
         metrics, '_session', SimpleNamespace(post=lambda *a, **kw: (_ for _ in ()).throw(RuntimeError()))
     )
     metrics.export_snapshot()  # export failure cannot turn a successful job into a retry
-    assert metrics._last_export == 1061
+    assert metrics._last_export == 1301

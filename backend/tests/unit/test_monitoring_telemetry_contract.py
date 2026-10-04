@@ -180,7 +180,7 @@ def test_cloud_run_metrics_exporter_is_scoped_and_rate_limited(path, project_id,
     metrics = values['stackdriver']['metrics']
     assert values['stackdriver']['projectIds'] == [project_id]
     assert metrics['prefixes'] == ['prometheus.googleapis.com/omi_', 'custom.googleapis.com/omi_sync_phase_']
-    assert metrics['interval'] == '2m'
+    assert metrics['interval'] == '10m'
     assert metrics['offset'] == '1m'
     assert metrics['filters'] == [
         CLOUD_RUN_EXPORTER_FILTER,
