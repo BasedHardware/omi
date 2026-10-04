@@ -57,8 +57,11 @@ reject empty retries, drop invalid claim entries and emit bounded violation-clas
 fallback telemetry. On response serialization, the backend Conversation model
 keeps only claims whose target resolves and whose exact text remains in that
 field. The same pure filter runs after locked-content render projections.
-Edits and deleted sections therefore drop stale annotations on read, through
-every existing write path, with no database changes or additional reads.
+Summary/title edits and deleted sections drop stale annotations on read,
+through every existing write path, with no additional reads. Transcript-text edits
+also drop claims referring to the edited speech segment in the already-existing
+transaction that clears source_segment_ids; no new read or transaction is added.
+Other database write paths remain unchanged.
 Coverage gaps and residual vacuity never fail processing. Episode IDs are stripped
 from visible prose without converting them to transcript citations.
 Existing presentation repair remains a separate bounded guard.

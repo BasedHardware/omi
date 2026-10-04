@@ -38,3 +38,20 @@ def current_note_claims(structured: Any) -> list[Any]:
         if isinstance(value, str) and text in value:
             kept.append(claim)
     return kept
+
+
+def claim_references_segment(claim: Any, segment_id: str) -> bool:
+    """Whether persisted claim evidence depends on an edited speech segment."""
+    if not isinstance(claim, dict):
+        return False
+    speech_id = f'speech:{segment_id}'
+    ids = claim.get('evidence_ids')
+    if isinstance(ids, list) and speech_id in ids:
+        return True
+    sources = claim.get('evidence_sources')
+    return isinstance(sources, list) and any(
+        isinstance(source, dict)
+        and source.get('source_kind') == 'speech'
+        and (source.get('source_ref') == segment_id or source.get('id') == speech_id)
+        for source in sources
+    )
