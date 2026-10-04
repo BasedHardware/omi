@@ -180,6 +180,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
+        "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
         "MENTOR_GATE_DEBOUNCE_ENABLED": "true",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
@@ -206,6 +207,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
+        "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
         "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
         "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED": "true",

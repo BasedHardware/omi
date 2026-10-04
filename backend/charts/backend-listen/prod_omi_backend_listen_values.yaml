@@ -538,6 +538,10 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
+  - name: AUDIO_TIMELINE_SPANS
+    value: "false"
+  - name: LIVE_SPEAKER_SPAN_RESOLUTION
+    value: "false"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

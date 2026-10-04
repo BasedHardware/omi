@@ -13,7 +13,7 @@ from utils.manual_speaker_assignments import acknowledged_teaching
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
+from config import audio_timeline as audio_flags
 from config.translation import resolve_ondemand_config
 from config.capture_evidence import (
     capture_evidence_dark_write_enabled,
@@ -297,7 +297,7 @@ class ListenReceiver(ReplayFilterMixin):
         # client clock; both stay without the clock entirely.
         self.capture_timeline: Any = None
         self._pending_source_frame: dict | None = None
-        self.capture_timeline_v2 = False
+        self.capture_timeline_v2 = self.capture_timeline_spans = False
         if (
             not host.is_multi_channel
             and not host.use_custom_stt
@@ -319,9 +319,9 @@ class ListenReceiver(ReplayFilterMixin):
                 )
             # Pin the persistence mode for the recording's life; the flag is
             # never re-read per message or per callback.
-            self.capture_timeline_v2 = audio_timeline_v2_enabled()
+            self.capture_timeline_v2 = host.state.capture_timeline_v2 = audio_flags.audio_timeline_v2_enabled()
+            self.capture_timeline_spans = host.state.capture_timeline_spans = audio_flags.audio_timeline_spans_enabled()
             host.state.capture_timeline = self.capture_timeline
-            host.state.capture_timeline_v2 = self.capture_timeline_v2
             # Conversation ownership of recent capture ranges. Entries are
             # *runs* (contiguous samples under one conversation), coalesced by
             # `_note_accepted_frame`, so retention is time-based (120 s) and a
@@ -426,7 +426,7 @@ class ListenReceiver(ReplayFilterMixin):
         ring = self.host.state.audio_ring_buffer
         if ring is None:
             return
-        if self.capture_timeline_v2 or live_speaker_capture_clock_enabled():
+        if self.capture_timeline_v2 or audio_flags.live_speaker_capture_clock_enabled():
             ring.write_positioned(decoded, self.capture_timeline.wall(start_sample))
         else:
             ring.write(decoded, now)
@@ -523,7 +523,7 @@ class ListenReceiver(ReplayFilterMixin):
             source_map.remember_transcripts(segments)
         _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
-        if not live_speaker_capture_clock_enabled():
+        if not audio_flags.live_speaker_capture_clock_enabled():
             for segment in segments:
                 segment.pop('_capture_start_sample', None)
                 segment.pop('_capture_end_sample', None)
@@ -2170,7 +2170,7 @@ class ListenReceiver(ReplayFilterMixin):
                             buffer.extend(decoded)
                             await self._flush_stt_buffer(buffer)
                         if self.host.audio_bytes_send is not None:
-                            if self.capture_timeline_v2:
+                            if self.capture_timeline_v2 or self.capture_timeline_spans:
                                 self.host.audio_bytes_send(
                                     decoded,
                                     now,

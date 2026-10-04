@@ -243,6 +243,16 @@ def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     )
 
 
+def with_audio_timeline_span_env(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the span rollout defaults."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "AUDIO_TIMELINE_SPANS", "value": "false"},\n'
+        '        {"name": "LIVE_SPEAKER_SPAN_RESOLUTION", "value": "false"},',
+    )
+
+
 def with_sync_ledger_fence_mode(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
     return payload.replace(
@@ -368,7 +378,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             )
         )
     )
-    payload = with_screen_frame_egress_env(payload)
+    payload = with_screen_frame_egress_env(with_audio_timeline_span_env(payload))
     # The final-pass shadow is dark by default on the dev finalization worker.
     # Its deployed-state fixture must carry every explicit runtime binding.
     payload = re.sub(
