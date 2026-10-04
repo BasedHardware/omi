@@ -1822,7 +1822,7 @@ class ListenReceiver(ReplayFilterMixin):
                 # Reuse the bounded tail on initial paid legs too. Capacity
                 # waits belong to its supervised pump, so receive_data can
                 # keep reading audio and observe disconnect immediately.
-                wait_capacity = getattr(socket, 'wait_send_capacity', None)
+                wait_capacity = getattr(replay_delivery.raw_transport(socket), 'wait_send_capacity', None)
                 if callable(wait_capacity) and self._serving_provider() in {'soniox', 'modulate', 'deepgram'}:
                     self.stt_socket = ReplayTailSocket(
                         socket,
