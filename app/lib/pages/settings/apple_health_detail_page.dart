@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
@@ -97,7 +98,7 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
     final provider = context.watch<IntegrationProvider>();
     final isConnected = provider.isAppConnected(IntegrationApp.appleHealth);
 
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton()),
       body: SafeArea(
         child: Padding(
@@ -179,6 +180,33 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
         ),
       ),
     );
+    final l10n = context.l10n;
+    return IosNativeSurface(title: IntegrationApp.appleHealth.displayName, fallback: classic, toolbar: [
+      NativeRow('health_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+    ], sections: [
+      NativeSection('health_summary', [
+        NativeRow('health_description', l10n.appleHealthConnectCta,
+            kind: 'label', subtitle: isConnected ? l10n.appleHealthConnectedBadge : '')
+      ]),
+      NativeSection(
+          'health_features',
+          [
+            NativeRow('health_chat', l10n.appleHealthFeatureChatTitle,
+                kind: 'label', subtitle: l10n.appleHealthFeatureChatDesc),
+            NativeRow('health_readonly', l10n.appleHealthFeatureReadOnlyTitle,
+                kind: 'label', subtitle: l10n.appleHealthFeatureReadOnlyDesc),
+            NativeRow('health_secure', l10n.appleHealthFeatureSecureTitle,
+                kind: 'label', subtitle: l10n.appleHealthFeatureSecureDesc),
+          ],
+          footer: l10n.appleHealthManageNote),
+      NativeSection('health_connection', [
+        if (isConnected)
+          NativeRow('health_disconnect', l10n.appleHealthDisconnectCta,
+              destructive: true, enabled: !_isConnecting && !_isDisconnecting, action: (_) => _disconnect())
+        else
+          NativeRow('health_connect', l10n.appleHealthConnectCta, enabled: !_isConnecting, action: (_) => _connect()),
+      ]),
+    ]);
   }
 
   Widget _logoPair() {

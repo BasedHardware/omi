@@ -65,6 +65,8 @@ class _FakeRingDevice implements DeviceConnection {
   void Function(List<int>)? onBytes;
   final controller = StreamController<List<int>>.broadcast();
   final advances = <_Advance>[];
+  final listening = Completer<void>();
+  final firstAdvance = Completer<void>();
   int ackStatus = RingProtocol.ackOk;
   RingInfo? postAckInfo;
   int custodyEpochValue = 7;
@@ -96,6 +98,7 @@ class _FakeRingDevice implements DeviceConnection {
     required int? expectedRingId,
   }) async {
     advances.add(_Advance(newReadSeq, expectedEpoch, expectedRingId));
+    if (!firstAdvance.isCompleted) firstAdvance.complete();
     return RingCommandAck(status: ackStatus);
   }
 
@@ -104,6 +107,7 @@ class _FakeRingDevice implements DeviceConnection {
     required void Function(List<int>) onStorageBytesReceived,
   }) async {
     onBytes = onStorageBytesReceived;
+    if (!listening.isCompleted) listening.complete();
     return controller.stream.listen((_) {});
   }
 
@@ -250,12 +254,14 @@ void main() {
       final sync = syncWith(local, card, wal);
 
       final future = sync.syncWal(wal: wal);
-      await Future.delayed(const Duration(milliseconds: 50));
+      await card.listening.future.timeout(const Duration(seconds: 5));
       card.emit(_readBegin(5, 63));
       for (var i = 0; i < 61; i++) {
         card.emit(_record(frameSizes: List.filled(100, 1)));
       }
-      await Future.delayed(const Duration(milliseconds: 300));
+      // Observe the actual durable-chunk acknowledgment before sending DONE;
+      // a fixed wall-clock wait can expire while parallel builds consume CPU.
+      await card.firstAdvance.future.timeout(const Duration(seconds: 5));
       final incrementalCount = card.advances.length;
       for (var i = 0; i < 2; i++) {
         card.emit(_record(frameSizes: List.filled(100, 1)));

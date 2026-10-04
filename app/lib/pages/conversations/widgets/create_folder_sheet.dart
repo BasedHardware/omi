@@ -6,6 +6,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/folder.dart';
+import 'package:omi/mobile/native_ui/ios_native_edit.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -32,7 +34,8 @@ const List<String> folderIcons = folderIconStrings;
 class CreateFolderBottomSheet extends StatefulWidget {
   final Folder? folderToEdit;
 
-  const CreateFolderBottomSheet({super.key, this.folderToEdit});
+  const CreateFolderBottomSheet({super.key, this.folderToEdit, this.native = false});
+  final bool native;
 
   @override
   State<CreateFolderBottomSheet> createState() => _CreateFolderBottomSheetState();
@@ -159,6 +162,51 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.native) {
+      final l10n = context.l10n;
+      final colorValue = '#${_selectedColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+      return IosNativeEdit(
+          title: isEditing ? l10n.editFolder : l10n.newFolder,
+          isDirty: _isDirty,
+          enabled: !_isLoading,
+          fallback: OmiSheetScaffold(title: isEditing ? l10n.editFolder : l10n.newFolder, child: _classic(context)),
+          toolbar: [
+            NativeRow('folder_save', isEditing ? l10n.save : l10n.create,
+                enabled: !_isLoading, action: (_) => _handleSubmit())
+          ],
+          sections: [
+            NativeSection('folder_fields', [
+              NativeRow('folder_name', l10n.folderName,
+                  kind: 'text',
+                  value: _nameController.text,
+                  maximumLength: 30,
+                  action: (value) => setState(() => _nameController.text = value as String)),
+              NativeRow('folder_description', l10n.descriptionOptional,
+                  kind: 'text',
+                  value: _descriptionController.text,
+                  maximumLength: 100,
+                  action: (value) => setState(() => _descriptionController.text = value as String)),
+              NativeRow('folder_icon', l10n.icon,
+                  kind: 'choice',
+                  value: _selectedIcon,
+                  options: {for (final icon in folderIcons) icon: icon},
+                  action: (value) => setState(() => _selectedIcon = value as String)),
+              NativeRow('folder_color', l10n.color,
+                  kind: 'color',
+                  value: colorValue,
+                  options: {
+                    for (final (index, color) in folderColors.indexed)
+                      '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}': '${l10n.color} ${index + 1}'
+                  },
+                  action: (value) => setState(
+                      () => _selectedColor = Color(int.parse('FF${(value as String).substring(1)}', radix: 16)))),
+            ])
+          ]);
+    }
+    return _classic(context);
+  }
+
+  Widget _classic(BuildContext context) {
     final labelStyle = OmiType.subhead.copyWith(fontWeight: FontWeight.w500, color: OmiColors.textTertiary);
     return PopScope(
       canPop: !_isDirty,
@@ -302,6 +350,7 @@ Future<bool> showCreateFolderBottomSheet(BuildContext context, {Folder? folderTo
     title: folderToEdit != null ? context.l10n.editFolder : context.l10n.newFolder,
     enableDrag: false,
     builder: (context) => CreateFolderBottomSheet(folderToEdit: folderToEdit),
+    nativeBuilder: (context) => CreateFolderBottomSheet(folderToEdit: folderToEdit, native: true),
   );
   return result ?? false;
 }

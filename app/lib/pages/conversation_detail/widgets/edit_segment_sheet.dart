@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/mobile/native_ui/ios_native_edit.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -39,11 +40,13 @@ class EditSegmentSheet extends StatefulWidget {
 class _EditSegmentSheetState extends State<EditSegmentSheet> {
   late final TextEditingController _controller;
   bool _dirty = false;
+  late String _lastPublishedText;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.segment.text);
+    _lastPublishedText = _controller.text;
     _controller.addListener(_onChanged);
   }
 
@@ -56,6 +59,11 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
 
   void _onChanged() {
     final dirty = _controller.text.trim() != widget.segment.text.trim();
+    // Native snapshots carry the current text and Save eligibility. The classic
+    // editor retains its dirty-only rebuild guard; selection-only changes never
+    // require a new native snapshot either.
+    if (dirty == _dirty && (!iosSwiftUiEnabled || _lastPublishedText == _controller.text)) return;
+    _lastPublishedText = _controller.text;
     setState(() => _dirty = dirty);
   }
 

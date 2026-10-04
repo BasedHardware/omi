@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
@@ -890,26 +891,31 @@ void main() {
   }, timeout: const Timeout(Duration(seconds: 10)));
 
   test('silent Limitless realtime start probes status and retries activation only once', () async {
-    final transport = FakeDeviceTransport();
-    final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
-    final connection = LimitlessDeviceConnection(
-      device,
-      transport,
-      streamHealthWindow: const Duration(milliseconds: 10),
-      storageStatusTimeout: const Duration(milliseconds: 10),
-    );
+    late LimitlessDeviceConnection connection;
+    fakeAsync((clock) {
+      final transport = FakeDeviceTransport();
+      final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
+      connection = LimitlessDeviceConnection(
+        device,
+        transport,
+        streamHealthWindow: const Duration(milliseconds: 10),
+        storageStatusTimeout: const Duration(milliseconds: 10),
+      );
 
-    await connection.connect();
-    await Future<void>.delayed(const Duration(milliseconds: 70));
+      var connected = false;
+      connection.connect().then((_) => connected = true);
+      // Complete connection settling and both watchdog windows without depending
+      // on wall-clock scheduling while other tests or Xcode consume the machine.
+      clock.elapse(const Duration(seconds: 5));
+      expect(connected, true);
 
-    final messageNumbers = transport.writes.map((write) => decodeWrapperCommand(write)['messageNumber']).toList();
-    expect(messageNumbers, [6, 8, 21, 8, 21]);
-    expect(
-      messageNumbers.where((messageNumber) => messageNumber == 8).length,
-      2,
-      reason: 'the health watchdog may reactivate realtime once but must not loop',
-    );
-
+      List<dynamic> messageNumbers() =>
+          transport.writes.map((write) => decodeWrapperCommand(write)['messageNumber']).toList();
+      expect(messageNumbers(), [6, 8, 21, 8, 21]);
+      clock.elapse(const Duration(minutes: 1));
+      expect(messageNumbers(), [6, 8, 21, 8, 21],
+          reason: 'the health watchdog may reactivate realtime once but must not loop');
+    });
     await connection.disconnect();
   }, timeout: const Timeout(Duration(seconds: 10)));
 

@@ -13,6 +13,37 @@ struct NativeSurfaceTests {
         let snapshot = try NativeSurfaceSnapshot.decode(input)
         precondition(snapshot.sections[0].rows[0].value?.text == "system")
         precondition(snapshot.largeTitle == nil)
+        var searchable = row
+        searchable["optionSearch"] = "Search countries"
+        searchable["optionClose"] = "Close"
+        var countries = input
+        countries["sections"] = [["id": "country", "title": "", "footer": "", "rows": [searchable]]]
+        let country = try NativeSurfaceSnapshot.decode(countries)
+        precondition(country.replacingValue(id: "appearance", value: .text("system")).sections[0].rows[0].optionSearch == "Search countries")
+        searchable.removeValue(forKey: "optionClose")
+        countries["sections"] = [["id": "country", "title": "", "footer": "", "rows": [searchable]]]
+        rejects(countries)
+        var color = row
+        color["kind"] = "color"
+        color["value"] = "#3B82F6"
+        color["options"] = [["id": "#3B82F6", "title": "Color 1"]]
+        var palette = input
+        palette["sections"] = [["id": "palette", "title": "", "footer": "", "rows": [color]]]
+        _ = try NativeSurfaceSnapshot.decode(palette)
+        color["options"] = [["id": "invalid", "title": "Color"]]
+        palette["sections"] = [["id": "palette", "title": "", "footer": "", "rows": [color]]]
+        rejects(palette)
+        var meter = row
+        meter["level"] = 4
+        palette["sections"] = [["id": "meter", "title": "", "footer": "", "rows": [meter]]]
+        rejects(palette)
+        meter["level"] = 2
+        meter["visibilityEnabled"] = true
+        palette["sections"] = [["id": "meter", "title": "", "footer": "", "rows": [meter]]]
+        let levels = try NativeSurfaceSnapshot.decode(palette)
+        let revised = levels.replacingValue(id: "appearance", value: .text("system"))
+        precondition(revised.revision == 1 && revised.sections[0].rows[0].level == 2)
+        precondition(revised.sections[0].rows[0].visibilityEnabled == true)
         var navigation = row
         navigation["kind"] = "navigation"
         navigation.removeValue(forKey: "value")
@@ -54,6 +85,15 @@ struct NativeSurfaceTests {
         precondition(chatSnapshot.withoutContent().chat == nil)
         var text = row
         text["kind"] = "text"
+        text["keyboard"] = "phone"
+        text["value"] = ""
+        input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [text]]]
+        let phone = try NativeSurfaceSnapshot.decode(input)
+        precondition(phone.sections[0].rows[0].keyboard == "phone")
+        text["keyboard"] = "unknown"
+        input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [text]]]
+        rejects(input)
+        text.removeValue(forKey: "keyboard")
         text["maximumLength"] = 2
         text["value"] = "👨‍👩‍👧‍👦a"
         input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [text]]]

@@ -1,6 +1,92 @@
 import XCTest
 
 final class PreviewUITests: XCTestCase {
+    func testCountryChoiceFitsAbovePhoneAndPreservesSearch() {
+        let app = start(["surface", "country"])
+        let country = app.buttons["country"]
+        let phone = app.textFields["phone"]
+        XCTAssertTrue(country.waitForExistence(timeout: 10))
+        XCTAssertTrue(country.isHittable)
+        XCTAssertLessThanOrEqual(country.frame.maxY, phone.frame.minY)
+        capture(app, "native-country-choice")
+        country.tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("372")
+        XCTAssertFalse(app.buttons["country_option_US"].exists)
+        app.buttons["country_option_EE"].tap()
+        XCTAssertTrue(app.staticTexts["country:EE"].waitForExistence(timeout: 5))
+        XCTAssertFalse(search.exists)
+    }
+
+    func testOnboardingBackAppearsWhenNavigationChromeArrivesAfterMount() {
+        let app = start(["surface", "late-toolbar"])
+        let back = app.buttons["onboarding_back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10))
+        XCTAssertTrue(back.isHittable)
+        capture(app, "native-onboarding-late-back")
+        back.tap()
+        XCTAssertTrue(app.staticTexts["onboarding_back:"].waitForExistence(timeout: 5))
+    }
+
+    func testNativeModalReturnsOnlyExplicitSaveAndLatestText() {
+        let app = start(["modal"])
+        app.buttons["modal-open"].tap()
+        let field = app.textFields["draft"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("Avery final edit")
+        app.buttons["save"].tap()
+        XCTAssertTrue(app.staticTexts["saved:Avery final edit:false"].waitForExistence(timeout: 10))
+        XCTAssertFalse(field.exists)
+        capture(app, "native-modal-explicit-save")
+    }
+
+    func testNativeModalCancelGuardsDirtyInput() {
+        let app = start(["modal"])
+        app.buttons["modal-open"].tap()
+        let field = app.textFields["draft"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("Unsaved person")
+        app.buttons["cancel"].tap()
+        XCTAssertTrue(app.alerts["Discard Changes?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Keep Editing"].tap()
+        XCTAssertEqual(field.value as? String, "Unsaved person")
+        app.buttons["cancel"].tap()
+        app.alerts.buttons["Discard"].tap()
+        XCTAssertTrue(app.staticTexts["Cancelled without saving"].waitForExistence(timeout: 10))
+        XCTAssertFalse(field.exists)
+        capture(app, "native-modal-discard")
+    }
+
+    func testNativeModalSessionEndDismissesPrivateInput() {
+        let app = start(["modal", "expire"])
+        app.buttons["modal-open"].tap()
+        XCTAssertTrue(app.textFields["draft"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Cancelled without saving"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.textFields["draft"].exists)
+        XCTAssertFalse(app.buttons["save"].exists)
+    }
+
+    func testNativeConfirmationUsesSystemAlertAndCancels() {
+        let app = start(["modal", "alert"])
+        app.buttons["modal-open"].tap()
+        XCTAssertTrue(app.alerts["Edit Person"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Cancel"].tap()
+        XCTAssertTrue(app.staticTexts["Cancelled without saving"].waitForExistence(timeout: 10))
+    }
+
+    func testNativeModalSaveIncludesLatestSwitchChoice() {
+        let app = start(["modal"])
+        app.buttons["modal-open"].tap()
+        let toggle = app.switches["opt_out"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.switches.firstMatch.tap()
+        app.buttons["save"].tap()
+        XCTAssertTrue(app.staticTexts["saved::true"].waitForExistence(timeout: 10))
+    }
     func start(_ arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = arguments
@@ -156,7 +242,8 @@ final class PreviewUITests: XCTestCase {
         let field = app.textFields["draft"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
-        field.typeText("unsaved edit")
+        // The first rejected edit removes focus. Do not type into an invalidated field.
+        field.typeText("x")
         app.buttons["save"].tap()
         XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["saved:"].exists)

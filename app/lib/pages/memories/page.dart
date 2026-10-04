@@ -369,6 +369,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       title: context.l10n.memoryManagement,
       padding: EdgeInsets.zero,
       builder: (context) => MemoryManagementSheet(provider: provider),
+      nativeBuilder: (context) => MemoryManagementSheet(provider: provider, native: true),
     );
   }
 }

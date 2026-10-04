@@ -32,6 +32,9 @@ class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key, this.showsCall = false, this.onPresentation});
 
   /// Native presentation reuses this card's lifecycle, labels and controls without painting it.
+  /// Called after every build, including a reset followed by the current card in
+  /// the same frame. Consumers must be idempotent and coalesce presentation
+  /// updates; receiving a snapshot must never start or stop capture.
   final ValueChanged<CaptureCardPresentation?>? onPresentation;
 
   /// Home shows an Omi call on this card; the Conversations tab has its own call banner.

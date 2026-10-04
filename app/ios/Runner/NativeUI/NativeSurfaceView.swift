@@ -15,7 +15,7 @@ final class NativeSurfaceState: ObservableObject {
     private var editWaiters: [CheckedContinuation<Void, Never>] = []
     private var latestEdits: [String: String] = [:]
     private(set) var sentDraft: String?
-    private var queued: [String: String] = [:]
+    private var queued: [String: Any] = [:]
     private var revision = NativeSnapshotRevision()
     private let perform: (String, Any?) async throws -> Void
 
@@ -42,16 +42,16 @@ final class NativeSurfaceState: ObservableObject {
 
     func send(_ id: String, value: Any? = nil) async {
         guard valid else { return }
+        let isEdit = snapshot.allRows.contains {
+            $0.id == id && ["text", "toggle", "choice", "color", "date"].contains($0.kind)
+        }
         if let text = value as? String, snapshot.allRows.contains(where: { $0.id == id && $0.kind == "text" }) {
             latestEdits[id] = text
         }
         if pending.contains(id) {
-            if let text = value as? String, id == "_search" || snapshot.allRows.contains(where: { $0.id == id && $0.kind == "text" }) {
-                queued[id] = text
-            }
+            if let value, id == "_search" || isEdit { queued[id] = value }
             return
         }
-        let isEdit = snapshot.allRows.contains { $0.id == id && $0.kind == "text" }
         pending.insert(id)
         if isEdit { pendingEdits.insert(id) }
         defer {
@@ -111,8 +111,15 @@ struct NativeSurfaceView: View {
                     .navigationTitle(state.snapshot.title)
                     .navigationBarTitleDisplayMode(state.snapshot.largeTitle == true ? .large : .inline)
                     .toolbar {
-                        ForEach(state.snapshot.toolbar) { row in
-                            ToolbarItem(placement: row.symbol == "chevron.left" ? .navigationBarLeading : .navigationBarTrailing) { rowView(row, compact: true) }
+                        ToolbarItemGroup(placement: .navigationBarLeading) {
+                            ForEach(state.snapshot.toolbar.filter { $0.symbol == "chevron.left" }) { row in
+                                rowView(row, compact: true)
+                            }
+                        }
+                        ToolbarItemGroup(placement: .navigationBarTrailing) {
+                            ForEach(state.snapshot.toolbar.filter { $0.symbol != "chevron.left" }) { row in
+                                rowView(row, compact: true)
+                            }
                         }
                     }
             } else { Color.clear.accessibilityIdentifier("native-surface-invalidated") }
@@ -160,7 +167,11 @@ struct NativeSurfaceView: View {
             }.id("native-surface-status")
             ForEach(state.snapshot.sections) { section in
                 Section {
-                    ForEach(section.rows) { row in rowView(row) }
+                    ForEach(section.rows) { row in
+                        rowView(row).onAppear {
+                            if row.visibilityEnabled == true { Task { await state.send("_visible:\(row.id)") } }
+                        }
+                    }
                 } header: {
                     if !section.title.isEmpty { Text(section.title) }
                 } footer: {
@@ -184,7 +195,6 @@ struct NativeSurfaceView: View {
                     actionLabel(row, compact: compact)
                         .frame(minWidth: compact ? 44 : 0, minHeight: 44)
                         .contentShape(Rectangle())
-                        .modifier(NativeGlassButtonStyle(menu: compact))
                 }
             case "toggle":
                 Toggle(isOn: Binding(get: { row.value?.bool ?? false }, set: { value in
@@ -201,6 +211,13 @@ struct NativeSurfaceView: View {
                             .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                     }.frame(minHeight: 44).contentShape(Rectangle())
                 }.buttonStyle(.plain)
+                    .contextMenu {
+                        ForEach(row.options) { option in
+                            Button(option.title, role: option.id == "delete" ? .destructive : nil) {
+                                Task { await state.send(row.id, value: option.id) }
+                            }
+                        }
+                    }
             case "task":
                 HStack(spacing: 12) {
                     Button { Task { await state.send(row.id, value: !(row.value?.bool ?? false)) } } label: {
@@ -215,12 +232,38 @@ struct NativeSurfaceView: View {
                         }
                 }.buttonStyle(.plain)
             case "choice":
-                Picker(selection: Binding(get: { row.value?.text ?? "" }, set: { value in
-                    Task { await state.send(row.id, value: value) }
-                })) {
-                    ForEach(row.options) { option in Text(option.title).tag(option.id) }
-                } label: { label(row) }
-                    .pickerStyle(.menu)
+                if row.optionSearch != nil {
+                    NativeSearchableChoice(row: row, state: state)
+                } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    label(row)
+                    Picker(row.title, selection: Binding(get: { row.value?.text ?? "" }, set: { value in
+                        Task { await state.send(row.id, value: value) }
+                    })) {
+                        ForEach(row.options) { option in Text(option.title).tag(option.id) }
+                    }.pickerStyle(.menu).labelsHidden()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                }
+            case "color":
+                VStack(alignment: .leading, spacing: 8) {
+                    label(row)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 44))], spacing: 8) {
+                        ForEach(row.options) { option in
+                            Button { Task { await state.send(row.id, value: option.id) } } label: {
+                                let rgb = UInt32(option.id.dropFirst(), radix: 16) ?? 0
+                                Circle().fill(Color(red: Double((rgb >> 16) & 255) / 255,
+                                    green: Double((rgb >> 8) & 255) / 255, blue: Double(rgb & 255) / 255))
+                                    .frame(width: 28, height: 28)
+                                    .overlay {
+                                        if row.value?.text == option.id { Image(systemName: "checkmark").foregroundStyle(.white).shadow(radius: 1) }
+                                    }.frame(minWidth: 44, minHeight: 44)
+                            }.buttonStyle(.plain).accessibilityLabel(option.title)
+                                .accessibilityAddTraits(row.value?.text == option.id ? .isSelected : [])
+                        }
+                    }
+                }
             case "date":
                 DatePicker(row.title, selection: Binding(get: {
                     Date(timeIntervalSince1970: (Double(row.value?.text ?? "") ?? Date().timeIntervalSince1970 * 1000) / 1000)
@@ -291,7 +334,9 @@ struct NativeSurfaceView: View {
                         let visible = Set(frames.filter { $0.value.intersects(bounds) }.keys)
                         let appeared = visible.subtracting(visibleMessages)
                         visibleMessages = visible
-                        for id in appeared { Task { await state.send("_visible:\(id)") } }
+                        for id in appeared where state.snapshot.allRows.contains(where: { $0.id == id && $0.visibilityEnabled == true }) {
+                            Task { await state.send("_visible:\(id)") }
+                        }
                     }
                     .onAppear { reader.scrollTo("native-chat-bottom", anchor: .bottom) }
                     .onChange(of: state.snapshot.sections) { _ in
@@ -381,9 +426,74 @@ struct NativeSurfaceView: View {
             if let uri = row.imageUri { NativeThumbnail(uri: uri) }
             VStack(alignment: .leading, spacing: 4) {
                 Text(row.title).foregroundStyle(row.destructive ? Color.red : Color.primary)
+                if let level = row.level {
+                    HStack(spacing: 3) {
+                        ForEach(0..<3) { step in
+                            Capsule().fill(step < level ? Color.primary : Color.secondary.opacity(0.25))
+                                .frame(width: 14, height: 5)
+                        }
+                    }.accessibilityHidden(true)
+                }
                 if !row.subtitle.isEmpty { Text(row.subtitle).font(.subheadline).foregroundStyle(.secondary) }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+@available(iOS 16.0, *)
+private struct NativeSearchableChoice: View {
+    let row: NativeSurfaceRow
+    @ObservedObject var state: NativeSurfaceState
+    @State private var presented = false
+    @State private var search = ""
+
+    var body: some View {
+        Button {
+            search = ""
+            presented = true
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(row.title).foregroundStyle(.primary)
+                HStack {
+                    Text(row.options.first { $0.id == row.value?.text }?.title ?? "")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.down").font(.caption).foregroundStyle(.secondary)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading).frame(minHeight: 44)
+        }.buttonStyle(.plain)
+            .sheet(isPresented: $presented) {
+                NavigationStack {
+                    List(row.options.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)
+                        || $0.id.localizedCaseInsensitiveContains(search) }) { option in
+                        Button {
+                            Task {
+                                await state.send(row.id, value: option.id)
+                                if state.valid && !state.actionFailed { presented = false }
+                            }
+                        } label: {
+                            HStack {
+                                Text(option.title)
+                                Spacer()
+                                if option.id == row.value?.text { Image(systemName: "checkmark") }
+                            }.frame(minHeight: 44)
+                        }.disabled(state.pending.contains(row.id))
+                            .accessibilityIdentifier("\(row.id)_option_\(option.id)")
+                            .accessibilityAddTraits(option.id == row.value?.text ? .isSelected : [])
+                    }.searchable(text: $search, prompt: row.optionSearch ?? "")
+                        .navigationTitle(row.title).navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button { presented = false } label: {
+                                    Label(row.optionClose ?? "", systemImage: "xmark").labelStyle(.iconOnly)
+                                }
+                            }
+                        }
+                }.tint(.primary)
+            }
+            .onChange(of: state.valid) { valid in
+                if !valid { search = ""; presented = false }
+            }
     }
 }
 
@@ -444,6 +554,8 @@ private struct NativeTextRow: View {
 
     var body: some View {
         TextField(row.title, text: $draft, axis: .vertical)
+            .keyboardType(keyboardType)
+            .autocorrectionDisabled(row.keyboard != nil && row.keyboard != "default")
             .focused($focused)
             .onAppear {
                 if !initialized { draft = state.draft(for: row); initialized = true }
@@ -459,6 +571,16 @@ private struct NativeTextRow: View {
                 }
                 if focused && value != row.value?.text { Task { await state.send(row.id, value: value) } }
             }
+    }
+
+    private var keyboardType: UIKeyboardType {
+        switch row.keyboard {
+        case "phone": return .phonePad
+        case "email": return .emailAddress
+        case "url": return .URL
+        case "decimal": return .decimalPad
+        default: return .default
+        }
     }
 }
 

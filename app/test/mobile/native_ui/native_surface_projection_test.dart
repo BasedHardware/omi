@@ -70,6 +70,38 @@ void main() {
     expect(text.accepts(List.filled(10001, 'x').join()), false);
     expect(text.accepts(true), false);
   });
+  test('native context menus and palette stay within the current projection', () async {
+    final chosen = <Object?>[];
+    final person = NativeRow('person_1', 'Avery',
+        kind: 'navigation', level: 2, options: const {'pin': 'Pin', 'delete': 'Delete'}, action: chosen.add);
+    await dispatchNativeAction(const MethodCall('action', {'id': 'person_1', 'value': 'pin'}),
+        isActive: () => true, rows: [person]);
+    expect(chosen, ['pin']);
+    expect(person.accepts('delete_other_person'), false);
+    expect(person.accepts(null), true);
+    expect(const NativeRow('person', 'Name', level: 4).valid, false);
+    const color = NativeRow('color', 'Color', kind: 'color', value: '#3B82F6', options: {'#3B82F6': 'Color 1'});
+    expect(color.valid, true);
+    expect(color.accepts('#000000'), false);
+    expect(
+        const NativeRow('color', 'Color', kind: 'color', value: 'invalid', options: {'invalid': 'Color'}).valid, false);
+  });
+  test('visibility is opt-in and cannot invoke a mutation', () async {
+    var loads = 0;
+    var deletes = 0;
+    final more = NativeRow('more', 'Show more', onVisible: (_) => loads++);
+    final deletion = NativeRow('delete', 'Delete', action: (_) => deletes++);
+    expect(more.projection['visibilityEnabled'], true);
+    expect(deletion.projection['visibilityEnabled'], false);
+    await dispatchNativeAction(const MethodCall('action', {'id': '_visible:more'}),
+        isActive: () => true, rows: [more, deletion]);
+    expect(loads, 1);
+    await expectLater(
+        dispatchNativeAction(const MethodCall('action', {'id': '_visible:delete'}),
+            isActive: () => true, rows: [more, deletion]),
+        throwsA(isA<PlatformException>()));
+    expect(deletes, 0);
+  });
   test('thumbnails allow selected local files and HTTPS assets only', () {
     expect(nativeImageUri('/sandbox/my photo.jpg'), 'file:///sandbox/my%20photo.jpg');
     expect(nativeImageUri('https://assets.example/image.jpg'), 'https://assets.example/image.jpg');

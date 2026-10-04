@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/phone_calls/phone_setup_verify_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/phone_number_input.dart';
@@ -27,7 +29,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _phoneFocus.requestFocus();
+      if (!iosSwiftUiEnabled) _phoneFocus.requestFocus();
     });
   }
 
@@ -102,7 +104,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton()),
       body: SafeArea(
         child: Padding(
@@ -197,6 +199,49 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
           ),
         ),
       ),
+    );
+    final l10n = context.l10n;
+    return IosNativeSurface(
+      title: l10n.enterYourNumber,
+      fallback: classic,
+      toolbar: [
+        NativeRow('phone_number_back', l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+      ],
+      sections: [
+        NativeSection('phone_number', [
+          NativeRow('phone_number_hint', l10n.phoneNumberCallerIdHint, kind: 'label'),
+          NativeRow('phone_number_country', l10n.phoneSelectCountryTitle,
+              kind: 'choice',
+              optionSearch: l10n.searchCountries,
+              optionClose: l10n.close,
+              value: _selectedCountry.codeAlpha2,
+              options: {
+                for (final country in IntlCountryData.all())
+                  country.codeAlpha2: '${country.flag} ${country.name} +${country.telephoneCode}'
+              },
+              enabled: !_isLoading,
+              action: (value) =>
+                  setState(() => _selectedCountry = IntlCountryData.fromCountryCodeAlpha2(value as String))),
+          NativeRow('phone_number_input', l10n.phoneNumberHint,
+              kind: 'text', value: _phoneController.text, keyboard: 'phone', enabled: !_isLoading, action: (value) {
+            var edited = TextEditingValue(text: value as String);
+            for (final formatter in phoneFieldInputFormatters) {
+              edited = formatter.formatEditUpdate(_phoneController.value, edited);
+            }
+            setState(() {
+              _phoneController.value = edited;
+              _errorMessage = null;
+            });
+          }),
+          if (_errorMessage != null) NativeRow('phone_number_error', _errorMessage!, kind: 'label'),
+          if (_isLoading) NativeRow('phone_number_loading', l10n.loading, kind: 'label'),
+          NativeRow('phone_number_continue', l10n.phoneContinue, enabled: _isValid && !_isLoading, action: (_) {
+            OmiHaptics.medium();
+            return _onContinue();
+          }),
+        ]),
+      ],
     );
   }
 }

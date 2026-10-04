@@ -6,10 +6,18 @@ struct PreviewApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if ProcessInfo.processInfo.arguments.contains("surface") || ProcessInfo.processInfo.arguments.contains("chat") || ProcessInfo.processInfo.arguments.contains("settings-menu") {
+                if ProcessInfo.processInfo.arguments.contains("modal") {
+                    ModalFixture()
+                } else if ProcessInfo.processInfo.arguments.contains("surface") || ProcessInfo.processInfo.arguments.contains("chat") || ProcessInfo.processInfo.arguments.contains("settings-menu") {
                     NativeSurfaceView(state: harness.surface)
                 } else { NativeHomeView(state: harness.state) }
             }
+                .task {
+                    if ProcessInfo.processInfo.arguments.contains("late-toolbar") {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        harness.revealOnboardingChrome()
+                    }
+                }
                 .environment(\.dynamicTypeSize, ProcessInfo.processInfo.arguments.contains("large") ? .accessibility3 : .large)
                 .overlay(alignment: .top) {
                     if ProcessInfo.processInfo.arguments.contains("chrome") {
@@ -34,12 +42,94 @@ struct PreviewApp: App {
     }
 }
 
+/// Exercises the actual UIKit presenter and production SwiftUI form without an account or API.
+private struct ModalFixture: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> ModalFixtureController { ModalFixtureController() }
+    func updateUIViewController(_ controller: ModalFixtureController, context: Context) {}
+}
+
+@MainActor
+private final class ModalFixtureModel: ObservableObject {
+    @Published var receipt = "No changes saved"
+    var open: () -> Void = {}
+}
+
+@MainActor
+private final class ModalFixtureController: UIViewController {
+    private let model = ModalFixtureModel()
+    private lazy var presenter = NativeModalPresenter(rootController: { [weak self] in self })
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let child = UIHostingController(rootView: ModalFixtureControls(model: model))
+        addChild(child)
+        child.view.frame = view.bounds
+        child.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(child.view)
+        child.didMove(toParent: self)
+        model.open = { [weak self] in self?.open() }
+    }
+
+    private func open() {
+        func row(_ id: String, _ title: String, _ kind: String, _ value: Any? = nil) -> [String: Any] {
+            var result: [String: Any] = ["id": id, "title": title, "kind": kind,
+                "subtitle": "", "options": [], "enabled": true, "destructive": false]
+            if let value { result["value"] = value }
+            return result
+        }
+        var snapshot: [String: Any] = ["version": 1, "revision": 0, "title": "Edit Person", "appearance": "dark",
+            "locale": "en", "direction": "ltr", "loading": false, "failed": false, "empty": "",
+            "toolbar": [row("cancel", "Cancel", "button"), row("save", "Save", "button")],
+            "searchEnabled": false, "searchValue": "", "searchPlaceholder": "", "refreshEnabled": false,
+            "error": "Could not save", "retry": "Retry", "loadingLabel": "Loading"]
+        let alert = ProcessInfo.processInfo.arguments.contains("alert")
+        snapshot["sections"] = [["id": "fields", "title": "", "footer": "", "rows": alert
+            ? [row("message", "Delete the selected person?", "label")]
+            : [row("draft", "Name", "text", ""), row("opt_out", "Do not ask again", "toggle", false)]]]
+        let args: [String: Any] = ["requestId": 1, "cancelId": "cancel", "snapshot": snapshot,
+            "alert": alert, "dismissible": true, "guardEdits": true,
+            "discard": ["title": "Discard Changes?", "message": "Your changes have not been saved.",
+                "confirm": "Discard", "cancel": "Keep Editing"]]
+        do {
+            try presenter.present(args) { [weak self] response in
+                guard let self else { return }
+                if let response = response as? [String: Any], response["action"] as? String == "save",
+                   let values = response["values"] as? [String: Any] {
+                    self.model.receipt = "saved:\(values["draft"] as? String ?? ""):\(values["opt_out"] as? Bool ?? false)"
+                } else { self.model.receipt = "Cancelled without saving" }
+            }
+            if ProcessInfo.processInfo.arguments.contains("expire") {
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    self?.presenter.dismiss(id: 1)
+                }
+            }
+        } catch { model.receipt = "Presentation failed" }
+    }
+}
+
+private struct ModalFixtureControls: View {
+    @ObservedObject var model: ModalFixtureModel
+    var body: some View {
+        VStack(spacing: 20) {
+            Button("Open Editor", action: model.open).accessibilityIdentifier("modal-open")
+            Text(model.receipt).accessibilityIdentifier("modal-receipt")
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 @MainActor
 final class PreviewHarness: ObservableObject {
     @Published var lastAction = "Preview fixture"
     @Published var lastSaved = ""
     var raw: [String: Any]
     var lastDraft = ""
+    func revealOnboardingChrome() {
+        surfaceRaw["revision"] = (surfaceRaw["revision"] as? Int ?? 0) + 1
+        surfaceRaw["toolbar"] = [["id": "onboarding_back", "title": "Back", "kind": "button",
+            "symbol": "chevron.left", "subtitle": "", "options": [], "enabled": true, "destructive": false]]
+        surface.update(try! NativeSurfaceSnapshot.decode(surfaceRaw))
+    }
     lazy var state: NativeHomeState = NativeHomeState(snapshot: try! NativeHomeSnapshot.decode(raw)) { [weak self] method, id in
         guard let self else { return nil }
         self.lastAction = "\(method):\(id ?? "")"
@@ -100,6 +190,22 @@ final class PreviewHarness: ObservableObject {
         let data = try! Data(contentsOf: Bundle.main.url(forResource: "native_home_v1", withExtension: "json")!)
         original = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
         raw = original
+        if ProcessInfo.processInfo.arguments.contains("late-toolbar") {
+            surfaceRaw["title"] = "Here is what I heard"
+            surfaceRaw["toolbar"] = []
+        }
+        if ProcessInfo.processInfo.arguments.contains("country") {
+            surfaceRaw["title"] = "Enter your number"
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sections"] = [["id": "phone", "title": "", "footer": "", "rows": [
+                ["id": "country", "title": "Select Country", "kind": "choice", "subtitle": "", "value": "US",
+                 "optionSearch": "Search countries", "optionClose": "Close",
+                 "options": [["id": "US", "title": "🇺🇸 United States +1"], ["id": "EE", "title": "🇪🇪 Estonia +372"]],
+                 "enabled": true, "destructive": false],
+                ["id": "phone", "title": "Phone number", "kind": "text", "keyboard": "phone", "subtitle": "",
+                 "value": "", "options": [], "enabled": true, "destructive": false]
+            ]]]
+        }
         if ProcessInfo.processInfo.arguments.contains("settings-menu") {
             surfaceRaw["largeTitle"] = true
             surfaceRaw["toolbar"] = [["id": "settings_close", "title": "Close", "kind": "button", "symbol": "xmark", "subtitle": "", "options": [], "enabled": true, "destructive": false]]

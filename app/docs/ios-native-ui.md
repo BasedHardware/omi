@@ -1,6 +1,7 @@
 # iOS native presentation migration
 
 Tracking: [#20426](https://github.com/BasedHardware/omi/issues/20426).
+Route coverage and remaining completion checks: [parity ledger](ios-native-ui-parity.md).
 
 ## Native preview
 
@@ -17,13 +18,15 @@ same layout. Flutter no longer puts a small native list below its own Home heade
 | Area | Native presentation | Existing feature surfaces retained |
 |---|---|---|
 | Home and library | Home, dated lists, local recording entry points, gaps, processing, paging, recap browsing, summary/transcript reader and guarded transcript-text editor | Recording playback, detailed summary/speaker/photo edits and bulk selection |
-| Search | Recent searches, folders, starred items, scoped results, conversations/tasks/memories/recaps | People management and advanced folder sheets |
-| Tasks and Memories | Lists, search, completion, menus, create/edit forms with explicit Save and discard guard | Bulk selection, hierarchy/reorder, memory management and Mind Map |
+| Search and People | Recent searches, folders, starred items, scoped results, People search/filters/pinning/confidence/voice samples/cleanup, create/edit/move/delete folder sheets | Advanced search result selection |
+| Tasks and Memories | Lists, search, completion, menus, create/edit forms with explicit Save and discard guard; memory categories, belief collection, device filter and bulk management | List selection, hierarchy/reorder and Mind Map |
 | Apps | Catalog, app detail, setup-step entry points, declared permission disclosures, enable/disable/subscribe actions and guarded review editor | Full screenshot viewer, Markdown instructions, app-owner editing and specialized filters |
-| Settings | Navigation, profile, display/notifications, language, privacy, permissions, recording groups, device settings, plan selection/management, integrations and task service configuration (Asana/ClickUp/Todoist/Google Tasks) | Existing confirmation/consent and checkout/OAuth flows, Health detail, custom transcription/developer tools, Shortcuts setup and device-specific controls |
+| Settings | Navigation, profile, display/notifications, language, privacy, permissions, recording groups, device settings, plan selection/management, integrations, Apple Health, vocabulary, JSON transcription editor and task service configuration (Asana/ClickUp/Todoist/Google Tasks) | Existing checkout/OAuth owners, custom transcription/developer tools, Shortcuts setup and device-specific controls |
 | Diagnostics | Connection summaries, live signal and battery charts, day/week choice, disconnect history, export | Same Bluetooth polling and export owners |
 | Chat | Transcript/composer, send/retry, follow-up, scoped context, voice waveform/Stop/Send/Retry/Discard, attachment picker/removal/previews and app picker | Structured interactive message inspector and full attachment viewers |
-| First run | Sign-in actions, consent, name, primary language, permission rows and completion | Step navigation, device discovery and guided voice enrollment |
+| First run | Sign-in actions, consent, name, primary language, acquisition survey, permission rows, guided voice prompts/waveform/review/edit/save receipts, step navigation and completion | Device discovery, interactive pendant setup and knowledge graph |
+| Calls | Setup disclosure, country/phone entry, verification status/retry and caller-ID management | Active call, keypad, contacts and call history |
+| Confirmations | System alerts, action menus, guarded native input/opt-out sheets | Specialized dialog widgets that have not yet adopted the shared presentation API |
 
 These retained surfaces are explicit parity work, not a completed full-app migration. Keep them
 available while moving them screen by screen; removing access to a feature is not a migration.
@@ -34,7 +37,9 @@ available while moving them screen by screen; removing access to a feature is no
 renders them in `UIHostingController`s inside Flutter platform views with UIKit child-controller
 containment. Both Runner targets compile the same renderer.
 
-- `com.omi.native_ui/config`: `isSupported` gates the OS before constructing a native view.
+- `com.omi.native_ui/config`: `isSupported` gates the OS before constructing a native view;
+  `present`/`dismissPresentation` own temporary system alerts and SwiftUI input sheets. Explicit
+  selection returns validated input to the current Dart owner; cancellation returns no mutation.
 - `com.omi.native_ui/home/<view id>`: localized Home/read snapshots and existing read/navigation
   callbacks (`detail`, `open`, `browse`, `refresh`, `loadMore`, capture and chrome actions).
 - `com.omi.native_ui/surface/<view id>`: typed lists, forms, chat and charts; `update`/`invalidate`
@@ -60,6 +65,15 @@ containment. Both Runner targets compile the same renderer.
   dates and arbitrary mutation payloads are rejected. Rapid text changes keep the final edit;
   Save waits for pending edits and cannot commit after a rejected edit. A successful chat send
   clears its submitted draft without discarding text typed after that submission.
+- Native navigation chrome comes from the current onboarding owner and shares the child's
+  SwiftUI screen. An unsupported child restores the complete original step and its navigation.
+  Phone setup/caller-ID presentation also keeps the original number parser, input formatters,
+  verification polling and confirmed deletion. Text keyboard metadata is a typed allowlist;
+  country choices open a searchable native sheet that matches country names, dial codes and
+  country IDs. The selected country has its own full-width row above the phone input.
+  entering or selecting a number never starts verification before explicit Continue.
+  Guided voice actions project the existing action group; microphone, transcription, voice
+  enrollment, memory/goal persistence and capture restoration stay with the existing controller.
 - Copy, dates and speaker names come from the current localization and formatting primitives.
   System/Dark/Light follows `AppearanceProvider`; native code does not store a second choice.
   The embedded UIKit host applies that choice to its traits too, including live changes and
@@ -86,11 +100,25 @@ xcodebuild -project ios/test/native_ui_preview/Preview.xcodeproj -scheme Preview
 
 The standalone fixture compiles the production SwiftUI sources and tests native navigation,
 locked rows, retry/empty states, session invalidation, large text, reachable Home controls,
-rapid editing and chat submission. It is a Simulator-only fixture; it has no live account or
+rapid editing, chat submission, system confirmations, explicit modal Save, dirty cancellation
+and session dismissal. It is a Simulator-only fixture; it has no live account or
 backend. The integration test also exercises the actual Flutter platform view and containment.
 `NATIVE_UI_EVIDENCE_DIR` selects the host screenshot directory for the integration driver.
 The host test opens the actual Settings route, retaining NEW/BETA copy and native navigation,
 then checks rendered Dark/Light/System screenshots rather than only snapshot values.
+It also opens the real People, folder-edit, memory-management, phone-entry and guided voice
+review surfaces, checking native containment and the existing selection/edit owners with inert I/O.
+The voice owner and platform view must survive an onboarding-parent rebuild. Phone entry
+must preserve international validation and invoke verification only on explicit Continue.
+Simulator host tests also compare the current UIKit toolbar IDs with the Dart projection;
+that inspection method is absent from physical-device builds and returns no private text.
+
+For synchronized display screenshots, set `NATIVE_UI_SCREENSHOT_PORT` to an unused loopback
+port and `NATIVE_UI_SIMULATOR_ID` to the same explicitly selected Simulator ID in the driver
+environment, and add `--dart-define=NATIVE_UI_SCREENSHOT_PORT=<port>` to `flutter drive`.
+The test-only driver captures CoreSimulator display pixels before the test advances, alongside
+the integration plugin's UIKit screenshots. Files ending in `-display.png` are display captures.
+Leave the port unset for the ordinary host checks. This seam has no production app endpoint.
 
 Run the full hermetic Flutter suite, analyzer ratchet, SwiftLint, `mobile-verify fast --all` and
 `make preflight` before pushing. Personal phone installs use a signed `Release-prod` AOT build

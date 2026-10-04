@@ -91,6 +91,7 @@ private enum NativePresentationError: Error {
 @MainActor
 final class NativeHostingContainer<Content: View>: UIView {
     private let host: UIHostingController<Content>
+    private var hostedConstraints: [NSLayoutConstraint] = []
 
     init(frame: CGRect, rootView: Content, appearance: String) {
         host = UIHostingController(rootView: rootView)
@@ -98,13 +99,6 @@ final class NativeHostingContainer<Content: View>: UIView {
         updateAppearance(appearance)
         host.view.backgroundColor = .clear
         host.view.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(host.view)
-        NSLayoutConstraint.activate([
-            host.view.leadingAnchor.constraint(equalTo: leadingAnchor),
-            host.view.trailingAnchor.constraint(equalTo: trailingAnchor),
-            host.view.topAnchor.constraint(equalTo: topAnchor),
-            host.view.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
     }
 
     required init?(coder: NSCoder) { return nil }
@@ -129,7 +123,17 @@ final class NativeHostingContainer<Content: View>: UIView {
             if let parent = current as? UIViewController {
                 if host.parent !== parent {
                     detach()
+                    // Establish ownership before the hosting view enters the
+                    // window, so SwiftUI installs navigation during appearance.
                     parent.addChild(host)
+                    addSubview(host.view)
+                    hostedConstraints = [
+                        host.view.leadingAnchor.constraint(equalTo: leadingAnchor),
+                        host.view.trailingAnchor.constraint(equalTo: trailingAnchor),
+                        host.view.topAnchor.constraint(equalTo: topAnchor),
+                        host.view.bottomAnchor.constraint(equalTo: bottomAnchor),
+                    ]
+                    NSLayoutConstraint.activate(hostedConstraints)
                     host.didMove(toParent: parent)
                 }
                 return
@@ -141,6 +145,9 @@ final class NativeHostingContainer<Content: View>: UIView {
     private func detach() {
         guard host.parent != nil else { return }
         host.willMove(toParent: nil)
+        NSLayoutConstraint.deactivate(hostedConstraints)
+        hostedConstraints.removeAll()
+        host.view.removeFromSuperview()
         host.removeFromParent()
     }
 }

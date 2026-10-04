@@ -7,6 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -246,7 +247,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
   Widget build(BuildContext context) {
     PlatformManager.instance.analytics.pageOpened('Custom Vocabulary');
 
-    return GestureDetector(
+    final classic = GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.customVocabularyTitle)),
@@ -267,5 +268,37 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
         ),
       ),
     );
+    final userProvider = context.watch<UserProvider>();
+    final l10n = context.l10n;
+    final disabled = _isDeletingBatch || userProvider.isUpdatingVocabulary;
+    return IosNativeSurface(title: l10n.customVocabularyTitle, fallback: classic, toolbar: [
+      NativeRow('vocabulary_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+    ], sections: [
+      NativeSection(
+          'vocabulary_entry',
+          [
+            NativeRow('vocabulary_draft', l10n.vocabularyHint,
+                kind: 'text',
+                value: _vocabularyController.text,
+                enabled: !userProvider.isUpdatingVocabulary,
+                action: (value) => setState(() => _vocabularyController.text = value as String)),
+            NativeRow('vocabulary_add', l10n.add,
+                symbol: 'plus', enabled: !userProvider.isUpdatingVocabulary, action: (_) => _addWord(userProvider)),
+          ],
+          title: l10n.addWords,
+          footer: l10n.addWordsDesc),
+      NativeSection(
+          'vocabulary_words',
+          [
+            for (final word in userProvider.transcriptionVocabulary)
+              NativeRow('vocabulary_word_$word', word,
+                  subtitle: l10n.removeVocabularyWord(word),
+                  symbol: 'minus.circle',
+                  destructive: true,
+                  enabled: !disabled && !_pendingDeletions.contains(word),
+                  action: (_) => _queueWordDeletion(userProvider, word)),
+          ],
+          title: l10n.vocabularyWordCount(userProvider.transcriptionVocabulary.length)),
+    ]);
   }
 }

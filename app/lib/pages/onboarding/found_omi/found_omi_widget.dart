@@ -1,5 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -77,10 +78,18 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
     widget.goNext();
   }
 
+  void _selectSource(String label) {
+    OmiHaptics.light();
+    setState(() {
+      _selectedSource = _selectedSource == label ? null : label;
+      if (_selectedSource != context.l10n.otherSource) _otherController.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final sources = _getSources(context);
-    return OnboardingStep(
+    final classic = OnboardingStep(
       card: OnboardingCard(
         padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, OmiSpacing.xl, OmiSpacing.xxl, 0),
         content: [
@@ -93,15 +102,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
             _SourceTile(
               option: source,
               selected: _selectedSource == source.label,
-              onTap: () {
-                OmiHaptics.light();
-                setState(() {
-                  _selectedSource = _selectedSource == source.label ? null : source.label;
-                  if (_selectedSource != context.l10n.otherSource) {
-                    _otherController.clear();
-                  }
-                });
-              },
+              onTap: () => _selectSource(source.label),
             ),
             const SizedBox(height: 10),
           ],
@@ -145,6 +146,22 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
         ],
       ),
     );
+    return IosNativeSurface(title: context.l10n.whereDidYouHearAboutOmi, fallback: classic, sections: [
+      NativeSection('onboarding_sources', [
+        for (final (index, source) in sources.indexed)
+          NativeRow('onboarding_source_$index', source.label,
+              kind: 'toggle', value: _selectedSource == source.label, action: (_) => _selectSource(source.label)),
+        if (_selectedSource == context.l10n.otherSource)
+          NativeRow('onboarding_other_source', context.l10n.pleaseSpecify,
+              kind: 'text',
+              value: _otherController.text,
+              action: (value) => setState(() => _otherController.text = value as String)),
+      ]),
+      NativeSection('onboarding_source_actions', [
+        NativeRow('found_omi_continue', context.l10n.continueButton, enabled: _canContinue, action: (_) => _submit()),
+        NativeRow('found_omi_skip', context.l10n.skip, action: (_) => _skip()),
+      ]),
+    ]);
   }
 }
 

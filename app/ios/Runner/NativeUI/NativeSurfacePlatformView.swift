@@ -54,6 +54,12 @@ private final class NativeSurfacePlatformView: NSObject, @preconcurrency Flutter
                     container?.updateAppearance(state.snapshot.appearance)
                     result(nil)
                 case "invalidate": state.invalidate(); result(nil)
+                #if targetEnvironment(simulator)
+                // Hermetic host tests inspect the received projection, without private text.
+                case "debugPresentation":
+                    result(["revision": state.snapshot.revision,
+                            "toolbar": state.snapshot.toolbar.map { ["id": $0.id, "enabled": $0.enabled] }])
+                #endif
                 default: result(FlutterMethodNotImplemented)
                 }
             } catch { result(FlutterError(code: "invalid_native_snapshot", message: nil, details: nil)) }

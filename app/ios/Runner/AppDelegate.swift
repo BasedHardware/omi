@@ -152,9 +152,24 @@ final class QuickActionsIconPatcher: NSObject {
       registrar.register(NativeSurfaceViewFactory(messenger: messenger), withId: "com.omi.native_ui/surface")
     }
     let nativeUIConfig = FlutterMethodChannel(name: "com.omi.native_ui/config", binaryMessenger: messenger)
-    nativeUIConfig.setMethodCallHandler { call, result in
-      guard call.method == "isSupported" else { result(FlutterMethodNotImplemented); return }
-      if #available(iOS 16.0, *) { result(true) } else { result(false) }
+    if #available(iOS 16.0, *) {
+      let presentations = NativeModalPresenter(rootController: { [weak self] in self?.window?.rootViewController })
+      nativeUIConfig.setMethodCallHandler { call, result in
+        do {
+          switch call.method {
+          case "isSupported": result(true)
+          case "present": try presentations.present(call.arguments, completion: result)
+          case "dismissPresentation":
+            if let id = call.arguments as? Int { presentations.dismiss(id: id) }
+            result(nil)
+          default: result(FlutterMethodNotImplemented)
+          }
+        } catch { result(FlutterError(code: "invalid_native_presentation", message: nil, details: nil)) }
+      }
+    } else {
+      nativeUIConfig.setMethodCallHandler { call, result in
+        result(call.method == "isSupported" ? false : FlutterMethodNotImplemented)
+      }
     }
     SiriBridge.shared.attach(messenger: messenger)
     #if compiler(>=6.4)

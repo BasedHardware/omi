@@ -11,6 +11,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 import 'ios_native_home.dart';
 import 'native_read_session.dart';
+import 'native_navigation_chrome.dart';
 
 typedef NativeAction = FutureOr<void> Function(Object? value);
 
@@ -39,7 +40,11 @@ class NativeRow {
     this.symbol,
     this.minimumDate,
     this.maximumLength,
+    this.keyboard,
+    this.optionSearch,
+    this.optionClose,
     this.imageUri,
+    this.level,
     this.points = const [],
     this.action,
     this.onVisible,
@@ -51,6 +56,11 @@ class NativeRow {
   final String? symbol, minimumDate;
   final String? imageUri;
   final int? maximumLength;
+  final String? keyboard;
+  final String? optionSearch, optionClose;
+
+  /// The existing three-band confidence meter; never a probability or a new score.
+  final int? level;
   final List<Map<String, Object>> points;
   final Object? value;
   final Map<String, String> options;
@@ -69,14 +79,20 @@ class NativeRow {
         'symbol': symbol,
         'minimumDate': minimumDate,
         'maximumLength': maximumLength,
+        'keyboard': keyboard,
+        'optionSearch': optionSearch,
+        'optionClose': optionClose,
         'imageUri': imageUri,
+        'level': level,
         'points': points,
         'destructive': destructive,
         'enabled': enabled && action != null,
+        'visibilityEnabled': onVisible != null,
       };
 
   bool get valid {
     if (id.isEmpty || id.startsWith('_') || options.keys.any((id) => id.isEmpty)) return false;
+    if (level != null && (level! < 0 || level! > 3)) return false;
     if (imageUri != null) {
       final uri = Uri.tryParse(imageUri!);
       if (imageUri!.length > 4096 ||
@@ -88,6 +104,18 @@ class NativeRow {
       }
     }
     if (maximumLength != null && (kind != 'text' || maximumLength! < 1 || maximumLength! > 10000)) return false;
+    if (keyboard != null && (kind != 'text' || !['phone', 'email', 'url', 'decimal', 'default'].contains(keyboard))) {
+      return false;
+    }
+    if (optionSearch != null || optionClose != null) {
+      if (kind != 'choice' ||
+          optionSearch == null ||
+          optionSearch!.isEmpty ||
+          optionClose == null ||
+          optionClose!.isEmpty) {
+        return false;
+      }
+    }
     if (points.length > 10000 ||
         points.map((point) => point['x']).toSet().length != points.length ||
         points.any(
@@ -104,6 +132,9 @@ class NativeRow {
     return switch (kind) {
       'toggle' || 'task' => value is bool,
       'choice' => value is String && options.containsKey(value),
+      'color' => value is String &&
+          options.containsKey(value) &&
+          options.keys.every((key) => RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(key)),
       'text' => value is String && (value as String).characters.length <= (maximumLength ?? 10000),
       'date' => value is String && ((value as String).isEmpty || _validDate(value as String)),
       'label' ||
@@ -127,7 +158,8 @@ class NativeRow {
   bool accepts(Object? input) => switch (kind) {
         'toggle' => input is bool,
         'task' => input is bool || input is String && options.containsKey(input),
-        'choice' || 'menu' => input is String && options.containsKey(input),
+        'choice' || 'color' || 'menu' => input is String && options.containsKey(input),
+        'navigation' => input == null || input is String && options.containsKey(input),
         'date' =>
           input is String && _validDate(input) && (minimumDate == null || int.parse(input) >= int.parse(minimumDate!)),
         'text' => input is String && input.characters.length <= (maximumLength ?? 10000),
@@ -235,6 +267,9 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
   MethodChannel? _channel;
   int _revision = 0;
   bool _scheduled = false;
+  List<NativeSection> get _sections => [...?NativeNavigationChrome.of(context)?.sections, ...widget.sections];
+  List<NativeRow> get _toolbar => [...?NativeNavigationChrome.of(context)?.toolbar, ...widget.toolbar];
+  Widget _fallback() => NativeNavigationChrome.of(context)?.wrapFallback?.call(widget.fallback) ?? widget.fallback;
 
   @override
   void initState() {
@@ -270,8 +305,8 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         'loading': widget.loading,
         'failed': widget.failed,
         'empty': widget.empty,
-        'sections': widget.sections.map((section) => section.projection).toList(),
-        'toolbar': widget.toolbar.map((row) => row.projection).toList(),
+        'sections': _sections.map((section) => section.projection).toList(),
+        'toolbar': _toolbar.map((row) => row.projection).toList(),
         'searchEnabled': widget.search != null,
         'searchValue': widget.searchValue,
         'searchPlaceholder': widget.searchPlaceholder,
@@ -287,8 +322,8 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
       call,
       isActive: () => _session.active && mounted,
       rows: [
-        ...widget.toolbar,
-        ...widget.sections.expand((section) => section.rows),
+        ..._toolbar,
+        ..._sections.expand((section) => section.rows),
         ...?widget.chat?.actions,
       ],
       refresh: widget.onRefresh,
@@ -336,25 +371,25 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
   @override
   Widget build(BuildContext context) {
     final rows = [
-      ...widget.toolbar,
-      ...widget.sections.expand((section) => section.rows),
+      ..._toolbar,
+      ..._sections.expand((section) => section.rows),
       ...?widget.chat?.actions,
     ];
     if (!iosSwiftUiEnabled ||
         rows.any((row) => !row.valid) ||
         rows.map((row) => row.id).toSet().length != rows.length ||
-        widget.sections.map((section) => section.id).toSet().length != widget.sections.length) {
+        _sections.map((section) => section.id).toSet().length != _sections.length) {
       unawaited(_invalidate());
-      return widget.fallback;
+      return _fallback();
     }
     context.watch<AppearanceProvider>();
     _schedule();
     return FutureBuilder<bool>(
       future: _supported,
       builder: (context, support) {
-        if (support.hasError) return widget.fallback;
+        if (support.hasError) return _fallback();
         if (support.connectionState != ConnectionState.done) return const OmiLoadingState();
-        if (support.data != true) return widget.fallback;
+        if (support.data != true) return _fallback();
         if (!_session.active) return const SizedBox.shrink();
         final view = UiKitView(
           viewType: 'com.omi.native_ui/surface',
