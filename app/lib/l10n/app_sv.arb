@@ -3840,9 +3840,9 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "thisWeek": "Den här veckan",
-    "busiestDay": "Mest intensiva dagen",
+    "busiestDay": "Den mest aktiva dagen",
     "timeRecorded": "Inspelad tid",
-    "peopleYouTalkedToMost": "Personer du pratade mest med",
+    "peopleYouTalkedToMost": "Personerna du pratade mest med",
     "recapPrevious": "Föregående: {value}",
     "noRecapForPeriod": "Inget inspelat under den här perioden än",
     "openTasks": "Öppna uppgifter"

@@ -3843,7 +3843,7 @@
     "busiestDay": "Най-натоварен ден",
     "timeRecorded": "Записано време",
     "peopleYouTalkedToMost": "Хората, с които говорихте най-много",
-    "recapPrevious": "Предишен: {value}",
+    "recapPrevious": "Предишно: {value}",
     "noRecapForPeriod": "Все още няма записи за този период",
     "openTasks": "Отворени задачи"
 }

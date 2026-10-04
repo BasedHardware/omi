@@ -12454,7 +12454,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get timeRecorded => 'Masa dirakam';
 
   @override
-  String get peopleYouTalkedToMost => 'Orang yang paling kerap anda bercakap';
+  String get peopleYouTalkedToMost => 'Orang yang paling kerap bercakap dengan anda';
 
   @override
   String recapPrevious(String value) {

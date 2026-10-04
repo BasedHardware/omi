@@ -12472,7 +12472,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String recapPrevious(String value) {
-    return 'Предишен: $value';
+    return 'Предишно: $value';
   }
 
   @override

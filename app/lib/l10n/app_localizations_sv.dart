@@ -12422,13 +12422,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get thisWeek => 'Den här veckan';
 
   @override
-  String get busiestDay => 'Mest intensiva dagen';
+  String get busiestDay => 'Den mest aktiva dagen';
 
   @override
   String get timeRecorded => 'Inspelad tid';
 
   @override
-  String get peopleYouTalkedToMost => 'Personer du pratade mest med';
+  String get peopleYouTalkedToMost => 'Personerna du pratade mest med';
 
   @override
   String recapPrevious(String value) {
