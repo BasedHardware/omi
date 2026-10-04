@@ -28,6 +28,7 @@ STT_STREAM_CLOSE_REASONS = frozenset(
         'soniox_rotation',
         'soniox_invalid_hint',
         'modulate_serve_error',
+        'provider_invalid_request',
         'connection_lost',
         'provider_5xx',
     }

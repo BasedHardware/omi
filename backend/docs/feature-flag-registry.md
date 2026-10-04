@@ -180,6 +180,7 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_OWNER_JEV_FLIP_ENABLED` | Switch memory owner decisions to Jev | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-23 | unowned |
 | `MENTOR_GATE_DEBOUNCE_ENABLED` | Debounce mentor gate evaluation | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
 | `MENTOR_GATE_PROMPT_CACHE_ENABLED` | Cache mentor gate prompts | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
+| `MODULATE_STREAM_PROTOCOL_GUARD_ENABLED` | Preserve Modulate terminal causes and nullable interleaved previews | backend | env | closed | — | — | — | — | pending | 2026-11-04 | backend |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | Enable overflow routing to Gemini | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED` | Shadow gateway action-items extraction | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | — | pending | 2026-10-15 | unowned |
 | `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED` | Shadow gateway conversation structuring | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | — | pending | 2026-10-15 | unowned |
@@ -353,6 +354,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
 - `MENTOR_GATE_PROMPT_CACHE_ENABLED` — Cache mentor gate prompts (fail: closed)
+- `MODULATE_STREAM_PROTOCOL_GUARD_ENABLED` — Preserve Modulate terminal causes and nullable interleaved previews (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: closed)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
 - `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` — Select gateway output-budget experiments (fail: closed)
