@@ -490,3 +490,19 @@ class TestDecodeFilesToWavPcmRouting:
         assert _is_pcm_codec('audio_omi_opus_fs320_16000_2_fs320_1710000000.bin') is False
         assert _is_pcm_codec('audio_omi_aac_16000_1_fs160_1710000000.bin') is False
         assert _is_pcm_codec('audio_omi_lc3_16000_1_fs160_1710000000.bin') is False
+
+
+def test_pcm_tmpfs_full_propagates_capacity_pressure_instead_of_invalid_audio(tmp_path, monkeypatch):
+    import errno
+    from utils.sync import files
+    from utils.sync.input_limits import BackfillStoragePressure
+
+    raw = tmp_path / 'audio.bin'
+    raw.write_bytes(struct.pack('<I', 320) + b'\0' * 320)
+
+    def full_volume(*args, **kwargs):
+        raise OSError(errno.ENOSPC, 'synthetic tmpfs full')
+
+    monkeypatch.setattr(files.sync_playback, 'pcm_to_wav', full_volume)
+    with pytest.raises(BackfillStoragePressure):
+        files.decode_pcm_file_to_wav(str(raw), str(tmp_path / 'audio.wav'))

@@ -571,7 +571,7 @@ def upload_syncing_temporal_file(file_path: str):
         blob.upload_from_filename(file_path)
 
 
-def download_syncing_temporal_file(file_path: str) -> bool:
+def download_syncing_temporal_file(file_path: str, *, max_bytes: int | None = None) -> bool:
     """Download a staged blob back to its local relative path.
 
     Returns False when the blob no longer exists (e.g. deleted by the
@@ -583,7 +583,28 @@ def download_syncing_temporal_file(file_path: str) -> bool:
     if directory:
         os.makedirs(directory, exist_ok=True)
     try:
-        blob.download_to_filename(file_path)
+        if max_bytes is None:
+            blob.download_to_filename(file_path)
+        else:
+            from utils.sync.input_limits import BackfillInputLimitExceeded
+
+            # Metadata rejects obviously large legacy blobs without downloading;
+            # the streaming bound also protects against a changed generation.
+            blob.reload()
+            if blob.size is None or blob.size > max_bytes:
+                raise BackfillInputLimitExceeded('backfill staged bytes exceeded')
+            written = 0
+            try:
+                with blob.open('rb', chunk_size=256 * 1024) as source, open(file_path, 'wb') as target:
+                    while chunk := source.read(min(256 * 1024, max_bytes - written + 1)):
+                        written += len(chunk)
+                        if written > max_bytes:
+                            raise BackfillInputLimitExceeded('backfill staged bytes exceeded')
+                        target.write(chunk)
+            except Exception:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                raise
         return True
     except BlobNotFound:
         return False
