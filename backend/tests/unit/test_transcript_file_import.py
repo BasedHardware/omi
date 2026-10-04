@@ -12,6 +12,7 @@ import codecs
 import inspect
 import io
 import struct
+import threading
 import time
 import zipfile
 import zlib
@@ -249,6 +250,14 @@ def test_utf16_transcripts_are_decoded_not_mistaken_for_binary(encoding, bom):
         ('Sam', 12.0),
     ]
     assert parsed.cues[0].text == 'Morning, did the vendor send the quote?'
+
+
+def test_a_numbered_srt_saved_as_txt_is_read_as_srt():
+    as_srt = tf.parse_transcript_file('call.srt', SRT.encode('utf-8'))
+    as_txt = tf.parse_transcript_file('call.txt', SRT.encode('utf-8'))
+
+    assert as_srt is not None and as_txt is not None
+    assert as_txt.cues == as_srt.cues
 
 
 def test_file_dispatch_uses_extension_title_and_filename_date():
@@ -773,6 +782,81 @@ def test_a_shutdown_after_the_import_completed_keeps_it_completed(tmp_path, job,
     assert job.final()['status'] == ImportJobStatus.completed.value
 
 
+def _cancel_while(tmp_path, data: bytes, blocked: threading.Event, release: threading.Event):
+    """Run the import as a task and cancel it, as the shutdown drain does, while a step is blocked."""
+    path = tmp_path / 'export.zip'
+    path.write_bytes(data)
+
+    async def main():
+        task = asyncio.create_task(
+            tf.process_transcript_import('job-1', UID, str(path), original_filename='export.zip')
+        )
+        while not blocked.is_set():
+            await asyncio.sleep(0.01)
+        task.cancel()
+        await asyncio.sleep(0.05)
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(main())
+    return path
+
+
+def test_a_real_shutdown_cancel_mid_file_fails_the_job_and_writes_nothing_more(tmp_path, job, monkeypatch):
+    blocked, release = threading.Event(), threading.Event()
+    import_file = tf._import_file
+    abandoned = {}
+
+    def slow_import(*args, **kwargs):
+        blocked.set()
+        release.wait(5)
+        try:
+            return import_file(*args, **kwargs)
+        except Exception as exc:
+            abandoned['error'] = type(exc).__name__
+            raise
+
+    monkeypatch.setattr(tf, '_import_file', slow_import)
+
+    path = _cancel_while(tmp_path, _zip({'a.srt': SRT}), blocked, release)
+    time.sleep(0.2)  # let the abandoned file thread finish
+
+    assert job.final()['status'] == ImportJobStatus.failed.value
+    assert job.final()['error'] == tf.INTERRUPTED_ERROR
+    assert not path.exists()
+    # The released archive stops the abandoned thread before it stores anything.
+    assert job.store.docs == {}
+
+
+@pytest.mark.parametrize(
+    ('files', 'final_status'),
+    [
+        pytest.param({'a.srt': SRT}, ImportJobStatus.completed.value, id='completed-write'),
+        pytest.param({'recording.mp3': b'ID3'}, ImportJobStatus.failed.value, id='no-transcripts-write'),
+        pytest.param({'a.srt': b'\x00binary'}, ImportJobStatus.failed.value, id='nothing-imported-write'),
+    ],
+)
+def test_a_shutdown_during_the_final_write_never_overwrites_it(tmp_path, job, monkeypatch, files, final_status):
+    blocked, release = threading.Event(), threading.Event()
+    update = tf.import_jobs_db.update_import_job
+
+    def slow_final_write(job_id, fields):
+        if fields.get('status') == final_status:
+            blocked.set()
+            release.wait(5)
+        update(job_id, fields)
+
+    monkeypatch.setattr(tf.import_jobs_db, 'update_import_job', slow_final_write)
+
+    _cancel_while(tmp_path, _zip(files), blocked, release)
+    time.sleep(0.2)  # let the final write land
+
+    assert [write['status'] for write in job.final_status_writes()] == [final_status]
+    assert job.final()['status'] == final_status
+    assert all(tf.INTERRUPTED_ERROR not in str(n) for n in job.notifications)
+
+
 def test_job_uses_its_own_source_type(monkeypatch):
     created = MagicMock()
     monkeypatch.setattr(tf.import_jobs_db, 'create_import_job', created)
@@ -1097,6 +1181,64 @@ def test_a_zip_without_a_comment_is_read_from_its_final_22_bytes(tmp_path, job, 
 
     assert job.final()['error'] == 'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
     assert opened == []
+
+
+def test_an_end_record_at_the_far_edge_of_the_search_window_is_checked(tmp_path, job, monkeypatch):
+    """zipfile searches the last 64 KiB + 22 bytes; a record at its very first byte still counts."""
+    opened = []
+    monkeypatch.setattr(tf, 'ZipFile', lambda *args, **kwargs: opened.append(args))
+
+    _run(tmp_path, 'export.zip', _end_of_directory(30_000, 9 * 1024 * 1024) + b'\0' * (1 << 16))
+
+    assert job.final()['error'] == 'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
+    assert opened == []
+
+
+@pytest.mark.parametrize(
+    'data',
+    [
+        pytest.param(b'not a zip archive' * 10, id='no-end-record'),
+        pytest.param(b'PK\x05\x06\0\0', id='shorter-than-an-end-record'),
+    ],
+)
+def test_a_zip_whose_end_record_cannot_be_read_is_refused_before_it_is_opened(tmp_path, job, monkeypatch, data):
+    opened = []
+    monkeypatch.setattr(tf, 'ZipFile', lambda *args, **kwargs: opened.append(args))
+
+    _run(tmp_path, 'export.zip', data)
+
+    assert job.final()['error'] == 'The upload is not a valid ZIP archive.'
+    assert opened == []
+
+
+@pytest.mark.parametrize(
+    ('entries', 'directory_bytes', 'accepted'),
+    [
+        pytest.param(tf.MAX_ZIP_DIRECTORY_ENTRIES, 0, True, id='entries-at-limit'),
+        pytest.param(tf.MAX_ZIP_DIRECTORY_ENTRIES + 1, 0, False, id='entries-over'),
+        pytest.param(1, tf.MAX_ZIP_DIRECTORY_BYTES, True, id='directory-at-limit'),
+        pytest.param(1, tf.MAX_ZIP_DIRECTORY_BYTES + 1, False, id='directory-over'),
+    ],
+)
+def test_the_directory_caps_are_inclusive(tmp_path, job, monkeypatch, entries, directory_bytes, accepted):
+    opened = []
+    monkeypatch.setattr(tf, 'ZipFile', lambda *args, **kwargs: opened.append(args))
+
+    _run(tmp_path, 'export.zip', _end_of_directory(entries, directory_bytes))
+
+    assert bool(opened) is accepted
+
+
+def test_a_future_zip_entry_date_is_clamped_to_now(tmp_path, job):
+    buf = io.BytesIO()
+    with ZipFile(buf, 'w') as zf:
+        zf.writestr(zipfile.ZipInfo('call.srt', date_time=(2099, 1, 1, 0, 0, 0)), SRT)
+    before = datetime.now(timezone.utc)
+
+    _run(tmp_path, 'export.zip', buf.getvalue())
+
+    (stored,) = job.store.docs.values()
+    assert before <= stored['started_at'] <= datetime.now(timezone.utc)
 
 
 def test_zip64_archive_with_few_entries_still_imports(tmp_path, job, monkeypatch):

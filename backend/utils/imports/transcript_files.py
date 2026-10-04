@@ -126,6 +126,8 @@ class ParsedTranscript:
 _TIMESTAMP = r'(?:\d{1,3}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?'
 _TIMESTAMP_RE = re.compile(r'(?:(\d{1,3}):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?')
 _CUE_TIMING_RE = re.compile(rf'^\s*({_TIMESTAMP})\s*-->\s*({_TIMESTAMP})')
+# A cue timing on any line: a numbered SRT puts its cue number on the first one.
+_SRT_TIMING_LINE_RE = re.compile(rf'^\s*{_TIMESTAMP}\s*-->', re.MULTILINE)
 _LABEL_RE = re.compile(r"^(?P<label>[^\W\d_][^:\n]{0,39}?)\s*:\s+(?P<rest>\S.*)$")
 _SPEAKER_N_RE = re.compile(r'^(?:speaker|participant|person|spk)\s*\d+$', re.IGNORECASE)
 # These run on uploaded lines of up to a few MB while holding the GIL, so each
@@ -407,7 +409,7 @@ def parse_transcript_file(filename: str, data: bytes, *, tz: Optional[str] = 'UT
     head = _normalize(text).lstrip()
     if head.startswith('WEBVTT'):
         cues = parse_vtt(text)
-    elif extension == '.srt' or (extension == '.txt' and _CUE_TIMING_RE.search(head[:500] or '')):
+    elif extension == '.srt' or (extension == '.txt' and _SRT_TIMING_LINE_RE.search(head[:500])):
         cues = parse_srt(text)
     elif extension == '.vtt':
         cues = parse_vtt(text)
@@ -621,6 +623,8 @@ def _end_of_directory_at(tail: bytes) -> Optional[int]:
     signature, which must have a whole record behind it.
     """
     record_size = _END_OF_DIRECTORY.size
+    if len(tail) < record_size:
+        return None
     if tail[-record_size:].startswith(_END_OF_DIRECTORY_SIGNATURE) and tail.endswith(b'\0\0'):
         return len(tail) - record_size
     index = tail.rfind(_END_OF_DIRECTORY_SIGNATURE)
@@ -638,7 +642,8 @@ def _declared_zip_directory(path: str) -> Optional[tuple[int, int]]:
     zip64_records: List[tuple[Any, ...]] = []
     with open(path, 'rb') as handle:
         size = handle.seek(0, os.SEEK_END)
-        tail_start = max(0, size - _END_OF_DIRECTORY.size - 0xFFFF)
+        # zipfile's search window: the longest comment (64 KiB) plus the record itself.
+        tail_start = max(0, size - _END_OF_DIRECTORY.size - (1 << 16))
         handle.seek(tail_start)
         tail = handle.read()
         index = _end_of_directory_at(tail)
@@ -695,7 +700,10 @@ def _open_upload(upload_path: str, original_filename: str, tz: Optional[str]) ->
     """
     if PurePosixPath(original_filename).suffix.lower() == '.zip' or is_zipfile(upload_path):
         declared = _declared_zip_directory(upload_path)
-        if declared and (declared[0] > MAX_ZIP_DIRECTORY_ENTRIES or declared[1] > MAX_ZIP_DIRECTORY_BYTES):
+        # Fail closed: zipfile cannot open a file whose end record this cannot find either.
+        if declared is None:
+            raise TranscriptImportError('The upload is not a valid ZIP archive.')
+        if declared[0] > MAX_ZIP_DIRECTORY_ENTRIES or declared[1] > MAX_ZIP_DIRECTORY_BYTES:
             raise TranscriptImportError(
                 'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
             )
@@ -741,7 +749,10 @@ def _archive_entries(archive: ZipFile, tz: Optional[str]) -> List[_Entry]:
     entries: List[_Entry] = []
     for info in members:
         try:
-            archived_at = datetime(*info.date_time, tzinfo=zone).astimezone(timezone.utc)
+            # A future date (a wrong device clock) would pin the conversation atop the history.
+            archived_at = min(
+                datetime(*info.date_time, tzinfo=zone).astimezone(timezone.utc), datetime.now(timezone.utc)
+            )
         except ValueError:
             archived_at = None
         entries.append(
@@ -889,7 +900,9 @@ async def process_transcript_import(
     slot is held for the whole import (backend/AGENTS.md, lane 2).
     """
     upload: Optional[_Upload] = None
-    completed = False
+    # Set before the final status write is awaited: a shutdown cancel during that write
+    # leaves its thread running, and must not race it with an "interrupted" failure.
+    settling = False
     try:
         if await run_blocking(db_executor, _job_cancelled, job_id):
             logger.info('transcript import job %s was cancelled before it started', job_id)
@@ -909,6 +922,7 @@ async def process_transcript_import(
         total = len(upload.entries)
         await run_blocking(db_executor, import_jobs_db.update_import_job, job_id, {'total_files': total})
         if total == 0:
+            settling = True
             await run_blocking(
                 db_executor, _fail, uid, job_id, 'No transcript files (.srt, .vtt or .txt) were found in the upload.'
             )
@@ -955,6 +969,7 @@ async def process_transcript_import(
                     logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
                     return
         if errors and created == 0 and skipped == 0:
+            settling = True
             await run_blocking(
                 db_executor, _fail, uid, job_id, f'None of the {total} file(s) could be imported ({errors[0]}).'
             )
@@ -962,6 +977,7 @@ async def process_transcript_import(
         if await run_blocking(db_executor, _job_cancelled, job_id):
             logger.info('transcript import job %s was cancelled; not recording its completion', job_id)
             return
+        settling = True
         await run_blocking(
             db_executor,
             import_jobs_db.update_import_job,
@@ -974,7 +990,6 @@ async def process_transcript_import(
                 'conversations_skipped': skipped,
             },
         )
-        completed = True
         body = f'Imported {created} conversation(s) from your transcripts.'
         if skipped:
             body += f' {skipped} were already imported.'
@@ -997,7 +1012,7 @@ async def process_transcript_import(
     except asyncio.CancelledError:
         # Shutdown cancels tracked background tasks (drain_background_tasks): record the
         # interruption rather than leave the job processing with no worker behind it.
-        if not completed:
+        if not settling:
             await run_blocking(db_executor, _fail, uid, job_id, INTERRUPTED_ERROR)
         raise
     except TranscriptImportError as exc:
