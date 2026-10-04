@@ -60,9 +60,13 @@ custom transcription provider configuration with SecureField replacement input, 
 Offline Sync root with its original status priorities and existing sync/retention owners.
 The saved STT key is absent from routine snapshots; reveal is explicit and logs start closed.
 Usage image capture is session-fenced, uncached and capped, with the existing share owner
-retaining temporary-file cleanup. This follow-up is not yet installed on the iPhone. A fresh pre-install read succeeded
-over Wi-Fi and confirmed the saved account, Dark appearance and selected pendant;
-the previous installed Release receipt above only applies to the conversation/advanced-screen artifact.
+retaining temporary-file cleanup. This follow-up was installed over the existing iPhone app
+and reopened over Wi-Fi. The signed production Release AOT came from personal source
+`df7f126013`, corresponding to presentation source `da52c82b6f`, with SHA-256
+`9e557b07da970b5042f8ef5d46a0fb401352fe59d70c79dd19422819a33861bc`.
+Fresh private before/after checks confirmed the same signed-in account, Dark appearance,
+onboarding, selected pendant and logical pairing. The fresh authenticated startup completed
+normally with no failed stages or new preference quarantines. No production data was cleared.
 
 Follow-up verification: 4,622 hermetic Flutter checks passed (14 declared skips),
 plus 138 startup checks and all 23 checks across six software journeys. The actual
@@ -76,3 +80,12 @@ preflight passed 39 checks. Early host failures exposed a missing chart label,
 a ring-storage read outside the original firmware gate, and incorrect fixture
 setup/copy expectations; the corrected final run passed. Physical playback/calls
 and full upstream CI remain unverified.
+
+Interactive follow-up inspection used agent-flutter to open all four new routes in the
+synthetic local-dev host, with native accessibility snapshots and display screenshots.
+The transcription title/Back/Save layout, seeded usage metrics, import empty state/refresh
+and Offline Sync status were visible. Unavailable loopback responses exercised the existing
+usage retry/error state and retention-owner error path; they are not evidence of successful
+live API writes. Successful owner and chart behavior is covered by the app-host checks above.
+The presentation head's available upstream checks passed (13 successes, 23 fork-policy skips);
+skipped full mobile CI still requires a maintainer to apply `ci:full` and rerun.
