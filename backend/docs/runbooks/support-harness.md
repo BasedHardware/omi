@@ -5,6 +5,23 @@ ID token. It makes no account changes. Each successful request must append a
 `support_audit_log` document before returning; failed audit persistence returns
 503 with no account or trace data.
 
+## CLI
+
+Support people do not get a GCP key. From a checkout of this repo:
+
+```bash
+scripts/omi-support login
+scripts/omi-support whoami
+scripts/omi-support lookup customer@example.com
+scripts/omi-support trace customer@example.com --from 2026-10-01T00:00:00Z --to 2026-10-02T00:00:00Z
+```
+
+`login` opens a localhost page and uses the same public Firebase web config as the app (`config/public-build-values.json`, prod). `localhost` is an authorized Firebase auth domain. Sign in with the support person's Omi Google account, not the customer's. The CLI stores only the Firebase refresh token at `~/.config/omi-support/session.json` (mode 0600) and refreshes a short-lived ID token per command.
+
+`whoami` prints the Firebase uid. An operator with Firestore write then creates `supportData/{that uid}` with `role: support:read` and an optional future `expires_at`. Until that document exists, lookup and trace return 403. This CLI cannot create the grant.
+
+`--base-url` defaults to `https://api.omi.me`. The routes are not served until this backend change is deployed. A missing conversation row does not prove where a recording was lost. Discarded or deleted rows stay in the trace as captured/synced evidence and are not reported as saved.
+
 ## Access
 
 An authorized operator manages `supportData/{caller_uid}` outside this API.
@@ -50,7 +67,7 @@ report `has_transcript=false`; that value cannot prove absence on those document
 
 Every document counts as captured and synced. Processed means postprocessing
 completed, or conversation completed with postprocessing absent/not_started/
-completed. Saved requires processed plus conversation completed. Failed reflects
+completed. Saved requires processed plus conversation completed, and is false when `discarded` or `deleted` is set. Those flags are returned as booleans. Failed reflects
 either failed status. Failure stage is process unless postprocessing completed
 but conversation failed, in which case it is save. These are lifecycle
 inferences, not proof of an on-device capture/sync failure: a missing server

@@ -310,7 +310,12 @@ def recording(**fields):
     }
 
 
-def test_completed_projection_contains_no_content():
+def test_discarded_or_deleted_is_not_saved():
+    discarded = project_support_trace(recording(discarded=True))
+    deleted = project_support_trace(recording(deleted=True))
+    assert discarded.captured and discarded.synced and not discarded.saved and discarded.discarded
+    assert deleted.captured and deleted.synced and not deleted.saved and deleted.deleted
+    assert 'SECRET' not in discarded.model_dump_json()
     row = project_support_trace(
         recording(
             audio_files=[{'path': 'gs://SECRET-BUCKET/SECRET-AUDIO', 'url': 'SECRET-URL'}],
@@ -416,6 +421,7 @@ def test_trace_real_reader_bounds_masks_and_audits(harness):
         'transcript_segments',
         'segments',
     } & set(selected)
+    assert 'discarded' in selected and 'deleted' in selected
     assert ('limit', 51) in harness.store.query_events
     assert len(harness.store.writes) == 1
     audit = harness.store.writes[0]

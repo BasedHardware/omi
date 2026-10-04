@@ -15,6 +15,8 @@ def project_support_trace(conversation: dict[str, Any]) -> SupportTraceRow:
         status == ConversationStatus.completed
         and post_status in (None, PostProcessingStatus.not_started, PostProcessingStatus.completed)
     )
+    discarded = bool(conversation.get('discarded'))
+    deleted = bool(conversation.get('deleted'))
     failed = status == ConversationStatus.failed or post_status == PostProcessingStatus.failed
     failure_stage = None
     if failed:
@@ -45,7 +47,9 @@ def project_support_trace(conversation: dict[str, Any]) -> SupportTraceRow:
         captured=True,
         synced=True,
         processed=processed,
-        saved=processed and status == ConversationStatus.completed,
+        saved=processed and status == ConversationStatus.completed and not discarded and not deleted,
+        discarded=discarded,
+        deleted=deleted,
         failed=failed,
         failure_stage=failure_stage,
         audio_present=isinstance(audio, list) and bool(audio),

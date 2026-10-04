@@ -1180,6 +1180,8 @@ def get_conversations(
             'postprocessing_status',
             'audio_files',
             'transcript_segments_compressed',
+            'discarded',
+            'deleted',
         ]
         return [
             dict(doc.to_dict() or {}, id=doc.id)

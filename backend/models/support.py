@@ -34,6 +34,8 @@ class SupportTraceRow(BaseModel):
     synced: bool
     processed: bool
     saved: bool
+    discarded: bool = False
+    deleted: bool = False
     failed: bool
     failure_stage: Literal['capture', 'sync', 'process', 'save'] | None = None
     audio_present: bool
