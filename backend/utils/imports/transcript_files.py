@@ -135,7 +135,9 @@ _VOICE_RE = re.compile(r'<v(?:\.[\w.-]+)?\s+([^<>\s][^<>]*)>')
 _TAG_RE = re.compile(r'<[^<>]*>')
 _HEADER_NAME_FIRST_RE = re.compile(rf'^(?P<name>\S(?:[^\n]{{0,58}}\S)?)\s{{2,}}\(?(?P<ts>{_TIMESTAMP})\)?$')
 _HEADER_TIME_FIRST_RE = re.compile(rf"^\[?(?P<ts>{_TIMESTAMP})\]?\s+(?P<name>[^\W\d_][\w .'-]{{0,39}})$")
-_INLINE_TIMED_RE = re.compile(rf'^\[?(?P<ts>{_TIMESTAMP})\]?\s*(?:-\s*)?(?P<rest>\S.*)$')
+# An optional "--> end" (one-line cues, whisper.cpp's "[start --> end]") is consumed whole,
+# so its dash is never taken for the "-" separator before the text.
+_INLINE_TIMED_RE = re.compile(rf'^\[?(?P<ts>{_TIMESTAMP})(?:\s*-->\s*{_TIMESTAMP})?\]?\s*(?:-\s*)?(?P<rest>\S.*)$')
 
 
 def _seconds(value: str) -> Optional[float]:
@@ -390,18 +392,21 @@ def _decode_transcript(data: bytes) -> Optional[str]:
         return None if '\x00' in text else text
     if b'\x00' in data:
         return None
+    data = data.removeprefix(codecs.BOM_UTF8)
     try:
-        return data.decode('utf-8-sig')
+        return data.decode('utf-8')
     except UnicodeDecodeError:
         return data.decode('cp1252', errors='replace')
 
 
-def _opens_like_srt(head: str) -> bool:
-    """Whether text opens the way an SRT does: a cue timing on the first block's first
-    or second line (after a cue number). A timing further in (a quoted clip, an agenda)
-    does not make notes an SRT, whose parser keeps only timed blocks."""
-    first = _blocks(head)[:1]
-    return bool(first) and any(_CUE_TIMING_RE.match(line) for line in first[0][:2])
+def _reads_as_srt(text: str) -> bool:
+    """Whether most blocks of a .txt are SRT cues: a cue timing on a block's first or
+    second line (after a cue number). The SRT parser keeps only such blocks, so a
+    title or header before the cues is fine, but notes that quote a timing or two
+    (a clip, an agenda) must stay text or most of them would be dropped."""
+    blocks = _blocks(text)
+    timed = sum(1 for lines in blocks if any(_CUE_TIMING_RE.match(line) for line in lines[:2]))
+    return timed * 2 > len(blocks)
 
 
 def parse_transcript_file(filename: str, data: bytes, *, tz: Optional[str] = 'UTC') -> Optional[ParsedTranscript]:
@@ -415,9 +420,9 @@ def parse_transcript_file(filename: str, data: bytes, *, tz: Optional[str] = 'UT
     head = _normalize(text).lstrip()
     if head.startswith('WEBVTT'):
         cues = parse_vtt(text)
-    elif extension == '.srt' or (extension == '.txt' and _opens_like_srt(head[:500])):
+    elif extension == '.srt' or (extension == '.txt' and _reads_as_srt(text)):
         cues = parse_srt(text)
-        if extension == '.txt' and not any(cue.text.strip() for cue in cues):
+        if extension == '.txt' and not cues:
             cues = parse_text_transcript(text)
     elif extension == '.vtt':
         cues = parse_vtt(text)
@@ -606,10 +611,14 @@ def _read_limited(open_member: Callable[[], object]) -> bytes:
 
 
 def _read_member(archive: ZipFile, info: ZipInfo) -> bytes:
+    if info.header_offset < 0:
+        # The end record placed the directory past where it starts: no member is where it says.
+        raise TranscriptFileSkipped(FILE_DAMAGED)
     try:
         return _read_limited(lambda: archive.open(info))
-    except (BadZipFile, zlib.error, EOFError) as exc:
-        # A bad CRC, corrupt deflate stream or truncated member.
+    except (BadZipFile, zlib.error, EOFError, NotImplementedError, UnicodeDecodeError) as exc:
+        # A bad CRC, corrupt deflate stream or truncated member; a feature zipfile does
+        # not support (patched data, strong encryption); a local name that is not UTF-8.
         logger.warning('transcript import member unreadable error_class=%s', type(exc).__name__)
         raise TranscriptFileSkipped(FILE_DAMAGED) from exc
 
@@ -703,13 +712,21 @@ class _Upload:
     archive: Optional[ZipFile] = None
 
 
+def _looks_like_zip(path: str) -> bool:
+    """is_zipfile, which older 3.11 releases let raise on a multi-disk zip64 locator."""
+    try:
+        return is_zipfile(path)
+    except BadZipFile:
+        return False
+
+
 def _open_upload(upload_path: str, original_filename: str, tz: Optional[str]) -> _Upload:
     """The upload's transcript files, after every archive-wide limit is checked.
 
     One bounded blocking step: it reads the end records and a capped central
     directory, never a member's data.
     """
-    if PurePosixPath(original_filename).suffix.lower() == '.zip' or is_zipfile(upload_path):
+    if PurePosixPath(original_filename).suffix.lower() == '.zip' or _looks_like_zip(upload_path):
         declared = _declared_zip_directory(upload_path)
         # Fail closed: zipfile cannot open a file whose end record this cannot find either.
         if declared is None:
@@ -768,8 +785,9 @@ def _archive_entries(archive: ZipFile, tz: Optional[str]) -> List[_Entry]:
             )
         except ValueError:
             archived_at = None
-        # The ZIP zero date (1980-01-01, ZipInfo's default) is not a recording time.
-        if archived_at is not None and archived_at.year < MIN_FILENAME_YEAR:
+        # Years before MIN_FILENAME_YEAR (local, as for file-name dates) are not recording
+        # times: they include the ZIP zero date, 1980-01-01, that ZipInfo writes by default.
+        if info.date_time[0] < MIN_FILENAME_YEAR:
             archived_at = None
         entries.append(
             _Entry(

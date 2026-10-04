@@ -283,6 +283,71 @@ def test_a_txt_that_only_mentions_a_cue_timing_is_not_read_as_srt(text):
     assert {'Alice', 'Bob'} <= {cue.speaker for cue in parsed.cues}
 
 
+@pytest.mark.parametrize(
+    'preface',
+    ['Weekly sync transcript\n\n', 'SRT\n\n', 'Exported by Recorder\nDate: 2026-09-12\n\n', '\n\n  \n'],
+    ids=['title', 'format-line', 'header-block', 'blank-lines'],
+)
+def test_an_srt_saved_as_txt_after_a_preface_is_still_read_as_srt(preface):
+    srt = '1\n00:00:01,000 --> 00:00:04,000\nAlice: Hello there.\n\n2\n00:00:05,000 --> 00:00:08,000\nBob: Hi Alice.\n'
+
+    as_txt = tf.parse_transcript_file('x.txt', (preface + srt).encode('utf-8'))
+
+    assert as_txt is not None
+    assert [(cue.speaker, cue.start) for cue in as_txt.cues] == [('Alice', 1.0), ('Bob', 5.0)]
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        pytest.param(
+            '00:01:02,000 --> 00:01:09,000\nClip: customer said onboarding was confusing.\n\n'
+            'Alice: we should simplify step two.\nBob: agreed, I will draft a proposal.\nAlice: great, review Friday.\n',
+            id='clip-first',
+        ),
+        pytest.param(
+            '10:00 --> 10:15 Updates\n10:15 --> 10:30 Roadmap\n\nAlice: hi everyone.\nBob: morning.\nAlice: let us start.\n',
+            id='agenda-first',
+        ),
+    ],
+)
+def test_notes_that_open_with_a_quoted_timing_keep_every_turn(text):
+    parsed = tf.parse_transcript_file('notes.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert {'Alice', 'Bob'} <= {cue.speaker for cue in parsed.cues}
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        pytest.param(
+            '00:00:01.000 --> 00:00:05.000 Hello there.\n\n00:00:05.000 --> 00:00:09.000 Hi Alice.\n',
+            id='one-line-cues',
+        ),
+        pytest.param(
+            '[00:00:01.000 --> 00:00:05.000]   Hello there.\n[00:00:05.000 --> 00:00:09.000]   Hi Alice.\n',
+            id='whisper-cpp',
+        ),
+    ],
+)
+def test_one_line_timed_cues_keep_their_text_and_start(text):
+    parsed = tf.parse_transcript_file('call.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.text, cue.start) for cue in parsed.cues] == [('Hello there.', 1.0), ('Hi Alice.', 5.0)]
+
+
+def test_a_bom_survives_neither_utf8_nor_the_cp1252_fallback():
+    data = codecs.BOM_UTF8 + '00:00:01,000 --> 00:00:02,000\nJos\u00e9: hola.\n\n'.encode('cp1252')
+    data += '00:00:03,000 --> 00:00:04,000\nAna: buenas.\n'.encode('cp1252')
+
+    parsed = tf.parse_transcript_file('call.srt', data)
+
+    assert parsed is not None
+    assert [(cue.speaker, cue.text) for cue in parsed.cues] == [('Jos\u00e9', 'hola.'), ('Ana', 'buenas.')]
+
+
 def test_a_txt_that_opens_like_srt_but_holds_no_cues_is_read_as_text():
     text = '00:00:01,000 --> 00:00:02,000\n\nAlice: hi there.\nBob: hello.\nAlice: shall we start?\n'
 
@@ -1325,6 +1390,71 @@ def test_a_zip_entry_at_the_dos_epoch_is_dated_by_the_upload_instead(tmp_path, j
 
     (stored,) = job.store.docs.values()
     assert before <= stored['started_at'] <= datetime.now(timezone.utc)
+
+
+def _central_flag(raw: bytearray, bit: int) -> bytearray:
+    at = raw.rfind(b'PK\x01\x02')
+    struct.pack_into('<H', raw, at + 8, struct.unpack_from('<H', raw, at + 8)[0] | bit)
+    return raw
+
+
+def _local_utf8_flag_on_a_cp437_name(raw: bytearray) -> bytearray:
+    at = raw.find(b'PK\x03\x04')
+    struct.pack_into('<H', raw, at + 6, struct.unpack_from('<H', raw, at + 6)[0] | 0x800)
+    raw[at + 30] = 0xFF
+    return raw
+
+
+def _directory_offset_past_its_start(raw: bytearray) -> bytearray:
+    struct.pack_into('<L', raw, raw.rfind(b'PK\x05\x06') + 16, raw.rfind(b'PK\x01\x02') + 1000)
+    return raw
+
+
+@pytest.mark.parametrize(
+    'damage',
+    [
+        pytest.param(lambda raw: _central_flag(raw, 0x20), id='patched-data-flag'),
+        pytest.param(lambda raw: _central_flag(raw, 0x40), id='strong-encryption-flag'),
+        pytest.param(_local_utf8_flag_on_a_cp437_name, id='local-utf8-name'),
+        pytest.param(_directory_offset_past_its_start, id='negative-header-offset'),
+    ],
+)
+def test_a_member_zipfile_cannot_read_is_reported_as_damaged(tmp_path, job, damage):
+    _run(tmp_path, 'export.zip', bytes(damage(bytearray(_zip({'a.srt': SRT})))))
+
+    assert job.final()['error'] == f'None of the 1 file(s) could be imported ({tf.FILE_DAMAGED}).'
+
+
+@pytest.mark.parametrize(
+    ('date_time', 'tz', 'kept'),
+    [
+        pytest.param((1990, 1, 1, 0, 30, 0), 'Europe/Berlin', True, id='first-local-day-of-1990'),
+        pytest.param((1989, 12, 31, 23, 30, 0), 'America/Los_Angeles', False, id='last-local-day-of-1989'),
+    ],
+)
+def test_the_zip_date_floor_reads_the_local_year(tmp_path, job, date_time, tz, kept):
+    """The same floor as a date in a file name, which is read in the user's timezone."""
+    buf = io.BytesIO()
+    with ZipFile(buf, 'w') as zf:
+        zf.writestr(zipfile.ZipInfo('call.srt', date_time=date_time), SRT)
+
+    _run(tmp_path, 'export.zip', buf.getvalue(), tz=tz)
+
+    (stored,) = job.store.docs.values()
+    assert (stored['started_at'].year < 2000) is kept
+
+
+def test_an_upload_that_breaks_zip_detection_is_read_by_its_extension(tmp_path, job, monkeypatch):
+    """Older zipfile versions raise from is_zipfile on some locators instead of answering False."""
+
+    def is_zipfile_raises(path):
+        raise zipfile.BadZipFile('zipfiles that span multiple disks are not supported')
+
+    monkeypatch.setattr(tf, 'is_zipfile', is_zipfile_raises)
+
+    _run(tmp_path, 'call.srt', SRT.encode('utf-8'))
+
+    assert job.final()['status'] == ImportJobStatus.completed.value
 
 
 def test_zip64_archive_with_few_entries_still_imports(tmp_path, job, monkeypatch):
