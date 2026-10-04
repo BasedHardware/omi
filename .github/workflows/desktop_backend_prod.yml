@@ -379,6 +379,8 @@ jobs:
             MENTOR_PIPELINE=cohort
             POSTHOG_HOST=https://us.posthog.com
             OMI_CUSTOMER_DATA_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            FIRESTORE_READ_LEDGER=1
+            FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
           secrets: |
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest

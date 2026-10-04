@@ -91,6 +91,8 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
   - name: PROACTIVITY_REDIS_HOST
     valueFrom:
       configMapKeyRef:
