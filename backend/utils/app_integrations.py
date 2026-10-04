@@ -1172,7 +1172,7 @@ async def _async_trigger_realtime_integrations(
                     )
                 if mentor_message:
                     mentor_results['mentor'] = mentor_message
-            elif conversation_id:
+            elif pipeline == 'v2' and conversation_id:
                 from utils.proactivity_producers import evaluate_mentor_event
 
                 await evaluate_mentor_event(uid, conversation_id, conversation_messages)

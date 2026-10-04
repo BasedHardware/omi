@@ -629,7 +629,8 @@ on every mentor host (effective once that env change reaches the process).
 In-flight calls retain reservations and settle; publication rechecks the cached
 flag and suppresses after disable becomes visible.
 Feed returns disabled, outcomes for existing items still work. Coordinator may
-explicitly flip mentor to legacy; never an automatic failure fallback. Preserve
+explicitly flip mentor to legacy. A failed cohort flag lookup selects legacy
+before invoking v2; once v2 is invoked, failures never retry through legacy. Preserve
 ledger/budgets/attempt IDs until TTL; no historical rewrite or refund-on-rollback.
 No old ledger backfill. Released clients continue existing routes while the
 integration owner handles retirement using `contracts/client-compat/` policy.
