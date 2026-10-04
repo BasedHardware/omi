@@ -324,22 +324,22 @@ def _embed_missing(
         base_ids: set[str] = set()
         if session is not None:
 
-            def cached_chunks():
+            def cached_chunks(read_session: AudioChunkReadSession):
                 # Mirror the base iterator's wanted/filter/order semantics, but
                 # read only the already generation-verified invocation cache.
-                chunks = sorted(session.chunks, key=lambda c: c.get('span', {}).get('start', c['timestamp']))
+                chunks = sorted(read_session.chunks, key=lambda c: c.get('span', {}).get('start', c['timestamp']))
                 for index, chunk in enumerate(chunks):
-                    if time.monotonic() > deadline or not session.in_budget():
+                    if time.monotonic() > deadline or not read_session.in_budget():
                         return
                     chunk_start = chunk.get('span', {}).get('start', chunk['timestamp'])
                     following = chunks[index + 1] if index + 1 < len(chunks) else None
                     next_start = following.get('span', {}).get('start', following['timestamp']) if following else None
                     if wanted(chunk_start, next_start):
-                        pcm, _ = session.cache.get(chunk['path'], (None, 'missing_blob'))
+                        pcm, _ = read_session.cache.get(chunk['path'], (None, 'missing_blob'))
                         if pcm:
                             yield chunk_start, pcm
 
-            iterator = cached_chunks()
+            iterator = cached_chunks(session)
         else:
             # Rollback/legacy sync path retains its single-midpoint-chunk policy.
             iterator = iter_audio_chunk_pcm(uid, conversation.id, wanted, sample_rate=SAMPLE_RATE)
