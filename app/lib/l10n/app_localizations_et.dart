@@ -78,6 +78,19 @@ class AppLocalizationsEt extends AppLocalizations {
   String get reprocessConversation => 'Töötle vestlust uuesti';
 
   @override
+  String get reprocessTranscription => 'Töötle transkriptsioon uuesti';
+
+  @override
+  String get retranscribingConversation =>
+      'Vestlust transkribeeritakse uuesti...\nSee võib pikemate vestluste puhul veidi aega võtta';
+
+  @override
+  String get errorReprocessingTranscription => 'Viga transkriptsiooni uuesti töötlemisel. Proovi hiljem uuesti.';
+
+  @override
+  String get errorNoStoredAudio => 'Selle vestluse jaoks pole salvestatud heli.';
+
+  @override
   String get deleteConversation => 'Kustuta vestlus';
 
   @override

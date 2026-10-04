@@ -78,6 +78,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reprocessConversation => 'Beszélgetés újrafeldolgozása';
 
   @override
+  String get reprocessTranscription => 'Átírás újrafeldolgozása';
+
+  @override
+  String get retranscribingConversation =>
+      'A beszélgetés újraátiratazása...\nEz hosszabb beszélgetések esetén eltarthat egy ideig';
+
+  @override
+  String get errorReprocessingTranscription => 'Hiba az átírás újrafeldolgozásakor. Próbáld meg később.';
+
+  @override
+  String get errorNoStoredAudio => 'Ehhez a beszélgetéshez nincs tárolt hang.';
+
+  @override
   String get deleteConversation => 'Beszélgetés törlése';
 
   @override
