@@ -142,10 +142,10 @@ _INLINE_TIMED_RE = re.compile(
 )
 # A line that is only a timing ("[00:32.000 --> 00:36.000]", an empty whisper.cpp
 # segment): it carries no words.
-_BARE_TIMING_RE = re.compile(rf'^\[?{_TIMESTAMP}(?:\s*-->\s*{_TIMESTAMP})?\]?$')
-# What may follow an SRT timing line's end time: cue settings ("X1:40 Y1:20",
-# "align:start"). Anything else is the text of a one-line cue.
-_CUE_SETTINGS_RE = re.compile(r'(?:\s+[\w-]+:\S+)*\s*')
+_BARE_TIMING_RE = re.compile(rf'^\[?(?P<ts>{_TIMESTAMP})(?:\s*-->\s*{_TIMESTAMP})?\]?$')
+# What may follow an SRT timing line's end time: cue settings (SRT's "X1:40 Y1:20",
+# WebVTT's "align:start position:10%"). Anything else is the text of a one-line cue.
+_CUE_SETTINGS_RE = re.compile(r'(?:\s+(?:[XY][12]|align|position|line|size|vertical|region):\S+)*\s*', re.IGNORECASE)
 
 
 def _seconds(value: str) -> Optional[float]:
@@ -249,10 +249,21 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
 
 
 def _paragraph_cues(block: Sequence[str]) -> List[TranscriptCue]:
-    """An untimed block: one cue per "Name: text" line when every line is one, else one cue."""
-    if len(block) > 1 and all(_LABEL_RE.match(line) for line in block):
-        return [TranscriptCue(text=line) for line in block]
-    return [TranscriptCue(text=' '.join(block))]
+    """An untimed block: one cue per "Name: text" turn when it holds several, else one cue.
+
+    A line that is not a label continues the turn above it (a wrapped turn), or
+    stands as its own cue before the first label (a title).
+    """
+    labeled = [_LABEL_RE.match(line) is not None for line in block]
+    if sum(labeled) < 2:
+        return [TranscriptCue(text=' '.join(block))]
+    turns: List[List[str]] = []
+    for line, is_label in zip(block, labeled):
+        if is_label or not turns:
+            turns.append([line])
+        else:
+            turns[-1].append(line)
+    return [TranscriptCue(text=' '.join(turn)) for turn in turns]
 
 
 def parse_srt(text: str) -> List[TranscriptCue]:
@@ -343,19 +354,25 @@ def parse_text_transcript(text: str, *, blocks: Optional[Sequence[Sequence[str]]
     headers = _header_lines(content)
     if any(headers):
         return _parse_header_turns(content, headers)
-    timed = [_INLINE_TIMED_RE.match(line) for line in content]
+    timed = [_INLINE_TIMED_RE.match(line) or _BARE_TIMING_RE.match(line) for line in content]
     if sum(1 for match in timed if match) * 2 >= len(content):
-        # Continuation lines collect under their timed line and each cue is joined
-        # once; rebuilding the cue per line re-copied its text (quadratic).
-        turns: List[tuple[re.Match[str], List[str]]] = []
+        # A timed line opens a turn; a timing alone on its line (an empty whisper.cpp
+        # segment, or a timing with its text below) opens one with no text yet, and
+        # turns that stay empty are dropped. Lines before the first timing keep their
+        # words as an untimed cue. Each turn is joined once (per-line rebuilds were quadratic).
+        lead: List[str] = []
+        turns: List[tuple[Optional[float], List[str]]] = []
         for line, match in zip(content, timed):
             if match:
-                turns.append((match, [match.group('rest').strip()]))
-            elif turns and not _BARE_TIMING_RE.match(line):
+                rest = match.groupdict().get('rest')
+                turns.append((_seconds(match.group('ts')), [rest.strip()] if rest else []))
+            elif turns:
                 turns[-1][1].append(line)
-        return _assign_speakers(
-            [TranscriptCue(text=' '.join(parts), start=_seconds(match.group('ts'))) for match, parts in turns]
-        )
+            else:
+                lead.append(line)
+        cues = [TranscriptCue(text=' '.join(lead))] if lead else []
+        cues.extend(TranscriptCue(text=' '.join(parts), start=start) for start, parts in turns if parts)
+        return _assign_speakers(cues)
     cues: List[TranscriptCue] = []
     for block in _blocks(text) if blocks is None else blocks:
         cues.extend(_paragraph_cues(block))

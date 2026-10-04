@@ -410,6 +410,82 @@ def test_empty_whisper_segments_add_nothing_to_the_cue_before_them():
     assert [(cue.text, cue.start) for cue in parsed.cues] == [('thanks everyone', 0.0), ('let us start', 4.0)]
 
 
+@pytest.mark.parametrize(
+    ('text', 'expected'),
+    [
+        pytest.param(
+            '[00:00:00.000 --> 00:00:04.000]\n[00:00:04.000 --> 00:00:08.000]  Hello there\n'
+            '[00:00:08.000 --> 00:00:09.000]\n',
+            [(None, 'Hello there', 4.0)],
+            id='as-many-empty-segments-as-spoken',
+        ),
+        pytest.param(
+            'Weekly sync\n[00:00:01.000 --> 00:00:02.000]  Alice: hi\n[00:00:02.000 --> 00:00:03.000]\n'
+            '[00:00:03.000 --> 00:00:04.000]  Bob: hello\n[00:00:04.000 --> 00:00:05.000]\n',
+            [(None, 'Weekly sync', None), ('Alice', 'hi', 1.0), ('Bob', 'hello', 3.0)],
+            id='title-and-empty-segments',
+        ),
+        pytest.param(
+            '[00:00:01.000 --> 00:00:04.000]\nHello there\n[00:00:04.000 --> 00:00:08.000]\nHi Alice\n',
+            [(None, 'Hello there', 1.0), (None, 'Hi Alice', 4.0)],
+            id='timing-lines-with-text-below',
+        ),
+        pytest.param(
+            'Weekly sync\n2026-09-12\n[00:00:01] Alice: Hi all\n[00:00:05] Bob: Hello\n',
+            [(None, 'Weekly sync 2026-09-12', None), ('Alice', 'Hi all', 1.0), ('Bob', 'Hello', 5.0)],
+            id='title-above-inline-timestamps',
+        ),
+    ],
+)
+def test_inline_timed_text_keeps_its_timings_and_every_word(text, expected):
+    parsed = tf.parse_transcript_file('call.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.speaker, cue.text, cue.start) for cue in parsed.cues] == expected
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        pytest.param(
+            'Alice: Hello there everyone\nand welcome to the call\nBob: Thanks for having me\nAlice: Let us start\n'
+            'Bob: Sure thing\n',
+            id='a-wrapped-turn',
+        ),
+        pytest.param(
+            'Weekly sync\nAlice: Hello there everyone\nBob: Thanks for having me\nAlice: Let us start\n',
+            id='a-title-above',
+        ),
+    ],
+)
+def test_a_labeled_transcript_keeps_its_speakers(text):
+    parsed = tf.parse_transcript_file('call.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert {'Alice', 'Bob'} <= {cue.speaker for cue in parsed.cues}
+    assert all(not (cue.speaker or '').startswith('Weekly') for cue in parsed.cues)
+
+
+@pytest.mark.parametrize('body', ['Note:see you then', 'see http://x.io/a', 'B:c'])
+def test_one_line_cue_text_that_looks_like_a_setting_is_kept(body):
+    text = f'00:00:01,000 --> 00:00:04,000 {body}\n\n00:00:05,000 --> 00:00:06,000 bye\n'
+
+    parsed = tf.parse_transcript_file('call.srt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [cue.text for cue in parsed.cues] == [body, 'bye']
+
+
+@pytest.mark.parametrize('settings', [' X1:100 X2:200 Y1:10 Y2:20', ' align:start position:10%', ''])
+def test_real_cue_settings_are_not_cue_text(settings):
+    text = f'1\n00:00:01,000 --> 00:00:04,000{settings}\nHello there\n'
+
+    parsed = tf.parse_transcript_file('call.srt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.text, cue.start) for cue in parsed.cues] == [('Hello there', 1.0)]
+
+
 def test_a_bom_survives_neither_utf8_nor_the_cp1252_fallback():
     data = codecs.BOM_UTF8 + '00:00:01,000 --> 00:00:02,000\nJos\u00e9: hola.\n\n'.encode('cp1252')
     data += '00:00:03,000 --> 00:00:04,000\nAna: buenas.\n'.encode('cp1252')
