@@ -200,7 +200,7 @@ env:
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
-    value: 'false'
+    value: 'true'
   # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
   - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
     value: "true"

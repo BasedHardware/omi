@@ -72,7 +72,7 @@ overlay:
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -288,7 +288,7 @@ overlay:
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
