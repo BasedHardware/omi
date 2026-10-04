@@ -69,6 +69,10 @@ void main() {
     expect(find.byType(OmiBackButton), findsOneWidget);
     expect(find.text('12'), findsOneWidget);
     expect(find.text('Previous: 9'), findsOneWidget);
+    // Lengths in rows are compact (ux-contract §8): 95 min, 80 min before, 25 min with Sam.
+    expect(find.text('1h 35m'), findsOneWidget);
+    expect(find.text('Previous: 1h 20m'), findsOneWidget);
+    expect(find.text('25m'), findsOneWidget);
     expect(find.text('Busiest day'), findsOneWidget);
     expect(find.text('Sam'), findsOneWidget);
 
@@ -78,7 +82,7 @@ void main() {
     expect(find.text('Move the offsite to March'), findsOneWidget);
     expect(find.text('Who owns the budget?'), findsOneWidget);
     // The open tasks are titled apart from the overview's count of tasks created.
-    expect(find.text('Open tasks'), findsOneWidget);
+    expect(find.text('Open Tasks'), findsOneWidget);
   });
 
   testWidgets('switching to This Month loads the month recap', (tester) async {
@@ -208,6 +212,64 @@ void main() {
     expect(calls, 2);
     expect(find.byType(OmiPartialNotice), findsNothing);
     expect(find.text('Sam'), findsOneWidget);
+  });
+
+  testWidgets('pulling down refreshes the recap and keeps it on screen meanwhile', (tester) async {
+    final pending = <Completer<ApiResult<wire.GeneratedPeriodRecapResponse>>>[];
+    await tester.pumpWidget(
+      _app(
+        PeriodRecapPage(
+          load: (period) {
+            final completer = Completer<ApiResult<wire.GeneratedPeriodRecapResponse>>();
+            pending.add(completer);
+            return completer.future;
+          },
+        ),
+      ),
+    );
+    pending.single.complete(ApiSuccess(_recap('week', conversations: 12)));
+    await tester.pumpAndSettle();
+
+    await tester.fling(find.text('Conversations'), const Offset(0, 400), 1000);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1)); // the overscroll settles
+    await tester.pump(const Duration(seconds: 1)); // the indicator arms and calls onRefresh
+
+    expect(pending, hasLength(2));
+    expect(find.byType(OmiLoadingState), findsNothing);
+    expect(find.text('12'), findsOneWidget);
+
+    pending.last.complete(ApiSuccess(_recap('week', conversations: 21)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('21'), findsOneWidget);
+  });
+
+  testWidgets('pulling down on an empty recap refreshes it too', (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(
+      _app(
+        PeriodRecapPage(
+          load: (period) async {
+            calls++;
+            return ApiSuccess(
+              wire.GeneratedPeriodRecapResponse.fromJson({
+                'period': period.name,
+                'start_date': '2026-09-28',
+                'end_date': '2026-10-04',
+                'days_recorded': 0,
+              }),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.fling(find.byType(OmiEmptyState), const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+
+    expect(calls, 2);
   });
 
   testWidgets('a highlight without a topic is titled by its summary', (tester) async {

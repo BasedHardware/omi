@@ -46,13 +46,14 @@ def previous_period_bounds(period: str, start: date) -> Tuple[date, date]:
 def comparable_previous_bounds(period: str, start: date, end: date, through: date) -> Tuple[date, date]:
     """The stretch of the previous period to compare with: like for like.
 
-    ``through`` is the last day of the current period being compared. Past the
-    period's end that is the whole previous period; otherwise the same number
-    of days from the previous period's start, so four days into a month are not
-    measured against a full month.
+    ``through`` is the last day of the current period being compared. On or past
+    the period's last day that is the whole previous period (so February 28
+    compares with all of January, as it will tomorrow); otherwise the same
+    number of days from the previous period's start, so four days into a month
+    are not measured against a full month.
     """
     previous_start, previous_end = previous_period_bounds(period, start)
-    if through > end:
+    if through >= end:
         return previous_start, previous_end
     elapsed = max((through - start).days, 0)
     return previous_start, min(previous_start + timedelta(days=elapsed), previous_end)
@@ -64,9 +65,14 @@ def _comparison_bounds(
     """The previous-period dates to compare with, or None when nothing is comparable yet.
 
     A period that has ended compares with the whole previous one. While it is in
-    progress, today counts only once its daily recap exists (it is written in the
-    evening); before that the comparison runs through yesterday, so the previous
-    period never gets a day the current one is still missing.
+    progress, today counts only once its daily recap exists (it is written at the
+    user's delivery hour, 22:00 by default); before that the comparison runs
+    through yesterday, so the previous period never gets a day the current one is
+    still missing. A user whose delivery hour is in the morning gets yesterday's
+    recap only then (before noon the cron summarizes the day before), so early in
+    the day "through yesterday" can still favour the previous period. That is
+    unavoidable: a day with nothing recorded has no recap either, so a missing
+    recap cannot tell "not written yet" from "empty day".
     """
     if today is None or today > end:
         return previous_period_bounds(period, start)

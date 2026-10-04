@@ -45,10 +45,12 @@ class _PeriodRecapPageState extends State<PeriodRecapPage> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  /// Loads the selected period. A pull-to-refresh passes [keepShown] so the recap
+  /// stays on screen under the refresh spinner until the new one arrives.
+  Future<void> _load({bool keepShown = false}) async {
     final generation = ++_generation;
     final period = _period;
-    setState(() => _result = null);
+    if (!keepShown) setState(() => _result = null);
     final result = await widget.load(period);
     if (!mounted || generation != _generation) return;
     setState(() => _result = result);
@@ -85,7 +87,14 @@ class _PeriodRecapPageState extends State<PeriodRecapPage> {
               ],
             ),
           ),
-          Expanded(child: _buildBody(context)),
+          Expanded(
+            child: RefreshIndicator(
+              color: OmiColors.onAccent,
+              backgroundColor: OmiColors.accent,
+              onRefresh: () => _load(keepShown: true),
+              child: _buildBody(context),
+            ),
+          ),
         ],
       ),
     );
@@ -95,14 +104,27 @@ class _PeriodRecapPageState extends State<PeriodRecapPage> {
     final result = _result;
     return switch (result) {
       null => const OmiLoadingState(),
-      ApiFailure() => OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: _load),
+      ApiFailure() => _scrollable(OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: _load)),
       ApiSuccess(:final data, :final truncated) => _withPartialNotice(
           truncated,
           data.daysRecorded == 0 && (data.topPeople ?? const []).isEmpty && (data.openActionItems ?? const []).isEmpty
-              ? OmiEmptyState(icon: Icons.calendar_month_outlined, title: context.l10n.noRecapForPeriod)
+              ? _scrollable(OmiEmptyState(icon: Icons.calendar_month_outlined, title: context.l10n.noRecapForPeriod))
               : _RecapContent(recap: data),
         ),
     };
+  }
+
+  /// A full-height scrollable around a state, so pull-to-refresh works on it too.
+  Widget _scrollable(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(child: child),
+        ),
+      ),
+    );
   }
 
   /// A recap the server had to cut short (its people or task read ran out of
@@ -139,6 +161,7 @@ class _RecapContent extends StatelessWidget {
     final actions = recap.openActionItems ?? const [];
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + OmiSpacing.md),
       children: [
         OmiSettingsGroup(
@@ -152,10 +175,10 @@ class _RecapContent extends StatelessWidget {
             ),
             OmiSettingsRow(
               title: l10n.timeRecorded,
-              value: OmiDuration.long((stats?.totalDurationMinutes ?? 0) * 60, l10n),
+              value: OmiDuration.compact((stats?.totalDurationMinutes ?? 0) * 60, l10n),
               subtitle: previous == null
                   ? null
-                  : l10n.recapPrevious(OmiDuration.long(previous.totalDurationMinutes * 60, l10n)),
+                  : l10n.recapPrevious(OmiDuration.compact(previous.totalDurationMinutes * 60, l10n)),
             ),
             OmiSettingsRow(title: l10n.tasks, value: '${stats?.actionItemsCreated ?? 0}'),
             OmiSettingsRow(title: l10n.memories, value: '${stats?.memoriesCreated ?? 0}'),
@@ -174,7 +197,7 @@ class _RecapContent extends StatelessWidget {
               for (final person in people)
                 OmiSettingsRow(
                   title: person.name,
-                  value: OmiDuration.long(person.talkMinutes * 60, l10n),
+                  value: OmiDuration.compact(person.talkMinutes * 60, l10n),
                   subtitle: l10n.conversationCount(person.conversations),
                 ),
             ],

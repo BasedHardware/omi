@@ -25,7 +25,7 @@ from database.conversation_scan import RECAP_PEOPLE_SCAN_CAP
 from models.period_recap import PeriodRecapResponse
 from routers import recaps as recaps_mod
 from utils.observability.fallback import ALLOWED_COMPONENTS
-from utils.other.list_budget import OMI_LIST_TRUNCATED_HEADER, ListReadBudget
+from utils.other.list_budget import OMI_LIST_TRUNCATED_HEADER, ListReadBudget, ListReadBudgetExhausted
 
 UID = 'u1'
 
@@ -64,10 +64,23 @@ def deps(monkeypatch):
 
     def people_scan(uid, *, start_date, end_date, budget):
         calls['people_scan'] = (uid, start_date, end_date, budget)
-        return iter([_conversation('p-sam', 300.0), _conversation('p-ana', 60.0)])
+
+        def rows():
+            # Like iter_conversations: an exhausted budget ends the scan before any read.
+            try:
+                budget.check()
+            except ListReadBudgetExhausted:
+                return
+            yield _conversation('p-sam', 300.0)
+            yield _conversation('p-ana', 60.0)
+
+        return rows()
 
     def action_items(uid, **kwargs):
         calls['action_items'] = (uid, kwargs)
+        if kwargs['budget'].truncated:
+            # Like get_action_items: no read once the request budget is spent.
+            return []
         return [
             {
                 'id': 'task-1',
@@ -206,7 +219,7 @@ def test_open_tasks_are_the_live_open_tasks_created_in_the_period(deps):
             'completed': False,
             'start_date': datetime(2026, 9, 28, 4, 0, tzinfo=timezone.utc),
             'end_date': datetime(2026, 10, 5, 3, 59, 59, 999999, tzinfo=timezone.utc),
-            'limit': 10,
+            'limit': recaps_mod.RECAP_TASK_READ_LIMIT,
             'budget': budget,
         },
     )
@@ -219,6 +232,44 @@ def test_open_tasks_are_the_live_open_tasks_created_in_the_period(deps):
             'due_at': None,
         }
     ]
+
+
+def test_locked_tasks_do_not_crowd_out_open_ones(deps, monkeypatch):
+    # Newest first, as the task list orders them: ten locked tasks, then three open ones.
+    tasks = [
+        {
+            'id': f'locked-{i}',
+            'description': 'Locked task',
+            'is_locked': True,
+            'created_at': datetime(2026, 10, 3, 12, i, tzinfo=timezone.utc),
+        }
+        for i in range(10)
+    ] + [
+        {
+            'id': f'open-{i}',
+            'description': f'Open task {i}',
+            'created_at': datetime(2026, 9, 29, 12, i, tzinfo=timezone.utc),
+        }
+        for i in range(3)
+    ]
+    monkeypatch.setattr(recaps_mod.action_items_db, 'get_action_items', lambda uid, *, limit, **_kwargs: tasks[:limit])
+
+    recap = _get('week', '2026-10-01')
+
+    assert [item.id for item in recap.open_action_items] == ['open-0', 'open-1', 'open-2']
+    assert recaps_mod.RECAP_TASK_READ_LIMIT == 50
+
+
+def test_a_failed_people_scan_keeps_the_tasks(deps, monkeypatch):
+    def broken_scan(uid, **_kwargs):
+        raise RuntimeError('firestore unavailable')
+
+    monkeypatch.setattr(recaps_mod, 'recap_people_scan', broken_scan)
+    monkeypatch.setattr(recaps_mod, 'record_fallback', lambda **kwargs: None)
+
+    recap = _get('week', '2026-10-01')
+
+    assert [item.id for item in recap.open_action_items] == ['task-1']
 
 
 def test_names_come_from_the_top_ranked_people_only(deps, monkeypatch):

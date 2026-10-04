@@ -17,7 +17,6 @@ from utils.other import endpoints as auth
 from utils.other.list_budget import ListReadBudget, finish_list_budget
 from utils.people_stats import collect_people_stats
 from utils.period_recaps import (
-    MAX_RECAP_ITEMS,
     MAX_TOP_PEOPLE,
     MIN_RECAP_DATE,
     RECAP_PERIODS,
@@ -36,6 +35,11 @@ logger = logging.getLogger(__name__)
 # for a regenerated copy of every date. A read that fills it may be cut off, so
 # the comparison with the previous period is then left out.
 RECAP_SUMMARY_READ_LIMIT = 124
+# Open tasks read for the recap. Locked (paywalled) tasks are dropped after the
+# read and the rest capped at MAX_RECAP_ITEMS, so the read takes more than it
+# shows: newer locked tasks cannot crowd out the open ones. The query cannot
+# filter on is_locked, as older tasks have no such field.
+RECAP_TASK_READ_LIMIT = 50
 
 
 @router.get('/v1/users/recaps/{period}', tags=['v1'], response_model=PeriodRecapResponse)
@@ -82,8 +86,11 @@ def get_period_recap(
     )
     start_utc, end_utc = period_utc_bounds(start, end, time_zone)
     budget = conversation_scan_budget(request, route='period-recap')
-    open_tasks = _period_open_tasks(uid, start_utc, end_utc, budget)
+    open_tasks, tasks_failed = _period_open_tasks(uid, start_utc, end_utc, budget)
     people_stats, people_names = _period_people(uid, start_utc, end_utc, budget)
+    if tasks_failed:
+        # Marked only now: an exhausted budget would end the people scan before it read anything.
+        _mark_partial(budget)
     recap = PeriodRecapResponse(
         **build_period_recap(
             period,
@@ -114,12 +121,17 @@ def _mark_partial(budget: ListReadBudget) -> None:
 
 def _period_open_tasks(
     uid: str, start_utc: datetime, end_utc: datetime, budget: ListReadBudget
-) -> List[Dict[str, Any]]:
-    """The live open tasks created in the period; a failed read degrades to none, marked partial."""
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """The live open tasks created in the period, and whether the read failed.
+
+    A failed read degrades to no tasks. The caller marks the response partial
+    once the other reads are done, so the failure cannot cut them short.
+    """
     try:
-        return action_items_db.get_action_items(
-            uid, completed=False, start_date=start_utc, end_date=end_utc, limit=MAX_RECAP_ITEMS, budget=budget
+        tasks = action_items_db.get_action_items(
+            uid, completed=False, start_date=start_utc, end_date=end_utc, limit=RECAP_TASK_READ_LIMIT, budget=budget
         )
+        return tasks, False
     except Exception:
         record_fallback(
             component='daily_summary',
@@ -129,8 +141,7 @@ def _period_open_tasks(
             outcome='degraded',
             log=logger,
         )
-        _mark_partial(budget)
-        return []
+        return [], True
 
 
 def _period_people(
