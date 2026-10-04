@@ -9279,6 +9279,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Memuat turun daripada peranti anda';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current daripada $total';
   }

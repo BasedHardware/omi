@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "కనెక్షన్‌ను తనిఖీ చేయండి",
     "forYou": "మీ కోసం",
     "stopThese": "వీటిని ఆపండి",
-    "dismiss": "దాచు"
+    "dismiss": "దాచు",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

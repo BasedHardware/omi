@@ -9340,6 +9340,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Dina-download mula sa iyong device';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current ng $total';
   }

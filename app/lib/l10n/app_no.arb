@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Sjekk tilkoblingen",
     "forYou": "For deg",
     "stopThese": "Stopp disse",
-    "dismiss": "Avvis"
+    "dismiss": "Avvis",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

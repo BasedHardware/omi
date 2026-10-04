@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "کنکشن چیک کریں",
     "forYou": "آپ کے لیے",
     "stopThese": "یہ روکیں",
-    "dismiss": "چھپائیں"
+    "dismiss": "چھپائیں",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

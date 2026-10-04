@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்",
     "forYou": "உங்களுக்காக",
     "stopThese": "இவற்றை நிறுத்து",
-    "dismiss": "மறை"
+    "dismiss": "மறை",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

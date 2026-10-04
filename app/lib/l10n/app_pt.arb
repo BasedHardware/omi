@@ -3870,5 +3870,7 @@
     "playbackAudioNetworkFailed": "Verifique a ligação",
     "forYou": "Para você",
     "stopThese": "Parar estes",
-    "dismiss": "Dispensar"
+    "dismiss": "Dispensar",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

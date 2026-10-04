@@ -17253,6 +17253,18 @@ abstract class AppLocalizations {
   /// **'Downloading from your device'**
   String get syncCardDownloadingTitle;
 
+  /// Offline Sync status card: overall device-download percent. Not shown on recording rows.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String syncCardDownloadPercent(int percent);
+
+  /// Offline Sync status card: overall device-download percent and speed. Not shown on recording rows.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% · {speed} KB/s'**
+  String syncCardDownloadPercentSpeed(int percent, String speed);
+
   /// Top status card: secondary progress line under the phase title.
   ///
   /// In en, this message translates to:

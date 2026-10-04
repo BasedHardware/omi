@@ -3870,5 +3870,7 @@
     "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin",
     "forYou": "Sizin İçin",
     "stopThese": "Bunları Durdur",
-    "dismiss": "Gizle"
+    "dismiss": "Gizle",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

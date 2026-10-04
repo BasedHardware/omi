@@ -9117,6 +9117,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncCardDownloadingTitle => '기기에서 다운로드 중';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$total개 중 $current개';
   }
