@@ -1,0 +1,50 @@
+# ==============================================================================
+# Secrets and Credentials (Critical Security Guard)
+# ==============================================================================
+google-credentials.json
+*.env
+*.env.*
+.env*
+!.env.template
+!.env.example
+!.env.local-dev.template
+!.env.dev.template
+!.env.prod.template
+!.env.offline.template
+*.pem
+*.key
+*.cert
+*.crt
+
+# ==============================================================================
+# Python / Build Caches & Virtual Environments
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*venv/
+venv/
+.venv/
+env/
+myenv/
+.local/
+dump/
+
+# ==============================================================================
+# OS Artifacts & Logs
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+*.log
+*.zip
+*.tar.gz
