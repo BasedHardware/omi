@@ -37,7 +37,6 @@ from utils.conversations.process_conversation import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage
-from utils.log_sanitizer import sanitize_pii
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
     classify_finalization_failure,
