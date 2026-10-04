@@ -3,7 +3,7 @@
 Use this recipe to track your personal milestones, target deadlines, and long-term habits alongside your daily calendar meetings: it converts one or more `goal list` JSON exports into a standard RFC 5545 iCalendar (`.ics`) file compatible with Google Calendar, Apple Calendar, Microsoft Outlook, Thunderbird, and Apple Reminders.
 
 It reads saved JSON exports, makes zero network requests, and supports dual calendar modes:
-- **`vevent` (default)**: Visual milestone events scheduled at target deadlines with progress descriptions.
+- **`vevent` (default)**: Milestone calendar events scheduled at latest goal activity (or target deadlines if defined) with progress metrics and status descriptions.
 - **`vtodo`**: Native actionable task items featuring RFC 5545 `PERCENT-COMPLETE` progress bars for to-do managers and Reminders apps.
 
 ## Prerequisites
@@ -13,17 +13,16 @@ It reads saved JSON exports, makes zero network requests, and supports dual cale
 
 ## 1. Export your goals
 
-Export your goals using the CLI:
+Export your active goals using the CLI (up to the maximum 100 limit):
 
 ```sh
-omi --json goal list > goals.json
+omi --json goal list --limit 100 > goals.json
 ```
 
-For large account collections spanning multiple pages, retrieve each page using `--offset`:
+To include inactive or completed goals in your calendar, pass the `--include-inactive` flag:
 
 ```sh
-omi --json goal list --limit 100 --offset 0 > goals_page1.json
-omi --json goal list --limit 100 --offset 100 > goals_page2.json
+omi --json goal list --limit 100 --include-inactive > all_goals.json
 ```
 
 ## 2. Convert to iCalendar (.ics)
@@ -39,7 +38,7 @@ python goals_to_ics.py goals.json -o goals.ics
 Stream directly from the Omi CLI through Unix pipes without intermediate files:
 
 ```sh
-omi --json goal list | python goals_to_ics.py - -o goals.ics --force
+omi --json goal list --include-inactive | python goals_to_ics.py - -o goals.ics --force
 ```
 
 ### VTODO mode for Apple Reminders & Task Managers
@@ -50,12 +49,12 @@ To import your goals as actionable tasks with native completion percentages into
 python goals_to_ics.py goals.json --mode vtodo -o goals_tasks.ics --force
 ```
 
-### Multi-page aggregation and deduplication
+### Multi-file aggregation and deduplication
 
-When passing multiple files from paginated exports, `goals_to_ics.py` automatically merges records and deduplicates by `id`, keeping the newest `updated_at` entry:
+When combining exports across multiple snapshots, projects, or recurring backup files (e.g. combining active and archived exports or team goal snapshots), `goals_to_ics.py` automatically merges records and deduplicates by `id`, keeping the newest `updated_at` entry:
 
 ```sh
-python goals_to_ics.py goals_page1.json goals_page2.json -o full_calendar.ics --force
+python goals_to_ics.py goals_q3.json goals_q4.json -o full_calendar.ics --force
 ```
 
 ### Filtering and custom calendar name
@@ -64,6 +63,12 @@ python goals_to_ics.py goals_page1.json goals_page2.json -o full_calendar.ics --
 # Only export active goals to a custom-named calendar
 python goals_to_ics.py goals.json --status active --name "Q4 2026 Goals" -o q4_goals.ics
 ```
+
+> **Note**: Filtering by `--status achieved` or `--status inactive` requires that your goals were exported with `--include-inactive`, since the default CLI list excludes inactive records.
+
+### Timestamp & deadline mapping
+
+Current Omi Goal API exports provide `created_at` and `updated_at` timestamps. In `vevent` mode, events are scheduled based on the most recent goal activity (falling back to creation time, or respecting optional `target_date`/`deadline` keys if present in customized exports), allowing you to visually timeline when milestones were last progressed or achieved. In `vtodo` mode, target dates populate the `DUE:` property when present.
 
 ## Command line options
 

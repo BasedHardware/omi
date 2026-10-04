@@ -13,8 +13,8 @@ Features:
 - Zero third-party dependencies: strictly Python standard library.
 
 Usage:
-    # Export to iCalendar events (Google Calendar, Outlook, Apple Calendar)
-    omi --json goal list | python goals_to_ics.py - -o goals.ics
+    # Export to iCalendar events (optionally including inactive/archived goals)
+    omi --json goal list --include-inactive | python goals_to_ics.py - -o goals.ics
 
     # Export to VTODO tasks (Apple Reminders, Thunderbird Tasks, OmniFocus)
     python goals_to_ics.py goals.json --mode vtodo -o goals_tasks.ics --force
