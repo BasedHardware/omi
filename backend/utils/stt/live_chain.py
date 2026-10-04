@@ -32,7 +32,6 @@ from utils.stt.live_router import (
     capacity_available,
     note_capacity_full,
     capacity_refused_at,
-    CAPABILITY_FAMILIES,
 )
 from config.live_stt_registry import routing_on, DEFAULT_IDS, registry, Target
 from config.live_stt_recovery import recovery_enabled
@@ -288,7 +287,7 @@ async def connect_configured_chain(
                     if any(s == service and (t is None or t.endpoint is None) for s, t in routes):
                         continue
                     target, _ = route_target(service)
-                    routes.append((service, target if service.value in CAPABILITY_FAMILIES else None))
+                    routes.append((service, target if targets and target in targets else None))
         except CostHealthUnavailable as error:
             COST_FAIL_OPEN.labels(reason='cache_unavailable').inc()
             routes, active = fallback_routes(error.states)
