@@ -108,6 +108,15 @@ MEMORY_POLICY_CORE_TESTS = (
 # intentional-exception check below — single source so the two lists cannot
 # drift apart and silently stop selecting the monitoring unit contracts.
 MONITORING_CONTRACT_SOURCES = (
+    'backend/charts/monitoring/prometheus-adapter/',
+    'backend/scripts/diff_prod_adapter.py',
+    'backend/charts/parakeet/',
+    'backend/charts/backend-listen/',
+    'backend/charts/pusher/',
+    'backend/charts/vad/',
+    'backend/charts/diarizer/',
+    'backend/charts/nllb-translation/',
+    'backend/charts/deepgram-self-hosted/nova-3/',
     'backend/charts/monitoring/expected-targets.prod.yaml',
     'backend/charts/monitoring/kube-prometheus-stack/',
     'backend/charts/monitoring/alerts/',
