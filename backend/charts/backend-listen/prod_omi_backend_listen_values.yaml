@@ -560,6 +560,8 @@ env:
     value: "true"
   - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "true"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

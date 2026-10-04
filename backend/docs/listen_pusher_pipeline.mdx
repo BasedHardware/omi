@@ -2929,3 +2929,17 @@ identifies an already unknown stored contributor counted again; the original cau
 is not reconstructed after restart. A merge reason takes precedence over a fresh
 contributor's refusal. Attribution travels in transaction-local metadata and is never
 stored in a transcript or exposed through the public conversation API.
+
+### Delayed-final capture retention
+
+`LIVE_CAPTURE_WINDOW_RETENTION` defaults **off** in code, runtime overlays and GKE
+values. Off retains 64 capture anchors and 4096 accepted-send spans. On admits
+512 anchors and 16384 spans per map (including the Soniox shadow map). Clocks/maps
+snapshot their bounds at construction, so disabling the switch affects new clocks
+and provider epochs; existing ledgers remain bounded by their admitted limits.
+No PCM, text or IDs are added to these ledgers. Retained rows still originate only
+from decoded receiver observations and successful accepted sends. Compaction,
+eviction, discontinuity and invalid-interval refusals remain fail-closed beyond the
+new limits. Ownership history, audio format, embedding cache keys and resolution
+status policy do not change. This flag cannot repair unknown merged text or fill
+VAD gaps; measure first-commit attribution before promoting it.

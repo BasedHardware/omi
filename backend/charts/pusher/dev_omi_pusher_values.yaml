@@ -185,6 +185,8 @@ env:
     value: "false"
   - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "false"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_CHAT_AGENT_ROUTE

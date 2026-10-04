@@ -105,3 +105,45 @@ async def test_transaction_counts_first_stored_id_once_and_versions_separately(w
     before = sum(count('segment', reason) for reason in CAPTURE_WINDOW_REASONS)
     await processor._update_live_conversation(current, [fresh], [], datetime.now(timezone.utc), None)
     assert sum(count('segment', reason) for reason in CAPTURE_WINDOW_REASONS) == before
+
+
+@pytest.mark.parametrize(
+    'reason',
+    [
+        'translator_zero_length',
+        'translator_outside_accepted_sends',
+        'kill_switch',
+        'custom_stt',
+        'multi_channel',
+        'anchor_compacted',
+    ],
+)
+async def test_original_loss_reason_reaches_committed_metric(monkeypatch, reason):
+    from tests.unit.test_live_capture_retention import setup, drain
+    from tests.unit.test_audio_timeline_round3 import RATE, T0
+
+    receiver, callback, epoch, sender = setup(monkeypatch, False, 'modulate')
+    pcm = b'\0\0' * RATE
+    for i in range(70 if reason == 'anchor_compacted' else 1):
+        first, _, _ = receiver.capture_timeline.accept(pcm, T0 + i * 4 + 1, i * 4 + 1)
+        assert sender.send(pcm, start_sample=first)
+    raw = dict(id='loss', text='Synthetic final.', start=0.1, end=0.9, speaker='SPEAKER_00', is_user=False)
+    before_version, before_segment = count('version', reason), count('segment', reason)
+    if reason == 'custom_stt':
+        receiver.host.use_custom_stt = True
+        receiver._enqueue_stt_segments([raw], provider='custom')
+    elif reason == 'multi_channel':
+        receiver.host.is_multi_channel = True
+        receiver._enqueue_stt_segments([raw])
+    else:
+        if reason == 'kill_switch':
+            monkeypatch.setenv('LIVE_SPEAKER_CAPTURE_CLOCK', 'false')
+        elif reason == 'translator_zero_length':
+            raw['end'] = raw['start']
+        elif reason == 'translator_outside_accepted_sends':
+            raw.update(start=5, end=6)
+        callback([raw])
+    (stored,) = await drain(monkeypatch, receiver)
+    assert 'audio_capture_start' not in stored
+    assert count('version', reason) == before_version + 1
+    assert count('segment', reason) == before_segment + 1
