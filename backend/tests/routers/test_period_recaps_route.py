@@ -15,10 +15,12 @@ os.environ.setdefault("OPENAI_API_KEY", "sk-test")
 import logging
 import time
 from datetime import date, datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 from fastapi import HTTPException, Response
 
 from database.conversation_scan import RECAP_PEOPLE_SCAN_CAP
@@ -404,3 +406,16 @@ def test_a_task_read_cut_by_the_request_budget_is_reported_truncated(deps, monke
     _get('week', '2026-10-01', response=response)
 
     assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
+
+
+def test_the_route_policy_declares_the_byok_check_its_auth_dependency_runs():
+    # get_current_user_uid validates BYOK headers whenever they are present, so
+    # the manifest says so, as it does for the daily-summaries routes.
+    [route] = [r for r in recaps_mod.router.routes if getattr(r, 'path', None) == '/v1/users/recaps/{period}']
+    assert any(dep.call is recaps_mod.auth.get_current_user_uid for dep in route.dependant.dependencies)
+    manifest = yaml.safe_load((Path(__file__).resolve().parents[2] / 'route_policy_manifest.yaml').read_text())
+    [entry] = [
+        e for e in manifest['routes'] if e.get('method') == 'GET' and e.get('path') == '/v1/users/recaps/{period}'
+    ]
+
+    assert entry['policy']['byok'] == 'validated_when_headers_present'
