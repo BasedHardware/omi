@@ -328,7 +328,7 @@ def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
         "https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt"
     )
     assert failures == []
-    assert report[0] == "FLEET committed=15 live=15 gated=15 matching=15 gated_matching=15"
+    assert report[0] == "FLEET committed=26 live=26 gated=26 matching=26 gated_matching=26"
     assert "COMMITTED_BUT_ABSENT (0): -" in report
     assert "LIVE_BUT_UNCOMMITTED (0): -" in report
 

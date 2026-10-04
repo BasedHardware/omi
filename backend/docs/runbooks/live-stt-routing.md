@@ -435,7 +435,8 @@ combined overflow/batch-pressure, POST-latency, replay-continuity, lifecycle,
 persistence, snapshot and stage-readiness rules. Any-text headline success
 remains its existing limited SLI. Deploy and test notification delivery through
 the monitoring release process before rollout; committing rules does not make
-them live. Lifecycle/replay rules document their configured-chain/recovery
+them live. The live-STT import allowlist and coverage gate include these rules;
+the monitoring import must precede verification of their live coverage. Lifecycle/replay rules document their configured-chain/recovery
 prerequisites. The #20391 terminal-after-text emitter also requires the pinned
 recovery flag; its dedicated alert is dormant while that flag is off. The
 independent mid-session terminal rule covers every path. Never pool lifecycle

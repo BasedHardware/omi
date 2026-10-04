@@ -49,6 +49,17 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-batch-queue-depth",
     "omi-stt-batch-queue-latency",
     "omi-stt-sync-prerecorded-errors",
+    "omi-stt-terminal-after-text",
+    "omi-stt-mid-session-terminal",
+    "omi-stt-paid-capacity",
+    "omi-stt-combined-pressure",
+    "omi-stt-window-post-latency",
+    "omi-stt-replay-continuity",
+    "omi-stt-evidence-loss",
+    "omi-stt-leg-lifecycle-gap",
+    "omi-stt-snapshot-unready",
+    "omi-stt-stage-disagreement",
+    "omi-stt-enabled-state-unknown",
 )
 LIVE_STT_PENDING_UIDS = ("omi-soniox-runway-70", "omi-soniox-runway-90")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
