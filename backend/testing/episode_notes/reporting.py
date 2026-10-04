@@ -13,8 +13,12 @@ COSTS = ('input_tokens', 'output_tokens', 'latency_seconds')
 
 
 def summarize(rows: list[dict]) -> dict:
+    attempts = rows
+    rows = [row for row in rows if row.get('status', 'ok') == 'ok']
     return {
         'count': len(rows),
+        'attempted_count': len(attempts),
+        'error_count': len(attempts) - len(rows),
         'mean_informativeness_gap': sum(row['informativeness_gap'] for row in rows) / len(rows) if rows else None,
         **{metric: sum(row[metric] for row in rows) for metric in METRICS if metric != 'informativeness_gap'},
         'property_failure_count': sum(len(row['property_failures']) for row in rows),
@@ -25,7 +29,9 @@ def summarize(rows: list[dict]) -> dict:
                 'mean': sum(values) / len(values) if values else None,
             }
             for metric in COSTS
-            for values in [[row['candidate_cost'][metric] for row in rows if row['candidate_cost'][metric] is not None]]
+            for values in [
+                [row['candidate_cost'][metric] for row in attempts if row['candidate_cost'][metric] is not None]
+            ]
         },
     }
 
@@ -45,11 +51,11 @@ def arm_reports(rows: list[dict], arms: tuple[str, ...]) -> dict:
 
 
 def paired_reports(rows: list[dict]) -> dict:
-    by_arm = {(row['id'], row['arm']): row for row in rows}
+    by_arm = {(row['id'], row['arm']): row for row in rows if row.get('status', 'ok') == 'ok'}
     results = {}
     for comparison in ('baseline', 'stored'):
         pairs = []
-        for episode in [row for row in rows if row['arm'] == 'episode']:
+        for episode in [row for row in rows if row['arm'] == 'episode' and row.get('status', 'ok') == 'ok']:
             other = by_arm.get((episode['id'], comparison))
             if other is None:
                 continue

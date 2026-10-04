@@ -95,6 +95,7 @@ class LLMResult:
     input_tokens: int | None = None
     output_tokens: int | None = None
     latency_seconds: float | None = None
+    finish_reason: str | None = None
 
     def cost(self) -> dict:
         return {
@@ -107,3 +108,12 @@ class LLMResult:
 def _result(value: dict | LLMResult) -> LLMResult:
     # Legacy fake callbacks have no measured usage; never invent zero counts.
     return value if isinstance(value, LLMResult) else LLMResult(content=value)
+
+
+class LLMCallError(Exception):
+    """Bounded failure class and usage receipt, never provider/evidence text."""
+
+    def __init__(self, error_class: str, result: LLMResult):
+        super().__init__(error_class)
+        self.error_class = error_class
+        self.result = result

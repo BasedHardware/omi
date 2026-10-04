@@ -29,8 +29,13 @@ and `clients.get_llm` add no reasoning-effort override. The harness likewise sen
 no `reasoning_effort`, `reasoning`, or temperature override. Reference/judge default
 to `openai/gpt-6-sol`, configurable with `--reference-model` / `--judge-model` or
 `EPISODE_EVAL_REFERENCE_MODEL` / `EPISODE_EVAL_JUDGE_MODEL`. Live use requires an
-explicit key and HTTPS base URL. Requests have a 6000-token output cap, 60-second
-timeout, no transport retries. CLI concurrency defaults to four (maximum eight).
+explicit key and HTTPS base URL. Requests default to a configurable 32000-token output cap (`--max-tokens`) and
+300-second timeout (`--timeout`), with no transport retries. Each call records
+`finish_reason`. Truncation, transport, JSON and judge-schema failures become
+per-case/per-arm error rows; another case or arm continues. Reports separate
+scored counts from attempted/error counts; paired scores include only successful
+pairs. Failed calls are not cached, and resuming retries them while reusing
+successful references/candidates/judges. Invalid old judge receipts are refreshed. CLI concurrency defaults to four (maximum eight).
 
 The reference is cached next to the output (`OUTPUT.cache/`). Candidate and judge
 responses are cached separately. Keys include model, exact prompt and payload;

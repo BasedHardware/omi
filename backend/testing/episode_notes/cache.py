@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
-from testing.episode_notes.schema import LLMResult, _result
+from testing.episode_notes.schema import LLMCallError, LLMResult, _result
 
 
 def fingerprint(value: object) -> str:
@@ -43,14 +43,32 @@ def cached_call(
     prompt: str,
     payload: dict,
     llm: Callable[[str, dict], dict | LLMResult],
+    validate: Callable[[dict], object] | None = None,
 ) -> LLMResult:
     key = fingerprint({'model': model, 'prompt': prompt, 'payload': payload})
     path = directory / f'{kind}-{key}.json' if directory else None
     if path is not None and path.exists():
         receipt = json.loads(path.read_text())
         if receipt.get('key') == key:
-            return LLMResult(**receipt['result'])
+            cached = LLMResult(**receipt['result'])
+            try:
+                if validate is not None:
+                    validate(cached.content)
+            except Exception:
+                pass  # Older invalid receipts must not poison a resumed judge call.
+            else:
+                return cached
     result = _result(llm(prompt, payload))
+    if validate is not None:
+        try:
+            validate(result.content)
+        except Exception as exc:
+            raise LLMCallError(
+                type(exc).__name__, LLMResult(content={}, **result.cost(), finish_reason=result.finish_reason)
+            ) from None
     if path is not None:
-        write_json(path, {'key': key, 'result': {'content': result.content, **result.cost()}})
+        write_json(
+            path,
+            {'key': key, 'result': {'content': result.content, **result.cost(), 'finish_reason': result.finish_reason}},
+        )
     return result
