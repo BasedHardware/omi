@@ -44,7 +44,11 @@ def _unambiguous_unknown_boundary(a: 'TranscriptSegment', b: 'TranscriptSegment'
     Uncased sentence starts also abstain without explicit provider boundary evidence.
     """
     left, right = a.text.split(), b.text.split()
-    if len(left) < 2 or len(right) < 2 or not (a.end - a.start >= 1 and b.end - b.start >= 1):
+    # Standalone punctuation is often delivered as its own provider token, then
+    # attached by formatting. It cannot make a one-word utterance substantial.
+    left_words = sum(any(char.isalnum() for char in token) for token in left)
+    right_words = sum(any(char.isalnum() for char in token) for token in right)
+    if left_words < 2 or right_words < 2 or not (a.end - a.start >= 1 and b.end - b.start >= 1):
         return False
     last = left[-1]
     if last[-1:] not in SENTENCE_ENDERS or not right[0][0].isupper():

@@ -139,6 +139,10 @@ async def test_ambiguous_provider_endings_keep_legacy_absorption(
         ('Lost.', 'Next sentence.', 1.5, 3.5),
         ('Lost sentence.', 'Next sentence.', 1.5, 2.8),
         ('Lost sentence.', 'Next.', 1.5, 3.5),
+        ('Lost sentence.', 'Next .', 1.5, 3.5),
+        ('Lost sentence.', 'Next ?', 1.5, 3.5),
+        ('Lost sentence.', 'Next ...', 1.5, 3.5),
+        ('Lost sentence.', 'Next ！', 1.5, 3.5),
         ('Lost sentence.', 'next sentence.', 1.5, 3.5),
         ('Lost sentence.', '下一句话。', 1.5, 3.5),
     ],
@@ -155,7 +159,8 @@ async def test_uncertain_or_short_sides_never_split(
         accept(receiver, sender, 0, 4)
     callback([raw('b', right, 2, right_end)])
     rows = await tick(receiver, processor, store)
-    assert [s['text'] for s in rows] == [left + ' ' + right]
+    expected = (left + ' ' + right).replace(' .', '.').replace(' ?', '?')
+    assert [s['text'] for s in rows] == [expected]
     assert known(rows) == 0
 
 

@@ -3008,7 +3008,8 @@ it on live transport. OFF preserves legacy text/window payloads and counters.
 Unknown text stays unknown. When exactly one side is known and the preceding
 row ends with unambiguous sentence punctuation followed by an uppercase sentence
 start, ON can keep the next piece as a row. Both pieces must already contain at
-least two words and span at least one second. Titles, known abbreviations, initials,
+least two words containing letters or digits and span at least one second;
+standalone punctuation does not count as a word. Titles, known abbreviations, initials,
 decimals, ellipses, URLs and all-uppercase acronym endings do not establish this boundary. Uncased starts and
 individual word callbacks abstain; no future continuation is assumed. Inside a
 sentence ordinary word merging continues, including clearing windows when an
