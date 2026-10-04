@@ -889,6 +889,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
           final bytesDownloaded = offset - storageOffsetStarts;
           final progressPercent = totalBytes > 0 ? bytesDownloaded / totalBytes : 0.0;
+          wal.deviceDownloadFraction = progressPercent.clamp(0.0, 1.0);
 
           progress?.onWalSyncedProgress(progressPercent.clamp(0.0, 1.0), speedKBps: speedKBps);
           listener.onWalUpdated();
@@ -960,6 +961,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
         final bytesDownloaded = offset - storageOffsetStarts;
         final progressPercent = totalBytes > 0 ? bytesDownloaded / totalBytes : 0.0;
+        walToSync.deviceDownloadFraction = progressPercent.clamp(0.0, 1.0);
 
         progress?.onWalSyncedProgress(progressPercent.clamp(0.0, 1.0), speedKBps: speedKBps);
         listener.onWalUpdated();

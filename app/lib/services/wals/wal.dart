@@ -184,6 +184,11 @@ class Wal {
   DateTime? syncStartedAt;
   int? syncEtaSeconds;
   double? syncSpeedKBps;
+
+  /// 0..1 fraction of this recording's device transfer. Runtime only.
+  /// Null when this recording is not the active device download.
+  /// Zero means the transfer has started but no countable bytes have arrived.
+  double? deviceDownloadFraction;
   SyncMethod syncMethod = SyncMethod.ble;
 
   int frameSize = 160;

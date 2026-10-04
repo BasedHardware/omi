@@ -434,6 +434,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
             }
 
             final double reportCap = globalStartPage != null ? 0.99 : 0.95;
+            wal.deviceDownloadFraction = progressPercent.clamp(0.0, 1.0);
             progress?.onWalSyncedProgress(progressPercent.clamp(0.0, reportCap), speedKBps: wal.syncSpeedKBps);
             listener.onWalUpdated();
           }

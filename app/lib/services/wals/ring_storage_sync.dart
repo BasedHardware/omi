@@ -344,6 +344,7 @@ class RingStorageSyncImpl implements RingStorageSync {
           break;
         }
         wal.status = WalStatus.synced;
+        wal.deviceDownloadFraction = null;
         listener.onWalUpdated();
       }
     } catch (e) {
@@ -692,6 +693,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         if (wal.storageTotalBytes > 0) {
           final consumedBytes = recordsConsumed * RingProtocol.recordSize;
           final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
+          wal.deviceDownloadFraction = pct;
           progress?.onWalSyncedProgress(pct, speedKBps: _currentSpeedKBps, phase: SyncPhase.downloadingFromDevice);
         }
       }
