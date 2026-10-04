@@ -172,7 +172,7 @@ The legacy pipeline introduced **L1/L2 as processing stages** — **not** the sa
 | Internal term (retire in product/docs) | Code locations | Means | Canonical term |
 |----------------------------------------|----------------|-------|----------------|
 | **L1**, `L1MemoryArchiveItem`, `WorkingMemoryObservation` | `working_observations.py`, `memory_contracts.py` | Working-memory / archive extraction candidates | **Working observation** or **short-term candidate** |
-| **L2**, `L2MemoryRoute`, `durable_memory_patch*` | `memory_non_active_routes.py`, `memory_domain.py` | Durable synthesis / promotion routing | **Promotion proposal** / **consolidation route** |
+| **L2**, `L2MemoryRoute` *(retired)*, `durable_memory_patch*` | `memory_non_active_routes.py`, `memory_contracts.py` | Durable synthesis / promotion routing | **Promotion proposal** / **consolidation route** |
 | **`LifecycleState.working`** | `memory_contracts.py` | In-flight extraction state | Internal only; not a product layer |
 | **`context_only`** | projections, route hints | Processing outcome | **Not a tier** — normalize to **Archive** or non-default outcome |
 | **`processing_state`** | `pending` / `processed` / `blocked` | Item processing pipeline | **Keep** internal; separate from `layer` |
