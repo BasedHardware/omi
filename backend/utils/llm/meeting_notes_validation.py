@@ -238,26 +238,52 @@ def sanitize_structured_speaker_placeholders(structured: Structured) -> Structur
     return structured
 
 
-# A title led by people's names stays scannable in the list; the second name is
-# dropped before this is exceeded, and a title is never truncated to fit.
-MAX_LED_TITLE_CHARACTERS = 70
+# A two-name lead is used only while the led title fits in this many characters;
+# past it the second name is dropped. It is not a title cap: a one-name lead is
+# never shortened, and no title is ever truncated.
+TWO_NAME_LEAD_MAX_CHARACTERS = 70
+
+# Thai, kana, CJK ideographs and Hangul: scripts written without spaces between
+# words, or (Hangul) with particles attached to the name. Python's ``\w`` matches
+# them all, so ``\w`` boundaries never form around a name in these scripts.
+_UNSPACED_SCRIPT_RANGES = '\u0e00-\u0e7f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af'
+_UNSPACED_SCRIPT = re.compile(f'[{_UNSPACED_SCRIPT_RANGES}]')
+# A word character that continues a spaced-script word; an unspaced-script
+# neighbour is a boundary, so "与Sarah讨论预算" names Sarah while "Leeds" is not "Lee".
+_SPACED_WORD_CHAR = f'[^\\W{_UNSPACED_SCRIPT_RANGES}]'
 
 
-def _whole_name_pattern(name: str) -> re.Pattern[str]:
-    return re.compile(r'(?<!\w)' + re.escape(name) + r'(?!\w)', re.IGNORECASE)
+def _name_pattern(name: str) -> re.Pattern[str]:
+    escaped = re.escape(name)
+    if _UNSPACED_SCRIPT.search(name):
+        return re.compile(escaped, re.IGNORECASE)
+    return re.compile(f'(?<!{_SPACED_WORD_CHAR}){escaped}(?!{_SPACED_WORD_CHAR})', re.IGNORECASE)
+
+
+def _name_mentions(name: str) -> list[str]:
+    """The full name, its first name, its surname (3+ characters), and any unspaced-script token.
+
+    One unspaced-script character (a common family name such as 王) or a
+    two-letter surname ("Li") is too common to count as a mention on its own.
+    """
+    tokens = name.split()
+    mentions = [name]
+    if len(tokens) > 1:
+        mentions.extend(
+            token
+            for index, token in enumerate(tokens)
+            if (index == 0 and len(token) > 1)
+            or (index == len(tokens) - 1 and len(token) > 2)
+            or (len(token) > 1 and _UNSPACED_SCRIPT.search(token))
+        )
+    return mentions
 
 
 def title_names_any_person(title: str, people: Iterable[str]) -> bool:
-    """True when the title already names one of ``people`` by full or first name."""
+    """True when the title already names one of ``people`` (see ``_name_mentions``)."""
     for name in people:
         name = name.strip()
-        if not name:
-            continue
-        candidates = [name]
-        first = name.split()[0]
-        if first != name and len(first) > 1:
-            candidates.append(first)
-        if any(_whole_name_pattern(candidate).search(title) for candidate in candidates):
+        if name and any(_name_pattern(mention).search(title) for mention in _name_mentions(name)):
             return True
     return False
 
@@ -270,11 +296,12 @@ def lead_title_with_people(title: str, people: Sequence[str]) -> tuple[str, bool
     language, joins at most two people, and never invents a title or a name.
     """
     stripped = title.strip()
-    if not stripped or not people or title_names_any_person(stripped, people):
+    names = [name.strip() for name in people if name and name.strip()]
+    if not stripped or not names or title_names_any_person(stripped, names):
         return title, False
-    led = f'{" & ".join(people[:2])}: {stripped}'
-    if len(led) > MAX_LED_TITLE_CHARACTERS and len(people) > 1:
-        led = f'{people[0]}: {stripped}'
+    led = f'{" & ".join(names[:2])}: {stripped}'
+    if len(led) > TWO_NAME_LEAD_MAX_CHARACTERS and len(names) > 1:
+        led = f'{names[0]}: {stripped}'
     return led, True
 
 

@@ -88,42 +88,43 @@ _ROSTER_KIND_LABELS = {'owner': 'owner', 'human': 'human', 'ai_agent': 'ai agent
 TITLE_PERSON_MIN_WORD_SHARE = 0.1
 
 
-def _title_people(
-    speaker_names: Mapping[int, Optional[str]],
-    source_map: Optional[Mapping[int, Optional[str]]],
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
+def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Return ``(title_people, owner_names)`` for the general notes path.
 
-    Only an owner-aware speaker map (``SpeakerMap`` from
-    ``conversation_transcript_and_speaker_map``) can tell the account owner apart
-    from everyone else; a bare mapping names nobody rather than risk titling a
-    note with its owner's own name.
+    Only the hard voice/tag bindings an owner-aware ``SpeakerMap`` (from
+    ``conversation_transcript_and_speaker_map``) records can name someone: a bare
+    mapping names nobody rather than risk titling a note with its owner's name,
+    and a calendar name bound by elimination never reaches the title. Words are
+    tallied per ``(speaker_id_scope, speaker_id)`` cluster, but the rendered
+    ``spk`` lines key on the id alone, so an id whose clusters disagree about
+    who is speaking (two people, or a person and the owner) names nobody.
     """
-    owner_keys = getattr(source_map, 'owner_keys', None)
-    if owner_keys is None:
+    clusters = getattr(source_map, 'clusters', None)
+    if clusters is None:
         return (), ()
-    word_counts: Mapping[int, int] = getattr(source_map, 'word_counts', None) or {}
-    owner_names: list[str] = []
-    for key in owner_keys:
-        name = speaker_names.get(key)
-        if name and name.casefold() not in {owner.casefold() for owner in owner_names}:
-            owner_names.append(name)
-    owner_folds = {name.casefold() for name in owner_names}
-    total_words = sum(word_counts.values())
-    order = {key: index for index, key in enumerate(speaker_names)}
+    owner_name = (getattr(source_map, 'owner_name', '') or '').strip()
+    owner_fold = owner_name.casefold()
+    owner_names = (owner_name,) if owner_name and any(cluster.owner for cluster in clusters) else ()
+    identities: dict[int, set[str]] = {}
+    for cluster in clusters:
+        folds = identities.setdefault(cluster.speaker_id, set())
+        folds.update(name.casefold() for name in cluster.names)
+        if cluster.owner:
+            folds.add(owner_fold)
+    if any(len(folds) > 1 for folds in identities.values()):
+        return (), owner_names
+    total_words = sum(cluster.words for cluster in clusters)
     spoken: dict[str, int] = {}
-    first_seen: dict[str, int] = {}
     display: dict[str, str] = {}
-    for key, name in speaker_names.items():
-        if not name or key in owner_keys or name.casefold() in owner_folds:
+    for cluster in clusters:
+        if cluster.owner or not cluster.names or cluster.names[0].casefold() == owner_fold:
             continue
-        fold = name.casefold()
-        display.setdefault(fold, name)
-        spoken[fold] = spoken.get(fold, 0) + word_counts.get(key, 0)
-        first_seen.setdefault(fold, order[key])
+        fold = cluster.names[0].casefold()
+        display.setdefault(fold, cluster.names[0])
+        spoken[fold] = spoken.get(fold, 0) + cluster.words
     people = [fold for fold in spoken if not total_words or spoken[fold] / total_words >= TITLE_PERSON_MIN_WORD_SHARE]
-    people.sort(key=lambda fold: (-spoken[fold], first_seen[fold]))
-    return tuple(display[fold] for fold in people), tuple(owner_names)
+    people.sort(key=lambda fold: -spoken[fold])  # stable: ties keep first-appearance order
+    return tuple(display[fold] for fold in people), owner_names
 
 
 def _speaker_metadata_lines(
@@ -298,7 +299,7 @@ def build_conversation_prompt_prefix(
 
     source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
     # Rich meeting notes name people through their roster rules instead.
-    title_people, owner_names = _title_people(speaker_names, speaker_map) if roster is None else ((), ())
+    title_people, owner_names = _title_people(speaker_map) if roster is None else ((), ())
     return ConversationPromptPrefix(
         conversation_id=conversation_id,
         context='\n\n'.join(context_parts),
