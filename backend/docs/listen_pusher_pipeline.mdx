@@ -2944,6 +2944,18 @@ new limits. Ownership history, audio format, embedding cache keys and resolution
 status policy do not change. This flag cannot repair unknown merged text or fill
 VAD gaps; measure first-commit attribution before promoting it.
 
+### Half-open capture-window projection
+
+`LIVE_CAPTURE_WINDOW_STRICT_PROJECTION` is independent of retention and defaults
+**off** in code and every runtime declaration. ON projects legacy windows as
+half-open sample intervals: an exclusive end exactly at a wall anchor uses the
+preceding interval, and an interval crossing any positive observed wall
+discontinuity refuses its capture window (`translator_discontinuous_interval`).
+Compacted anchors still refuse. This applies within the original 64-anchor horizon
+as well as old retained anchors. OFF preserves the former endpoint projection,
+including its hiatus weakness. V2 translation always uses the same strict helper;
+`AUDIO_TIMELINE_V2` stays off. Transcript text survives refusals; no gap is filled.
+
 ### Preserve original live provider pieces
 
 `LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION` is an independent default-off gate in the

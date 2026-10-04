@@ -300,6 +300,31 @@ class CaptureTimeline:
             return None
         return self.wall(sample)
 
+    def project_window(self, start: int, end: int, *, strict: bool = True) -> Optional[Tuple[float, float]]:
+        """Project [start, end), refusing any positive wall discontinuity.
+
+        An exclusive end at an anchor belongs to the preceding interval.
+        The legacy rollback mode preserves the former endpoint projection.
+        """
+        if not strict:
+            first, last = self.wall_strict(start), self.wall_strict(end)
+            return (first, last) if first is not None and last is not None else None
+        if end <= start or not self.anchors:
+            return None
+        first = self.wall_strict(start)
+        if first is None:
+            return None
+        previous_sample, previous_wall = self.anchors[0]
+        end_anchor = (previous_sample, previous_wall)
+        for sample, wall in self.anchors[1:]:
+            if start < sample < end and wall > previous_wall + (sample - previous_sample) / self.sample_rate:
+                return None
+            if sample < end:
+                end_anchor = (sample, wall)
+            previous_sample, previous_wall = sample, wall
+        last = end_anchor[1] + (end - end_anchor[0]) / self.sample_rate
+        return first, last
+
 
 class SendMap:
     """Accepted provider-audio spans for one provider connection (epoch).
@@ -763,16 +788,21 @@ class ProviderEpochTranslator:
                         translated.append(segment)
                     continue
             if self._project_times:
-                start_wall = self.timeline.wall_strict(interval[0])
-                end_wall = self.timeline.wall_strict(interval[1])
-                if start_wall is None or end_wall is None:
+                window = self.timeline.project_window(*interval)
+                if window is None:
                     # The anchors describing this sample range were compacted
                     # away; projecting would invent a position. Fail closed.
-                    self._reject(segment, 'evicted_interval')
+                    self._reject(
+                        segment,
+                        (
+                            'evicted_interval'
+                            if self.timeline.wall_strict(interval[0]) is None
+                            else 'discontinuous_interval'
+                        ),
+                    )
                     self._append_unplaced(translated, segment)
                     continue
-                segment['start'] = start_wall
-                segment['end'] = max(segment['start'], end_wall)
+                segment['start'], segment['end'] = window
             # Private capture interval for owner resolution; the receiver pops
             # these keys before the segment enters any buffer.
             segment['_capture_start_sample'] = interval[0]
