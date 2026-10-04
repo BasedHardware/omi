@@ -6,13 +6,15 @@ callers and tests already import from it.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Optional, Sequence
 
 from models.structured import Participant, Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.conversations.meeting_participants import MeetingRoster
 
-PRESENTATION_CONTRACT_VERSION = 'v1'
+# Metric label for the presentation contract; v2 adds the title_people_lead repair (#3602).
+PRESENTATION_CONTRACT_VERSION = 'v2'
 
 
 @dataclass
@@ -243,20 +245,41 @@ def sanitize_structured_speaker_placeholders(structured: Structured) -> Structur
 # never shortened, and no title is ever truncated.
 TWO_NAME_LEAD_MAX_CHARACTERS = 70
 
-# Thai, kana, CJK ideographs and Hangul: scripts written without spaces between
-# words, or (Hangul) with particles attached to the name. Python's ``\w`` matches
-# them all, so ``\w`` boundaries never form around a name in these scripts.
-_UNSPACED_SCRIPT_RANGES = '\u0e00-\u0e7f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af'
+# Scripts written without spaces between words (Thai, Lao, Myanmar, Khmer, kana
+# incl. halfwidth, CJK ideographs) and Hangul, whose particles attach to the name.
+# Python's ``\w`` matches them all, so ``\w`` boundaries never form around a name.
+_UNSPACED_SCRIPT_RANGES = (
+    '\u0e00-\u0e7f'  # Thai
+    '\u0e80-\u0eff'  # Lao
+    '\u1000-\u109f'  # Myanmar
+    '\u1780-\u17ff'  # Khmer
+    '\u3040-\u30ff'  # hiragana, katakana
+    '\u3400-\u4dbf\u4e00-\u9fff'  # CJK ideographs
+    '\uac00-\ud7af'  # Hangul syllables
+    '\uff66-\uff9f'  # halfwidth katakana
+)
 _UNSPACED_SCRIPT = re.compile(f'[{_UNSPACED_SCRIPT_RANGES}]')
 # A word character that continues a spaced-script word; an unspaced-script
 # neighbour is a boundary, so "与Sarah讨论预算" names Sarah while "Leeds" is not "Lee".
 _SPACED_WORD_CHAR = f'[^\\W{_UNSPACED_SCRIPT_RANGES}]'
+# Case endings and possessives ("Peters", "Сарой", "Anną", "Sarahin", "Sárával"):
+# a name token this long also matches its stem plus a short suffix.
+_INFLECTED_NAME_MIN_CHARACTERS = 4
+_INFLECTION_MAX_SUFFIX_CHARACTERS = 4
+_APOSTROPHES = str.maketrans({'\u2019': "'"})
+
+
+def _normalize_for_match(text: str) -> str:
+    return unicodedata.normalize('NFC', text).translate(_APOSTROPHES)
 
 
 def _name_pattern(name: str) -> re.Pattern[str]:
     escaped = re.escape(name)
     if _UNSPACED_SCRIPT.search(name):
         return re.compile(escaped, re.IGNORECASE)
+    if len(name) >= _INFLECTED_NAME_MIN_CHARACTERS and len(name.split()) == 1:
+        suffix = f'{_SPACED_WORD_CHAR}{{0,{_INFLECTION_MAX_SUFFIX_CHARACTERS}}}'
+        escaped = f'(?:{escaped}|{re.escape(name[:-1])}{suffix})'
     return re.compile(f'(?<!{_SPACED_WORD_CHAR}){escaped}(?!{_SPACED_WORD_CHAR})', re.IGNORECASE)
 
 
@@ -265,6 +288,8 @@ def _name_mentions(name: str) -> list[str]:
 
     One unspaced-script character (a common family name such as 王) or a
     two-letter surname ("Li") is too common to count as a mention on its own.
+    A single-token mention of 4+ characters also matches inflected forms; that
+    over-matches some words ("Mark" in "Market"), which only suppresses a lead.
     """
     tokens = name.split()
     mentions = [name]
@@ -280,9 +305,13 @@ def _name_mentions(name: str) -> list[str]:
 
 
 def title_names_any_person(title: str, people: Iterable[str]) -> bool:
-    """True when the title already names one of ``people`` (see ``_name_mentions``)."""
+    """True when the title already names one of ``people`` (see ``_name_mentions``).
+
+    Title and names are NFC-normalized and ’ reads as ' before matching.
+    """
+    title = _normalize_for_match(title)
     for name in people:
-        name = name.strip()
+        name = _normalize_for_match(name).strip()
         if name and any(_name_pattern(mention).search(title) for mention in _name_mentions(name)):
             return True
     return False

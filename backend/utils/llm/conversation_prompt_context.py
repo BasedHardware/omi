@@ -83,9 +83,12 @@ def _transcript_has_source_content(transcript: str, source_ids: frozenset[str]) 
 _ROSTER_KIND_LABELS = {'owner': 'owner', 'human': 'human', 'ai_agent': 'ai agent'}
 
 
-# A bound person must have spoken at least this share of the conversation's words
+# A bound person must have spoken at least this share of the conversation's talk
 # to be named in its title; a one-word greeting is not what the conversation was.
-TITLE_PERSON_MIN_WORD_SHARE = 0.1
+TITLE_PERSON_MIN_TALK_SHARE = 0.1
+
+# Identity key for the account owner; no casefolded name can equal it.
+_OWNER_IDENTITY = '\x00owner'
 
 
 def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -94,37 +97,56 @@ def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tu
     Only the hard voice/tag bindings an owner-aware ``SpeakerMap`` (from
     ``conversation_transcript_and_speaker_map``) records can name someone: a bare
     mapping names nobody rather than risk titling a note with its owner's name,
-    and a calendar name bound by elimination never reaches the title. Words are
-    tallied per ``(speaker_id_scope, speaker_id)`` cluster, but the rendered
-    ``spk`` lines key on the id alone, so an id whose clusters disagree about
-    who is speaking (two people, or a person and the owner) names nobody.
+    and a calendar name bound by elimination never reaches the title.
+
+    ``owner_names`` is the real profile name whenever one is known, even with no
+    ``is_user`` cluster: the owner can be addressed by name in any transcript.
+    The profile holds only a first name, so a person record whose name or first
+    token matches it is the owner's own record (a namesake is left unnamed too).
+
+    The rendered ``spk`` lines key on ``speaker_id`` alone while clusters are
+    ``(speaker_id_scope, speaker_id)``: an id that is the owner anywhere, or whose
+    clusters name different people, is never named; other ids still are. Talk
+    share is speech time, or words when no segment carries timing.
     """
     clusters = getattr(source_map, 'clusters', None)
     if clusters is None:
         return (), ()
-    owner_name = (getattr(source_map, 'owner_name', '') or '').strip()
+    owner_name = (getattr(source_map, 'owner_name', None) or '').strip()
     owner_fold = owner_name.casefold()
-    owner_names = (owner_name,) if owner_name and any(cluster.owner for cluster in clusters) else ()
+    owner_first = owner_fold.split()[0] if owner_fold else ''
+
+    def identity(name: str) -> str:
+        fold = name.casefold()
+        return _OWNER_IDENTITY if owner_first and (fold == owner_fold or fold.split()[0] == owner_first) else fold
+
     identities: dict[int, set[str]] = {}
     for cluster in clusters:
         folds = identities.setdefault(cluster.speaker_id, set())
-        folds.update(name.casefold() for name in cluster.names)
+        folds.update(identity(name) for name in cluster.names)
         if cluster.owner:
-            folds.add(owner_fold)
-    if any(len(folds) > 1 for folds in identities.values()):
-        return (), owner_names
-    total_words = sum(cluster.words for cluster in clusters)
-    spoken: dict[str, int] = {}
+            folds.add(_OWNER_IDENTITY)
+    nameable = {key for key, folds in identities.items() if len(folds) == 1 and _OWNER_IDENTITY not in folds}
+    timed = any(cluster.speech_seconds > 0 for cluster in clusters)
+
+    def talk(cluster: Any) -> float:
+        return cluster.speech_seconds if timed else cluster.words
+
+    total = sum(talk(cluster) for cluster in clusters)
+    spoken: dict[str, float] = {}
     display: dict[str, str] = {}
     for cluster in clusters:
-        if cluster.owner or not cluster.names or cluster.names[0].casefold() == owner_fold:
+        if cluster.speaker_id not in nameable or not cluster.names:
             continue
-        fold = cluster.names[0].casefold()
-        display.setdefault(fold, cluster.names[0])
-        spoken[fold] = spoken.get(fold, 0) + cluster.words
-    people = [fold for fold in spoken if not total_words or spoken[fold] / total_words >= TITLE_PERSON_MIN_WORD_SHARE]
+        name = cluster.names[0]
+        if strip_speaker_placeholders(name) != name:
+            continue
+        fold = name.casefold()
+        display.setdefault(fold, name)
+        spoken[fold] = spoken.get(fold, 0) + talk(cluster)
+    people = [fold for fold in spoken if not total or spoken[fold] / total >= TITLE_PERSON_MIN_TALK_SHARE]
     people.sort(key=lambda fold: -spoken[fold])  # stable: ties keep first-appearance order
-    return tuple(display[fold] for fold in people), owner_names
+    return tuple(display[fold] for fold in people), (owner_name,) if owner_name else ()
 
 
 def _speaker_metadata_lines(

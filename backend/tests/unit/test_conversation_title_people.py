@@ -41,7 +41,8 @@ def isolated_imports():
         yield
 
 
-def _seg(segment_id, text, *, speaker='SPEAKER_00', is_user=True, person_id=None, scope=None):
+def _seg(segment_id, text, *, speaker='SPEAKER_00', is_user=True, person_id=None, scope=None, seconds=None):
+    # Half a second per word unless the turn's speech time is given.
     return TranscriptSegment(
         id=segment_id,
         text=text,
@@ -50,7 +51,7 @@ def _seg(segment_id, text, *, speaker='SPEAKER_00', is_user=True, person_id=None
         person_id=person_id,
         speaker_id_scope=scope,
         start=0.0,
-        end=2.0,
+        end=0.5 * len(text.split()) if seconds is None else seconds,
     )
 
 
@@ -173,9 +174,26 @@ def test_speaker_map_keeps_scoped_hard_identity_evidence(monkeypatch):
     assert speaker_map == {0: 'David', 1: 'Sarah Chen', 2: 'Lee'}
     assert speaker_map.owner_name == 'David'
     assert [
-        (cluster.speaker_id, cluster.scope, cluster.owner, cluster.names, cluster.words)
+        (cluster.speaker_id, cluster.scope, cluster.owner, cluster.names, cluster.speech_seconds, cluster.words)
         for cluster in speaker_map.clusters
-    ] == [(0, None, True, (), 14), (1, None, False, ('Sarah Chen',), 38), (2, None, False, ('Lee',), 1)]
+    ] == [
+        (0, None, True, (), 7.0, 14),
+        (1, None, False, ('Sarah Chen',), 19.0, 38),
+        (2, None, False, ('Lee',), 0.5, 1),
+    ]
+
+
+def test_speaker_map_owner_name_is_the_real_profile_name_only(monkeypatch):
+    from utils.conversations import transcript_for_llm
+
+    monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_a, **_k: None)
+    transcript, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map(
+        'uid-1', _three_party_conversation(), _people()
+    )
+
+    # The rendered map keeps its 'User' label; the owner line needs a real name.
+    assert speaker_map[0] == 'User'
+    assert speaker_map.owner_name is None
 
 
 def test_prefix_title_people_exclude_owner_and_minor_speakers(monkeypatch):
@@ -247,7 +265,7 @@ def test_reused_speaker_id_bound_to_different_people_names_nobody(monkeypatch):
     assert prefix.owner_names == ('David',)
 
 
-def test_reused_speaker_id_that_is_the_owner_in_another_source_names_nobody(monkeypatch):
+def test_reused_speaker_id_that_is_the_owner_in_another_source_is_never_named(monkeypatch):
     # Source B tagged the owner's voice with their own person record ("David Miller");
     # source A marks the same id as the account owner. The owner is never a title person.
     people = _people() + [_person('p-david-miller', 'David Miller')]
@@ -261,7 +279,33 @@ def test_reused_speaker_id_that_is_the_owner_in_another_source_names_nobody(monk
 
     prefix = _prefix_for(merged, monkeypatch, people=people)
 
-    assert prefix.title_people == ()
+    assert prefix.title_people == ('Sarah Chen',)
+    assert prefix.owner_names == ('David',)
+
+
+def test_conflicting_speaker_ids_are_dropped_without_silencing_the_rest(monkeypatch):
+    # Id 1 is Lee in source A and Sarah in source B; id 0 is the owner in source A and
+    # tagged Maria in source B. Neither id can be named, but Bob (id 2) still is.
+    people = _people() + [_person('p-maria', 'Maria'), _person('p-bob', 'Bob')]
+    merged = SimpleNamespace(
+        transcript_segments=[
+            _seg('a1', 'hey so where are we on the budget for next quarter', scope='conv-a'),
+            _seg('a2', 'hi', speaker='SPEAKER_01', is_user=False, person_id='p-lee', scope='conv-a'),
+            _seg('b1', SARAH_SHORT, is_user=False, person_id='p-maria', scope='conv-b'),
+            _seg('b2', SARAH_LONG, speaker='SPEAKER_01', is_user=False, person_id='p-sarah', scope='conv-b'),
+            _seg(
+                'c1',
+                'bob replies with details on the budget ' * 2,
+                speaker='SPEAKER_02',
+                is_user=False,
+                person_id='p-bob',
+            ),
+        ]
+    )
+
+    prefix = _prefix_for(merged, monkeypatch, people=people)
+
+    assert prefix.title_people == ('Bob',)
     assert prefix.owner_names == ('David',)
 
 
@@ -330,8 +374,117 @@ def test_calendar_guessed_owner_cluster_is_never_a_title_person(monkeypatch):
 
     assert 'spk 0 David Miller' in prefix.context
     assert prefix.title_people == ('Bob',)
-    assert prefix.owner_names == ()
     assert structured.title == 'Bob: Weekly plan'
+
+
+def test_owner_line_comes_from_the_profile_name_without_an_owner_cluster(monkeypatch):
+    # No speech profile: no cluster is ``is_user``, yet the owner can still be addressed
+    # by name ("Thanks, David"), so the model must always know who the owner is.
+    conversation = SimpleNamespace(
+        transcript_segments=[
+            _seg('s1', 'thanks david, so the plan for the week is set', is_user=False),
+            _seg('s2', SARAH_LONG, speaker='SPEAKER_01', is_user=False, person_id='p-sarah'),
+        ]
+    )
+
+    prefix = _prefix_for(conversation, monkeypatch)
+    _, messages = _notes(prefix, monkeypatch, title='Sarah Plans the Week')
+
+    assert prefix.owner_names == ('David',)
+    assert '- Account owner (never name them in the title): David' in _text(messages[1])
+
+
+def test_owner_line_is_omitted_without_a_real_profile_name(monkeypatch):
+    prefix = _prefix_for(_three_party_conversation(), monkeypatch, owner_name=None)
+    _, messages = _notes(prefix, monkeypatch, title='Sarah Chen Moves the Offsite to March')
+
+    assert prefix.title_people == ('Sarah Chen',)
+    assert prefix.owner_names == ()
+    assert 'Account owner' not in _text(messages[1])
+    assert 'User' not in _text(messages[1]).split('PEOPLE IN THIS CONVERSATION', 1)[1]
+
+
+def test_owner_own_person_record_is_never_a_title_person(monkeypatch):
+    # The profile yields only the first name ("David"); the owner's own person record
+    # ("David Miller") tagged on a cluster is still the owner.
+    people = _people() + [_person('p-david-miller', 'David Miller')]
+    conversation = SimpleNamespace(
+        transcript_segments=[
+            _seg('s1', 'hey so where are we on the budget for next quarter'),
+            _seg('s2', SARAH_LONG, speaker='SPEAKER_01', is_user=False, person_id='p-sarah'),
+            _seg('s3', SARAH_SHORT, speaker='SPEAKER_02', is_user=False, person_id='p-david-miller'),
+        ]
+    )
+
+    prefix = _prefix_for(conversation, monkeypatch, people=people)
+
+    assert prefix.title_people == ('Sarah Chen',)
+    assert prefix.owner_names == ('David',)
+
+
+def test_title_people_are_ordered_most_spoken_first(monkeypatch):
+    # Sarah speaks first; Lee speaks later and more, so Lee leads.
+    conversation = SimpleNamespace(
+        transcript_segments=[
+            _seg('s1', 'hey so where are we on the budget for next quarter'),
+            _seg('s2', SARAH_SHORT, speaker='SPEAKER_01', is_user=False, person_id='p-sarah'),
+            _seg('s3', f'{SARAH_LONG} {SARAH_SHORT}', speaker='SPEAKER_02', is_user=False, person_id='p-lee'),
+        ]
+    )
+
+    prefix = _prefix_for(conversation, monkeypatch)
+
+    assert prefix.title_people == ('Lee', 'Sarah Chen')
+
+
+def test_talk_share_is_speech_time_for_unspaced_scripts(monkeypatch):
+    # One long turn by 王伟 against ten short owner turns: by whitespace words 王伟 said
+    # 1 of 11 "words", by speech time 30 of 50 seconds.
+    people = [_person('p-wang', '王伟')]
+    conversation = SimpleNamespace(
+        transcript_segments=[_seg(f'o{index}', '好的', seconds=2.0) for index in range(10)]
+        + [
+            _seg(
+                'w1',
+                '我们下周把预算削减百分之十并且把团建改到三月份',
+                speaker='SPEAKER_01',
+                is_user=False,
+                person_id='p-wang',
+                seconds=30.0,
+            )
+        ]
+    )
+
+    prefix = _prefix_for(conversation, monkeypatch, people=people)
+
+    assert prefix.title_people == ('王伟',)
+
+
+def test_talk_share_falls_back_to_words_without_segment_timing(monkeypatch):
+    untimed = SimpleNamespace(
+        transcript_segments=[
+            segment.model_copy(update={'start': 0.0, 'end': 0.0})
+            for segment in _three_party_conversation().transcript_segments
+        ]
+    )
+
+    prefix = _prefix_for(untimed, monkeypatch)
+
+    assert prefix.title_people == ('Sarah Chen',)
+
+
+def test_person_named_like_a_speaker_placeholder_is_never_a_title_person(monkeypatch):
+    people = [_person('p-speaker', 'Speaker 2')]
+    conversation = SimpleNamespace(
+        transcript_segments=[
+            _seg('s1', 'hey so where are we on the budget for next quarter'),
+            _seg('s2', SARAH_LONG, speaker='SPEAKER_01', is_user=False, person_id='p-speaker'),
+        ]
+    )
+
+    prefix = _prefix_for(conversation, monkeypatch, people=people)
+
+    assert prefix.title_people == ()
 
 
 def test_calendar_guessed_owner_split_cluster_is_never_a_title_person(monkeypatch):
@@ -366,8 +519,9 @@ def test_title_rules_are_static_while_names_stay_volatile(monkeypatch):
     _, messages = _notes(prefix, monkeypatch, title='Sarah Chen Moves the Offsite to March')
     static, volatile = _text(messages[0]), _text(messages[1])
 
-    assert 'TITLE' in static
-    assert 'account owner' in static
+    from utils.llm.conversation_title_people import GENERAL_TITLE_RULES
+
+    assert GENERAL_TITLE_RULES in static
     assert 'Sarah Chen' not in static
     assert 'PEOPLE IN THIS CONVERSATION' in volatile
     assert '- Sarah Chen' in volatile
@@ -478,7 +632,7 @@ def test_lead_never_invents_a_title_or_a_name(title, people):
 def test_name_match_is_whole_word_and_escapes_punctuation():
     from utils.llm.meeting_notes_validation import title_names_any_person
 
-    assert title_names_any_person("Catch-up with O'Neill", ("Pat O'Neil",)) is False
+    assert title_names_any_person('Alfex Sync', ('Al.Ex',)) is False
     assert title_names_any_person("Pat O'Neil Reviews Launch", ("Pat O'Neil",)) is True
     assert title_names_any_person('Sarahville Trip Planning', ('Sarah Chen',)) is False
     assert title_names_any_person('Al.Ex Sync', ('Al.Ex',)) is True
@@ -499,6 +653,36 @@ def test_surname_only_mention_already_names_the_person(title, people):
     assert lead_title_with_people(title, people) == (title, False)
 
 
+@pytest.mark.parametrize(
+    ('title', 'people'),
+    [
+        ('Peters Umzug nach Berlin', ('Peter',)),  # German genitive
+        ('Обсуждение бюджета с Сарой', ('Сара',)),  # Russian instrumental
+        ('Spotkanie z Anną w sprawie budżetu', ('Anna Kowalska',)),  # Polish instrumental
+        ('Sarahin budjettipalaveri', ('Sarah',)),  # Finnish genitive
+        ('Megbeszélés Sárával a költségvetésről', ('Sára',)),  # Hungarian instrumental
+    ],
+)
+def test_inflected_name_already_names_the_person(title, people):
+    from utils.llm.meeting_notes_validation import lead_title_with_people
+
+    assert lead_title_with_people(title, people) == (title, False)
+
+
+@pytest.mark.parametrize(
+    ('title', 'people'),
+    [
+        ('Zoë Plans the Trip', ('Zoe\u0308',)),  # NFC: composed title, decomposed name
+        ('Zoe\u0308 Plans the Trip', ('Zoë',)),  # NFC: decomposed title, composed name
+        ('Catch-up with O’Neil', ("Pat O'Neil",)),  # typographic apostrophe
+    ],
+)
+def test_name_match_normalizes_unicode_and_apostrophes(title, people):
+    from utils.llm.meeting_notes_validation import title_names_any_person
+
+    assert title_names_any_person(title, people) is True
+
+
 def test_short_surname_is_not_a_mention():
     from utils.llm.meeting_notes_validation import lead_title_with_people
 
@@ -517,6 +701,10 @@ def test_short_surname_is_not_a_mention():
         ('김민준과 예산 회의', ('김민준',)),  # Korean: particle attached to the name
         ('สมชายประชุมงบประมาณ', ('สมชาย',)),  # Thai: no spaces between words
         ('与Sarah讨论预算', ('Sarah Chen',)),  # a spaced-script name inside unspaced text
+        ('សុខាប្រជុំថវិកា', ('សុខា',)),  # Khmer
+        ('ສົມສັກປະຊຸມງົບປະມານ', ('ສົມສັກ',)),  # Lao
+        ('အောင်နှင့်ဘတ်ဂျက်အစည်းအဝေး', ('အောင်',)),  # Myanmar
+        ('ﾀﾅｶｻﾝﾄ予算会議', ('ﾀﾅｶ',)),  # halfwidth katakana
     ],
 )
 def test_names_in_unspaced_scripts_already_name_the_person(title, people):
@@ -547,6 +735,18 @@ def test_title_lead_repair_is_counted_as_a_static_presentation_repair(monkeypatc
     _notes(prefix, monkeypatch, title='Q2 Budget Cuts and Offsite Move')
 
     assert ('static_repair', ['title_people_lead']) in recorded
+
+
+def test_title_lead_repair_is_counted_under_the_title_contract_version(monkeypatch):
+    from prometheus_client import REGISTRY
+
+    labels = {'outcome': 'static_repair', 'reason': 'title_people_lead', 'contract_version': 'v2'}
+    before = REGISTRY.get_sample_value('omi_conversation_note_presentation_total', labels) or 0.0
+    prefix = _prefix_for(_three_party_conversation(), monkeypatch)
+
+    _notes(prefix, monkeypatch, title='Q2 Budget Cuts and Offsite Move')
+
+    assert REGISTRY.get_sample_value('omi_conversation_note_presentation_total', labels) == before + 1
 
 
 def test_rich_meeting_notes_titles_are_left_to_the_roster_rules(monkeypatch):
