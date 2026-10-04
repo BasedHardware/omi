@@ -321,9 +321,13 @@ void main() {
 
       final custody = PendantRingCustody(store: store, walValidator: (_) async => true);
       final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringId), grantedCaps: 0x0F);
+      final replayWritten = Completer<void>();
+      t.onWrite = (write) {
+        if (write[0] == RingProtocol.cmdAdvanceId && !replayWritten.isCompleted) replayWritten.complete();
+      };
       conn = OmiDeviceConnection(_device('3.0.21'), t, custody: custody);
       t.emit(DeviceTransportState.connected);
-      await _settle();
+      await replayWritten.future.timeout(const Duration(seconds: 5));
 
       final advances =
           t.writes.where((w) => w[0] == RingProtocol.cmdAdvance || w[0] == RingProtocol.cmdAdvanceId).toList();
