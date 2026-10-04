@@ -22,6 +22,7 @@ from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completi
 from llm_gateway.gateway.providers import ProviderResponse
 from llm_gateway.gateway.resolver import resolve_chat_completion_route, resolve_systemone_route
 from tests.unit.test_proactivity_v2_budget import NOW, Redis, claim, store
+from utils import proactivity
 
 
 def context(item, step='phrase'):
@@ -65,8 +66,8 @@ def gated(store, monkeypatch):
     async def admit(*args):
         return None
 
-    monkeypatch.setattr(gate, 'ensure_admitted', admit)
-    monkeypatch.setattr(gate, 'BudgetAuthority', lambda: authority)
+    monkeypatch.setattr(proactivity, 'ensure_admitted', admit)
+    monkeypatch.setattr(money, 'BudgetAuthority', lambda: authority)
     monkeypatch.setenv('LLM_GATEWAY_ACCOUNTING_ENABLED', 'true')
     return authority
 
@@ -212,7 +213,7 @@ async def test_executor_denials_never_reach_provider(store, gated, monkeypatch, 
         async def denied(*args):
             raise ProactivityDenied('disabled')
 
-        monkeypatch.setattr(gate, 'ensure_admitted', denied)
+        monkeypatch.setattr(proactivity, 'ensure_admitted', denied)
     elif fault == 'unpriced':
         monkeypatch.setattr(gate, 'rate_card_for', lambda *args: None)
     else:
@@ -347,11 +348,8 @@ async def test_gateway_cohort_admission_uses_same_user_resolver(store, monkeypat
     monkeypatch.setattr(service.ledger, 'refresh_health', lambda *args, **kwargs: None)
     monkeypatch.setattr(service, 'utc_now', lambda: NOW)
     monkeypatch.setenv('LLM_GATEWAY_ACCOUNTING_ENABLED', 'true')
-    monkeypatch.setattr(
-        gate,
-        'BudgetAuthority',
-        lambda: money.BudgetAuthority(firestore_client=store, redis_client=Redis(), clock=lambda: NOW),
-    )
+    authority = money.BudgetAuthority(firestore_client=store, redis_client=Redis(), clock=lambda: NOW)
+    monkeypatch.setattr(money, 'BudgetAuthority', lambda: authority)
     item = claim(store, producer='conversation_mentor_v2')
     route = resolve_chat_completion_route(
         load_gateway_config(),
