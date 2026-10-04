@@ -139,8 +139,32 @@ class TestNormalizeRecord(unittest.TestCase):
         rec3 = converter.normalize_record({"id": "c3", "conversation_id": None})
         self.assertIsNone(rec3["conversation_id"])
 
+    def test_timestamp_overflow_numeric_string_graceful(self) -> None:
+        overflow_candidates = ("1e100", "-1e100", "1e1000", "9999999999999999999999999999999999999999")
+        for candidate in overflow_candidates:
+            with self.subTest(candidate=candidate):
+                rec = converter.normalize_record({"id": "ov", "created_at": candidate})
+                self.assertIsNone(rec["created_at"])
+
 
 class TestDeduplication(unittest.TestCase):
+    def test_synthetic_ids_different_attributes_no_collision(self) -> None:
+        # Two tasks created in the same second with same description but different due_date or conversation
+        raw1 = {
+            "description": "Fix memory leak",
+            "created_at": "2026-10-04T10:00:00Z",
+            "due_date": "2026-10-05T10:00:00Z",
+        }
+        raw2 = {
+            "description": "Fix memory leak",
+            "created_at": "2026-10-04T10:00:00Z",
+            "due_date": "2026-10-08T10:00:00Z",
+        }
+        norm1 = converter.normalize_record(raw1)
+        norm2 = converter.normalize_record(raw2)
+        self.assertNotEqual(norm1["id"], norm2["id"])
+        deduped = converter.deduplicate_records([norm1, norm2])
+        self.assertEqual(len(deduped), 2)
     def test_dedup_prefers_latest_updated_at(self) -> None:
         records = [
             {
@@ -335,6 +359,24 @@ class TestCliExecution(unittest.TestCase):
                 exit_code = converter.main([str(bad_file)])
                 self.assertEqual(exit_code, 1)
                 self.assertIn("Invalid JSON", stderr_stream.getvalue())
+
+    def test_cli_empty_stdin_rejected_with_error(self) -> None:
+        stdin_stream = io.StringIO("")  # Completely empty input from failing pipeline
+        with patch("sys.stdin", stdin_stream):
+            stderr_stream = io.StringIO()
+            with patch("sys.stderr", stderr_stream):
+                exit_code = converter.main(["-"])
+                self.assertEqual(exit_code, 1)
+                self.assertIn("Empty input received from stdin", stderr_stream.getvalue())
+
+    def test_cli_empty_json_array_accepted(self) -> None:
+        stdin_stream = io.StringIO("[]")  # Valid empty array
+        with patch("sys.stdin", stdin_stream):
+            stdout_stream = io.StringIO()
+            with patch("sys.stdout", stdout_stream):
+                exit_code = converter.main(["-"])
+                self.assertEqual(exit_code, 0)
+                self.assertEqual(stdout_stream.getvalue(), "")
 
     def test_cli_missing_input_file_returns_error(self) -> None:
         stderr_stream = io.StringIO()

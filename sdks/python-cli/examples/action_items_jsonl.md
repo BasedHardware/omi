@@ -33,14 +33,15 @@ While Markdown and CSV exports are ideal for human reading and spreadsheets, **J
 Stream live task records directly through standard input (`-`):
 
 ```bash
-# Export all action items to tasks.jsonl via stdin pipeline
+# Enable pipefail in bash/zsh so upstream errors abort the pipeline
+set -o pipefail
 omi --json action-item list --limit 200 | python examples/action_items_to_jsonl.py - -o tasks.jsonl
 ```
 
 Or print directly to stdout for shell piping:
 
 ```bash
-# Print JSONL lines to stdout
+set -o pipefail
 omi --json action-item list | python examples/action_items_to_jsonl.py -
 ```
 
@@ -143,7 +144,7 @@ GROUP BY status;
 
 ### Filter with `jq`
 
-Extract high-priority tasks due within the upcoming week:
+Extract open tasks with assigned deadlines:
 
 ```bash
 cat tasks.jsonl | jq -c 'select(.completed == false and .due_date != null)'

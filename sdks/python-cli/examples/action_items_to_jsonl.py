@@ -46,7 +46,7 @@ def _parse_timestamp(raw_val: Any) -> Optional[datetime]:
         if ts > 1e11:
             ts /= 1000.0
         return datetime.fromtimestamp(ts, tz=timezone.utc)
-    except ValueError:
+    except (ValueError, OverflowError, OSError):
         pass
 
     # Normalize trailing Z to +00:00 for fromisoformat
@@ -113,12 +113,25 @@ def _safe_str(val: Any) -> str:
     return str(val).strip()
 
 
-def _generate_synthetic_id(description: str, created_at: Optional[str]) -> str:
-    """Generate a deterministic fallback ID for records missing an explicit id."""
+def _generate_synthetic_id(
+    description: str,
+    created_at: Optional[str] = None,
+    due_date: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    extra_entropy: Optional[str] = None,
+) -> str:
+    """Generate a deterministic fallback ID incorporating all stable record attributes."""
     hasher = hashlib.sha256()
     hasher.update((description or "").encode("utf-8"))
     hasher.update(b"::")
     hasher.update((created_at or "").encode("utf-8"))
+    hasher.update(b"::")
+    hasher.update((due_date or "").encode("utf-8"))
+    hasher.update(b"::")
+    hasher.update((conversation_id or "").encode("utf-8"))
+    if extra_entropy:
+        hasher.update(b"::")
+        hasher.update(extra_entropy.encode("utf-8"))
     return f"syn_{hasher.hexdigest()[:16]}"
 
 
@@ -151,10 +164,23 @@ def normalize_record(raw: Dict[str, Any]) -> Dict[str, Any]:
     if not updated_at:
         updated_at = created_at
 
+    conversation_id = raw.get("conversation_id")
+    conv_id_str = _safe_str(conversation_id) if conversation_id is not None else None
+    if conv_id_str == "":
+        conv_id_str = None
+
     # Normalize ID
     item_id = _safe_str(raw.get("id"))
     if not item_id:
-        item_id = _generate_synthetic_id(description, created_at)
+        # Include full raw dump (excluding id) to ensure distinct records never collide
+        raw_entropy = json.dumps({k: v for k, v in raw.items() if k != "id"}, sort_keys=True, default=str)
+        item_id = _generate_synthetic_id(
+            description=description,
+            created_at=created_at,
+            due_date=due_date,
+            conversation_id=conv_id_str,
+            extra_entropy=raw_entropy,
+        )
 
     # Normalize completion and status
     raw_completed = raw.get("completed")
@@ -347,7 +373,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             try:
                 content = sys.stdin.read()
                 if not content.strip():
-                    continue
+                    sys.stderr.write(
+                        "Error: Empty input received from stdin. If piping from omi, verify that upstream command succeeded.\n"
+                    )
+                    return 1
                 data = json.loads(content)
                 raw_items.extend(unwrap_action_items(data))
             except json.JSONDecodeError as exc:
@@ -365,7 +394,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 with path.open("r", encoding="utf-8") as f:
                     content = f.read()
                     if not content.strip():
-                        continue
+                        sys.stderr.write(f"Error: Empty file: {path}\n")
+                        return 1
                     data = json.loads(content)
                     raw_items.extend(unwrap_action_items(data))
             except json.JSONDecodeError as exc:
