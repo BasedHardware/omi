@@ -70,7 +70,9 @@ public struct BackendResponse: Sendable, Hashable {
 public protocol BackendTransport: Sendable {
     func request(_ request: BackendRequest) async throws -> BackendResponse
     /// Server-sent generation events for a chat generation; `onFrame` is
-    /// called per SSE frame. Resolves with the terminal HTTP response.
+    /// called per SSE frame, including its terminating blank line so a
+    /// streaming parser can dispatch it immediately. Resolves with the
+    /// terminal HTTP response.
     func generationEvents(
         generationId: String,
         lastEventId: String?,

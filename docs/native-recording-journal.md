@@ -31,3 +31,35 @@ Native backend invalidation is terminal: it cancels backend transport work, prev
 Automatic-resume verification passed 104 focused React Native tests (/tmp/v5-auto-resume-focus.log), including active capture with no new packets, repeated stopped upload/completion failures under a three-byte test memory budget, deferred stop persistence failure, permanent conflict rejection, and account/unmount retirement during a journal read. Native disposal and ownership classification passed the native runner and Android, iOS and macOS builds (/tmp/v5-backend-disposal-{native,android-build,ios-build,macos-build}.log).
 
 Terminal transcript verification passed 84 focused tests independently (/tmp/v5-terminal-transcript-peer.log) and the complete root gate (/tmp/v5-terminal-transcript-root-check.log). An isolated synthetic service and actual built app verified desktop and 390-by-844 mobile failure refreshes: four transcript GETs and zero failed-job POSTs, while the queued job resumed through one POST and displayed completed text (/tmp/v5-terminal-transcript-browser-counts.json). Mobile document and scroll widths both measured 390 with bottom navigation available. The owned fixture processes and tab were removed; this is UI/transport proof, not a live provider or physical recording test.
+
+## Swift Apple host assembly
+
+The Swift iOS and macOS hosts assemble `EncryptedRecordingJournalTransport`
+with `AppleRecordingJournalOwnerProvider`, the Keychain session store, the Apple
+journal vault and the durable file adapter. This assembly currently requires the
+New software plane and its validated stamped origin. Old-plane reads retain the
+legacy origin; Swift journal capture fails closed on that plane. Android Skip,
+Linux and Windows hosts do not receive this journal capability.
+
+Ownership is obtained with the current authenticated session through
+`GET /v1/device-sessions/ownership`. Owner metadata and login generation stay in
+the Keychain session payload. Explicit redemption creates a new generation;
+refresh preserves it. Secure session revisions fence delayed refresh,
+redemption and ownership responses across logout and replacement login. The
+journal adapter remains reusable after logout because session identity, rather
+than permanent adapter retirement, isolates each new login's partition.
+
+Local operations may reuse the exact cached receipt only after DNS,
+connection-unavailable or timeout errors. Replay requires an online ownership
+response and pins the bearer, origin and receipt before dispatch. Backend
+redirects are refused. HTTP denial, TLS failure, cancellation, secure-store
+failure and the Worker's `capture_ownership_unavailable` response never select a
+cached-owner or plaintext fallback. Postgres ownership is exercised only through
+mocked HTTP responses in the Swift suite; no live service writes are involved.
+
+`AppleRecordingJournalOwnerTests` uses a synthetic secure credential store,
+mock URLSession responses and an ephemeral test vault. It does not access real
+Keychain credentials, entitlements, Bluetooth devices or recording permissions.
+Source-slice tests cover the native core policy and journal/auth transport;
+they do not establish a complete SwiftUI/Skip host build or physical-device
+capture readiness.

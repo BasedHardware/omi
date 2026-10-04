@@ -68,7 +68,10 @@ public func chatSessionLost(_ error: Error) -> Bool {
         return backendError.status == 401
             || backendError.action == "reauthenticate"
     }
-    return error is TransportFailure && !isCancellation(error)
+    if let failure = error as? TransportFailure {
+        return failure == .unconfigured || failure == .unauthorized
+    }
+    return false
 }
 
 public func chatHistoryErrorCopy(_ error: Error) -> String {

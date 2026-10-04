@@ -116,3 +116,17 @@ public func isLoopbackHostname(_ hostname: String) -> Bool {
     return normalized == "localhost" || normalized == "127.0.0.1"
         || normalized == "::1"
 }
+
+/// Port of `isAllowedV5Hostname`: loopback, the pinned cloud origin, or an
+/// exact `*.workers.dev` subdomain. Shared-provider Cloud Run suffixes stay
+/// rejected until an exact verified origin is stamped.
+public func isAllowedV5Hostname(_ hostname: String) -> Bool {
+    let normalized = hostname
+        .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        .lowercased()
+    if isLoopbackHostname(normalized) || normalized == "api.omi.me" {
+        return true
+    }
+    return normalized.hasSuffix(".workers.dev")
+        && normalized.count > ".workers.dev".count
+}

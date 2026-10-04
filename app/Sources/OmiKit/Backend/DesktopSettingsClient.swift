@@ -79,6 +79,7 @@ public enum PermissionKind: String, Sendable, Equatable {
     case screen
     case microphone
     case notifications
+    case bluetooth
 }
 
 public enum PermissionState: String, Sendable, Equatable {

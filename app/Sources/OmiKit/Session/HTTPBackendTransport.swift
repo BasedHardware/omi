@@ -16,11 +16,16 @@ public actor HTTPBackendTransport: BackendTransport {
     private let credentials: CredentialStoring
     private let originOverride: String?
     private let bearerResolver: (@Sendable () async -> String?)?
+    private let planeStore: SoftwarePlaneStoring?
+    private var planeStoreRevision: String?
     private var planeRevision = UUID().uuidString
     private var storedPlane: String?
     private var stampedValid: Bool
     private var planeLocked: Bool
     private let invalidation: InvalidationBox
+    #if !SKIP
+    private var generationRequests = [String: (id: String, task: Task<BackendResponse, Error>)]()
+    #endif
 
     private final class InvalidationBox: @unchecked Sendable {
         let continuation: AsyncStream<Void>.Continuation
@@ -59,13 +64,19 @@ public actor HTTPBackendTransport: BackendTransport {
         credentials: CredentialStoring,
         planeSelection: PlaneSelection,
         originOverride: String? = nil,
-        bearerResolver: (@Sendable () async -> String?)? = nil
+        bearerResolver: (@Sendable () async -> String?)? = nil,
+        planeStore: SoftwarePlaneStoring? = nil
     ) {
         self.session = session
         self.credentials = credentials
         self.originOverride = originOverride
         self.bearerResolver = bearerResolver
-        self.storedPlane = planeSelection.storedPlane
+        self.planeStore = planeStore
+        if let planeStore {
+            let selected = planeStore.softwarePlaneSnapshot()
+            self.storedPlane = selected.storedPlane
+            self.planeStoreRevision = selected.revision
+        } else { self.storedPlane = planeSelection.storedPlane }
         self.stampedValid = planeSelection.stampedValid
         self.planeLocked = !planeSelection.allowPlaneSwitch
         self.invalidation = InvalidationBox()
@@ -78,7 +89,30 @@ public actor HTTPBackendTransport: BackendTransport {
     // MARK: Plane and contract
 
     private func isNewPlane() -> Bool {
-        Policy.softwarePlaneIsNew(stored: storedPlane, stampedValid: stampedValid)
+        synchronizePlaneSelection()
+        return Policy.softwarePlaneIsNew(stored: storedPlane, stampedValid: stampedValid)
+    }
+
+    private func synchronizePlaneSelection() {
+        if let planeStore {
+            let selected = planeStore.softwarePlaneSnapshot()
+            changePlane(to: selected.storedPlane, selectionRevision: selected.revision)
+        }
+    }
+
+    private func isPlaneCurrent(_ revision: String) -> Bool {
+        synchronizePlaneSelection()
+        return revision == planeRevision
+    }
+
+    private func changePlane(to selected: String?, selectionRevision: String? = nil) {
+        guard storedPlane != selected || planeStoreRevision != selectionRevision else { return }
+        storedPlane = selected
+        planeStoreRevision = selectionRevision
+        planeRevision = UUID().uuidString
+        #if !SKIP
+        for request in generationRequests.values { request.task.cancel() }
+        #endif
     }
 
     public func apiContract() async -> APIContract? {
@@ -92,8 +126,9 @@ public actor HTTPBackendTransport: BackendTransport {
     @discardableResult
     public func setSoftwarePlane(_ plane: SoftwarePlane) async -> SoftwarePlane? {
         guard !planeLocked else { return await softwarePlane() }
-        if storedPlane != plane.rawValue { planeRevision = UUID().uuidString }
-        storedPlane = plane.rawValue
+        planeStore?.storeSoftwarePlane(plane)
+        if planeStore != nil { synchronizePlaneSelection() }
+        else { changePlane(to: plane.rawValue) }
         return await softwarePlane()
     }
 
@@ -105,6 +140,10 @@ public actor HTTPBackendTransport: BackendTransport {
 
     private func resolveURL(path: String) throws -> URL {
         let origin = isNewPlane() ? originOverride : CLOUD_BACKEND_ORIGIN
+        return try makeURL(path: path, origin: origin)
+    }
+
+    private func makeURL(path: String, origin: String?) throws -> URL {
         guard var origin else {
             throw TransportFailure.unconfigured
         }
@@ -116,6 +155,7 @@ public actor HTTPBackendTransport: BackendTransport {
     }
 
     public func request(_ request: BackendRequest) async throws -> BackendResponse {
+        synchronizePlaneSelection()
         let revision = planeRevision
         let contract: APIContract = isNewPlane() ? .canonical : .omi
         if let expected = request.expectedApiContract, expected != contract {
@@ -125,10 +165,10 @@ public actor HTTPBackendTransport: BackendTransport {
         let token: String?
         if let bearerResolver { token = await bearerResolver() }
         else { token = await credentials.load()?.idToken }
-        guard revision == planeRevision else { throw TransportFailure.unconfigured }
+        guard isPlaneCurrent(revision) else { throw TransportFailure.unconfigured }
         guard let token, !token.isEmpty else { throw TransportFailure.unauthorized }
         return try await execute(makeRequest(request, url: url, token: token),
-            id: request.id, capturePath: Policy.isCapturePath(request.path))
+            id: request.id, capturePath: Policy.isCapturePath(request.path), expectedPlane: revision)
     }
 
     private func makeRequest(_ request: BackendRequest, url: URL, token: String) -> URLRequest {
@@ -150,7 +190,8 @@ public actor HTTPBackendTransport: BackendTransport {
 
     private func execute(
         _ urlRequest: URLRequest, id: String, capturePath: Bool,
-        ownershipProbe: Bool = false, invalidateOn401: Bool = true
+        ownershipProbe: Bool = false, invalidateOn401: Bool = true,
+        expectedPlane: String? = nil
     ) async throws -> BackendResponse {
         let data: Data
         let response: URLResponse
@@ -173,6 +214,9 @@ public actor HTTPBackendTransport: BackendTransport {
             }
             #endif
             throw TransportFailure.transportFailed
+        }
+        if let expectedPlane, !isPlaneCurrent(expectedPlane) {
+            throw TransportFailure.unconfigured
         }
         guard let http = response as? HTTPURLResponse else {
             throw TransportFailure.transportFailed
@@ -204,6 +248,39 @@ public actor HTTPBackendTransport: BackendTransport {
         lastEventId: String?,
         onFrame: @escaping @Sendable (String) -> Void
     ) async throws -> BackendResponse {
+        // Apply a completed login pin before registering this new request, so
+        // retiring requests from the preceding plane cannot cancel it.
+        synchronizePlaneSelection()
+        #if !SKIP
+        // Registration precedes the first suspension, so cancellation works
+        // even while headers or credentials are still pending.
+        generationRequests[generationId]?.task.cancel()
+        let requestId = UUID().uuidString
+        let task = Task {
+            try await self.receiveGenerationEvents(
+                generationId: generationId, lastEventId: lastEventId, onFrame: onFrame)
+        }
+        generationRequests[generationId] = (requestId, task)
+        defer {
+            if generationRequests[generationId]?.id == requestId {
+                generationRequests.removeValue(forKey: generationId)
+            }
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        #else
+        return try await receiveGenerationEvents(
+            generationId: generationId, lastEventId: lastEventId, onFrame: onFrame)
+        #endif
+    }
+
+    private func receiveGenerationEvents(
+        generationId: String, lastEventId: String?,
+        onFrame: @escaping @Sendable (String) -> Void
+    ) async throws -> BackendResponse {
         let path = "/v1/chat-generations/\(encodeQueryComponent(generationId))/events"
         var urlRequest = URLRequest(url: try resolveURL(path: path))
         urlRequest.httpMethod = "GET"
@@ -215,52 +292,107 @@ public actor HTTPBackendTransport: BackendTransport {
         let token: String?
         if let bearerResolver { token = await bearerResolver() }
         else { token = await credentials.load()?.idToken }
-        guard revision == planeRevision, let token else { throw TransportFailure.unauthorized }
+        guard isPlaneCurrent(revision), let token, !token.isEmpty else {
+            throw TransportFailure.unauthorized
+        }
         urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "authorization")
-        let data: Data
-        let response: URLResponse
+        urlRequest.setValue("text/event-stream", forHTTPHeaderField: "accept")
+        var data = Data()
+        var streamBody = ""
+        let http: HTTPURLResponse
+        var decoder = SSEFrameDecoder()
         do {
+            #if !SKIP && !canImport(FoundationNetworking)
+            try Task.checkCancellation()
+            let (bytes, response) = try await session.bytes(
+                for: urlRequest, delegate: RefuseBackendRedirects())
+            defer { bytes.task.cancel() }
+            guard let response = response as? HTTPURLResponse else {
+                throw TransportFailure.transportFailed
+            }
+            http = response
+            try Task.checkCancellation()
+            for try await byte in bytes {
+                try Task.checkCancellation()
+                guard isPlaneCurrent(revision) else { throw TransportFailure.cancelled }
+                if http.statusCode == 200, let frame = decoder.append(byte) {
+                    let chunk = frame + "\n\n"
+                    streamBody += chunk
+                    onFrame(chunk)
+                } else if http.statusCode != 200 {
+                    data.append(byte)
+                }
+            }
+            try Task.checkCancellation()
+            if http.statusCode == 200, let frame = decoder.finish() {
+                let chunk = frame + "\n\n"
+                streamBody += chunk
+                onFrame(chunk)
+            }
+            #else
+            // Skip/FoundationNetworking do not expose Apple's AsyncBytes API.
+            // Preserve their existing response path with the shared UTF-8 decoder.
+            let response: URLResponse
             #if !SKIP
             (data, response) = try await session.data(for: urlRequest, delegate: RefuseBackendRedirects())
             #else
             (data, response) = try await session.data(for: urlRequest)
             #endif
+            guard let response = response as? HTTPURLResponse else {
+                throw TransportFailure.transportFailed
+            }
+            http = response
+            guard isPlaneCurrent(revision) else { throw TransportFailure.cancelled }
+            if http.statusCode == 200 {
+                for byte in [UInt8](data) {
+                    #if !SKIP
+                    try Task.checkCancellation()
+                    #endif
+                    guard isPlaneCurrent(revision) else { throw TransportFailure.cancelled }
+                    if let frame = decoder.append(byte) {
+                        let chunk = frame + "\n\n"
+                        streamBody += chunk
+                        onFrame(chunk)
+                    }
+                }
+                if let frame = decoder.finish() {
+                    let chunk = frame + "\n\n"
+                    streamBody += chunk
+                    onFrame(chunk)
+                }
+            }
+            #endif
         } catch is CancellationError {
             throw TransportFailure.cancelled
         } catch {
+            #if !SKIP
+            if (error as? URLError)?.code == .cancelled || Task.isCancelled {
+                throw TransportFailure.cancelled
+            }
+            #endif
+            if let failure = error as? TransportFailure { throw failure }
             throw TransportFailure.transportFailed
         }
-        guard let http = response as? HTTPURLResponse else {
-            throw TransportFailure.transportFailed
-        }
+        guard isPlaneCurrent(revision) else { throw TransportFailure.cancelled }
         if http.statusCode == 401 {
             invalidation.continuation.yield()
             throw TransportFailure.unauthorized
         }
-        if http.statusCode == 200 {
-            // Deliver each SSE frame (blank-line delimited) as a string, the
-            // same chunking the native bridge used on the JS boundary.
-            var frames = [String]()
-            var current = ""
-            for byte in [UInt8](data) {
-                current.append(Character(Unicode.Scalar(byte)))
-                if current.hasSuffix("\n\n") {
-                    frames.append(String(current.dropLast(2)))
-                    current = ""
-                }
-            }
-            if !current.isEmpty { frames.append(current) }
-            for frame in frames { onFrame(frame) }
+        var retryAfter: Int?
+        for header in http.allHeaderFields {
+            if let name = header.key as? String, name.lowercased() == "retry-after",
+                let value = header.value as? String { retryAfter = Int(value) }
         }
         return BackendResponse(
             id: generationId, status: http.statusCode,
-            body: String(decoding: data, as: UTF8.self),
-            retryAfterSeconds: nil)
+            body: http.statusCode == 200 ? streamBody : String(decoding: data, as: UTF8.self),
+            retryAfterSeconds: retryAfter)
     }
 
     public func cancelGenerationEvents(generationId: String) async {
-        // URLSession requests cannot be selectively torn down here; the
-        // platform hosts wrap task cancellation around the stream call.
+        #if !SKIP
+        generationRequests[generationId]?.task.cancel()
+        #endif
     }
 
     // MARK: Write identity
@@ -321,7 +453,7 @@ extension HTTPBackendTransport: RecordingJournalOwnerRequesting {
         let beforeRefresh = try secure.secureSnapshot()
         guard beforeRefresh.session != nil else { return nil }
         if let bearerResolver { _ = await bearerResolver() }
-        guard plane == planeRevision else { throw EncryptedRecordingJournalError.ownerChanged }
+        guard isPlaneCurrent(plane) else { throw EncryptedRecordingJournalError.ownerChanged }
         var snapshot = try secure.secureSnapshot()
         guard var stored = snapshot.session,
             stored.loginGeneration == beforeRefresh.session?.loginGeneration,
@@ -346,10 +478,10 @@ extension HTTPBackendTransport: RecordingJournalOwnerRequesting {
         let response: BackendResponse
         do {
             response = try await execute(makeRequest(request,
-                url: try resolveURL(path: request.path), token: stored.idToken),
+                url: try makeURL(path: request.path, origin: origin), token: stored.idToken),
                 id: request.id, capturePath: false, ownershipProbe: true, invalidateOn401: false)
         } catch {
-            guard plane == planeRevision,
+            guard isPlaneCurrent(plane),
                 try secure.secureSnapshot().revision == snapshot.revision
             else { throw EncryptedRecordingJournalError.ownerChanged }
             if error is OwnershipConnectivityFailure, allowCached,
@@ -358,7 +490,7 @@ extension HTTPBackendTransport: RecordingJournalOwnerRequesting {
             }
             throw error
         }
-        guard plane == planeRevision,
+        guard isPlaneCurrent(plane),
             try secure.secureSnapshot().revision == snapshot.revision
         else { throw EncryptedRecordingJournalError.ownerChanged }
         guard (200..<300).contains(response.status),
@@ -403,10 +535,11 @@ extension HTTPBackendTransport: RecordingJournalOwnerRequesting {
         let plane = planeRevision
         // No suspension between checking the session and constructing the full
         // request. Later account changes cannot substitute their bearer.
-        var pinned = makeRequest(request, url: try resolveURL(path: request.path), token: stored.idToken)
+        var pinned = makeRequest(request,
+            url: try makeURL(path: request.path, origin: owner.backendOrigin), token: stored.idToken)
         pinned.setValue(owner.ownershipReceipt, forHTTPHeaderField: "x-omi-capture-ownership")
         let response = try await execute(pinned, id: request.id, capturePath: true, invalidateOn401: false)
-        guard plane == planeRevision, let current = try secure.secureSnapshot().session,
+        guard isPlaneCurrent(plane), let current = try secure.secureSnapshot().session,
             try ownerContext(current, origin: owner.backendOrigin).hasSameIdentity(as: owner)
         else { throw EncryptedRecordingJournalError.ownerChanged }
         return response

@@ -28,12 +28,68 @@ public enum AuthError: Error, Sendable, Equatable {
     case expired
 }
 
+/// Copy the card can show. Sign-in must not fail without a reason.
+public func signInFailureCopy(_ error: AuthError) -> String {
+    switch error {
+    case .unconfigured:
+        return "Sign in is not configured on this build."
+    case .unauthorized(let message):
+        return message
+    case .transport:
+        return "Could not reach Omi to finish sign in."
+    case .cancelled:
+        return "Sign in was cancelled."
+    case .expired:
+        return "Sign in expired. Try again."
+    }
+}
+
 /// Host-supplied browser leg for the legacy loopback OAuth flow.
 public protocol BrowserAuthControlling: Sendable {
     /// Presents the authorize URL and resolves with the loopback callback
     /// URL, or nil when the user cancelled.
     func presentAuthorizeURL(_ url: String, state: String) async -> String?
 }
+
+#if !SKIP
+/// Fences callbacks from a browser session that was replaced by a newer
+/// sign-in attempt.
+public struct BrowserAuthSessionGeneration: Sendable {
+    private var current: UInt64 = 0
+
+    public init() {}
+
+    public mutating func beginAttempt() -> UInt64 {
+        current &+= 1
+        return current
+    }
+
+    public func isCurrent(_ generation: UInt64) -> Bool {
+        generation == current
+    }
+}
+
+/// Bridges a native browser session's synchronous start result and its later
+/// callback. A failed `start()` has no callback to resume the waiter, so it
+/// must finish immediately; the one-shot completion also tolerates a callback
+/// racing with that failure result.
+@MainActor
+public func startBrowserAuthSession(
+    _ start: @MainActor (@escaping @MainActor @Sendable (String?) -> Void) -> Bool
+) async -> String? {
+    await withCheckedContinuation { continuation in
+        var didResume = false
+        let finish: @MainActor @Sendable (String?) -> Void = { result in
+            guard !didResume else { return }
+            didResume = true
+            continuation.resume(returning: result)
+        }
+        if !start(finish) {
+            finish(nil)
+        }
+    }
+}
+#endif
 
 public struct AuthSessionConfig: Sendable {
     public var firebaseApiKey: String
@@ -44,7 +100,7 @@ public struct AuthSessionConfig: Sendable {
 
     public init(
         firebaseApiKey: String, v5BackendOrigin: String? = nil,
-        legacyAuthorizeURL: String = "https://api.omi.me/v1/auth/google",
+        legacyAuthorizeURL: String = "https://api.omi.me/v1/auth/authorize",
         legacyRedirectURI: String = "http://127.0.0.1:0/callback"
     ) {
         self.firebaseApiKey = firebaseApiKey
@@ -98,13 +154,113 @@ public enum AuthCrypto {
         }
         return nil
     }
-
     public static func randomValue() -> String? {
         var bytes = [UInt8](repeating: 0, count: 32)
         for index in bytes.indices {
             bytes[index] = UInt8.random(in: 0...255)
         }
         return Base64Codec.encodeURL(bytes)
+    }
+}
+
+/// The legacy browser-leg authorize URL, mirroring the native module's
+/// query (`OmiAuthModule.mm`): `provider=google`, the redirect URI, state,
+/// and the PKCE S256 challenge. api.omi.me 307s this to Google OAuth with
+/// its own client — the client sends no client_id or response_type. The
+/// old default path `/v1/auth/google` does not exist upstream (404).
+public func legacyAuthorizeURL(
+    base: String, redirectURI: String, state: String, codeChallenge: String
+) -> String? {
+    guard var components = URLComponents(string: base) else { return nil }
+    components.queryItems = [
+        URLQueryItem(name: "provider", value: "google"),
+        URLQueryItem(name: "redirect_uri", value: redirectURI),
+        URLQueryItem(name: "state", value: state),
+        URLQueryItem(name: "code_challenge", value: codeChallenge),
+        URLQueryItem(name: "code_challenge_method", value: "S256"),
+    ]
+    return components.string
+}
+
+/// The callback shape check the native module applies before exchange: the
+/// callback must match the armed redirect URI (macOS loopback `http://
+/// 127.0.0.1:<port>/callback` or the iOS app scheme
+/// `omi-rnruntime://auth/callback`), carry no fragment, and echo the state
+/// with a non-empty code. Returns that code, or nil.
+public func authCallbackCode(
+    _ callback: String, redirectURI: String, expectedState: String
+) -> String? {
+    guard
+        let callbackComponents = URLComponents(string: callback),
+        let redirect = URLComponents(string: redirectURI),
+        !expectedState.isEmpty,
+        callbackComponents.user == nil,
+        callbackComponents.password == nil,
+        callbackComponents.fragment == nil,
+        (callbackComponents.scheme ?? "").lowercased()
+            == (redirect.scheme ?? "").lowercased(),
+        (callbackComponents.host ?? "").lowercased()
+            == (redirect.host ?? "").lowercased(),
+        callbackComponents.percentEncodedPath == redirect.percentEncodedPath,
+        !redirect.path.isEmpty,
+        callbackComponents.port == redirect.port
+    else {
+        return nil
+    }
+    var values: [String: String] = [:]
+    for item in callbackComponents.queryItems ?? [] {
+        guard let value = item.value, values[item.name] == nil else { return nil }
+        values[item.name] = value
+    }
+    guard values["error"] == nil, values["state"] == expectedState,
+        let code = values["code"], !code.isEmpty
+    else {
+        return nil
+    }
+    return code
+}
+
+/// Collect one bounded HTTP header block from a fragmented loopback callback.
+/// TCP does not preserve HTTP request boundaries, so the macOS host must wait
+/// for the header terminator before parsing the callback query.
+public struct AuthHTTPRequestHeaderAccumulator: Sendable {
+    public enum AppendResult: Equatable, Sendable {
+        case incomplete
+        case complete(String)
+        case invalidEncoding
+        case tooLarge
+    }
+
+    private let maximumBytes: Int
+    private var bytes = Data()
+
+    public init(maximumBytes: Int = 16 * 1024) {
+        self.maximumBytes = max(1, maximumBytes)
+    }
+
+    public mutating func append(_ chunk: Data) -> AppendResult {
+        guard chunk.count <= maximumBytes - bytes.count else { return .tooLarge }
+        bytes.append(chunk)
+
+        let headerEnd: Data.Index?
+        if let range = bytes.range(of: Data([13, 10, 13, 10])) {
+            headerEnd = range.upperBound
+        } else if let range = bytes.range(of: Data([10, 10])) {
+            headerEnd = range.upperBound
+        } else {
+            headerEnd = nil
+        }
+
+        if let headerEnd {
+            guard
+                let request = String(
+                    data: bytes[..<headerEnd], encoding: String.Encoding.utf8)
+            else {
+                return .invalidEncoding
+            }
+            return .complete(request)
+        }
+        return bytes.count == maximumBytes ? .tooLarge : .incomplete
     }
 }
 
@@ -119,15 +275,18 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
     private var settled = true
     private var attemptRevision: String?
     private let urlSession: URLSession
+    private let planeStore: SoftwarePlaneStoring
 
     public init(
         config: AuthSessionConfig, credentials: CredentialStoring,
-        browserAuth: BrowserAuthControlling? = nil, urlSession: URLSession = .shared
+        browserAuth: BrowserAuthControlling? = nil, urlSession: URLSession = .shared,
+        planeStore: SoftwarePlaneStoring = UserDefaultsSoftwarePlaneStore()
     ) {
         self.config = config
         self.credentials = credentials
         self.browserAuth = browserAuth
         self.urlSession = urlSession
+        self.planeStore = planeStore
         self.handoffs = InvalidationStream()
         self.invalidations = InvalidationStream()
     }
@@ -255,13 +414,15 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
                 ])
             ).utf8
         )
-        guard let (data, response) = try? await urlSession.data(for: request),
-            let http = response as? HTTPURLResponse, http.statusCode == 200,
+        let redeemed = try? await urlSession.data(for: request)
+        let http = redeemed?.1 as? HTTPURLResponse
+        guard let data = redeemed?.0, http?.statusCode == 200,
             let body = JSON.parseOrNull(String(data: data, encoding: String.Encoding.utf8)),
             body.isRecord,
             let idToken = body["idToken"]?.stringValue,
             let refreshToken = body["refreshToken"]?.stringValue
         else {
+            NSLog("Omi auth firebase redeem status=%d", http?.statusCode ?? -1)
             return false
         }
         let expiresIn = body["expiresIn"]?.numberValue ?? 3600
@@ -281,9 +442,12 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
                             throw SecureSessionError.changed
                         }
                     }
-                    try secure.replaceSession(stored, expecting: snapshot.revision)
-                    if let storedPlane {
-                        UserDefaults.standard.set(storedPlane, forKey: SOFTWARE_PLANE_DEFAULTS_KEY)
+                    if let storedPlane, let plane = SoftwarePlane(rawValue: storedPlane) {
+                        try planeStore.commitSoftwarePlane(plane) {
+                            try secure.replaceSession(stored, expecting: snapshot.revision)
+                        }
+                    } else {
+                        try secure.replaceSession(stored, expecting: snapshot.revision)
                     }
                 }
             } catch { return false }
@@ -291,8 +455,8 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         }
         #endif
         await credentials.store(stored)
-        if let storedPlane {
-            UserDefaults.standard.set(storedPlane, forKey: SOFTWARE_PLANE_DEFAULTS_KEY)
+        if let storedPlane, let plane = SoftwarePlane(rawValue: storedPlane) {
+            planeStore.storeSoftwarePlane(plane)
         }
         return true
     }
@@ -439,27 +603,27 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         else {
             throw AuthError.unconfigured
         }
-        let authorizeURL =
-            "\(config.legacyAuthorizeURL)?client_id=omi&redirect_uri=\(encodeQueryComponent(config.legacyRedirectURI))&response_type=code&state=\(encodeQueryComponent(state))&code_challenge=\(encodeQueryComponent(challenge))&code_challenge_method=S256"
-        guard let callback = await browserAuth.presentAuthorizeURL(
-            authorizeURL, state: state)
+        let authorizeURL = legacyAuthorizeURL(
+            base: config.legacyAuthorizeURL,
+            redirectURI: config.legacyRedirectURI,
+            state: state,
+            codeChallenge: challenge
+        )
+        guard let authorizeURL else {
+            throw AuthError.unconfigured
+        }
+        guard
+            let callback = await browserAuth.presentAuthorizeURL(
+                authorizeURL, state: state)
         else {
             throw AuthError.unauthorized("Omi cloud sign in was cancelled or failed")
         }
         guard isAttemptCurrent(attempt) else { return false }
-        // Validate the loopback callback shape.
-        guard let components = URLComponents(string: callback),
-            components.scheme?.lowercased() == "http",
-            components.host?.lowercased() == "127.0.0.1",
-            components.path == "/callback", components.fragment == nil
+        // Validate the callback shape (loopback on macOS, app scheme on iOS).
+        guard
+            let code = authCallbackCode(
+                callback, redirectURI: config.legacyRedirectURI, expectedState: state)
         else {
-            throw AuthError.unauthorized("Omi cloud sign in was cancelled or failed")
-        }
-        let values = Dictionary(
-            uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
-                item.value.map { (item.name, $0) }
-            })
-        guard values["state"] == state, let code = values["code"], !code.isEmpty else {
             throw AuthError.unauthorized("Omi cloud sign in was cancelled or failed")
         }
         guard isAttemptCurrent(attempt) else { return false }
@@ -471,11 +635,21 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         exchange.setValue(
             "application/x-www-form-urlencoded", forHTTPHeaderField: "content-type")
         exchange.httpBody = Data(body.utf8)
-        guard let (data, response) = try? await urlSession.data(for: exchange),
-            let http = response as? HTTPURLResponse, http.statusCode == 200,
-            let payload = JSON.parseOrNull(String(data: data, encoding: String.Encoding.utf8)),
+        let exchanged: (Data, URLResponse)
+        do {
+            exchanged = try await urlSession.data(for: exchange)
+        } catch {
+            throw AuthError.transport
+        }
+        guard let http = exchanged.1 as? HTTPURLResponse else {
+            throw AuthError.transport
+        }
+        guard http.statusCode == 200,
+            let payload = JSON.parseOrNull(
+                String(data: exchanged.0, encoding: String.Encoding.utf8)),
             payload.isRecord
         else {
+            NSLog("Omi auth token exchange status=%d", http.statusCode)
             throw AuthError.unauthorized("Omi cloud token exchange failed")
         }
         // Only a custom_token mints a refreshable Omi session.
