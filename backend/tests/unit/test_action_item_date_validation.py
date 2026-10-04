@@ -132,6 +132,16 @@ _SYS_MODULE_NAMES = [
     "utils.conversations.meeting_participants",
     "utils.llm.meeting_notes_rich_prompts",
     "utils.llm.meeting_notes_validation",
+    "utils.llm.meeting_notes_presentation",
+    "utils.llm.action_item_normalization",
+    "utils.llm.conversation_notes_prompts",
+    "utils.llm.episode_notes_prompts",
+    "utils.llm.episode_notes_validation",
+    "utils.conversations.episode_evidence",
+    "utils.conversations.episode_vacuity",
+    "utils.observability",
+    "utils.observability.fallback",
+    "models.structured_extraction",
     "models.structured",
     "models.calendar_context",
     "models.conversation_enums",
@@ -403,10 +413,29 @@ _load_module_from_file(
     BACKEND_DIR / "utils" / "llm" / "action_item_normalization.py",
 )
 
+# Episode helpers are pure but also imported when their feature flag is off.
+# Preserve the isolated import graph while exercising the real prompt adapters.
+_stub_package("utils.observability")
+fallback_stub = _stub_module("utils.observability.fallback")
+fallback_stub.record_fallback = MagicMock()
+for module_name, relative_path in [
+    ("utils.conversations.episode_evidence", "utils/conversations/episode_evidence.py"),
+    ("utils.conversations.episode_vacuity", "utils/conversations/episode_vacuity.py"),
+    ("utils.llm.conversation_notes_prompts", "utils/llm/conversation_notes_prompts.py"),
+    ("utils.llm.episode_notes_prompts", "utils/llm/episode_notes_prompts.py"),
+    ("utils.llm.episode_notes_validation", "utils/llm/episode_notes_validation.py"),
+]:
+    _load_module_from_file(module_name, BACKEND_DIR / relative_path)
+
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
 )
+
+# Retain the same extraction model graph as the isolated production module.
+# Importing it again after restoration creates incompatible Pydantic class identities.
+ActionItemsExtraction = sys.modules["models.structured_extraction"].ActionItemsExtraction
+ExtractedActionItem = sys.modules["models.structured_extraction"].ExtractedActionItem
 
 # Restore sys.modules now that the modules under test are imported and bound to
 # their stubbed dependencies. Tests below patch those module objects directly.
@@ -621,8 +650,6 @@ class TestExtractActionItemsPostValidation:
 
     def test_clears_past_due_dates_from_extraction(self):
         """Due dates more than 1 day in the past should be cleared after extraction."""
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
         past_due = datetime(2025, 9, 15, 10, 0, tzinfo=timezone.utc)
         future_due = datetime.now(timezone.utc) + timedelta(days=3)
 
@@ -666,8 +693,6 @@ class TestExtractActionItemsPostValidation:
 
     def test_passes_current_time_to_invoke(self):
         """extract_action_items should pass current_time in the invoke payload."""
-        from models.structured_extraction import ActionItemsExtraction
-
         mock_response = ActionItemsExtraction(action_items=[])
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
@@ -702,8 +727,6 @@ class TestExtractActionItemsPostValidation:
 
     def test_preserves_none_due_dates(self):
         """Action items with no due date should remain unchanged."""
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
         mock_response = ActionItemsExtraction(
             action_items=[ExtractedActionItem(description="No due date task", due_at=None)]
         )
@@ -739,8 +762,6 @@ class TestExtractActionItemsPostValidation:
 
     def test_preserves_due_date_within_grace_boundary(self):
         """Due date 23h ago should be preserved (within 1-day grace window)."""
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
         boundary_due = datetime.now(timezone.utc) - timedelta(hours=23)
         mock_response = ActionItemsExtraction(
             action_items=[ExtractedActionItem(description="Boundary task", due_at=boundary_due)]
@@ -786,8 +807,6 @@ class TestActionItemTimezoneConversion:
         return ZoneInfo(key)
 
     def _run(self, due_at, tz):
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
         mock_response = ActionItemsExtraction(action_items=[ExtractedActionItem(description="Task", due_at=due_at)])
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response

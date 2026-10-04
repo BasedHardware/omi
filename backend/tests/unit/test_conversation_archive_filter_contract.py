@@ -242,6 +242,12 @@ def conversations_db():
         "utils.manual_speaker_assignments",
         os.path.join(str(_BACKEND), "utils", "manual_speaker_assignments.py"),
     )
+    # Provenance invalidation is a pure helper imported by the database module.
+    # Keep the archive tests on its real implementation despite the empty fake package.
+    fakes["utils.conversations.note_claim_mutations"] = load_module_fresh(
+        "utils.conversations.note_claim_mutations",
+        os.path.join(str(_BACKEND), "utils", "conversations", "note_claim_mutations.py"),
+    )
     fakes["models.client_processing"] = client_processing_real
     fakes["utils.conversations.transcript_hash"] = transcript_hash_real
     fakes["utils.conversations.fragment_visibility"] = fragment_visibility_real
