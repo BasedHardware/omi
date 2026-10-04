@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Ελέγξτε τη σύνδεση",
     "forYou": "Για εσάς",
     "stopThese": "Διακοπή αυτών",
-    "dismiss": "Απόρριψη"
+    "dismiss": "Απόρριψη",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

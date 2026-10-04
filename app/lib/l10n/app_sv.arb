@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Kontrollera anslutningen",
     "forYou": "För dig",
     "stopThese": "Stoppa dessa",
-    "dismiss": "Avvisa"
+    "dismiss": "Avvisa",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

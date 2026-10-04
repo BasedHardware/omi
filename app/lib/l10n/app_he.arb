@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "בדקו את החיבור",
     "forYou": "בשבילך",
     "stopThese": "הפסקת אלה",
-    "dismiss": "סגירה"
+    "dismiss": "סגירה",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

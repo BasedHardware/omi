@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "接続を確認してください",
     "forYou": "あなたへのおすすめ",
     "stopThese": "この種類を停止",
-    "dismiss": "非表示"
+    "dismiss": "非表示",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

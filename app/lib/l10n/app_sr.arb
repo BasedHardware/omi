@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "Proverite vezu",
     "forYou": "За вас",
     "stopThese": "Заустави ово",
-    "dismiss": "Сакриј"
+    "dismiss": "Сакриј",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }
