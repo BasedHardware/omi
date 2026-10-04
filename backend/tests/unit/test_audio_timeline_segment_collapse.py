@@ -607,6 +607,7 @@ class TestTranslatorDegenerateIntervals:
             collected.extend(epoch.translate(segments))
 
         socket = SimpleNamespace(
+            _protocol_guard=False,
             _prev_partial_text='the unfinalized tail',
             _prev_partial_start_ms=400,
             _prev_partial_word_count=3,
@@ -797,6 +798,7 @@ async def test_managed_prod_order_mints_fresh_epoch_after_failover(monkeypatch, 
     def emit_adapter_message(service, callback, text, start_ms, end_ms):
         if service == st.STTService.modulate:
             adapter = object.__new__(st.SafeModulateSocket)
+            adapter._protocol_guard = False
             adapter._stream_transcript = callback
             adapter._preseconds = 0
             adapter._prev_partial_text = ''

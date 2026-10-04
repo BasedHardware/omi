@@ -143,6 +143,7 @@ async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch
     )
     before_mapped = mapped._value.get()
     adapter = object.__new__(SafeModulateSocket)
+    adapter._protocol_guard = False
     adapter._stream_transcript = callbacks['provider']
     adapter._preseconds = 0
     adapter._prev_partial_text = ''

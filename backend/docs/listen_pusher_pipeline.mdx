@@ -158,6 +158,13 @@ can prioritize Parakeet only when that live-model capability matches; it never
 overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
+Modulate's default-off `MODULATE_STREAM_PROTOCOL_GUARD_ENABLED` fixes nullable
+terminal preview timing and tracks UUID-bearing partials by `utterance_uuid`.
+UUID-less partials retain the legacy single-preview behavior: any nonempty
+final clears the anonymous preview, even if it represents unrelated speech.
+The scope and remaining limitation are described in
+[the protocol guard runbook](operational/modulate-protocol-guard.md).
+
 When `STT_ROUTING_MODE=shadow`, listen computes the cost-ordered, capability-
 filtered primary against static selection and counts agreement without changing
 connections. `on` applies that policy only to the stable UID cohort selected by

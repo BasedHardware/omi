@@ -48,6 +48,7 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.socket import STTSocket
+from utils.stt.modulate_protocol import MODULATE_DEATH_SERVE_ERROR, ModulatePendingUtterances, modulate_death_reason
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
@@ -1380,47 +1381,6 @@ def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int
     return buf.getvalue()
 
 
-MODULATE_DEATH_SERVE_ERROR: Final = 'modulate_serve_error'
-
-# Velma's in-stream error frames are free text, so the fault boundary is
-# matched on normalized text. Budget/quota is never transient and is the
-# same class as Soniox monthly-budget / Deepgram HTTP 402. 5xx wording is a
-# provider serve fault. Everything else — invalid audio we sent, rate limits
-# — is either our fault or this session's, and must not bench the provider.
-_MODULATE_BUDGET_MARKERS: Final = (
-    'monthly usage limit',
-    'usage limit reached',
-    'quota exceeded',
-)
-_MODULATE_SERVER_FAULT_MARKERS: Final = (
-    'internal server error',
-    'internal error',
-    'unable to complete the request',
-    'server error',
-)
-
-
-def modulate_death_reason(err: Any) -> Optional[str]:
-    """Bound a Velma in-stream error frame to a typed death reason.
-
-    Returns ``PROVIDER_BUDGET_EXHAUSTED`` for quota/monthly-cap text,
-    ``MODULATE_DEATH_SERVE_ERROR`` when the text says the provider failed to
-    serve the stream it accepted, else ``None`` (untyped — the raw text stays
-    on the death latch for logs). New provider wordings degrade to untyped
-    rather than growing a new bounded token per message.
-    """
-    normalized = str(err or '').strip().lower().rstrip('.')
-    if not normalized:
-        return None
-    if any(marker in normalized for marker in _MODULATE_BUDGET_MARKERS):
-        return PROVIDER_BUDGET_EXHAUSTED
-    if any(marker in normalized for marker in _MODULATE_SERVER_FAULT_MARKERS):
-        return MODULATE_DEATH_SERVE_ERROR
-    if any(marker in normalized for marker in ('invalid audio', 'unsupported audio', 'invalid wav', 'invalid input')):
-        return 'other'  # Our audio/request shape, never provider availability.
-    return None
-
-
 class SafeModulateSocket(STTSocket):
     max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
     replay_limits = ReplayLimits()
@@ -1455,6 +1415,9 @@ class SafeModulateSocket(STTSocket):
         self._prev_partial_text: str = ''
         self._prev_partial_start_ms: int = 0
         self._prev_partial_word_count: int = 0
+        # Snapshot once per socket; rollback preserves the legacy adapter.
+        self._protocol_guard = os.getenv('MODULATE_STREAM_PROTOCOL_GUARD_ENABLED', 'false').lower() == 'true'
+        self._pending_utterances = ModulatePendingUtterances()
         # Velma rejects any s16le frame that is not a whole number of samples with
         # {"type":"error","error":"Invalid input audio"} and then closes the socket, so a
         # single odd-length frame ends the session even after valid audio. Nothing upstream
@@ -1592,6 +1555,9 @@ class SafeModulateSocket(STTSocket):
     def finalize(self) -> None:
         pass
 
+    def _has_pending_partial(self) -> bool:
+        return bool(self._prev_partial_text) or (self._protocol_guard and bool(self._pending_utterances))
+
     def finish(self) -> None:
         with self._lock:
             if self._closed:
@@ -1618,11 +1584,11 @@ class SafeModulateSocket(STTSocket):
                 await asyncio.wait_for(self._done_event.wait(), timeout=60)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 logger.warning('Modulate drain timed out waiting for done message')
-                if self._prev_partial_text:
+                if self._has_pending_partial():
                     self._flush_partial()
         except Exception:
             pass
-        if self._prev_partial_text:
+        if self._has_pending_partial():
             self._flush_partial()
         self._recv_task.cancel()
         try:
@@ -1725,7 +1691,7 @@ class SafeModulateSocket(STTSocket):
                             typed,
                             sanitize_provider_error(err, code=msg.get('error_code') or msg.get('code')),
                         )
-                    if self._prev_partial_text:
+                    if self._has_pending_partial():
                         self._flush_partial()
                     self._done_event.set()
                     self._mark_dead(f'modulate error: {err}', typed_reason=typed)
@@ -1733,7 +1699,7 @@ class SafeModulateSocket(STTSocket):
                 elif msg_type == 'done':
                     self._observe_served()
                     logger.info('Modulate streaming done: duration_ms=%s', msg.get('duration_ms'))
-                    if self._prev_partial_text:
+                    if self._has_pending_partial():
                         self._flush_partial()
                     self._done_event.set()
                     break
@@ -1757,6 +1723,10 @@ class SafeModulateSocket(STTSocket):
             self._mark_dead(f'ws recv error: {e}')
 
     def _handle_partial_utterance(self, msg: Dict[str, Any]) -> None:
+        identifier = msg.get('utterance_uuid')
+        if self._protocol_guard and isinstance(identifier, str) and identifier:
+            self._pending_utterances.observe(msg)
+            return
         # Modulate sends cumulative partial_utterance messages during streaming
         # (e.g., "He", "He could", "He could hardly"...) but these are preview-only.
         # We buffer them here and only forward the final `utterance` via _handle_utterance.
@@ -1779,8 +1749,13 @@ class SafeModulateSocket(STTSocket):
         self._prev_partial_word_count = len(text.split())
 
     def _flush_partial(self) -> None:
+        if self._protocol_guard:
+            for segment in self._pending_utterances.flush(self._preseconds):
+                self._stream_transcript([segment])
         text = self._prev_partial_text
-        start_ms = self._prev_partial_start_ms
+        start_ms: Any = self._prev_partial_start_ms
+        if self._protocol_guard and start_ms is None:
+            start_ms = 0
         self._prev_partial_text = ''
         self._prev_partial_word_count = 0
         if not text:
@@ -1807,6 +1782,8 @@ class SafeModulateSocket(STTSocket):
         self._stream_transcript(segments)
 
     def _handle_utterance(self, msg: Dict[str, Any]) -> None:
+        if self._protocol_guard:
+            self._pending_utterances.finalized(msg)
         text = msg.get('text', '').strip()
         if not text:
             return
