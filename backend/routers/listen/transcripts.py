@@ -15,6 +15,7 @@ from fastapi.websockets import WebSocketDisconnect
 
 from config.capture_evidence import capture_evidence_dark_write_enabled, listen_committed_capture_coverage_enabled
 from config.translation import resolve_ondemand_config
+from config.live_capture import capture_window_reason
 from utils.capture_evidence import unknown_envelope
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 
@@ -38,7 +39,11 @@ from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
 from utils.audio_timeline import UNPLACED_SEGMENT_OFFSET
 from utils.conversations.factory import deserialize_conversation
-from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL, OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL
+from utils.metrics import (
+    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
+    OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL,
+    OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL,
+)
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
@@ -439,6 +444,7 @@ class TranscriptProcessor:
                 conversation.id,
                 [segment.model_dump() for segment in targets],
                 live_segments=fresh,
+                live_capture_reasons={str(s.id): s._audio_capture_reason for s in segments},
                 started_at=started_at,
                 audio_timeline=audio_timeline,
                 **({'capture_evidence': capture_evidence} if capture_evidence_dark_write_enabled() else {}),
@@ -473,6 +479,10 @@ class TranscriptProcessor:
                     OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL.labels(
                         outcome='persisted' if known else 'unavailable', reason=reason
                     ).inc()
+                    attribution = 'known_window' if known else capture_window_reason(written.capture_reasons.get(sid))
+                    OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='version', reason=attribution).inc()
+                    if sid in written.created_ids:
+                        OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='segment', reason=attribution).inc()
             if source_map is not None:
                 source_map.acknowledge(conversation.id, capture_evidence)
             conversation.transcript_segments = list(by_id.values())
@@ -917,7 +927,13 @@ class TranscriptProcessor:
                     self.speaker_id_allocator.assign(raw)
                     raw['start'] += offset
                     raw['end'] += offset
+                    attribution = raw.pop('_capture_window_reason', None)
+                    if getattr(self.host, 'use_custom_stt', False):
+                        attribution = 'custom_stt'
+                    elif getattr(self.host, 'is_multi_channel', False):
+                        attribution = 'multi_channel'
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
+                    segment._audio_capture_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
@@ -1167,7 +1183,13 @@ class TranscriptProcessor:
                         # V2 capture spans begin at >=0, so this offset cannot
                         # resolve to audio even when the marker is invisible.
                         raw['start'] = raw['end'] = UNPLACED_SEGMENT_OFFSET
+                    attribution = raw.pop('_capture_window_reason', None)
+                    if getattr(self.host, 'use_custom_stt', False):
+                        attribution = 'custom_stt'
+                    elif getattr(self.host, 'is_multi_channel', False):
+                        attribution = 'multi_channel'
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
+                    segment._audio_capture_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id

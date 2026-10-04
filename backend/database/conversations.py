@@ -2720,6 +2720,7 @@ def update_conversation_segments(
     return_segments: bool = False,
     preserve_unseen: bool = False,
     live_segments: Optional[List[dict]] = None,
+    live_capture_reasons: Optional[Dict[str, str]] = None,
     segment_update_fields: Optional[tuple[str, ...]] = None,
 ):
     """Write a transcript using an explicit segment-set ownership mode.
@@ -2789,6 +2790,7 @@ def update_conversation_segments(
                 live_segments,
                 receipt,
                 absorbed_ids=[absorbed_id for commit in prior_commits for absorbed_id in commit],
+                capture_reasons=live_capture_reasons,
             )
         remap = planned.absorbed_into if planned is not None else {}
         if remap:
@@ -2886,7 +2888,14 @@ def update_conversation_segments(
             _invalidate_client_processing(prepared_payload)
         transaction.update(doc_ref, prepared_payload)
         if planned is not None:
-            return LiveTranscriptMerge(accepted, planned.updated_ids, planned.removed_ids, planned.absorbed_into)
+            return LiveTranscriptMerge(
+                accepted,
+                planned.updated_ids,
+                planned.removed_ids,
+                planned.absorbed_into,
+                planned.capture_reasons,
+                planned.created_ids,
+            )
         return accepted if return_segments else True
 
     result = run_transactional(client, _write_segments)

@@ -797,6 +797,15 @@ class ProviderEpochTranslator:
         translated.append(segment)
 
     def _reject(self, segment: Dict, reason: str) -> None:
+        # Transient metadata only; the legacy refusal metric and text stay unchanged.
+        attribution = 'anchor_compacted' if reason == 'evicted_interval' else 'translator_' + reason
+        if reason == 'outside_accepted_sends' and self.send_map.evicted_spans and self.send_map._spans:
+            try:
+                if 0 <= float(segment['start']) * self.provider_sample_rate < self.send_map._spans[0][0]:
+                    attribution = 'send_map_evicted'
+            except (TypeError, ValueError, KeyError):
+                pass
+        segment['_capture_window_reason'] = attribution
         self.rejected_segments += 1
         if self._on_reject is not None:
             try:

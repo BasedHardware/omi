@@ -2911,3 +2911,21 @@ Neither field contains transcript content. Do not retry unreadable blobs as
 provider outages. The existing `omi-journey-capture-fail` alert
 uses the durable terminal projection; inspect the current alert manifest for
 its 30-minute denominator and dwell rather than adding a raw-count page.
+
+### Live capture-window attribution
+
+`omi_live_audio_capture_windows_total` keeps its existing labels and committed-version
+semantics. The additive `omi_live_audio_capture_attribution_total{population,reason}`
+counts the same versions (`population="version"`) and first stored segment IDs
+(`population="segment"`) separately. An absorbed provider fragment that never exists
+as a stored segment is not a distinct segment. The transaction snapshot, including
+its replay receipt, determines first commits; no session ID is a metric label.
+Counters observe acknowledged successful writes, not an exactly-once durable ledger.
+
+Reasons are bounded in `config/live_capture.py`: translator refusals, send-map eviction,
+anchor compaction, merge unknown side/gap/invalid window, partial redistribution,
+custom STT, multi-channel, kill switch, and missing metadata. `inherited_unknown`
+identifies an already unknown stored contributor counted again; the original cause
+is not reconstructed after restart. A merge reason takes precedence over a fresh
+contributor's refusal. Attribution travels in transaction-local metadata and is never
+stored in a transcript or exposed through the public conversation API.

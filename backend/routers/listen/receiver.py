@@ -528,6 +528,7 @@ class ListenReceiver(ReplayFilterMixin):
                 segment.pop('_capture_start_sample', None)
                 segment.pop('_capture_end_sample', None)
                 segment['_capture_window_unavailable'] = True
+                segment['_capture_window_reason'] = 'kill_switch'
             self._enqueue_stt_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
             return
         for segment in segments:
@@ -536,6 +537,8 @@ class ListenReceiver(ReplayFilterMixin):
             if start_sample is not None and end_sample is not None and end_sample >= start_sample:
                 abs_start = self.capture_timeline.wall_strict(start_sample)
                 abs_end = self.capture_timeline.wall_strict(end_sample)
+                if abs_start is None or abs_end is None:
+                    segment['_capture_window_reason'] = 'anchor_compacted'
                 if abs_start is not None and abs_end is not None:
                     segment['_capture_abs_start'] = abs_start
                     segment['_capture_abs_end'] = abs_end

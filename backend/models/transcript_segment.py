@@ -124,6 +124,8 @@ class TranscriptSegment(BaseModel):
     # than persisted diarization. Not dumped; a stored synthesized 0 still
     # looks real after a round-trip.
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
+    # Transaction-local attribution, never serialized or persisted.
+    _audio_capture_reason: str = PrivateAttr(default='missing_window')
 
     @model_serializer(mode='wrap')
     def _serialize_internal_evidence(self, handler, info):
@@ -182,6 +184,7 @@ class TranscriptSegment(BaseModel):
 
     def _clear_audio_evidence(self) -> None:
         self._clear_audio_capture_window()
+        self._audio_capture_reason = 'partial_redistribution'
         self.audio_source = None
 
     def _merge_audio_source(self, other: 'TranscriptSegment') -> None:
@@ -224,6 +227,18 @@ class TranscriptSegment(BaseModel):
             self.audio_capture_start = min(a_start, b_start)
             self.audio_capture_end = max(a_end, b_end)
         else:
+            if self._audio_capture_reason == 'inherited_unknown' or other._audio_capture_reason == 'inherited_unknown':
+                self._audio_capture_reason = 'inherited_unknown'
+            elif any(value is None for value in (a_start, a_end, b_start, b_end)):
+                self._audio_capture_reason = 'merge_unknown_side'
+            elif (
+                not all(math.isfinite(v) for v in (a_start, a_end, b_start, b_end))
+                or a_start >= a_end
+                or b_start >= b_end
+            ):
+                self._audio_capture_reason = 'merge_invalid_window'
+            else:
+                self._audio_capture_reason = 'merge_gap'
             self._clear_audio_capture_window()
 
     def assign_resolved_speaker(self, speaker_id: int, scope: str) -> None:
