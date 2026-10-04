@@ -225,6 +225,10 @@ umask 077
 mkdir -p .local
 export ADAPTER_REVIEW_DIR=$(mktemp -d "$PWD/.local/adapter-review.XXXXXX")
 git check-ignore "$ADAPTER_REVIEW_DIR/rollback.yaml"
+# Persist rollback state so the rollback block works from a fresh shell.
+printf 'export ADAPTER_REVIEW_DIR=%q ADAPTER_BEFORE=%q STACK_BEFORE=%q\n' \
+  "$ADAPTER_REVIEW_DIR" "$ADAPTER_BEFORE" "${STACK_BEFORE:-}" > .local/adapter-review.env
+git check-ignore .local/adapter-review.env
 helm --kube-context "$PROD_CTX" -n "$MON_NS" get manifest prod-omi-prometheus-adapter \
   --revision "$ADAPTER_BEFORE" > "$ADAPTER_REVIEW_DIR/rollback.yaml"
 
@@ -348,7 +352,15 @@ only if its scrape change also needs reversal; exporter/alert effects need their
 own reviewed recovery and are not covered by these Helm rollbacks.
 
 ```bash
-# David: same authorized context and preserved ADAPTER_REVIEW_DIR as above.
+# David: run from the same repository root; self-contained for a fresh shell.
+set -uo pipefail
+export PROD_CTX=gke_based-hardware_us-central1_prod-omi-gke
+export MON_NS=prod-omi-monitoring
+source ~/.local/bin/gcp-agent-env.sh human
+kprod() { rm -f ~/.kube/gke_gcloud_auth_plugin_cache; kubectl --context "$PROD_CTX" "$@"; }
+source .local/adapter-review.env
+: "${ADAPTER_BEFORE:?missing from .local/adapter-review.env}" "${ADAPTER_REVIEW_DIR:?missing}"
+test -s "$ADAPTER_REVIEW_DIR/restore-apiservices-configmap.yaml"
 kprod -n prod-omi-backend delete deployment prod-omi-backend-listen-canary \
   --ignore-not-found --wait=true --timeout=5m
 CANARY_PODS=$(kprod -n prod-omi-backend get pod -l app.kubernetes.io/name=backend-listen,track=canary -o name)
@@ -369,6 +381,7 @@ fi
 # Re-run both APIService, listen/Parakeet metric API and HPA post-checks above.
 # Set ROLLBACK_STACK=yes only if the stack also needs rollback.
 if [ "${ROLLBACK_STACK:-no}" = yes ]; then
+  : "${STACK_BEFORE:?set STACK_BEFORE to the known-good stack revision}"
   helm rollback prod-omi-kube-prometheus-stack "$STACK_BEFORE" \
     --namespace "$MON_NS" --kube-context "$PROD_CTX" --wait --timeout 15m
 fi
