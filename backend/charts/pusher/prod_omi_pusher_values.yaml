@@ -190,6 +190,8 @@ env:
     value: "true"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.

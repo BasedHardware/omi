@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from config.audio_timeline import live_capture_window_strict_projection_enabled
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.metrics import (
     AUDIO_TIMELINE_REJECT_REASONS,
@@ -147,9 +148,13 @@ def attach_legacy_capture_window(segment: Dict[str, Any], timeline: CaptureTimel
     start_sample = segment.pop('_capture_start_sample', None)
     end_sample = segment.pop('_capture_end_sample', None)
     if start_sample is not None and end_sample is not None and end_sample >= start_sample:
-        start, end = timeline.wall_strict(start_sample), timeline.wall_strict(end_sample)
-        if start is not None and end is not None:
-            segment['_capture_abs_start'], segment['_capture_abs_end'] = start, end
+        window = timeline.project_window(
+            start_sample, end_sample, strict=live_capture_window_strict_projection_enabled()
+        )
+        if window is not None:
+            segment['_capture_abs_start'], segment['_capture_abs_end'] = window
             return
-        segment['_capture_window_reason'] = 'anchor_compacted'
+        segment['_capture_window_reason'] = (
+            'anchor_compacted' if timeline.wall_strict(start_sample) is None else 'translator_discontinuous_interval'
+        )
     segment['_capture_window_unavailable'] = True

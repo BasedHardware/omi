@@ -48,7 +48,7 @@ def declarations():
 
 def test_composed_and_helm_declarations_are_all_off(declarations):
     manifest, charts = declarations
-    flags = (FLAG, 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION')
+    flags = (FLAG, 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'LIVE_CAPTURE_WINDOW_STRICT_PROJECTION')
     for env in manifest['environments'].values():
         for service in (*env['gke'].values(), *env['cloud_run']['services'].values()):
             for flag in flags:
