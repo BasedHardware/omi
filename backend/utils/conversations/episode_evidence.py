@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, Literal, Mapping, Sequence, cast
 
 from pydantic import BaseModel
 
 from utils.conversations.meeting_participants import bind_speakers_with_roster
+from utils.conversations.wake_word import escape_spoken_wake_word_marker, find_wake_word_segment_ids
 
 from models.structured import NoteEvidenceRef, Structured  # type: ignore[reportAttributeAccessIssue]  # Runtime SDK/fallback export.
 
@@ -36,6 +38,7 @@ class EvidenceItem(BaseModel):
     content: str
     sensitivity: Literal['standard', 'private'] = 'standard'
     source_ref: str | None = None
+    wake_word_invocation: bool = False
 
 
 def evidence_time(value: Any) -> str | None:
@@ -69,6 +72,7 @@ def capture_evidence(
         bind_speakers_with_roster(speaker_names, roster, desktop_capture)
     items = []
     segments = getattr(conversation, 'transcript_segments', None) or []
+    invocation_ids = find_wake_word_segment_ids(segments)
     for index, segment in enumerate(segments):
         segment_id = getattr(segment, 'id', None)
         actor = (
@@ -80,12 +84,13 @@ def capture_evidence(
             _item(
                 'speech',
                 segment_id or index,
-                getattr(segment, 'text', ''),
+                escape_spoken_wake_word_marker(getattr(segment, 'text', '')),
                 time=f'+{segment.start}s..+{segment.end}s',
                 actor=actor,
                 ref=segment_id,
             )
         )
+        items[-1].wake_word_invocation = segment_id in invocation_ids
     if not segments and transcript.strip():
         items.append(_item('speech', 'external', transcript, ref='external_audio_text'))
     for index, photo in enumerate(getattr(conversation, 'photos', None) or []):
@@ -271,7 +276,7 @@ _PROVENANCE_KINDS = {
 }
 
 
-def claim_violations(structured: Structured, items: Sequence[EvidenceItem]) -> set[str]:
+def claim_violations(structured: Structured, items: Sequence[EvidenceItem], *, drop_invalid: bool = False) -> set[str]:
     """Validate source IDs, target spans, coverage and sensitivity; never infer factual truth."""
     by_id = {item.id: item for item in items}
     violations = set()
@@ -279,8 +284,10 @@ def claim_violations(structured: Structured, items: Sequence[EvidenceItem]) -> s
     if not claims:
         return {'missing_claims'}
     document = structured.model_dump(mode='json')
-    covered = set()
+    covered: dict[str, list[str]] = {}
+    valid_claims = []
     for claim in claims:
+        invalid = False
         value: Any = document
         try:
             for part in claim.target.strip('/').split('/'):
@@ -289,17 +296,25 @@ def claim_violations(structured: Structured, items: Sequence[EvidenceItem]) -> s
             value = None
         if not isinstance(value, str) or not claim.text.strip() or claim.text not in value:
             violations.add('invalid_claim_span')
-        else:
-            covered.add(claim.target)
+            invalid = True
         sources = [by_id[id] for id in claim.evidence_ids if id in by_id]
         if not sources or len(sources) != len(claim.evidence_ids):
             violations.add('invalid_evidence_reference')
-        claim.evidence_sources = [NoteEvidenceRef(**source.model_dump(exclude={'content'})) for source in sources]
+            invalid = True
+        claim.evidence_sources = [
+            NoteEvidenceRef(**source.model_dump(exclude={'content', 'wake_word_invocation'})) for source in sources
+        ]
         if any(source.source_kind not in _PROVENANCE_KINDS[claim.provenance] for source in sources):
             violations.add('wrong_provenance')
+            invalid = True
         # A private source cannot become public through a model-authored tag.
         if any(source.sensitivity == 'private' for source in sources):
             claim.private = True
+        if not invalid:
+            valid_claims.append(claim)
+            covered.setdefault(claim.target, []).append(claim.text)
+    if drop_invalid:
+        structured.note_claims = valid_claims
     required = ['/title'] if structured.title else []
     if structured.overview:
         required.append('/overview')
@@ -313,6 +328,16 @@ def claim_violations(structured: Structured, items: Sequence[EvidenceItem]) -> s
             for attribute in attributes:
                 if getattr(element, attribute, None):
                     required.append(f'/{field}/{index}/{attribute}')
-    if any(target not in covered for target in required):
-        violations.add('missing_claim_coverage')
+    for target in required:
+        value = document
+        for part in target.strip('/').split('/'):
+            value = value[int(part)] if isinstance(value, list) else value[part]
+        # Cover every word across sentences/bullets, allowing multiple exact clauses
+        # and Markdown punctuation. A claim about one sentence cannot cover another.
+        mask = [False] * len(value)
+        for text in covered.get(target, []):
+            for match in re.finditer(re.escape(text), value):
+                mask[match.start() : match.end()] = [True] * len(text)
+        if any(re.match(r'\w', char) and not mask[index] for index, char in enumerate(value)):
+            violations.add('missing_claim_coverage')
     return violations

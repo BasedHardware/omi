@@ -179,29 +179,84 @@ def test_empty_audio_with_screen_evidence_and_one_vacuity_retry(processing, monk
     assert 'FULL TRANSCRIPT' not in calls[0][1].content
 
 
-def test_retry_is_bounded_and_remaining_vacuity_rejected(processing, monkeypatch):
+def test_retry_is_bounded_and_remaining_vacuity_accepted(processing, monkeypatch, caplog):
     bad = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
-    calls = []
-
-    def invoke(messages):
-        calls.append(messages)
-        return SimpleNamespace(content=json.dumps(bad))
-
-    monkeypatch.setattr(processing, 'get_llm', lambda *a, **k: SimpleNamespace(invoke=invoke))
-    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: False)
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
-
-    with pytest.raises(ValueError, match='vacuity'):
-        processing.get_conversation_notes(
-            ConversationPromptPrefix('synthetic', 'text'),
-            started_at=START,
-            language_code='en',
-            output_language_code=None,
-            tz='UTC',
-            task_intelligence_capture=False,
-            episode_evidence=[EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed')],
-        )
+    bad['note_claims'][0]['evidence_ids'] = ['missing']
+    result, calls = invoke_notes(
+        processing, monkeypatch, [valid_note().model_dump(mode='json') | {'overview': 'A brief exchange'}, bad]
+    )
     assert len(calls) == 2
+    assert result.title == 'Quick chat'  # Structurally valid retry wins.
+    assert len(result.note_claims) == 1
+    assert 'to=vacuity' in caplog.text
+    assert 'to=invalid_evidence_reference' in caplog.text
+    assert 'to=missing_claim_coverage' in caplog.text
+
+
+def test_malformed_retry_retains_initial_note(processing, monkeypatch, caplog):
+    bad = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
+    result, calls = invoke_notes(processing, monkeypatch, [bad, {'title': {'invalid': 'shape'}}])
+    assert len(calls) == 2 and result.title == 'Quick chat'
+    assert 'to=retry_unavailable' in caplog.text
+
+
+def test_episode_ids_removed_from_initial_and_retry_without_transcript_citations(processing, monkeypatch, caplog):
+    first = valid_note(overview='The message shows approval. [screen_ocr:1]')
+    retry = valid_note(overview='The message shows approval. `screen_frame:invented`')
+    result, calls = invoke_notes(
+        processing, monkeypatch, [first.model_dump(mode='json'), retry.model_dump(mode='json')]
+    )
+    assert len(calls) == 2
+    assert 'screen_' not in result.overview
+    assert all(not section.source_segment_ids for section in result.sections)
+    assert 'to=evidence_id_in_prose' in caplog.text
+
+
+def test_claim_coverage_includes_each_factual_span():
+    note = valid_note(overview='The message shows approval. Ari wrote about medical treatment.')
+    note.note_claims[1].text = 'The message shows approval.'
+    evidence = [
+        EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Synthetic thread', sensitivity='private')
+    ]
+    assert 'missing_claim_coverage' in claim_violations(note, evidence)
+    note.note_claims.append(claim('/overview', 'Ari wrote about medical treatment.'))
+    assert not claim_violations(note, evidence)
+    assert all(c.private for c in note.note_claims)
+
+
+def test_wake_word_metadata_is_server_authored_and_prompted(processing, monkeypatch):
+    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.conversations.wake_word import WAKE_WORD_MARKER
+
+    segments = [
+        SimpleNamespace(id='s1', text='Hey Omi, remind me to send the invoice.', start=0, end=3, is_user=True),
+        SimpleNamespace(id='s2', text=WAKE_WORD_MARKER, start=4, end=5, is_user=True),
+    ]
+    items = capture_evidence(SimpleNamespace(transcript_segments=segments))
+    assert items[0].wake_word_invocation and not items[1].wake_word_invocation
+    assert WAKE_WORD_MARKER not in items[1].content
+    calls = []
+    monkeypatch.setattr(
+        processing,
+        'get_llm',
+        lambda *a, **k: SimpleNamespace(
+            invoke=lambda m: calls.append(m)
+            or SimpleNamespace(content=json.dumps(valid_note().model_dump(mode='json')))
+        ),
+    )
+    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: False)
+    processing.get_conversation_notes(
+        ConversationPromptPrefix('synthetic', 'FULL TRANSCRIPT'),
+        started_at=START,
+        language_code='en',
+        output_language_code=None,
+        tz='UTC',
+        task_intelligence_capture=True,
+        episode_evidence=items,
+    )
+    assert 'wake_word_invocation=true' in calls[0][1].content
+    assert 'capture_kind=explicit_command' in calls[0][1].content
+    assert 'bracketed turn header' not in calls[0][1].content
 
 
 def test_flag_off_still_returns_empty_without_audio(processing, monkeypatch):
@@ -365,3 +420,39 @@ def test_same_bounded_ocr_read_retains_messages_only_for_episode_pack(monkeypatc
     assert not typed.screen_text
     items = context_pack_evidence(typed)
     assert 'sensitive reason' in items[0].content and items[0].sensitivity == 'private'
+
+
+def test_invalid_claim_schema_never_invalidates_usable_note(processing, monkeypatch, caplog):
+    bad = valid_note().model_dump(mode='json')
+    bad['note_claims'].append({'provenance': 'invented'})
+    result, calls = invoke_notes(processing, monkeypatch, [bad, bad])
+    assert len(calls) == 2 and result.title == 'Written approval'
+    assert len(result.note_claims) == 2
+    assert 'to=invalid_claim_schema' in caplog.text
+
+
+def test_retry_provider_error_never_invalidates_usable_note(processing, monkeypatch, caplog):
+    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+
+    bad = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
+    calls = []
+
+    def invoke(messages):
+        calls.append(messages)
+        if len(calls) == 2:
+            raise TimeoutError('synthetic')
+        return SimpleNamespace(content=json.dumps(bad))
+
+    monkeypatch.setattr(processing, 'get_llm', lambda *a, **k: SimpleNamespace(invoke=invoke))
+    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: False)
+    result = processing.get_conversation_notes(
+        ConversationPromptPrefix('synthetic', 'FULL TRANSCRIPT'),
+        started_at=START,
+        language_code='en',
+        output_language_code=None,
+        tz='UTC',
+        task_intelligence_capture=False,
+        episode_evidence=[EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Synthetic')],
+    )
+    assert len(calls) == 2 and result.title == 'Quick chat'
+    assert 'to=retry_unavailable' in caplog.text

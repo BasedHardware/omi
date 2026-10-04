@@ -31,15 +31,18 @@ from utils.byok import has_byok_keys
 from utils.conversations.meeting_participants import MeetingRoster
 from utils.conversations.episode_evidence import (
     EvidenceItem,
-    claim_violations,
     open_task_evidence,
     render_episode_evidence,
 )
-from utils.conversations.episode_vacuity import is_vacuous_note
+from utils.llm.episode_notes_validation import parse_episode_response, repair_episode_note, sanitize_episode_ids
 from utils.llm.conversation_notes_prompts import (
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
 )
-from utils.llm.episode_notes_prompts import episode_static_instructions, episode_volatile_instructions
+from utils.llm.episode_notes_prompts import (
+    EPISODE_WAKE_WORD_RULES,
+    episode_static_instructions,
+    episode_volatile_instructions,
+)
 from utils.conversations.wake_word import (
     WAKE_WORD_DISCARD_PROMPT_RULES,
     WAKE_WORD_PROMPT_RULES,
@@ -1270,7 +1273,10 @@ def get_conversation_notes(
     else:
         static_instructions = _conversation_notes_static_instructions(extraction_parser.get_format_instructions())
     wake_word_rules = ''
-    if trusted_wake_word_markers and has_structural_wake_word_marker(prefix.context):
+    if episode_mode:
+        if any(item.wake_word_invocation for item in episode_evidence or ()):
+            wake_word_rules = EPISODE_WAKE_WORD_RULES
+    elif trusted_wake_word_markers and has_structural_wake_word_marker(prefix.context):
         wake_word_rules = WAKE_WORD_PROMPT_RULES
     volatile_kwargs = dict(
         response_language=response_language,
@@ -1320,8 +1326,12 @@ def get_conversation_notes(
         request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
     )
     raw_response = _content_str(model.invoke(messages))
-    response = extraction_parser.parse(raw_response)
-    structured = response.to_structured()
+    episode_presentation_violations = set()
+    if episode_mode:
+        structured, episode_presentation_violations = parse_episode_response(raw_response, extraction_parser)
+        episode_presentation_violations |= sanitize_episode_ids(structured)
+    else:
+        structured = extraction_parser.parse(raw_response).to_structured()
     if rich_mode and not episode_mode:
         validate_rich_meeting_notes(
             structured,
@@ -1354,29 +1364,17 @@ def get_conversation_notes(
     )
 
     if episode_mode:
-        violations = claim_violations(structured, evidence_items)
-        if is_vacuous_note(structured):
-            violations.add('vacuity')
-        if violations:
-            # One new retry maximum, independently of the existing presentation guard.
-            retry_messages = [
-                *messages,
-                HumanMessage(
-                    content=(
-                        'Regenerate complete JSON once. State concretely what evidence shows and what coverage is missing; '
-                        'remove vacuous filler. Repair every claim span, evidence reference and provenance. '
-                        'Errors: ' + ', '.join(sorted(violations)) + '\nPrior JSON:\n' + raw_response
-                    )
-                ),
-            ]
-            structured = extraction_parser.parse(_content_str(model.invoke(retry_messages))).to_structured()
-            # Static presentation sanitization here avoids a second episode retry.
-            enforce_structured_presentation_contract(structured, prefix.transcript_segment_ids, safe_fallback=True)
-            violations = claim_violations(structured, evidence_items)
-            if is_vacuous_note(structured):
-                violations.add('vacuity')
-            if violations:
-                raise ValueError('episode note contract: ' + ', '.join(sorted(violations)))
+        structured = repair_episode_note(
+            structured,
+            evidence=evidence_items,
+            model=model,
+            messages=messages,
+            parser=extraction_parser,
+            raw_response=raw_response,
+            content_str=_content_str,
+            transcript_segment_ids=prefix.transcript_segment_ids,
+            initial_violations=episode_presentation_violations,
+        )
 
     for action_item in structured.action_items:
         if action_item.created_at is None:
