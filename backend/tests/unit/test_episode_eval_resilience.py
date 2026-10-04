@@ -62,7 +62,7 @@ def test_one_failure_is_recorded_and_other_cases_continue(tmp_path, phase):
 def test_truncation_and_invalid_json_preserve_usage_and_finish_reason(monkeypatch):
     response = {
         'choices': [{'finish_reason': 'length', 'message': {'content': '{"truncated":'}}],
-        'usage': {'prompt_tokens': 120, 'completion_tokens': 45},
+        'usage': {'prompt_tokens': 120, 'completion_tokens': 45, 'completion_tokens_details': {'reasoning_tokens': 12}},
     }
     requests = []
 
@@ -77,6 +77,7 @@ def test_truncation_and_invalid_json_preserve_usage_and_finish_reason(monkeypatc
     assert caught.value.error_class == 'output_truncated'
     assert caught.value.result.finish_reason == 'length'
     assert caught.value.result.output_tokens == 45
+    assert caught.value.result.reasoning_tokens == 12
     assert requests[0][0]['max_tokens'] == 32000 and requests[0][1]['timeout'] == 300
     response['choices'][0]['finish_reason'] = 'stop'
     endpoint = cli.CompatibleEndpoint(

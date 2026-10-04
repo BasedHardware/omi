@@ -32,7 +32,6 @@ from utils.conversations.meeting_context_render import (
     MAX_SCREEN_CHARACTERS,
 )
 from utils.conversations.screen_text_digest import digest_screen_rows
-from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -42,35 +41,6 @@ MAX_PRIOR_GIST_CHARACTERS = 300
 PRIOR_MEETING_LOOKBACK_DAYS = 180
 MAX_PEOPLE_DOCS = 100
 MAX_SCREEN_ROWS = 80
-MIN_CLUSTER_COUNT = 2
-MIN_SPEECH_SECONDS = 300
-
-
-def should_gather_meeting_context(conversation: Any, resolved_context: Optional[CalendarMeetingContext]) -> bool:
-    """Whether this conversation is meeting-like enough to pay for context reads.
-
-    True for a desktop meeting-role capture, whenever meeting identity already
-    resolved, or when the transcript shows a real multi-party conversation
-    (>= 2 speaker clusters and >= 300 seconds of deduplicated speech). The rich
-    flag check itself stays at the call site so this stays a pure gate.
-    """
-    source = getattr(conversation, 'source', None)
-    external_data = getattr(conversation, 'external_data', None) or {}
-    if (
-        getattr(source, 'value', source) == 'desktop'
-        and isinstance(external_data, Mapping)
-        and external_data.get('conversation_role') == 'meeting'
-    ):
-        return True
-    if resolved_context is not None:
-        return True
-    segments = getattr(conversation, 'transcript_segments', None) or []
-    cluster_ids = {
-        getattr(segment, 'speaker_id', None) for segment in segments if getattr(segment, 'speaker_id', None) is not None
-    }
-    if len(cluster_ids) < MIN_CLUSTER_COUNT:
-        return False
-    return deduplicated_transcribed_speech_seconds(segments) >= MIN_SPEECH_SECONDS
 
 
 def _log_source_failure(source: str, uid: str, exc: Exception) -> None:
@@ -524,5 +494,4 @@ __all__ = [
     'gather_meeting_context_pack',
     'load_people_documents',
     'resolve_owner_identity',
-    'should_gather_meeting_context',
 ]

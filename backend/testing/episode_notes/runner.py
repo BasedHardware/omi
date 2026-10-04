@@ -13,9 +13,11 @@ from testing.episode_notes.prompts import (
     CANDIDATE_PROMPT,
     SCORING_MODEL,
     candidate_request,
+    SOURCE_FIELDS,
 )
 from testing.episode_notes.reporting import arm_reports, paired_reports
 from testing.episode_notes.schema import FixtureSet, JudgeScore, LLMCallError, LLMResult
+from utils.conversations.episode_evidence import restore_episode_claim_ids
 from utils.conversations.episode_vacuity import is_vacuous_note
 from utils.llm.episode_policy import EPISODE_PRIVACY_RULE, EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
 
@@ -171,6 +173,11 @@ def evaluate(
                         prompt = candidate_prompt
                     result = cached_call(cache_dir, arm, candidate_model, prompt, payload, llm)
                     prompt_hash = fingerprint(prompt)
+                if arm == 'episode':
+                    restore_episode_claim_ids(
+                        result.content.get('note_claims', []),
+                        [item for field in SOURCE_FIELDS for item in getattr(episode.evidence, field)],
+                    )
                 phase = 'judge'
                 judged = cached_call(
                     cache_dir,
@@ -196,6 +203,7 @@ def evaluate(
                         'candidate': result.content,
                         'candidate_cost': result.cost(),
                         'generation_performed': arm != 'stored',
+                        'candidate_reasoning_tokens': result.reasoning_tokens,
                         'prompt_sha256': prompt_hash,
                         'reference': reference_result.content,
                         'reference_cost': reference_result.cost(),

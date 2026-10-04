@@ -433,15 +433,18 @@ class TestWiringFlags:
         loaded: list[str] = []
         monkeypatch.setattr(wiring, 'load_screen_frame_evidence', lambda uid, cid: loaded.append(cid) or evidence)
         monkeypatch.setattr(wiring, 'load_notes_frame_images', lambda *a: FRAMES)
-        monkeypatch.setattr(wiring, 'load_people_documents', lambda uid: [])
-        monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David Zhang', ('david@example.com',)))
         captured: dict = {}
 
         def pack(uid, conversation, roster, **kwargs):
             captured.update(kwargs)
             return None
 
-        monkeypatch.setattr(wiring, 'gather_meeting_context_pack', pack)
+        sources = SimpleNamespace(
+            load_people_documents=lambda uid: [],
+            resolve_owner_identity=lambda uid: ('David Zhang', ('david@example.com',)),
+            gather_meeting_context_pack=pack,
+        )
+        monkeypatch.setattr(wiring, 'meeting_context_sources', lambda: sources)
         conversation = SimpleNamespace(
             id='conv-1',
             source='desktop',

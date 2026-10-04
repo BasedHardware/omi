@@ -526,8 +526,8 @@ def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch
     frame_module = importlib.import_module('utils.conversations.screen_frame_evidence')
     frame = frame_module.ScreenFrameEvidence('frame', START, 'strip', 0.5, ('Screen identity',), 'Private screen text')
     monkeypatch.setattr(wiring, '_screen_frame_evidence', lambda *a: (frame,))
-    monkeypatch.setattr(wiring, 'load_people_documents', lambda *a: [])
-    monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda *a: (None, ()))
+    sources = SimpleNamespace(load_people_documents=lambda *a: [], resolve_owner_identity=lambda *a: (None, ()))
+    monkeypatch.setattr(wiring, 'meeting_context_sources', lambda: sources)
     monkeypatch.setattr(wiring, '_rich_meeting_context_block', lambda *a, **k: None)
     monkeypatch.setattr(wiring, 'meeting_notes_screen_frames_context_enabled', lambda: True)
     observed = []
@@ -621,7 +621,7 @@ def test_compact_evidence_preserves_provenance_and_trusted_metadata():
     ]
     rendered = render_episode_evidence(items)
     encoded = json.loads(rendered.split('\n', 1)[1])
-    assert encoded[0] == items[0].model_dump()
+    assert encoded[0] == items[0].model_dump() | {'id': 'evidence:0'}
     assert encoded[1]['sensitivity'] == 'private' and 'actor' not in encoded[1]
     assert len(rendered) < len(json.dumps([item.model_dump() for item in items], indent=2))
 
@@ -644,3 +644,15 @@ def test_episode_person_privacy_and_relevance_rules_are_shared():
         {'note_claims': [claim('/title', 'Budget').model_dump()]}
     ).to_structured()
     assert isinstance(output.note_claims[0], NoteClaim)
+
+
+def test_short_aliases_expand_before_validation_and_never_become_speech_citations(processing, monkeypatch):
+    data = valid_note().model_dump(mode='json')
+    for entry in data['note_claims']:
+        entry['evidence_ids'] = ['evidence:0']
+    result, calls = invoke_notes(processing, monkeypatch, [data])
+    assert len(calls) == 1
+    assert all(c.evidence_ids == ['screen_ocr:1'] for c in result.note_claims)
+    assert all(c.evidence_sources[0].id == 'screen_ocr:1' for c in result.note_claims)
+    assert not result.sections
+    assert '"id":"evidence:0"' in calls[0][1].content

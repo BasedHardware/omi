@@ -62,6 +62,10 @@ person/pronoun/AI-agent rules also apply. Claims bind factual sentences/bullets
 with short unique exact anchors; headings need no claims. The generation schema
 omits server-authored source metadata; the backend fills it. Compact evidence
 JSON preserves metadata and content while omitting unknown optional values.
+Short prompt-local evidence aliases are restored before production validation
+and offline judging. Reports retain original IDs; generation costs retain actual
+provider usage. Optional candidate reasoning-token counts are recorded when supplied
+by the provider; billed output counts always remain the provider completion total.
 
 Both generation arms reuse production static/volatile helpers and schemas.
 Baseline uses rich notes v2: `build_conversation_prompt_prefix`, normalized roster,

@@ -67,7 +67,10 @@ it. Headings need no claims. Every factual unit still needs an anchor; repeated
 ambiguous anchors are invalid. Generation omits server-authored evidence_sources,
 which validation fills without model output cost. Compact evidence serialization
 retains source/time/actor/privacy/invocation metadata; absent optional values stay
-unknown. Flag-off hot imports do not load the episode adapters/schema/repair code.
+unknown. Short prompt-local evidence IDs are expanded to the original IDs before
+validation/scoring; original source references and metadata remain intact.
+Flag-off hot imports do not load the episode adapters/schema/repair code or optional background
+retrieval. Its unchanged eligibility gate is pure and separately owned.
 Tile/roster names are shown/written, never said without speech support; conclusions
 about absent evidence are inferred. Rich person/name/pronoun/AI-agent rules apply.
 Coverage includes action owners and participant names/emails/organizations/roles.

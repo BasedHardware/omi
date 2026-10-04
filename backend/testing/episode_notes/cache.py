@@ -69,6 +69,14 @@ def cached_call(
     if path is not None:
         write_json(
             path,
-            {'key': key, 'result': {'content': result.content, **result.cost(), 'finish_reason': result.finish_reason}},
+            {
+                'key': key,
+                'result': {
+                    'content': result.content,
+                    **result.cost(),
+                    'finish_reason': result.finish_reason,
+                    'reasoning_tokens': result.reasoning_tokens,
+                },
+            },
         )
     return result

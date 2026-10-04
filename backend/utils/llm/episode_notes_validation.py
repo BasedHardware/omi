@@ -8,13 +8,13 @@ from langchain_core.messages import HumanMessage
 from pydantic import ValidationError
 
 from models.structured import NoteClaim, Structured  # type: ignore[reportAttributeAccessIssue]  # Runtime SDK/fallback export.
-from utils.conversations.episode_evidence import EvidenceItem, SourceKind, claim_violations
+from utils.conversations.episode_evidence import EvidenceItem, SourceKind, claim_violations, restore_episode_claim_ids
 from utils.conversations.episode_vacuity import is_vacuous_note
 from utils.llm.meeting_notes_presentation import has_note_content
 from utils.llm.meeting_notes_validation import visible_text_fields, enforce_structured_presentation_contract
 from utils.observability.fallback import record_fallback
 
-_EPISODE_ID = re.compile(r'(?<![\w-])(?:' + '|'.join(SourceKind.__args__) + r'):[\w:.-]+(?![\w-])')
+_EPISODE_ID = re.compile(r'(?<![\w-])(?:' + '|'.join((*SourceKind.__args__, 'evidence')) + r'):[\w:.-]+(?![\w-])')
 
 
 def sanitize_episode_ids(structured: Structured) -> set[str]:
@@ -68,6 +68,7 @@ def repair_episode_note(
     transcript_segment_ids: Sequence[str],
     initial_violations: set[str],
 ) -> Structured:
+    restore_episode_claim_ids(structured.note_claims or [], evidence)
     violations = initial_violations | sanitize_episode_ids(structured) | claim_violations(structured, evidence)
     if is_vacuous_note(structured):
         violations.add('vacuity')
@@ -91,6 +92,7 @@ def repair_episode_note(
         )
         # Prefer the retry whenever its extraction schema is structurally valid.
         revised, retry_violations = parse_episode_response(content_str(retry), parser)
+        restore_episode_claim_ids(revised.note_claims or [], evidence)
         violations |= retry_violations | sanitize_episode_ids(revised)
         if has_note_content(structured) and not has_note_content(revised):
             violations.add('empty_retry')

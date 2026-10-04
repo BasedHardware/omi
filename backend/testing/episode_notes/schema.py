@@ -96,6 +96,7 @@ class LLMResult:
     output_tokens: int | None = None
     latency_seconds: float | None = None
     finish_reason: str | None = None
+    reasoning_tokens: int | None = None
 
     def cost(self) -> dict:
         return {

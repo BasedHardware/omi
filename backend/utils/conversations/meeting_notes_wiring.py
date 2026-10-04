@@ -19,12 +19,7 @@ from models.calendar_context import CalendarMeetingContext
 
 if TYPE_CHECKING:
     from utils.conversations.episode_evidence import EvidenceItem
-from utils.conversations.meeting_context_pack import (
-    gather_meeting_context_pack,
-    load_people_documents,
-    resolve_owner_identity,
-    should_gather_meeting_context,
-)
+from utils.conversations.meeting_context_gate import should_gather_meeting_context
 from utils.conversations.meeting_context_render import (
     render_meeting_context_pack,
 )
@@ -43,6 +38,11 @@ from utils.conversations.screen_frame_evidence import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def meeting_context_sources() -> Any:
+    """The rich retrieval backend is optional; flag-off hot imports must stay cheap."""
+    return import_module('utils.conversations.meeting_context_pack')
 
 
 def _flag_enabled(name: str, *, default: bool = False) -> bool:
@@ -121,8 +121,8 @@ def _rich_meeting_roster(
                 started_at=frame_evidence_started_at(conversation),
                 duration_minutes=frame_evidence_duration_minutes(conversation),
             )
-        people_docs = load_people_documents(uid)
-        owner_name, owner_emails = resolve_owner_identity(uid)
+        people_docs = meeting_context_sources().load_people_documents(uid)
+        owner_name, owner_emails = meeting_context_sources().resolve_owner_identity(uid)
         roster = normalize_meeting_participants(
             calendar_context,
             getattr(conversation, 'source', None),
@@ -153,7 +153,7 @@ def _rich_meeting_context_block(
     pack comes back empty. Called only at the notes call site — memory and app
     prompts share the roster but never gather background."""
     try:
-        pack = gather_meeting_context_pack(
+        pack = meeting_context_sources().gather_meeting_context_pack(
             uid,
             conversation,
             roster,

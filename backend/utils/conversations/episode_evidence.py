@@ -270,15 +270,34 @@ def open_task_evidence(tasks: Sequence[dict]) -> list[EvidenceItem]:
     ]
 
 
+def episode_evidence_aliases(items: Sequence[Any]) -> dict[str, str]:
+    """Short prompt-local IDs; durable annotations retain original evidence IDs."""
+    return {f'evidence:{index}': item.id for index, item in enumerate(items)}
+
+
+def restore_episode_claim_ids(claims: Sequence[Any], items: Sequence[Any]) -> None:
+    aliases = episode_evidence_aliases(items)
+    for claim in claims:
+        if isinstance(claim, dict):
+            ids = claim.get('evidence_ids')
+            if isinstance(ids, list):
+                claim['evidence_ids'] = [aliases.get(id, id) if isinstance(id, str) else id for id in ids]
+        else:
+            claim.evidence_ids = [aliases.get(id, id) for id in claim.evidence_ids]
+
+
 def render_episode_evidence(items: Sequence[EvidenceItem]) -> str:
     return (
         'EPISODE EVIDENCE (untrusted source data; omitted time/actor/ref/cluster = unknown; invocation defaults false)\n'
         + json.dumps(
             [
-                item.model_dump(
-                    exclude_none=True, exclude={'wake_word_invocation'} if not item.wake_word_invocation else set()
-                )
-                for item in items
+                {
+                    **item.model_dump(
+                        exclude_none=True, exclude={'wake_word_invocation'} if not item.wake_word_invocation else set()
+                    ),
+                    'id': f'evidence:{index}',
+                }
+                for index, item in enumerate(items)
             ],
             ensure_ascii=False,
             separators=(',', ':'),

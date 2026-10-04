@@ -65,6 +65,7 @@ class CompatibleEndpoint:
             output_tokens=usage.get('completion_tokens'),
             latency_seconds=latency,
             finish_reason=choice.get('finish_reason'),
+            reasoning_tokens=(usage.get('completion_tokens_details') or {}).get('reasoning_tokens'),
         )
         if receipt.finish_reason == 'length':
             raise LLMCallError('output_truncated', receipt)
@@ -74,7 +75,12 @@ class CompatibleEndpoint:
                 raise ValueError('provider response must be a JSON object')
         except Exception as exc:
             raise LLMCallError(type(exc).__name__, receipt) from None
-        return LLMResult(content=content, **receipt.cost(), finish_reason=receipt.finish_reason)
+        return LLMResult(
+            content=content,
+            **receipt.cost(),
+            finish_reason=receipt.finish_reason,
+            reasoning_tokens=receipt.reasoning_tokens,
+        )
 
 
 def main(argv: list[str] | None = None) -> None:
