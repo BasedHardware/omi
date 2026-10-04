@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-production-bypasses-shared-pcm-encoder",
+  "violated_contract": "Production audio capture must use the same PCM conversion implementation whose rounding, clamping and nonfinite-input behavior is verified by the shared core tests. Context for Claude's microphone and system-audio callbacks instead had independent Float-to-Int16 loops, so passing C++ encoder tests did not establish the behavior of captured audio.",
+  "canonical_prevention": "Route platform converter buffers through the shared pointer-based PCM encoder and derive meters and watchdog magnitudes from the encoded bytes. Exercise that production pointer seam with asymmetric rounding, clipping and NaN samples, and test signed-minimum peak magnitude in the portable core.",
+  "canonical_prevention_artifact": [
+    "desktop/context-for-claude/Sources/ContextCore/Policy.swift",
+    "desktop/context-for-claude/Tests/ContextCoreTests/PolicyTests.swift",
+    "desktop/context-for-claude/core/tests/context_core_tests.cpp"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/context-for-claude/Sources/ContextApp/Capture/**",
+    "desktop/context-for-claude/Sources/ContextCore/Policy.swift",
+    "desktop/context-for-claude/core/**"
+  ],
+  "status": "open"
+}
