@@ -734,7 +734,11 @@ class ReplayTailSocket:
         self._closing = True
         if self._task is not None:
             self._task.cancel()
-        self.connection.finish()
+        try:
+            self.connection.finish()
+        finally:
+            # The receiver tracks the inner connection, not this tail wrapper.
+            release_live_stt_socket(self.connection)
         self._debit_pending_write()
         self._pending_write = None
         outcome = getattr(self.connection, 'leg_outcome', None)
