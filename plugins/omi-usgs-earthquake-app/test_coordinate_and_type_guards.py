@@ -131,6 +131,67 @@ class CoordinateAndTypeGuardTest(unittest.TestCase):
         self.assertFalse(response.success)
         self.assertEqual(response.message, "event_id is required")
 
+    def test_guards_treat_none_as_missing(self):
+        self.assertIsNone(main._parse_float(None))
+        self.assertEqual(main._safe_int(None, default=24, minimum=1, maximum=168), 24)
+        self.assertEqual(
+            main._safe_float(None, default=250.0, minimum=1.0, maximum=2000.0), 250.0
+        )
+
+    def test_nearby_earthquakes_rejects_mixed_bool_and_float_coordinates(self):
+        response = asyncio.run(
+            main.tool_nearby_earthquakes(
+                DummyRequest({"latitude": True, "longitude": 12.5})
+            )
+        )
+        self.assertFalse(response.success)
+        self.assertEqual(response.message, "latitude and longitude are required")
+
+    def test_recent_earthquakes_boolean_filters_use_defaults(self):
+        captured = {}
+
+        async def fake_list_earthquakes(params):
+            captured.update(params)
+            return {"count": 0, "earthquakes": []}
+
+        original = main._list_earthquakes
+        main._list_earthquakes = fake_list_earthquakes
+        try:
+            response = asyncio.run(
+                main.tool_recent_earthquakes(
+                    DummyRequest({"hours": False, "limit": True, "min_magnitude": False})
+                )
+            )
+        finally:
+            main._list_earthquakes = original
+        self.assertTrue(response.success)
+        # False/True must fall back to defaults, not clamp int(False)==0 to minimum.
+        self.assertEqual(captured["limit"], 5)
+        self.assertEqual(captured["minmagnitude"], 2.5)
+        self.assertIn("starttime", captured)
+
+    def test_nearby_earthquakes_boolean_radius_falls_back_to_default(self):
+        captured = {}
+
+        async def fake_list_earthquakes(params):
+            captured.update(params)
+            return {"count": 0, "earthquakes": []}
+
+        original = main._list_earthquakes
+        main._list_earthquakes = fake_list_earthquakes
+        try:
+            response = asyncio.run(
+                main.tool_nearby_earthquakes(
+                    DummyRequest(
+                        {"latitude": 12.5, "longitude": 77.5, "radius_km": True}
+                    )
+                )
+            )
+        finally:
+            main._list_earthquakes = original
+        self.assertTrue(response.success)
+        self.assertEqual(captured["maxradiuskm"], 250.0)
+
 
 if __name__ == "__main__":
     unittest.main()
