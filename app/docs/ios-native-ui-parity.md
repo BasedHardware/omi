@@ -36,8 +36,19 @@ and physical recording tests were performed. Existing service owners remain auth
 - [ ] Every remaining production route above has native presentation with its existing actions reachable.
 - [x] Simulator production-host checks cover conversation playback/read/edit ownership, speaker selection, media paging/cleanup and advanced form validation.
 - [ ] Native journeys cover the remaining graphs, device setup and secure credential tools; physical playback/call checks remain.
-- [ ] The final signed Release artifact is installed over the existing iPhone identity and its saved session/data checked.
-- [ ] Physical screenshots verify the final main flows and accessibility settings on the connected phone.
+- [x] The conversation/advanced-screen Release artifact is installed over the existing iPhone identity; saved account, appearance, onboarding and pendant pairing passed fresh preservation checks.
+- [ ] Physical screenshots verify the final main flows and accessibility settings on the connected phone. The read-only installed-app check is prepared, but the phone locked before it could run.
 - [ ] Maintainer migration-direction review and full upstream mobile CI are complete.
 
 Verification commands and containment/session rules are in [the native UI guide](ios-native-ui.md).
+
+October 4 conversation/advanced-screen verification: 4,620 hermetic Flutter checks
+plus 138 startup checks, 23 software-journey checks and 19 real Flutter/UIKit host
+scenarios across two passing runs (plus both teardowns). All 33 distinct native
+fixture scenarios passed across combined/focused runs; the combined run’s single
+accessibility-server failure passed in isolation. The photo gesture test caught
+and fixed a loading-task identity loop, then passed double-tap/pinch/pan/reset.
+After separating the native playback projection from its existing player owner,
+all 30 playback regression checks passed and normal commit/push gates passed.
+The personal Release app opened normally with no failed startup stages or new
+preference quarantines. Full upstream mobile CI remains maintainer-gated.
