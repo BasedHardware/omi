@@ -24,6 +24,7 @@ import httpx
 from prometheus_client.parser import text_string_to_metric_families
 
 FIXTURES = Path(__file__).resolve().parents[1] / 'testing/release_fixtures'
+LIVE_POST_TIMEOUT_SECONDS = 8.0
 
 
 def validate_url(url: str) -> str:
@@ -128,17 +129,18 @@ async def step(client: httpx.AsyncClient, args: argparse.Namespace, n: int, payl
         try:
             headers = {'X-Omi-STT-Surface': 'live-window', 'X-Omi-STT-Timeout-Seconds': '8'} if lane == 'live' else {}
             endpoint = '/v1/transcribe' if lane == 'live' else '/v2/transcribe'
-            response = await client.post(
-                args.url + endpoint,
-                files={'file': ('fixture.wav', payloads[duration], 'audio/wav')},
-                data={'diarize': str(args.diarize_backfill).lower()} if lane == 'backfill' else None,
-                headers=headers,
-                timeout=8 if lane == 'live' else 120,
-            )
-            status = response.status_code
-            if status == 200:
-                has_text = bool(response.json().get('text', '').strip())
-        except (httpx.HTTPError, ValueError):
+            async with asyncio.timeout(LIVE_POST_TIMEOUT_SECONDS if lane == 'live' else None):
+                response = await client.post(
+                    args.url + endpoint,
+                    files={'file': ('fixture.wav', payloads[duration], 'audio/wav')},
+                    data={'diarize': str(args.diarize_backfill).lower()} if lane == 'backfill' else None,
+                    headers=headers,
+                    timeout=8 if lane == 'live' else 120,
+                )
+                status = response.status_code
+                if status == 200:
+                    has_text = bool(response.json().get('text', '').strip())
+        except (httpx.HTTPError, ValueError, TimeoutError):
             pass
         rows.append(
             {

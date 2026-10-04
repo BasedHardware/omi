@@ -1,6 +1,10 @@
 """Safety and measurement contracts for the direct dev capacity probe."""
 
+import asyncio
 import io
+from types import SimpleNamespace
+
+import httpx
 import wave
 
 import pytest
@@ -50,3 +54,41 @@ wait_sum{lane="backfill"} 9999
 ''')
     summary = histogram(before, after, 'wait', {'lane': 'live'})
     assert summary == {'count': 2, 'mean': 1, 'p50': 1, 'p95': pytest.approx(1.9), 'p99': pytest.approx(1.98)}
+
+
+@pytest.mark.asyncio
+async def test_live_probe_cancels_entire_post_at_wall_deadline(monkeypatch):
+    from scripts import parakeet_live_loadtest as probe
+
+    monkeypatch.setattr(probe, 'LIVE_POST_TIMEOUT_SECONDS', 0.02)
+    cancelled = []
+
+    async def handle(request):
+        if request.method == 'POST':
+            if request.headers.get('X-Omi-STT-Surface') == 'live-window':
+                try:
+                    await asyncio.sleep(0.1)
+                except asyncio.CancelledError:
+                    cancelled.append(True)
+                    raise
+            return httpx.Response(200, json={'text': 'synthetic'})
+        if request.url.path == '/batch/metrics':
+            return httpx.Response(200, json={'live_pending_requests': 0, 'live_oldest_pending_seconds': 0})
+        return httpx.Response(200, text='')
+
+    args = SimpleNamespace(
+        url='http://127.0.0.1:28180',
+        seconds=0.05,
+        pace=6,
+        batch_floor_rps=1,
+        synchronized=True,
+        live_context_seconds=24,
+        diarize_backfill=True,
+        keepalive_connections=0,
+    )
+    payloads = {duration: b'synthetic' for duration in (6, 12, 18, 24, 30, 60, 120, 240)}
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        receipt = await probe.step(client, args, 1, payloads)
+    assert cancelled == [True]
+    assert receipt['live']['statuses'] == {'transport_error': 1}
+    assert receipt['backfill']['statuses'] == {'200': 1}

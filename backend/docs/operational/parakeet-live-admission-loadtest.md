@@ -41,7 +41,7 @@ Run `backend/scripts/parakeet_live_loadtest.py` only against a loopback dev pod
 port-forward. It validates the hashes of the checked-in LibriSpeech CC-BY-4.0
 and synthetic Portuguese release fixtures, repeats their PCM to create bounded
 contexts, and emits no transcript content. Live uses v1 with the live header and
-8 s timeout; batch uses v2 with diarization enabled. Each live session has one
+8 s queue budget; batch uses v2 with diarization enabled. Each live session has one
 POST in flight, 6 s start spacing, and a repeating 6/12/18/24 s context profile.
 Batch duration bands are 30/60/120/240 s at 30/20/40/10% by count. Its rate is
 the larger of 177k/day/3 pods (0.683 RPS) and live RPS*16/84.
@@ -67,8 +67,12 @@ it is restored after the test. The deployment was updated by the successful
 No backend/listen, Firestore, user audio, or production HTTP endpoint was used.
 
 Three minutes per step, followed by draining requests. These seven steps used
-closed HTTP connections, a conservative tunnel-overhead case. POST includes
-8 s timeouts. Queue/inference values are histogram estimates. GPU columns are
+closed HTTP connections, a conservative tunnel-overhead case. Archived runs used an 8 s HTTPX **phase** timeout, not an outer wall timeout.
+An audit found three late 200s at 16 sessions (maximum 10.50 s); every other
+step's successful responses finished under 8 s. The checked-in driver now
+cancels the entire live POST at 8 s, with a cancellation contract test. The late
+responses do not change the qualified paced steps or the failed 16-session
+conclusion. The table preserves observed statuses and latency, including errors. Queue/inference values are histogram estimates. GPU columns are
 DCGM mean/maximum percentages.
 
 | Live sessions | POST p50 / p95 / p99 (s) | Live / backfill queue p95 (s) | Inference p95 (s) | GPU mean / max (%) | Backfill completed RPS | Live errors / count |
@@ -82,7 +86,8 @@ DCGM mean/maximum percentages.
 | 24 | 1.99 / 4.09 / 5.68 | 1.85 / 2.89 | 0.81 | 57.3 / 100 | 0.759 | 0 / 720 |
 
 All steps had zero GPU OOMs/fatal CUDA errors and zero backfill HTTP errors.
-At 16 sessions, 32 live requests timed out, backfill POST p95 reached 41.30 s,
+At 16 sessions, 32 live requests timed out and three returned 200 after the
+8 s wall budget (35/462 wall-budget violations). Backfill POST p95 reached 41.30 s,
 and minimum free GPU memory dropped to 6.6 GiB. At 24, larger live batching
 improved throughput, but client p95 still missed 3 s. This non-monotonic result
 excludes 16 and 24 from a reliable admission recommendation.
