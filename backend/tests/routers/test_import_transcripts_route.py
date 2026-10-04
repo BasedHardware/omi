@@ -9,6 +9,7 @@ import inspect
 import io
 import os
 import threading
+from pathlib import Path
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test")
@@ -16,6 +17,7 @@ os.environ.setdefault("OPENAI_API_KEY", "sk-test")
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from starlette.datastructures import UploadFile
@@ -332,3 +334,22 @@ def test_job_status_reports_its_source():
         result = imports_mod.get_import_job_status('a', uid=UID)
 
     assert result.source_type == ImportSourceType.transcript_files
+
+
+def _dependency_calls(dependant):
+    for dependency in dependant.dependencies:
+        yield dependency.call
+        yield from _dependency_calls(dependency)
+
+
+def test_route_policy_records_the_byok_check_its_auth_runs():
+    """get_current_user_uid runs validate_byok_request: BYOK keys are validated when sent."""
+    route = next(r for r in imports_mod.router.routes if getattr(r, 'path', None) == '/v1/import/transcripts')
+    assert imports_mod.auth.get_current_user_uid in set(_dependency_calls(route.dependant))
+    manifest_path = Path(__file__).resolve().parents[2] / 'route_policy_manifest.yaml'
+    with manifest_path.open(encoding='utf-8') as handle:
+        manifest = yaml.safe_load(handle)
+
+    (entry,) = [r for r in manifest['routes'] if (r['method'], r['path']) == ('POST', '/v1/import/transcripts')]
+
+    assert entry['policy']['byok'] == 'validated_when_headers_present'
