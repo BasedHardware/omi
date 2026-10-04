@@ -161,11 +161,7 @@ def _top_people(
         return []
     names = people_names or {}
     ranked = sorted(
-        (
-            (person_id, stats)
-            for person_id, stats in people_stats.items()
-            if isinstance(stats, Mapping) and _text(names.get(person_id))
-        ),
+        ((person_id, stats) for person_id, stats in people_stats.items() if _text(names.get(person_id))),
         key=lambda item: (-(item[1].get('talk_seconds') or 0.0), -(item[1].get('conversation_count') or 0), item[0]),
     )
     return [
