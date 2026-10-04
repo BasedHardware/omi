@@ -11556,6 +11556,19 @@ class AppLocalizationsTh extends AppLocalizations {
       'การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้';
 
   @override
+  String get pairSecondDevice => 'จับคู่อุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get secondDevice => 'อุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน';
+
+  @override
+  String get forgetSecondDevice => 'ลืมอุปกรณ์เครื่องที่สอง';
+
+  @override
   String get conversationSummaryFailed => 'สร้างสรุปไม่สำเร็จ';
 
   @override

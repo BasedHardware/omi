@@ -99,8 +99,13 @@ class _FakeConnection implements DeviceConnection {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-BtDevice _device(String id, {DeviceType type = DeviceType.omi}) =>
-    BtDevice(id: id, name: id, type: type, rssi: 0, locator: DeviceLocator.bluetooth(deviceId: id));
+BtDevice _device(String id, {DeviceType type = DeviceType.omi}) => BtDevice(
+      id: id,
+      name: id,
+      type: type,
+      rssi: 0,
+      locator: DeviceLocator.bluetooth(deviceId: id),
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -141,11 +146,13 @@ void main() {
     await SharedPreferencesUtil().btDeviceAdd(glass);
 
     built = {};
-    service = DeviceService(connectionBuilder: (device) {
-      final connection = _FakeConnection(device);
-      built[device.id] = connection;
-      return connection;
-    });
+    service = DeviceService(
+      connectionFactory: (device) {
+        final connection = _FakeConnection(device);
+        built[device.id] = connection;
+        return connection;
+      },
+    );
   });
 
   test('connecting a second device leaves the first connected', () async {
@@ -156,7 +163,8 @@ void main() {
     expect(service.connectionFor(glassId)?.status, DeviceConnectionState.connected);
     expect(built[audioId]!.disconnectCalled, isFalse);
     expect(built[audioId]!.transport.disposed, isFalse);
-    expect(service.connections.length, 2);
+    expect(service.connectionFor(audioId), isNotNull);
+    expect(service.connectionFor(glassId), isNotNull);
   });
 
   test('an already connected device is reused rather than reconnected', () async {
@@ -164,7 +172,8 @@ void main() {
     final second = await service.ensureConnection(audioId, force: true);
 
     expect(identical(first, second), isTrue);
-    expect(service.connections.length, 1);
+    expect(service.connectionFor(audioId), isNotNull);
+    expect(service.connectionFor(glassId), isNull);
   });
 
   test('resume checks native link and reconnects the existing source', () async {
@@ -219,7 +228,8 @@ void main() {
 
     await service.disconnectDevice(audioId);
 
-    expect(service.connectionFor(audioId), isNull);
+    expect(service.connectionFor(audioId)?.status, DeviceConnectionState.disconnected);
+    expect(built[audioId]!.disconnectCalled, isTrue);
     expect(service.connectionFor(glassId)?.status, DeviceConnectionState.connected);
     expect(built[glassId]!.disconnectCalled, isFalse);
   });
@@ -242,7 +252,8 @@ void main() {
 
     await service.stop();
 
-    expect(service.connections, isEmpty);
+    expect(service.connectionFor(audioId), isNull);
+    expect(service.connectionFor(glassId), isNull);
     expect(built[audioId]!.transport.disposed, isTrue);
     expect(built[glassId]!.transport.disposed, isTrue);
   });
@@ -251,6 +262,6 @@ void main() {
     final connection = await service.ensureConnection(audioId);
 
     expect(connection, isNull);
-    expect(service.connections, isEmpty);
+    expect(service.connectionFor(audioId), isNull);
   });
 }

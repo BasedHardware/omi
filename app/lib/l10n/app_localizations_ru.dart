@@ -11660,6 +11660,19 @@ class AppLocalizationsRu extends AppLocalizations {
       'Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить.';
 
   @override
+  String get pairSecondDevice => 'Подключить второе устройство';
+
+  @override
+  String get secondDevice => 'Второе устройство';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Подключите OmiGlass вместе с Omi, чтобы фото и звук попадали в один разговор.';
+
+  @override
+  String get forgetSecondDevice => 'Забыть второе устройство';
+
+  @override
   String get conversationSummaryFailed => 'Не удалось создать сводку';
 
   @override

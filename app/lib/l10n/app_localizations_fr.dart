@@ -11716,6 +11716,19 @@ class AppLocalizationsFr extends AppLocalizations {
       'La capture d\'écran sera retirée de la note de cette réunion. Cette action est irréversible.';
 
   @override
+  String get pairSecondDevice => 'Associer un deuxième appareil';
+
+  @override
+  String get secondDevice => 'Deuxième appareil';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Connectez OmiGlass en plus de votre Omi pour que les photos et l\'audio rejoignent la même conversation.';
+
+  @override
+  String get forgetSecondDevice => 'Oublier le deuxième appareil';
+
+  @override
   String get conversationSummaryFailed => 'Échec du résumé';
 
   @override

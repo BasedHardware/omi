@@ -11717,6 +11717,19 @@ class AppLocalizationsTl extends AppLocalizations {
       'Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik.';
 
   @override
+  String get pairSecondDevice => 'Ipares ang ikalawang device';
+
+  @override
+  String get secondDevice => 'Ikalawang device';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Ikonekta ang OmiGlass kasama ng iyong Omi para mapunta sa iisang usapan ang mga larawan at audio.';
+
+  @override
+  String get forgetSecondDevice => 'Kalimutan ang ikalawang device';
+
+  @override
   String get conversationSummaryFailed => 'Nabigo ang buod';
 
   @override

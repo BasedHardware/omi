@@ -3835,5 +3835,9 @@
     "playbackAudioNetworkFailed": "Kiểm tra kết nối",
     "forYou": "Dành Cho Bạn",
     "stopThese": "Dừng Loại Này",
-    "dismiss": "Ẩn"
+    "dismiss": "Ẩn",
+    "pairSecondDeviceDescription": "Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.",
+    "pairSecondDevice": "Ghép nối thiết bị thứ hai",
+    "secondDevice": "Thiết bị thứ hai",
+    "forgetSecondDevice": "Quên thiết bị thứ hai"
 }

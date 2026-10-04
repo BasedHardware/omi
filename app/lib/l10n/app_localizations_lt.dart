@@ -11639,6 +11639,19 @@ class AppLocalizationsLt extends AppLocalizations {
       'Ekrano kopija bus pašalinta iš šio susitikimo užrašo. Šio veiksmo anuliuoti negalima.';
 
   @override
+  String get pairSecondDevice => 'Susieti antrą įrenginį';
+
+  @override
+  String get secondDevice => 'Antras įrenginys';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Prijunkite OmiGlass kartu su savo Omi, kad nuotraukos ir garsas patektų į tą patį pokalbį.';
+
+  @override
+  String get forgetSecondDevice => 'Pamiršti antrą įrenginį';
+
+  @override
   String get conversationSummaryFailed => 'Santrauka nepavyko';
 
   @override

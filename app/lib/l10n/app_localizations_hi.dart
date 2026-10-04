@@ -11599,6 +11599,19 @@ class AppLocalizationsHi extends AppLocalizations {
       'यह इस मीटिंग के नोट से स्क्रीनशॉट हटा देगा। इसे पूर्ववत नहीं किया जा सकता।';
 
   @override
+  String get pairSecondDevice => 'दूसरा डिवाइस पेयर करें';
+
+  @override
+  String get secondDevice => 'दूसरा डिवाइस';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'अपने Omi के साथ OmiGlass कनेक्ट करें ताकि फ़ोटो और ऑडियो एक ही बातचीत में जाएँ।';
+
+  @override
+  String get forgetSecondDevice => 'दूसरा डिवाइस भूल जाएँ';
+
+  @override
   String get conversationSummaryFailed => 'सारांश नहीं बन सका';
 
   @override

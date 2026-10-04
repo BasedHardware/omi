@@ -3835,5 +3835,9 @@
     "playbackAudioNetworkFailed": "Tarkista yhteys",
     "forYou": "Sinulle",
     "stopThese": "Lopeta nämä",
-    "dismiss": "Hylkää"
+    "dismiss": "Hylkää",
+    "pairSecondDeviceDescription": "Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.",
+    "pairSecondDevice": "Yhdistä toinen laite",
+    "secondDevice": "Toinen laite",
+    "forgetSecondDevice": "Unohda toinen laite"
 }

@@ -3931,5 +3931,9 @@
     "playbackAudioNetworkFailed": "Ellenőrizze a kapcsolatot",
     "forYou": "Önnek",
     "stopThese": "Ezek leállítása",
-    "dismiss": "Elrejtés"
+    "dismiss": "Elrejtés",
+    "pairSecondDeviceDescription": "Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.",
+    "pairSecondDevice": "Második eszköz párosítása",
+    "secondDevice": "Második eszköz",
+    "forgetSecondDevice": "Második eszköz elfelejtése"
 }

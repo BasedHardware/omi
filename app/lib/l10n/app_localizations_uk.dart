@@ -11643,6 +11643,19 @@ class AppLocalizationsUk extends AppLocalizations {
       'Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати.';
 
   @override
+  String get pairSecondDevice => 'Підключити другий пристрій';
+
+  @override
+  String get secondDevice => 'Другий пристрій';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Підключіть OmiGlass разом з Omi, щоб фото та звук потрапляли в одну розмову.';
+
+  @override
+  String get forgetSecondDevice => 'Забути другий пристрій';
+
+  @override
   String get conversationSummaryFailed => 'Не вдалося створити підсумок';
 
   @override

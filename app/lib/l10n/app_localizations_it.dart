@@ -11685,6 +11685,19 @@ class AppLocalizationsIt extends AppLocalizations {
       'Lo screenshot verrà rimosso dalla nota di questa riunione. L\'operazione non può essere annullata.';
 
   @override
+  String get pairSecondDevice => 'Associa un secondo dispositivo';
+
+  @override
+  String get secondDevice => 'Secondo dispositivo';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Collega OmiGlass insieme al tuo Omi così foto e audio finiscono nella stessa conversazione.';
+
+  @override
+  String get forgetSecondDevice => 'Dimentica il secondo dispositivo';
+
+  @override
   String get conversationSummaryFailed => 'Riepilogo non riuscito';
 
   @override

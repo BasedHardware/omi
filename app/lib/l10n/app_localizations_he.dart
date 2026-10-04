@@ -11531,6 +11531,18 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteMeetingScreenshotMessage => 'צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו.';
 
   @override
+  String get pairSecondDevice => 'צימוד מכשיר שני';
+
+  @override
+  String get secondDevice => 'מכשיר שני';
+
+  @override
+  String get pairSecondDeviceDescription => 'חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.';
+
+  @override
+  String get forgetSecondDevice => 'שכח את המכשיר השני';
+
+  @override
   String get conversationSummaryFailed => 'יצירת הסיכום נכשלה';
 
   @override

@@ -3835,5 +3835,9 @@
     "playbackAudioNetworkFailed": "Kontrollige ühendust",
     "forYou": "Sulle",
     "stopThese": "Peata need",
-    "dismiss": "Peida"
+    "dismiss": "Peida",
+    "pairSecondDeviceDescription": "Ühenda OmiGlass oma Omi kõrvale, et fotod ja heli jõuaksid samasse vestlusse.",
+    "pairSecondDevice": "Seo teine seade",
+    "secondDevice": "Teine seade",
+    "forgetSecondDevice": "Unusta teine seade"
 }

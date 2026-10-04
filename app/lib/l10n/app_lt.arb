@@ -3835,5 +3835,9 @@
     "playbackAudioNetworkFailed": "Patikrinkite ryšį",
     "forYou": "Jums",
     "stopThese": "Sustabdyti šiuos",
-    "dismiss": "Slėpti"
+    "dismiss": "Slėpti",
+    "pairSecondDeviceDescription": "Prijunkite OmiGlass kartu su savo Omi, kad nuotraukos ir garsas patektų į tą patį pokalbį.",
+    "pairSecondDevice": "Susieti antrą įrenginį",
+    "secondDevice": "Antras įrenginys",
+    "forgetSecondDevice": "Pamiršti antrą įrenginį"
 }

@@ -11612,6 +11612,19 @@ class AppLocalizationsSk extends AppLocalizations {
       'Snímka obrazovky sa odstráni z poznámky tejto schôdzky. Túto akciu nie je možné vrátiť.';
 
   @override
+  String get pairSecondDevice => 'Spárovať druhé zariadenie';
+
+  @override
+  String get secondDevice => 'Druhé zariadenie';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Pripojte OmiGlass k svojmu Omi, aby fotky a zvuk išli do rovnakej konverzácie.';
+
+  @override
+  String get forgetSecondDevice => 'Zabudnúť druhé zariadenie';
+
+  @override
   String get conversationSummaryFailed => 'Zhrnutie zlyhalo';
 
   @override

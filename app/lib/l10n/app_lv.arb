@@ -3835,5 +3835,9 @@
     "playbackAudioNetworkFailed": "Pārbaudiet savienojumu",
     "forYou": "Jums",
     "stopThese": "Apturēt šos",
-    "dismiss": "Paslēpt"
+    "dismiss": "Paslēpt",
+    "pairSecondDeviceDescription": "Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.",
+    "pairSecondDevice": "Savienot pārī otro ierīci",
+    "secondDevice": "Otrā ierīce",
+    "forgetSecondDevice": "Aizmirst otro ierīci"
 }

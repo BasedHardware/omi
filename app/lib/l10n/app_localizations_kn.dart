@@ -11653,6 +11653,19 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
 
   @override
+  String get pairSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಜೋಡಿಸಿ';
+
+  @override
+  String get secondDevice => 'ಎರಡನೇ ಸಾಧನ';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'ಫೋಟೋಗಳು ಮತ್ತು ಆಡಿಯೊ ಒಂದೇ ಸಂವಾದಕ್ಕೆ ಹೋಗಲು ನಿಮ್ಮ Omi ಜೊತೆಗೆ OmiGlass ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String get forgetSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ';
+
+  @override
   String get conversationSummaryFailed => 'ಸಾರಾಂಶ ವಿಫಲವಾಗಿದೆ';
 
   @override

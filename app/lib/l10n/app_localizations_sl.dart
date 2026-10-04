@@ -11647,6 +11647,19 @@ class AppLocalizationsSl extends AppLocalizations {
       'S tem boste posnetek zaslona odstranili iz zapiska tega sestanka. Tega ni mogoče razveljaviti.';
 
   @override
+  String get pairSecondDevice => 'Seznani drugo napravo';
+
+  @override
+  String get secondDevice => 'Druga naprava';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Povežite OmiGlass ob svojem Omi, da gredo fotografije in zvok v isti pogovor.';
+
+  @override
+  String get forgetSecondDevice => 'Pozabi drugo napravo';
+
+  @override
   String get conversationSummaryFailed => 'Povzetek ni uspel';
 
   @override

@@ -11644,6 +11644,19 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteMeetingScreenshotMessage => 'Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.';
 
   @override
+  String get pairSecondDevice => 'Savienot pārī otro ierīci';
+
+  @override
+  String get secondDevice => 'Otrā ierīce';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.';
+
+  @override
+  String get forgetSecondDevice => 'Aizmirst otro ierīci';
+
+  @override
   String get conversationSummaryFailed => 'Kopsavilkums neizdevās';
 
   @override

@@ -11618,6 +11618,19 @@ class AppLocalizationsBn extends AppLocalizations {
       'এটি এই মিটিংয়ের নোট থেকে স্ক্রিনশটটি সরিয়ে দেবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।';
 
   @override
+  String get pairSecondDevice => 'দ্বিতীয় ডিভাইস যুক্ত করুন';
+
+  @override
+  String get secondDevice => 'দ্বিতীয় ডিভাইস';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'আপনার Omi-এর পাশে OmiGlass সংযুক্ত করুন, যাতে ছবি ও অডিও একই কথোপকথনে যায়।';
+
+  @override
+  String get forgetSecondDevice => 'দ্বিতীয় ডিভাইস ভুলে যান';
+
+  @override
   String get conversationSummaryFailed => 'সারাংশ তৈরি করা যায়নি';
 
   @override
