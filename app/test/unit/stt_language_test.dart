@@ -19,6 +19,7 @@ void main() {
       expect(SttLanguage.mapPrimary(SttProvider.openai, 'es', isIOS: false), 'es');
       expect(SttLanguage.mapPrimary(SttProvider.openai, 'ko-KR', isIOS: false), 'ko');
       expect(SttLanguage.mapPrimary(SttProvider.openai, 'multi', isIOS: false), 'multi');
+      expect(SttLanguage.mapPrimary(SttProvider.deepgram, 'gu', isIOS: false), 'gu');
     });
 
     test('an unsupported primary language falls back to the provider default', () {
