@@ -179,14 +179,13 @@ struct NativeSurfaceView: View {
                 Menu {
                     ForEach(row.options) { option in
                         Button(option.title) { Task { await state.send(row.id, value: option.id) } }
-                            .buttonStyle(.automatic)
                     }
                 } label: {
                     actionLabel(row, compact: compact)
                         .frame(minWidth: compact ? 44 : 0, minHeight: 44)
                         .contentShape(Rectangle())
+                        .modifier(NativeGlassButtonStyle(menu: compact))
                 }
-                .menuStyle(.button)
             case "toggle":
                 Toggle(isOn: Binding(get: { row.value?.bool ?? false }, set: { value in
                     Task { await state.send(row.id, value: value) }
@@ -306,10 +305,16 @@ struct NativeSurfaceView: View {
                                     ForEach(chat.actions.filter { $0.id != "chat_followup" && !["label", "waveform"].contains($0.kind) }) { row in
                                         if row.kind == "text" { rowView(row).padding(12).modifier(NativeGlassComposerStyle()) }
                                         else {
-                                            rowView(row, compact: true).frame(minWidth: 44, minHeight: 44)
-                                                .modifier(NativeGlassButtonStyle(menu: row.kind == "menu"))
-                                                .disabled(!row.enabled || state.pending.contains(row.id))
-                                                .accessibilityIdentifier(row.id)
+                                            if row.kind == "menu" {
+                                                rowView(row, compact: true)
+                                                    .disabled(!row.enabled || state.pending.contains(row.id))
+                                                    .accessibilityIdentifier(row.id)
+                                            } else {
+                                                rowView(row, compact: true).frame(minWidth: 44, minHeight: 44)
+                                                    .modifier(NativeGlassButtonStyle())
+                                                    .disabled(!row.enabled || state.pending.contains(row.id))
+                                                    .accessibilityIdentifier(row.id)
+                                            }
                                         }
                                     }
                                 }
