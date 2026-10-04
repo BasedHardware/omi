@@ -555,18 +555,16 @@ def test_repo_prod_gke_values_match_manifest():
     assert errors == []
 
 
-def test_conversation_finalization_capability_inventory_explicitly_covers_pusher_in_every_environment():
-    validator = load_validator()
-    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
-
+def test_conversation_finalization_capability_inventory_explicitly_covers_pusher_in_every_environment(cap_env):
     for env in ('dev', 'prod'):
-        pusher = manifest['environments'][env]['gke']['pusher']
+        validator, env_config = cap_env(env)
+        pusher = env_config['gke']['pusher']
         assert set(pusher['capabilities']) == {
             'conversation.finalize.persisted',
             'memory.canonical.mutate',
         }
         assert pusher['env']['MEMORY_ENABLED']['value'] == 'on'
-        assert validator.validate_conversation_finalization_capabilities(env, manifest['environments'][env]) == []
+        assert validator.validate_conversation_finalization_capabilities(env, env_config) == []
 
 
 @pytest.fixture(scope='module')
