@@ -115,6 +115,8 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
   - name: PROACTIVITY_REDIS_HOST
     valueFrom:
       configMapKeyRef:
@@ -186,6 +188,10 @@ env:
     value: "true"
   - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "true"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
   # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
   - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
     value: "true"
