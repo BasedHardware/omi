@@ -86,6 +86,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     _updateState(DeviceTransportState.connecting);
 
     _deviceReadyCompleter = Completer<List<BleService>>();
+    final deviceReady = _deviceReadyCompleter!.future;
+    // A disconnect can arrive while the platform's manageDevice reply is pending.
+    // Observe that error immediately; the await below still delivers it to connect's caller.
+    deviceReady.ignore();
 
     try {
       await _hostApi.manageDevice(_peripheralUuid, requiresBond);
@@ -97,7 +101,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     }
 
     try {
-      _services = await _deviceReadyCompleter!.future.timeout(
+      _services = await deviceReady.timeout(
         const Duration(seconds: 60),
         onTimeout: () => throw TimeoutException('Device ready timeout after 60s'),
       );

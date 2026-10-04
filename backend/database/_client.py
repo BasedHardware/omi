@@ -8,6 +8,7 @@ from google.api_core.exceptions import InvalidArgument
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
+from database.firestore_transaction_retry import FirestoreAborted, FirestoreContentionExhausted
 from database.google_credentials import (
     customer_data_service_account,
     customer_entitlement_service_account,
@@ -22,6 +23,7 @@ __all__ = [
     "FIRESTORE_DOCUMENT_KINDS",
     "firestore_document_kind",
     "firestore_error_document_path",
+    "firestore_failure_reason",
     "get_customer_firestore_client",
     "get_data_plane_firestore_client",
     "get_firestore_client",
@@ -316,6 +318,29 @@ def is_document_size_limit_error(error: BaseException) -> bool:
     rather than loop.
     """
     return isinstance(error, InvalidArgument) and _DOCUMENT_SIZE_LIMIT_MARKER in str(error).lower()
+
+
+# The SDK's ``_Transactional`` raises a bare ValueError once its own attempts are spent.
+_SDK_COMMIT_EXHAUSTED_PREFIX = "failed to commit transaction"
+
+
+def firestore_failure_reason(error: BaseException) -> str:
+    """Bounded, loggable token for why a Firestore call failed; never the message itself.
+
+    Firestore error text names the rejected document by path, which carries the
+    uid, so callers log this token (and ``firestore_document_kind``) instead.
+    ``document_size_limit`` is permanent; ``expired_transaction`` and
+    ``contention`` are transient and succeed on a later attempt.
+    """
+    if is_document_size_limit_error(error):
+        return 'document_size_limit'
+    if is_expired_transaction_error(error):
+        return 'expired_transaction'
+    if isinstance(error, (FirestoreAborted, FirestoreContentionExhausted)) or (
+        type(error) is ValueError and str(error).lower().startswith(_SDK_COMMIT_EXHAUSTED_PREFIX)
+    ):
+        return 'contention'
+    return 'other'
 
 
 # Firestore names the rejected document as ``.../documents/<collection>/<id>/...``.
