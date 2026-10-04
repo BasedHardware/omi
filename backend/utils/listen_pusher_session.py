@@ -388,7 +388,10 @@ class ListenPusherSession:
                         conversation_id=group_conversation,
                         start_wall=group[0].start_wall,
                         data=b''.join(run.data for run in group),
-                        source_runs=list(group),
+                        # Only legacy envelopes unwrap to raw runs on failure; a span
+                        # envelope retries its pinned payload, so keeping its source
+                        # runs would retain reconciled-away PCM outside the byte cap.
+                        source_runs=None if timeline_active else list(group),
                     )
                     envelope.header_timestamp = (
                         envelope.start_wall if honor_projection and envelope.start_wall is not None else legacy_header

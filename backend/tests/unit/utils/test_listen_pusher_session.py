@@ -551,6 +551,50 @@ async def test_span_socket_send_failure_retains_uncertain_while_mode_stays_activ
     assert ws.sent[-1][12:] == b"abcd"
 
 
+def _retained_pcm_bytes(session):
+    seen = {}
+    stack = list(session.audio_runs)
+    while stack:
+        run = stack.pop()
+        seen[id(run.data)] = len(run.data)
+        stack.extend(run.source_runs or [])
+    return sum(seen.values())
+
+
+@pytest.mark.anyio
+async def test_span_envelope_retains_no_pcm_outside_the_byte_cap(monkeypatch):
+    """A grouped span envelope that fails, is trimmed by prefix
+    reconciliation, and fails again must not keep its original raw runs
+    reachable: retained PCM equals the accounted buffer size."""
+
+    def verified_prefix(*args, **kwargs):
+        return len(args[3]) - 2, []
+
+    monkeypatch.setattr(pusher_session, 'reconcile_audio_chunk_prefix', verified_prefix)
+    ws = FakePusherWebSocket(
+        incoming=[audio_timeline_ack_frame()],
+        send_errors=[None, RuntimeError("send failed"), RuntimeError("send failed")],
+    )
+    session = make_session(ws=ws, config_overrides={'audio_timeline_spans': True, 'max_audio_buffer_size': 64})
+    await session.connect()
+    assert session.audio_timeline_active
+    session.audio_bytes_send(b"a" * 16, received_at=101.0, conversation_id='conv-1', start_wall=100.0)
+    session.audio_bytes_send(b"b" * 16, received_at=103.0, conversation_id='conv-1', start_wall=100.001)
+
+    await session._audio_bytes_flush()
+    assert len(session.audio_runs) == 1 and session.audio_runs[0].uncertain
+    assert session.audio_runs[0].source_runs is None
+    assert _retained_pcm_bytes(session) == session.audio_total_size == 32
+
+    await session._audio_bytes_flush()
+    assert session.audio_total_size == 2
+    assert _retained_pcm_bytes(session) == 2
+
+    session.audio_bytes_send(b"c" * 62, received_at=110.0, conversation_id='conv-1', start_wall=110.0)
+    assert session.audio_total_size == 64
+    assert _retained_pcm_bytes(session) == 64
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("flush", ["transcript", "audio"])
 async def test_cancelled_send_retains_buffer(flush):
