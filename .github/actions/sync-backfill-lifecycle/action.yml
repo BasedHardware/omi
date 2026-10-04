@@ -156,7 +156,7 @@ runs:
           --min-instances=3
           --max-instances=18
           --max=18
-          --concurrency=6
+          --concurrency=3
           --cpu=2
           --memory=4Gi
           --add-volume=mount-path=/app/syncing,type=in-memory,size-limit=1Gi

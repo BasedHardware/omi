@@ -1,6 +1,6 @@
-# Backfill memory-only rollout
+# Bounded backfill memory rollout
 
-Draft build, 2026-10-04. No production changes. Review and observability acceptance precede rollout through the existing backend deploy workflow. The worker limit changes in `.github/actions/sync-backfill-lifecycle/action.yml`: **8 → 4 GiB**. Keep 2 vCPU, concurrency 3, revision min/max 3/18, service max 18 and request-based CPU. Queue settings stay 40 concurrent / 10 per second. The action also mounts a **1-GiB in-memory volume at `/app/syncing`**; the Docker working directory is `/app`.
+Draft build, 2026-10-04. No production changes. Review and observability acceptance precede rollout through the existing backend deploy workflow. The worker limit changes in `.github/actions/sync-backfill-lifecycle/action.yml`: **8 → 4 GiB**. PR #20661 merged to main with concurrency 6 on 2026-10-04. This draft explicitly pins concurrency back to **3** for the qualified 4-GiB configuration; concurrency 6 remains separately qualified only at 8 GiB. Keep 2 vCPU, concurrency 3, revision min/max 3/18, service max 18 and request-based CPU. Queue settings stay 40 concurrent / 10 per second. The action also mounts a **1-GiB in-memory volume at `/app/syncing`**; the Docker working directory is `/app`.
 
 The coordinator's aggregate `cost-opps/evidence/backend-sync-backfill-container-memory-utilizations.json` records daily merged memory-utilization histograms at an 8-GiB allocation. Highest nonempty linear bucket upper bound = bucket index × 0.01 × 8 GiB. The source distribution is sampled; this is neither exact peak RSS nor proof against transient OOM.
 

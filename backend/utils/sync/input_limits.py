@@ -55,6 +55,7 @@ def _validate(streams: Iterable[tuple[str, BinaryIO]]) -> None:
         count += 1
         if count > MAX_BACKFILL_FILES:
             raise BackfillInputLimitExceeded('backfill file count exceeded')
+        frame_samples = 0
         pcm = sync_pcm_format(filename)
         if pcm:
             rate, width = pcm
