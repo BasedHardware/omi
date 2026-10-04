@@ -310,6 +310,7 @@ void main() {
   test('persisted durable frontier replays before READ through 0x15 only', () async {
     const ringId = 0x1122334455667788;
     final tmp = await Directory.systemTemp.createTemp('custody_replay_test');
+    OmiDeviceConnection? conn;
     try {
       final store = PendantCustodyStore(directoryProvider: () async => tmp);
       final seed = PendantRingCustody(store: store, walValidator: (_) async => true);
@@ -320,7 +321,7 @@ void main() {
 
       final custody = PendantRingCustody(store: store, walValidator: (_) async => true);
       final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringId), grantedCaps: 0x0F);
-      OmiDeviceConnection(_device('3.0.21'), t, custody: custody);
+      conn = OmiDeviceConnection(_device('3.0.21'), t, custody: custody);
       t.emit(DeviceTransportState.connected);
       await _settle();
 
@@ -333,6 +334,14 @@ void main() {
       expect(bd.getUint64(9, Endian.big), 10);
       expect(_hasOp(t, RingProtocol.cmdAdvance), isFalse);
     } finally {
+      // The replay ACK is observable before its checkpoint finishes writing.
+      // Join physical readiness only after the wire assertions, then release
+      // the fake audio subscription before deleting the checkpoint directory.
+      if (conn != null) {
+        final audio = await conn.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
+        await audio?.cancel();
+        await conn.disconnect();
+      }
       if (await tmp.exists()) await tmp.delete(recursive: true);
     }
   });
