@@ -154,4 +154,24 @@ final class PreviewUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Appearance"].exists)
     }
 
+    func testNativeAttachmentMenuForwardsSelectedPayload() {
+        let app = start(["chat", "attachments"])
+        XCTAssertTrue(app.buttons["chat_attach"].waitForExistence(timeout: 10))
+        app.buttons["chat_attach"].tap()
+        app.buttons["Choose File"].tap()
+        XCTAssertTrue(app.staticTexts["chat_attach:file"].waitForExistence(timeout: 5))
+        capture(app, "native-chat-attachment-menu")
+    }
+    func testNativeVoiceWaveformKeepsControlsReachableAtLargeText() {
+        let app = start(["chat", "voice", "large"])
+        XCTAssertTrue(app.buttons["chat_voice_stop"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["chat_voice_stop"].isHittable)
+        XCTAssertTrue(app.buttons["chat_voice_discard"].isHittable)
+        capture(app, "native-chat-voice-large-text")
+        app.buttons["chat_voice_stop"].tap()
+        XCTAssertTrue(app.staticTexts["chat_voice_stop:"].waitForExistence(timeout: 5))
+        app.buttons["preview-end-session"].tap()
+        XCTAssertFalse(app.buttons["chat_voice_stop"].exists)
+    }
+
 }

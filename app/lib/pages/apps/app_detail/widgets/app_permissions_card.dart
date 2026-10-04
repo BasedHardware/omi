@@ -61,6 +61,20 @@ class AppPermissionsCard extends StatelessWidget {
 
   final App app;
 
+  /// Same declared permissions and trigger labels for the native presentation.
+  List<String> presentationLabels(BuildContext context) {
+    if (!app.worksExternally()) return const [];
+    final l10n = context.l10n;
+    return [
+      for (final permission in _permissions(context))
+        '${switch (permission.kind) {
+          _PermissionKind.access => l10n.permissionTypeAccess,
+          _PermissionKind.create => l10n.permissionTypeCreate,
+          _PermissionKind.trigger => l10n.permissionTypeTrigger,
+        }} · ${permission.title}',
+    ];
+  }
+
   List<_Permission> _permissions(BuildContext context) {
     final l10n = context.l10n;
     final actions = app.externalIntegration?.actions ?? [];

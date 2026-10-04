@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 
 import 'package:omi/pages/onboarding/permissions/onboarding_permissions_panel.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
@@ -15,6 +16,7 @@ class PermissionsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (iosSwiftUiEnabled) return OnboardingPermissionsPanel(source: source, nativeContinue: goNext);
     return OnboardingStep(
       card: OnboardingCard(
         content: [

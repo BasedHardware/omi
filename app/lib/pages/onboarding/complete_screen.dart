@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
@@ -82,7 +82,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final classic = Container(
       color: OmiColors.surface0,
       width: double.infinity,
       height: double.infinity,
@@ -163,6 +163,23 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
           },
         ),
       ),
+    );
+    return IosNativeSurface(
+      title: context.l10n.onboardingYoureAllSet,
+      publicSurface: true,
+      fallback: classic,
+      sections: [
+        NativeSection('onboarding_complete', [
+          NativeRow('onboarding_complete_message', context.l10n.onboardingCompleteMessage, kind: 'label'),
+          if (_siriHintVersionSupported && _appShortcutsAvailable)
+            NativeRow('onboarding_siri_hint', context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi'),
+                kind: 'label'),
+          NativeRow('onboarding_complete_start', context.l10n.startUsingOmi, symbol: 'checkmark', action: (_) {
+            OmiHaptics.success();
+            widget.onComplete();
+          }),
+        ])
+      ],
     );
   }
 }

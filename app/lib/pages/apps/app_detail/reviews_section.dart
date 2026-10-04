@@ -12,6 +12,9 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_edit.dart';
+import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 
 class RatingDistributionWidget extends StatelessWidget {
   final double ratingAvg;
@@ -67,6 +70,7 @@ class RecentReviewsSection extends StatefulWidget {
   final AppReview? userReview;
   final App app;
   final VoidCallback? onReviewUpdated;
+  final bool nativePage;
 
   const RecentReviewsSection({
     super.key,
@@ -74,6 +78,7 @@ class RecentReviewsSection extends StatefulWidget {
     required this.app,
     this.userReview,
     this.onReviewUpdated,
+    this.nativePage = false,
   });
 
   @override
@@ -85,6 +90,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
   double editRating = 0;
   late TextEditingController reviewController;
   bool isSubmitting = false;
+  bool _nativeSaved = false;
 
   @override
   void initState() {
@@ -187,7 +193,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       return const SizedBox.shrink();
     }
 
-    return Column(
+    final classic = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -200,6 +206,80 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
         ],
       ],
     );
+    if (!widget.nativePage) return classic;
+    final l10n = context.l10n;
+    final editing = showUserReviewSection && (isEditing || widget.userReview == null);
+    final sections = [
+      NativeSection('app_reviews', [
+        for (final (index, review) in filteredReviews.indexed)
+          NativeRow('app_review_${index}_${review.uid}', review.username,
+              kind: 'label',
+              subtitle: [review.score.toString(), review.review, review.response]
+                  .where((line) => line.isNotEmpty)
+                  .join('\n')),
+        if (showUserReviewSection && !editing)
+          NativeRow('app_review_edit', widget.userReview!.review,
+              subtitle: l10n.edit,
+              action: (_) => setState(() {
+                    isEditing = true;
+                    reviewController.text = widget.userReview!.review;
+                    editRating = widget.userReview!.score;
+                  })),
+        if (editing) ...[
+          NativeRow('app_review_rating', l10n.pleaseSelectRating,
+              kind: 'choice',
+              value: editRating.toInt().toString(),
+              options: {'0': l10n.pleaseSelectRating, for (var i = 1; i <= 5; i++) '$i': '★' * i},
+              enabled: !isSubmitting,
+              action: (value) => setState(() => editRating = double.parse(value as String))),
+          NativeRow('app_review_text', l10n.writeReviewOptional,
+              kind: 'text',
+              value: reviewController.text,
+              enabled: !isSubmitting,
+              action: (value) => setState(() => reviewController.text = value as String)),
+        ],
+        if (widget.reviews.isNotEmpty)
+          NativeRow('app_reviews_all', l10n.ratingsAndReviews, action: (_) {
+            PlatformManager.instance.analytics
+                .appDetailReviewsOpened(appId: widget.app.id, reviewCount: widget.reviews.length);
+            routeToReviews();
+          }),
+      ])
+    ];
+    final fallback = Scaffold(body: SafeArea(child: SingleChildScrollView(child: classic)));
+    if (editing) {
+      return IosNativeEdit(
+          title: l10n.ratingsAndReviews,
+          fallback: fallback,
+          sections: sections,
+          isDirty: !_nativeSaved &&
+              (reviewController.text != (widget.userReview?.review ?? '') ||
+                  editRating != (widget.userReview?.score ?? 0)),
+          enabled: !isSubmitting,
+          toolbar: [
+            NativeRow('app_review_save', l10n.submitReview, enabled: !isSubmitting, action: (_) async {
+              await _submitReview();
+              if (context.mounted && !isEditing && widget.app.userReview != null) {
+                setState(() => _nativeSaved = true);
+                Navigator.of(context).pop();
+              }
+            })
+          ]);
+    }
+    return SizedBox(
+        height: MediaQuery.sizeOf(context).height * .88,
+        child: IosNativeSurface(
+          title: l10n.ratingsAndReviews,
+          fallback: fallback,
+          sections: sections,
+          toolbar: [
+            NativeRow('app_reviews_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop())
+          ],
+        ));
+  }
+
+  void routeToReviews() {
+    Navigator.of(context).push(omiPageRoute(builder: (_) => ReviewsListPage(app: widget.app)));
   }
 
   Widget _buildUserReviewSection() {

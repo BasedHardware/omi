@@ -17,6 +17,9 @@ import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/native_plan_projection.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/plan_pricing.dart';
@@ -504,7 +507,7 @@ class _PlansSheetState extends State<PlansSheet> {
             periodEnd != null && DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000).isBefore(DateTime.now());
         final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
 
-        return DecoratedBox(
+        final classic = DecoratedBox(
           // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
           decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
           child: SizedBox(
@@ -700,6 +703,121 @@ class _PlansSheetState extends State<PlansSheet> {
             ),
           ),
         );
+        // The existing handlers retain checkout, consent, downgrade and cancellation ownership.
+        // Future additions to the opt-in program keep their full consent renderer until projected.
+        if (!iosSwiftUiEnabled || _showTrainingDataOptIn) return classic;
+        final busy = _isUpgrading || _isSwitchingToFree;
+        final statusOnly =
+            isUnlimited && !isCancelled && (hasScheduledUpgrade || _getCurrentPlanDetails()?['interval'] == 'year');
+        final planRows = !plansLoaded || statusOnly
+            ? <NativeRow>[]
+            : nativePlanRows(l10n, _buildTierPlanCards(availablePlans: provider.availablePlans!), enabled: !busy);
+        if (planRows == null) return classic;
+        return SizedBox(
+            height: MediaQuery.sizeOf(context).height * .85,
+            child: IosNativeSurface(
+              title: hasScheduledUpgrade
+                  ? l10n.upgradeScheduled
+                  : isUnlimited
+                      ? l10n.changePlan
+                      : l10n.upgradeYourPlan,
+              fallback: classic,
+              loading: provider.isLoadingPlans,
+              failed: !provider.isLoadingPlans && provider.availablePlans == null,
+              onRefresh: (_) => _loadAvailablePlans(),
+              toolbar: [
+                NativeRow('plans_close', l10n.close,
+                    symbol: 'xmark', enabled: !busy, action: (_) => Navigator.of(context).maybePop())
+              ],
+              sections: [
+                NativeSection('plans_summary', [
+                  NativeRow(
+                      'plans_description',
+                      hasScheduledUpgrade
+                          ? l10n.upgradeAlreadyScheduled
+                          : isUnlimited
+                              ? l10n.youAreOnAPaidPlan
+                              : l10n.planSheetChooseYourPlan,
+                      kind: 'label'),
+                  if (isUnlimited)
+                    NativeRow(
+                        'plans_renewal',
+                        isCancelled
+                            ? periodEnded
+                                ? l10n.planEndedOn(renewalDate)
+                                : l10n.planSetToCancelOn(renewalDate)
+                            : hasScheduledUpgrade
+                                ? l10n.annualPlanStartsAutomatically
+                                : l10n.planRenewsOn(renewalDate),
+                        kind: 'label'),
+                  NativeRow(
+                      'plans_features',
+                      [
+                        l10n.unlimitedConversations,
+                        l10n.askOmiAnything,
+                        l10n.unlockOmiInfiniteMemory,
+                        l10n.availableOnMacMobileWeb
+                      ].join('\n'),
+                      kind: 'label'),
+                ]),
+                NativeSection('plans_choices', [
+                  if (statusOnly)
+                    NativeRow('plans_status', hasScheduledUpgrade ? l10n.upgradeScheduled : l10n.youreOnAnnualPlan,
+                        kind: 'label',
+                        subtitle: hasScheduledUpgrade ? l10n.annualPlanStartsAutomatically : l10n.alreadyBestValuePlan),
+                  ...planRows,
+                  NativeRow('plans_promo', l10n.promoCode,
+                      kind: 'text',
+                      value: _promoCodeController.text,
+                      enabled: !busy,
+                      subtitle: _promoCodeError ?? '',
+                      action: (value) => setState(() {
+                            _promoCodeController.text = value as String;
+                            _promoCodeError = null;
+                          })),
+                  if (shouldShowPlanContinueButton(
+                      isOnAnnualPlan: _getCurrentPlanDetails()?['interval'] == 'year',
+                      hasScheduledUpgrade: hasScheduledUpgrade,
+                      isCancelled: isCancelled,
+                      plansLoaded: plansLoaded,
+                      selectedTierId: selectedTierId,
+                      currentTierId: sub?.plan.wireName,
+                      currentGrantsDesktop: sub?.plan.grantsDesktop ?? false))
+                    NativeRow('plans_upgrade', isUnlimited ? l10n.continueText : l10n.upgrade, enabled: !busy,
+                        action: (_) async {
+                      HapticFeedback.mediumImpact();
+                      await _handleUpgradeWithSelectedPlan();
+                    }),
+                  if (isCancelled && plansLoaded)
+                    NativeRow('plans_resubscribe', l10n.resubscribe, enabled: !busy, action: (_) async {
+                      HapticFeedback.mediumImpact();
+                      await _handleUpgradeWithSelectedPlan();
+                    }),
+                ]),
+                if (!isUnlimited)
+                  NativeSection('plans_freemium', [
+                    NativeRow('plans_freemium_limits', l10n.freemiumLimitsIntro,
+                        kind: 'label',
+                        subtitle: [
+                          l10n.downgradeLimitBattery,
+                          l10n.downgradeLimitQuality,
+                          l10n.downgradeLimitDelayNotRealTime,
+                          l10n.downgradeLimitSpeakers
+                        ].join('\n')),
+                    if (plansLoaded)
+                      NativeRow('plans_downgrade', l10n.downgradeToFreemiumAction,
+                          enabled: !busy, action: (_) => _handleDowngradeToFreemium()),
+                  ]),
+                if (isUnlimited || sub?.stripeSubscriptionId?.isNotEmpty == true)
+                  NativeSection('plans_management', [
+                    NativeRow('plans_payment', l10n.managePaymentMethod,
+                        symbol: 'creditcard', enabled: !busy, action: (_) => _openPaymentPortal()),
+                    if (isUnlimited && !isCancelled)
+                      NativeRow('plans_cancel', l10n.cancelSubscription,
+                          enabled: !busy, action: (_) => _handleCancelSubscription()),
+                  ]),
+              ],
+            ));
       },
     );
   }
@@ -905,6 +1023,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     return PlanOptionCard(
+      key: ValueKey('${planData['id']}_$interval'),
       isSelected: isSelected,
       saveTag: saveTag,
       isPopular: isPopular,

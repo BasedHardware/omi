@@ -16,14 +16,14 @@ same layout. Flutter no longer puts a small native list below its own Home heade
 
 | Area | Native presentation | Existing feature surfaces retained |
 |---|---|---|
-| Home and library | Home, dated lists, local recording entry points, gaps, processing, paging, recap browsing, summary/transcript reader | Recording playback, detailed edits and bulk selection |
+| Home and library | Home, dated lists, local recording entry points, gaps, processing, paging, recap browsing, summary/transcript reader and guarded transcript-text editor | Recording playback, detailed summary/speaker/photo edits and bulk selection |
 | Search | Recent searches, folders, starred items, scoped results, conversations/tasks/memories/recaps | People management and advanced folder sheets |
 | Tasks and Memories | Lists, search, completion, menus, create/edit forms with explicit Save and discard guard | Bulk selection, hierarchy/reorder, memory management and Mind Map |
-| Apps | Catalog lists, search and filters | App detail, integration setup and specialized filters |
-| Settings | Navigation, profile, display/notifications, language, privacy, permissions, recording groups, device settings | Billing, custom transcription, integration/developer tools, native Shortcuts setup and device-specific controls |
+| Apps | Catalog, app detail, setup-step entry points, declared permission disclosures, enable/disable/subscribe actions and guarded review editor | Full screenshot viewer, Markdown instructions, app-owner editing and specialized filters |
+| Settings | Navigation, profile, display/notifications, language, privacy, permissions, recording groups, device settings, plan selection/management, integrations and task service configuration (Asana/ClickUp/Todoist/Google Tasks) | Existing confirmation/consent and checkout/OAuth flows, Health detail, custom transcription/developer tools, Shortcuts setup and device-specific controls |
 | Diagnostics | Connection summaries, live signal and battery charts, day/week choice, disconnect history, export | Same Bluetooth polling and export owners |
-| Chat | Transcript, native draft/composer, send/retry, follow-up, scoped context | Voice/attachments, structured interactive message inspector and app picker |
-| First run | Sign-in actions, consent, name and primary language | Step navigation, device discovery, guided voice, permissions and completion |
+| Chat | Transcript/composer, send/retry, follow-up, scoped context, voice waveform/Stop/Send/Retry/Discard, attachment picker/removal/previews and app picker | Structured interactive message inspector and full attachment viewers |
+| First run | Sign-in actions, consent, name, primary language, permission rows and completion | Step navigation, device discovery and guided voice enrollment |
 
 These retained surfaces are explicit parity work, not a completed full-app migration. Keep them
 available while moving them screen by screen; removing access to a feature is not a migration.
@@ -42,6 +42,16 @@ containment. Both Runner targets compile the same renderer.
 - Native code receives no tokens and adds no backend client, database, recording coordinator or
   persistent conversation cache. Auth/Firebase, HTTP, BLE, microphone, recovery, subscription
   checks, mutations and undo continue through current services and their existing contracts.
+- Native chat mounts the existing voice widget offstage only when the supported native renderer
+  is active, with its animations disabled. Its microphone arbitration, transcription callbacks
+  and recoverable files remain with the existing owner; callbacks are fenced to the captured
+  account session. Unsupported systems mount only the complete current chat composer.
+- Attachment thumbnails use existing HTTPS asset URLs or selected files inside the app's own
+  container. Local images are downsampled off the main thread. Picker, upload, removal and
+  attachment-send gating stay with `MessageProvider`.
+- Native billing projects the existing filtered plan cards, backend price identities, disclosures,
+  badges and exact selection handlers. The existing visibility/Continue rules and upgrade,
+  cancellation, downgrade, consent and payment owners still apply. It introduces no SKU or price.
 - Each native surface captures the auth-session generation. Read completion and commands are
   fenced to it; sign-out/disposal clears native state. Monotonic revisions reject stale updates.
   Locked content is stripped before crossing the bridge. Unknown controls or invalid legacy

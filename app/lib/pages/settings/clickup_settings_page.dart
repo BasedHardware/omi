@@ -7,6 +7,7 @@ import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/integrations/clickup_service.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class ClickUpSettingsPage extends StatefulWidget {
@@ -182,10 +183,14 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
   Widget build(BuildContext context) {
     if (_isLoadingTeams) {
       // Give the first load the same header as the loaded page, so it can always be left.
-      return Scaffold(
+      final classic = Scaffold(
         appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.appSettings('ClickUp'))),
         body: const OmiLoadingState(),
       );
+      return IosNativeSurface(title: context.l10n.appSettings('ClickUp'), fallback: classic, loading: true, toolbar: [
+        NativeRow('clickup_back', context.l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+      ], sections: const []);
     }
 
     return IntegrationSettingsPage(
@@ -194,6 +199,55 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
       disconnectService: _clickupService.disconnect,
       showRefresh: true,
       onRefresh: _initializeClickUp,
+      nativeSections: [
+        if (_clickupService.currentUserId != null)
+          NativeSection('clickup_identity', [
+            NativeRow('clickup_connected_user', context.l10n.connectedAsUser(_clickupService.currentUserId!),
+                kind: 'label')
+          ]),
+        NativeSection(
+            'clickup_teams',
+            [
+              for (final team in _teams)
+                NativeRow('clickup_team_${team['id']}', team['name'] as String,
+                    symbol: _selectedTeamId == team['id'].toString() ? 'checkmark.circle.fill' : 'circle',
+                    action: (_) => _selectTeam(team)),
+            ],
+            title: context.l10n.defaultWorkspace,
+            footer: context.l10n.tasksCreatedInWorkspace),
+        if (_selectedTeamId != null)
+          NativeSection(
+              'clickup_spaces',
+              [
+                if (_isLoadingSpaces)
+                  NativeRow('clickup_spaces_loading', context.l10n.loading, kind: 'label')
+                else if (_spaces.isEmpty)
+                  NativeRow('clickup_spaces_empty', context.l10n.noSpacesInWorkspace, kind: 'label')
+                else
+                  for (final space in _spaces)
+                    NativeRow('clickup_space_${space['id']}', space['name'] as String,
+                        symbol: _selectedSpaceId == space['id'].toString() ? 'checkmark.circle.fill' : 'circle',
+                        action: (_) => _selectSpace(space)),
+              ],
+              title: context.l10n.defaultSpace,
+              footer: context.l10n.selectSpaceInWorkspace),
+        if (_selectedSpaceId != null)
+          NativeSection(
+              'clickup_lists',
+              [
+                if (_isLoadingLists)
+                  NativeRow('clickup_lists_loading', context.l10n.loading, kind: 'label')
+                else if (_lists.isEmpty)
+                  NativeRow('clickup_lists_empty', context.l10n.noListsInSpace, kind: 'label')
+                else
+                  for (final list in _lists)
+                    NativeRow('clickup_list_${list['id']}', list['name'] as String,
+                        symbol: _selectedListId == list['id'].toString() ? 'checkmark.circle.fill' : 'circle',
+                        action: (_) => _selectList(list)),
+              ],
+              title: context.l10n.defaultList,
+              footer: context.l10n.tasksAddedToList),
+      ],
       children: [
         if (_clickupService.currentUserId != null)
           IntegrationConnectedBanner(context.l10n.connectedAsUser(_clickupService.currentUserId!)),

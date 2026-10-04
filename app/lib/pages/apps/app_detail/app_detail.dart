@@ -41,6 +41,11 @@ import 'package:omi/pages/apps/app_detail/widgets/app_preview_gallery.dart';
 import 'package:omi/pages/apps/app_detail/widgets/app_setup_steps.dart';
 import 'package:omi/pages/apps/widgets/app_actions.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
+part 'native_app_detail.dart';
 
 class AppDetailPage extends StatefulWidget {
   final App app;
@@ -373,7 +378,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         bool hasSetupInstructions =
             isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
         bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
-        return Scaffold(
+        final classic = Scaffold(
           appBar: AppBar(
             elevation: 0,
             automaticallyImplyLeading: false,
@@ -644,6 +649,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             ),
           ),
         );
+        return iosSwiftUiEnabled ? _nativeDetail(classic) : classic;
       },
     );
   }
@@ -689,6 +695,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
         ],
       ],
     );
+  }
+
+  void _refreshAfterNativeReview() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _reEnableApp() async {

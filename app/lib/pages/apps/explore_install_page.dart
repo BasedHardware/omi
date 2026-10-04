@@ -44,7 +44,10 @@ class ExploreInstallPage extends StatefulWidget {
   /// Slivers shown above the catalog's search bar in the same scroll view (Integrations puts the
   /// connected services there).
   final List<Widget> leadingSlivers;
-  const ExploreInstallPage({super.key, this.scrollController, this.leadingSlivers = const []});
+  final List<NativeSection>? nativeLeadingSections;
+  final String? nativeTitle;
+  const ExploreInstallPage(
+      {super.key, this.scrollController, this.leadingSlivers = const [], this.nativeLeadingSections, this.nativeTitle});
 
   @override
   State<ExploreInstallPage> createState() => ExploreInstallPageState();
@@ -682,17 +685,22 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         },
       ),
     );
-    // Integrations supplies additional service controls; keep those reachable until projected.
-    if (!iosSwiftUiEnabled || widget.leadingSlivers.isNotEmpty) return classic;
+    if (!iosSwiftUiEnabled || (widget.leadingSlivers.isNotEmpty && widget.nativeLeadingSections == null)) {
+      return classic;
+    }
     final provider = context.watch<AppProvider>();
     final filtered = provider.isFilterActive() || provider.isSearchActive();
-    NativeRow appRow(App app, String group) =>
-        NativeRow('${group}_${app.id}', app.getName(), subtitle: app.description, action: (_) async {
+    NativeRow appRow(App app, String group) => NativeRow('${group}_${app.id}', app.getName(),
+            subtitle: app.description, imageUri: nativeImageUri(app.getImageUrl()), action: (_) async {
           await routeToPage(context, AppDetailPage(app: app));
         });
     return IosNativeSurface(
-        title: context.l10n.apps,
-        fallback: classic,
+        title: widget.nativeTitle ?? context.l10n.apps,
+        fallback: widget.nativeTitle == null
+            ? classic
+            : Scaffold(
+                appBar: AppBar(leading: const OmiBackButton(), title: Text(widget.nativeTitle!)),
+                body: SafeArea(bottom: false, child: classic)),
         loading: provider.isLoading || provider.isSearching,
         empty: context.l10n.noAppsFound,
         searchValue: provider.searchQuery,
@@ -702,6 +710,9 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         },
         onRefresh: (_) => provider.forceRefreshApps(),
         toolbar: [
+          if (widget.nativeTitle != null)
+            NativeRow('apps_back', context.l10n.back,
+                symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
           NativeRow('apps_filters', context.l10n.filters, symbol: 'line.3.horizontal.decrease', action: (_) {
             FilterBottomSheet.show(context);
           }),
@@ -709,23 +720,26 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             provider.clearFilters();
           }),
         ],
-        sections: filtered
-            ? [
-                NativeSection('apps_results', [for (final app in provider.filteredApps) appRow(app, 'result')])
-              ]
-            : [
-                if (provider.popularApps.isNotEmpty)
-                  NativeSection('apps_popular', [for (final app in provider.popularApps) appRow(app, 'popular')],
-                      title: context.l10n.popularApps),
-                for (var index = 0; index < provider.groupedApps.length; index++)
-                  NativeSection(
-                      'apps_category_$index',
-                      [
-                        for (final app in (provider.groupedApps[index]['data'] as List<App>? ?? <App>[]))
-                          appRow(app, 'category_$index')
-                      ],
-                      title: _nativeGroupTitle(provider.groupedApps[index])),
-              ]);
+        sections: [
+          ...?widget.nativeLeadingSections,
+          ...filtered
+              ? [
+                  NativeSection('apps_results', [for (final app in provider.filteredApps) appRow(app, 'result')])
+                ]
+              : [
+                  if (provider.popularApps.isNotEmpty)
+                    NativeSection('apps_popular', [for (final app in provider.popularApps) appRow(app, 'popular')],
+                        title: context.l10n.popularApps),
+                  for (var index = 0; index < provider.groupedApps.length; index++)
+                    NativeSection(
+                        'apps_category_$index',
+                        [
+                          for (final app in (provider.groupedApps[index]['data'] as List<App>? ?? <App>[]))
+                            appRow(app, 'category_$index')
+                        ],
+                        title: _nativeGroupTitle(provider.groupedApps[index])),
+                ],
+        ]);
   }
 
   String _nativeGroupTitle(Map<String, dynamic> group) {

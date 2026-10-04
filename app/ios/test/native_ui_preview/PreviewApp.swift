@@ -124,6 +124,23 @@ final class PreviewHarness: ObservableObject {
                 "capture": ["status": "Listening", "detail": "", "elapsed": "12:04", "source": "omi", "lastLine": "Keep the pendant flow as it is.", "explanation": "",
                     "actions": [["id": "pauseCapture", "title": "Pause", "symbol": "pause.fill", "enabled": true]]]]
         }
+        if ProcessInfo.processInfo.arguments.contains("attachments"), var chat = surfaceRaw["chat"] as? [String: Any] {
+            var actions = chat["actions"] as! [[String: Any]]
+            actions.append(["id": "chat_attach", "title": "Add Attachment", "kind": "menu", "symbol": "paperclip", "subtitle": "",
+                "options": [["id": "file", "title": "Choose File"], ["id": "photos", "title": "Photo Library"]], "enabled": true, "destructive": false])
+            chat["actions"] = actions
+            surfaceRaw["chat"] = chat
+        }
+        if ProcessInfo.processInfo.arguments.contains("voice"), var chat = surfaceRaw["chat"] as? [String: Any] {
+            chat["actions"] = [
+                ["id": "chat_voice_status", "title": "Recording", "kind": "label", "subtitle": "", "options": [], "enabled": false, "destructive": false],
+                ["id": "chat_voice_waveform", "title": "Recording", "kind": "waveform", "subtitle": "", "options": [], "enabled": false, "destructive": false,
+                    "points": (0..<20).map { ["x": Double($0), "y": Double(($0 % 5) + 1) / 5, "label": ""] as [String: Any] }],
+                ["id": "chat_voice_stop", "title": "Stop Recording", "kind": "button", "symbol": "stop.fill", "subtitle": "", "options": [], "enabled": true, "destructive": false],
+                ["id": "chat_voice_discard", "title": "Discard Recording", "kind": "button", "symbol": "xmark", "subtitle": "", "options": [], "enabled": true, "destructive": false],
+            ]
+            surfaceRaw["chat"] = chat
+        }
         if ProcessInfo.processInfo.arguments.contains("light") { raw["appearance"] = "light" }
         else { raw["appearance"] = "dark" }
         if ProcessInfo.processInfo.arguments.contains("error") || ProcessInfo.processInfo.arguments.contains("empty") {

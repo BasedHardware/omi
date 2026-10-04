@@ -9,8 +9,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/ui/components/omi_permission_row.dart';
-import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// The permissions the first-run flow and the returning-user interstitial ask for.
@@ -72,10 +73,13 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
 /// Nothing here prompts on its own; the screens' Continue only moves on. States are re-read when
 /// the app returns to the foreground, so a permission switched on in Settings shows as allowed.
 class OnboardingPermissionsPanel extends StatefulWidget {
-  const OnboardingPermissionsPanel({super.key, this.source});
+  const OnboardingPermissionsPanel({super.key, this.source, this.nativeContinue});
 
   /// Defaults to [PlatformOnboardingPermissionsSource] over the ambient [OnboardingProvider].
   final OnboardingPermissionsSource? source;
+
+  /// A full-screen presentation of these same permission owners for the native first-run step.
+  final VoidCallback? nativeContinue;
 
   @override
   State<OnboardingPermissionsPanel> createState() => _OnboardingPermissionsPanelState();
@@ -128,7 +132,7 @@ class _OnboardingPermissionsPanelState extends State<OnboardingPermissionsPanel>
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Column(
+    final classic = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final permission in _source.permissions) ...[
@@ -156,6 +160,83 @@ class _OnboardingPermissionsPanelState extends State<OnboardingPermissionsPanel>
           const SizedBox(height: OmiSpacing.sm),
         ],
       ],
+    );
+    final next = widget.nativeContinue;
+    if (next == null) return classic;
+    void continueStep() {
+      OmiHaptics.selection();
+      next();
+    }
+
+    return IosNativeSurface(
+      title: l10n.grantPermissions,
+      publicSurface: true,
+      fallback: OnboardingStep(
+          card: OnboardingCard(content: [
+        Text(l10n.grantPermissions, style: OmiType.title1, textAlign: TextAlign.center),
+        const SizedBox(height: OmiSpacing.xs),
+        Text(l10n.permissionsChangeAnytime,
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
+        const SizedBox(height: OmiSpacing.xl),
+        classic,
+      ], footer: [
+        const SizedBox(height: OmiSpacing.xs),
+        OmiButton(
+            key: const Key('onboarding_permissions_continue'),
+            label: l10n.continueButton,
+            expand: true,
+            onPressed: continueStep),
+      ])),
+      sections: [
+        NativeSection(
+            'onboarding_permissions',
+            [
+              for (final permission in _source.permissions) _nativePermission(context, permission),
+              NativeRow('onboarding_permissions_continue', l10n.continueButton, action: (_) => continueStep()),
+            ],
+            footer: l10n.permissionsChangeAnytime)
+      ],
+    );
+  }
+
+  NativeRow _nativePermission(BuildContext context, OnboardingPermission permission) {
+    final l10n = context.l10n;
+    final status = _statuses[permission] ?? OmiPermissionStatus.askable;
+    final title = switch (permission) {
+      OnboardingPermission.background => l10n.backgroundActivity,
+      OnboardingPermission.location => l10n.locationAccess,
+      OnboardingPermission.notifications => l10n.notifications,
+    };
+    final reason = switch (permission) {
+      OnboardingPermission.background => l10n.backgroundActivityDesc,
+      OnboardingPermission.location => l10n.locationAccessDesc,
+      OnboardingPermission.notifications => l10n.notificationsDesc,
+    };
+    final label = switch (status) {
+      OmiPermissionStatus.granted => l10n.permissionAllowed,
+      OmiPermissionStatus.askable => l10n.allow,
+      _ => l10n.openSettings,
+    };
+    final hint = switch (status) {
+      OmiPermissionStatus.blocked => l10n.permissionBlockedHint,
+      OmiPermissionStatus.serviceOff => l10n.locationServiceDisabledDesc,
+      _ => '',
+    };
+    return NativeRow(
+      'onboarding_permission_${permission.name}',
+      '$title · $label',
+      kind: status == OmiPermissionStatus.granted ? 'label' : 'button',
+      subtitle: [reason, if (hint.isNotEmpty) hint].join('\n'),
+      symbol: status == OmiPermissionStatus.granted ? 'checkmark.circle' : null,
+      action: status == OmiPermissionStatus.granted
+          ? null
+          : (_) async {
+              if (status == OmiPermissionStatus.askable) {
+                await _allow(permission);
+              } else {
+                await openAppSettings();
+              }
+            },
     );
   }
 }

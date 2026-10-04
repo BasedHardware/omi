@@ -13,6 +13,7 @@ import 'package:omi/pages/settings/google_tasks_settings_page.dart';
 import 'package:omi/pages/settings/integration_selection_card.dart';
 import 'package:omi/pages/settings/todoist_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
 import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/services/integrations/clickup_service.dart';
@@ -402,29 +403,34 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     );
   }
 
+  VoidCallback? _appTap(TaskIntegrationApp app, bool isLoading) {
+    final isSelected = context.read<TaskIntegrationProvider>().selectedApp == app;
+    final isConnected = _isAppConnected(app);
+    if (!app.isAvailable || isLoading) return null;
+    return () {
+      // If already connected and selected, open settings
+      if (isConnected && isSelected) {
+        if (app == TaskIntegrationApp.asana) {
+          routeToPage(context, const AsanaSettingsPage());
+        } else if (app == TaskIntegrationApp.clickup) {
+          routeToPage(context, const ClickUpSettingsPage());
+        } else if (app == TaskIntegrationApp.todoist) {
+          routeToPage(context, const TodoistSettingsPage());
+        } else if (app == TaskIntegrationApp.googleTasks) {
+          routeToPage(context, const GoogleTasksSettingsPage());
+        }
+      } else {
+        _selectApp(app);
+      }
+    };
+  }
+
   Widget _buildAppTile(TaskIntegrationApp app, bool isLoading) {
     final isSelected = context.read<TaskIntegrationProvider>().selectedApp == app;
     final isAvailable = app.isAvailable;
     final isConnected = _isAppConnected(app);
 
-    final VoidCallback? onTap = isAvailable && !isLoading
-        ? () {
-            // If already connected and selected, open settings
-            if (isConnected && isSelected) {
-              if (app == TaskIntegrationApp.asana) {
-                routeToPage(context, const AsanaSettingsPage());
-              } else if (app == TaskIntegrationApp.clickup) {
-                routeToPage(context, const ClickUpSettingsPage());
-              } else if (app == TaskIntegrationApp.todoist) {
-                routeToPage(context, const TodoistSettingsPage());
-              } else if (app == TaskIntegrationApp.googleTasks) {
-                routeToPage(context, const GoogleTasksSettingsPage());
-              }
-            } else {
-              _selectApp(app);
-            }
-          }
-        : null;
+    final onTap = _appTap(app, isLoading);
 
     final Widget trailing;
     if (isLoading && app != TaskIntegrationApp.appleReminders) {
@@ -503,7 +509,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     final provider = context.watch<TaskIntegrationProvider>();
     final isLoading = provider.isLoading || !provider.hasLoaded;
 
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.taskIntegrations),
@@ -561,6 +567,38 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           ),
         ),
       ),
+    );
+    return IosNativeSurface(
+      title: context.l10n.taskIntegrations,
+      fallback: classic,
+      loading: isLoading,
+      toolbar: [
+        NativeRow('task_integrations_back', context.l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+        if (_shouldShowSettingsIcon())
+          NativeRow('task_integrations_settings', context.l10n.configureSettings,
+              symbol: 'gearshape', action: (_) => _openSelectedAppSettings()),
+      ],
+      sections: [
+        NativeSection(
+            'task_integrations',
+            [
+              for (final app in TaskIntegrationApp.values
+                  .where((app) => app != TaskIntegrationApp.appleReminders || PlatformService.isApple))
+                NativeRow('task_integration_${app.name}', app.displayName,
+                    symbol: provider.selectedApp == app && _isAppConnected(app) ? 'checkmark.circle.fill' : null,
+                    subtitle: !app.isAvailable
+                        ? context.l10n.comingSoon
+                        : isLoading
+                            ? context.l10n.loading
+                            : !_isAppConnected(app)
+                                ? context.l10n.connect
+                                : '',
+                    enabled: _appTap(app, isLoading) != null,
+                    action: (_) => _appTap(app, isLoading)?.call()),
+            ],
+            footer: context.l10n.tasksExportedOneApp)
+      ],
     );
   }
 }

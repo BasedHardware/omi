@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -38,7 +39,9 @@ class ChatAppsDrawer extends StatelessWidget {
     return Drawer(
       backgroundColor: OmiColors.surface1,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg)),
+        borderRadius: BorderRadius.horizontal(
+          left: Radius.circular(OmiRadius.lg),
+        ),
       ),
       child: SafeArea(
         child: Consumer2<MessageProvider, AppProvider>(
@@ -52,15 +55,26 @@ class ChatAppsDrawer extends StatelessWidget {
               onSelectApp(id);
             }
 
-            return Column(
+            final classic = Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.xxs, 0),
+                  padding: const EdgeInsetsDirectional.fromSTEB(
+                    OmiSpacing.lg,
+                    OmiSpacing.xs,
+                    OmiSpacing.xxs,
+                    0,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
-                        child: Semantics(header: true, child: Text(l10n.chatAppsTitle, style: OmiType.title3)),
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            l10n.chatAppsTitle,
+                            style: OmiType.title3,
+                          ),
+                        ),
                       ),
                       OmiCloseButton(color: OmiColors.textSecondary),
                     ],
@@ -90,10 +104,17 @@ class ChatAppsDrawer extends StatelessWidget {
                       ListTile(
                         leading: Padding(
                           padding: const EdgeInsets.only(left: 2),
-                          child: FaIcon(FontAwesomeIcons.circlePlus, color: OmiColors.textPrimary, size: 20),
+                          child: FaIcon(
+                            FontAwesomeIcons.circlePlus,
+                            color: OmiColors.textPrimary,
+                            size: 20,
+                          ),
                         ),
                         title: Text(l10n.enableApps, style: OmiType.callout),
-                        trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+                        trailing: Icon(
+                          Icons.chevron_right,
+                          color: OmiColors.textTertiary,
+                        ),
                         onTap: () {
                           Navigator.of(context).pop();
                           onEnableApps();
@@ -106,14 +127,84 @@ class ChatAppsDrawer extends StatelessWidget {
                 ListTile(
                   leading: Padding(
                     padding: const EdgeInsets.only(left: 2),
-                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: OmiColors.danger, size: 20),
+                    child: FaIcon(
+                      FontAwesomeIcons.solidTrashCan,
+                      color: OmiColors.danger,
+                      size: 20,
+                    ),
                   ),
-                  title: Text(l10n.clearChat, style: OmiType.callout.copyWith(color: OmiColors.danger)),
+                  title: Text(
+                    l10n.clearChat,
+                    style: OmiType.callout.copyWith(color: OmiColors.danger),
+                  ),
                   onTap: () {
                     Navigator.of(context).pop();
                     onClearChat();
                   },
                 ),
+              ],
+            );
+            return IosNativeSurface(
+              title: l10n.chatAppsTitle,
+              fallback: classic,
+              loading: messageProvider.isLoadingChatApps,
+              toolbar: [
+                NativeRow(
+                  'chat_apps_close',
+                  l10n.close,
+                  symbol: 'xmark',
+                  action: (_) => Navigator.of(context).pop(),
+                ),
+              ],
+              sections: [
+                NativeSection('chat_apps', [
+                  NativeRow(
+                    'chat_app_omi',
+                    l10n.omiAppName,
+                    symbol: isOmiSelected ? 'checkmark.circle.fill' : 'bubble.left',
+                    enabled: messageProvider.canSwitchChat,
+                    action: (_) => choose('no_selected'),
+                  ),
+                  for (final app in chatApps) ...[
+                    NativeRow(
+                      'chat_app_${app.id}',
+                      app.getName(),
+                      imageUri: nativeImageUri(app.getImageUrl()),
+                      symbol: selectedAppId == app.id ? 'checkmark.circle.fill' : null,
+                      enabled: messageProvider.canSwitchChat,
+                      action: (_) => choose(app.id),
+                    ),
+                    if (selectedAppId != app.id)
+                      NativeRow(
+                        'chat_app_disable_${app.id}',
+                        l10n.disableAppNamed(app.getName()),
+                        destructive: true,
+                        enabled: messageProvider.canSwitchChat,
+                        action: (_) => onDisableApp(app),
+                      ),
+                  ],
+                  NativeRow(
+                    'chat_apps_enable',
+                    l10n.enableApps,
+                    symbol: 'plus',
+                    action: (_) {
+                      Navigator.of(context).pop();
+                      onEnableApps();
+                    },
+                  ),
+                ]),
+                NativeSection('chat_apps_clear', [
+                  NativeRow(
+                    'chat_apps_clear_action',
+                    l10n.clearChat,
+                    destructive: true,
+                    enabled: messageProvider.canSwitchChat,
+                    action: (_) {
+                      Navigator.of(context).pop();
+                      onClearChat();
+                    },
+                  ),
+                ]),
               ],
             );
           },
@@ -144,9 +235,19 @@ class _AppRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: avatar,
-      title: Text(name, style: OmiType.callout, overflow: TextOverflow.ellipsis),
+      title: Text(
+        name,
+        style: OmiType.callout,
+        overflow: TextOverflow.ellipsis,
+      ),
       trailing: isSelected
-          ? ExcludeSemantics(child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18))
+          ? ExcludeSemantics(
+              child: FaIcon(
+                FontAwesomeIcons.solidCircleCheck,
+                color: OmiColors.textPrimary,
+                size: 18,
+              ),
+            )
           : onDisable == null
               ? null
               : OmiIconButton(
@@ -172,8 +273,11 @@ class ChatAppAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return CachedNetworkImage(
       imageUrl: app.getImageUrl(),
-      imageBuilder: (context, imageProvider) =>
-          CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider),
+      imageBuilder: (context, imageProvider) => CircleAvatar(
+        backgroundColor: Colors.white,
+        radius: 12,
+        backgroundImage: imageProvider,
+      ),
       errorWidget: (context, url, error) => CircleAvatar(
         backgroundColor: OmiColors.surface3,
         radius: 12,
@@ -192,7 +296,10 @@ class ChatOmiAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
+        image: DecorationImage(
+          image: AssetImage(Assets.images.background.path),
+          fit: BoxFit.cover,
+        ),
         borderRadius: OmiRadius.lgAll,
       ),
       height: 24,

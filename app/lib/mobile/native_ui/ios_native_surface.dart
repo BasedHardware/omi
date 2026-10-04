@@ -14,24 +14,42 @@ import 'native_read_session.dart';
 
 typedef NativeAction = FutureOr<void> Function(Object? value);
 
+/// Normalize thumbnails already supplied by the existing image/file owner. Unsupported URLs
+/// render without a thumbnail; they do not introduce another authenticated API client.
+String? nativeImageUri(String? input) {
+  if (input == null || input.isEmpty || input.length > 4096) return null;
+  final value = input.startsWith('/') ? Uri.file(input).toString() : input;
+  if (value.length > 4096) return null;
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.userInfo.isNotEmpty) return null;
+  if (uri.scheme == 'https' && uri.host.isNotEmpty) return value;
+  if (uri.scheme == 'file' && uri.host.isEmpty && uri.path.startsWith('/')) return value;
+  return null;
+}
+
 /// Only presentation values cross the channel. Callbacks stay with their current owner.
 class NativeRow {
-  const NativeRow(this.id, this.title,
-      {this.kind = 'button',
-      this.subtitle = '',
-      this.value,
-      this.options = const {},
-      this.symbol,
-      this.minimumDate,
-      this.maximumLength,
-      this.points = const [],
-      this.action,
-      this.onVisible,
-      this.destructive = false,
-      this.enabled = true});
+  const NativeRow(
+    this.id,
+    this.title, {
+    this.kind = 'button',
+    this.subtitle = '',
+    this.value,
+    this.options = const {},
+    this.symbol,
+    this.minimumDate,
+    this.maximumLength,
+    this.imageUri,
+    this.points = const [],
+    this.action,
+    this.onVisible,
+    this.destructive = false,
+    this.enabled = true,
+  });
 
   final String id, title, kind, subtitle;
   final String? symbol, minimumDate;
+  final String? imageUri;
   final int? maximumLength;
   final List<Map<String, Object>> points;
   final Object? value;
@@ -46,11 +64,12 @@ class NativeRow {
         'subtitle': subtitle,
         'value': value,
         'options': [
-          for (final entry in options.entries) {'id': entry.key, 'title': entry.value}
+          for (final entry in options.entries) {'id': entry.key, 'title': entry.value},
         ],
         'symbol': symbol,
         'minimumDate': minimumDate,
         'maximumLength': maximumLength,
+        'imageUri': imageUri,
         'points': points,
         'destructive': destructive,
         'enabled': enabled && action != null,
@@ -58,23 +77,36 @@ class NativeRow {
 
   bool get valid {
     if (id.isEmpty || id.startsWith('_') || options.keys.any((id) => id.isEmpty)) return false;
+    if (imageUri != null) {
+      final uri = Uri.tryParse(imageUri!);
+      if (imageUri!.length > 4096 ||
+          uri == null ||
+          uri.userInfo.isNotEmpty ||
+          !((uri.scheme == 'https' && uri.host.isNotEmpty) ||
+              (uri.scheme == 'file' && uri.host.isEmpty && uri.path.startsWith('/')))) {
+        return false;
+      }
+    }
     if (maximumLength != null && (kind != 'text' || maximumLength! < 1 || maximumLength! > 10000)) return false;
     if (points.length > 10000 ||
         points.map((point) => point['x']).toSet().length != points.length ||
-        points.any((point) =>
-            point['x'] is! num ||
-            point['y'] is! num ||
-            !(point['x'] as num).isFinite ||
-            !(point['y'] as num).isFinite)) {
+        points.any(
+          (point) =>
+              point['x'] is! num ||
+              point['y'] is! num ||
+              !(point['x'] as num).isFinite ||
+              !(point['y'] as num).isFinite,
+        )) {
       return false;
     }
     if (minimumDate != null && !_validDate(minimumDate!)) return false;
+    if (kind == 'waveform' && points.any((point) => (point['y'] as num).abs() > 1)) return false;
     return switch (kind) {
       'toggle' || 'task' => value is bool,
       'choice' => value is String && options.containsKey(value),
       'text' => value is String && (value as String).characters.length <= (maximumLength ?? 10000),
       'date' => value is String && ((value as String).isEmpty || _validDate(value as String)),
-      'label' || 'button' || 'menu' || 'message_user' || 'message_ai' || 'chart' => value == null,
+      'label' || 'button' || 'menu' || 'message_user' || 'message_ai' || 'chart' || 'waveform' => value == null,
       _ => false,
     };
   }
@@ -96,11 +128,13 @@ class NativeRow {
 }
 
 /// Dispatches only commands from the current provider projection.
-Future<void> dispatchNativeAction(MethodCall call,
-    {required bool Function() isActive,
-    required Iterable<NativeRow> rows,
-    NativeAction? refresh,
-    NativeAction? search}) async {
+Future<void> dispatchNativeAction(
+  MethodCall call, {
+  required bool Function() isActive,
+  required Iterable<NativeRow> rows,
+  NativeAction? refresh,
+  NativeAction? search,
+}) async {
   if (!isActive()) throw PlatformException(code: 'native_session_ended');
   if (call.method != 'action' || call.arguments is! Map) throw PlatformException(code: 'invalid_native_action');
   final args = call.arguments as Map;
@@ -118,12 +152,13 @@ Future<void> dispatchNativeAction(MethodCall call,
 }
 
 class NativeChat {
-  const NativeChat(
-      {required this.draft,
-      required this.placeholder,
-      required this.actions,
-      this.streaming = false,
-      this.followup = ''});
+  const NativeChat({
+    required this.draft,
+    required this.placeholder,
+    required this.actions,
+    this.streaming = false,
+    this.followup = '',
+  });
   final String draft, placeholder, followup;
   final bool streaming;
   final List<NativeRow> actions;
@@ -150,27 +185,33 @@ class NativeSection {
 
 /// Shared native list/form renderer. Each page supplies its existing callbacks and provider state.
 class IosNativeSurface extends StatefulWidget {
-  const IosNativeSurface(
-      {super.key,
-      required this.title,
-      required this.sections,
-      required this.fallback,
-      this.toolbar = const [],
-      this.loading = false,
-      this.failed = false,
-      this.empty = '',
-      this.onRefresh,
-      this.search,
-      this.searchValue = '',
-      this.searchPlaceholder = '',
-      this.publicSurface = false,
-      this.chat});
+  const IosNativeSurface({
+    super.key,
+    required this.title,
+    required this.sections,
+    required this.fallback,
+    this.toolbar = const [],
+    this.loading = false,
+    this.failed = false,
+    this.empty = '',
+    this.onRefresh,
+    this.search,
+    this.searchValue = '',
+    this.searchPlaceholder = '',
+    this.publicSurface = false,
+    this.nativeOwner,
+    this.chat,
+  });
 
   final NativeChat? chat;
   final String title, empty, searchValue, searchPlaceholder;
   final List<NativeSection> sections;
   final List<NativeRow> toolbar;
   final Widget fallback;
+
+  /// Mount an existing service-owning widget only when the native renderer is active.
+  /// It receives lifecycle events but contributes no Flutter presentation or animation.
+  final Widget? nativeOwner;
   final bool loading, failed, publicSurface;
   final NativeAction? onRefresh, search;
 
@@ -197,8 +238,9 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
     var publicOwnerValid = true;
     final publicSurface = widget.publicSurface;
     _session = NativeReadSession(
-        isCurrent: () =>
-            publicSurface ? publicOwnerValid : owner != null && AuthService.instance.isSessionSnapshotCurrent(owner));
+      isCurrent: () =>
+          publicSurface ? publicOwnerValid : owner != null && AuthService.instance.isSessionSnapshotCurrent(owner),
+    );
     _auth = AuthService.instance.sessionGenerationEvents.listen((_) {
       publicOwnerValid = false;
       if (!_session.active) {
@@ -231,11 +273,17 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
       };
 
   Future<Object?> _handle(MethodCall call) async {
-    await dispatchNativeAction(call,
-        isActive: () => _session.active && mounted,
-        rows: [...widget.toolbar, ...widget.sections.expand((section) => section.rows), ...?widget.chat?.actions],
-        refresh: widget.onRefresh,
-        search: widget.search);
+    await dispatchNativeAction(
+      call,
+      isActive: () => _session.active && mounted,
+      rows: [
+        ...widget.toolbar,
+        ...widget.sections.expand((section) => section.rows),
+        ...?widget.chat?.actions,
+      ],
+      refresh: widget.onRefresh,
+      search: widget.search,
+    );
     if (mounted && _session.active) _schedule();
     return null;
   }
@@ -254,7 +302,10 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
     final channel = _channel;
     if (channel == null) return;
     try {
-      await channel.invokeMethod<void>(_session.active ? 'update' : 'invalidate', _session.active ? _snapshot() : null);
+      await channel.invokeMethod<void>(
+        _session.active ? 'update' : 'invalidate',
+        _session.active ? _snapshot() : null,
+      );
     } on MissingPluginException {
       if (mounted && identical(channel, _channel)) rethrow;
     }
@@ -267,12 +318,18 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
     channel.setMethodCallHandler(null);
     try {
       await channel.invokeMethod<void>('invalidate');
-    } on MissingPluginException {/* Already detached. */}
+    } on MissingPluginException {
+      /* Already detached. */
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final rows = [...widget.toolbar, ...widget.sections.expand((section) => section.rows), ...?widget.chat?.actions];
+    final rows = [
+      ...widget.toolbar,
+      ...widget.sections.expand((section) => section.rows),
+      ...?widget.chat?.actions,
+    ];
     if (!iosSwiftUiEnabled ||
         rows.any((row) => !row.valid) ||
         rows.map((row) => row.id).toSet().length != rows.length ||
@@ -283,33 +340,51 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
     context.watch<AppearanceProvider>();
     _schedule();
     return FutureBuilder<bool>(
-        future: _supported,
-        builder: (context, support) {
-          if (support.hasError) return widget.fallback;
-          if (support.connectionState != ConnectionState.done) return const OmiLoadingState();
-          if (support.data != true) return widget.fallback;
-          if (!_session.active) return const SizedBox.shrink();
-          return UiKitView(
-              viewType: 'com.omi.native_ui/surface',
-              creationParams: _snapshot(),
-              creationParamsCodec: const StandardMessageCodec(),
-              onPlatformViewCreated: (id) {
-                final channel = MethodChannel('com.omi.native_ui/surface/$id');
-                if (!mounted || !_session.active) {
-                  unawaited(_invalidateDetached(channel));
-                  return;
-                }
-                unawaited(_invalidate());
-                _channel = channel..setMethodCallHandler(_handle);
-                _schedule();
-              });
-        });
+      future: _supported,
+      builder: (context, support) {
+        if (support.hasError) return widget.fallback;
+        if (support.connectionState != ConnectionState.done) return const OmiLoadingState();
+        if (support.data != true) return widget.fallback;
+        if (!_session.active) return const SizedBox.shrink();
+        final view = UiKitView(
+          viewType: 'com.omi.native_ui/surface',
+          creationParams: _snapshot(),
+          creationParamsCodec: const StandardMessageCodec(),
+          onPlatformViewCreated: (id) {
+            final channel = MethodChannel('com.omi.native_ui/surface/$id');
+            if (!mounted || !_session.active) {
+              unawaited(_invalidateDetached(channel));
+              return;
+            }
+            unawaited(_invalidate());
+            _channel = channel..setMethodCallHandler(_handle);
+            _schedule();
+          },
+        );
+        return widget.nativeOwner == null
+            ? view
+            : Stack(
+                fit: StackFit.expand,
+                children: [
+                  view,
+                  Offstage(
+                    child: TickerMode(
+                      enabled: false,
+                      child: widget.nativeOwner!,
+                    ),
+                  ),
+                ],
+              );
+      },
+    );
   }
 
   Future<void> _invalidateDetached(MethodChannel channel) async {
     try {
       await channel.invokeMethod<void>('invalidate');
-    } on MissingPluginException {/* View detached. */}
+    } on MissingPluginException {
+      /* View detached. */
+    }
   }
 
   @override

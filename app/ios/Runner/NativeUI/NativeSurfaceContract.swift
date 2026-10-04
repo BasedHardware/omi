@@ -13,6 +13,7 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
     let symbol: String?
     let minimumDate: String?
     let maximumLength: Int?
+    let imageUri: String?
     struct Point: Decodable, Equatable, Identifiable {
         let x: Double; let y: Double; let label: String
         var id: Double { x }
@@ -92,17 +93,29 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
               Set(snapshot.sections.map(\.id)).count == snapshot.sections.count,
               Set(ids).count == ids.count, !ids.contains(where: { $0.isEmpty || $0.hasPrefix("_") }),
               rows.allSatisfy({ row in
-                  ["label", "button", "toggle", "task", "choice", "text", "menu", "date", "message_user", "message_ai", "chart"].contains(row.kind)
+                  ["label", "button", "toggle", "task", "choice", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform"].contains(row.kind)
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
+                      && row.hasValidImageURI
                       && (row.maximumLength == nil || (row.kind == "text" && (1...10000).contains(row.maximumLength ?? 0)))
                       && (row.minimumDate == nil || Double(row.minimumDate ?? "").map { $0.isFinite && abs($0) <= 8640000000000000 } == true)
                       && (row.points ?? []).count <= 10000
                       && (row.points ?? []).allSatisfy { $0.x.isFinite && $0.y.isFinite }
+                      && (row.kind != "waveform" || (row.points ?? []).allSatisfy { abs($0.y) <= 1 })
                       && Set((row.points ?? []).map(\.x)).count == (row.points ?? []).count
               }) else { throw ContractError.invalidSnapshot }
         return snapshot
     }
     enum ContractError: Error { case invalidSnapshot }
+}
+
+private extension NativeSurfaceRow {
+    var hasValidImageURI: Bool {
+        guard let imageUri else { return true }
+        guard imageUri.count <= 4096, let url = URL(string: imageUri),
+              url.user == nil, url.password == nil else { return false }
+        return (url.scheme == "https" && !(url.host ?? "").isEmpty)
+            || (url.isFileURL && (url.host ?? "").isEmpty && url.path.hasPrefix("/"))
+    }
 }

@@ -53,6 +53,26 @@ struct NativeSurfaceTests {
         text["maximumLength"] = 0
         input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [text]]]
         rejects(input)
+        var image = row
+        for uri in ["https://example.com/a.jpg", "file:///sandbox/a.jpg"] {
+            image["imageUri"] = uri
+            input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [image]]]
+            _ = try NativeSurfaceSnapshot.decode(input)
+        }
+        for uri in ["http://example.com/a", "file://other-host/a", "https://user:password@example.com/a", "javascript:alert(1)"] {
+            image["imageUri"] = uri
+            input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [image]]]
+            rejects(input)
+        }
+        var wave = row
+        wave["kind"] = "waveform"
+        wave.removeValue(forKey: "value")
+        wave["points"] = [["x": 0, "y": 0.5, "label": ""]]
+        input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [wave]]]
+        _ = try NativeSurfaceSnapshot.decode(input)
+        wave["points"] = [["x": 0, "y": 2, "label": ""]]
+        input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [wave]]]
+        rejects(input)
         print("Native surface contract: typed values, command IDs, uniqueness and invalidation passed")
     }
     static func rejects(_ input: Any) {

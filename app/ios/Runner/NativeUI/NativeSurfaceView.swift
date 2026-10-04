@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import ImageIO
 
 @available(iOS 16.0, *)
 @MainActor
@@ -179,7 +180,11 @@ struct NativeSurfaceView: View {
                     ForEach(row.options) { option in
                         Button(option.title) { Task { await state.send(row.id, value: option.id) } }
                     }
-                } label: { actionLabel(row, compact: compact) }
+                } label: {
+                    actionLabel(row, compact: compact)
+                        .frame(minWidth: compact ? 44 : 0, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
             case "toggle":
                 Toggle(isOn: Binding(get: { row.value?.bool ?? false }, set: { value in
                     Task { await state.send(row.id, value: value) }
@@ -222,6 +227,12 @@ struct NativeSurfaceView: View {
                             .accessibilityLabel(row.title)
                     } else { Text(row.subtitle).foregroundStyle(.secondary) }
                 }
+            case "waveform":
+                Chart(row.points ?? []) { point in
+                    BarMark(x: .value(row.title, point.x), yStart: .value(row.title, -point.y), yEnd: .value(row.title, point.y))
+                }.frame(height: 36).chartYScale(domain: -1...1)
+                    .chartXAxis(.hidden).chartYAxis(.hidden)
+                    .accessibilityLabel(row.title)
             case "message_user", "message_ai":
                 message(row)
             case "text":
@@ -230,7 +241,7 @@ struct NativeSurfaceView: View {
             default: action(row, compact: compact)
             }
         }
-        .disabled(!row.enabled && !["label", "chart", "message_ai", "message_user"].contains(row.kind) || (state.pending.contains(row.id) && row.kind != "text"))
+        .disabled(!row.enabled && !["label", "chart", "waveform", "message_ai", "message_user"].contains(row.kind) || (state.pending.contains(row.id) && row.kind != "text"))
         .accessibilityIdentifier(row.id)
     }
 
@@ -275,6 +286,10 @@ struct NativeSurfaceView: View {
                     .onChange(of: state.snapshot.sections) { _ in
                         if followingChat { reader.scrollTo("native-chat-bottom", anchor: .bottom) }
                     }
+                    .onChange(of: state.completedChatSend) { _ in
+                        followingChat = true
+                        reader.scrollTo("native-chat-bottom", anchor: .bottom)
+                    }
                     .safeAreaInset(edge: .bottom) {
                         NativeGlassControls {
                             VStack(spacing: 10) {
@@ -282,14 +297,14 @@ struct NativeSurfaceView: View {
                                     Button(chat.followup) { Task { await state.send("chat_followup") } }
                                         .modifier(NativeGlassButtonStyle()).lineLimit(2)
                                 }
+                                ForEach(chat.actions.filter { ["label", "waveform"].contains($0.kind) }) { row in
+                                    rowView(row)
+                                }
                                 HStack(alignment: .bottom, spacing: 10) {
-                                    ForEach(chat.actions.filter { $0.id != "chat_followup" }) { row in
+                                    ForEach(chat.actions.filter { $0.id != "chat_followup" && !["label", "waveform"].contains($0.kind) }) { row in
                                         if row.kind == "text" { rowView(row).padding(12).modifier(NativeGlassComposerStyle()) }
                                         else {
-                                            Button {
-                                                followingChat = true
-                                                Task { await state.send(row.id) }
-                                            } label: { actionLabel(row, iconOnly: true).frame(minWidth: 44, minHeight: 44) }
+                                            rowView(row, compact: true).frame(minWidth: 44, minHeight: 44)
                                                 .modifier(NativeGlassButtonStyle())
                                                 .disabled(!row.enabled || state.pending.contains(row.id))
                                                 .accessibilityIdentifier(row.id)
@@ -341,10 +356,59 @@ struct NativeSurfaceView: View {
     }
 
     private func label(_ row: NativeSurfaceRow) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(row.title).foregroundStyle(row.destructive ? Color.red : Color.primary)
-            if !row.subtitle.isEmpty { Text(row.subtitle).font(.subheadline).foregroundStyle(.secondary) }
+        HStack(spacing: 12) {
+            if let uri = row.imageUri { NativeThumbnail(uri: uri) }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.title).foregroundStyle(row.destructive ? Color.red : Color.primary)
+                if !row.subtitle.isEmpty { Text(row.subtitle).font(.subheadline).foregroundStyle(.secondary) }
+            }
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Local images come from the existing file-selection owner. Remote thumbnails are presentation
+/// assets only; authentication, upload and API requests remain with the current Dart services.
+@available(iOS 16.0, *)
+private struct NativeThumbnail: View {
+    let uri: String
+    @Environment(\.displayScale) private var displayScale
+    @State private var localImage: UIImage?
+
+    var body: some View {
+        Group {
+            if let url = URL(string: uri), url.isFileURL {
+                if let localImage { Image(uiImage: localImage).resizable().scaledToFill() }
+                else { Image(systemName: "photo").foregroundStyle(.secondary) }
+            } else {
+                AsyncImage(url: URL(string: uri)) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else if phase.error != nil { Image(systemName: "photo").foregroundStyle(.secondary) }
+                    else { ProgressView() }
+                }
+            }
+        }.frame(width: 72, height: 64).clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .accessibilityHidden(true)
+            .task(id: uri) {
+                localImage = nil
+                guard let url = URL(string: uri), url.isFileURL else { return }
+                let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+                let root = URL(fileURLWithPath: NSHomeDirectory()).resolvingSymlinksInPath().standardizedFileURL.path
+                guard path.hasPrefix(root + "/") else { return }
+                guard displayScale.isFinite, displayScale > 0, displayScale <= 10 else { return }
+                let maxPixels = Int((72 * displayScale).rounded(.up))
+                let image = await Task.detached(priority: .userInitiated) {
+                    guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil as CGImage? }
+                    return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceCreateThumbnailWithTransform: true,
+                        kCGImageSourceThumbnailMaxPixelSize: maxPixels,
+                        kCGImageSourceShouldCacheImmediately: true,
+                    ] as CFDictionary)
+                }.value
+                guard !Task.isCancelled else { return }
+                if let image { localImage = UIImage(cgImage: image) }
+            }
     }
 }
 

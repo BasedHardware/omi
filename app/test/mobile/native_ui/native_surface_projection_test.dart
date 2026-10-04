@@ -54,6 +54,35 @@ void main() {
     expect(text.accepts(List.filled(10001, 'x').join()), false);
     expect(text.accepts(true), false);
   });
+  test('thumbnails allow selected local files and HTTPS assets only', () {
+    expect(nativeImageUri('/sandbox/my photo.jpg'), 'file:///sandbox/my%20photo.jpg');
+    expect(nativeImageUri('https://assets.example/image.jpg'), 'https://assets.example/image.jpg');
+    for (final uri in [
+      'javascript:alert(1)',
+      'http://example.com/a',
+      'file://other-host/a',
+      'https://user:password@example.com/a',
+      'relative.png'
+    ]) {
+      expect(nativeImageUri(uri), isNull);
+      expect(NativeRow('image', 'Image', imageUri: uri).valid, false);
+    }
+    expect(nativeImageUri('/${' ' * 4095}'), isNull);
+  });
+  test('native voice waveform rejects malformed amplitudes', () {
+    expect(
+        const NativeRow('wave', 'Recording', kind: 'waveform', points: [
+          {'x': 0, 'y': .5, 'label': ''}
+        ]).valid,
+        true);
+    for (final y in [double.nan, double.infinity, 2]) {
+      expect(
+          NativeRow('wave', 'Recording', kind: 'waveform', points: [
+            {'x': 0, 'y': y, 'label': ''}
+          ]).valid,
+          false);
+    }
+  });
   test('nested settings groups keep unique identities', () {
     final groups = nativeSettingsSections([
       Column(children: [
