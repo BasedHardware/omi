@@ -196,3 +196,34 @@ def test_non_api_error_diagnostic_includes_exception_type(cache, caplog):
         flags.enabled('private-uid')
     assert 'error_type=TimeoutError http_status=unknown' in caplog.text
     assert 'private' not in caplog.text
+
+
+@pytest.mark.parametrize('raw', ['phc_token\n', '  phc_token \r\n'])
+def test_flag_client_strips_secret_mounted_whitespace(monkeypatch, raw):
+    constructed = {}
+
+    class FakePosthog:
+        def __init__(self, **kwargs):
+            constructed.update(kwargs)
+
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', raw)
+    monkeypatch.setenv('POSTHOG_HOST', 'https://us.posthog.com\n')
+    monkeypatch.setattr(flags.importlib, 'import_module', lambda name: SimpleNamespace(Posthog=FakePosthog))
+    flags.flag_client.cache_clear()
+    try:
+        flags.flag_client()
+    finally:
+        flags.flag_client.cache_clear()
+    assert constructed['project_api_key'] == 'phc_token'
+    assert constructed['host'] == 'https://us.posthog.com'
+
+
+def test_flag_client_whitespace_only_key_is_unavailable(monkeypatch):
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', ' \n')
+    monkeypatch.delenv('POSTHOG_API_KEY', raising=False)
+    flags.flag_client.cache_clear()
+    try:
+        with pytest.raises(ProactivityDenied):
+            flags.flag_client()
+    finally:
+        flags.flag_client.cache_clear()

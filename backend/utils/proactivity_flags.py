@@ -74,12 +74,13 @@ def _error_result(exc: Exception, expires_at: float) -> _FlagResult:
 
 @lru_cache(maxsize=1)
 def flag_client() -> Any:
-    key = os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY')
+    # Secret-mounted tokens can carry a trailing newline: capture tolerates it, /decide returns 401.
+    key = (os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY') or '').strip()
     if not key:
         raise ProactivityDenied('flag_unavailable')
     return importlib.import_module('posthog').Posthog(
         project_api_key=key,
-        host=os.getenv('POSTHOG_HOST', 'https://app.posthog.com'),
+        host=(os.getenv('POSTHOG_HOST') or 'https://app.posthog.com').strip(),
         send=False,
         sync_mode=True,
         feature_flags_request_timeout_seconds=2,
