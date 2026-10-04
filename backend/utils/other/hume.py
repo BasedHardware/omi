@@ -101,17 +101,40 @@ class HumeJobModelPredictionResponseModel:
         cls, prediction_model: str, data: Dict[str, Any]
     ) -> List["HumeJobModelPredictionResponseModel"]:
         model: List[HumeJobModelPredictionResponseModel] = []
-        if "results" not in data or "predictions" not in data["results"]:
+        if not isinstance(data, dict):
+            return model
+        results = data.get("results")
+        if not isinstance(results, dict):
+            return model
+        raw_predictions = results.get("predictions")
+        if not isinstance(raw_predictions, list):
             return model
 
-        for prediction in data["results"]["predictions"]:
+        for prediction in raw_predictions:
             # A failed or partial Hume job can omit the requested model, grouped_predictions, or the
             # inner predictions list; guard the nested lookups so one malformed prediction yields no
-            # emotions instead of a KeyError that 500s the whole callback (mirrors the .get(...) style
-            # used elsewhere in this module).
-            grouped_predictions = prediction.get('models', {}).get(prediction_model, {}).get('grouped_predictions', [])
+            # emotions instead of an AttributeError/KeyError that 500s the whole callback.
+            if not isinstance(prediction, dict):
+                continue
+            models = prediction.get('models')
+            if not isinstance(models, dict):
+                continue
+            model_data = models.get(prediction_model)
+            if not isinstance(model_data, dict):
+                continue
+            grouped_predictions = model_data.get('grouped_predictions')
+            if not isinstance(grouped_predictions, list):
+                continue
+
             for grouped_prediction in grouped_predictions:
-                for grouped_prediction_prediction in grouped_prediction.get('predictions', []):
+                if not isinstance(grouped_prediction, dict):
+                    continue
+                inner_predictions = grouped_prediction.get('predictions')
+                if not isinstance(inner_predictions, list):
+                    continue
+                for grouped_prediction_prediction in inner_predictions:
+                    if not isinstance(grouped_prediction_prediction, dict):
+                        continue
                     model.append(cls.from_dict(grouped_prediction_prediction))
 
         return model
@@ -130,10 +153,16 @@ class HumeJobCallbackModel:
 
     @classmethod
     def from_dict(cls, prediction_model: str, data: Dict[str, Any]) -> "HumeJobCallbackModel":
+        if not isinstance(data, dict):
+            return cls(None, None, [])
+
         # predictions[0] -> results -> predictions
         predictions: List[HumeJobModelPredictionResponseModel] = []
-        if "predictions" in data and len(data["predictions"]) > 0:
-            predictions = HumeJobModelPredictionResponseModel.from_multi_dict(prediction_model, data["predictions"][0])
+        raw_predictions = data.get("predictions")
+        if isinstance(raw_predictions, list) and len(raw_predictions) > 0:
+            first_pred = raw_predictions[0]
+            if isinstance(first_pred, dict):
+                predictions = HumeJobModelPredictionResponseModel.from_multi_dict(prediction_model, first_pred)
 
         model = cls(data.get("job_id"), data.get("status"), predictions)
         return model

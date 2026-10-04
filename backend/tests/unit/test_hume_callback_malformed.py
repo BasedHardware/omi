@@ -110,3 +110,61 @@ def test_from_multi_dict_parses_valid_payload():
     result = HumeJobModelPredictionResponseModel.from_multi_dict("prosody", data)
     assert len(result) == 1
     assert [e.name for e in result[0].emotions] == ["joy"]
+
+
+def test_from_multi_dict_non_dict_elements_resilience():
+    # Non-dict data, results, or predictions list elements must not raise AttributeError
+    assert HumeJobModelPredictionResponseModel.from_multi_dict("prosody", None) == []
+    assert HumeJobModelPredictionResponseModel.from_multi_dict("prosody", "string") == []
+    assert HumeJobModelPredictionResponseModel.from_multi_dict("prosody", {"results": "string"}) == []
+    assert HumeJobModelPredictionResponseModel.from_multi_dict("prosody", {"results": {"predictions": "string"}}) == []
+
+    # Non-dict items inside predictions, models, or grouped_predictions
+    malformed = {
+        "results": {
+            "predictions": [
+                "not-a-dict",
+                None,
+                {"models": "not-a-dict"},
+                {"models": {"prosody": "not-a-dict"}},
+                {"models": {"prosody": {"grouped_predictions": ["not-a-dict"]}}},
+                {"models": {"prosody": {"grouped_predictions": [{"predictions": ["not-a-dict"]}]}}},
+                {
+                    "models": {
+                        "prosody": {
+                            "grouped_predictions": [
+                                {
+                                    "predictions": [
+                                        {"time": {"begin": 1.0, "end": 2.0}, "emotions": [{"name": "calm", "score": 0.8}]}
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+            ]
+        }
+    }
+    result = HumeJobModelPredictionResponseModel.from_multi_dict("prosody", malformed)
+    assert len(result) == 1
+    assert result[0].time == (1.0, 2.0)
+    assert [e.name for e in result[0].emotions] == ["calm"]
+
+
+def test_callback_from_dict_non_dict_data_resilience():
+    # Top-level non-dict payloads or predictions
+    m1 = HumeJobCallbackModel.from_dict("prosody", None)
+    assert m1.job_id is None
+    assert m1.predictions == []
+
+    m2 = HumeJobCallbackModel.from_dict("prosody", "string")
+    assert m2.job_id is None
+    assert m2.predictions == []
+
+    m3 = HumeJobCallbackModel.from_dict("prosody", {"job_id": "j2", "predictions": "string"})
+    assert m3.job_id == "j2"
+    assert m3.predictions == []
+
+    m4 = HumeJobCallbackModel.from_dict("prosody", {"job_id": "j3", "predictions": [None]})
+    assert m4.job_id == "j3"
+    assert m4.predictions == []
