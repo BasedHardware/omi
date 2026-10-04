@@ -1035,5 +1035,116 @@
       "server_live_p99": 2.1333333333333346,
       "profile": "staggered-24s-eight"
     }
-  ]
+  ],
+  "cost_model": {
+    "instantaneous_queries": [
+      {
+        "period": "1d",
+        "stat": "avg_over_time",
+        "query": "avg_over_time((clamp_max(clamp_min((max(label_replace(ceil((sum(parakeet_active_batch_requests{namespace=\"prod-omi-backend\"})+sum(parakeet_active_streams{namespace=\"prod-omi-backend\"})) / 3),\"signal\",\"requests\",\"__name__\",\".*\") or label_replace(ceil((sum(kube_deployment_status_replicas{namespace=\"prod-omi-backend\",deployment=\"prod-omi-parakeet\"})) * (avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{namespace=\"prod-omi-backend\"}[1m]))) / 45),\"signal\",\"gpu\",\"__name__\",\".*\"))),3),7))[1d:1m])",
+        "result": {
+          "status": "success",
+          "data": {
+            "resultType": "vector",
+            "result": [
+              {
+                "metric": {},
+                "value": [
+                  1791114311.213,
+                  "3.0597222222222222"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "period": "1d",
+        "stat": "max_over_time",
+        "query": "max_over_time((clamp_max(clamp_min((max(label_replace(ceil((sum(parakeet_active_batch_requests{namespace=\"prod-omi-backend\"})+sum(parakeet_active_streams{namespace=\"prod-omi-backend\"})) / 3),\"signal\",\"requests\",\"__name__\",\".*\") or label_replace(ceil((sum(kube_deployment_status_replicas{namespace=\"prod-omi-backend\",deployment=\"prod-omi-parakeet\"})) * (avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{namespace=\"prod-omi-backend\"}[1m]))) / 45),\"signal\",\"gpu\",\"__name__\",\".*\"))),3),7))[1d:1m])",
+        "result": {
+          "status": "success",
+          "data": {
+            "resultType": "vector",
+            "result": [
+              {
+                "metric": {},
+                "value": [
+                  1791114312.937,
+                  "7"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "period": "7d",
+        "stat": "avg_over_time",
+        "query": "avg_over_time((clamp_max(clamp_min((max(label_replace(ceil((sum(parakeet_active_batch_requests{namespace=\"prod-omi-backend\"})+sum(parakeet_active_streams{namespace=\"prod-omi-backend\"})) / 3),\"signal\",\"requests\",\"__name__\",\".*\") or label_replace(ceil((sum(kube_deployment_status_replicas{namespace=\"prod-omi-backend\",deployment=\"prod-omi-parakeet\"})) * (avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{namespace=\"prod-omi-backend\"}[1m]))) / 45),\"signal\",\"gpu\",\"__name__\",\".*\"))),3),7))[7d:1m])",
+        "result": {
+          "status": "success",
+          "data": {
+            "resultType": "vector",
+            "result": [
+              {
+                "metric": {},
+                "value": [
+                  1791114314.46,
+                  "3.215945194598888"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "period": "7d",
+        "stat": "max_over_time",
+        "query": "max_over_time((clamp_max(clamp_min((max(label_replace(ceil((sum(parakeet_active_batch_requests{namespace=\"prod-omi-backend\"})+sum(parakeet_active_streams{namespace=\"prod-omi-backend\"})) / 3),\"signal\",\"requests\",\"__name__\",\".*\") or label_replace(ceil((sum(kube_deployment_status_replicas{namespace=\"prod-omi-backend\",deployment=\"prod-omi-parakeet\"})) * (avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{namespace=\"prod-omi-backend\"}[1m]))) / 45),\"signal\",\"gpu\",\"__name__\",\".*\"))),3),7))[7d:1m])",
+        "result": {
+          "status": "success",
+          "data": {
+            "resultType": "vector",
+            "result": [
+              {
+                "metric": {},
+                "value": [
+                  1791114319.796,
+                  "7"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "approximate_stabilized_replay": [
+      {
+        "period": "1d",
+        "mean_replicas": 3.433032616238723,
+        "max": 6,
+        "samples": 1441,
+        "node_hours_month": 2506.113809854268,
+        "cost_month": 1536.2477654406662,
+        "saving_vs_five": 701.2022345593338
+      },
+      {
+        "period": "7d",
+        "mean_replicas": 3.992852179092624,
+        "max": 7,
+        "samples": 10073,
+        "node_hours_month": 2914.7820907376154,
+        "cost_month": 1786.7614216221582,
+        "saving_vs_five": 450.6885783778417
+      }
+    ],
+    "dollars_per_node_hour": 0.613,
+    "hours_per_month": 730,
+    "assumed_baseline_nodes": 5,
+    "planning_mean_nodes": [
+      3.5,
+      4.2
+    ]
+  }
 }

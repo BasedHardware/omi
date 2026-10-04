@@ -190,18 +190,31 @@ aggregates yielded 3.06 pods over 24 h and 3.22 over seven days, with peaks at
 seven. This omits HPA tolerance/stabilization, cold start, node retention,
 changed admission and correlated peaks. It is a planning model, not a forecast.
 
+A second replay adds a rolling ten-minute downscale recommendation maximum,
++1/minute scale-up, and -1/ten-minute scale-down, delaying downscale for ten
+minutes after scale-up. It starts at three and replays seven days of minute
+samples: mean 3.43 over the final day, 3.99 over the full week, peaks six/seven.
+That is 2,506–2,915 pod-hours/month and $1,536–1,787 before node-retention lag:
+$451–701 saved against five nodes. This approximate replay omits tolerance,
+missing/not-ready pod metric handling, recomputed GPU utilization under changed
+replica counts, provisioning time, and admission changes. Allow **3.5–4.2 mean
+nodes** when budgeting retention/lag; a production bake must measure actual node
+hours. The weekly snapshot includes rollout/traffic changes, not a stationary
+future traffic forecast.
+
 At 730 h/month and $0.613/node-hour:
 
 | Scenario | Mean nodes | Node-hours/month | GPU node cost/month |
 | --- | ---: | ---: | ---: |
 | Supplied baseline | 5 | 3,650 | $2,237 |
-| Planning allowance for lag/retention | 3.4–3.7 | 2,482–2,701 | $1,521–1,656 |
+| Planning allowance for lag/retention | 3.5–4.2 | 2,555–3,066 | $1,566–1,879 |
 | Three-node floor only | 3 | 2,190 | $1,342 |
 
-Expected planning saving versus five nodes: **$581–716/month**; floor-only
+Expected planning saving versus five nodes: **$358–671/month**; floor-only
 maximum $895/month. Each removed average node saves $447/month. Actual observed
-node averages were 5.27 over 24 h and 3.83 over seven days; savings relative to
-that seven-day baseline are only about $56–190/month at the planning allowance.
+node averages were 5.27 over 24 h and 3.83 over seven days; the proposed planning range would save $146/month to **cost $168/month more**
+relative to that seven-day baseline. Savings depend on the baseline and are not
+guaranteed by the historical week.
 This covers GPU nodes only and excludes fallback-provider costs.
 
 ## Risks and acceptance before a production change
