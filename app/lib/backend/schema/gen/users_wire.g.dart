@@ -835,16 +835,22 @@ class GeneratedPeriodRecapStats {
 }
 
 class GeneratedPeriodRecapPrevious {
+  final String endDate;
+  final String startDate;
   final int totalConversations;
   final int totalDurationMinutes;
 
   const GeneratedPeriodRecapPrevious({
+    required this.endDate,
+    required this.startDate,
     this.totalConversations = 0,
     this.totalDurationMinutes = 0,
   });
 
   factory GeneratedPeriodRecapPrevious.fromJson(Map<String, dynamic> json) {
     return GeneratedPeriodRecapPrevious(
+      endDate: _required(_readFieldValue<String>(_readField(json, const ["end_date"]), "end_date", _readString, requiredField: true, nullable: false), "end_date"),
+      startDate: _required(_readFieldValue<String>(_readField(json, const ["start_date"]), "start_date", _readString, requiredField: true, nullable: false), "start_date"),
       totalConversations: _required(_readFieldValue<int>(_readField(json, const ["total_conversations"]), "total_conversations", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_conversations"),
       totalDurationMinutes: _required(_readFieldValue<int>(_readField(json, const ["total_duration_minutes"]), "total_duration_minutes", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_duration_minutes"),
     );
@@ -852,6 +858,8 @@ class GeneratedPeriodRecapPrevious {
 
   Map<String, dynamic> toJson() {
     return {
+      'end_date': endDate,
+      'start_date': startDate,
       'total_conversations': totalConversations,
       'total_duration_minutes': totalDurationMinutes,
     };
@@ -985,13 +993,15 @@ class GeneratedPeriodRecapQuestion {
 class GeneratedPeriodRecapActionItem {
   final String date;
   final String description;
-  final String? priority;
+  final String? dueAt;
+  final String id;
   final String? sourceConversationId;
 
   const GeneratedPeriodRecapActionItem({
     required this.date,
     required this.description,
-    this.priority,
+    this.dueAt,
+    required this.id,
     this.sourceConversationId,
   });
 
@@ -999,7 +1009,8 @@ class GeneratedPeriodRecapActionItem {
     return GeneratedPeriodRecapActionItem(
       date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
-      priority: _readFieldValue<String>(_readField(json, const ["priority"]), "priority", _readString, requiredField: false, nullable: true),
+      dueAt: _readFieldValue<String>(_readField(json, const ["due_at"]), "due_at", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       sourceConversationId: _readFieldValue<String>(_readField(json, const ["source_conversation_id"]), "source_conversation_id", _readString, requiredField: false, nullable: true),
     );
   }
@@ -1008,7 +1019,8 @@ class GeneratedPeriodRecapActionItem {
     return {
       'date': date,
       'description': description,
-      'priority': priority,
+      'due_at': dueAt,
+      'id': id,
       'source_conversation_id': sourceConversationId,
     };
   }

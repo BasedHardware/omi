@@ -3447,7 +3447,8 @@ export interface PendingSyncResponse {
 export interface PeriodRecapActionItem {
   date: string;
   description: string;
-  priority?: string | null;
+  due_at?: string | null;
+  id: string;
   source_conversation_id?: string | null;
 }
 
@@ -3480,6 +3481,8 @@ export interface PeriodRecapPerson {
 }
 
 export interface PeriodRecapPrevious {
+  end_date: string;
+  start_date: string;
   total_conversations?: number;
   total_duration_minutes?: number;
 }

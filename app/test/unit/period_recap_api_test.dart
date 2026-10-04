@@ -13,10 +13,24 @@ const _recapJson = {
   'days_recorded': 3,
   'stats': {'total_conversations': 10, 'total_duration_minutes': 180},
   'busiest_day': {'date': '2026-10-01', 'total_conversations': 6, 'total_duration_minutes': 120},
+  'open_action_items': [
+    {
+      'id': 'task-1',
+      'date': '2026-09-29',
+      'description': 'Send revised numbers',
+      'source_conversation_id': 'c1',
+      'due_at': '2026-10-03T17:00:00+00:00',
+    },
+  ],
   'top_people': [
     {'person_id': 'p-sam', 'name': 'Sam', 'conversations': 4, 'talk_minutes': 25},
   ],
-  'previous': {'total_conversations': 5, 'total_duration_minutes': 100},
+  'previous': {
+    'start_date': '2026-09-21',
+    'end_date': '2026-09-24',
+    'total_conversations': 5,
+    'total_duration_minutes': 100,
+  },
 };
 
 void main() {
@@ -55,6 +69,22 @@ void main() {
       expect(recap.busiestDay!.date, '2026-10-01');
       expect(recap.topPeople!.single.name, 'Sam');
       expect(recap.previous!.totalConversations, 5);
+      expect((recap.previous!.startDate, recap.previous!.endDate), ('2026-09-21', '2026-09-24'));
+      final task = recap.openActionItems!.single;
+      expect((task.id, task.dueAt), ('task-1', '2026-10-03T17:00:00+00:00'));
+      expect((result as ApiSuccess).truncated, isFalse);
+    });
+
+    test('a cut-short recap is a success marked truncated', () async {
+      final result = await getPeriodRecap(
+        RecapPeriod.month,
+        baseUrl: 'https://api.omi.me/',
+        send: (_) async => http.Response(jsonEncode(_recapJson), 200, headers: {'x-omi-list-truncated': 'true'}),
+      );
+
+      final success = result as ApiSuccess;
+      expect(success.truncated, isTrue);
+      expect(success.data.topPeople!.single.name, 'Sam');
     });
 
     test('a server error is a failure, never an empty recap', () async {

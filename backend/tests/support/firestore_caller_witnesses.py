@@ -22,7 +22,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Iterable
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 
 import database.conversations as conversations_db
 import database.conversation_scan as conversation_scan
@@ -330,8 +330,17 @@ def _run_period_recap(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -
     _stub(monkeypatch, recaps_router.notification_db, 'get_user_time_zone', lambda uid: 'America/New_York')
     _stub(monkeypatch, recaps_router.daily_summaries_db, 'get_daily_summaries', lambda uid, **kwargs: [])
     _stub(monkeypatch, recaps_router, 'conversation_scan_budget', lambda request, route: None)
+    _stub(monkeypatch, recaps_router.action_items_db, 'get_action_items', lambda uid, **kwargs: [])
     for period in ('week', 'month'):
-        trial(capture, recaps_router.get_period_recap, request=None, period=period, date=None, uid='u1')
+        trial(
+            capture,
+            recaps_router.get_period_recap,
+            request=None,
+            response=Response(),
+            period=period,
+            date=None,
+            uid='u1',
+        )
 
 
 def _run_period_recap_recipe(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
