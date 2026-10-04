@@ -110,6 +110,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "voice:transcribe_stream": (60, 3600),
     "voice:message": (60, 3600),
     "file:upload": (40, 3600),
+    # Transcript imports: one upload can carry up to 1,000 files, so a person needs
+    # only a few an hour, and imports must not spend the chat file-upload bucket.
+    "import:upload": (10, 3600),
     # STT proxy — parakeet GPU batch transcription behind the Omi auth guard
     "stt:transcribe": (60, 3600),
     # Speaker tag prompts: each clip merges stored audio chunks; each answer may

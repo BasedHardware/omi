@@ -9,14 +9,17 @@ upload limits, and the job lifecycle.
 
 import codecs
 import io
+import struct
 import time
+import zipfile
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-from zipfile import ZIP_BZIP2, ZIP_DEFLATED, ZIP_LZMA, ZipFile
+from zipfile import ZIP_BZIP2, ZIP_DEFLATED, ZIP_LZMA, ZIP_STORED, ZipFile
 
 import pytest
 
+import database.conversations as conversations_db
 from models.conversation_enums import ConversationSource
 from models.import_job import ImportJobStatus, ImportSourceType
 from utils.imports import transcript_files as tf
@@ -659,3 +662,255 @@ def test_job_uses_its_own_source_type(monkeypatch):
 
     assert job.source_type == ImportSourceType.transcript_files
     assert created.call_args.args[0]['source_type'] == 'transcript_files'
+
+
+# --------------------------------------------------------------------------- parse limits
+
+
+def test_absurd_cue_hours_do_not_fail_the_file():
+    """A timestamp's hours are bounded, so one absurd cue is dropped instead of raising."""
+    srt = (
+        '1\n' + '9' * 5000 + ':00:00,000 --> 00:00:02,000\nNever spoken.\n\n'
+        '2\n99999999:00:00,000 --> 99999999:00:02,000\nAlso never spoken.\n\n'
+        '3\n00:00:03,000 --> 00:00:04,000\nHello there.\n'
+    )
+
+    parsed = tf.parse_transcript_file('call.srt', srt.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(c.text, c.start) for c in parsed.cues] == [('Hello there.', 3.0)]
+    assert tf._seconds('99999999:00:00') is None
+    assert tf._seconds('100:00:00') == 360000.0
+
+
+def test_inline_continuation_lines_build_each_cue_once(monkeypatch):
+    """Continuation lines are joined once, not re-copied into a new cue per line."""
+    built = []
+    cue = tf.TranscriptCue
+
+    def counting_cue(*args, **kwargs):
+        built.append(1)
+        return cue(*args, **kwargs)
+
+    monkeypatch.setattr(tf, 'TranscriptCue', counting_cue)
+    timed_lines = 200
+
+    cues = tf.parse_text_transcript('0:00 Okay, noted\n' * timed_lines + 'b\n' * timed_lines)
+
+    assert len(cues) == timed_lines
+    assert cues[-1].text == 'Okay, noted' + ' b' * timed_lines
+    assert len(built) <= timed_lines
+
+
+def test_future_filename_dates_are_clamped_to_now():
+    before = datetime.now(timezone.utc)
+
+    started_at = tf.started_at_from_filename('2999-01-01 10_00 call.txt', 'UTC')
+
+    assert started_at is not None
+    assert before <= started_at <= datetime.now(timezone.utc)
+
+
+@pytest.mark.parametrize(
+    ('filename', 'expected'),
+    [
+        pytest.param(' '.join(['meeting'] * 60) + '.txt', ' '.join(['meeting'] * 25), id='cut-at-word-boundary'),
+        pytest.param('x' * 300 + '.srt', 'x' * 200, id='one-long-word'),
+        pytest.param('Q3 ' + 'x' * 300 + '.vtt', 'Q3 ' + 'x' * 197, id='early-space-is-not-a-cut-point'),
+    ],
+)
+def test_long_titles_are_capped(filename, expected):
+    title = tf.title_from_filename(filename)
+
+    assert title == expected
+    assert len(title) <= 200
+
+
+# --------------------------------------------------------------------------- storage limits
+
+
+def test_file_over_the_segment_cap_is_skipped_before_segments_are_built(tmp_path, job, monkeypatch):
+    monkeypatch.setattr(tf, 'MAX_TRANSCRIPT_SEGMENTS', 3)
+    built = []
+    segments_from_cues = tf.segments_from_cues
+    monkeypatch.setattr(
+        tf, 'segments_from_cues', lambda cues, **kw: built.append(cues) or segments_from_cues(cues, **kw)
+    )
+
+    _run(tmp_path, 'call.srt', SRT.encode('utf-8'))
+
+    final = job.final()
+    assert final['status'] == ImportJobStatus.failed.value
+    assert final['error'] == 'None of the 1 file(s) could be imported (transcript too long).'
+    assert built == []
+    assert job.store.docs == {}
+
+
+@pytest.mark.parametrize(('budget', 'imported'), [(1000, True), (999, False)], ids=['at-budget', 'one-byte-over'])
+def test_stored_transcript_must_fit_the_document_budget(tmp_path, job, monkeypatch, budget, imported):
+    """The budget is measured on the blob the conversation write path itself encodes."""
+    encoded = []
+
+    def encode(uid, conversation_data, level='standard'):
+        encoded.append(conversation_data['transcript_segments'])
+        return {'transcript_segments': b'z' * 1000}
+
+    monkeypatch.setattr(tf.conversations_db, 'encode_conversation_for_write', encode)
+    monkeypatch.setattr(tf, 'MAX_COMPRESSED_TRANSCRIPT_BYTES', budget)
+
+    _run(tmp_path, 'call.srt', SRT.encode('utf-8'))
+
+    assert [segment['text'] for segment in encoded[0]][-1] == 'Agreed.'
+    final = job.final()
+    if imported:
+        assert final['status'] == ImportJobStatus.completed.value
+        assert len(job.store.docs) == 1
+    else:
+        assert final['error'] == 'None of the 1 file(s) could be imported (transcript too long).'
+        assert job.store.docs == {}
+
+
+def test_compressed_transcript_size_is_the_write_path_blob():
+    segments = [{'id': 's1', 'text': 'hello there', 'speaker': 'SPEAKER_00', 'start': 0.0, 'end': 1.0}]
+
+    size = tf._compressed_transcript_bytes(UID, segments)
+
+    assert size == len(
+        conversations_db.encode_conversation_for_write(UID, {'transcript_segments': segments})['transcript_segments']
+    )
+    assert segments[0]['text'] == 'hello there', 'measuring never mutates the payload'
+
+
+@pytest.mark.parametrize(('size', 'imported'), [(1024 * 1024, True), (1024 * 1024 + 1, False)], ids=['1MiB', 'over'])
+def test_transcript_files_are_capped_at_one_mebibyte(tmp_path, job, size, imported):
+    _run(tmp_path, 'notes.txt', b'x' * size)
+
+    final = job.final()
+    if imported:
+        assert final['status'] == ImportJobStatus.completed.value
+    else:
+        assert final['error'] == 'None of the 1 file(s) could be imported (file too large).'
+        assert job.store.docs == {}
+
+
+# --------------------------------------------------------------------------- archive limits
+
+
+def _end_of_directory(entries: int, directory_bytes: int, offset: int = 0) -> bytes:
+    return struct.pack('<4s4H2LH', b'PK\x05\x06', 0, 0, entries, entries, directory_bytes, offset, 0)
+
+
+def _zip64_end_of_directory(entries: int, directory_bytes: int) -> bytes:
+    record = struct.pack('<4sQ2H2L4Q', b'PK\x06\x06', 44, 45, 45, 0, 0, entries, entries, directory_bytes, 0)
+    locator = struct.pack('<4sLQL', b'PK\x06\x07', 0, 0, 1)
+    return record + locator + _end_of_directory(0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
+
+
+def _directory_entries(count: int) -> bytes:
+    """Central-directory records with no file data behind them (the cheap way to list many files)."""
+    entry = struct.pack('<4s4B4HL2L5H2L', b'PK\x01\x02', 20, 3, 20, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0)
+    return (entry + b'a.srt') * count
+
+
+@pytest.mark.parametrize(
+    'archive',
+    [
+        pytest.param(_directory_entries(25_000) + _end_of_directory(25_000, 50 * 25_000), id='many-real-entries'),
+        pytest.param(_end_of_directory(30_000, 0), id='many-declared-entries'),
+        pytest.param(_end_of_directory(10, 9 * 1024 * 1024), id='oversized-directory'),
+        pytest.param(_zip64_end_of_directory(100_000, 0), id='zip64-many-entries'),
+        pytest.param(_zip64_end_of_directory(10, 2**40), id='zip64-oversized-directory'),
+    ],
+)
+def test_archive_with_an_oversized_directory_is_rejected_before_it_is_opened(tmp_path, job, monkeypatch, archive):
+    """Opening a ZIP loads its whole central directory, so its declared size is checked first."""
+    opened = []
+    monkeypatch.setattr(tf, 'ZipFile', lambda *args, **kwargs: opened.append(args))
+
+    _run(tmp_path, 'export.zip', archive)
+
+    final = job.final()
+    assert final['status'] == ImportJobStatus.failed.value
+    assert final['error'] == 'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
+    assert opened == []
+
+
+def test_zip64_archive_with_few_entries_still_imports(tmp_path, job, monkeypatch):
+    """A real zip64 end record (classic fields 0xFFFF) is read for its true counts."""
+    with monkeypatch.context() as patched:
+        patched.setattr(zipfile, 'ZIP_FILECOUNT_LIMIT', 0)  # force zipfile to write the zip64 records
+        raw = bytearray(_zip({'a.srt': SRT, 'b.txt': INLINE_TXT}))
+    assert b'PK\x06\x06' in raw and b'PK\x06\x07' in raw
+    # Some writers always defer to the zip64 record: the classic counts become markers.
+    end = raw.rfind(b'PK\x05\x06')
+    struct.pack_into('<2H', raw, end + 8, 0xFFFF, 0xFFFF)
+    archive = bytes(raw)
+
+    _run(tmp_path, 'export.zip', archive)
+
+    assert job.final()['status'] == ImportJobStatus.completed.value
+    assert len(job.store.docs) == 2
+
+
+def _flag_members_encrypted(archive: bytes) -> bytes:
+    raw = bytearray(archive)
+    for signature, flags_at in ((b'PK\x01\x02', 8), (b'PK\x03\x04', 6)):
+        index = raw.find(signature)
+        while index >= 0:
+            struct.pack_into('<H', raw, index + flags_at, 1)
+            index = raw.find(signature, index + 1)
+    return bytes(raw)
+
+
+def test_password_protected_archive_is_rejected_with_a_plain_message(tmp_path, job):
+    _run(tmp_path, 'export.zip', _flag_members_encrypted(_zip({'a.srt': SRT, 'b.txt': INLINE_TXT})))
+
+    final = job.final()
+    assert final['status'] == ImportJobStatus.failed.value
+    assert final['error'] == "Password-protected ZIP files aren't supported."
+    assert job.store.docs == {}
+
+
+def _corrupt_stored_member(archive: bytes) -> bytes:
+    raw = bytearray(archive)
+    data_start = raw.find(b'PK\x03\x04') + 30 + len('a.srt')
+    raw[data_start] ^= 0xFF
+    return bytes(raw)
+
+
+class InvalidArgument(Exception):
+    """Stands in for the Firestore error a too-large document raises."""
+
+
+@pytest.mark.parametrize(
+    ('case', 'reason'),
+    [
+        ('damaged-member', 'file is damaged'),
+        ('store-rejects', 'could not be saved'),
+        ('unexpected', 'unexpected error'),
+    ],
+)
+def test_per_file_failures_reach_users_as_plain_reasons(tmp_path, job, monkeypatch, caplog, case, reason):
+    archive = _zip({'a.srt': SRT})
+    if case == 'damaged-member':
+        archive = _corrupt_stored_member(_zip({'a.srt': SRT}, ZIP_STORED))
+    elif case == 'store-rejects':
+
+        def reject(uid, data):
+            raise InvalidArgument('document too large')
+
+        monkeypatch.setattr(tf.lifecycle_service, 'persist_imported_conversation', reject)
+    else:
+
+        def explode(*_args, **_kwargs):
+            raise KeyError('speaker')
+
+        monkeypatch.setattr(tf, 'parse_transcript_file', explode)
+
+    with caplog.at_level('WARNING', logger=tf.logger.name):
+        _run(tmp_path, 'export.zip', archive)
+
+    final = job.final()
+    assert final['error'] == f'None of the 1 file(s) could be imported ({reason}).'
+    assert not any(name in final['error'] for name in ('BadZipFile', 'InvalidArgument', 'KeyError', 'Error'))
+    assert 'error_class=' in caplog.text, 'the exception class is still logged'

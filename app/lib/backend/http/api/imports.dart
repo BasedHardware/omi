@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/imports_integrations_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -140,9 +141,30 @@ String transcriptImportUrl(String baseUrl, {required String language, String? ti
   ).toString();
 }
 
+/// The outcome of starting an import: the job to poll, or the server's reason for
+/// refusing it (its `detail`), when it gave one.
+class ImportStartResult {
+  const ImportStartResult.started(ImportJobResponse this.job) : errorDetail = null;
+  const ImportStartResult.failed({this.errorDetail}) : job = null;
+
+  final ImportJobResponse? job;
+  final String? errorDetail;
+}
+
+/// The plain-text `detail` of a refused import upload (wrong file type, rate limit,
+/// server busy), or null when the body carries none.
+String? importStartErrorDetail(String body) {
+  try {
+    final detail = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).detail;
+    return detail is String && detail.trim().isNotEmpty ? detail.trim() : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Start importing SRT, VTT or TXT transcripts (or a ZIP of them) exported from
-/// other apps. Returns the job to poll, or null when the upload was refused.
-Future<ImportJobResponse?> startTranscriptImport(
+/// other apps. `origin` stays API-only: the app always sends the default.
+Future<ImportStartResult> startTranscriptImport(
   File file, {
   String language = 'en',
   String? timeZone,
@@ -156,13 +178,13 @@ Future<ImportJobResponse?> startTranscriptImport(
     );
     if (response.statusCode == 200) {
       final data = wire.GeneratedImportJobResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-      return ImportJobResponse.fromGenerated(data);
+      return ImportStartResult.started(ImportJobResponse.fromGenerated(data));
     }
     Logger.debug('Failed to start transcript import. Status: ${response.statusCode}');
-    return null;
+    return ImportStartResult.failed(errorDetail: importStartErrorDetail(response.body));
   } catch (e) {
     Logger.debug('Error starting transcript import: $e');
-    return null;
+    return const ImportStartResult.failed();
   }
 }
 

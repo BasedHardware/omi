@@ -631,6 +631,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "voice:message",
             "voice:transcribe",
             "file:upload",
+            "import:upload",
             "agent:execute_tool",
             "mcp:sse",
             "memories:create",

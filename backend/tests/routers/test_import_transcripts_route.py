@@ -21,6 +21,7 @@ from starlette.datastructures import UploadFile
 
 from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from routers import imports as imports_mod
+from utils.rate_limit_config import RATE_POLICIES
 
 UID = "u1"
 
@@ -164,6 +165,55 @@ def test_failed_staging_removes_the_partial_file_and_fails_the_job(staged):
     assert not worker.called.is_set()
 
 
+def test_staged_file_is_removed_even_when_failing_the_job_raises(staged):
+    _, worker, tmp_path = staged
+
+    with patch.object(
+        imports_mod.import_jobs_db, 'update_import_job', side_effect=RuntimeError('firestore down')
+    ), pytest.raises(RuntimeError):
+        _call(_BrokenUpload())
+
+    assert os.listdir(tmp_path) == [], 'the partial upload is removed'
+    assert not worker.called.is_set()
+
+
+class _CancelledUpload(_BrokenUpload):
+    """The request deadline (TimeoutMiddleware) cancels the handler mid-upload."""
+
+    async def read(self, size: int = -1) -> bytes:
+        if self.reads:
+            raise asyncio.CancelledError()
+        return await super().read(size)
+
+
+def test_cancelled_staging_fails_the_job_removes_the_partial_file_and_reraises(staged, monkeypatch):
+    _, worker, tmp_path = staged
+    cleanups = []
+
+    def run_now(executor, fn, *args, **kwargs):
+        # A cancelled handler cannot await its cleanup, so it hands it to a pool.
+        cleanups.append(executor)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(imports_mod, 'submit_with_context', run_now, raising=False)
+
+    with patch.object(imports_mod.import_jobs_db, 'update_import_job') as update, pytest.raises(asyncio.CancelledError):
+        _call(_CancelledUpload())
+
+    assert cleanups == [imports_mod.db_executor]
+    assert update.call_args.args[0] == 'job-9'
+    assert update.call_args.args[1]['status'] == ImportJobStatus.failed.value
+    assert os.listdir(tmp_path) == [], 'the partial upload is removed'
+    assert not worker.called.is_set()
+
+
+def test_failed_job_error_never_names_an_exception_class(staged):
+    with patch.object(imports_mod.import_jobs_db, 'update_import_job') as update, pytest.raises(HTTPException):
+        _call(_BrokenUpload())
+
+    assert update.call_args.args[1]['error'] == 'Failed to save uploaded file'
+
+
 def test_job_is_failed_when_the_worker_cannot_be_queued(staged, monkeypatch):
     """A job that never reaches the worker must not sit in pending forever."""
     _, worker, tmp_path = staged
@@ -199,7 +249,14 @@ def _post(client: TestClient):
     )
 
 
-def test_upload_is_rate_limited_per_user_like_other_uploads(staged, monkeypatch):
+def test_imports_have_their_own_modest_rate_limit():
+    """Imports must not spend the chat file-upload bucket, and one import carries many files."""
+    max_requests, window = RATE_POLICIES['import:upload']
+
+    assert (max_requests, window) == (10, 3600)
+
+
+def test_upload_is_rate_limited_per_user(staged, monkeypatch):
     create, worker, _ = staged
     checked = []
 
@@ -210,7 +267,7 @@ def test_upload_is_rate_limited_per_user_like_other_uploads(staged, monkeypatch)
     response = _post(_client(monkeypatch, deny))
 
     assert response.status_code == 429
-    assert checked == [(UID, 'file:upload')]
+    assert checked == [(UID, 'import:upload')]
     create.assert_not_called()
     assert not worker.called.is_set()
 
@@ -223,7 +280,7 @@ def test_upload_within_the_rate_limit_is_queued(staged, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()['job_id'] == 'job-9'
-    assert checked == [(UID, 'file:upload')]
+    assert checked == [(UID, 'import:upload')]
     worker.wait()
 
 

@@ -2,12 +2,13 @@
 Import endpoints for importing data from external sources.
 """
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from utils.executors import db_executor, storage_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -118,7 +119,7 @@ async def import_transcript_files(
     language: str = 'en',
     tz: str = 'UTC',
     origin: str = 'other',
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'file:upload')),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'import:upload')),
 ):
     """
     Start importing transcripts exported from other tools.
@@ -145,8 +146,16 @@ async def import_transcript_files(
                 await run_blocking(storage_executor, f.write, contents)
         finally:
             f.close()
+    except asyncio.CancelledError:
+        # The request deadline cancelled the handler. Under that cancellation every
+        # further await is interrupted too, so the cleanup goes to a pool unawaited.
+        submit_with_context(
+            db_executor, _abandon_transcript_import, job.id, upload_path, 'Failed to save uploaded file'
+        )
+        raise
     except Exception as e:
-        await _abandon_transcript_import(job.id, upload_path, f"Failed to save uploaded file: {type(e).__name__}")
+        logger.error('transcript import upload not staged job_id=%s error_class=%s', job.id, type(e).__name__)
+        await run_blocking(db_executor, _abandon_transcript_import, job.id, upload_path, 'Failed to save uploaded file')
         raise HTTPException(status_code=500, detail="Failed to save uploaded file")
 
     try:
@@ -162,7 +171,13 @@ async def import_transcript_files(
         )
     except Exception as e:
         logger.error('transcript import could not be queued job_id=%s error_class=%s', job.id, type(e).__name__)
-        await _abandon_transcript_import(job.id, upload_path, 'The import could not be started. Please try again.')
+        await run_blocking(
+            db_executor,
+            _abandon_transcript_import,
+            job.id,
+            upload_path,
+            'The import could not be started. Please try again.',
+        )
         raise HTTPException(status_code=503, detail="The import could not be started. Try again shortly.")
     return ImportJobResponse(job_id=job.id, status=ImportJobStatus.pending, source_type=job.source_type)
 
@@ -176,19 +191,22 @@ def _discard_staged_upload(upload_path: str) -> None:
         logger.error('transcript import staged upload cleanup failed error_class=%s', type(e).__name__)
 
 
-async def _abandon_transcript_import(job_id: str, upload_path: str, error: str) -> None:
-    """Fail a job whose upload will never reach the worker, so it is not left pending, and drop the file."""
-    await run_blocking(
-        db_executor,
-        import_jobs_db.update_import_job,
-        job_id,
-        {
-            'status': ImportJobStatus.failed.value,
-            'error': error,
-            'completed_at': datetime.now(timezone.utc).isoformat(),
-        },
-    )
-    await run_blocking(storage_executor, _discard_staged_upload, upload_path)
+def _abandon_transcript_import(job_id: str, upload_path: str, error: str) -> None:
+    """Fail a job whose upload will never reach the worker, so it is not left pending, and drop the file.
+
+    The file goes even when the job update raises.
+    """
+    try:
+        import_jobs_db.update_import_job(
+            job_id,
+            {
+                'status': ImportJobStatus.failed.value,
+                'error': error,
+                'completed_at': datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    finally:
+        _discard_staged_upload(upload_path)
 
 
 @router.get(

@@ -132,7 +132,10 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   Future<void> _startLimitlessImport() => _startImport(
         analyticsSource: 'limitless',
         allowedExtensions: const ['zip'],
-        upload: (file) => startLimitlessImport(file),
+        upload: (file) async {
+          final job = await startLimitlessImport(file);
+          return job == null ? const ImportStartResult.failed() : ImportStartResult.started(job);
+        },
         retry: _startLimitlessImport,
       );
 
@@ -150,7 +153,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   Future<void> _startImport({
     required String analyticsSource,
     required List<String> allowedExtensions,
-    required Future<ImportJobResponse?> Function(File file) upload,
+    required Future<ImportStartResult> Function(File file) upload,
     required VoidCallback retry,
   }) async {
     try {
@@ -183,22 +186,23 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       final file = File(filePath);
 
       Logger.debug('Starting $analyticsSource import…');
-      final response = await upload(file);
-      Logger.debug('Import response: ${response?.jobId}');
+      final started = await upload(file);
+      Logger.debug('Import response: ${started.job?.jobId}');
 
       if (mounted) {
         setState(() => _isUploading = false);
       }
 
-      if (response != null) {
+      if (started.job != null) {
         // Refresh the list and start polling
         await _loadJobs();
         if (mounted) OmiFeedback.confirm(context, context.l10n.importStarted);
       } else {
         if (mounted) {
+          // The server's own reason (wrong file type, rate limit) says more than the generic copy.
           OmiFeedback.error(
             context,
-            context.l10n.failedToStartImport,
+            started.errorDetail ?? context.l10n.failedToStartImport,
             actionLabel: context.l10n.tryAgain,
             onAction: retry,
           );

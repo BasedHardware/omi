@@ -4035,7 +4035,7 @@ routes:
         scopes: []
       byok: not_applicable
       rate_limit:
-        policy_name: file:upload
+        policy_name: import:upload
         key_subject: uid
         enforcement: fail_open
         placement: dependency

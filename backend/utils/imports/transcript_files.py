@@ -15,15 +15,18 @@ import html
 import logging
 import os
 import re
+import struct
 import uuid
+import zlib
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
-from typing import Callable, Dict, Iterator, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence
 from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile, ZipInfo, is_zipfile
 from zoneinfo import ZoneInfo
 
+import database.conversations as conversations_db
 import database.import_jobs as import_jobs_db
 import database.users as users_db
 from database.auth import get_user_name
@@ -48,8 +51,17 @@ TRANSCRIPT_EXTENSIONS = ('.srt', '.vtt', '.txt')
 UPLOAD_EXTENSIONS = ('.zip', *TRANSCRIPT_EXTENSIONS)
 TRANSCRIPT_ORIGINS = {'plaud': ConversationSource.plaud, 'other': ConversationSource.unknown}
 MAX_TRANSCRIPT_FILES = 1000
-MAX_TRANSCRIPT_FILE_BYTES = 5 * 1024 * 1024
 MAX_ARCHIVE_TRANSCRIPT_BYTES = 200 * 1024 * 1024
+# Each file becomes one conversation document, which Firestore caps at 1 MiB. The
+# transcript is stored as zlib(json), and 'enhanced' protection then stores that as
+# hex -> AES -> base64 (about 2.67x), so 350 KB of zlib output is about 935 KB stored.
+MAX_TRANSCRIPT_FILE_BYTES = 1024 * 1024
+MAX_TRANSCRIPT_SEGMENTS = 5_000
+MAX_COMPRESSED_TRANSCRIPT_BYTES = 350_000
+# Opening a ZIP loads its whole central directory before any member limit applies,
+# so the size the end record declares is checked first.
+MAX_ZIP_DIRECTORY_ENTRIES = 20_000
+MAX_ZIP_DIRECTORY_BYTES = 8 * 1024 * 1024
 # Deflate honors the per-read output cap; bzip2 and LZMA members decompress a
 # whole input block regardless, so a tiny member can expand past every limit.
 READABLE_ZIP_COMPRESSION = (ZIP_STORED, ZIP_DEFLATED)
@@ -57,6 +69,7 @@ READABLE_ZIP_COMPRESSION = (ZIP_STORED, ZIP_DEFLATED)
 # conversation a plausible duration (about 150 spoken words per minute).
 ESTIMATED_WORDS_PER_SECOND = 2.5
 DEFAULT_TITLE = 'Imported transcript'
+MAX_TITLE_CHARS = 200
 # Never change: baked into the ID of every conversation already imported.
 TRANSCRIPT_IMPORT_ID_NAMESPACE = 'transcript-file'
 # A file counts as speaker-labeled when most cues open with "Name: ".
@@ -67,6 +80,23 @@ MIN_FILENAME_YEAR = 1990
 
 class TranscriptImportError(Exception):
     """An upload the importer refuses as a whole, with a user-facing reason."""
+
+
+# Why one file was skipped, as shown to the user. Exception class names stay in logs.
+NOT_A_TRANSCRIPT = 'not a readable transcript'
+FILE_TOO_LARGE = 'file too large'
+TRANSCRIPT_TOO_LONG = 'transcript too long'
+FILE_DAMAGED = 'file is damaged'
+NOT_SAVED = 'could not be saved'
+UNEXPECTED_ERROR = 'unexpected error'
+
+
+class TranscriptFileSkipped(Exception):
+    """One file the import skips, with the reason shown to the user; the others still import."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -86,8 +116,9 @@ class ParsedTranscript:
 
 # --------------------------------------------------------------------------- parsing
 
-_TIMESTAMP = r'(?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?'
-_TIMESTAMP_RE = re.compile(r'(?:(\d+):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?')
+# Hours are bounded so a cue claiming a 5,000-digit hour is not a timestamp at all.
+_TIMESTAMP = r'(?:\d{1,3}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?'
+_TIMESTAMP_RE = re.compile(r'(?:(\d{1,3}):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?')
 _CUE_TIMING_RE = re.compile(rf'^\s*({_TIMESTAMP})\s*-->\s*({_TIMESTAMP})')
 _LABEL_RE = re.compile(r"^(?P<label>[^\W\d_][^:\n]{0,39}?)\s*:\s+(?P<rest>\S.*)$")
 _SPEAKER_N_RE = re.compile(r'^(?:speaker|participant|person|spk)\s*\d+$', re.IGNORECASE)
@@ -106,12 +137,16 @@ def _seconds(value: str) -> Optional[float]:
     if not match:
         return None
     hours, minutes, seconds, fraction = match.groups()
-    if int(seconds) >= 60 or (hours is not None and int(minutes) >= 60):
+    try:
+        if int(seconds) >= 60 or (hours is not None and int(minutes) >= 60):
+            return None
+        total = int(hours or 0) * 3600 + int(minutes) * 60 + int(seconds)
+        if fraction:
+            total += int(fraction.ljust(3, '0')) / 1000
+        return float(total)
+    except (ValueError, OverflowError):
+        # One unreadable timestamp leaves its cue untimed; it never fails the file.
         return None
-    total = int(hours or 0) * 3600 + int(minutes) * 60 + int(seconds)
-    if fraction:
-        total += int(fraction.ljust(3, '0')) / 1000
-    return float(total)
 
 
 def _normalize(text: str) -> str:
@@ -256,15 +291,18 @@ def parse_text_transcript(text: str) -> List[TranscriptCue]:
         return _parse_header_turns(content, headers)
     timed = [_INLINE_TIMED_RE.match(line) for line in content]
     if sum(1 for match in timed if match) * 2 >= len(content):
-        cues: List[TranscriptCue] = []
+        # Continuation lines collect under their timed line and each cue is joined
+        # once; rebuilding the cue per line re-copied its text (quadratic).
+        turns: List[tuple[re.Match[str], List[str]]] = []
         for line, match in zip(content, timed):
             if match:
-                cues.append(TranscriptCue(text=match.group('rest').strip(), start=_seconds(match.group('ts'))))
-            elif cues:
-                previous = cues[-1]
-                cues[-1] = TranscriptCue(text=f'{previous.text} {line}', start=previous.start)
-        return _assign_speakers(cues)
-    cues = []
+                turns.append((match, [match.group('rest').strip()]))
+            elif turns:
+                turns[-1][1].append(line)
+        return _assign_speakers(
+            [TranscriptCue(text=' '.join(parts), start=_seconds(match.group('ts'))) for match, parts in turns]
+        )
+    cues: List[TranscriptCue] = []
     for block in _blocks(text):
         if len(block) > 1 and all(_LABEL_RE.match(line) for line in block):
             cues.extend(TranscriptCue(text=line) for line in block)
@@ -314,7 +352,8 @@ def started_at_from_filename(filename: str, tz: Optional[str] = 'UTC') -> Option
             int(parts['s'] or 0),
             tzinfo=_zone(tz),
         )
-        return local.astimezone(timezone.utc)
+        # A date in the future is a wrong device clock; it would sort above every real conversation.
+        return min(local.astimezone(timezone.utc), datetime.now(timezone.utc))
     except (ValueError, OverflowError):
         # Not a real date (or past datetime's range in UTC): the caller falls back.
         return None
@@ -326,6 +365,11 @@ def title_from_filename(filename: str) -> str:
     if match:
         stem = stem[: match.start()] + ' ' + stem[match.end() :]
     title = re.sub(r'\s+', ' ', re.sub(r'[_]+|(?<=\w)-(?=\w)', ' ', stem)).strip(' -_.')
+    if len(title) > MAX_TITLE_CHARS:
+        cut = title[: MAX_TITLE_CHARS + 1]
+        space = cut.rfind(' ')
+        # End on the last whole word that fits, unless that would drop most of the title.
+        title = (cut[:space] if space > MAX_TITLE_CHARS // 2 else cut[:MAX_TITLE_CHARS]).strip(' -_.')
     return title if title and not title.replace(' ', '').isdigit() else DEFAULT_TITLE
 
 
@@ -494,6 +538,14 @@ def build_imported_conversation(
     people: Mapping[str, str],
     fallback_started_at: datetime,
 ) -> Conversation:
+    """The completed conversation for one parsed file.
+
+    Raises ``TranscriptFileSkipped`` before building any segment when the file has
+    more turns than one conversation document can hold; segments cost far more
+    memory than cues.
+    """
+    if len(parsed.cues) > MAX_TRANSCRIPT_SEGMENTS:
+        raise TranscriptFileSkipped(TRANSCRIPT_TOO_LONG)
     segments = segments_from_cues(parsed.cues, owner_name=owner_name, people=people)
     started_at = parsed.started_at or fallback_started_at
     finished_at = started_at + timedelta(seconds=max((segment.end for segment in segments), default=0.0))
@@ -529,16 +581,57 @@ class _Entry:
     archived_at: Optional[datetime]
 
 
-class _TooLarge(Exception):
-    pass
-
-
 def _read_limited(open_member: Callable[[], object]) -> bytes:
     with open_member() as handle:  # type: ignore[attr-defined]
         data = handle.read(MAX_TRANSCRIPT_FILE_BYTES + 1)
     if len(data) > MAX_TRANSCRIPT_FILE_BYTES:
-        raise _TooLarge()
+        raise TranscriptFileSkipped(FILE_TOO_LARGE)
     return data
+
+
+def _read_member(archive: ZipFile, info: ZipInfo) -> bytes:
+    try:
+        return _read_limited(lambda: archive.open(info))
+    except (BadZipFile, zlib.error, EOFError) as exc:
+        # A bad CRC, corrupt deflate stream or truncated member.
+        logger.warning('transcript import member unreadable error_class=%s', type(exc).__name__)
+        raise TranscriptFileSkipped(FILE_DAMAGED) from exc
+
+
+_END_OF_DIRECTORY = struct.Struct('<4s4H2LH')
+_ZIP64_LOCATOR = struct.Struct('<4sLQL')
+_ZIP64_END_OF_DIRECTORY = struct.Struct('<4sQ2H2L4Q')
+
+
+def _declared_zip_directory(path: str) -> Optional[tuple[int, int]]:
+    """(entries, central-directory bytes) an archive's end records declare, or None without one.
+
+    Mirrors how ``zipfile`` finds them: the last end-of-directory signature in the
+    final 64 KiB plus the record, and a zip64 record directly before its locator,
+    whose values replace the classic ones when present.
+    """
+    with open(path, 'rb') as handle:
+        size = handle.seek(0, os.SEEK_END)
+        tail_start = max(0, size - (_END_OF_DIRECTORY.size + 0xFFFF))
+        handle.seek(tail_start)
+        tail = handle.read()
+        # The whole 22-byte record must fit after the signature.
+        index = tail.rfind(b'PK\x05\x06', 0, len(tail) - _END_OF_DIRECTORY.size + 4)
+        if index < 0:
+            return None
+        fields = _END_OF_DIRECTORY.unpack_from(tail, index)
+        declared = (int(fields[4]), int(fields[5]))
+        locator_at = tail_start + index - _ZIP64_LOCATOR.size
+        record_at = locator_at - _ZIP64_END_OF_DIRECTORY.size
+        if record_at < 0:
+            return declared
+        handle.seek(record_at)
+        record = handle.read(_ZIP64_END_OF_DIRECTORY.size + _ZIP64_LOCATOR.size)
+    locator = _ZIP64_LOCATOR.unpack_from(record, _ZIP64_END_OF_DIRECTORY.size)
+    zip64 = _ZIP64_END_OF_DIRECTORY.unpack_from(record)
+    if locator[0] != b'PK\x06\x07' or zip64[0] != b'PK\x06\x06':
+        return declared
+    return int(zip64[7]), int(zip64[8])
 
 
 def _is_transcript_member(info: ZipInfo) -> bool:
@@ -554,6 +647,11 @@ def _is_transcript_member(info: ZipInfo) -> bool:
 @contextmanager
 def _upload_entries(upload_path: str, original_filename: str, tz: Optional[str]) -> Iterator[List[_Entry]]:
     if PurePosixPath(original_filename).suffix.lower() == '.zip' or is_zipfile(upload_path):
+        declared = _declared_zip_directory(upload_path)
+        if declared and (declared[0] > MAX_ZIP_DIRECTORY_ENTRIES or declared[1] > MAX_ZIP_DIRECTORY_BYTES):
+            raise TranscriptImportError(
+                'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
+            )
         try:
             archive = ZipFile(upload_path)
         except BadZipFile as exc:
@@ -567,6 +665,8 @@ def _upload_entries(upload_path: str, original_filename: str, tz: Optional[str])
                 )
             if sum(info.file_size for info in members) > MAX_ARCHIVE_TRANSCRIPT_BYTES:
                 raise TranscriptImportError('The transcripts in this archive are too large to import at once.')
+            if any(info.flag_bits & 0x1 for info in members):
+                raise TranscriptImportError("Password-protected ZIP files aren't supported.")
             if any(info.compress_type not in READABLE_ZIP_COMPRESSION for info in members):
                 raise TranscriptImportError(
                     'This archive uses an unsupported compression method. '
@@ -582,7 +682,7 @@ def _upload_entries(upload_path: str, original_filename: str, tz: Optional[str])
                 entries.append(
                     _Entry(
                         name=info.filename,
-                        read=lambda info=info: _read_limited(lambda: archive.open(info)),
+                        read=lambda info=info: _read_member(archive, info),
                         archived_at=archived_at,
                     )
                 )
@@ -658,6 +758,51 @@ def _fail(uid: str, job_id: str, message: str) -> None:
     _notify(uid, job_id, 'Transcript Import Failed', message, {'type': 'import_failed', 'job_id': job_id})
 
 
+def _compressed_transcript_bytes(uid: str, segments: List[Any]) -> int:
+    """Size of the transcript blob the conversation write path stores, before any encryption."""
+    encoded = conversations_db.encode_conversation_for_write(uid, {'transcript_segments': segments})
+    return len(encoded['transcript_segments'])
+
+
+def _import_file(
+    job_id: str,
+    uid: str,
+    entry: _Entry,
+    *,
+    tz: Optional[str],
+    source: ConversationSource,
+    language_code: str,
+    owner_name: Optional[str],
+    people: Mapping[str, str],
+) -> bool:
+    """Store one transcript file as a conversation; False when it was already imported.
+
+    Raises ``TranscriptFileSkipped`` with the user-facing reason when the file cannot be imported.
+    """
+    data = entry.read()
+    parsed = parse_transcript_file(entry.name, data, tz=tz)
+    if parsed is None:
+        raise TranscriptFileSkipped(NOT_A_TRANSCRIPT)
+    conversation = build_imported_conversation(
+        uid,
+        parsed,
+        data,
+        source=source,
+        language_code=language_code,
+        owner_name=owner_name,
+        people=people,
+        fallback_started_at=entry.archived_at or datetime.now(timezone.utc),
+    )
+    payload = omit_null_processing_state(conversation.model_dump())
+    if _compressed_transcript_bytes(uid, payload['transcript_segments']) > MAX_COMPRESSED_TRANSCRIPT_BYTES:
+        raise TranscriptFileSkipped(TRANSCRIPT_TOO_LONG)
+    try:
+        return lifecycle_service.persist_imported_conversation(uid, payload)
+    except Exception as exc:
+        logger.warning('transcript import save failed job_id=%s error_class=%s', job_id, type(exc).__name__)
+        raise TranscriptFileSkipped(NOT_SAVED) from exc
+
+
 def process_transcript_import(
     job_id: str,
     uid: str,
@@ -693,32 +838,24 @@ def process_transcript_import(
                 return
             for entry in entries:
                 try:
-                    data = entry.read()
-                    parsed = parse_transcript_file(entry.name, data, tz=tz)
-                    if parsed is None:
-                        errors.append('not a readable transcript')
+                    if _import_file(
+                        job_id,
+                        uid,
+                        entry,
+                        tz=tz,
+                        source=source,
+                        language_code=language_code,
+                        owner_name=owner_name,
+                        people=people,
+                    ):
+                        created += 1
                     else:
-                        conversation = build_imported_conversation(
-                            uid,
-                            parsed,
-                            data,
-                            source=source,
-                            language_code=language_code,
-                            owner_name=owner_name,
-                            people=people,
-                            fallback_started_at=entry.archived_at or datetime.now(timezone.utc),
-                        )
-                        if lifecycle_service.persist_imported_conversation(
-                            uid, omit_null_processing_state(conversation.model_dump())
-                        ):
-                            created += 1
-                        else:
-                            skipped += 1
-                except _TooLarge:
-                    errors.append('file too large')
+                        skipped += 1
+                except TranscriptFileSkipped as skip:
+                    errors.append(skip.reason)
                 except Exception as exc:
                     logger.warning('transcript import file failed job_id=%s error_class=%s', job_id, type(exc).__name__)
-                    errors.append(type(exc).__name__)
+                    errors.append(UNEXPECTED_ERROR)
                 processed += 1
                 if processed % 10 == 0 or processed == total:
                     import_jobs_db.update_import_job(

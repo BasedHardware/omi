@@ -43,6 +43,37 @@ void main() {
     });
   });
 
+  group('importStartErrorDetail', () {
+    test('reads the reason the server gave for refusing the upload', () {
+      expect(
+        importStartErrorDetail('{"detail": "Upload a .zip, .srt, .vtt or .txt file"}'),
+        'Upload a .zip, .srt, .vtt or .txt file',
+      );
+    });
+
+    test('has no reason for validation lists, blank details or non-JSON bodies', () {
+      expect(importStartErrorDetail('{"detail": [{"loc": ["query", "tz"], "msg": "bad"}]}'), isNull);
+      expect(importStartErrorDetail('{"detail": "  "}'), isNull);
+      expect(importStartErrorDetail('<html>502 Bad Gateway</html>'), isNull);
+      expect(importStartErrorDetail(''), isNull);
+    });
+  });
+
+  group('ImportStartResult', () {
+    test('a started import carries its job and no failure reason', () {
+      final job = ImportJobResponse(jobId: 'j1', status: ImportJobStatus.pending);
+      final result = ImportStartResult.started(job);
+
+      expect(result.job, same(job));
+      expect(result.errorDetail, isNull);
+    });
+
+    test('a refused import carries the server reason when there was one', () {
+      expect(const ImportStartResult.failed(errorDetail: 'Rate limit exceeded.').errorDetail, 'Rate limit exceeded.');
+      expect(const ImportStartResult.failed().job, isNull);
+    });
+  });
+
   test('the transcript picker accepts exactly the formats the server imports', () {
     expect(transcriptImportExtensions, ['zip', 'srt', 'vtt', 'txt']);
   });
