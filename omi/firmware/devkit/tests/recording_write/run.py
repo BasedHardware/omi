@@ -12,7 +12,7 @@ SOURCE = HERE.parents[1] / "src"
 
 def function(filename, name):
     source = (SOURCE / filename).read_text()
-    match = re.search(r"^(?:static )?(?:int|bool) " + name + r"\([^;]*?\)\s*\{", source, re.M)
+    match = re.search(r"^(?:static )?(?:int|bool|void) " + name + r"\([^;]*?\)\s*\{", source, re.M)
     if not match:
         raise RuntimeError(f"Missing production function: {name}")
     start = match.start()
@@ -35,4 +35,12 @@ with tempfile.TemporaryDirectory(prefix="devkit-recording-") as tmp:
     binary = directory / "test"
     subprocess.run([os.environ.get("CC", "cc"), "-std=c11", "-Wall", "-Wextra", "-Werror",
                     "-I", tmp, str(HERE / "test_recording.c"), "-o", str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)
+
+with tempfile.TemporaryDirectory(prefix="devkit-pusher-") as tmp:
+    directory = Path(tmp)
+    (directory / "pusher.inc").write_text(function("transport.c", "pusher"))
+    binary = directory / "test"
+    subprocess.run([os.environ.get("CC", "cc"), "-std=c11", "-Wall", "-Wextra", "-Werror",
+                    "-I", tmp, str(HERE / "test_pusher_retry.c"), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)

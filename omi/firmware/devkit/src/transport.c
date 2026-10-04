@@ -717,7 +717,10 @@ void pusher(void)
     static atomic_val_t handled_connection_generation = 0;
 
     while (1) {
-        k_sem_take(&pusher_wake_sem, K_FOREVER);
+        /* A full queue cannot enqueue another frame to signal the semaphore.
+         * Pending I/O must therefore retry even without a producer wakeup.
+         */
+        k_sem_take(&pusher_wake_sem, tx_frame_pending ? K_MSEC(10) : K_FOREVER);
 
         atomic_val_t generation = atomic_get(&connection_generation);
         if (current_connection != NULL && generation != handled_connection_generation) {
