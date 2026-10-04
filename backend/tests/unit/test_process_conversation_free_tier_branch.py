@@ -232,7 +232,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.jit_rollout', AutoMockModule('utils.jit_rollout'))
     add('utils.log_sanitizer', AutoMockModule('utils.log_sanitizer'))
     add('utils.retrieval.frame_request_authority', AutoMockModule('utils.retrieval.frame_request_authority'))
-    add('utils.task_intelligence.proactive_engine', AutoMockModule('utils.task_intelligence.proactive_engine'))
     services_pkg = ModuleType('services')
     services_pkg.__path__ = []  # type: ignore[attr-defined]
     add('services', services_pkg)
@@ -862,13 +861,12 @@ async def test_finalizer_completes_minimum_store_without_extracting_memories(mon
     )
     complete = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
-    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', MagicMock())
     monkeypatch.setattr(
         persisted_finalizer,
         'resolve_frame_request_authority',
         AsyncMock(return_value=SimpleNamespace(enabled=False, account_generation=None)),
     )
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -885,7 +883,7 @@ async def test_finalizer_completes_minimum_store_without_extracting_memories(mon
 
 
 # red-proof: restore the skip_derived_effects early return that complete_fanout
-# and returns before record_and_persist_finalized_meeting_receipt
+# and returns before record_finalized_meeting_receipt
 @pytest.mark.anyio
 @pytest.mark.parametrize('anyio_backend', ['asyncio'])
 async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat_intent(
@@ -918,7 +916,6 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
     )
     extract = MagicMock()
     integrations = MagicMock()
-    intent_spy = MagicMock(return_value=SimpleNamespace(intent_id='intent-1'))
 
     def minimum_process(_uid, _lang, conv, **kwargs):
         observer = kwargs.get('persistence_observer')
@@ -958,8 +955,6 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
         'resolve_frame_request_authority',
         AsyncMock(return_value=SimpleNamespace(enabled=False, account_generation=None)),
     )
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
-    monkeypatch.setattr(meeting_receipt_mod, 'persist_capture_arrival_intent', intent_spy)
     monkeypatch.setattr(
         meeting_receipt_mod.jobs_db,
         'record_meeting_receipt',
@@ -972,12 +967,12 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
     monkeypatch.setattr(
         meeting_receipt_mod.jobs_db,
         'mark_meeting_receipt_intent_persisted',
-        MagicMock(return_value=True),
+        MagicMock(side_effect=AssertionError('automatic Chat intents are retired')),
     )
     monkeypatch.setattr(
         persisted_finalizer,
-        'record_and_persist_finalized_meeting_receipt',
-        meeting_receipt_mod.record_and_persist_finalized_meeting_receipt,
+        'record_finalized_meeting_receipt',
+        meeting_receipt_mod.record_finalized_meeting_receipt,
     )
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
@@ -992,10 +987,6 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
     extract.assert_not_called()
     integrations.assert_not_called()
     complete.assert_called_once_with('job-1', 2, 3)
-    intent_spy.assert_called_once()
-    assert intent_spy.call_args.args == ('uid-1',)
-    assert intent_spy.call_args.kwargs['conversation_id'] == 'meeting-1'
-    assert intent_spy.call_args.kwargs['is_desktop_meeting'] is True
 
 
 # red-proof: call _funding_owner_for_feature / request_carries_validated_byok_key
@@ -1101,13 +1092,12 @@ async def test_finalizer_retry_after_minimum_persist_emits_no_derived_effects(mo
         lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
-    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', receipt)
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', receipt)
     monkeypatch.setattr(
         persisted_finalizer,
         'resolve_frame_request_authority',
         AsyncMock(return_value=SimpleNamespace(enabled=False, account_generation=None)),
     )
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
 
     finalize_kwargs = {
         'finalization_job_id': 'job-1',

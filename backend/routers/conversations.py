@@ -73,7 +73,7 @@ from utils.conversations.process_conversation import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 from utils.conversations import share_email
-from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
@@ -238,7 +238,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
                 try:
-                    record_and_persist_finalized_meeting_receipt(uid, enriched)
+                    record_finalized_meeting_receipt(uid, enriched)
                 except Exception:
                     logger.exception('lazy enrich receipt publish failed uid=%s conv=%s', uid, conversation_id)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")

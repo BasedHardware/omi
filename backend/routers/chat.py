@@ -861,9 +861,7 @@ def get_messages(
             logger.info(f"  - Message {m.get('id')}: rating={m.get('rating')}")
 
     if not messages:
-        # The greeting belongs to the session that was read, not to whatever
-        # session `acquire_chat_session` would pick for the app.
-        return [] if offset > 0 else [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
+        return []
     # FastAPI validates the response against Message, so one malformed/legacy stored row would
     # 500 the whole page; skip bad rows the same way the send path does.
     return Message.deserialize_many_safe(

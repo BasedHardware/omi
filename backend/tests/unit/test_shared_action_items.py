@@ -25,10 +25,9 @@ def share_data():
     }
 
 
-@patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
 @patch("routers.action_items.redis_db")
-def test_accept_shared_tasks_all_deleted_returns_404(mock_redis, mock_db, mock_wake, sample_request, share_data):
+def test_accept_shared_tasks_all_deleted_returns_404(mock_redis, mock_db, sample_request, share_data):
     mock_redis.get_task_share.return_value = share_data
     mock_db.get_action_item.return_value = None
 
@@ -39,13 +38,11 @@ def test_accept_shared_tasks_all_deleted_returns_404(mock_redis, mock_db, mock_w
     assert "deleted or not found" in exc_info.value.detail
     mock_redis.try_accept_task_share.assert_not_called()
     mock_redis.undo_accept_task_share.assert_not_called()
-    mock_wake.assert_not_called()
 
 
-@patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
 @patch("routers.action_items.redis_db")
-def test_accept_shared_tasks_all_locked_returns_402(mock_redis, mock_db, mock_wake, sample_request, share_data):
+def test_accept_shared_tasks_all_locked_returns_402(mock_redis, mock_db, sample_request, share_data):
     mock_redis.get_task_share.return_value = share_data
     mock_db.get_action_item.return_value = {"id": "task-1", "is_locked": True}
 
@@ -56,7 +53,6 @@ def test_accept_shared_tasks_all_locked_returns_402(mock_redis, mock_db, mock_wa
     assert "locked" in exc_info.value.detail
     mock_redis.try_accept_task_share.assert_not_called()
     mock_redis.undo_accept_task_share.assert_not_called()
-    mock_wake.assert_not_called()
 
 
 @patch("routers.action_items.action_items_db")
@@ -104,12 +100,9 @@ def test_accept_shared_tasks_used_token_conflict(mock_redis, mock_db, sample_req
 
 
 @patch("routers.action_items.upsert_action_item_vector")
-@patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
 @patch("routers.action_items.redis_db")
-def test_accept_shared_tasks_success_creates_and_wakes(
-    mock_redis, mock_db, mock_wake, mock_vector, sample_request, share_data
-):
+def test_accept_shared_tasks_success_creates_and_wakes(mock_redis, mock_db, mock_vector, sample_request, share_data):
     mock_redis.get_task_share.return_value = share_data
     mock_redis.try_accept_task_share.return_value = True
     items = {
@@ -125,16 +118,13 @@ def test_accept_shared_tasks_success_creates_and_wakes(
     mock_db.create_action_items_batch.assert_called_once()
     mock_db.create_action_item.assert_not_called()
     mock_redis.undo_accept_task_share.assert_not_called()
-    mock_wake.assert_called_once()
-    assert mock_wake.call_args.args[:2] == ("recipient-user-456", ["new-1", "new-2"])
 
 
 @patch("routers.action_items.upsert_action_item_vector")
-@patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
 @patch("routers.action_items.redis_db")
 def test_accept_shared_tasks_creation_failure_rolls_back_token(
-    mock_redis, mock_db, mock_wake, mock_vector, sample_request, share_data
+    mock_redis, mock_db, mock_vector, sample_request, share_data
 ):
     mock_redis.get_task_share.return_value = share_data
     mock_redis.try_accept_task_share.return_value = True
@@ -149,7 +139,6 @@ def test_accept_shared_tasks_creation_failure_rolls_back_token(
         accept_shared_action_items(request=sample_request, uid="recipient-user-456")
 
     mock_redis.undo_accept_task_share.assert_called_once_with(sample_request.token, "recipient-user-456")
-    mock_wake.assert_not_called()
 
 
 @patch("routers.action_items.upsert_action_item_vector")
@@ -174,11 +163,10 @@ def test_later_source_read_failure_happens_before_any_copy(
 
 @patch("routers.action_items._schedule_action_item_reminder")
 @patch("routers.action_items.upsert_action_item_vector")
-@patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
 @patch("routers.action_items.redis_db")
 def test_delivery_starts_after_all_twenty_tasks_are_saved(
-    mock_redis, mock_db, mock_wake, mock_vector, mock_reminder, sample_request
+    mock_redis, mock_db, mock_vector, mock_reminder, sample_request
 ):
     ids = [f"task-{index}" for index in range(20)]
     created = [f"copy-{index}" for index in range(20)]
@@ -201,16 +189,12 @@ def test_delivery_starts_after_all_twenty_tasks_are_saved(
     assert mock_vector.call_count == mock_reminder.call_count == 20
     mock_db.create_action_item.assert_not_called()
     mock_redis.undo_accept_task_share.assert_not_called()
-    mock_wake.assert_called_once()
 
 
 @pytest.mark.parametrize('remaining', [None, {"is_locked": True}])
-@patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
 @patch("routers.action_items.redis_db")
-def test_no_longer_available_tasks_release_acceptance(
-    mock_redis, mock_db, mock_wake, remaining, sample_request, share_data
-):
+def test_no_longer_available_tasks_release_acceptance(mock_redis, mock_db, remaining, sample_request, share_data):
     mock_redis.get_task_share.return_value = share_data
     mock_redis.try_accept_task_share.return_value = True
     mock_db.get_action_item.side_effect = [{"description": "Task"}, {"description": "Task"}, remaining, remaining]
@@ -221,16 +205,12 @@ def test_no_longer_available_tasks_release_acceptance(
 
     assert error.value.status_code == 402
     mock_redis.undo_accept_task_share.assert_called_once_with(sample_request.token, "recipient")
-    mock_wake.assert_not_called()
 
 
 @patch("routers.action_items.upsert_action_item_vector")
-@patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
 @patch("routers.action_items.redis_db")
-def test_ineligible_source_does_not_shift_copy_metadata(
-    mock_redis, mock_db, mock_wake, mock_vector, sample_request, share_data
-):
+def test_ineligible_source_does_not_shift_copy_metadata(mock_redis, mock_db, mock_vector, sample_request, share_data):
     mock_redis.get_task_share.return_value = share_data
     mock_redis.try_accept_task_share.return_value = True
     kept = {"description": "Keep this task"}
@@ -246,11 +226,10 @@ def test_ineligible_source_does_not_shift_copy_metadata(
 
 @patch("routers.action_items._schedule_action_item_reminder")
 @patch("routers.action_items.upsert_action_item_vector")
-@patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
 @patch("routers.action_items.redis_db")
 def test_post_commit_failure_does_not_release_duplicate_acceptance(
-    mock_redis, mock_db, mock_wake, mock_vector, mock_reminder, sample_request, share_data
+    mock_redis, mock_db, mock_vector, mock_reminder, sample_request, share_data
 ):
     mock_redis.get_task_share.return_value = share_data
     mock_redis.try_accept_task_share.return_value = True

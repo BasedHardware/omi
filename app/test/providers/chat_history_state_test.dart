@@ -48,6 +48,64 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
+  test('old caches with discarded provenance are rehydrated instead of rendered', () async {
+    final prefs = SharedPreferencesUtil();
+    prefs.saveStringList('cachedMessages', [
+      '{"id":"old","created_at":"2026-01-01T00:00:00Z","sender":"ai","type":"text","text":"Task","content_blocks":[{"type":"taskCard","id":"card","taskId":"task"}]}',
+    ]);
+    final provider = MessageProvider(sessionsApi: FakeSessions());
+    addTearDown(provider.dispose);
+    provider.setMessagesFromCache();
+    expect(provider.messages, isEmpty);
+  });
+
+  test('session history, cache and notification ingestion hide automatic rows only', () async {
+    final automatic = ServerMessage.fromJson({
+      ...message('auto').toJson(),
+      'sender': 'ai',
+      'metadata': '{"chatFirstIntentSource":"capture_arrival"}',
+      'content_blocks': [
+        {'type': 'conversationLink', 'conversationId': 'meeting', 'summary': 'Notes'}
+      ],
+    });
+    final reply = ServerMessage.fromJson({
+      ...message('reply').toJson(),
+      'sender': 'ai',
+      'content_blocks': [
+        {'type': 'taskCard', 'id': 'task-block', 'taskId': 'task'}
+      ],
+    });
+    final api = FakeSessions()..readResult = (_, __) async => ApiSuccess([automatic, reply]);
+    final provider = MessageProvider(sessionsApi: api);
+    addTearDown(provider.dispose);
+    SharedPreferencesUtil().cachedMessages = [automatic, reply];
+    provider.setMessagesFromCache();
+    expect(provider.messages.map((m) => m.id), ['reply']);
+    expect(await provider.openChatSession(session('thread')), isTrue);
+    expect(provider.messages.map((m) => m.id), ['reply']);
+    provider.addMessage(automatic);
+    expect(provider.messages.map((m) => m.id), ['reply']);
+    expect(provider.messages.single.typedContentBlocks.length, 1);
+  });
+
+  test('filtered session rows still advance the raw page offset', () async {
+    final rows = List.generate(
+        100,
+        (i) => ServerMessage.fromJson({
+              ...message('auto-$i').toJson(),
+              'metadata': '{"chatFirstIntentId":"old-$i"}',
+            }));
+    final api = FakeSessions()..readResult = (_, offset) async => ApiSuccess(offset == 0 ? rows : [message('user')]);
+    final provider = MessageProvider(sessionsApi: api);
+    addTearDown(provider.dispose);
+    await provider.openChatSession(session('thread'));
+    expect(provider.messages, isEmpty);
+    expect(provider.hasOlderMessages, isTrue);
+    await provider.loadOlderMessages();
+    expect(api.offsets, [0, 100]);
+    expect(provider.messages.single.id, 'user');
+  });
+
   test('opening history failure keeps the previous target and transcript', () async {
     final api = FakeSessions();
     final provider = MessageProvider(sessionsApi: api);
