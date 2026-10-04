@@ -27,7 +27,8 @@ SURFACES = (
 )
 
 
-def manifest():
+@pytest.fixture(scope='module')
+def deployment_manifest():
     return yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())
 
 
@@ -43,8 +44,8 @@ def public_token():
 
 
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
-def test_every_host_binds_same_public_token_and_chart_values(stage):
-    config = manifest()['environments'][stage]
+def test_every_host_binds_same_public_token_and_chart_values(stage, deployment_manifest):
+    config = deployment_manifest['environments'][stage]
     for path in SURFACES:
         host = surface(config, path)
         assert host['env'][TOKEN] == {'value': public_token(), 'category': 'rollout'}
@@ -61,8 +62,8 @@ def test_every_host_binds_same_public_token_and_chart_values(stage):
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
 @pytest.mark.parametrize('path', SURFACES)
 @pytest.mark.parametrize('entry', [None, {'value': 'disabled'}, {'value': 'not-public'}, {'secret': {'key': TOKEN}}])
-def test_manifest_rejects_missing_or_invalid_binding_on_each_host(stage, path, entry):
-    config = copy.deepcopy(manifest()['environments'][stage])
+def test_manifest_rejects_missing_or_invalid_binding_on_each_host(stage, path, entry, deployment_manifest):
+    config = copy.deepcopy(deployment_manifest['environments'][stage])
     env = surface(config, path)['env']
     if entry is None:
         del env[TOKEN]
@@ -100,8 +101,8 @@ def test_plain_token_validation_allows_only_optional_absence():
 
 
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
-def test_cloud_run_render_and_desktop_workflow_bind_plain_token(stage, monkeypatch):
-    source = manifest()
+def test_cloud_run_render_and_desktop_workflow_bind_plain_token(stage, monkeypatch, deployment_manifest):
+    source = deployment_manifest
     config = source['environments'][stage]
     # Resolve provisional deploy inputs without cloud credentials or live services.
     for host in config['cloud_run']['services'].values():
