@@ -2983,24 +2983,6 @@ as well as old retained anchors. OFF preserves the former endpoint projection,
 including its hiatus weakness. V2 translation always uses the same strict helper;
 `AUDIO_TIMELINE_V2` stays off. Transcript text survives refusals; no gap is filled.
 
-### Preserve original live provider pieces
-
-`LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION` is an independent default-off gate in the
-live transaction planner. When enabled, a merge with a known capture window stops
-if the other contributor is unknown or its known window is disjoint. Partial
-sentence redistribution also stops when either original piece has a known window.
-Original provider text, IDs, speakers, times and capture windows remain paired;
-contiguous/overlapping whole-piece unions still work. Both unknown pieces retain
-today's text merging, and manual protection/decisions retain precedence. Sync and
-other combine callers do not opt in. No word boundaries or windows are invented.
-
-This changes visible turn segmentation while enabled. It prevents future sticky
-unknown survivors and preserves windows during partial repairs, but cannot recover
-proof for already merged unknown text. A provider interval crossing a VAD gap still
-refuses in the translator. The resolver must still validate every candidate against
-stored span-bearing audio; field availability alone is not a resolved conversation.
-
-
 ### Receiver-proven live merge unions
 
 `LIVE_CAPTURE_WINDOW_MERGE_UNION` defaults **off** in code and every deployment
@@ -3018,8 +3000,8 @@ up to 32 recent conversations, for this session. Each transaction validates its
 snapshot window against that sidecar before merging. Successful writes return
 the new tail proof separately from storage. Restarts, older tails, changed
 transaction windows and uncertain write acknowledgements can reduce recovery;
-no provider connection, raw audio, epoch identifier or proof is persisted or
-exposed to clients. OFF preserves legacy text/window payloads and counters.
+no provider connection or raw audio is retained, and no epoch identifier or proof
+enters stored transcripts or client projections. OFF preserves legacy text/window payloads and counters.
 
 Unknown text stays unknown. When exactly one side is known and the preceding
 row ends with supported sentence punctuation, ON starts the next sentence as a
@@ -3031,3 +3013,20 @@ speaker scopes and durable replay receipts retain precedence. Recovered unions
 use the existing `known_window` attribution; there is no new metric label.
 Capture placement and conversation-wide resolution still require stored-audio
 span validation. The preservation and retention switches remain independent.
+
+### Preserve original live provider pieces
+
+`LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION` is an independent default-off gate in the
+live transaction planner. When enabled, a merge with a known capture window stops
+if the other contributor is unknown or its known window is disjoint. Partial
+sentence redistribution also stops when either original piece has a known window.
+Original provider text, IDs, speakers, times and capture windows remain paired;
+contiguous/overlapping whole-piece unions still work. Both unknown pieces retain
+today's text merging, and manual protection/decisions retain precedence. Sync and
+other combine callers do not opt in. No word boundaries or windows are invented.
+
+This changes visible turn segmentation while enabled. It prevents future sticky
+unknown survivors and preserves windows during partial repairs, but cannot recover
+proof for already merged unknown text. A provider interval crossing a VAD gap still
+refuses in the translator. The resolver must still validate every candidate against
+stored span-bearing audio; field availability alone is not a resolved conversation.
