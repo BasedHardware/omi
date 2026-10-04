@@ -8,7 +8,7 @@ overlay:
   gke:
     backend-listen:
       env:
-        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -191,7 +191,7 @@ overlay:
           category: rollout
     pusher:
       env:
-        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
