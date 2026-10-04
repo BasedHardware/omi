@@ -20,6 +20,9 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
             category: rollout
+          CAPTURE_EVIDENCE_V1_DARK_WRITE:
+            value: 'true'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -474,6 +477,9 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
             category: rollout
+          CAPTURE_EVIDENCE_V1_DARK_WRITE:
+            value: 'true'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -871,6 +877,9 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -1183,6 +1192,9 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -1457,6 +1469,9 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -1683,6 +1698,9 @@ environments:
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -2178,6 +2196,9 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
             category: rollout
+          CAPTURE_EVIDENCE_V1_DARK_WRITE:
+            value: 'true'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2665,6 +2686,9 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
             category: rollout
+          CAPTURE_EVIDENCE_V1_DARK_WRITE:
+            value: 'true'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2974,6 +2998,9 @@ environments:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'true'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
@@ -3308,6 +3335,9 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
               category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -3575,6 +3605,9 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
               category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
+              value: 'true'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -3814,6 +3847,9 @@ environments:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'true'
+              category: rollout
+            CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
