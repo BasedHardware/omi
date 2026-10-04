@@ -3001,13 +3001,19 @@ snapshot window against that sidecar before merging. Successful writes return
 the new tail proof separately from storage. Restarts, older tails, changed
 transaction windows and uncertain write acknowledgements can reduce recovery;
 no provider connection or raw audio is retained, and no epoch identifier or proof
-enters stored transcripts or client projections. OFF preserves legacy text/window payloads and counters.
+enters stored transcripts, client projections or inbound diagnostic cassettes.
+The receiver omits the proof from the copy sent to diagnostic capture while keeping
+it on live transport. OFF preserves legacy text/window payloads and counters.
 
 Unknown text stays unknown. When exactly one side is known and the preceding
-row ends with supported sentence punctuation, ON starts the next sentence as a
-row. Inside a sentence ordinary word merging continues, including clearing
-windows when an unknown piece is absorbed. This bounds sticky unknown absorption
-without making every provider word a row. Partial cross-speaker redistribution
+row ends with unambiguous sentence punctuation followed by an uppercase sentence
+start, ON can keep the next piece as a row. Both pieces must already contain at
+least two words and span at least one second. Titles, known abbreviations, initials,
+decimals, ellipses, URLs and all-uppercase acronym endings do not establish this boundary. Uncased starts and
+individual word callbacks abstain; no future continuation is assumed. Inside a
+sentence ordinary word merging continues, including clearing windows when an
+unknown piece is absorbed. This trades coverage for substantial rows when the
+boundary is uncertain. Partial cross-speaker redistribution
 still clears both windows because it lacks per-word proof. Manual protection,
 speaker scopes and durable replay receipts retain precedence. Recovered unions
 use the existing `known_window` attribution; there is no new metric label.

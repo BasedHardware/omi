@@ -133,23 +133,23 @@ async def test_unknown_absorption_ends_at_a_sentence_not_at_each_word(monkeypatc
     for i, text in enumerate(['old', 'sentence.', 'Now', 'we', 'have', 'audio.']):
         callback([raw(str(i), text, 0.2 + i * 0.5, 0.5 + i * 0.5)])
         rows = await tick(receiver, processor, store)
-    assert [s['text'] for s in rows] == (
-        ['Lost old sentence.', 'Now we have audio.'] if enabled else ['Lost old sentence. Now we have audio.']
-    )
-    assert known(rows) == int(enabled)
-    if enabled:
-        assert rows[0]['id'] == 'unknown' and rows[1]['id'] == '2'
-        assert (rows[1]['audio_capture_start'], rows[1]['audio_capture_end']) == (T0 + 1.2, T0 + 3)
+    # Neither the zero-duration left row nor the next single-word callback is
+    # enough evidence to isolate a substantial sentence row. Conservatively absorb.
+    assert [s['text'] for s in rows] == ['Lost old sentence. Now we have audio.']
+    assert known(rows) == 0
 
 
 @pytest.mark.parametrize('ender', ['.', '!', '?', '。', '！', '？', '؟', '۔', '।', '॥'])
 async def test_unknown_sentence_boundary_locales(monkeypatch, ender):
     receiver, callback, epoch, sender, processor, store = harness(monkeypatch, True)
-    accept(receiver, sender, 0, 2)
-    callback([raw('unknown', 'Lost' + ender, 0, 0), raw('b', 'Next', 0.1, 0.4), raw('c', 'sentence' + ender, 0.6, 0.9)])
+    callback([raw('unknown', 'Lost sentence' + ender, 0.1, 1.5)])
+    await tick(receiver, processor, store)
+    accept(receiver, sender, 0, 4)
+    callback([raw('b', 'Next sentence' + ender, 2, 3.5)])
     rows = await tick(receiver, processor, store)
-    assert [s['text'] for s in rows] == ['Lost' + ender, 'Next sentence' + ender]
+    assert [s['text'] for s in rows] == ['Lost sentence' + ender, 'Next sentence' + ender]
     assert known(rows) == 1
+    assert all(s['end'] - s['start'] >= 1 and len(s['text'].split()) >= 2 for s in rows)
 
 
 @pytest.mark.parametrize('enabled', [False, True])
@@ -248,11 +248,13 @@ async def test_simulated_word_stream_coverage_and_rows(monkeypatch, provider):
             known_words=sum(len(s['text'].split()) for s in rows if 'audio_capture_start' in s),
             words=sum(len(s['text'].split()) for s in rows),
             texts=[s['text'] for s in rows],
+            durations=[s['end'] - s['start'] for s in rows],
         )
     assert report['on']['words'] == report['off']['words'] == 72
     assert report['on']['known_window'] > report['off']['known_window']
     assert report['on']['rows'] <= 12
     assert all(len(t.split()) >= 6 for t in report['on']['texts'])
+    assert all(d >= 1 for d in report['on']['durations'])
     if os.getenv('CAPTURE_R5_SIMULATION_OUTPUT'):
         Path(os.environ['CAPTURE_R5_SIMULATION_OUTPUT'] + '.' + provider + '.json').write_text(
             json.dumps(report, indent=2) + '\n'

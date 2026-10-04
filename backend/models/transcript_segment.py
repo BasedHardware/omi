@@ -29,6 +29,34 @@ CROSS_SPEAKER_REPAIR_MAX_GAP_SECONDS = 3
 
 AUDIO_SOURCE_MERGE_TOLERANCE_SECONDS = 0.001
 
+# Titles and common period-bearing abbreviations in English, Spanish and Vietnamese.
+# Dotted initials, decimals, URLs and ellipses are rejected structurally below.
+UNKNOWN_BOUNDARY_ABBREVIATIONS = frozenset(
+    'dr mr mrs ms prof sr sra srta jr st vs etc eg ie ts ths pgs gs bs ks tp th tr'.split()
+)
+
+
+def _unambiguous_unknown_boundary(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
+    """Abstain unless both already-sized rows have clear sentence-boundary text.
+
+    Provider word callbacks are not sentence boundaries. Do not isolate their first
+    word while waiting for a continuation; losing its window is safer than a short row.
+    Uncased sentence starts also abstain without explicit provider boundary evidence.
+    """
+    left, right = a.text.split(), b.text.split()
+    if len(left) < 2 or len(right) < 2 or not (a.end - a.start >= 1 and b.end - b.start >= 1):
+        return False
+    last = left[-1]
+    if last[-1:] not in SENTENCE_ENDERS or not right[0][0].isupper():
+        return False
+    preceding = last[:-1]
+    return (
+        len(preceding) >= 2
+        and preceding.isalpha()
+        and not preceding.isupper()
+        and preceding.casefold() not in UNKNOWN_BOUNDARY_ABBREVIATIONS
+    )
+
 
 def _sync_source_window(source: Any) -> Optional[Tuple[float, float]]:
     """Absolute ``(start, end)`` of a stored sync provenance marker, or None."""
@@ -495,11 +523,12 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if (
                 bound_unknown_sentences
-                and a.text.rstrip()[-1:] in SENTENCE_ENDERS
                 and (a.capture_window_bounds() is None) != (b.capture_window_bounds() is None)
+                and _is_chronological_continuation(a, b)
+                and _unambiguous_unknown_boundary(a, b)
             ):
-                # A whole unknown sentence stays unknown. Resume known text at
-                # its next sentence, never split each provider word into a row.
+                # Only keep two substantial, unambiguous sentence pieces separate.
+                # Ambiguous punctuation and individual word callbacks still absorb.
                 return a, b
             preserve_known_window = preserve_capture_windows and (
                 a.capture_window_bounds() is not None or b.capture_window_bounds() is not None
