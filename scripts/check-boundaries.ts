@@ -13,10 +13,10 @@ const files = tracked.stdout.toString().trim().split("\n").filter(Boolean);
 // Swift is allowed only where the package manifest declares a target path
 // (Package.swift itself excepted).
 const packageSwift = await Bun.file(
-  import.meta.dir + "/../Package.swift",
+  import.meta.dir + "/../Package.swift"
 ).text();
 const targetPaths = [...packageSwift.matchAll(/path:\s*"([^"]+)"/g)].map(
-  (match) => match[1],
+  (match) => match[1]
 );
 
 const forbidden = files.filter((file) => {
@@ -29,11 +29,11 @@ const forbidden = files.filter((file) => {
     // not the Swift package; everything else must sit in a package target.
     if (file.startsWith("app/Platforms/")) return false;
     return !targetPaths.some(
-      (targetPath) => file === targetPath || file.startsWith(targetPath + "/"),
+      (targetPath) => file === targetPath || file.startsWith(targetPath + "/")
     );
   }
   return /(^|\/)(node_modules|Pods|DerivedData|\.build|dist)(\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(
-    file,
+    file
   );
 });
 
@@ -43,7 +43,7 @@ if (forbidden.length > 0) {
 }
 
 const sourceFiles = files.filter((file) =>
-  /\.(c|cc|cpp|h|m|mm|ts|tsx)$/.test(file),
+  /\.(c|cc|cpp|h|m|mm|ts|tsx)$/.test(file)
 );
 for (const file of sourceFiles) {
   const text = await Bun.file(import.meta.dir + "/../" + file).text();
