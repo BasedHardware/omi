@@ -821,7 +821,12 @@ def test_utterance_sample_is_evenly_strided_with_endpoints():
     eligible = [(T0, T0, ('w%03d' % index,)) for index in range(100)]
     sample = cc._sample_utterances(eligible)
     assert len(sample) == cc.MAX_SMALLER_UTTERANCES == 32
-    indices = [index for index, item in enumerate(eligible) if item in sample]
+    assert all(weight == 1 for _, _, _, weight in sample)
+    indices = [
+        index
+        for index, item in enumerate(eligible)
+        if (item[0], item[1], item[2]) in [(s, e, w) for s, e, w, _ in sample]
+    ]
     assert indices == [i * 99 // 31 for i in range(32)]
     assert indices[0] == 0 and indices[-1] == 99
 
@@ -830,10 +835,20 @@ def test_utterance_sample_follows_word_mass_not_utterance_count():
     eligible = [(T0, T0, ('w%03d' % index,) * (8 if index % 2 == 0 else 120)) for index in range(40)]
     sample = cc._sample_utterances(eligible)
     assert len(sample) <= cc.MAX_SMALLER_UTTERANCES
-    assert len(set(sample)) == len(sample)
-    assert sample[0] == eligible[0] and sample[-1] == eligible[-1]
-    indices = [index for index, item in enumerate(eligible) if item in sample]
+    assert len({(s, e, w) for s, e, w, _ in sample}) == len(sample)
+    assert sum(weight for _, _, _, weight in sample) == cc.MAX_SMALLER_UTTERANCES == 32
+    assert any(weight > 1 for _, _, _, weight in sample)
+    chosen = [(s, e, w) for s, e, w, _ in sample]
+    assert chosen[0] == eligible[0] and chosen[-1] == eligible[-1]
+    indices = [index for index, item in enumerate(eligible) if item in chosen]
     assert indices != [i * 39 // 31 for i in range(len(indices))]
+
+
+def test_utterance_sample_weights_equal_words_when_unsampled():
+    eligible = [(T0, T0, ('w%03d' % index,) * (index + 8)) for index in range(32)]
+    sample = cc._sample_utterances(eligible)
+    assert [(s, e, w) for s, e, w, _ in sample] == eligible
+    assert all(weight == len(words) for _, _, words, weight in sample)
 
 
 def test_length_skewed_pair_cannot_confirm_under_word_mass_sampling():
@@ -841,6 +856,19 @@ def test_length_skewed_pair_cannot_confirm_under_word_mass_sampling():
     for first, second in ((pendant, desktop), (desktop, pendant)):
         decision = cc.measure_capture_containment(first, second)
         assert not decision.would_join and decision.coverage < cc.MIN_COVERAGE
+
+
+def test_collapsed_quantile_hits_retain_weight_in_coverage():
+    pendant, desktop = long_pair.quantile_collapse_pair()
+    for first, second in ((pendant, desktop), (desktop, pendant)):
+        decision = cc.measure_capture_containment(first, second)
+        assert not decision.would_join
+        assert decision.coverage == pytest.approx(22 / 32) and decision.coverage < cc.MIN_COVERAGE
+    eligible = [(T0, T0, tuple(seg['text'].split())) for seg in pendant['transcript_segments']]
+    sample = cc._sample_utterances(eligible)
+    assert sum(weight for _, _, _, weight in sample) == 32
+    mass_weight = sum(weight for _, _, words, weight in sample if words[0].startswith('mass'))
+    assert mass_weight == 22
 
 
 def test_filler_between_every_target_token_still_rejects():

@@ -139,3 +139,40 @@ def length_skewed_pair():
     pendant = row('pendant', 'omi', 0.0, SKEW_SECONDS, pendant_segments)
     desktop = row('desktop', 'desktop', 0.0, SKEW_SECONDS, desktop_segments)
     return pendant, desktop
+
+
+COLLAPSE_SECONDS = 1400.0
+COLLAPSE_UTTERANCES = 33
+COLLAPSE_MASS = 4
+COLLAPSE_STEP = 40.0
+
+
+def quantile_collapse_pair():
+    """Four massive exact-match utterances absorb 22 of 32 quantile hits.
+
+    Word-mass sampling must count repeated hits as coverage weight; otherwise
+    the few disjoint sampled words misreport coverage. The exact-match head is
+    deliberately strong enough that the symmetric trigram rule confirms too.
+    """
+    pendant_segments = []
+    desktop_segments = []
+    for index in range(COLLAPSE_UTTERANCES):
+        start = index * COLLAPSE_STEP
+        if index < COLLAPSE_MASS:
+            text = ' '.join('mass%dw%d' % (index, word) for word in range(128))
+            pendant_segments.append(segment(text, start, end=start + 30.0))
+            desktop_segments.append(segment(text, start, end=start + 30.0))
+        else:
+            pendant_segments.append(
+                segment(' '.join('small%dw%d' % (index, word) for word in range(8)), start, end=start + 2.0)
+            )
+            desktop_segments.append(
+                segment(' '.join('other%dw%d' % (index, word) for word in range(8)), start, end=start + 2.0)
+            )
+    for extra in range(10):
+        start = extra * 100.0 + 35.0
+        desktop_segments.append(segment('extra remote words', start, is_user=False, end=start + 2.0))
+    desktop_segments.sort(key=lambda item: item['start'])
+    pendant = row('pendant', 'omi', 0.0, COLLAPSE_SECONDS, pendant_segments)
+    desktop = row('desktop', 'desktop', 0.0, COLLAPSE_SECONDS, desktop_segments)
+    return pendant, desktop

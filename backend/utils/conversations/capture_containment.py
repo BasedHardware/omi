@@ -255,11 +255,12 @@ def _ordered_match(u_words: tuple[str, ...], bundle_words: tuple[str, ...]) -> t
 
 
 def _match_utterances(
-    small_user: list[tuple[datetime, datetime, tuple[str, ...]]],
+    small_user: list[tuple[datetime, datetime, tuple[str, ...], int]],
     target_user: list[tuple[datetime, datetime, tuple[str, ...]]],
-) -> tuple[int, set[str], set[tuple[str, ...]], float]:
+) -> tuple[int, set[str], set[tuple[str, ...]], float, float]:
     """Greedily pair smaller user utterances with monotonic target bundles."""
     matched_words = 0
+    matched_weight = 0.0
     matched_tokens: set[str] = set()
     matched_utterances: set[tuple[str, ...]] = set()
     covered_until: datetime | None = None
@@ -271,7 +272,7 @@ def _match_utterances(
     bundle_checks = 0
     skew = timedelta(seconds=MAX_TIME_SKEW_SECONDS)
     target_starts = [item[0] for item in target_user]
-    for u_start, u_end, u_words in small_user:
+    for u_start, u_end, u_words, u_weight in small_user:
         u_bigrams = _bigrams(u_words)
         candidates = []
         first = max(last_consumed + 1, bisect.bisect_left(target_starts, u_start - skew))
@@ -320,6 +321,7 @@ def _match_utterances(
         _, j, common, matched = best
         last_consumed = j
         matched_words += common
+        matched_weight += (common / len(u_words)) * u_weight
         matched_tokens.update(matched)
         matched_utterances.add(u_words)
         if covered_until is None or u_start >= covered_until:
@@ -327,26 +329,25 @@ def _match_utterances(
         elif u_end > covered_until:
             support_seconds += (u_end - covered_until).total_seconds()
         covered_until = u_end if covered_until is None else max(covered_until, u_end)
-    return matched_words, matched_tokens, matched_utterances, support_seconds
+    return matched_words, matched_tokens, matched_utterances, support_seconds, matched_weight
 
 
 def _sample_utterances(
     eligible: list[tuple[datetime, datetime, tuple[str, ...]]],
-) -> list[tuple[datetime, datetime, tuple[str, ...]]]:
+) -> list[tuple[datetime, datetime, tuple[str, ...], int]]:
     if len(eligible) <= MAX_SMALLER_UTTERANCES:
-        return list(eligible)
+        return [(start, end, words, len(words)) for start, end, words in eligible]
     cumulative_ends = []
     total_words = 0
     for _, _, words in eligible:
         total_words += len(words)
         cumulative_ends.append(total_words)
-    indices = sorted(
-        {
-            bisect.bisect_right(cumulative_ends, i * (total_words - 1) // (MAX_SMALLER_UTTERANCES - 1))
-            for i in range(MAX_SMALLER_UTTERANCES)
-        }
-    )
-    return [eligible[index] for index in indices]
+    hits: dict[int, int] = {}
+    for i in range(MAX_SMALLER_UTTERANCES):
+        position = i * (total_words - 1) // (MAX_SMALLER_UTTERANCES - 1)
+        index = bisect.bisect_right(cumulative_ends, position)
+        hits[index] = hits.get(index, 0) + 1
+    return [(*eligible[index], hits[index]) for index in sorted(hits)]
 
 
 def measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
@@ -382,9 +383,11 @@ def _measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
     eligible = [(s, e, w) for s, e, w in small_user if len(w) >= MIN_UTTERANCE_WORDS]
     eligible_words = sum(len(words) for _, _, words in eligible)
     sample = _sample_utterances(eligible)
-    sample_words = sum(len(words) for _, _, words in sample)
-    matched_words, matched_tokens, matched_utterances, support_seconds = _match_utterances(sample, large_user)
-    coverage = (matched_words / sample_words) * (eligible_words / smaller_words) if sample_words else 0.0
+    sample_weight = sum(weight for _, _, _, weight in sample)
+    matched_words, matched_tokens, matched_utterances, support_seconds, matched_weight = _match_utterances(
+        sample, large_user
+    )
+    coverage = (matched_weight / sample_weight) * (eligible_words / smaller_words) if sample_weight else 0.0
     decision = CaptureContainment(
         would_join=(
             matched_words >= MIN_MATCHED_WORDS
