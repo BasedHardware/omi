@@ -32,6 +32,7 @@ import routers.developer as developer_router
 import routers.google_calendar as google_calendar_router
 import routers.integration as integration_router
 import routers.search as search_router
+import routers.support as support_router
 import routers.users as users_router
 import utils.app_integrations as app_integrations
 import utils.apps as apps_utils
@@ -510,6 +511,19 @@ def _run_calendar_gaps(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) 
     trial(capture, call)
 
 
+def _run_support_trace(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    _stub(monkeypatch, support_router, 'resolve_support_target', lambda email: 'u1')
+    trial(
+        capture,
+        support_router.trace_support_recordings,
+        email='customer@example.com',
+        input_from=FROZEN_NOW.isoformat(),
+        input_to=FROZEN_LATER.isoformat(),
+        caller_uid='support-caller',
+    )
+    assert capture.calls[-1]['limit'] == 51 and capture.calls[-1]['metadata_only'] is True
+
+
 def _run_wrapped(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, wrapped_2025, '_update_progress', lambda *a, **k: None)
     trial(capture, wrapped_2025.generate_wrapped_2025, 'u1')
@@ -518,6 +532,14 @@ def _run_wrapped(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> Non
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
+        CallerWitness(
+            'routers/support.py:trace_support_recordings:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('support-trace',),
+            1,
+            _run_support_trace,
+        ),
         CallerWitness(
             'routers/conversations.py:get_conversations:database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',

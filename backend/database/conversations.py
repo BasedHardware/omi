@@ -1140,6 +1140,8 @@ def get_conversations(
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
     date_field: str = 'created_at',
+    *,
+    metadata_only: bool = False,
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -1165,6 +1167,24 @@ def get_conversations(
     # Sort — must match the range-filter field to satisfy Firestore index requirements
     sort_field = date_field if (start_date or end_date) else 'created_at'
     conversations_ref = conversations_ref.order_by(sort_field, direction=firestore.Query.DESCENDING)
+
+    if metadata_only:
+        # Support needs presence, never decoded content or photo hydration. Bound
+        # the query itself, including discarded/deleted lifecycle evidence.
+        fields = [
+            'id',
+            'started_at',
+            'finished_at',
+            'status',
+            'postprocessing.status',
+            'postprocessing_status',
+            'audio_files',
+            'transcript_segments_compressed',
+        ]
+        return [
+            dict(doc.to_dict() or {}, id=doc.id)
+            for doc in conversations_ref.select(fields).limit(limit).offset(offset).stream()
+        ]
 
     return _collect_visible_conversation_page(
         conversations_ref, limit=limit, offset=offset, include_discarded=include_discarded
