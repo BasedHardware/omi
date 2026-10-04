@@ -20,7 +20,6 @@ import database.goals as goals_db
 import database.screen_activity as screen_activity_db
 from database._client import db as firestore_db, get_firestore_client
 from database.auth import get_user_from_uid
-from models.calendar_context import CalendarMeetingContext
 from utils.memory.memory_service import MemoryService
 from utils.conversations.meeting_context import stored_meeting_window
 from utils.conversations.meeting_participants import MeetingRoster
