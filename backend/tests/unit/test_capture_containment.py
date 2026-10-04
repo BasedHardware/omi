@@ -6,6 +6,7 @@ coverage stays at 0.8125 >= 0.8.
 """
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -140,6 +141,8 @@ def test_unrelated_meetings_with_user_speech_do_not_join():
 def test_background_media_without_user_attribution_never_joins():
     pendant, laptop = complementary_pair()
     for item in laptop['transcript_segments']:
+        if not item['is_user']:
+            item['start'] += 5.0
         item['is_user'] = False
     decision = cc.measure_capture_containment(pendant, laptop)
     assert not decision.would_join and decision.reason == 'no_user_speech'
@@ -148,6 +151,8 @@ def test_background_media_without_user_attribution_never_joins():
 def test_missing_or_unknown_user_attribution_fails_closed():
     pendant, laptop = complementary_pair()
     for item in laptop['transcript_segments']:
+        if not item['is_user']:
+            item['start'] += 5.0
         item.pop('is_user')
     assert cc.measure_capture_containment(pendant, laptop).reason == 'no_user_speech'
     for item in laptop['transcript_segments']:
@@ -487,15 +492,32 @@ def test_sparse_matches_with_long_span_reject():
     assert decision.matched_words == 52 and decision.coverage == 0.8125 and decision.support_seconds == 32.0
 
 
-def test_overlapping_matched_intervals_merge_in_support():
+@pytest.mark.parametrize('track', [True, False])
+@pytest.mark.parametrize('shape', ['equal', 'partial'])
+@pytest.mark.parametrize('unordered', [False, True])
+def test_overlapping_intervals_within_a_track_reject(track, shape, unordered):
+    for order in (('pendant', 'laptop'), ('laptop', 'pendant')):
+        pendant, laptop = complementary_pair()
+        targets = [item for item in laptop['transcript_segments'] if item['is_user'] is track]
+        if shape == 'equal':
+            targets[1]['start'], targets[1]['end'] = targets[0]['start'], targets[0]['end']
+        else:
+            targets[1]['start'] = targets[0]['start'] + 1.0
+        if unordered:
+            laptop['transcript_segments'].reverse()
+        rows = {'pendant': pendant, 'laptop': laptop}
+        decision = cc.measure_capture_containment(rows[order[0]], rows[order[1]])
+        assert not decision.would_join and decision.reason == 'bounds'
+        assert decision.matched_words == 0 and decision.support_seconds == 0.0
+
+
+def test_adjacent_intervals_within_a_track_are_allowed():
     pendant, laptop = complementary_pair()
-    for item in pendant['transcript_segments']:
-        item['start'], item['end'] = 80.0, 92.0
-    for item in laptop['transcript_segments']:
-        if item.get('is_user'):
-            item['start'], item['end'] = 83.0, 95.0
+    laptop['transcript_segments'].append(
+        {'text': 'another remote remark', 'start': 231.0, 'end': 240.0, 'is_user': False, 'speaker': 'SPEAKER_00'}
+    )
     decision = cc.measure_capture_containment(pendant, laptop)
-    assert not decision.would_join and decision.reason == 'too_small' and decision.support_seconds == 12.0
+    assert decision.would_join and decision.matched_words == 52
 
 
 def test_whitespace_only_segment_counts_against_character_bounds():
@@ -511,3 +533,225 @@ def test_whitespace_segments_accumulate_capture_character_budget():
     pendant, _ = complementary_pair()
     laptop = row('laptop', 'desktop', 0, 600, segments)
     assert cc.measure_capture_containment(pendant, laptop).reason == 'bounds'
+
+
+def _counting_matcher(calls):
+    real = cc._ordered_match
+
+    def spy(u_words, bundle_words):
+        calls.append((len(u_words) + len(bundle_words), len(u_words) * len(bundle_words)))
+        return real(u_words, bundle_words)
+
+    return spy
+
+
+def _maximum_layout_pair():
+    pendant, laptop = complementary_pair()
+    user = [item for item in laptop['transcript_segments'] if item['is_user']]
+    remote = [
+        {
+            'text': 'w%d' % index,
+            'start': index * 0.25,
+            'end': index * 0.25 + 0.25,
+            'is_user': False,
+            'speaker': 'SPEAKER_00',
+        }
+        for index in range(1020)
+    ]
+    merged = sorted(user + remote, key=lambda item: item['start'])
+    assert len(merged) == cc.MAX_SEGMENTS == 1024
+    return pendant, row('laptop', 'desktop', -3, 297, merged)
+
+
+def test_whole_pair_maximum_layout_stays_within_budgets(monkeypatch):
+    pendant, laptop = _maximum_layout_pair()
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    for first, second in ((pendant, laptop), (laptop, pendant)):
+        calls.clear()
+        decision = cc.measure_capture_containment(first, second)
+        assert decision.would_join and decision.matched_words == 52 and decision.smaller_words == 64
+        assert 0 < len(calls) <= cc.MAX_MATCHER_CALLS
+        assert sum(tokens for tokens, _ in calls) <= cc.MAX_COMPARED_TOKENS
+        assert sum(cells for _, cells in calls) <= cc.MAX_TOKEN_COMPARISONS
+
+
+def test_duplicate_user_intervals_bounds_before_any_matching(monkeypatch):
+    pendant, _ = _maximum_layout_pair()
+    laptop = row(
+        'laptop',
+        'desktop',
+        -3,
+        297,
+        [
+            {
+                'text': 'one two three four five six seven eight',
+                'start': 83.0,
+                'end': 95.0,
+                'is_user': True,
+                'speaker': 'SPEAKER_00',
+            }
+            for _ in range(cc.MAX_SEGMENTS)
+        ],
+    )
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    for first, second in ((pendant, laptop), (laptop, pendant)):
+        decision = cc.measure_capture_containment(first, second)
+        assert not decision.would_join and decision.reason == 'bounds'
+    assert not calls
+
+
+def _budget_rows(count):
+    segments = [segment('a%d b%d c%d d%d e%d f%d g%d h%d' % ((index,) * 8), index * 30.0) for index in range(count)]
+    end = count * 30.0 + 30.0
+    return (
+        row('pendant', 'omi', 0, end, segments),
+        row('laptop', 'desktop', 0, end, [dict(item) for item in segments]),
+    )
+
+
+def test_whole_pair_call_budget_exhaustion_bounds(monkeypatch):
+    pendant, laptop = _budget_rows(129)
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert not decision.would_join and decision.reason == 'bounds'
+    assert len(calls) == cc.MAX_MATCHER_CALLS == 128
+
+
+def test_whole_pair_under_call_budget_joins(monkeypatch):
+    pendant, laptop = _budget_rows(128)
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert decision.would_join and len(calls) == 128
+
+
+@pytest.mark.parametrize('cap', ['tokens', 'cells'])
+def test_whole_pair_token_and_cell_budgets_bound_midway(monkeypatch, cap):
+    monkeypatch.setattr(cc, 'MAX_MATCHER_CALLS', 10000)
+    if cap == 'tokens':
+        monkeypatch.setattr(cc, 'MAX_COMPARED_TOKENS', 32)
+    else:
+        monkeypatch.setattr(cc, 'MAX_TOKEN_COMPARISONS', 128)
+    pendant, laptop = _budget_rows(6)
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert not decision.would_join and decision.reason == 'bounds'
+    assert len(calls) == 2
+
+
+def test_whole_pair_exact_budget_limits_still_accept(monkeypatch):
+    pendant, laptop = complementary_pair()
+    totals = {'calls': 0, 'tokens': 0, 'cells': 0}
+    real = cc._ordered_match
+
+    def spy(u_words, bundle_words):
+        totals['calls'] += 1
+        totals['tokens'] += len(u_words) + len(bundle_words)
+        totals['cells'] += len(u_words) * len(bundle_words)
+        return real(u_words, bundle_words)
+
+    monkeypatch.setattr(cc, '_ordered_match', spy)
+    assert cc.measure_capture_containment(pendant, laptop).would_join
+    monkeypatch.setattr(cc, 'MAX_MATCHER_CALLS', totals['calls'])
+    monkeypatch.setattr(cc, 'MAX_COMPARED_TOKENS', totals['tokens'])
+    monkeypatch.setattr(cc, 'MAX_TOKEN_COMPARISONS', totals['cells'])
+    assert cc.measure_capture_containment(pendant, laptop).would_join
+
+
+def _adversarial_pair():
+    repeated = ' '.join(['same'] * 128)
+    pendant = row(
+        'pendant',
+        'omi',
+        0,
+        300,
+        [segment(repeated, start, end=start + 30.0) for start in (80.0, 140.0, 200.0)],
+    )
+    laptop = row(
+        'laptop',
+        'desktop',
+        0,
+        300,
+        [
+            segment(repeated, start + 12.0 * piece, end=start + 12.0 * piece + 12.0)
+            for start in (80.0, 140.0, 200.0)
+            for piece in range(3)
+        ],
+    )
+    return pendant, laptop
+
+
+def test_whole_pair_cell_budget_exhaustion_bounds(monkeypatch):
+    pendant, laptop = _adversarial_pair()
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert not decision.would_join and decision.reason == 'bounds'
+    assert len(calls) == 8
+    assert sum(cells for _, cells in calls) == cc.MAX_TOKEN_COMPARISONS == 262144
+
+
+def _no_candidate_pair():
+    pendant = row(
+        'pendant',
+        'omi',
+        0,
+        300,
+        [segment('u%d a%d b%d c%d d%d e%d f%d g%d' % ((index,) * 8), 30.0 + 30.0 * index) for index in range(6)],
+    )
+    laptop_segments = []
+    for index in range(6):
+        for piece in range(10):
+            start = 30.0 + 30.0 * index - 12.0 + 0.1 * piece
+            laptop_segments.append(
+                {
+                    'text': 'v%d_%d' % (index, piece),
+                    'start': start,
+                    'end': start + 0.05,
+                    'is_user': True,
+                    'speaker': 'SPEAKER_00',
+                }
+            )
+    laptop_segments.sort(key=lambda item: item['start'])
+    return pendant, row('laptop', 'desktop', 0, 300, laptop_segments)
+
+
+def test_whole_pair_bundle_check_budget_bounds_without_matching(monkeypatch):
+    pendant, laptop = _no_candidate_pair()
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    monkeypatch.setattr(cc, 'MAX_BUNDLE_CHECKS', 2)
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert not decision.would_join and decision.reason == 'bounds'
+    assert not calls
+    monkeypatch.setattr(cc, 'MAX_BUNDLE_CHECKS', 4096)
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert not decision.would_join and decision.reason == 'timing'
+
+
+def test_whole_pair_bundle_check_budget_at_exact_limit_accepts(monkeypatch):
+    pendant, laptop = complementary_pair()
+    monkeypatch.setattr(cc, 'MAX_BUNDLE_CHECKS', 9)
+    assert cc.measure_capture_containment(pendant, laptop).would_join
+    monkeypatch.setattr(cc, 'MAX_BUNDLE_CHECKS', 8)
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert not decision.would_join and decision.reason == 'bounds'
+
+
+@pytest.mark.parametrize('layout', ['maximum', 'exhaustion', 'adversarial'])
+def test_whole_pair_decision_cpu_stays_bounded(layout):
+    if layout == 'maximum':
+        first, second = _maximum_layout_pair()
+    elif layout == 'exhaustion':
+        first, second = _budget_rows(129)
+    else:
+        first, second = _adversarial_pair()
+    start = time.process_time()
+    for _ in range(6):
+        cc.measure_capture_containment(first, second)
+    elapsed = time.process_time() - start
+    assert elapsed < 0.30, elapsed

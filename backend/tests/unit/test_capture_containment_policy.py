@@ -261,6 +261,8 @@ def test_background_media_without_user_speech_stays_separate(seam, monkeypatch, 
     monkeypatch.setenv(containment_module.MODE_ENV, 'on')
     pendant, laptop = complementary_rows()
     for item in laptop['transcript_segments']:
+        if not item['is_user']:
+            item['start'] += 5.0
         item['is_user'] = False
     seam['store'].rows.update({path('pendant'): pendant, path('laptop'): laptop})
     with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
@@ -391,6 +393,52 @@ def test_jev_companion_is_omitted_when_off(seam, monkeypatch, caplog):
         shadow.submit_same_scene(UID, 'pendant', 'laptop')
     detector.assert_not_called()
     assert not containment_lines(caplog)
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'on'])
+def test_pair_budget_exhaustion_blocks_join_through_the_seam(seam, monkeypatch, caplog, mode):
+    monkeypatch.setenv(containment_module.MODE_ENV, mode)
+    monkeypatch.setattr(containment_module, 'MAX_MATCHER_CALLS', 2)
+    pendant, laptop = complementary_rows()
+    seam['store'].rows.update({path('pendant'): pendant, path('laptop'): laptop})
+    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
+        policy.link_duplicate_captures(UID, Conversation(**seam['store'].rows[path('laptop')]))
+    assert all('capture_group' not in r for r in seam['store'].rows.values())
+    for cid in ('pendant', 'laptop'):
+        members = seam['store'].rows[path(cid)].get('capture_group', {}).get('members', [])
+        assert all(m['evidence'].get('method') != 'user_speech_containment' for m in members)
+    assert ('capture_group_joined', 'none') in seam['events']
+    lines = containment_lines(caplog)
+    assert any('would_join=false' in line and 'reason=bounds' in line for line in lines)
+
+
+def test_pair_budget_exhaustion_bounds_every_candidate_pair(seam, monkeypatch, caplog):
+    monkeypatch.setenv(containment_module.MODE_ENV, 'on')
+    monkeypatch.setattr(containment_module, 'MAX_MATCHER_CALLS', 2)
+    calls = []
+    real = containment_module._ordered_match
+
+    def spy(u_words, bundle_words):
+        calls.append(1)
+        return real(u_words, bundle_words)
+
+    monkeypatch.setattr(containment_module, '_ordered_match', spy)
+    pendant, _ = complementary_rows()
+    seam['store'].rows[path('pendant')] = pendant
+    for index in range(6):
+        utterances = [
+            segment('u%d w%d x%d y%d z%d v%d q%d r%d' % ((index,) * 8), t)
+            for t in (20.0, 50.0, 80.0, 140.0, 200.0, 260.0)
+        ]
+        seam['store'].rows[path('stranger%d' % index)] = row('stranger%d' % index, 'desktop', 0, 300, utterances)
+    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
+        policy.link_duplicate_captures(UID, Conversation(**seam['store'].rows[path('pendant')]))
+    assert all('capture_group' not in r for r in seam['store'].rows.values())
+    lines = containment_lines(caplog)
+    assert len(lines) == 6
+    assert all('would_join=false' in line and 'reason=bounds' in line for line in lines)
+    assert len(calls) <= 12
+    assert all(token not in '\n'.join(lines) for token in (UID, 'pendant', 'stranger', 'alpha'))
 
 
 REPO = Path(__file__).resolve().parents[3]

@@ -536,8 +536,14 @@ complementary case: within the intersection of both wall windows it takes the
 capture with fewer in-window words, aligns each of its `is_user` utterances
 (8+ tokens) to a chronological bundle of one to three contiguous user segments
 on the other side (both ends within 12 seconds), and accepts a pair only when
-difflib matching blocks cover at least 0.8 of the utterance tokens and share at
-least two distinct adjacent bigrams. A join additionally requires 40+ matched
+a bounded ordered longest-common-subsequence match covers at least 0.8 of the
+utterance tokens and shares at
+least two distinct adjacent bigrams. Only ordered subsequences count as
+coverage — a fully reversed transcript still fails — while a partial reorder
+keeps whatever ordered subsequence survives; this is not bag-of-words overlap.
+The ordered LCS is optimal rather than the previous greedy difflib alignment,
+so it can resolve some ambiguous token alignments more optimally; every
+threshold remains shadow-mode and uncalibrated. A join additionally requires 40+ matched
 words, 20+ distinct matched tokens, 3+ distinct matched utterances, 45+ seconds
 of union duration of matched utterance intervals (not wall-span gaps), and
 matched/total coverage of at least 0.8. Every threshold
@@ -546,7 +552,19 @@ All inputs are
 bounded (segments, characters, words, candidate bundles) and every bound fails
 closed as `bounds`; every string, including whitespace-only text, counts toward
 the character budgets; missing or non-`is_user` attribution, malformed timing, and
-speech outside the shared window are never evidence. Modes: `off` runs nothing
+speech outside the shared window are never evidence. Overlapping or duplicated
+intervals within one attribution track (own-voice versus all other speakers;
+touching endpoints are allowed, and the two tracks may overlap each other) fail
+closed as `bounds` before any matching. Work per pair is additionally bounded
+end to end: candidate windows are located by index lookups over the sorted
+target starts rather than a full rescan, and four pair-wide budgets — 4,096
+bundle-check span attempts, 128 matcher calls, 16,384 summed compared tokens,
+and 262,144 summed LCS cells — bound discovery and all alignments together, so
+even candidates that never qualify cannot rescan the target; any projected
+overflow returns `bounds` with no partial evidence. With N at most 1,024
+in-window segments, total work stays O(N log N) sorting and index lookups plus
+at most 4,096×384 candidate-word construction, 262,144 DP cells, and 16,384
+reconstruction and lexical-token work. Modes: `off` runs nothing
 new, `shadow` computes and logs the fixed content-free line
 `event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=…`
 (labels and numbers only — never transcript, identifiers, or errors), and `on`

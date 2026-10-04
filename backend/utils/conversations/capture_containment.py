@@ -15,7 +15,7 @@ detail.
 
 from __future__ import annotations
 
-import difflib
+import bisect
 import itertools
 import logging
 import math
@@ -60,6 +60,10 @@ MAX_BUNDLE_SECONDS = 90.0
 MAX_BUNDLE_WORDS = 384
 MAX_BUNDLE_SPAN = 3
 MAX_TIME_SKEW_SECONDS = 12.0
+MAX_MATCHER_CALLS = 128
+MAX_COMPARED_TOKENS = 16384
+MAX_TOKEN_COMPARISONS = 262144
+MAX_BUNDLE_CHECKS = 4096
 
 _WORD = re.compile(r"[^\W_]+(?:'[^\W_]+)?", re.UNICODE)
 
@@ -184,11 +188,44 @@ def _in_window_segments(
             return None
         placed.append((wall_start, wall_end, _field(segment, 'is_user') is True, words, index))
     placed.sort(key=lambda item: (item[0], item[1], item[4]))
+    latest_end: dict[bool, datetime] = {}
+    for item in placed:
+        previous = latest_end.get(item[2])
+        if previous is not None and item[0] < previous:
+            return None
+        latest_end[item[2]] = item[1]
     return placed, total_words
 
 
 def _bigrams(words: tuple[str, ...]) -> set[tuple[str, str]]:
     return {(words[i], words[i + 1]) for i in range(len(words) - 1)}
+
+
+def _ordered_match(u_words: tuple[str, ...], bundle_words: tuple[str, ...]) -> tuple[int, set[str]]:
+    """Ordered LCS length plus the smaller-side tokens the alignment matched."""
+    m, n = len(u_words), len(bundle_words)
+    rows = [[0] * (n + 1) for _ in range(m + 1)]
+    for i in range(1, m + 1):
+        above, current = rows[i - 1], rows[i]
+        for j in range(1, n + 1):
+            if u_words[i - 1] == bundle_words[j - 1]:
+                current[j] = above[j - 1] + 1
+            elif above[j] >= current[j - 1]:
+                current[j] = above[j]
+            else:
+                current[j] = current[j - 1]
+    matched: set[str] = set()
+    i, j = m, n
+    while i > 0 and j > 0:
+        if u_words[i - 1] == bundle_words[j - 1] and rows[i][j] == rows[i - 1][j - 1] + 1:
+            matched.add(u_words[i - 1])
+            i -= 1
+            j -= 1
+        elif rows[i - 1][j] > rows[i][j - 1]:
+            i -= 1
+        else:
+            j -= 1
+    return rows[m][n], matched
 
 
 def _match_utterances(
@@ -202,17 +239,23 @@ def _match_utterances(
     covered_until: datetime | None = None
     support_seconds = 0.0
     last_consumed = -1
+    matcher_calls = 0
+    compared_tokens = 0
+    token_comparisons = 0
+    bundle_checks = 0
+    skew = timedelta(seconds=MAX_TIME_SKEW_SECONDS)
+    target_starts = [item[0] for item in target_user]
     for u_start, u_end, u_words in small_user:
         candidates = []
-        skew = timedelta(seconds=MAX_TIME_SKEW_SECONDS)
-        for i in range(last_consumed + 1, len(target_user)):
-            if target_user[i][0] - u_start > skew:
-                break
-            if u_start - target_user[i][0] > skew:
-                continue
+        first = max(last_consumed + 1, bisect.bisect_left(target_starts, u_start - skew))
+        last = bisect.bisect_right(target_starts, u_start + skew)
+        for i in range(first, last):
             for span in range(1, MAX_BUNDLE_SPAN + 1):
                 if i + span > len(target_user):
                     break
+                if bundle_checks + 1 > MAX_BUNDLE_CHECKS:
+                    return None
+                bundle_checks += 1
                 bundle = target_user[i : i + span]
                 if abs((bundle[-1][1] - u_end).total_seconds()) > MAX_TIME_SKEW_SECONDS:
                     continue
@@ -226,22 +269,31 @@ def _match_utterances(
                     return None
         best = None
         for i, j, bundle, bundle_words in candidates:
-            blocks = difflib.SequenceMatcher(None, u_words, bundle_words, autojunk=False).get_matching_blocks()
-            common = sum(block.size for block in blocks)
+            tokens = len(u_words) + len(bundle_words)
+            cells = len(u_words) * len(bundle_words)
+            if (
+                matcher_calls + 1 > MAX_MATCHER_CALLS
+                or compared_tokens + tokens > MAX_COMPARED_TOKENS
+                or token_comparisons + cells > MAX_TOKEN_COMPARISONS
+            ):
+                return None
+            matcher_calls += 1
+            compared_tokens += tokens
+            token_comparisons += cells
+            common, matched = _ordered_match(u_words, bundle_words)
             if common / len(u_words) < MIN_PAIR_COVERAGE:
                 continue
             if len(_bigrams(u_words) & _bigrams(bundle_words)) < MIN_SHARED_BIGRAMS:
                 continue
             key = (common, -abs((bundle[0][0] - u_start).total_seconds()), -j)
             if best is None or key > best[0]:
-                best = (key, j, blocks)
+                best = (key, j, common, matched)
         if best is None:
             continue
-        _, j, blocks = best
+        _, j, common, matched = best
         last_consumed = j
-        matched_words += sum(block.size for block in blocks)
-        for block in blocks:
-            matched_tokens.update(u_words[block.a : block.a + block.size])
+        matched_words += common
+        matched_tokens.update(matched)
         matched_utterances.add(u_words)
         if covered_until is None or u_start >= covered_until:
             support_seconds += (u_end - u_start).total_seconds()
