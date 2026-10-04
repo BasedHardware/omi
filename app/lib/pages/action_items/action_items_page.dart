@@ -438,11 +438,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final showCompleted = provider.showCompletedView;
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
         final apiPhase = provider.apiViewState.phase;
+        // Successful empty results use the existing icon and conversation guidance.
         final showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
-            apiPhase == ApiViewPhase.authenticationRequired ||
-            apiPhase == ApiViewPhase.empty;
+            apiPhase == ApiViewPhase.authenticationRequired;
 
         return Scaffold(
           body: Stack(
@@ -473,9 +473,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               : _buildTasksList(categorizedItems, provider),
                 ),
               ),
-              // Hide the corner FAB when the empty state already
-              // shows its own "Create Task" button — otherwise we
-              // render two competing add buttons on top of each other.
+              // The empty state points to conversation capture on Home.
               if (!categorizedItems.values.every((l) => l.isEmpty)) _buildFab(),
               // Selection-mode action bar is mounted at the home page's outer
               // Stack so it paints above the BottomNavBar (mirrors the
@@ -503,10 +501,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        const SliverPadding(padding: EdgeInsets.only(top: 20)),
-        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
-      ],
+      slivers: [SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent()))],
     );
   }
 
@@ -518,17 +513,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         child: OmiEmptyState(
           icon: Icons.task_alt_rounded,
           title: context.l10n.noTasksYet,
+          titleLayoutReference: context.l10n.noConversationsYet,
           message: context.l10n.tasksEmptyStateMessage,
-          // Primary action: the obvious next step is to write a task.
-          action: OmiButton(
-            label: context.l10n.createActionItem,
-            icon: Icons.add_rounded,
-            size: OmiButtonSize.compact,
-            onPressed: () {
-              OmiHaptics.light();
-              showActionItemFormSheet(context);
-            },
-          ),
         ),
       ),
     );
@@ -641,7 +627,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
-                              Text(title.toUpperCase(), style: _sectionLabelStyle),
+                              Text(title, style: _sectionLabelStyle),
                               if (orderedItems.isNotEmpty) ...[
                                 const SizedBox(width: 8),
                                 _SectionCount(orderedItems.length),
@@ -652,7 +638,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       else
                         Padding(
                           padding: _sectionHeaderLinePadding,
-                          child: Text(title.toUpperCase(), style: _sectionLabelStyle),
+                          child: Text(title, style: _sectionLabelStyle),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
@@ -732,7 +718,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         size: 16,
                       ),
                       const SizedBox(width: 4),
-                      Text(context.l10n.tasksOverdue.toUpperCase(), style: _sectionLabelStyle),
+                      Text(context.l10n.tasksOverdue, style: _sectionLabelStyle),
                       const SizedBox(width: 8),
                       _SectionCount(orderedItems.length),
                     ],
@@ -1266,10 +1252,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
 /// A section header's label ("TODAY", "OVERDUE").
+// Title Case like OmiSectionHeader (the contract's section header is not all caps), at a label's
+// size so the groups stay quieter than the page title.
 final TextStyle _sectionLabelStyle = OmiType.footnote.copyWith(
   color: OmiColors.textTertiary,
   fontWeight: FontWeight.w600,
-  letterSpacing: 0.8,
 );
 
 /// The count beside a section header, read out as "3 tasks" rather than a bare number.

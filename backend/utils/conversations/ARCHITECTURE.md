@@ -40,7 +40,33 @@ and background processing.
   (`relevance_jev.py`, gateway lane `omi:auto:jev-decisions`) and discards only
   when P(discard) exceeds `JEV_DISCARD_THRESHOLD`; no answer keeps
   (`decided_by=jev`, `reason=jev_error`). Photos and wake-word invocations keep
-  `conv_discard`. The record carries the probability under `jev`.
+  `conv_discard`. The record carries the probability under `jev`. EXP-004 uses
+  `relevance_arm(uid, conversation_id)`: a stable per-conversation keep-all
+  sample takes precedence over the per-conversation Jev ramp (salt
+  `relevance-arm-v2`, range [K,min(100,K+J)); other conversations use nano. Keep-all bypasses only the reached model tier;
+  restores/rules/plan gates remain first. Both samples and the shadow receive the same conversation ID, independent
+  of account identity; increasing J with K fixed retains existing Jev conversations.
+  The UID allowlist is read only with `OMI_ENV_STAGE=dev`; prod declarations
+  (including empty bindings) are rejected by the runtime env validator.
+  Unset live percentages preserve dev's flag-on=everyone behavior. Production
+  stage 2 is live at J=10 after stage 1 soaked 24 h from 2026-10-01 22:46Z,
+  with 14 Jev gateway timeouts and no Jev-attributable 5xx. Keep-all K=2
+  remains live on all five processing hosts and wins any overlap. Non-keep-all
+  conversations outside the Jev range stay on nano; nano remains the large
+  control arm, not a separate matched nano-only cohort.
+  Owner-flip flags and UID allowlists remain absent.
+  `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` admits short,
+  transcript-only model-tier decisions outside the Jev arm asynchronously, with
+  Redis dedupe/daily caps, a bounded queue and text-free 60-day shadow records.
+  Live rollout is 1% -> 10% -> 50% -> 100%, with 24 h soak per stage. Abort
+  criteria: Jev failures >5%, p95 latency >2x, actual discard rate differing
+  from shadow prediction >20% relative, rising empty titles among Jev-kept
+  conversations, rising 7-day deletes/restores of Jev-kept/discarded conversations,
+  or notes spend per DAU above cap. Discards are recoverable; restoring records
+  `sync_relevance_user_kept`. These monitoring gates belong to the coordinator;
+  this PR adds no automatic fleet controller. Exact env blocks, provider bindings
+  and sync metric visibility limits are in
+  `backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md`.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by
@@ -54,7 +80,8 @@ and background processing.
   only materialized `speaker_id` from the SPEAKER_00 default is not
   cluster evidence.
   One flagged exception (`MEMORY_OWNER_JEV_FLIP_ENABLED`, default off,
-  `owner_jev.py`): a candidate capture resolved to a *third party* may be
+  `owner_jev.py`, universal when enabled — INV-MEM-5 forbids UID cohorts in
+  live owner attribution): a candidate capture resolved to a *third party* may be
   re-attributed to the user when Jev's P(owner = user) is at least 0.9. It
   never moves a candidate away from the user or out of `unknown`, and the
   item's `promotion.source_attribution.override` records the probability and
@@ -74,6 +101,17 @@ and background processing.
   structure is a typed failure before persistence. The flagged Cloud Tasks
   worker closes that job on its first occurrence, retaining the transcript as
   a visible completed conversation; provider and parser errors still retry.
+  A clear rule-level discard is not a minimal structure: recovery records it
+  as an explicit server-recovery discard only after strict transcript decoding,
+  so contentless rows never surface. Discard persistence omits the transcript
+  fields, preserving the stored blob byte-for-byte. It rechecks protected
+  structure, user title, and the restore marker transactionally; a raced edit or
+  restore takes the same typed-minimum terminal path, retaining a visible row
+  with no new discard decision. Selfheal reports that job as dead-lettered.
+  Every terminal that moves a `processing` row into the list (dead-letter, BYOK
+  abandonment, orphan recovery) replaces an empty title with
+  `deterministic_minimum_title`; the dead-letter also marks a transient failure
+  `summary_retryable` (see `database/conversation_finalization_jobs.py`).
 - `smart_merge.py` folds a finished pendant conversation into the immediately
   preceding one of the same device partition when Jev says it is the same
   occasion (`CONVERSATION_SMART_MERGE_MODE=off|shadow|merge`, default `merge`; `off`
@@ -86,7 +124,12 @@ and background processing.
   survivor keeps its id; the donor becomes the sync bridge's redirect tombstone
   (`deleted`/`discarded`/`sync_merged_into`, survivor `sync_merged_from`), so
   existing redirect readers and the deletion purge apply unchanged. The survivor
-  is reprocessed once per merge (`ProcessingTrigger.SMART_MERGE`); an absorb
+  is reprocessed once per merge (`ProcessingTrigger.SMART_MERGE`); a retry of a
+  donor whose cleanup or refresh failed resumes it before the fanout claim, and a
+  failed refresh releases its own invocation lease. Resume first checks the job
+  epoch/generation/binding; terminal or stale deliveries do no work. Active refresh
+  leases exclude even same-job callers, and a processing receipt prevents a vector
+  retry from rerunning the completed bundle. Deferred cleanup remains retryable. An absorb
   requires `refreshed_revision == revision`, so a refresh never persists over a
   newer append. The absorb also advances `sync_content_revision` to fence
   processors that read the old transcript, and refresh persistence checks the
@@ -155,3 +198,49 @@ service and developer delete endpoint. Raw DB deletion and new-target rollback d
 not orchestrate external cleanup. The shared gap
 predicate lives in `utils/conversation_continuity.py`; both paths supply speech
 silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.
+
+EXP-004 owner measurement (`MEMORY_OWNER_JEV_SHADOW_PERCENT`) asks only grounded
+third-party candidates not scored by the live flip path, including those beyond
+its eight-candidate budget. It records the full owner distribution without
+changing capture output. Both shadows share `jev_shadow.py` admission/worker
+primitives and persist only numeric/enum/identifier metadata through
+`database/jev_shadow.py`; Redis unavailable fails closed before vendor egress.
+Their lazy ten-worker `jev-shadow` executor is isolated from foreground LLM
+work. Admission owns a bounded Redis client per attempt; vendor calls and
+retry-free Firestore writes consume only the remaining 2.5-second task budget.
+
+Owner shadows gather the full eligible batch, hash conversation ID + candidate
+full scoring SHA256 against the lane percentage, deduplicate identical identities and select the
+eight lowest before submission. The owner bulkhead has eight slots (relevance
+two); per-conversation cap and cross-conversation saturation losses remain
+`dropped` coverage. Records include original zero-based `candidate_index` and
+deduplicated pre-percentage/pre-cap `eligible_count`, both integers. Owner identities
+include candidate text, complete speaker-labelled scoring state, question user
+name and pipeline subject kind/entity ID; same text with different evidence is
+measured separately. Only hashes and numeric/enum metadata are persisted. Dev's four live-flag hosts pin
+`MEMORY_OWNER_JEV_FLIP_PERCENT=0` to avoid starving the shadow. This control is
+universal: only 100 permits the flag; intermediate/invalid values disable it.
+Either malformed relevance arm percentage resolves everyone to nano.
+
+Firestore's deadline race bounds waiting; an already-started commit can persist
+later. Deterministic IDs include lane, conversation, scoring identity hash (text
+hash for relevance) and question
+version. Transactional first-write-wins preserves scores and retention timestamps.
+Readouts include valid late writes once per (uid, document ID), independently of
+attempt `timeout`/`ok` counters. Account deletion remains transactionally fenced. Concurrent commit losers
+(the SDK wrapped-Aborted outcome) count as `deduped`, never scoring failures.
+
+The production shadow percentages are 100 (all five processing hosts). The
+production keep-all arm is live at 2 (started
+2026-10-01): a stable 2% of ambiguous model-tier conversations, chosen by
+conversation ID, are kept regardless of nano and record nano's would-be verdict;
+rollback is percent 0 and a redeploy. Jev relevance stage 2 started 2026-10-03
+at J=10 on the same five hosts, after stage 1 soaked 24 h from 2026-10-01
+22:46Z with 14 Jev gateway timeouts and no Jev-attributable 5xx. Keep-all takes
+precedence; the independent Jev bucket range is [2,12), and non-keep-all
+conversations outside it stay on nano. The nano remainder is the large control
+arm, but not a separate matched nano-only cohort. Owner-flip flags and UID
+allowlists remain absent; caps stay unchanged.
+The coordinator enabled `jev_shadow.expire_at` TTL
+in `based-hardware` on 2026-10-01 and verified ACTIVE before the flip. Sync hosts have no exporter;
+readouts must distinguish their records from scraped attempt/latency coverage.

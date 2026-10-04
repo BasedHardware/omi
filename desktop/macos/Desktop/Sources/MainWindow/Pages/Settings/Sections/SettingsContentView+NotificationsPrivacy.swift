@@ -71,18 +71,16 @@ extension SettingsContentView {
             GlassSeparator()
 
             settingRow(
-              title: "Insight Notifications",
-              subtitle: "Show notification when an insight is generated",
-              settingId: "notifications.insight"
+              title: "Goal and Reminder Notifications",
+              subtitle: "Allow goals and resurfaced items to notify you",
+              settingId: "notifications.goalReminder"
             ) {
-              Toggle("", isOn: $insightNotificationsEnabled)
+              Toggle("", isOn: $goalReminderNotificationsEnabled)
                 .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
-                .onChange(of: insightNotificationsEnabled) { _, newValue in
-                  InsightAssistantSettings.shared.notificationsEnabled = newValue
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      insight: InsightSettingsResponse(notificationsEnabled: newValue)))
+                .onChange(of: goalReminderNotificationsEnabled) { _, newValue in
+                  NotificationService.goalReminderNotificationsEnabled = newValue
+
                 }
             }
 
@@ -210,7 +208,7 @@ extension SettingsContentView {
   /// server just supplied, which is idempotent.
   func syncNotificationTogglesFromAssistantSettings() {
     taskNotificationsEnabled = TaskAssistantSettings.shared.notificationsEnabled
-    insightNotificationsEnabled = InsightAssistantSettings.shared.notificationsEnabled
+    goalReminderNotificationsEnabled = NotificationService.goalReminderNotificationsEnabled
     memoryNotificationsEnabled = MemoryAssistantSettings.shared.notificationsEnabled
   }
 
@@ -271,6 +269,23 @@ extension SettingsContentView {
           ) { newValue in
             updatePrivateCloudSync(newValue)
           }
+
+          GlassSeparator()
+
+          settingRow(
+            title: "Export All Data",
+            subtitle: "Download a JSON copy of your account data",
+            settingId: "privacy.exportdata"
+          ) {
+            Button("Export All Data…") {
+              dataExportModel.startExport()
+            }
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .disabled(dataExportModel.isExporting)
+            .accessibilityIdentifier("privacy.exportdata")
+          }
+
+          AccountDataExportView(model: dataExportModel)
         }
       }
 

@@ -22,7 +22,6 @@ class HeaderCircleButton extends StatelessWidget {
     this.color,
     this.diameter = kHeaderCircleDiameter,
     this.badgeCount = 0,
-    this.badgeColor,
   });
 
   final Widget icon;
@@ -36,9 +35,6 @@ class HeaderCircleButton extends StatelessWidget {
   /// A count shown in a small pill on the circle's top-right edge; hidden at zero. Visual only:
   /// put the count in [semanticLabel] too, since the pill is excluded from semantics.
   final int badgeCount;
-
-  /// Fill of the count pill. Defaults to the neutral [OmiColors.accent].
-  final Color? badgeColor;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +55,7 @@ class HeaderCircleButton extends StatelessWidget {
           right: 0,
           child: IgnorePointer(
             child: ExcludeSemantics(
-              child: HeaderCountBadge(count: badgeCount, color: badgeColor),
+              child: HeaderCountBadge(count: badgeCount),
             ),
           ),
         ),
@@ -68,33 +64,34 @@ class HeaderCircleButton extends StatelessWidget {
   }
 }
 
-/// The count pill on a [HeaderCircleButton]: 16pt tall, capped at "9+", ringed in the page
+/// The count pill on a [HeaderCircleButton]: capped at "9+", ringed in the page
 /// surface so it reads as sitting on top of the circle.
 class HeaderCountBadge extends StatelessWidget {
-  const HeaderCountBadge({super.key, required this.count, this.color});
+  const HeaderCountBadge({super.key, required this.count});
 
   final int count;
-  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final fill = color ?? OmiColors.accent;
-    // A custom fill is a status colour (warning); the page surface reads on it in both themes.
-    final ink = color == null ? OmiColors.onAccent : OmiColors.surface0;
+    final label = count > 9 ? '9+' : '$count';
     return Container(
       key: const ValueKey('header_count_badge'),
       constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
       padding: const EdgeInsets.symmetric(horizontal: 6),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: fill,
+        color: OmiColors.accent,
         borderRadius: const BorderRadius.all(Radius.circular(10)),
         border: Border.all(color: OmiColors.surface0, width: 2),
       ),
       child: Text(
-        count > 9 ? '9+' : '$count',
+        label,
         textScaler: TextScaler.noScaling,
-        style: OmiType.caption.copyWith(color: ink, fontWeight: FontWeight.w700, height: 1.0),
+        style: OmiType.caption.copyWith(
+          color: OmiColors.onAccent,
+          fontWeight: FontWeight.w700,
+          height: 1.0,
+        ),
       ),
     );
   }

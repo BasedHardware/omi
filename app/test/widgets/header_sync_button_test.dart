@@ -19,6 +19,7 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 class _Listener implements IWalSyncListener {
@@ -191,7 +192,7 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('keeps the badge and button neutral grey while files wait on the device', (tester) async {
+  testWidgets('keeps the filled circle and a black-and-white badge while files wait on the device', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     localSync.testWals = [
       _wal(timerStart: now - 120, storage: WalStorage.sdcard),
@@ -203,11 +204,30 @@ void main() {
     await pumpButton(tester, syncProvider, hasPairedDevice: true);
 
     final badge = tester.widget<Container>(find.byKey(const ValueKey('header_count_badge')));
-    final fill = (badge.decoration as BoxDecoration).color;
-    expect(fill, OmiColors.textTertiary);
-    expect(fill, isNot(OmiColors.warning));
-    final icon = tester.widget<Icon>(find.byIcon(Icons.cloud_rounded));
-    expect(icon.color, isNot(OmiColors.warning));
+    expect((badge.decoration as BoxDecoration).color, OmiColors.accent);
+    expect(tester.widget<Text>(find.text('2')).style!.color, OmiColors.onAccent);
+    expect(tester.widget<Icon>(find.byIcon(Icons.cloud_rounded)).color, OmiColors.textSecondary);
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration as BoxDecoration).shape == BoxShape.circle &&
+            (w.decoration as BoxDecoration).color == OmiColors.surface1,
+      ),
+      findsOneWidget,
+      reason: 'the same filled circle as Search and Settings',
+    );
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            ((w.decoration as BoxDecoration).color == OmiColors.warning ||
+                (w.decoration as BoxDecoration).color == OmiColors.warning.withValues(alpha: 0.15)),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('caps the badge at 9+', (tester) async {

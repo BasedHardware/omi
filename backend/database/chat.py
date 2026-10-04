@@ -22,6 +22,11 @@ CURRENT_CHAT_SESSION_SCAN_LIMIT = 200
 
 from models.chat import Message
 from utils import encryption
+from utils.other.portability_read import (
+    check_portability_read,
+    iter_portability_guarded,
+    verified_encrypted_read,
+)
 from ._client import db, get_firestore_client
 from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
 from database.read_boundary import parse_snapshot_or_none
@@ -85,10 +90,12 @@ def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(chat_data)
 
     if 'text' in data and isinstance(data['text'], str):
+        raw_text = data['text']
         try:
-            data['text'] = encryption.decrypt(data['text'], uid)
+            data['text'] = encryption.decrypt(raw_text, uid)
         except Exception:
             pass
+        data['text'] = verified_encrypted_read(raw_text, data['text'])
 
     return data
 
@@ -129,10 +136,24 @@ def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
     del message_data['memories']
     user_ref = db.collection('users').document(uid)
     user_ref.collection('messages').add(message_data)
+    if message_data.get('sender') == 'human' and message_data.get('plugin_id', message_data.get('app_id')) == 'mentor':
+        from database.proactivity_producers import record_mentor_reply
+
+        try:
+            record_mentor_reply(uid, firestore_client=db)
+        except Exception:
+            logger.info('mentor_v2 outcome_unavailable')
     return message_data
 
 
-def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[str] = None) -> Message:
+def add_app_message(
+    text: str,
+    app_id: str,
+    uid: str,
+    conversation_id: Optional[str] = None,
+    *,
+    proactivity_item_id: Optional[str] = None,
+) -> Message:
     """Add a chat message an app posted for the user, linking it to that app's chat session so it
     appears in the chat feed. get_messages filters by chat_session_id whenever a session exists, so
     a message stored without one is never returned on that path."""
@@ -150,7 +171,10 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         memories_id=[conversation_id] if conversation_id else [],
         chat_session_id=chat_session_id,
     )
-    add_message(uid, ai_message.model_dump())
+    payload = ai_message.model_dump()
+    if proactivity_item_id:
+        payload['proactivity_item_id'] = proactivity_item_id
+    add_message(uid, payload)
     if chat_session_id:
         add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message
@@ -570,8 +594,9 @@ def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, An
         if cursor is not None:
             batch_ref = batch_ref.start_after(cursor)
         batch: List[Dict[str, Any]] = []
-        snapshots = list(batch_ref.stream())
+        snapshots = list(iter_portability_guarded(batch_ref.stream()))
         for doc in snapshots:
+            check_portability_read()
             msg: Dict[str, Any] = _typed_doc(doc)
             msg['id'] = doc.id
             msg = _prepare_message_for_read(msg, uid) or msg

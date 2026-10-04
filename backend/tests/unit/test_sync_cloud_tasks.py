@@ -8,6 +8,7 @@ handler in routers/sync.py.
 """
 
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
@@ -851,7 +852,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
         payload = _valid_sync_task_payload(lane='backfill')
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -872,7 +873,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -892,7 +893,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill',
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
         assert enqueue.call_args.args[:3] == (
             'sync-backfill',
@@ -911,7 +912,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -931,7 +932,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_QUEUE': '',
             'SYNC_BACKFILL_TASKS_HANDLER_URL': '',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -944,7 +945,7 @@ class TestVerifyCloudTasksOidc:
     def test_enqueue_rejects_payload_schema_drift_before_cloud_tasks(self):
         cloud_tasks = _load_cloud_tasks()
         payload = _valid_sync_task_payload(unexpected_field='must-not-be-admitted')
-        with patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             with pytest.raises(ValueError, match='durable worker schema'):
                 cloud_tasks.enqueue_sync_job(payload)
         enqueue.assert_not_called()
@@ -960,7 +961,7 @@ class TestVerifyCloudTasksOidc:
         }
         job_hash = hashlib.sha256(b'job-1').hexdigest()[:32]
         task_id = f'account-delete-{job_hash}-abc123'
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue, patch.object(
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue, patch.object(
             cloud_tasks.uuid, 'uuid4', return_value=MagicMock(hex='abc123')
         ):
             cloud_tasks.enqueue_account_deletion_wipe('job-1')
@@ -1118,7 +1119,7 @@ def _load_sync_router_for_fast_path():
     from utils.stt import speaker_match as actual_speaker_match
     from utils.stt import speaker_identity as actual_speaker_identity
     from utils import manual_speaker_assignments as actual_manual_assignments
-    from utils.sync import lanes as actual_sync_lanes
+    from utils.sync import lanes as actual_sync_lanes, rate_limit as actual_rl
     from utils import capture_evidence as actual_capture_evidence
 
     saved_modules = {}
@@ -1190,9 +1191,10 @@ def _load_sync_router_for_fast_path():
         'utils.sync.uid_sequencer',
         'utils.sync.backfill_cutover',
         'utils.sync.content_id',
-        'utils.sync.capture_manifest',
         'utils.speaker_assignment',
+        'utils.speaker_permissions',
         'utils.speaker_identification',
+        'utils.speaker_learning_jobs',
         'utils.stt.speaker_embedding',
         'python_multipart',
         'python_multipart.multipart',
@@ -1215,9 +1217,7 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
 
     sys.modules['utils'].__path__ = []
-    # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
-    # submodule imports by the sync pipeline must be added to heavy_deps explicitly,
-    # since a MagicMock parent does not resolve submodules by itself.
+    # Register pipeline submodules explicitly: MagicMock parents cannot resolve them.
     sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_async_resolve_geolocation
     sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(return_value=False)
     sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
@@ -1273,6 +1273,7 @@ def _load_sync_router_for_fast_path():
     sync_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'sync')]
     sys.modules['utils.sync'] = sync_pkg
     sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
+    sys.modules['utils.sync.rate_limit'].retry_after_until_next_utc_day = actual_rl.retry_after_until_next_utc_day
     sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
     sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
     sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})

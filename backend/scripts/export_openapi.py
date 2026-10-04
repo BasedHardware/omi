@@ -52,6 +52,7 @@ INTEGRATION_PUBLIC_PATHS = (
     '/v2/integrations/{app_id}/tasks',
 )
 APP_CLIENT_PREFIXES = (
+    '/v1/proactivity',
     '/memory/search',
     '/v1/account/cutover',
     '/v1/action-items',
@@ -85,6 +86,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/phone',
     '/v1/mobile',
     '/v1/screen-activity',
+    '/v1/screen-task',
     '/v1/screen-frame-egress',
     '/v1/search',
     '/v1/speaker-tag-prompts',
@@ -92,6 +94,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/sync',
     '/v1/task-integrations',
     '/v1/task-intelligence',
+    '/v1/tts',
     '/v1/users',
     '/v1/wrapped',
     '/v1/work-intents',
@@ -99,6 +102,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/workstreams',
     '/v1/what-matters-now',
     '/v2/apps',
+    '/v2/chat-sessions',
     '/v2/chat/materialize-prompts',
     '/v2/files',
     '/v2/firmware',
@@ -224,6 +228,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'POST',
+        '/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'DELETE',
         '/v1/conversations/{conversation_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -330,6 +338,13 @@ APP_CLIENT_EXCLUDED_ROUTES: dict[tuple[str, str], str] = {
     ): (
         'Developer API key + conversations:read only (dev:ask); public OpenAPI is the '
         'authoritative contract. App-client firebaseBearer would mis-document auth.'
+    ),
+    (
+        'GET',
+        '/v1/dev/key',
+    ): (
+        'Developer API key only (dev:key_read); public OpenAPI is the authoritative contract. '
+        'App-client firebaseBearer would mis-document auth.'
     ),
 }
 

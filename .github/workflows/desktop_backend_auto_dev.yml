@@ -78,6 +78,25 @@ jobs:
             echo "revision_suffix=$revision_suffix"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ steps.candidate-identity.outputs.source_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
       - name: Google Auth
         id: auth
         uses: google-github-actions/auth@v3
@@ -260,7 +279,6 @@ jobs:
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
             MEMORY_BELIEF_MODEL_ENABLED=true
-            BASIC_PLAN_GATE_PROACTIVITY_ENABLED=true
             FREE_TIER_LOCAL_PROCESSING=true
             FREE_TIER_EMERGENCY_STOP=false
             FREE_TIER_LOCAL_PROCESSING_COHORT=${{ steps.desktop-expected-env.outputs.free_tier_local_processing_cohort }}

@@ -528,7 +528,7 @@ describe("RunToolCapabilityBroker", () => {
     expect(capability.allowedToolNames).toContain("think_deeper");
     expect(capability.allowedToolNames).toContain("web_search");
     expect(capability.allowedToolNames).toContain("point_click");
-    expect(capability.allowedToolNames).toContain("record_interject_feedback");
+    expect(capability.allowedToolNames).not.toContain("record_interject_feedback");
     const authorized = broker.authorize({
       capabilityRef: capability.capabilityRef,
       invocationId: "invoke-voice",

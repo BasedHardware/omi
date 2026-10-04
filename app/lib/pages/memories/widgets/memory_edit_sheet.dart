@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
@@ -44,8 +45,13 @@ class MemoryEditSheet extends StatefulWidget {
   /// Show the memory without editing controls. Forced for memories that cannot be edited.
   final bool readOnly;
 
-  const MemoryEditSheet(
-      {super.key, required this.memory, required this.provider, this.onDelete, this.readOnly = false});
+  const MemoryEditSheet({
+    super.key,
+    required this.memory,
+    required this.provider,
+    this.onDelete,
+    this.readOnly = false,
+  });
 
   @override
   State<MemoryEditSheet> createState() => _MemoryEditSheetState();
@@ -129,7 +135,8 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
               spacing: OmiSpacing.xs,
               runSpacing: OmiSpacing.xs,
               children: [
-                _MemoryChip(icon: Icons.label_outline, label: memory.category.toString().split('.').last),
+                if (_categoryLabel(l10n, memory.category) case final label?)
+                  _MemoryChip(icon: Icons.label_outline, label: label),
                 if (_isBaseline) _MemoryChip(icon: Icons.flag, label: l10n.baselineMemory),
               ],
             ),
@@ -249,6 +256,14 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
     }
   }
 }
+
+/// The category as the filter sheet names it; null hides the chip for a category with no label.
+String? _categoryLabel(AppLocalizations l10n, MemoryCategory category) => switch (category) {
+      MemoryCategory.system => l10n.filterSystem,
+      MemoryCategory.interesting => l10n.filterInteresting,
+      MemoryCategory.manual => l10n.filterManual,
+      MemoryCategory.workflow => null,
+    };
 
 class _MemoryChip extends StatelessWidget {
   const _MemoryChip({required this.icon, required this.label});

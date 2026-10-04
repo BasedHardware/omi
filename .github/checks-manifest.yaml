@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: firestore-index-guard
+    command: ["python3", "backend/scripts/run_firestore_index_guard.py"]
+    triggers: ["@firestore-index-guard", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/actions/release-eligibility/action.yml"]
+    lanes: ["local", "ci"]
+    reason: "#19941/#20113: undeclared serving queries fail in production; advisory Backend unit suite can be merged over. Run only the selector-owned hermetic guard so the exact offending main SHA cannot acquire Release Eligibility proof. @firestore-index-guard reuses the serving inventory and guard inputs instead of a second path list"
   - id: feature-flag-registry
     command: ["python3", "scripts/check_feature_flag_registry.py"]
     triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/render_feature_flag_registry.py", "scripts/posthog_flag_sync.py", "scripts/test_posthog_flag_sync.py", "backend/docs/feature-flag-registry.md", "backend/**/*.py", "backend/deploy/runtime_env/**", "backend/charts/**", "desktop/macos/Desktop/Sources/**/*.swift", "app/lib/services/experiments/**", "web/**/*.ts", "web/**/*.tsx", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
@@ -298,14 +303,19 @@ checks:
     reason: "manifest validity and workflow drift guard"
   - id: backend-production-release-vector-guards
     command: ["python3", ".github/scripts/check_release_rings.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check_release_rings.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/check_release_rings.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the canonical production backend release remains the only release authority"
   - id: backend-production-release-vector-guard-tests
     command: ["python3", ".github/scripts/test_check_release_rings.py"]
-    triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the one-action production backend release contract must reject legacy release planes"
+  - id: backend-route-5xx-alert-contract
+    command: ["python3", ".github/scripts/test_ensure_backend_route_5xx_alert.py"]
+    triggers: [".github/scripts/ensure_backend_route_5xx_alert.py", ".github/scripts/test_ensure_backend_route_5xx_alert.py", ".github/monitoring/backend_route_5xx_metric.json", ".github/monitoring/backend_route_5xx_policy.json", ".github/workflows/gcp_backend.yml", ".github/scripts/ensure_monitoring_metric_alert_policy.py", ".github/scripts/ensure_firestore_missing_index_alert.py", "backend/docs/runbooks/backend-route-5xx.md"]
+    lanes: ["local", "ci"]
+    reason: "the 2026-10-02 /v1/users/people 5xx regression returned platform 504s for four hours unpaged; the per-route metric and alert contract, and the non-blocking deploy provisioning step, must stay covered"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", "app/lib/**/*.dart", ".github/scripts/check_product_file_line_count_ratchet.py"]
@@ -478,6 +488,12 @@ checks:
     triggers: ["app/**"]
     lanes: ["local", "ci"]
     reason: "user-facing app changes require a durable mobile fragment on PR and main push"
+  - id: android-emulator-acceptance-contract
+    command: ["python3", "app/scripts/android_startup_smoke_test.py"]
+    triggers: ["app/scripts/android_emulator.py", "app/scripts/android_startup_smoke.py", "app/scripts/android_startup_smoke_test.py", ".github/workflows/mobile-app-checks.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PR #20437 reproduced a native startup crash missed by host tests; offline emulator acceptance must reject crashes, false liveness and unsafe account reuse"
+
   - id: mobile-store-promote-contract
     command: ["python3", "app/scripts/mobile_store_promote_test.py"]
     triggers: ["app/scripts/mobile_store_promote.py", "app/scripts/mobile_store_promote_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
@@ -554,6 +570,16 @@ checks:
     triggers: ["app/lib/**/*.dart"]
     lanes: ["local", "ci"]
     reason: "INV-UI-3: changed app/lib files may not add hand-rolled back glyphs, dialogs, sheets, toasts, clipboard writes, date patterns, UI literals or hardcoded copy (app/docs/ux-contract.md)"
+  - id: mobile-l10n-arb-contract
+    command: ["python3", "app/scripts/l10n.py", "check"]
+    triggers: ["app/lib/l10n/*.arb", "app/scripts/l10n.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "62 simple translations in da/de/fi/hi/id/sk/vi silently dropped an English placeholder (Danish showed 'Estimeret tid' with no ETA); gen-l10n accepts that, so the ARB contract must run on every ARB change, not only when an author remembers scripts/l10n.py check"
+  - id: mobile-l10n-arb-contract-tests
+    command: ["python3", "app/scripts/test_l10n_placeholders.py"]
+    triggers: ["app/scripts/l10n.py", "app/scripts/test_l10n_placeholders.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "The placeholder guard must keep a case proving it rejects a dropped placeholder and exempts plural/select messages"
   - id: rayban-dat-plugin-boundary
     command: ["ruby", "app/ios/test/rayban_dat_plugin_boundary_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Podfile.lock", "app/ios/rayban_dat_plugin_boundary.rb", "app/ios/test/rayban_dat_plugin_boundary_test.rb", ".github/checks-manifest.yaml"]
@@ -624,6 +650,18 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "pairing recovery must fire only for ATT authentication/encryption failures so ordinary Omi notification noise never tears down a healthy GATT link"
+  - id: ios-capture-transaction
+    command: ["ruby", "app/ios/test/omi_capture_transaction_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiCaptureHealth.swift", "app/ios/Runner/Ble/OmiBleCaptureSession.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/test/omi_capture_transaction_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "native pendant capture recovery must preserve its transaction trace across health, session, manager, and connection policy changes"
+  - id: ios-capture-health
+    command: ["ruby", "app/ios/test/omi_capture_health_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiCaptureHealth.swift", "app/ios/Runner/Ble/OmiBleCaptureSession.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/test/omi_capture_health_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "native pendant audio health must remain bounded across quiet, repair, reconnect, and relaunch transitions"
   - id: ios-dev-build-configuration
     command: ["ruby", "app/ios/test/omi_dev_build_configuration_test.rb"]
     triggers: ["app/ios/Flutter/devProfile.xcconfig", "app/ios/Flutter/devRelease.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/omi_dev_build_configuration_test.rb", ".github/checks-manifest.yaml"]
@@ -829,11 +867,6 @@ checks:
     triggers: ["firestore.indexes.json", "backend/database/firestore_index_registry.py", "backend/scripts/generate_firestore_indexes.py"]
     lanes: ["local", "ci"]
     reason: "Firebase composite-index manifest must be generated from the registered requirements"
-  - id: firestore-query-coverage
-    command: ["python3", "backend/scripts/firestore_query_coverage.py", "--check-ratchet"]
-    triggers: ["backend/**/*.py", "backend/scripts/firestore_query_coverage_baseline.json", "backend/scripts/firestore_query_coverage_waivers.json"]
-    lanes: ["local", "ci"]
-    reason: "serving Firestore compound queries cannot add unregistered or unsupported debt"
   - id: firestore-model-read-boundary
     command: ["python3", ".github/scripts/check_firestore_model_read_boundary.py"]
     triggers: ["backend/database/**/*.py", ".github/scripts/check_firestore_model_read_boundary.py", ".github/scripts/firestore_model_read_boundary_baseline.json"]
@@ -1011,7 +1044,7 @@ checks:
     reason: "store lookup failures and malformed responses must not be treated as empty history or build zero"
   - id: mobile-release-admission
     command: ["python3", ".github/scripts/test_verify_mobile_release_admission.py"]
-    triggers: [".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", ".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/workflows/mobile-app-checks.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    triggers: ["app/scripts/admit_android_source.sh", ".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", ".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/workflows/mobile-app-checks.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "tag admission must consume exact-SHA first-attempt Release Eligibility and the explicit Mobile Release Eligibility aggregate"
   - id: mobile-admission-collector
@@ -1222,17 +1255,17 @@ checks:
     reason: "#9989 exercises non-main, ambiguous SHA, mismatched checkout, and workflow-contract rejection cases"
   - id: backend-deploy-source-admission
     command: ["python3", ".github/scripts/check_backend_deploy_source_admission.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/test_verify_auto_backend_release_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/test_verify_auto_backend_release_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9991 keeps backend deploy source selection bound to one successful main Release Eligibility proof"
   - id: backend-deploy-source-admission-fixtures
     command: ["python3", ".github/scripts/test_check_backend_deploy_source_admission.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/test_verify_auto_backend_release_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/test_verify_auto_backend_release_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9991 mutation-tests workflow-run event, result, branch, SHA, repository, and manual proof drift"
   - id: automatic-backend-release-admission
     command: ["python3", ".github/scripts/test_verify_auto_backend_release_admission.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/test_verify_auto_backend_release_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/test_verify_auto_backend_release_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11979 keeps automatic development admission on merged-into-main ancestry, not main-tip equality"
   - id: superseded-auto-deploy-workflow-contracts
@@ -1242,12 +1275,12 @@ checks:
     reason: "Superseded deployment runs must report a neutral notice, and every later step must stay gated so stale images and deployments cannot run"
   - id: gcp-backend-production-boundary
     command: ["python3", ".github/scripts/check-gcp-backend-production-boundary.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", "backend/scripts/firebase_release_probe_token.py", "backend/scripts/transcription_capability_probe.py", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", "backend/scripts/firebase_release_probe_token.py", "backend/scripts/transcription_capability_probe.py", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the canonical production deploy is rollback-first and Cloud Run-only"
   - id: gcp-backend-production-boundary-fixtures
     command: ["python3", ".github/scripts/test_check_gcp_backend_production_boundary.py"]
-    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/actions/firestore-readiness/**", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "mutation-tests prod/all admission, serving smoke order, token handling, and rollback coverage"
   - id: direct-backend-production-admission

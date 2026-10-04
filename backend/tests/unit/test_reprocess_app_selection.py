@@ -206,3 +206,22 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch, partial_pr
     assert result['deferred'] is False
     assert process.call_args.kwargs['trigger'] is conv_router.ProcessingTrigger.FIRST_OPEN
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS
+
+
+def test_successful_reprocess_schedules_durable_learning():
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None,
+        available_app=None,
+        enabled=False,
+    )
+    model.id = 'c1'
+    tasks = []
+    background_tasks = SimpleNamespace(add_task=lambda fn, *a: tasks.append((fn, a)))
+    with p1, p2, p3, p4, p5, p6, process_patch:
+        result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1', background_tasks=background_tasks)
+
+    assert result is model
+    assert len(tasks) == 1
+    from utils.speaker_learning_jobs import run_speaker_learning_jobs
+
+    assert tasks[0] == (run_speaker_learning_jobs, ('u1', 'c1'))

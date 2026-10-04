@@ -53,6 +53,7 @@ from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
+    OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL,
     OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL,
     PUSHER_ACTIVE_WS_CONNECTIONS,
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
@@ -60,7 +61,7 @@ from utils.metrics import (
 from utils.readiness import ReadinessGate
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import JourneyAttempt
-from utils.speaker_identification import extract_speaker_samples
+from utils.speaker_learning_jobs import run_authorized_person_learning, schedule_person_voice_learning_retry
 import logging
 
 logger = logging.getLogger(__name__)
@@ -316,7 +317,11 @@ async def _websocket_util_trigger(
                     uid,
                     conv_id,
                     cast(str, cached_protection_level),
+                    sample_rate=sample_rate,
                 )
+                OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
+                    reason='with_spans' if batch.get('span') is not None else 'without_spans'
+                ).inc()
                 if batch.get('span') is not None and batch.get('end') is not None:
                     # The digest ledger records only runs whose object exists.
                     # Batches are contiguous by construction (discontinuities
@@ -340,6 +345,7 @@ async def _websocket_util_trigger(
                             {'audio_files': files_payload},
                         )
                         if applied:
+                            schedule_person_voice_learning_retry(uid, conv_id)
                             # Rebuild the conversation playback artifact if a stamped one
                             # went stale. No stamp (the live-conversation common case) → no-op.
                             if is_audio_merge_dispatch_enabled():
@@ -472,7 +478,7 @@ async def _websocket_util_trigger(
                 segment_ids = request['segment_ids']
 
                 try:
-                    await extract_speaker_samples(
+                    await run_authorized_person_learning(
                         uid=uid,
                         person_id=person_id,
                         conversation_id=conv_id,

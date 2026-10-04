@@ -548,7 +548,8 @@ extension RealtimeHubController {
       prepareVoiceOutputForDeterministicSlowToolAcknowledgement()
       FloatingBarVoicePlaybackService.shared.speakRealtimeSlowToolAcknowledgement(
         acknowledgement,
-        provider: acknowledgementProvider)
+        provider: acknowledgementProvider,
+        voiceName: Self.acknowledgementVoiceName(acknowledgementProvider, session?.assistantVoiceID))
     }
     switch tool {
     case .getTasks:
@@ -678,7 +679,6 @@ extension RealtimeHubController {
     guard isCurrentSession(source) else { return }
     AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
     NotchCardVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
-    InterjectClassificationDelivery.shared.voiceSessionDidOpenInputWindow()
   }
 
   func hubDidConnect(source: RealtimeHubSession) {
@@ -687,7 +687,6 @@ extension RealtimeHubController {
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     AgentCompletionVoiceDelivery.shared.voiceSessionDidConnect()
     NotchCardVoiceDelivery.shared.voiceSessionDidConnect()
-    InterjectClassificationDelivery.shared.voiceSessionDidConnect()
     let replayedReconnectTurn = reconnectAudioBuffer != nil
     let replayedReplacementTurn = replacementAudioBuffer != nil
     if replayedReplacementTurn {
@@ -854,7 +853,7 @@ extension RealtimeHubController {
       }
     }
     if isFinal {
-      let reply = InterjectVoiceFeedbackRouting.spokenText(from: assistantText)
+      let reply = LegacyReplyTokenSanitizer.spokenText(from: assistantText)
         .trimmingCharacters(in: .whitespacesAndNewlines)
       // Fallback only: if the model produced text but no native audio this turn,
       // speak it through the selected app voice. Normally both providers stream
@@ -943,14 +942,6 @@ extension RealtimeHubController {
         turnID: turnID,
         callId: callId,
         reportIdentity: toolIdentity,
-        arguments: arguments,
-        expectedTurnEpoch: toolTurnEpoch)
-      return
-    }
-    if name == HubTool.recordInterjectFeedback.rawValue {
-      handleInterjectFeedbackReport(
-        source: source,
-        callId: callId,
         arguments: arguments,
         expectedTurnEpoch: toolTurnEpoch)
       return

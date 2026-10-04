@@ -408,7 +408,7 @@ def create_action_items_batch(
     uid: str,
     action_items_data: List[Dict[str, Any]],
     *,
-    document_ids: Optional[List[str]] = None,
+    document_ids: Optional[List[Optional[str]]] = None,
 ) -> List[str]:
     """
     Create multiple action items in a batch operation.
@@ -416,6 +416,7 @@ def create_action_items_batch(
     Args:
         uid: User ID
         action_items_data: List of action item data dictionaries
+        document_ids: Optional per-item ids; a None entry gets a fresh Firestore id
 
     Returns:
         List of created action item IDs
@@ -443,9 +444,8 @@ def create_action_items_batch(
         if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
-        doc_ref = (
-            action_items_ref.document(document_ids[index]) if document_ids is not None else action_items_ref.document()
-        )
+        reserved_id = document_ids[index] if document_ids is not None else None
+        doc_ref = action_items_ref.document(reserved_id) if reserved_id is not None else action_items_ref.document()
         prepared_items.append(action_item_data)
         document_refs.append(doc_ref)
         doc_refs.append(doc_ref.id)
@@ -551,6 +551,7 @@ ACTION_ITEMS_LIST_SELECT_FIELDS = (
     'export_date',
     'export_platform',
     'apple_reminder_id',
+    'sync_requested',
 )
 
 
@@ -576,6 +577,7 @@ def _stream_action_items_bounded(
     *,
     max_docs: int,
     budget: Optional[ListReadBudget] = None,
+    extra_fields: tuple[str, ...] = (),
 ) -> tuple[List[Dict[str, Any]], int]:
     """Stream at most max_docs Firestore documents; skip soft-deleted rows.
 
@@ -590,7 +592,7 @@ def _stream_action_items_bounded(
     document_count = 0
     if max_docs <= 0:
         return action_items, 0
-    query = query.select(list(ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(max_docs)
+    query = query.select([*ACTION_ITEMS_LIST_SELECT_FIELDS, *extra_fields]).limit(max_docs)
     if budget is None:
         iterator = query.stream()
     else:
@@ -796,6 +798,7 @@ def get_action_items(
     limit: Optional[int] = None,
     offset: int = 0,
     budget: Optional[ListReadBudget] = None,
+    extra_fields: tuple[str, ...] = (),
 ) -> List[Dict[str, Any]]:
     """
     Get action items for a user with optional filters.
@@ -848,7 +851,9 @@ def get_action_items(
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        items, docs = _stream_action_items_bounded(q, max_docs=_list_scan_budget(row_budget), budget=budget)
+        items, docs = _stream_action_items_bounded(
+            q, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
+        )
         total_docs += docs
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
@@ -948,18 +953,13 @@ def get_active_action_item_by_description(uid: str, description: str) -> Optiona
     return None
 
 
-def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
-    """
-    Get all action items for a specific conversation.
+def get_action_items_by_conversation(
+    uid: str, conversation_id: str, *, extra_fields: tuple[str, ...] = ()
+) -> List[Dict[str, Any]]:
+    """A conversation's live action items; ``extra_fields`` widens the projection of its bucket reads.
 
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-
-    Returns:
-        List of action items for the conversation
-    """
-    return get_action_items(uid, conversation_id=conversation_id)
+    Legacy rows harvested for a missing ``completed`` keep the plain list projection."""
+    return get_action_items(uid, conversation_id=conversation_id, extra_fields=extra_fields)
 
 
 def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Dict[str, int]:
@@ -1094,6 +1094,8 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
         )
         if updated:
             bump_action_items_list_version(uid)
+            if update_data.get('completed') is True:
+                _record_followup_completion(uid, action_item_id)
         return updated
 
     # Check if exists
@@ -1105,6 +1107,8 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
 
     # Update the document
     action_item_ref.update(update_data)
+    if update_data.get('completed') is True:
+        _record_followup_completion(uid, action_item_id)
     bump_action_items_list_version(uid)
 
     return True
@@ -1173,6 +1177,12 @@ def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = 
 # *****************************
 
 
+def _purge_proactivity_source(uid: str, item_id: str) -> None:
+    from database.proactivity import purge_source_items
+
+    purge_source_items(uid=uid, source_kind='action_item', source_id=item_id, firestore_client=db)
+
+
 def delete_action_item(uid: str, action_item_id: str) -> bool:
     """
     Delete an action item.
@@ -1189,10 +1199,12 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
 
     # Check if exists
     if not action_item_ref.get().exists:
+        _purge_proactivity_source(uid, action_item_id)
         return False
 
     # Delete the document
     action_item_ref.delete()
+    _purge_proactivity_source(uid, action_item_id)
     bump_action_items_list_version(uid)
 
     return True
@@ -1226,6 +1238,8 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     if count > 0:
         batch.commit()
 
+    for item_id in action_item_ids:
+        _purge_proactivity_source(uid, item_id)
     bump_action_items_list_version(uid)
     return list(action_item_ids)
 
@@ -1250,9 +1264,11 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     batch = db.batch()
     count = 0
     total = 0
+    removed_ids = []
 
     for doc in docs:
         batch.delete(doc.reference)
+        removed_ids.append(doc.id)
         count += 1
         total += 1
         if count >= 499:  # Firestore batch limit is 500
@@ -1263,6 +1279,8 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     if count > 0:
         batch.commit()
 
+    for item_id in removed_ids:
+        _purge_proactivity_source(uid, item_id)
     if total > 0:
         bump_action_items_list_version(uid)
 
@@ -1288,6 +1306,7 @@ def retire_action_items_for_conversation(
     batch = db.batch()
     count = 0
     total = 0
+    removed_ids = []
     now = datetime.now(timezone.utc)
     for doc in query.stream():
         if doc.id in active_id_set:
@@ -1304,6 +1323,7 @@ def retire_action_items_for_conversation(
                 'updated_at': now,
             },
         )
+        removed_ids.append(doc.id)
         count += 1
         total += 1
         if count >= 499:  # Firestore batch limit is 500
@@ -1312,6 +1332,8 @@ def retire_action_items_for_conversation(
             count = 0
     if count > 0:
         batch.commit()
+    for item_id in removed_ids:
+        _purge_proactivity_source(uid, item_id)
     if total > 0:
         bump_action_items_list_version(uid)
     return total
@@ -1417,6 +1439,8 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
             result.missing_ids.append(entry['id'])
             continue
         result.updated_ids.append(entry['id'])
+        if update_data.get('completed') is True:
+            _record_followup_completion(uid, entry['id'])
 
     if result.updated_ids:
         bump_action_items_list_version(uid)
@@ -1598,3 +1622,12 @@ def get_scores(
         'default_tab': default_tab,
         'date': day.strftime('%Y-%m-%d'),
     }
+
+
+def _record_followup_completion(uid: str, task_id: str) -> None:
+    from database.proactivity_producers import record_task_completion
+
+    try:
+        record_task_completion(uid, task_id, firestore_client=db)
+    except Exception:
+        logger.info('commitment_followup outcome_unavailable')

@@ -44,6 +44,10 @@ def _build_fakes() -> dict[str, ModuleType]:
         fakes[name] = mod
         return mod
 
+    refresh = ModuleType('utils.conversations.action_item_refresh')
+    refresh.preserve = lambda *a, **k: False
+    add('utils.conversations.action_item_refresh', refresh)
+
     database_pkg = ModuleType('database')
     database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
     add('database', database_pkg)
@@ -51,9 +55,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod = ModuleType('database._client')
     client_mod.db = MagicMock(name='db')
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
     client_mod.document_id_from_seed = lambda seed: 'seed-id'
     add('database._client', client_mod)
-
     vector_db = add('database.vector_db', AutoMockModule('database.vector_db'))
     for attr in (
         'find_similar_memories',
@@ -160,7 +164,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     byok.get_byok_key = lambda _provider: None
     byok.has_validated_byok_keys = lambda: False
     add('utils.byok', byok)
-
+    speaker_id = add('utils.speaker_identification', AutoMockModule('utils.speaker_identification'))
+    speaker_id.extract_speaker_samples = AsyncMock()
     executors = add('utils.executors', AutoMockModule('utils.executors'))
     executors.db_executor = MagicMock()
     executors.llm_executor = MagicMock()
@@ -1536,6 +1541,31 @@ def test_paid_reprocess_merge_clears_stale_local_pending_and_resets_the_object(m
     # The object the caller returns must agree — not answer a stale pending
     # state back to the client on an enriched conversation.
     assert result.processing_state is None
+
+
+# red-proof: drop `conversation.summary_retryable = None` or `clear_summary_retryable` on the
+# enrichment persist → the Retry chip survives a successful user reprocess
+def test_paid_reprocess_clears_a_dead_letter_summary_retryable_marker(monkeypatch, pc) -> None:
+    _disable_flag(monkeypatch, pc)
+    _spy_managed_effects(monkeypatch, pc)
+    monkeypatch.setattr(
+        managed_compute,
+        'authorize_managed_compute',
+        lambda *_a, **_k: _memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
+    )
+    uid = 'retry-uid'
+    conv_id = 'dead-lettered-then-retried'
+    path = ('users', uid, 'conversations', conv_id)
+    store = StrictFirestore({path: {'id': conv_id, 'status': 'completed', 'summary_retryable': True}})
+    payloads = _capture_all_persists(monkeypatch, pc, store=store, path=path)
+    conversation = _existing_desktop(conv_id)
+    conversation.summary_retryable = True
+
+    result = _drive_reprocess(pc, conversation, uid=uid)
+
+    assert payloads[-1]['summary_retryable'] is None
+    assert store.rows[path]['summary_retryable'] is None
+    assert result.summary_retryable is None
 
 
 def test_flag_on_minimum_writes_local_pending_and_a_delivered_projection_stays_absent(monkeypatch, pc) -> None:

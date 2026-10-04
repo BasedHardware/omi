@@ -33,6 +33,7 @@ class GeneratedTranscriptSegment {
   final String? personId;
   final String? speaker;
   final int? speakerId;
+  final String? speakerLabelSource;
   final bool speechProfileProcessed;
   final double start;
   final String? sttProvider;
@@ -46,6 +47,7 @@ class GeneratedTranscriptSegment {
     this.personId,
     this.speaker = "SPEAKER_00",
     this.speakerId,
+    this.speakerLabelSource,
     this.speechProfileProcessed = true,
     required this.start,
     this.sttProvider,
@@ -61,6 +63,7 @@ class GeneratedTranscriptSegment {
       personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
       speaker: _readFieldValue<String>(_readField(json, const ["speaker"]), "speaker", _readString, requiredField: false, nullable: true, defaultValue: "SPEAKER_00"),
       speakerId: _readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: false, nullable: true),
+      speakerLabelSource: _readFieldValue<String>(_readField(json, const ["speaker_label_source"]), "speaker_label_source", _readString, requiredField: false, nullable: true),
       speechProfileProcessed: _required(_readFieldValue<bool>(_readField(json, const ["speech_profile_processed"]), "speech_profile_processed", _readBool, requiredField: false, nullable: false, defaultValue: true), "speech_profile_processed"),
       start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
       sttProvider: _readFieldValue<String>(_readField(json, const ["stt_provider"]), "stt_provider", _readString, requiredField: false, nullable: true),
@@ -77,6 +80,7 @@ class GeneratedTranscriptSegment {
       'person_id': personId,
       'speaker': speaker,
       'speaker_id': speakerId,
+      'speaker_label_source': speakerLabelSource,
       'speech_profile_processed': speechProfileProcessed,
       'start': start,
       'stt_provider': sttProvider,
@@ -936,6 +940,7 @@ class GeneratedConversation {
   final String? status;
   final GeneratedStructured structured;
   final List<String> suggestedSummarizationApps;
+  final bool? summaryRetryable;
   final int? syncContentRevision;
   final String? syncRelevance;
   final List<GeneratedTranscriptSegment> transcriptSegments;
@@ -986,6 +991,7 @@ class GeneratedConversation {
     this.status = "completed",
     required this.structured,
     this.suggestedSummarizationApps = const [],
+    this.summaryRetryable,
     this.syncContentRevision,
     this.syncRelevance,
     this.transcriptSegments = const [],
@@ -1038,6 +1044,7 @@ class GeneratedConversation {
       status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true, defaultValue: "completed"),
       structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
       suggestedSummarizationApps: _required(_readFieldValue<List<String>>(_readField(json, const ["suggested_summarization_apps"]), "suggested_summarization_apps", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "suggested_summarization_apps"),
+      summaryRetryable: _readFieldValue<bool>(_readField(json, const ["summary_retryable"]), "summary_retryable", _readBool, requiredField: false, nullable: true),
       syncContentRevision: _readFieldValue<int>(_readField(json, const ["sync_content_revision"]), "sync_content_revision", _readInt, requiredField: false, nullable: true),
       syncRelevance: _readFieldValue<String>(_readField(json, const ["sync_relevance"]), "sync_relevance", _readString, requiredField: false, nullable: true),
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
@@ -1091,6 +1098,7 @@ class GeneratedConversation {
       'status': status,
       'structured': structured.toJson(),
       'suggested_summarization_apps': suggestedSummarizationApps,
+      'summary_retryable': summaryRetryable,
       'sync_content_revision': syncContentRevision,
       'sync_relevance': syncRelevance,
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
@@ -1333,6 +1341,7 @@ class GeneratedConversationSearchItem {
   final String? status;
   final GeneratedStructured structured;
   final List<String> suggestedSummarizationApps;
+  final bool? summaryRetryable;
   final int? syncContentRevision;
   final String? syncRelevance;
   final List<GeneratedTranscriptSegment> transcriptSegments;
@@ -1384,6 +1393,7 @@ class GeneratedConversationSearchItem {
     this.status = "completed",
     required this.structured,
     this.suggestedSummarizationApps = const [],
+    this.summaryRetryable,
     this.syncContentRevision,
     this.syncRelevance,
     this.transcriptSegments = const [],
@@ -1437,6 +1447,7 @@ class GeneratedConversationSearchItem {
       status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true, defaultValue: "completed"),
       structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
       suggestedSummarizationApps: _required(_readFieldValue<List<String>>(_readField(json, const ["suggested_summarization_apps"]), "suggested_summarization_apps", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "suggested_summarization_apps"),
+      summaryRetryable: _readFieldValue<bool>(_readField(json, const ["summary_retryable"]), "summary_retryable", _readBool, requiredField: false, nullable: true),
       syncContentRevision: _readFieldValue<int>(_readField(json, const ["sync_content_revision"]), "sync_content_revision", _readInt, requiredField: false, nullable: true),
       syncRelevance: _readFieldValue<String>(_readField(json, const ["sync_relevance"]), "sync_relevance", _readString, requiredField: false, nullable: true),
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
@@ -1491,6 +1502,7 @@ class GeneratedConversationSearchItem {
       'status': status,
       'structured': structured.toJson(),
       'suggested_summarization_apps': suggestedSummarizationApps,
+      'summary_retryable': summaryRetryable,
       'sync_content_revision': syncContentRevision,
       'sync_relevance': syncRelevance,
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
@@ -1750,6 +1762,34 @@ class GeneratedSyncJobStatusResponse {
       'status': status,
       'successful_segments': successfulSegments,
       'total_segments': totalSegments,
+    };
+  }
+}
+
+class GeneratedRejectSpeakerRequest {
+  final String kind;
+  final String? personId;
+  final List<String>? segmentIds;
+
+  const GeneratedRejectSpeakerRequest({
+    required this.kind,
+    this.personId,
+    this.segmentIds,
+  });
+
+  factory GeneratedRejectSpeakerRequest.fromJson(Map<String, dynamic> json) {
+    return GeneratedRejectSpeakerRequest(
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
+      segmentIds: _readFieldValue<List<String>>(_readField(json, const ["segment_ids"]), "segment_ids", _readStringList, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'kind': kind,
+      'person_id': personId,
+      'segment_ids': segmentIds,
     };
   }
 }

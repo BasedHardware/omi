@@ -14,6 +14,27 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+            value: 'true'
+            category: rollout
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -130,15 +151,24 @@ environments:
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
+          STT_FAILOVER_RECOVERY_ENABLED:
+            value: 'false'
+            category: rollout
           STT_ROUTING_MODE:
             value: shadow
             category: rollout
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
-          STT_ROUTING_PROBE_PERCENT:
-            value: '2'
+          STT_ROUTING_ON_PERCENT:
+            value: '0'
             category: rollout
+          STT_ROUTING_TARGETS_JSON:
+            value: ''
+            category: rollout
+          STT_ROUTING_DISRUPTION_GATE:
+            value: '0.08'
+            category: reliability
           STT_NO_TEXT_SECONDS:
             value: '30'
             category: rollout
@@ -229,6 +259,12 @@ environments:
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -334,6 +370,12 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -377,6 +419,30 @@ environments:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -402,6 +468,24 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -436,12 +520,24 @@ environments:
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -484,6 +580,30 @@ environments:
             category: rollout
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
@@ -642,6 +762,18 @@ environments:
     region: us-central1
     desktop_backend:
       env:
+        OMI_VERTEX_RESERVATION_STATES:
+          env_var: OMI_VERTEX_RESERVATION_STATES
+          provisional: true
+          category: rollout
+        OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+          env_var: OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD
+          provisional: true
+          category: rollout
+        OMI_VERTEX_LEGACY_TASK_MODE:
+          env_var: OMI_VERTEX_LEGACY_TASK_MODE
+          provisional: true
+          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
           value: 'true'
@@ -653,9 +785,6 @@ environments:
           category: rollout
           value: 'false'
         MEMORY_BELIEF_MODEL_ENABLED:
-          category: rollout
-          value: 'true'
-        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
           category: rollout
           value: 'true'
         BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -736,6 +865,30 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -778,6 +931,9 @@ environments:
             TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
               value: '4'
               category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -811,6 +967,12 @@ environments:
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
               value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
@@ -901,6 +1063,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: dev-v1
               category: memory_rollout
+            MENTOR_GATE_DEBOUNCE_ENABLED:
+              value: 'true'
+              category: rollout
             SCREEN_FRAME_EGRESS_ENABLED:
               value: 'true'
               category: rollout
@@ -955,6 +1120,30 @@ environments:
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
               category: rollout
+            MEMORY_OWNER_JEV_FLIP_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+              value: ''
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -988,6 +1177,33 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1101,6 +1317,12 @@ environments:
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -1111,6 +1333,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            BUCKET_SCREEN_FRAMES:
+              value: based-hardware-dev-screen-frames
+              category: storage_retention
             TRANSCRIPTION_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -1169,6 +1394,30 @@ environments:
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
               category: rollout
+            MEMORY_OWNER_JEV_FLIP_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+              value: ''
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -1202,6 +1451,33 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1347,6 +1623,24 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: '1.0'
               category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+              value: ''
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -1384,6 +1678,33 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1827,6 +2148,27 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+            value: 'true'
+            category: rollout
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -1941,15 +2283,24 @@ environments:
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
+          STT_FAILOVER_RECOVERY_ENABLED:
+            value: 'false'
+            category: rollout
           STT_ROUTING_MODE:
             value: shadow
             category: rollout
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
-          STT_ROUTING_PROBE_PERCENT:
-            value: '2'
+          STT_ROUTING_ON_PERCENT:
+            value: '0'
             category: rollout
+          STT_ROUTING_TARGETS_JSON:
+            value: ''
+            category: rollout
+          STT_ROUTING_DISRUPTION_GATE:
+            value: '0.08'
+            category: reliability
           STT_NO_TEXT_SECONDS:
             value: '30'
             category: rollout
@@ -1972,10 +2323,10 @@ environments:
             value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '5'
+            value: '100'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
-            value: '8'
+            value: '16'
             category: rollout
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
             value: '8'
@@ -2031,15 +2382,21 @@ environments:
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -2145,6 +2502,9 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
             value: '12'
             category: reliability
@@ -2153,6 +2513,9 @@ environments:
             category: reliability
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
           ACCOUNT_DELETION_DISPATCH_MODE:
@@ -2206,6 +2569,27 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '2'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '10'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -2214,6 +2598,9 @@ environments:
             category: rollout
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
+            category: rollout
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
@@ -2231,6 +2618,24 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -2253,15 +2658,21 @@ environments:
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -2269,6 +2680,9 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -2286,6 +2700,30 @@ environments:
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '2'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '10'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -2351,6 +2789,18 @@ environments:
     region: us-central1
     desktop_backend:
       env:
+        OMI_VERTEX_RESERVATION_STATES:
+          env_var: OMI_VERTEX_RESERVATION_STATES
+          provisional: true
+          category: rollout
+        OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+          env_var: OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD
+          provisional: true
+          category: rollout
+        OMI_VERTEX_LEGACY_TASK_MODE:
+          env_var: OMI_VERTEX_LEGACY_TASK_MODE
+          provisional: true
+          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
           value: 'false'
@@ -2361,9 +2811,6 @@ environments:
           category: rollout
           value: 'false'
         MEMORY_BELIEF_MODEL_ENABLED:
-          category: rollout
-          value: 'false'
-        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
           category: rollout
           value: 'false'
         BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -2448,7 +2895,34 @@ environments:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
+            SCREEN_FRAME_SIGNING_SECRET:
+              secret: SCREEN_FRAME_SIGNING_SECRET
+              version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -2491,6 +2965,9 @@ environments:
             TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
               value: '4'
               category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -2514,15 +2991,21 @@ environments:
               category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
@@ -2613,8 +3096,19 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            MENTOR_GATE_DEBOUNCE_ENABLED:
+              value: 'true'
+              category: rollout
+            FIREBASE_SIGNER_SERVICE_ACCOUNT:
+              value: backend-runtime@based-hardware.iam.gserviceaccount.com
+            SCREEN_FRAME_EGRESS_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            BUCKET_SCREEN_FRAMES:
+              value: based-hardware-prod-screen-frames
+              category: storage_retention
             ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
               value: '1'
               category: rollout
@@ -2679,6 +3173,27 @@ environments:
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '2'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '10'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -2688,6 +3203,10 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
               category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -2709,6 +3228,33 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -2811,15 +3357,21 @@ environments:
               category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
@@ -2839,6 +3391,9 @@ environments:
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            BUCKET_SCREEN_FRAMES:
+              value: based-hardware-prod-screen-frames
+              category: storage_retention
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -2883,6 +3438,27 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '2'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '10'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -2892,6 +3468,10 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
               category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -2912,6 +3492,33 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -3065,6 +3672,27 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '2'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '10'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -3074,7 +3702,11 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
               category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
           provisional: true
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -3098,6 +3730,33 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -3204,6 +3863,10 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -3214,6 +3877,7 @@ environments:
           flags:
             --task-timeout: 3600s
             --memory: 2Gi
+            --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -3226,9 +3890,6 @@ environments:
               version: latest
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
-              version: latest
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
               version: latest
           env:
             OMI_LLM_GATEWAY_URL:
@@ -3474,6 +4135,7 @@ environments:
           flags:
             --remove-env-vars: HOSTED_PUSHER_API_URL
             --task-timeout: 900s
+            --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
@@ -3486,9 +4148,6 @@ environments:
               version: latest
             LIFECYCLE_EMAIL_SIGNING_SECRET:
               secret: LIFECYCLE_EMAIL_SIGNING_SECRET
-              version: latest
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
               version: latest
           env:
             OMI_ENV_STAGE:

@@ -8,6 +8,14 @@ overlay:
   gke:
     backend-listen:
       env:
+        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-dev-screen-frames
+          category: storage_retention
         LISTEN_RECONNECT_BUDGET_PER_MIN:
           value: '6'
           category: reliability
@@ -44,6 +52,9 @@ overlay:
           value: 'true'
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        STT_FAILOVER_RECOVERY_ENABLED:
+          value: 'false'
+          category: rollout
         STT_ROUTING_MODE:
           value: shadow
         STT_LEARNED_LANGUAGE_PROFILE:
@@ -60,6 +71,10 @@ overlay:
           value: 'true'
         MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'true'
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '25'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         HOSTED_PARAKEET_API_URL:
@@ -100,6 +115,30 @@ overlay:
         MEMORY_OWNER_JEV_FLIP_ENABLED:
           value: 'true'
           category: rollout
+        MEMORY_OWNER_JEV_FLIP_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -111,6 +150,14 @@ overlay:
           category: rollout
     pusher:
       env:
+        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-dev-screen-frames
+          category: storage_retention
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -161,6 +208,10 @@ overlay:
           value: 'true'
         MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'true'
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '25'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         MEMORY_BELIEF_MODEL_ENABLED:
@@ -174,6 +225,30 @@ overlay:
           category: rollout
         MEMORY_OWNER_JEV_FLIP_ENABLED:
           value: 'true'
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
           category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
@@ -343,8 +418,6 @@ overlay:
         value: 'false'
       MEMORY_BELIEF_MODEL_ENABLED:
         value: 'true'
-      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
-        value: 'true'
       BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
         value: 'true'
       MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -366,6 +439,11 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           SCREEN_FRAME_EGRESS_ENABLED:
@@ -393,6 +471,10 @@ overlay:
             value: 'true'
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -449,6 +531,30 @@ overlay:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -470,6 +576,11 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           TRANSCRIPTION_SHADOW_ENABLED:
@@ -512,6 +623,10 @@ overlay:
             value: 'true'
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
           GOOGLE_CLOUD_PROJECT:
@@ -555,6 +670,30 @@ overlay:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -576,6 +715,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
@@ -632,6 +773,24 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -656,6 +815,8 @@ overlay:
             secret: POSTHOG_EVENTS_API_KEY
             version: latest
         env:
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:

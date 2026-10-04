@@ -167,6 +167,12 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv.pop('geolocation', None)
     for field in PROJECTION_FAMILY_FIELDS:
         conv.pop(field, None)
+    # Where the live receiver heard each segment is internal placement evidence, not transcript.
+    for segment in conv.get('transcript_segments') or []:
+        if isinstance(segment, dict):
+            segment.pop('audio_capture_start', None)
+            segment.pop('audio_capture_end', None)
+            segment.pop('audio_source', None)
     if not conv.get('is_locked', False):
         return conv
     if 'structured' in conv:

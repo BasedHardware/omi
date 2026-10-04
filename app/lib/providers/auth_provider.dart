@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -69,6 +70,7 @@ class AuthenticationProvider extends BaseProvider {
     Future.microtask(() {
       _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
+        unawaited(ProactivityRuntime.outbox.bindOwner(user != null && !user.isAnonymous ? user.uid : null));
         AuthService.instance.handleAuthUserChanged(user?.uid);
         Logger.debug(
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
@@ -93,6 +95,7 @@ class AuthenticationProvider extends BaseProvider {
       });
       _idTokenSubscription = _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
+        unawaited(ProactivityRuntime.outbox.bindOwner(user != null && !user.isAnonymous ? user.uid : null));
         AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
           Logger.debug('User is currently signed out or the token has been revoked!');

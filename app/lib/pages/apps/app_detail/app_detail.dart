@@ -45,8 +45,18 @@ import 'package:omi/ui/ui.dart';
 class AppDetailPage extends StatefulWidget {
   final App app;
   final bool preventAutoOpenHomePage;
+  final Future<(bool, String)> Function(String) enableApp;
+  final Future<Map<String, dynamic>?> Function(String) appDetailsLoader;
+  final Future<bool> Function(String?) setupChecker;
 
-  const AppDetailPage({super.key, required this.app, this.preventAutoOpenHomePage = false});
+  const AppDetailPage({
+    super.key,
+    required this.app,
+    this.preventAutoOpenHomePage = false,
+    this.enableApp = enableAppServer,
+    this.appDetailsLoader = getAppDetailsServer,
+    this.setupChecker = isAppSetupCompleted,
+  });
 
   @override
   State<AppDetailPage> createState() => _AppDetailPageState();
@@ -63,6 +73,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
   Timer? _setupCheckTimer;
+  bool _paymentCheckInFlight = false;
+  bool _purchaseCompleted = false;
+  int _paymentCheckGeneration = 0;
   int _setupCheckGeneration = 0;
   int _markdownLoadGeneration = 0;
   late App app;
@@ -105,7 +118,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     // TODO: move check to backend
     final generation = ++_setupCheckGeneration;
     final requestedUrl = app.externalIntegration!.setupCompletedUrl;
-    isAppSetupCompleted(requestedUrl).then((value) {
+    widget.setupChecker(requestedUrl).then((value) {
       if (!mounted) return;
       if (generation != _setupCheckGeneration) return;
       if (app.externalIntegration?.setupCompletedUrl != requestedUrl) return;
@@ -141,33 +154,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   Future<void> _tryAutoInstallAfterSetup() async {
     if (!mounted) return;
-
-    setState(() => appLoading = true);
-    var prefs = SharedPreferencesUtil();
-    var (enabled, _) = await enableAppServer(app.id);
-
-    if (!mounted) return;
-
-    if (enabled) {
-      prefs.enableApp(app.id);
-      PlatformManager.instance.analytics.appEnabled(app.id);
-      context.read<AppProvider>().filterApps();
-
-      setState(() {
-        app.enabled = true;
-        appLoading = false;
-      });
-
-      if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) {
-            routeToPage(context, AppHomeWebPage(app: app));
-          }
-        });
-      }
-    } else {
-      setState(() => appLoading = false);
-    }
+    await _enableApp(app.id);
   }
 
   void setIsLoading(bool value) {
@@ -309,45 +296,68 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   @override
   void dispose() {
+    _paymentCheckGeneration++;
     _paymentCheckTimer?.cancel();
     _setupCheckTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
 
+  void _stopPaymentCheck() {
+    _paymentCheckTimer?.cancel();
+    _paymentCheckTimer = null;
+    _paymentCheckInFlight = false;
+    _paymentCheckGeneration++;
+  }
+
   Future _checkPaymentStatus(String appId) async {
     PlatformManager.instance.analytics.appPurchaseStarted(appId);
+    _paymentCheckTimer?.cancel();
+    _paymentCheckInFlight = false;
+    _purchaseCompleted = false;
+    final generation = ++_paymentCheckGeneration;
     _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      var prefs = SharedPreferencesUtil();
-      if (mounted) {
+      if (!mounted || app.id != appId || generation != _paymentCheckGeneration) {
+        timer.cancel();
+        return;
+      }
+      if (timer.tick >= 60) {
+        _stopPaymentCheck();
+        if (mounted) {
+          setState(() => appLoading = false);
+          OmiFeedback.error(context, context.l10n.issueActivatingApp);
+        }
+        return;
+      }
+      if (_paymentCheckInFlight) return;
+      _paymentCheckInFlight = true;
+      if (!appLoading) {
         setState(() => appLoading = true);
       }
-
-      var details = await getAppDetailsServer(appId);
-      if (details != null && details['is_user_paid']) {
-        var (enabled, _) = await enableAppServer(appId);
-        if (enabled) {
-          PlatformManager.instance.analytics.appPurchaseCompleted(appId);
-          prefs.enableApp(appId);
-          PlatformManager.instance.analytics.appEnabled(appId);
-
-          if (!mounted) {
-            timer.cancel();
-            _paymentCheckTimer?.cancel();
-            return;
-          }
-
-          context.read<AppProvider>().filterApps();
-          setState(() {
-            app.isUserPaid = true;
-            app.enabled = true;
-            appLoading = false;
-          });
-          timer.cancel();
-          _paymentCheckTimer?.cancel();
-        } else {
-          Logger.debug('Payment not made yet');
+      var confirmed = false;
+      try {
+        final details = await widget.appDetailsLoader(appId);
+        confirmed = details != null && details['is_user_paid'] == true;
+      } catch (_) {
+        confirmed = false;
+      } finally {
+        if (generation == _paymentCheckGeneration) {
+          _paymentCheckInFlight = false;
         }
+      }
+      if (!mounted || generation != _paymentCheckGeneration) return;
+      if (confirmed) {
+        _stopPaymentCheck();
+        app.isUserPaid = true;
+        if (!_purchaseCompleted) {
+          _purchaseCompleted = true;
+          PlatformManager.instance.analytics.appPurchaseCompleted(appId);
+        }
+        await _enableApp(appId);
+        return;
+      }
+      if (appLoading) {
+        setState(() => appLoading = false);
       }
     });
   }
@@ -434,10 +444,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                           ),
                         ),
-                        placeholder: (context, url) => const SizedBox.square(
-                          dimension: 108,
-                          child: Center(child: OmiSpinner()),
-                        ),
+                        placeholder: (context, url) =>
+                            const SizedBox.square(dimension: 108, child: Center(child: OmiSpinner())),
                         errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
                       ),
                       const SizedBox(width: 20),
@@ -602,7 +610,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   Builder(
                     builder: (context) {
                       final canAddReview = !app.isOwner(SharedPreferencesUtil().uid) && app.enabled;
-                      return (app.ratingCount > 0 || app.reviews.isNotEmpty || canAddReview)
+                      // The header already shows the average and count, so this card holds only reviews.
+                      return (app.reviews.isNotEmpty || canAddReview)
                           ? GestureDetector(
                               key: _reviewsSectionKey,
                               onTap: () {
@@ -623,13 +632,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const SizedBox(height: OmiSpacing.xxs),
-                                    RatingDistributionWidget(
-                                      ratingAvg: app.ratingAvg ?? 0,
-                                      ratingCount: app.ratingCount,
-                                      reviews: app.reviews,
-                                    ),
-                                    const SizedBox(height: OmiSpacing.md),
                                     RecentReviewsSection(
                                       reviews:
                                           app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
@@ -786,9 +788,21 @@ class _AppDetailPageState extends State<AppDetailPage> {
     var prefs = SharedPreferencesUtil();
     setState(() => appLoading = true);
 
-    var (enabled, detail) = await enableAppServer(appId);
+    bool enabled;
+    String detail;
+    try {
+      (enabled, detail) = await widget.enableApp(appId);
+    } catch (_) {
+      if (!mounted) return;
+      showOmiAlert(context, title: context.l10n.errorActivatingApp, message: context.l10n.issueActivatingApp);
+      setState(() => appLoading = false);
+      return;
+    }
 
-    if (!mounted) return;
+    if (!mounted) {
+      appLoading = false;
+      return;
+    }
 
     if (!enabled) {
       // Setup is only the right guess when the backend gave no reason. A
@@ -888,7 +902,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     PlatformManager.instance.analytics.appDetailSubscribeClicked(appId: app.id, appName: app.name);
     final link = app.paymentLink;
     if (link == null || link.isEmpty) {
-      await _enableApp(app.id);
+      OmiFeedback.error(context, context.l10n.invalidPaymentUrl);
       return;
     }
     final uri = Uri.tryParse(link);
@@ -925,7 +939,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         messageProvider.sendInitialAppMessage(selectedApp);
       }
       PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
-      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false, startFresh: false));
+      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false));
     } finally {
       if (mounted) setState(() => chatButtonLoading = false);
     }
@@ -936,20 +950,31 @@ class _AppDetailPageState extends State<AppDetailPage> {
     // iPad needs the share button's position for the popover.
     final box = buttonContext.findRenderObject() as RenderBox?;
     final origin = box != null ? box.localToGlobal(Offset.zero) & box.size : null;
-    final outcome = await SharePlus.instance
-        .share(ShareParams(text: appShareUrl(app.id, sid: sid), subject: app.name, sharePositionOrigin: origin));
+    final outcome = await SharePlus.instance.share(
+      ShareParams(
+        text: appShareUrl(app.id, sid: sid),
+        subject: app.name,
+        sharePositionOrigin: origin,
+      ),
+    );
     final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
-    PlatformManager.instance.analytics.track('App Shared', properties: {
-      'appId': app.id,
-      'share_id': sid,
-      'share_status': outcome.status.name,
-      if (targetApp != null) 'target_app': targetApp
-    });
-    PlatformManager.instance.analytics.track('App Detail Shared', properties: {
-      'app_id': app.id,
-      'app_name': app.name,
-      'share_id': sid,
-      if (targetApp != null) 'target_app': targetApp,
-    });
+    PlatformManager.instance.analytics.track(
+      'App Shared',
+      properties: {
+        'appId': app.id,
+        'share_id': sid,
+        'share_status': outcome.status.name,
+        if (targetApp != null) 'target_app': targetApp,
+      },
+    );
+    PlatformManager.instance.analytics.track(
+      'App Detail Shared',
+      properties: {
+        'app_id': app.id,
+        'app_name': app.name,
+        'share_id': sid,
+        if (targetApp != null) 'target_app': targetApp,
+      },
+    );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
+import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -47,6 +48,7 @@ import 'package:omi/startup/boot_crash_handlers.dart';
 import 'package:omi/startup/boot_journal.dart';
 import 'package:omi/startup/boot_recovery.dart';
 import 'package:omi/startup/boot_recovery_app.dart';
+import 'package:omi/startup/startup_error_router.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -176,7 +178,20 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// failure screen re-runs [_init].
 bool _serviceManagerInitialized = false;
 
-Future<void> _reportBootCrash(String kind, Object error, StackTrace? stack, {FlutterErrorDetails? details}) async {
+final StartupErrorRouter _startupErrorRouter = StartupErrorRouter(
+  report: (error, stack, {required fatal, required origin}) {
+    unawaited(_reportBootCrash('platform_error', error, stack, fatal: fatal, errorOrigin: origin));
+  },
+);
+
+Future<void> _reportBootCrash(
+  String kind,
+  Object error,
+  StackTrace? stack, {
+  FlutterErrorDetails? details,
+  bool fatal = true,
+  String errorOrigin = 'boot',
+}) async {
   if (PhysicalQualification.enabled) return;
   unawaited(AppReviewService().recordBadExperience(AppReviewBadExperience.fatalError));
   try {
@@ -195,7 +210,10 @@ Future<void> _reportBootCrash(String kind, Object error, StackTrace? stack, {Flu
     if (details != null) {
       await crashlytics.recordFlutterError(details);
     } else {
-      await crashlytics.recordError(error, stack, fatal: true);
+      try {
+        await crashlytics.setCustomKey('error_origin', errorOrigin);
+      } catch (_) {}
+      await crashlytics.recordError(error, stack, fatal: fatal);
     }
   } catch (_) {
     // Reporting must not recursively fail startup or the global error handler.
@@ -250,7 +268,7 @@ Future _init() async {
         if (PhysicalQualification.enabled) {
           unawaited(PhysicalQualification.runtimeEvent('platform_error', error: error, stack: stack));
         } else {
-          unawaited(_reportBootCrash('platform_error', error, stack));
+          _startupErrorRouter.handlePlatformError(error, stack);
           try {
             AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
           } catch (_) {}
@@ -277,6 +295,10 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  await PhysicalQualification.startupStage(
+    'autoremove_default',
+    SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
+  );
   SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family
@@ -371,6 +393,7 @@ Future<void> _start({bool forceFull = false}) async {
   BootRecovery? recovery;
   try {
     if (!PhysicalQualification.enabled) {
+      _startupErrorRouter.beginStartup();
       recovery = BootRecovery(await SharedPreferences.getInstance());
       await recovery.countInterruptedBoot(BootJournal.instance);
       await BootJournal.instance.record('boot', 'begin');
@@ -445,12 +468,9 @@ Future<void> _start({bool forceFull = false}) async {
       unawaited(PhysicalQualification.runtimeEvent('first_frame_callback'));
     });
   }
+  if (!PhysicalQualification.enabled) _startupErrorRouter.completeStartup();
   runApp(const MyApp());
-  unawaited(
-    SiriIntegration.instance.takePendingRoute().then((route) {
-      if (route != null) SiriIntegration.instance.openRoute(route);
-    }),
-  );
+  unawaited(SiriIntegration.instance.deliverPendingRoute());
   if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
 }
 
@@ -474,7 +494,7 @@ void main() {
       if (PhysicalQualification.enabled) {
         unawaited(PhysicalQualification.runtimeEvent('zone_error', error: error, stack: stack));
       } else {
-        unawaited(_reportBootCrash('platform_error', error, stack));
+        _startupErrorRouter.handleZoneError(error, stack);
         try {
           debugPrint('Uncaught error: $error\n$stack');
           AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
@@ -548,6 +568,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // legacy/allow projection cannot admit one offline upload.
     final resumeUser = FirebaseAuth.instance.currentUser;
     final resumeOwner = (resumeUser != null && !resumeUser.isAnonymous) ? resumeUser.uid : null;
+    await ProactivityRuntime.outbox.bindOwner(resumeOwner);
     await AccountCutoverRuntime.instance.bindAuthenticatedOwner(resumeOwner);
     SyncReconciler.instance.onForeground();
     unawaited(SyncUploadGate.instance.reconcileFairUseStatus());
@@ -558,6 +579,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      unawaited(ProactivityRuntime.outbox.flush());
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
         _performanceTelemetry.setForeground(true);

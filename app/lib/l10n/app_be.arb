@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "Вы ўпэўнены, што хочаце скаржыцца на гэта паведамленне?",
+    "reportMessageConfirm": "Паскардзіцца на гэта паведамленне?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "Вы ўпэўнены, што хочаце ачысціць чат? Гэта дзеянне нельга адмяніць.",
+    "clearChatConfirm": "Усе паведамленні ў гэтым чаце будуць выдалены. Гэта нельзя адмяніць.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "Усе вашы ўспаміны і размовы будуць безвяртана выданы.",
+    "allDataErased": "Вашы ўспаміны і размовы будуць сцёртыя.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "Вашы дадатыі і інтэграцыі будуць адключаны адразу.",
+    "appsDisconnected": "Вашы праграмы і інтэграцыі будуць адключаныя.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "Вы ўпэўнены, што хочаце адключыцца ад {appName}? Вы можаце переадключыцца ў любы час.",
+    "disconnectAppMessage": "Вы можаце зноў падключыць {appName} у любы час.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "Вы ўпэўнены, што хочаце выдаліць гэтую задачу?",
+    "deleteActionItemMessage": "Выдаліць гэту задачу?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Вы ўпэўнены, што хочаце выдаліць {count} выбраных задач{s}?",
+    "deleteSelectedItemsMessage": "Выдаліць выбраныя задачы ({count}){s}?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 Спамінаў яшчэ нету",
+    "noMemoriesYet": "Спамінаў яшчэ нету",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 Спамінаў не знойдзена",
+    "noMemoriesFound": "Спамінаў не знойдзена",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "Вы ўпэўнены, што хочаце вычысціць памяць Omi? Гэтае дзеянне нельга адмяніць.",
+    "clearMemoryMessage": "Усе вашы ўспаміны будуць выдалены. Гэта нельзя адмяніць.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "Вы ўпэўнены, што хочаце выдаліць гэтую задачу?",
+    "deleteActionItemConfirmMessage": "Выдаліць гэту задачу?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2267,15 +2267,15 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "ІНТЭРФЕЙС ПРЫКЛАДАННЯ",
+    "appInterfaceSectionTitle": "Інтэрфейс прыкладання",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "МОВ І РАСШЫФРОЎКА",
+    "speechTranscriptionSectionTitle": "Маўленне і расшыфроўка",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "Мова прыкладання змяняе меню і кнопкі. Мова маўлення влывае на тое, як вашы запісы расшыфроўваюцца.",
+    "languageSettingsHelperText": "Мова прыкладання змяняе меню і кнопкі. Першасная мова ўплывае на тое, як вашы запісы расшыфроўваюцца.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "Гэта дзеянне невозможна адмяніць.",
+    "thisActionCannotBeUndone": "Гэта нельзя адмяніць.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "Вы ўпэўнены, што хочаце выдаліць гэтую задачу? Гэта дзеянне немагчыма адмяніць.",
+    "deleteActionItemConfirmation": "Выдаліць гэту задачу? Гэта нельзя адмяніць.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "Вы ўпэўнены, што хочаце паведаміць аб гэтым паведамленні?",
+    "confirmReportMessage": "Паскардзіцца на гэта паведамленне?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "Вы ўпэўнены, што хочаце очыстіць чат? Гэта дзеянне невозможна адмяніць.",
+    "confirmClearChat": "Ачысціць гэты чат? Гэта нельзя адмяніць.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "Вы ўпэўнены, што хочаце выдаліць гэту памяць? Гэта дзеянне невозможна адмяніць.",
+    "deleteMemoryConfirmation": "Выдаліць гэты ўспамін? Гэта нельзя адмяніць.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "Вы ўпэўнены, што хочаце очыстіць памяць Omi? Гэта дзеянне невозможна адмяніць і назаўсёды выдаліць усе {count} памяткі.",
+    "clearMemoryConfirmation": "Усе ўспаміны ({count}) будуць выдалены. Гэта нельзя адмяніць.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "Дозвольце Omi выбраць най­лепшае прыкладанне аўтаматычна",
-    "deleteConversationConfirmation": "Вы сапраўды хочаце выдаліць гэтую размову? Гэта дзеянне не можна адмяніць.",
+    "deleteConversationConfirmation": "Выдаліць гэту размову? Гэта нельзя адмяніць.",
     "conversationDeleted": "Размова выдалена",
     "generatingLink": "Генеруецца спасылка…",
     "editConversation": "Рэдагаваць размову",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "Вы сапраўды хочаце абнавіць вашае прыкладанне? Змяненні будуць адлюстраны пасля рэцэнзіі нашай каманды.",
+    "updateAppConfirmation": "Змяненні з'явяцца пасля праверкі нашай камандай.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4421,10 +4421,6 @@
                 "type": "String"
             }
         }
-    },
-    "newVersionAvailable": "Даступна новая версія",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
     },
     "no": "Не",
     "@no": {
@@ -4478,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "Вы сапраўды хочаце скасаваць вашу падпіску? Вы будзеце мець доступ да конца цякучага біллінгавога перыяду.",
+    "cancelSubscriptionConfirmation": "Вы будзеце мець доступ да конца цякучага біллінгавога перыяду.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4738,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "Гэта дзеянне не можна адмяніць. Любыя прыкладанні, якія выкарыстоўваюць гэты ключ, больш не зможуць мець доступ да API.",
+    "revokeApiKeyWarning": "Праграмы, якія выкарыстоўваюць гэты ключ, страцяць доступ да API. Гэта нельзя адмяніць.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4829,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "Вы сапраўды хочаце выдаліць гэты {item}? Гэта дзеянне не можна адмяніць.",
+    "deleteItemConfirmation": "{item} будзе выдалена. Гэта нельга адмяніць.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4842,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "Вы сапраўды хочаце адкліклаць ключ \"{keyName}\"? Гэта дзеянне не можна адмяніць.",
+    "revokeKeyConfirmation": "Усё, што выкарыстоўвае \"{keyName}\", страціць доступ. Гэта нельзя адмяніць.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5089,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "Ваш план застанецца актыўным да {date}. Пасля гэтага вы страцяеце доступ да вашых неабмежаваных функцый. Вы сапраўды?",
+    "planRemainsActiveUntil": "Ваш план застанецца актыўным да {date}. Пасля гэтага вы страцяеце доступ да вашых неабмежаваных функцый.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5225,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Разблакуйце бясконцую память Omi",
+    "unlockOmiInfiniteMemory": "Неабмежаваныя ўспаміны",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5241,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Праверце падключэнне і паспрабуйце зноў",
+    "checkConnectionTryAgain": "Праверце злучэнне і паспрабуйце яшчэ раз.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5497,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "Гэта перманентна удаліт усе разговоры, імпартаваныя з Limitless. Гэта дзеяннне нельга адмяніць.",
+    "deleteAllLimitlessWarning": "Усе размовы, імпартаваныя з Limitless, будуць выдалены. Гэта нельзя адмяніць.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5555,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "Вы ўпэўнены, што хочаце удаліць ўзор {name}?",
+    "deleteSampleConfirmation": "Узор голасу {name} будзе выдалены. Гэта нельзя адмяніць.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5568,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "Вы ўпэўнены, што хочаце удаліць {name}? Гэта таксама выдаліт усе звязаныя ўзоры мовы.",
+    "deletePersonConfirmation": "Гэта выдаліць узоры голасу {name}, і гэта нельга адмяніць. Рэплікі ў мінулых размовах стануць безыменнымі гаворцамі.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Задачы з вашых разговораў пояўляцца тут.\nТапніце + каб стварыць адну ручнічна.",
+    "tasksEmptyStateMessage": "Пачніце размову, каб стварыць задачу.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6032,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "Вы ўпэўнены, што хочаце спыніць запіс і рэзюміраваць разговор зараз?",
+    "stopRecordingConfirmation": "Спыніць запіс і падсумаваць размову зараз?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -7215,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.",
+    "premiumMinutesInfo": "300 прэміум-хвілін у месяц. Выберыце «На прыладзе» для неабмежаванай бясплатнай расшыфроўкі.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7326,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ",
+    "premiumMinutesMonth": "300 прэміум-хвілін у месяц. Выберыце «На прыладзе» для неабмежаванай бясплатнай расшыфроўкі. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7414,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Убудаваная жывая транскрыпцыя Omi аптымізавана для разговораў у рэальным часе з аўтаматычным распазнаваннем дыктарыў і дыяризацыяй.",
+    "omiTranscriptionOptimized": "Жывая расшыфроўка Omi створана для размоў у рэальным часе і пазначае, хто што сказаў.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -8096,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "Вы ўпэўнены, што хочаце назаўсёды выдаліць гэты запіс? Гэта не можна адмяніць.",
+    "deleteRecordingConfirmation": "Гэта нельзя адмяніць.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8610,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "Вы мяняеце ваш Unlimite план на {title}. Вы ўпэўнены, што хочаце адкіць?",
+    "planSwitchingDescriptionWithTitle": "Вы мяняеце ваш план Unlimited на {title}.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10093,7 +10089,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "СХОВІШЧА",
+    "storageSection": "Сховішча",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -10415,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "Раскажыце падрабязней",
     "deleteFlowFeedbackSubtitle": "Што прымусіла б Omi працаваць для вас?",
     "deleteFlowFeedbackHint": "Неабавязкова — вашы думкі дапамагаюць нам ствараць лепшы прадукт.",
-    "deleteFlowConfirmTitle": "Гэта назаўсёды",
-    "deleteFlowConfirmSubtitle": "Пасля выдалення ўліковага запісу аднавіць яго немагчыма.",
+    "deleteFlowConfirmTitle": "Выдаліць ваш уліковы запіс?",
+    "deleteFlowConfirmSubtitle": "Гэта нельга адмяніць, нават службе падтрымкі.",
     "deleteConsequenceSubscription": "Любая актыўная падпіска будзе скасавана.",
     "deleteConsequenceNoRecovery": "Ваш уліковы запіс нельга аднавіць — нават службай падтрымкі.",
     "deleteTypeToConfirm": "Увядзіце DELETE для пацвярджэння",
@@ -10563,7 +10559,7 @@
     "syncCustomSttWarningTitle": "Сінхранізацыя выкарыстоўвае транскрыпцыю Omi",
     "syncCustomSttWarningMessage": "Вы карыстаецеся ўласным сэрвісам транскрыпцыі. Сінхранізацыя гэтых запісаў транскрыбуе іх на серверах Omi, і яны залічацца ў ліміт транскрыпцыі вашага тарыфу.",
     "transcribeLaterTitle": "Транскрыпцыя пазней",
-    "transcribeLaterDescription": "Запісвайце аўдыя зараз, а транскрыбуйце яго пры неабходнасці, а не ў рэжыме рэальнага часу. Запісы захоўваюцца на тэлефоне, а потым вы загружаеце іх, каб стварыць размовы.",
+    "transcribeLaterDescription": "Запісвайце зараз, расшыфроўвайце, калі захочаце. Да таго часу аўдыя застаецца на тэлефоне.",
     "transcribeLaterNote": "Працуе з мікрафонам тэлефона, прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.",
     "transcribeLaterStorageFull": "На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.",
     "unmute": "Уключыць гук",
@@ -10668,7 +10664,7 @@
     "cloudTranscription": "Воблачная транскрыпцыя",
     "copyMessage": "Капіяваць паведамленне",
     "deleteOnDeviceModel": "Выдаліць мадэль",
-    "deleteOnDeviceModelConfirm": "Вы сапраўды хочаце выдаліць гэту мадэль?",
+    "deleteOnDeviceModelConfirm": "Выдаліць гэту мадэль?",
     "downgradeAnyway": "Усё роўна перайсці",
     "downgradeLimitBattery": "У 7 разоў большы расход батарэі",
     "downgradeLimitDelay": "Затрымка 5–7 секунд",
@@ -10714,7 +10710,7 @@
     "whisperModelSizeMedium": "Сярэдняя",
     "whisperModelSizeSmall": "Малая",
     "whisperModelSizeTiny": "Мініяцюрная",
-    "planSheetChooseYourPlan": "Выберыце свой план, каб адкрыць безмежны Omi.",
+    "planSheetChooseYourPlan": "Выберыце план, які вам падыходзіць.",
     "availableOnMacMobileWeb": "Даступна на Mac, мабільным і ў вэбе",
     "popularBadge": "ПАПУЛЯРНЫ",
     "worksOnDesktop": "Працуе на камп'ютары",
@@ -10793,13 +10789,11 @@
     "moreOptions": "Дадатковыя параметры",
     "filterByDate": "Фільтр па даце",
     "memoryGraph": "Граф успамінаў",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{Голас гатовы да распазнавання} saved_sample_awaiting_embedding{Узор захаваны, чакае апрацоўкі голасу} not_learned{Голас не вывучаны} other{Стан голасу невядомы}}",
     "tagSpeakerIncludingLaterSpeech": "Таксама пазначыць пазнейшую мову гэтага спікера",
     "updateSummaryWithNewNames": "Абнавіць зводку з новымі імёнамі",
     "syncStatusUnsupportedAudio": "Не ўдалося прачытаць аўдыя — сінхранізацыя немагчымая",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Што ты можаш зрабіць для мяне?} goal{Дапамажы мне паставіць мэту} activity{Падсумуй маю нядаўнюю дзейнасць} improve{Як я магу палепшыцца?} other{}}",
     "nextWeek": "На наступным тыдні",
     "clearSearch": "Ачысціць пошук",
@@ -10890,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "Пацвердзіце свой нумар, каб тэлефанаваць праз Omi.",
     "phoneDeleteNumberFailed": "Не ўдалося выдаліць гэты нумар",
     "forgetDeviceConfirmTitle": "Забыць прыладу?",
-    "forgetDeviceConfirmMessage": "Omi перастане падключацца да гэтай прылады. Каб карыстацца ёй зноў, трэба будзе спалучыць яе нанова.",
+    "forgetDeviceConfirmMessage": "Omi перастане падключацца да гэтай прылады.",
     "deviceForgottenMessage": "Прылада забыта",
     "unpairDeviceConfirmTitle": "Разарваць спалучэнне з прыладай?",
     "rollBack": "Адкаціць",
@@ -11217,5 +11211,186 @@
     "deleteChatMessage": "Ён знікне з мінулых чатаў назаўсёды.",
     "deleteChat": "Выдаліць чат",
     "appsAskWith": "Пытайцеся ў Omi з",
-    "conversationsTodayCount": "{count, plural, =0{Сёння размоў няма.} =1{1 размова сёння.} other{{count} размоў сёння.}}"
+    "conversationsTodayCount": "{count, plural, =0{Сёння размоў няма.} =1{1 размова сёння.} other{{count} размоў сёння.}}",
+    "meetingScreenshotsTitle": "Што было на экране",
+    "meetingScreenshotFallbackCaption": "Здымак экрана з гэтай сустрэчы",
+    "deleteMeetingScreenshotTitle": "Выдаліць здымак экрана?",
+    "deleteMeetingScreenshotMessage": "Здымак экрана будзе выдалены з нататкі гэтай сустрэчы. Гэта нельга адрабіць.",
+    "conversationSummaryFailed": "Не ўдалося стварыць зводку",
+    "reconnectionsRecent": "Перазлучэнні (апошнія 7 дзён)",
+    "failedConnections": "Няўдалыя злучэнні",
+    "failedConnectionsRecent": "Няўдалыя злучэнні (апошнія 7 дзён)",
+    "diagnosticsCountSincePairing": "{count} з моманту спарвання",
+    "peopleFilterLowConfidence": "Нізкая ўпэўненасць",
+    "peopleFilterPinned": "Замацаваныя",
+    "peoplePinnedCount": "{count, plural, =1{Замацавана: 1} other{Замацавана: {count}}}",
+    "confidenceConfirmed": "Пацверджана",
+    "confidenceLikely": "Верагодна",
+    "confidenceUnverified": "Не праверана",
+    "confidenceMeterLabel": "Упэўненасць: {level}",
+    "confidenceReasonLabeled": "{count, plural, =1{Вы назвалі адзін раз} other{Вы назвалі разоў: {count}}}",
+    "confidenceReasonPicked": "{count, plural, =1{Абрана ў 1 падказцы} other{Абрана ў падказках: {count}}}",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{Вы пацвердзілі 1 супадзенне} other{Вы пацвердзілі супадзенняў: {count}}}",
+    "confidenceReasonAutoOnly": "Толькі аўтаматычнае супадзенне, без пацвярджэння",
+    "confidenceReasonNeverConfirmed": "Без пацвярджэння",
+    "confidenceReasonCorrected": "Вы выправілі супадзенне",
+    "confidenceReasonVoiceReady": "голас гатовы",
+    "confidenceReasonNeedsVoice": "патрэбны голас",
+    "confidenceReasonNotHeard": "пакуль не чуваць",
+    "confidenceSheetTitle": "Упэўненасць",
+    "confidenceSummaryConfirmed": "Omi распазнае голас {name}, і вы гэта пацвердзілі.",
+    "confidenceSummaryLikely": "Omi звычайна распазнае голас {name}, але вы пацвердзілі гэта толькі некалькі разоў.",
+    "confidenceSummaryUnverified": "Пакуль нішто з вашых дзеянняў не пацвярджае {name}.",
+    "confidenceEvidenceHeader": "Доказы",
+    "evidenceManualLabels": "{count, plural, =1{Вы назвалі ў 1 размове} other{Вы назвалі ў размовах: {count}}}",
+    "evidenceCardConfirms": "{count, plural, =1{«Так» у 1 падказцы} other{«Так» у падказках: {count}}}",
+    "evidenceCardPicks": "{count, plural, =1{Абрана ў 1 падказцы} other{Абрана ў падказках: {count}}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{Пацверджана 1 аўтаматычнае супадзенне} other{Пацверджана аўтаматычных супадзенняў: {count}}}",
+    "evidenceAutoCorrected": "{count, plural, =1{1 супадзенне перанесена да іншага чалавека} other{Супадзенняў перанесена да іншых: {count}}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 аўтаматычнае супадзенне без пацвярджэння} other{Аўтаматычных супадзенняў без пацвярджэння: {count}}}",
+    "evidenceVoiceReady": "Узор голасу гатовы",
+    "evidenceNoVoice": "Узору голасу пакуль няма",
+    "evidenceNotHeard": "Яшчэ не было ў размовах",
+    "evidenceNothing": "Вы яшчэ не называлі і не пацвярджалі",
+    "effectCountsALot": "Вельмі дапамагае",
+    "effectCounts": "Дапамагае",
+    "effectCountsALittle": "Крыху дапамагае",
+    "effectBarelyCounts": "Амаль не дапамагае",
+    "effectCountsAgainst": "Шкодзіць",
+    "effectNeeded": "Патрэбна для «Пацверджана»",
+    "confidenceToReachConfirmed": "Як дасягнуць «Пацверджана»",
+    "confidenceNextVoice": "Omi патрэбны яшчэ ўзор голасу {name}. Назавіце чалавека пры ўключаным «Запамінаць галасы».",
+    "confidenceIsConfirmed": "Статус {name}: «Пацверджана». Omi працягвае вучыцца з кожнай пазнакі.",
+    "confidenceFootnote": "Моцна змяняюць упэўненасць толькі вашы адказы. Аўтаматычныя супадзенні самі па сабе амаль не дапамагаюць.",
+    "personWhyConfidence": "Чаму?",
+    "pinPersonTitle": "Замацаваць {name}",
+    "pinPersonSubtitle": "Захаваць {name} і чакаць у вашых размовах",
+    "pinPersonHonestLine": "Omi пытаецца, перш чым супаставіць падобныя галасы.",
+    "pinAction": "Замацаваць",
+    "unpinAction": "Зняць замацаванне",
+    "personPinnedToast": "Замацавана: {name}",
+    "personUnpinnedToast": "Замацаванне знята: {name}",
+    "whyConfidenceMenu": "Чаму {level}?",
+    "deletePersonNamedTitle": "Выдаліць {name}?",
+    "deletePinnedPersonMessage": "Замацавана: {name}. Узоры голасу будуць выдалены, Omi перастане распазнаваць гэтага чалавека, а ў ранейшых расшыфроўках ён будзе безымянным спікерам. Гэта нельга адрабіць.",
+    "deleteNamedPerson": "Выдаліць {name}",
+    "selectPeople": "Выбраць людзей",
+    "cleanUpEllipsis": "Ачысціць…",
+    "cleanUpUnsureCount": "{count, plural, =1{1 чалавек, у якім Omi не ўпэўнены} other{Людзей, у якіх Omi не ўпэўнены: {count}}}",
+    "cleanUpBannerBody": "Часцей за ўсё гэта няправільна пачутыя імёны. Праглядзіце іх і выдаліце несапраўдныя.",
+    "reviewAction": "Праглядзець",
+    "cleanUpTitle": "Ачыстка",
+    "cleanUpLead": "{count, plural, =1{Omi не ўпэўнены ў гэтым чалавеку. Здыміце адзнаку, каб пакінуць.} other{Omi не ўпэўнены ў гэтых людзях: {count}. Большасць — імёны, памылкова пачутыя ў расшыфроўках. Здыміце адзнаку з тых, каго хочаце пакінуць.}}",
+    "cleanUpPinnedNote": "Замацаваныя людзі ніколі не трапляюць у ачыстку.",
+    "deletePeopleCountAction": "{count, plural, =1{Выдаліць 1 чалавека} other{Выдаліць людзей: {count}}}",
+    "peopleDeletedToast": "{count, plural, =1{Выдалены 1 чалавек} other{Выдалена людзей: {count}}}",
+    "cleanUpNothingTitle": "Няма чаго ачышчаць",
+    "cleanUpNothingMessage": "Цяпер Omi ва ўсіх упэўнены.",
+    "selectAllSkipsPinned": "«Выбраць усё» прапускае замацаваных людзей. Выдаляйце іх па адным на іх старонках.",
+    "pinnedNotSelectable": "Замацаваны, выбраць нельга",
+    "ignoredVoicesTitle": "Ігнараваныя галасы",
+    "ignoredVoicesSubtitle": "Тэлевізар, падкасты і іншыя галасы, пазначаныя «Не чалавек»",
+    "ignoredVoicesEmpty": "Няма ігнараваных галасоў",
+    "restoreAction": "Аднавіць",
+    "voiceRestoredToast": "Omi можа зноў спытаць пра гэты голас",
+    "speakerTagPromptSomeoneElse": "Хтосьці іншы…",
+    "speakerTagPromptNotAPerson": "Не чалавек",
+    "speakerTagPromptNotSureAction": "Не ведаю",
+    "speakerTagPromptThatsMeAction": "Гэта я",
+    "speakerTagPromptClosestVoices": "Найбольш падобныя галасы",
+    "speakerTagPromptRecentPeople": "Людзі, з якімі вы нядаўна размаўлялі",
+    "voiceMatchClose": "Блізкае супадзенне",
+    "voiceMatchPossible": "Магчымае супадзенне",
+    "voiceMatchWeak": "Слабое супадзенне",
+    "voiceMatchMeterLabel": "Супадзенне голасу: {level}",
+    "speakerTagPromptHintIdentify": "Кожны адказ вучыць Omi голасу і павышае ўпэўненасць у гэтым чалавеку.",
+    "speakerTagPromptHintConfirm": "«Так» павышае ўпэўненасць у {name}.",
+    "speakerTagPromptHintOwner": "Трымае ваш галасавы профіль дакладным, каб Omi ніколі не называў вас кімсьці іншым.",
+    "speakerTagPromptSavedAs": "Захавана як {name}",
+    "speakerTagPromptSavedAsYou": "Захавана як вы",
+    "speakerTagPromptIgnoredNote": "Omi больш не будзе пытацца пра гэты голас",
+    "speakerTagPromptLabeledToast": "Пазначана як {name}",
+    "speakerTagPromptLabeledYouToast": "Пазначана як вы",
+    "speakerTagPromptNotAPersonToast": "Пазначана як не чалавек",
+    "speakerTagPromptRejectedToast": "Пазнаку выдалена",
+    "whoIsItTitle": "Хто гэта?",
+    "newPersonEllipsis": "Новы чалавек…",
+    "addNamedPersonAction": "Дадаць “{name}”",
+    "everyoneHeader": "Усе",
+    "speakerSuggestionChip": "{name}?",
+    "speakerSuggestionAppliesToSpeaker": "Датычыцца ўсіх радкоў гэтага спікера",
+    "collapseAction": "Згарнуць",
+    "speakerTagPromptNotMeAction": "Не я",
+    "confidenceNextLabels": "{count, plural, =1{Пазначце яго яшчэ ў 1 размове.} other{Пазначце яго яшчэ ў {count} размовах.}}",
+    "siriShortcutsSetupHint": "Уключыце Omi ў Камандах → Siri. Скажыце «{askPhrase}» або «{questionPhrase}», а затым задайце сваё пытанне.",
+    "siriShortcutsSearchHint": " Также можно сказать «{searchPhrase} for what I did today».",
+    "updateAvailableTitle": "Даступнае абнаўленне",
+    "updateAvailableMessage": "Новая версія Omi гатовая: з выпраўленнямі і паляпшэннямі.",
+    "updateRequiredTitle": "Патрабуецца абнаўленне",
+    "updateRequiredMessage": "Гэтая версія Omi больш не падтрымліваецца. Абнавіце, каб працягваць запіс і сінхранізацыю.",
+    "exportingAllData": "Экспарт вашых даных… Не закрывайце Omi; вялікія ўліковыя запісы могуць патрабаваць некалькі хвілін.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 удзельнік} other{Удзельнікаў: {count}}}",
+    "autoRemoveSyncedCopiesTitle": "Аўтаматычна выдаляць сінхранізаваныя копіі",
+    "autoRemoveSyncedCopiesDays": "Сінхранізаваныя копіі выдаляюцца праз {days} дзён",
+    "autoRemoveSyncedCopiesDescription": "Выдаляе лакальныя копіі праз {days} дзён пасля сінхранізацыі. Воблачныя копіі захоўваюцца.",
+    "localCopiesSection": "Лакальныя копіі",
+    "speakerLabelLinesLabeled": "{count, plural, =1{Пазначаны 1 радок} other{Пазначана радкоў: {count}}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Голас запомнены} pending{Вывучэнне голасу…} disabled{Захаванне голасу выключана} other{Голас яшчэ не вывучаны}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi пазнае {name} наступным разам.} pending{Гэта зойме некалькі секунд.} disabled{Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць {name}.} other{Omi патрэбна больш выразнай мовы ад {name}, і ён будзе працягваць спробы.}}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{Ёсць у 1 ранейшай размове} other{Ёсць у ранейшых размовах: {count}}}",
+    "speakerLabelText": "{part, select, likely{Магчыма} soundsLike{Падобна на {name}} notPerson{Не {name}} carried{Усё яшчэ {name}. Перанесена з вашай апошняй размовы.} change{Змяніць} alsoTitle{Гэта таксама {name}?} alsoBody{Omi знайшоў такі ж голас у ранейшых размовах.} confirmed{Вы пацвердзілі гэту пазнаку} other{Праглядзець}}",
+    "speakerLabelTalkTime": "{duration} гэтага голасу",
+    "findDeviceNoneTitle": "Omi не знойдзены",
+    "findDeviceNoneMessage": "Уключыце яго і трымайце побач з тэлефонам.",
+    "startupFailedDetails": "Падрабязнасці",
+    "couldNotLoadApiKeys": "Не ўдалося загрузіць ключы API.",
+    "speakerTagPromptNoAction": "Не…",
+    "diagnosticsRightNow": "Зараз",
+    "diagnosticsLast7Days": "Апошнія 7 дзён",
+    "diagnosticsConnectedFor": "Падключана",
+    "diagnosticsVerdictReconnects": "Перападключаецца сама",
+    "diagnosticsVerdictReconnectsDetail": "Кароткія разрывы, кожны раз вяртаецца прыкладна за {duration}",
+    "diagnosticsVerdictNoDrops": "На гэтым тыдні разрываў не было",
+    "diagnosticsVerdictTrouble": "Праблемы з падключэннем",
+    "diagnosticsVerdictTroubleDetail": "Няўдалыя злучэнні за апошнія 24 гадзіны: {count}",
+    "diagnosticsDrops": "Разрывы",
+    "diagnosticsDropsPerHour": "прыкладна {count} у гадзіну",
+    "diagnosticsLongestGap": "Найдаўжэйшы перапынак",
+    "diagnosticsSincePairingSummary": "З моманту спарвання: разрываў — {drops}, няўдалых злучэнняў — {failed}.",
+    "diagnosticsLastDuration": "Апошнія {duration}",
+    "chatReplyOffline": "Не ўдалося падключыцца. Праверце злучэнне і паспрабуйце яшчэ раз.",
+    "chatReplyServerError": "Нешта пайшло не так на нашым баку. Паспрабуйце яшчэ раз.",
+    "chatReplyTimeout": "Адказ заняў занадта шмат часу. Паспрабуйце яшчэ раз.",
+    "chatReplyNotSignedIn": "Вы не ўвайшлі. Увайдзіце і паспрабуйце яшчэ раз.",
+    "chatAppsLoadFailed": "Не ўдалося загрузіць праграмы чата. Паспрабуйце яшчэ раз.",
+    "assistantVoiceSettingsTitle": "Голас",
+    "assistantVoice": "Голас памочніка",
+    "voiceSharedAcrossDevices": "Выбраны вамі голас выкарыстоўваецца на мабільнай прыладзе і на камп'ютары.",
+    "readChatRepliesAloud": "Чытаць адказы ў чаце ўголас",
+    "readChatRepliesAloudDescription": "Агучвае толькі тады, калі гэта дазваляе «Галасавы адказ».",
+    "voicePreviewSample": "Прывітанне, я Omi. Гэта мой голас.",
+    "peopleStatsIncomplete": "Колькасць можа быць няпоўнай.",
+    "previousDay": "Папярэдні дзень",
+    "nextDay": "Наступны дзень",
+    "noTasksOnDate": "Няма задач на {date}",
+    "reprocessingConversationProgress": "Паўторная апрацоўка размовы…",
+    "conversationReprocessed": "Размова абноўлена",
+    "loadingTranscript": "Загрузка транскрыпцыі…",
+    "transcriptLoadFailed": "Не ўдалося загрузіць транскрыпцыю.",
+    "processingConversationProgress": "Апрацоўка размовы…",
+    "conversationProcessingFailedMessage": "Не ўдалося апрацаваць гэту размову.",
+    "waitForReprocessing": "Пачакайце, пакуль скончыцца паўторная апрацоўка.",
+    "unnamedSpeakerLabel": "Дыктар",
+    "unresolvedSpeakersNotice": "Спікары не падзелены паміж запісамі.",
+    "unresolvedSpeakersTitle": "Пра пазнакі спікераў",
+    "unresolvedSpeakersMessage": "Omi не змогла адрозніць іншыя галасы паміж запісамі. Націсніце пазнаку спікера, каб назваць таго, хто гаворыць.",
+    "nameSpeakerTitle": "Назваць дыктара",
+    "playbackPreparingAudio": "Падрыхтоўка аўдыё…",
+    "playbackBackToCurrent": "Назад да бягучага",
+    "playbackAudioUnavailable": "Аўдыё недаступнае",
+    "playbackAudioLoadFailed": "Не ўдалося загрузіць аўдыё",
+    "playbackAudioNetworkFailed": "Праверце злучэнне",
+    "forYou": "Для вас",
+    "stopThese": "Спыніць гэта",
+    "dismiss": "Схаваць"
 }

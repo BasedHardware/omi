@@ -123,10 +123,8 @@ def test_conversation_matches_speaker(conversation, speaker_id, expected):
 
 
 def _stream(rows):
-    def fetch(limit, offset):
-        return rows[offset : offset + limit]
-
-    return fetch
+    # One newest-first iterator, as database.conversation_scan.iter_conversations yields.
+    return iter(rows)
 
 
 def test_browse_finds_speaker_beyond_the_latest_page():

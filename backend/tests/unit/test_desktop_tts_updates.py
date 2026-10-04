@@ -90,11 +90,36 @@ async def test_desktop_route_uses_shared_gemini_stream_and_style(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_desktop_legacy_rollback_keeps_openai_voice_validation(monkeypatch):
+async def test_desktop_legacy_rollback_maps_unknown_voice_to_fixed_openai_default(monkeypatch):
+    payloads = []
+
+    class _FakeUpstream:
+        is_error = False
+        status_code = 200
+        content = b'mp3'
+
+    async def fake_openai(payload, _api_key):
+        payloads.append(payload)
+        return _FakeUpstream()
+
+    monkeypatch.setattr(router, 'run_blocking', _run_blocking)
+    monkeypatch.setattr(router, 'get_byok_key', lambda _provider: None)
+    monkeypatch.setattr(router, '_openai_tts', fake_openai)
+    monkeypatch.setenv('TTS_PROVIDER', 'legacy')
+    monkeypatch.setenv('OPENAI_API_KEY', 'sk-test')
+
+    response = await router.tts_synthesize(router.TtsSynthesizeRequest(text='hello', voice_id='future_voice'), uid='u')
+
+    assert response.status_code == 200
+    assert payloads[0]['voice'] == 'cedar'
+
+
+@pytest.mark.asyncio
+async def test_desktop_legacy_rollback_still_rejects_invalid_voice_names(monkeypatch):
     monkeypatch.setenv('TTS_PROVIDER', 'legacy')
 
     with pytest.raises(HTTPException) as exc_info:
-        await router.tts_synthesize(router.TtsSynthesizeRequest(text='hello', voice_id='future_voice'), uid='u')
+        await router.tts_synthesize(router.TtsSynthesizeRequest(text='hello', voice_id='bad voice'), uid='u')
     assert exc_info.value.status_code == 400
 
 

@@ -111,7 +111,11 @@ void main() {
       final monitor = makeMonitor();
       wedge(monitor);
       final opened = <String>[];
-      Future<void> opener(String route) async => opened.add(route);
+      Future<bool> opener(String route, {bool Function()? canOpen}) async {
+        opened.add(route);
+        return true;
+      }
+
       HomeNavigation.register(opener);
       addTearDown(() => HomeNavigation.unregister(opener));
 
@@ -157,9 +161,9 @@ void main() {
       monitor.dispose();
     });
 
-    testWidgets('retention eviction shows a localized phone-storage risk warning', (tester) async {
+    testWidgets('admission-blocked storage shows a localized phone-storage risk warning', (tester) async {
       final monitor = makeMonitor(transferRetry: () async {});
-      monitor.observeStorageAtRisk(engagedAt: DateTime(2026), evictedCount: 1, retainedCount: 720);
+      monitor.observeStorageAtRisk(engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'count_cap');
 
       await pumpBanner(tester, monitor);
 

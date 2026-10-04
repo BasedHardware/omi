@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, cast
 
 from google.cloud import firestore
 
-from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
+from config.sync_telemetry import SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS
 from database._client import get_firestore_client
 from utils.sync import stage as sync_stage
 
@@ -63,14 +63,14 @@ def _observed_now(value: Optional[datetime] = None) -> datetime:
 def _validated_failure_fingerprint(key: str | None, fingerprint: str | None) -> str | None:
     if key == 'invalid_audio':
         return _INVALID_AUDIO_FINGERPRINT
-    if key == 'persistent_persistence' and fingerprint in {
-        f'persistence:{subtype}' for subtype in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
-    }:
+    if key == 'persistent_persistence' and fingerprint in SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS:
         return fingerprint
     return None
 
 
 def _repeat_failure_capped(existing: Dict[str, Any], now: datetime) -> bool:
+    # The pause is always bounded: once ``repeat_failure_pause_until`` passes,
+    # the same content is admitted again without operator action.
     until = _coerce_timestamp(existing.get('repeat_failure_pause_until'))
     return until is not None and until > now
 

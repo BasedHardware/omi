@@ -18,15 +18,19 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations as conversations_db
+from database import smart_merge_audit as audit_db
 from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
+from database.people_stats_cache import invalidate_people_stats_cache
+from config import merge_ancestry
+from config.conversation_smart_merge import smart_merge_flatten_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +67,14 @@ _PRECEDING_FIELDS = (
 )
 
 Plan = Callable[
-    [Mapping[str, Any], Sequence[Mapping[str, Any]], Mapping[str, Any], Sequence[Mapping[str, Any]]],
-    tuple[Optional[str], Optional[dict], Optional[dict]],
+    [
+        Mapping[str, Any],
+        Sequence[Mapping[str, Any]],
+        Mapping[str, Any],
+        Sequence[Mapping[str, Any]],
+        Mapping[str, Optional[Mapping[str, Any]]],
+    ],
+    tuple[Optional[str], Optional[dict], Optional[dict], Mapping[str, dict]],
 ]
 
 
@@ -72,6 +82,11 @@ Plan = Callable[
 class AbsorbResult:
     outcome: str  # 'absorbed' | 'already_absorbed' | 'rejected'
     reason: str
+    audit: str = 'none'  # audit sibling outcome of a committed absorb (database/smart_merge_audit.py)
+    flattened_ancestor_count: int = 0
+
+
+_UNSET = object()
 
 
 def _collection(client: Any, uid: str) -> Any:
@@ -145,20 +160,28 @@ def absorb_conversation(
     *,
     expected_revision: int,
     plan: Plan,
+    expected_survivor_sync_revision: Any = _UNSET,
+    expected_donor_sync_revision: Any = _UNSET,
     firestore_client: Any = None,
 ) -> AbsorbResult:
     """Atomically append the donor to the survivor and leave a redirect tombstone.
 
     ``plan`` re-applies the deterministic policy to the rows read here and
-    returns ``(reason, survivor_update, donor_update)``; a reason rejects.
+    returns ``(reason, survivor_update, donor_update, ancestor_updates)``; a
+    reason rejects. With flatten enabled, every row in the ancestry union minus
+    the direct donor — the survivor's existing ancestry and the donor's
+    declared ancestry — is re-read in this same transaction before the audit
+    gate and any write, and ``ancestor_updates`` re-points each inherited
+    tombstone at the survivor.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = _collection(client, uid)
     survivor_ref = collection.document(survivor_id)
     donor_ref = collection.document(donor_id)
 
-    @firestore.transactional
-    def absorb(transaction) -> AbsorbResult:
+    audit_io_failed = False
+
+    def absorb_attempt(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
@@ -172,21 +195,82 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'survivor_changed')
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
+        flatten = smart_merge_flatten_enabled()
+        if flatten:
+            if expected_survivor_sync_revision is not _UNSET and (
+                survivor_raw.get('sync_content_revision') != expected_survivor_sync_revision
+            ):
+                return AbsorbResult('rejected', 'flatten_content_changed')
+            if expected_donor_sync_revision is not _UNSET and (
+                donor_raw.get('sync_content_revision') != expected_donor_sync_revision
+            ):
+                return AbsorbResult('rejected', 'flatten_content_changed')
+            reason, union_ids = merge_ancestry.ancestry_union(survivor_raw, {donor_id: donor_raw})
+            if reason is not None:
+                return AbsorbResult('rejected', reason)
+            union_ancestors = [ancestor_id for ancestor_id in union_ids if ancestor_id != donor_id]
+            ancestor_rows = {
+                ancestor_id: collection.document(ancestor_id).get(transaction=transaction).to_dict()
+                for ancestor_id in union_ancestors
+            }
+        else:
+            ancestor_rows = {}
         survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
         donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
-        reason, survivor_update, donor_update = plan(survivor, survivor_segments, donor, donor_segments)
+        reason, survivor_update, donor_update, ancestor_updates = plan(
+            survivor, survivor_segments, donor, donor_segments, ancestor_rows
+        )
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
+        # Last read, only on the absorbing path: the gate fence for the audit sibling.
+        audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         # The survivor transcript changed: a stored client projection described the old one.
         conversations_db._invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
+        if flatten:
+            donor_update = dict(donor_update)
+            marker = dict(donor_update.get(SMART_MERGE_FIELD) or {})
+            marker['flattened_ancestor_count'] = len(ancestor_updates)
+            donor_update[SMART_MERGE_FIELD] = marker
         transaction.update(survivor_ref, payload)
         transaction.update(donor_ref, donor_update)
-        return AbsorbResult('absorbed', 'absorbed')
+        for ancestor_id, patch in ancestor_updates.items():
+            transaction.update(collection.document(ancestor_id), patch)
+        audit = audit or audit_db.stage_audit(
+            transaction,
+            client,
+            uid,
+            donor_id=donor_id,
+            survivor_id=survivor_id,
+            survivor_state=survivor_update[SMART_MERGE_FIELD],
+            donor_update=donor_update,
+            source=donor.get('source'),
+        )
+        return AbsorbResult('absorbed', 'absorbed', audit, flattened_ancestor_count=len(ancestor_updates))
 
-    result = run_transactional(client, absorb)
+    @firestore.transactional
+    def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
+        nonlocal audit_io_failed
+        try:
+            return absorb_attempt(transaction, audit_unavailable=audit_unavailable)
+        except audit_db.AuditUnavailable:
+            # The SDK's rollback RPC can mask this exception. Remember that
+            # the callback failed before commit even if rollback also fails.
+            audit_io_failed = True
+            raise
+
+    try:
+        result = run_transactional(client, absorb)
+    except Exception:
+        if not audit_io_failed:
+            raise
+        # No commit was attempted. Never continue writing on a transaction whose
+        # optional read/staging failed; re-read and re-plan on a fresh transaction.
+        logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
+        result = run_transactional(client, absorb, audit_unavailable=True)
     if result.outcome == 'absorbed':
+        invalidate_people_stats_cache(uid)
         # The same fail-open search-index hooks the conversation adapter runs after its writes.
         conversations_db._sync_conversation_search_index(uid, survivor_id)  # pyright: ignore[reportPrivateUsage]
         conversations_db._delete_conversation_search_index(uid, donor_id)  # pyright: ignore[reportPrivateUsage]
@@ -217,13 +301,64 @@ def claim_survivor_refresh(
             return None
         lease = state.get('refresh_lease') or {}
         until = lease.get('until')
-        if lease.get('owner') not in (None, owner) and isinstance(until, datetime) and until > now:
+        if lease.get('owner') is not None and isinstance(until, datetime) and until > now:
             return None
         state['refresh_lease'] = {'owner': owner, 'until': now + timedelta(seconds=lease_seconds)}
         transaction.update(ref, {SMART_MERGE_FIELD: state})
         return revision
 
     return run_transactional(client, claim)
+
+
+def release_survivor_refresh(uid: str, survivor_id: str, *, owner: str, firestore_client: Any = None) -> bool:
+    """Drop the refresh lease after a failed refresh, only while ``owner`` still holds it."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = _collection(client, uid).document(survivor_id)
+
+    @firestore.transactional
+    def release(transaction) -> bool:
+        row = ref.get(transaction=transaction).to_dict()
+        if not row or row.get('deleted'):
+            return False
+        state = dict(row.get(SMART_MERGE_FIELD) or {})
+        if (state.get('refresh_lease') or {}).get('owner') != owner:
+            return False
+        state.pop('refresh_lease', None)
+        transaction.update(ref, {SMART_MERGE_FIELD: state})
+        return True
+
+    return run_transactional(client, release)
+
+
+def checkpoint_survivor_processing(
+    uid: str, survivor_id: str, *, owner: str, revision: int, sync_revision: Any, firestore_client: Any = None
+) -> bool:
+    """Receipt the completed processing bundle before the independently retryable vector write."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = _collection(client, uid).document(survivor_id)
+
+    @firestore.transactional
+    def checkpoint(transaction) -> bool:
+        row = ref.get(transaction=transaction).to_dict()
+        if not row or row.get('deleted'):
+            return False
+        state = dict(row.get(SMART_MERGE_FIELD) or {})
+        lease = state.get('refresh_lease') or {}
+        until = lease.get('until')
+        if (
+            int(state.get('revision') or 0) != revision
+            or row.get('sync_content_revision') != sync_revision
+            or lease.get('owner') != owner
+            or not isinstance(until, datetime)
+            or until <= datetime.now(timezone.utc)
+        ):
+            return False
+        state['processed_revision'] = revision
+        state['processed_sync_revision'] = sync_revision
+        transaction.update(ref, {SMART_MERGE_FIELD: state})
+        return True
+
+    return run_transactional(client, checkpoint)
 
 
 def complete_survivor_refresh(

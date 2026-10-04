@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import math
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
@@ -626,6 +627,10 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
     Sends a data-only FCM message for action item reminder scheduling.
     The app receives this in the background and schedules a local notification.
     """
+    if os.getenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE'):
+        from utils.commitment_followup_tasks import schedule_followup
+
+        schedule_followup(user_id, action_item_id, due_at)
     logger.info(f'send_action_item_data_message to user {user_id}')
     data = {
         'type': 'action_item_reminder',
@@ -816,6 +821,10 @@ def sync_action_item_reminder(
     if completed or not due_at:
         send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
         return
+    if os.getenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE'):
+        from utils.commitment_followup_tasks import schedule_followup
+
+        schedule_followup(user_id, action_item_id, due_at)
     due_iso: str = due_at.isoformat() if isinstance(due_at, datetime) else due_at
     send_action_item_update_message(
         user_id=user_id, action_item_id=action_item_id, description=description or '', due_at=due_iso

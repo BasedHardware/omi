@@ -174,6 +174,34 @@ def _manifest_env_value(expected_services: ConfigDict, name: str) -> str:
     return ''
 
 
+KEY_CREDENTIAL_ENV_NAMES = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
+
+
+def _declared_service_account(service_config: ConfigDict) -> str:
+    raw = service_config.get('service_account')
+    return '' if raw in (None, '') else str(raw).strip()
+
+
+def _validate_service_identity(
+    *,
+    scope: str,
+    service_config: ConfigDict,
+    actual_service_account: str | None,
+    actual_env_names: set[str],
+) -> list[ValidationError]:
+    """A service that declares an attached runtime identity runs as it and mounts no key credential."""
+    expected = _declared_service_account(service_config)
+    if not expected:
+        return []
+    errors: list[ValidationError] = []
+    if actual_service_account != expected:
+        errors.append(ValidationError(scope, f'must run as service_account {expected!r}'))
+    for name in KEY_CREDENTIAL_ENV_NAMES:
+        if name in actual_env_names:
+            errors.append(ValidationError(scope, f'runs as {expected!r} and must not mount key credential {name}'))
+    return errors
+
+
 def _network_flags(env_config: ConfigDict) -> ConfigDict:
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     network = _as_config_dict(cloud_run.get('network')) or {}
@@ -231,7 +259,7 @@ def _validate_env_entries(
     strict_provisional: bool,
     config_maps: set[str] | None = None,
 ) -> list[ValidationError]:
-    errors: list[ValidationError] = []
+    errors: list[ValidationError] = validate_mentor_pipeline(scope=scope, config=actual)
     for name, expected_entry in expected.items():
         if 'config_map' in expected_entry:
             config_map = _as_config_dict(expected_entry['config_map']) or {}
@@ -283,3 +311,27 @@ def _validate_forbidden_env_entries(
         ValidationError(scope, f'forbidden env {name} is present')
         for name in sorted(set(forbidden_names).intersection(actual))
     ]
+
+
+def validate_mentor_pipeline(
+    *, scope: str, config: object, _seen: frozenset[int] = frozenset()
+) -> list[ValidationError]:
+    """Validate manifest, Helm and exported env forms, including resolved env-var values."""
+    if id(config) in _seen:
+        return []
+    seen = _seen | {id(config)}
+    errors: list[ValidationError] = []
+    if isinstance(config, dict):
+        entry = config.get('MENTOR_PIPELINE')
+        if config.get('name') == 'MENTOR_PIPELINE':
+            entry = config
+        if entry is not None:
+            value = entry.get('value', entry.get('default', 'legacy')) if isinstance(entry, dict) else entry
+            if not isinstance(value, str) or value not in {'legacy', 'v2', 'cohort'}:
+                errors.append(ValidationError(scope, 'MENTOR_PIPELINE must be legacy, v2 or cohort (default legacy)'))
+        for name, value in config.items():
+            errors.extend(validate_mentor_pipeline(scope=f'{scope}/{name}', config=value, _seen=seen))
+    elif isinstance(config, list):
+        for index, value in enumerate(config):
+            errors.extend(validate_mentor_pipeline(scope=f'{scope}/{index}', config=value, _seen=seen))
+    return errors

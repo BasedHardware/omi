@@ -126,6 +126,7 @@ _SCAN_FILES: tuple[str, ...] = (
     'models/client_processing.py',
     'models/conversation.py',
     'routers/developer.py',
+    'utils/memory/developer_memory_list.py',
     'utils/conversations/meeting_context.py',
     'utils/conversations/process_conversation.py',
     'utils/conversations/projection_payload.py',
@@ -499,7 +500,8 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/conversations/render.py', 'conversation_to_dict', 'model_dump'),
         DumpSite('utils/app_integrations.py', '_single', 'conversation_to_dict'),
         DumpSite('utils/webhooks.py', '_build_conversation_webhook_payload_sync', 'conversation_to_dict'),
-        DumpSite('routers/developer.py', 'get_memories', 'model_dump'),
+        DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
+        DumpSite('utils/goals_response.py', 'list_developer_goals', 'model_dump'),
         DumpSite('routers/developer.py', '_create_conversation_from_segments', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
         # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
@@ -614,6 +616,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # `structured` is the deterministic minimum; it carries no client text,
         # so the integration redactor must not strip it.
         'processing_state',
+        # Server-authored dead-letter retry marker, written only by the
+        # finalization dead-letter transaction and cleared by processing
+        # persists. A bool, no client text: NOT projection-family.
+        'summary_retryable',
         # S1 capture evidence: server-authored internal receipt, NOT
         # projection-family. Pydantic-excluded (`Field(exclude=True)`), never
         # serialized to any client, and written only at explicit persistence

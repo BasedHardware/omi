@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "இந்த செய்தியைப் புகாரளிக்க விரும்புகிறீர்களா?",
+    "reportMessageConfirm": "இந்தச் செய்தியைப் புகாரளிக்கவா?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "சாட்டைத் துடைக்கவெண்டுமா? இந்த நடவடிக்கையை மாற்ற முடியாது.",
+    "clearChatConfirm": "இந்த அரட்டையில் உள்ள அனைத்து செய்திகளும் நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "உங்கள் அனைத்து நினைவுகள் மற்றும் உரையாடல்கள் நிரந்தரமாக நீக்கப்படும்.",
+    "allDataErased": "உங்கள் நினைவுகளும் உரையாடல்களும் அழிக்கப்படும்.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "உங்கள் பயன்பாடுகள் மற்றும் ஒருங்கிணைப்புகள் உடனடியாக துண்டிக்கப்படும்.",
+    "appsDisconnected": "உங்கள் ஆப்ஸ் மற்றும் ஒருங்கிணைப்புகள் துண்டிக்கப்படும்.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -1195,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "{appName} இலிருந்து இணைப்பை நீக்க விரும்புகிறீர்களா? நீங்கள் எப்போதும் மீண்டும் இணைக்கலாம்.",
+    "disconnectAppMessage": "நீங்கள் எப்போது வேண்டுமானாலும் {appName} ஐ மீண்டும் இணைக்கலாம்.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1951,7 +1951,7 @@
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "இந்த பணியை நீக்க விரும்புகிறீர்களா?",
+    "deleteActionItemMessage": "இந்தப் பணியை நீக்கவா?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "{count} தேர்ந்தெடுக்கப்பட்ட பணி{s} நீக்க விரும்புகிறீர்களா?",
+    "deleteSelectedItemsMessage": "{count} தேர்ந்தெடுக்கப்பட்ட பணி{s} நீக்கவா?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -2050,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 இன்னும் பதிவுகள் இல்லை",
+    "noMemoriesYet": "இன்னும் பதிவுகள் இல்லை",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2066,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 பதிவுகள் கிடைக்கவில்லை",
+    "noMemoriesFound": "பதிவுகள் கிடைக்கவில்லை",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -2078,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "Omi இன் உங்கள் பற்றிய பதிவை அழிக்க விரும்புகிறீர்களா? இந்தச் செயல் மாற்றமுடியாது.",
+    "clearMemoryMessage": "உங்கள் அனைத்து நினைவுகளும் நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2259,7 +2259,7 @@
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "இந்த பணியை நீக்க விரும்புகிறீர்களா?",
+    "deleteActionItemConfirmMessage": "இந்தப் பணியை நீக்கவா?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2275,7 +2275,7 @@
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "பயன்பாட்டு மொழி மெனுக்கள் மற்றும் பொத்தான்கள் மாற்றுகிறது. பேச்சு மொழி உங்கள் பதிவுகளை எவ்வாறு தட்டச்சு செய்யப்படுகிறது என்பதைப் பாதிக்கிறது.",
+    "languageSettingsHelperText": "பயன்பாட்டு மொழி மெனுக்களையும் பொத்தான்களையும் மாற்றுகிறது. முதன்மை மொழி உங்கள் பதிவுகள் எவ்வாறு எழுத்துப்படியாக்கப்படுகின்றன என்பதைப் பாதிக்கிறது.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2396,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.",
+    "thisActionCannotBeUndone": "இதை செயல்ரத்து செய்ய முடியாது.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -3083,7 +3083,7 @@
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "இந்த பணியை நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.",
+    "deleteActionItemConfirmation": "இந்தப் பணியை நீக்கவா? இதை செயல்ரத்து செய்ய முடியாது.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
@@ -3532,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "இந்த செய்தியை புகாரளிக்க விரும்புகிறீர்களா?",
+    "confirmReportMessage": "இந்தச் செய்தியைப் புகாரளிக்கவா?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3552,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "சட்டத்தைத் தெளிவு செய்ய விரும்புகிறீர்களா? இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.",
+    "confirmClearChat": "இந்த அரட்டையை அழிக்கவா? இதை செயல்ரத்து செய்ய முடியாது.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3802,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "இந்த நினைவை நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.",
+    "deleteMemoryConfirmation": "இந்த நினைவை நீக்கவா? இதை செயல்ரத்து செய்ய முடியாது.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3853,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "Omi ன் நினைவகம் தெளிவு செய்ய விரும்புகிறீர்களா? இந்த செயல் செயல்நீக்கம் செய்ய முடியாது மற்றும் அனைத்து {count} நினைவுகளை நிரந்தரமாக நீக்கும்.",
+    "clearMemoryConfirmation": "அனைத்து {count} நினைவுகளும் நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -4023,7 +4023,7 @@
         }
     },
     "letOmiChooseAutomatically": "Omi சிறந்த பயன்பாட்டைத் தானாக தேர்ந்தெடுக்க அனுமதிக்கவும்",
-    "deleteConversationConfirmation": "இந்த உரையாடலை நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்தவிர்க்க முடியாது.",
+    "deleteConversationConfirmation": "இந்த உரையாடலை நீக்கவா? இதை செயல்ரத்து செய்ய முடியாது.",
     "conversationDeleted": "உரையாடல் நீக்கப்பட்டது",
     "generatingLink": "இணைப்பை உருவாக்கிறது…",
     "editConversation": "உரையாடலை திருத்தவும்",
@@ -4383,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "உங்கள் பயன்பாட்டை புதுப்பிக்க விரும்புகிறீர்களா? நமது குழு மதிப்பாய்வு செய்த பிறகு மாற்றங்கள் பிரதிபலிக்கும்.",
+    "updateAppConfirmation": "எங்கள் குழு மதிப்பாய்வு செய்த பிறகு மாற்றங்கள் வெளியிடப்படும்.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4421,10 +4421,6 @@
                 "type": "String"
             }
         }
-    },
-    "newVersionAvailable": "புதிய பதிப்பு கிடைக்கிறது",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
     },
     "no": "இல்லை",
     "@no": {
@@ -4478,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "உங்கள் சந்தாவை ரத்து செய்ய விரும்புகிறீர்களா? உங்கள் தற்போதைய பில்லிங் காலத்தின் முடிவு வரை நீங்கள் அணுக்கத்தைப் பெற்றிருப்பீர்கள்.",
+    "cancelSubscriptionConfirmation": "உங்கள் தற்போதைய பில்லிங் காலத்தின் முடிவு வரை நீங்கள் அணுக்கத்தைப் பெற்றிருப்பீர்கள்.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4738,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "இந்த செயலை செயல்தவிர்க்க முடியாது. இந்த விசையைப் பயன்படுத்தும் எந்த பயன்பாடுகளும் API க்கு மீண்டும் அணுக முடியாது.",
+    "revokeApiKeyWarning": "இந்த விசையைப் பயன்படுத்தும் ஆப்ஸ் API அணுகலை இழக்கும். இதை செயல்ரத்து செய்ய முடியாது.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4829,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "இந்த {item} ஐ நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்தவிர்க்க முடியாது.",
+    "deleteItemConfirmation": "இந்த {item} ஐ நீக்குவதைச் செயல்தவிர்க்க முடியாது.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4842,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "\"{keyName}\" விசையை மறுக்க விரும்புகிறீர்களா? இந்த செயலை செயல்தவிர்க்க முடியாது.",
+    "revokeKeyConfirmation": "\"{keyName}\" ஐப் பயன்படுத்தும் அனைத்தும் அணுகலை இழக்கும். இதை செயல்ரத்து செய்ய முடியாது.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5089,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "உங்கள் திட்டம் {date} வரை சக்திய நிலையில் இருக்கும். அதன் பிறகு, நீங்கள் உங்கள் வரம்பற்ற அம்சங்களுக்கான அணுக்கம் இழக்கும். நீங்கள் உறுதியாக உள்ளீர்களா?",
+    "planRemainsActiveUntil": "உங்கள் திட்டம் {date} வரை சக்திய நிலையில் இருக்கும். அதன் பிறகு, நீங்கள் உங்கள் வரம்பற்ற அம்சங்களுக்கான அணுக்கம் இழக்கும்.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5225,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Omi இன் எல்லையற்ற நினைவை திறக்கவும்",
+    "unlockOmiInfiniteMemory": "வரம்பற்ற நினைவுகள்",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5241,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்",
+    "checkConnectionTryAgain": "உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5497,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "இது Limitless இலிருந்து ஏற்றுமதி செய்யப்பட்ட அனைத்து உரையாடல்களையும் நிரந்தரமாக நீக்கும். இந்த வினை செய்ய முடியாது.",
+    "deleteAllLimitlessWarning": "Limitless இலிருந்து இறக்குமதி செய்யப்பட்ட அனைத்து உரையாடல்களும் நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5555,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "{name} இன் மாதிரியை நீக்க விரும்பிறீர்களா?",
+    "deleteSampleConfirmation": "{name} இன் குரல் மாதிரி நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5568,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "{name} ஐ நீக்க விரும்பிறீர்களா? இது அனைத்து தொடர்புடைய பேச்சு மாதிரிகளையும் அகற்றும்.",
+    "deletePersonConfirmation": "இது {name} இன் குரல் மாதிரிகளை நீக்கும்; இதைச் செயல்தவிர்க்க முடியாது. கடந்த உரையாடல்களில் அவர்களின் பேச்சு பெயரற்ற பேச்சாளர்களாக மாறும்.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।",
+    "tasksEmptyStateMessage": "ஒரு பணியை உருவாக்க உரையாடலைத் தொடங்குங்கள்.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6032,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "பதிவை நிறுத்தி உரையாடலைத் தொகுக்க விரும்பிறீர்களா?",
+    "stopRecordingConfirmation": "பதிவை நிறுத்தி இப்போதே உரையாடலைச் சுருக்கவா?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -7215,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
+    "premiumMinutesInfo": "மாதத்திற்கு 300 பிரீமியம் நிமிடங்கள். வரம்பற்ற இலவச எழுத்துப்படியாக்கத்திற்கு \"சாதனத்தில்\" என்பதைத் தேர்ந்தெடுக்கவும்.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7326,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
+    "premiumMinutesMonth": "மாதத்திற்கு 300 பிரீமியம் நிமிடங்கள். வரம்பற்ற இலவச எழுத்துப்படியாக்கத்திற்கு \"சாதனத்தில்\" என்பதைத் தேர்ந்தெடுக்கவும். ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7414,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omi இன் உள்ளமைந்த நேரடி உபாய கேட்டுபேரல் உரையாடல் பற்றிய ஒத்திசைப்பு மற்றும் தற்போதைய பேச்சாளர் கண்டறிதலுக்கு தெளிவு செய்யப்பட்டுள்ளது।",
+    "omiTranscriptionOptimized": "Omi நேரலை எழுத்துப்படியாக்கம் நிகழ்நேர உரையாடல்களுக்காக உருவாக்கப்பட்டது, யார் என்ன சொன்னார்கள் என்பதைக் குறிக்கிறது.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -8096,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "இந்த பதிவை நிரந்தரமாக நீக்க விரும்புகிறீர்களா? இதை செயல்தவிர்க்க முடியாது.",
+    "deleteRecordingConfirmation": "இதை செயல்ரத்து செய்ய முடியாது.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8610,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "நீங்கள் உங்கள் எல்லையற்ற திட்டத்தை {title} ஆக மாற்றுகிறீர்கள். நீங்கள் தொடர்ந்து செல்ல விரும்புகிறீர்களா?",
+    "planSwitchingDescriptionWithTitle": "நீங்கள் உங்கள் எல்லையற்ற திட்டத்தை {title} ஆக மாற்றுகிறீர்கள்.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -10415,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "மேலும் சொல்லுங்கள்",
     "deleteFlowFeedbackSubtitle": "Omi உங்களுக்கு எவ்வாறு பயனுள்ளதாக இருந்திருக்கும்?",
     "deleteFlowFeedbackHint": "விருப்பத்தேர்வு — உங்கள் எண்ணங்கள் சிறந்த தயாரிப்பை உருவாக்க எங்களுக்கு உதவுகின்றன.",
-    "deleteFlowConfirmTitle": "இது நிரந்தரமானது",
-    "deleteFlowConfirmSubtitle": "கணக்கை நீக்கியதும், அதை மீட்க வழி இல்லை.",
+    "deleteFlowConfirmTitle": "உங்கள் கணக்கை நீக்கவா?",
+    "deleteFlowConfirmSubtitle": "இதைச் செயல்தவிர்க்க முடியாது, ஆதரவுக் குழுவாலும் முடியாது.",
     "deleteConsequenceSubscription": "செயலில் உள்ள சந்தா ரத்து செய்யப்படும்.",
     "deleteConsequenceNoRecovery": "உங்கள் கணக்கை மீட்டெடுக்க முடியாது — ஆதரவுக் குழுவாலும் முடியாது.",
     "deleteTypeToConfirm": "உறுதிப்படுத்த DELETE என தட்டச்சு செய்யவும்",
@@ -10563,7 +10559,7 @@
     "syncCustomSttWarningTitle": "ஒத்திசைவு Omi படியெடுப்பைப் பயன்படுத்துகிறது",
     "syncCustomSttWarningMessage": "நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.",
     "transcribeLaterTitle": "பின்னர் எழுத்தாக்கு",
-    "transcribeLaterDescription": "இப்போது ஆடியோவைப் பதிவுசெய்து, நேரலையாக அல்லாமல் தேவைப்படும்போது எழுத்தாக்கம் செய்யுங்கள். பதிவுகள் உங்கள் தொலைபேசியில் சேமிக்கப்படும்; பிறகு அவற்றைப் பதிவேற்றி உரையாடல்களை உருவாக்கலாம்.",
+    "transcribeLaterDescription": "இப்போது பதிவு செய்து, விரும்பும்போது எழுத்துப்படியாக்குங்கள். அதுவரை ஆடியோ உங்கள் ஃபோனிலேயே இருக்கும்.",
     "transcribeLaterNote": "தொலைபேசி மைக்ரோஃபோன், Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.",
     "transcribeLaterStorageFull": "உங்கள் தொலைபேசியில் இடவசதி குறைவாக உள்ளதால் பதிவு இடைநிறுத்தப்பட்டுள்ளது. இடத்தைக் காலியாக்குங்கள் அல்லது உங்கள் பதிவுகளைப் பதிவேற்றுங்கள்; பிறகு தானாகவே தொடரும்.",
     "unmute": "ஒலியை இயக்கு",
@@ -10668,7 +10664,7 @@
     "cloudTranscription": "கிளவுட் உரையாக்கம்",
     "copyMessage": "செய்தியை நகலெடு",
     "deleteOnDeviceModel": "மாதிரியை நீக்கு",
-    "deleteOnDeviceModelConfirm": "இந்த மாதிரியை நீக்க விரும்புகிறீர்களா?",
+    "deleteOnDeviceModelConfirm": "இந்த மாடலை நீக்கவா?",
     "downgradeAnyway": "எப்படியும் தரமிறக்கு",
     "downgradeLimitBattery": "7 மடங்கு அதிக பேட்டரி பயன்பாடு",
     "downgradeLimitDelay": "5-7 வினாடிகள் தாமதம்",
@@ -10714,7 +10710,7 @@
     "whisperModelSizeMedium": "நடுத்தரம்",
     "whisperModelSizeSmall": "சிறியது",
     "whisperModelSizeTiny": "மிகச் சிறியது",
-    "planSheetChooseYourPlan": "வரம்பற்ற Omi-ஐ திறக்க உங்கள் திட்டத்தைத் தேர்ந்தெடுக்கவும்.",
+    "planSheetChooseYourPlan": "உங்களுக்குப் பொருத்தமான திட்டத்தைத் தேர்ந்தெடுக்கவும்.",
     "availableOnMacMobileWeb": "Mac, மொபைல் மற்றும் வலையில் கிடைக்கிறது",
     "popularBadge": "பிரபலம்",
     "worksOnDesktop": "டெஸ்க்டாப்பில் இயங்கும்",
@@ -10793,13 +10789,11 @@
     "moreOptions": "மேலும் விருப்பங்கள்",
     "filterByDate": "தேதியின்படி வடிகட்டு",
     "memoryGraph": "நினைவு வரைபடம்",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{குரல் அடையாளம் காணத் தயார்} saved_sample_awaiting_embedding{மாதிரி சேமிக்கப்பட்டது; குரல் செயலாக்கம் இன்னும் தேவை} not_learned{குரல் கற்றுக்கொள்ளப்படவில்லை} other{குரலின் நிலை தெரியவில்லை}}",
     "tagSpeakerIncludingLaterSpeech": "இந்த பேச்சாளரின் பிந்தைய பேச்சையும் குறியிடு",
     "updateSummaryWithNewNames": "புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி",
     "syncStatusUnsupportedAudio": "ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{நீ எனக்கு என்ன செய்ய முடியும்?} goal{இலக்கை அமைக்க எனக்கு உதவு} activity{எனது சமீபத்திய செயல்பாடுகளைச் சுருக்கிக் கூறு} improve{நான் எப்படி மேம்படலாம்?} other{}}",
     "nextWeek": "அடுத்த வாரம்",
     "clearSearch": "தேடலை அழி",
@@ -10890,7 +10884,7 @@
     "phoneNoVerifiedNumbersMessage": "Omi மூலம் அழைக்க உங்கள் எண்ணைச் சரிபார்க்கவும்.",
     "phoneDeleteNumberFailed": "இந்த எண்ணை நீக்க முடியவில்லை",
     "forgetDeviceConfirmTitle": "சாதனத்தை மறக்கவா?",
-    "forgetDeviceConfirmMessage": "Omi இந்தச் சாதனத்துடன் இணைவதை நிறுத்தும். மீண்டும் பயன்படுத்த, அதை மீண்டும் இணைக்க வேண்டும்.",
+    "forgetDeviceConfirmMessage": "Omi இந்தச் சாதனத்துடன் இணைவதை நிறுத்தும்.",
     "deviceForgottenMessage": "சாதனம் மறக்கப்பட்டது",
     "unpairDeviceConfirmTitle": "சாதன இணைப்பை நீக்கவா?",
     "rollBack": "பின்வாங்கு",
@@ -11217,5 +11211,186 @@
     "deleteChatMessage": "இது முந்தைய அரட்டைகளிலிருந்து நிரந்தரமாக நீங்கும்.",
     "deleteChat": "அரட்டையை நீக்கு",
     "appsAskWith": "இதனுடன் Omi-யிடம் கேளுங்கள்",
-    "conversationsTodayCount": "{count, plural, =0{இன்று உரையாடல்கள் இல்லை.} =1{இன்று 1 உரையாடல்.} other{இன்று {count} உரையாடல்கள்.}}"
+    "conversationsTodayCount": "{count, plural, =0{இன்று உரையாடல்கள் இல்லை.} =1{இன்று 1 உரையாடல்.} other{இன்று {count} உரையாடல்கள்.}}",
+    "meetingScreenshotsTitle": "திரையில் இருந்தவை",
+    "meetingScreenshotFallbackCaption": "இந்தக் கூட்டத்தின் திரைப்பிடிப்பு",
+    "deleteMeetingScreenshotTitle": "திரைப்பிடிப்பை நீக்கவா?",
+    "deleteMeetingScreenshotMessage": "இது இந்தக் கூட்டத்தின் குறிப்பிலிருந்து திரைப்பிடிப்பை நீக்கும். இதைச் செயல்தவிர்க்க முடியாது.",
+    "conversationSummaryFailed": "சுருக்கம் தோல்வியடைந்தது",
+    "reconnectionsRecent": "மீண்டும் இணைப்புகள் (கடந்த 7 நாட்கள்)",
+    "failedConnections": "தோல்வியுற்ற இணைப்புகள்",
+    "failedConnectionsRecent": "தோல்வியுற்ற இணைப்புகள் (கடந்த 7 நாட்கள்)",
+    "diagnosticsCountSincePairing": "இணைத்ததிலிருந்து {count}",
+    "peopleFilterLowConfidence": "குறைந்த நம்பகத்தன்மை",
+    "peopleFilterPinned": "பின் செய்தவை",
+    "peoplePinnedCount": "{count, plural, =1{பின் செய்தது 1} other{பின் செய்தவை {count}}}",
+    "confidenceConfirmed": "உறுதிசெய்யப்பட்டது",
+    "confidenceLikely": "வாய்ப்புள்ளது",
+    "confidenceUnverified": "சரிபார்க்கப்படவில்லை",
+    "confidenceMeterLabel": "நம்பகத்தன்மை: {level}",
+    "confidenceReasonLabeled": "{count, plural, =1{நீங்கள் ஒருமுறை லேபிள் செய்தீர்கள்} other{நீங்கள் {count} முறை லேபிள் செய்தீர்கள்}}",
+    "confidenceReasonPicked": "{count, plural, =1{1 பரிந்துரையில் தேர்ந்தெடுக்கப்பட்டது} other{{count} பரிந்துரைகளில் தேர்ந்தெடுக்கப்பட்டது}}",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{1 பொருத்தத்தை உறுதிசெய்தீர்கள்} other{{count} பொருத்தங்களை உறுதிசெய்தீர்கள்}}",
+    "confidenceReasonAutoOnly": "தானாகப் பொருத்தப்பட்டது மட்டும், உறுதிசெய்யப்படவில்லை",
+    "confidenceReasonNeverConfirmed": "ஒருபோதும் உறுதிசெய்யப்படவில்லை",
+    "confidenceReasonCorrected": "அதன் பொருத்தத்தை நீங்கள் திருத்தினீர்கள்",
+    "confidenceReasonVoiceReady": "குரல் தயார்",
+    "confidenceReasonNeedsVoice": "குரல் தேவை",
+    "confidenceReasonNotHeard": "இன்னும் கேட்கப்படவில்லை",
+    "confidenceSheetTitle": "நம்பகத்தன்மை",
+    "confidenceSummaryConfirmed": "{name} அவர்களின் குரலை Omi அடையாளம் காண்கிறது, நீங்களும் அதை உறுதிசெய்துள்ளீர்கள்.",
+    "confidenceSummaryLikely": "{name} அவர்களின் குரலை Omi பொதுவாக அடையாளம் காண்கிறது, ஆனால் நீங்கள் சில முறை மட்டுமே உறுதிசெய்துள்ளீர்கள்.",
+    "confidenceSummaryUnverified": "{name} தொடர்பாக நீங்கள் செய்த எதுவும் இன்னும் ஆதரவாக இல்லை.",
+    "confidenceEvidenceHeader": "ஆதாரம்",
+    "evidenceManualLabels": "{count, plural, =1{1 உரையாடலில் நீங்கள் லேபிள் செய்தீர்கள்} other{{count} உரையாடல்களில் நீங்கள் லேபிள் செய்தீர்கள்}}",
+    "evidenceCardConfirms": "{count, plural, =1{1 பரிந்துரையில் ஆம்} other{{count} பரிந்துரைகளில் ஆம்}}",
+    "evidenceCardPicks": "{count, plural, =1{1 பரிந்துரையில் தேர்ந்தெடுக்கப்பட்டது} other{{count} பரிந்துரைகளில் தேர்ந்தெடுக்கப்பட்டது}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{1 தானியங்கி பொருத்தம் உறுதிசெய்யப்பட்டது} other{{count} தானியங்கி பொருத்தங்கள் உறுதிசெய்யப்பட்டன}}",
+    "evidenceAutoCorrected": "{count, plural, =1{1 பொருத்தம் வேறொருவருக்கு மாற்றப்பட்டது} other{{count} பொருத்தங்கள் வேறொருவருக்கு மாற்றப்பட்டன}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{யாரும் உறுதிசெய்யாத 1 தானியங்கி பொருத்தம்} other{யாரும் உறுதிசெய்யாத {count} தானியங்கி பொருத்தங்கள்}}",
+    "evidenceVoiceReady": "குரல் மாதிரி தயார்",
+    "evidenceNoVoice": "இன்னும் குரல் மாதிரி இல்லை",
+    "evidenceNotHeard": "இன்னும் எந்த உரையாடலிலும் கேட்கப்படவில்லை",
+    "evidenceNothing": "நீங்கள் இன்னும் லேபிள் செய்யவில்லை அல்லது உறுதிசெய்யவில்லை",
+    "effectCountsALot": "மிகவும் உதவும்",
+    "effectCounts": "உதவும்",
+    "effectCountsALittle": "சிறிது உதவும்",
+    "effectBarelyCounts": "கிட்டத்தட்ட உதவாது",
+    "effectCountsAgainst": "பாதிக்கும்",
+    "effectNeeded": "உறுதிசெய்யப்பட்டது நிலைக்குத் தேவை",
+    "confidenceToReachConfirmed": "உறுதிசெய்யப்பட்டது நிலையை அடைய",
+    "confidenceNextVoice": "{name} அவர்களின் குரல் மாதிரியும் Omi-க்குத் தேவை. “குரல்களை நினைவில் வை” இயக்கத்தில் இருக்கும்போது அவரை லேபிள் செய்யுங்கள்.",
+    "confidenceIsConfirmed": "{name}: உறுதிசெய்யப்பட்டது. ஒவ்வொரு லேபிளிலிருந்தும் Omi தொடர்ந்து கற்றுக்கொள்கிறது.",
+    "confidenceFootnote": "உங்கள் பதில்கள் மட்டுமே நம்பகத்தன்மையை அதிகம் மாற்றும். தானியங்கி பொருத்தங்கள் தனியாக கிட்டத்தட்ட உதவாது.",
+    "personWhyConfidence": "ஏன்?",
+    "pinPersonTitle": "{name}-ஐ பின் செய்",
+    "pinPersonSubtitle": "{name}-ஐ வைத்திருங்கள், உங்கள் உரையாடல்களில் அவர்களை எதிர்பாருங்கள்",
+    "pinPersonHonestLine": "ஒத்த குரல்களைப் பொருத்தும் முன் Omi கேட்கும்.",
+    "pinAction": "பின் செய்",
+    "unpinAction": "பின்னை நீக்கு",
+    "personPinnedToast": "{name} பின் செய்யப்பட்டார்",
+    "personUnpinnedToast": "{name} பின்னிலிருந்து நீக்கப்பட்டார்",
+    "whyConfidenceMenu": "ஏன் {level}?",
+    "deletePersonNamedTitle": "{name}-ஐ நீக்கவா?",
+    "deletePinnedPersonMessage": "{name} பின் செய்யப்பட்டுள்ளார். அவர்களின் குரல் மாதிரிகள் அகற்றப்படும், Omi அவர்களை இனி அடையாளம் காணாது, பழைய டிரான்ஸ்கிரிப்ட்களில் பெயரில்லாத பேச்சாளராகக் காட்டப்படுவார்கள். இதை மீட்டெடுக்க முடியாது.",
+    "deleteNamedPerson": "{name}-ஐ நீக்கு",
+    "selectPeople": "நபர்களைத் தேர்ந்தெடு",
+    "cleanUpEllipsis": "சுத்தம் செய்…",
+    "cleanUpUnsureCount": "{count, plural, =1{Omi-க்கு உறுதியில்லாத 1 நபர்} other{Omi-க்கு உறுதியில்லாத {count} நபர்கள்}}",
+    "cleanUpBannerBody": "பெரும்பாலும் தவறாகக் கேட்ட பெயர்கள். அவற்றைப் பார்த்து, உண்மையில்லாதவற்றை நீக்குங்கள்.",
+    "reviewAction": "பார்க்க",
+    "cleanUpTitle": "சுத்தம் செய்",
+    "cleanUpLead": "{count, plural, =1{இந்த நபரைப் பற்றி Omi-க்கு உறுதியில்லை. வைத்திருக்க விரும்பினால் தேர்வை நீக்குங்கள்.} other{இந்த {count} நபர்களைப் பற்றி Omi-க்கு உறுதியில்லை. பெரும்பாலானவை டிரான்ஸ்கிரிப்ட்களில் தவறாகக் கேட்ட பெயர்கள். வைத்திருக்க விரும்புபவர்களின் தேர்வை நீக்குங்கள்.}}",
+    "cleanUpPinnedNote": "பின் செய்யப்பட்டவர்கள் சுத்தம் செய்தலில் சேர்க்கப்படமாட்டார்கள்.",
+    "deletePeopleCountAction": "{count, plural, =1{1 நபரை நீக்கு} other{{count} நபர்களை நீக்கு}}",
+    "peopleDeletedToast": "{count, plural, =1{1 நபர் நீக்கப்பட்டார்} other{{count} நபர்கள் நீக்கப்பட்டனர்}}",
+    "cleanUpNothingTitle": "சுத்தம் செய்ய எதுவுமில்லை",
+    "cleanUpNothingMessage": "இப்போது யாரைப் பற்றியும் Omi-க்கு உறுதியின்மை இல்லை.",
+    "selectAllSkipsPinned": "அனைத்தையும் தேர்ந்தெடு பின் செய்யப்பட்டவர்களைத் தவிர்க்கும். அவர்களை அவர்களின் பக்கத்திலிருந்து ஒவ்வொருவராக நீக்குங்கள்.",
+    "pinnedNotSelectable": "பின் செய்யப்பட்டது, தேர்ந்தெடுக்க முடியாது",
+    "ignoredVoicesTitle": "புறக்கணித்த குரல்கள்",
+    "ignoredVoicesSubtitle": "டிவி, பாட்காஸ்ட்கள் மற்றும் நீங்கள் நபர் இல்லை எனக் குறித்த பிற குரல்கள்",
+    "ignoredVoicesEmpty": "புறக்கணித்த குரல்கள் இல்லை",
+    "restoreAction": "மீட்டமை",
+    "voiceRestoredToast": "இந்தக் குரலைப் பற்றி Omi மீண்டும் கேட்கலாம்",
+    "speakerTagPromptSomeoneElse": "வேறொருவர்…",
+    "speakerTagPromptNotAPerson": "நபர் இல்லை",
+    "speakerTagPromptNotSureAction": "தெரியவில்லை",
+    "speakerTagPromptThatsMeAction": "நான்தான்",
+    "speakerTagPromptClosestVoices": "நெருக்கமான குரல்கள்",
+    "speakerTagPromptRecentPeople": "சமீபத்தில் நீங்கள் பேசியவர்கள்",
+    "voiceMatchClose": "நெருங்கிய பொருத்தம்",
+    "voiceMatchPossible": "சாத்தியமான பொருத்தம்",
+    "voiceMatchWeak": "பலவீனமான பொருத்தம்",
+    "voiceMatchMeterLabel": "குரல் பொருத்தம்: {level}",
+    "speakerTagPromptHintIdentify": "ஒவ்வொரு பதிலும் Omi-க்கு ஒரு குரலைக் கற்றுத்தந்து, அந்த நபரின் நம்பகத்தன்மையை உயர்த்துகிறது.",
+    "speakerTagPromptHintConfirm": "ஆம் என்றால் {name} நம்பகத்தன்மை உயரும்.",
+    "speakerTagPromptHintOwner": "உங்கள் சொந்தக் குரல் சுயவிவரத்தைத் துல்லியமாக வைத்திருக்கும், அதனால் Omi உங்களை வேறொருவராகப் பெயரிடாது.",
+    "speakerTagPromptSavedAs": "{name} ஆகச் சேமிக்கப்பட்டது",
+    "speakerTagPromptSavedAsYou": "நீங்களாகச் சேமிக்கப்பட்டது",
+    "speakerTagPromptIgnoredNote": "இந்தக் குரலைப் பற்றி Omi மீண்டும் கேட்காது",
+    "speakerTagPromptLabeledToast": "{name} என லேபிள் செய்யப்பட்டது",
+    "speakerTagPromptLabeledYouToast": "நீங்கள் என லேபிள் செய்யப்பட்டது",
+    "speakerTagPromptNotAPersonToast": "நபர் இல்லை எனக் குறிக்கப்பட்டது",
+    "speakerTagPromptRejectedToast": "லேபிள் நீக்கப்பட்டது",
+    "whoIsItTitle": "இது யார்?",
+    "newPersonEllipsis": "புதிய நபர்…",
+    "addNamedPersonAction": "“{name}” ஐச் சேர்",
+    "everyoneHeader": "அனைவரும்",
+    "speakerSuggestionChip": "{name}?",
+    "speakerSuggestionAppliesToSpeaker": "இந்தப் பேச்சாளரின் எல்லா வரிகளுக்கும் பொருந்தும்",
+    "collapseAction": "சுருக்கு",
+    "speakerTagPromptNotMeAction": "நான் இல்லை",
+    "confidenceNextLabels": "{count, plural, =1{இன்னும் 1 உரையாடலில் அவர்களுக்கு லேபிள் இடுங்கள்.} other{இன்னும் {count} உரையாடல்களில் அவர்களுக்கு லேபிள் இடுங்கள்.}}",
+    "siriShortcutsSetupHint": "ஷார்ட்கட்ஸ் → Siri-இல் Omi-ஐ இயக்கவும். “{askPhrase}” அல்லது “{questionPhrase}” என்று சொல்லி, பிறகு உங்கள் கேள்வியைக் கேளுங்கள்.",
+    "siriShortcutsSearchHint": " நீங்கள் “{searchPhrase} for what I did today” என்றும் சொல்லலாம்.",
+    "updateAvailableTitle": "புதுப்பிப்பு கிடைக்கிறது",
+    "updateAvailableMessage": "Omi-இன் புதிய பதிப்பு தயார், திருத்தங்களும் மேம்பாடுகளும் உடன்.",
+    "updateRequiredTitle": "புதுப்பிப்பு தேவை",
+    "updateRequiredMessage": "Omi-இன் இந்தப் பதிப்பு இனி ஆதரிக்கப்படாது. பதிவுசெய்வதையும் ஒத்திசைப்பதையும் தொடர புதுப்பிக்கவும்.",
+    "exportingAllData": "உங்கள் தரவு ஏற்றுமதி செய்யப்படுகிறது… Omi-ஐ திறந்தே வைக்கவும்; பெரிய கணக்குகளுக்கு பல நிமிடங்கள் ஆகலாம்.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 பேச்சாளர்} other{{count} பேச்சாளர்கள்}}",
+    "autoRemoveSyncedCopiesTitle": "ஒத்திசைக்கப்பட்ட நகல்களை தானாக அகற்று",
+    "autoRemoveSyncedCopiesDays": "ஒத்திசைக்கப்பட்ட நகல்கள் {days} நாட்களுக்குப் பிறகு நீக்கப்படும்",
+    "autoRemoveSyncedCopiesDescription": "ஒத்திசைத்த {days} நாட்களுக்குப் பிறகு உள்ளூர் நகல்களை நீக்கும். கிளவுட் நகல்கள் வைக்கப்படும்.",
+    "localCopiesSection": "உள்ளூர் நகல்கள்",
+    "speakerLabelLinesLabeled": "{count, plural, =1{1 வரிக்கு லேபிளிடப்பட்டது} other{{count} வரிகளுக்கு லேபிளிடப்பட்டது}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{குரல் கற்றுக்கொள்ளப்பட்டது} pending{குரலைக் கற்றுக்கொள்கிறது…} disabled{குரல் சேமிப்பு முடக்கப்பட்டுள்ளது} other{குரல் இன்னும் கற்றுக்கொள்ளப்படவில்லை}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{அடுத்த முறை Omi {name} அவர்களை அடையாளம் காணும்.} pending{இதற்கு சில விநாடிகள் ஆகும்.} disabled{Omi {name} அவர்களை அடையாளம் காண, அமைப்புகளில் குரல் சேமிப்பை இயக்கவும்.} other{Omi-க்கு {name} அவர்களின் இன்னும் தெளிவான பேச்சு தேவை; அது தொடர்ந்து முயற்சிக்கும்.}}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{முந்தைய 1 உரையாடலில் கண்டறியப்பட்டது} other{முந்தைய {count} உரையாடல்களில் கண்டறியப்பட்டது}}",
+    "speakerLabelText": "{part, select, likely{சாத்தியம்} soundsLike{{name} போல ஒலிக்கிறது} notPerson{{name} இல்லை} carried{இன்னும் {name}. உங்கள் கடைசி உரையாடலில் இருந்து தொடர்கிறது.} change{மாற்று} alsoTitle{இதுவும் {name} தானா?} alsoBody{முந்தைய உரையாடல்களில் Omi இதே குரலைக் கண்டறிந்தது.} confirmed{இந்த லேபிளை உறுதிப்படுத்தினீர்கள்} other{மதிப்பாய்வு}}",
+    "speakerLabelTalkTime": "இந்தக் குரலின் {duration}",
+    "findDeviceNoneTitle": "Omi எதுவும் கிடைக்கவில்லை",
+    "findDeviceNoneMessage": "அதை இயக்கி, உங்கள் ஃபோனுக்கு அருகில் வைத்திருங்கள்.",
+    "startupFailedDetails": "விவரங்கள்",
+    "couldNotLoadApiKeys": "API விசைகளை ஏற்ற முடியவில்லை.",
+    "speakerTagPromptNoAction": "இல்லை…",
+    "diagnosticsRightNow": "இப்போது",
+    "diagnosticsLast7Days": "கடந்த 7 நாட்கள்",
+    "diagnosticsConnectedFor": "இணைந்திருக்கும் நேரம்",
+    "diagnosticsVerdictReconnects": "தானாகவே மீண்டும் இணைகிறது",
+    "diagnosticsVerdictReconnectsDetail": "சிறிய துண்டிப்புகள், ஒவ்வொரு முறையும் சுமார் {duration} இல் மீண்டும் இணைகிறது",
+    "diagnosticsVerdictNoDrops": "இந்த வாரம் துண்டிப்புகள் இல்லை",
+    "diagnosticsVerdictTrouble": "இணைப்பதில் சிக்கல்",
+    "diagnosticsVerdictTroubleDetail": "கடந்த 24 மணிநேரத்தில் தோல்வியுற்ற இணைப்புகள்: {count}",
+    "diagnosticsDrops": "துண்டிப்புகள்",
+    "diagnosticsDropsPerHour": "மணிக்கு சுமார் {count}",
+    "diagnosticsLongestGap": "நீண்ட இடைவெளி",
+    "diagnosticsSincePairingSummary": "இணைத்ததிலிருந்து: {drops} துண்டிப்புகள், {failed} தோல்வியுற்ற இணைப்புகள்.",
+    "diagnosticsLastDuration": "கடந்த {duration}",
+    "chatReplyOffline": "இணைக்க முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.",
+    "chatReplyServerError": "எங்கள் பக்கத்தில் ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.",
+    "chatReplyTimeout": "பதில் அதிக நேரம் எடுத்தது. மீண்டும் முயற்சிக்கவும்.",
+    "chatReplyNotSignedIn": "நீங்கள் உள்நுழையவில்லை. உள்நுழைந்து மீண்டும் முயற்சிக்கவும்.",
+    "chatAppsLoadFailed": "அரட்டை செயலிகளை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
+    "assistantVoiceSettingsTitle": "குரல்",
+    "assistantVoice": "உதவியாளர் குரல்",
+    "voiceSharedAcrossDevices": "நீங்கள் தேர்ந்தெடுத்த குரல் மொபைல் மற்றும் டெஸ்க்டாப்பில் பகிரப்படும்.",
+    "readChatRepliesAloud": "அரட்டை பதில்களை சத்தமாக வாசி",
+    "readChatRepliesAloudDescription": "\"குரல் பதில்\" அனுமதிக்கும்போது மட்டுமே பேசும்.",
+    "voicePreviewSample": "ஹாய், நான் Omi. இது என் குரல்.",
+    "peopleStatsIncomplete": "எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.",
+    "previousDay": "முந்தைய நாள்",
+    "nextDay": "அடுத்த நாள்",
+    "noTasksOnDate": "{date} அன்று பணிகள் இல்லை",
+    "reprocessingConversationProgress": "உரையாடல் மீண்டும் செயலாக்கப்படுகிறது…",
+    "conversationReprocessed": "உரையாடல் புதுப்பிக்கப்பட்டது",
+    "loadingTranscript": "டிரான்ஸ்கிரிப்ட் ஏற்றப்படுகிறது…",
+    "transcriptLoadFailed": "டிரான்ஸ்கிரிப்டை ஏற்ற முடியவில்லை.",
+    "processingConversationProgress": "உரையாடல் செயலாக்கப்படுகிறது…",
+    "conversationProcessingFailedMessage": "இந்த உரையாடலைச் செயலாக்க முடியவில்லை.",
+    "waitForReprocessing": "மீண்டும் செயலாக்கம் முடியும் வரை காத்திருக்கவும்.",
+    "unnamedSpeakerLabel": "பேச்சாளர்",
+    "unresolvedSpeakersNotice": "பதிவுகளில் பேசுபவர்கள் பிரிக்கப்படவில்லை.",
+    "unresolvedSpeakersTitle": "பேச்சாளர் லேபிள்கள் பற்றி",
+    "unresolvedSpeakersMessage": "பதிவுகளில் மற்ற குரல்களை Omi வேறுபடுத்த முடியவில்லை. யார் பேசுகிறார்கள் எனப் பெயரிட பேச்சாளர் லேபிளைத் தட்டவும்.",
+    "nameSpeakerTitle": "பேச்சாளருக்கு பெயரிடவும்",
+    "playbackPreparingAudio": "ஆடியோ தயாராகிறது…",
+    "playbackBackToCurrent": "தற்போதையதற்குத் திரும்பு",
+    "playbackAudioUnavailable": "ஆடியோ கிடைக்கவில்லை",
+    "playbackAudioLoadFailed": "ஆடியோவை ஏற்ற முடியவில்லை",
+    "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்",
+    "forYou": "உங்களுக்காக",
+    "stopThese": "இவற்றை நிறுத்து",
+    "dismiss": "மறை"
 }

@@ -1,13 +1,15 @@
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, Literal, Mapping, Optional, List, Tuple
+import math
 import uuid
 import re
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 from pydantic.json_schema import SkipJsonSchema
 
 from models.other import Person
+from models.speaker_label_provenance import project_source
 
 # Unicode sentence-ending punctuation used across supported locales.
 # Conservative set: English (.!?), CJK (。！？), Arabic/Urdu (؟۔), Hindi/Sanskrit (।॥)
@@ -23,6 +25,26 @@ SENTENCE_FINDALL_RE = re.compile(
 # Maximum gap between the end of one segment and the start of the next for the two to still be
 # treated as one continuing utterance. Mirrors the window _should_merge_same_speaker uses.
 CROSS_SPEAKER_REPAIR_MAX_GAP_SECONDS = 3
+
+AUDIO_SOURCE_MERGE_TOLERANCE_SECONDS = 0.001
+
+
+def _sync_source_window(source: Any) -> Optional[Tuple[float, float]]:
+    """Absolute ``(start, end)`` of a stored sync provenance marker, or None."""
+    if not isinstance(source, dict) or source.get('type') != 'sync':
+        return None
+    start, end = source.get('start'), source.get('end')
+    if (
+        isinstance(start, bool)
+        or isinstance(end, bool)
+        or not isinstance(start, (int, float))
+        or not isinstance(end, (int, float))
+        or not math.isfinite(start)
+        or not math.isfinite(end)
+        or start >= end
+    ):
+        return None
+    return float(start), float(end)
 
 
 def legacy_conversation_segment_id(conversation_id: str, index: int) -> str:
@@ -71,6 +93,7 @@ class TranscriptSegment(BaseModel):
     speaker_id: Optional[int] = None
     is_user: bool
     person_id: Optional[str] = None
+    speaker_label_source: Optional[Literal['manual', 'auto', 'carried']] = None
     start: float
     end: float
     translations: Optional[List[Translation]] = Field(default_factory=list)
@@ -90,22 +113,40 @@ class TranscriptSegment(BaseModel):
     # V2 accepted-send run start in capture samples. Stops live text merging
     # from turning two valid windows across a VAD skip into one false window.
     audio_capture_run: SkipJsonSchema[Optional[int]] = Field(default=None, exclude=True)
+    audio_capture_start: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
+    audio_capture_end: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
+    audio_source: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
+    # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
+    # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
+    voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
     # looks real after a round-trip.
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
 
-    def model_dump(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
-        # The ordinary model schema and every v1 dump stay unchanged. Only a
-        # v2 unplaced segment carries this internal marker into persistence
-        # and WebSocket payloads; Pydantic's model serializer would erase the
-        # public TranscriptSegment OpenAPI shape entirely.
-        data = super().model_dump(*args, **kwargs)
-        if self.audio_alignment is not None:
-            data['audio_alignment'] = self.audio_alignment
-        if self.audio_capture_run is not None:
-            data['audio_capture_run'] = self.audio_capture_run
+    @model_serializer(mode='wrap')
+    def _serialize_internal_evidence(self, handler, info):
+        # A wrap serializer also runs when a parent conversation is dumped. Leave
+        # the return type inferred so Pydantic retains the public field schema.
+        # Omit absent internal markers to keep ordinary v1 payloads unchanged.
+        data = handler(self)
+        data['speaker_label_source'] = project_source(data)
+        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
+            value = getattr(self, key)
+            if value is not None:
+                data[key] = value
+        excluded = info.exclude if isinstance(getattr(info, 'exclude', None), (dict, set, frozenset)) else frozenset()
+        included = getattr(info, 'include', None)
+        included = included if isinstance(included, (dict, set, frozenset)) else None
+        # Capture windows are storage-only. Python-mode dumps feed Firestore and internal
+        # rewrites; JSON-mode dumps are API responses, which must never carry them.
+        if getattr(info, 'mode', 'python') == 'json':
+            return data
+        for key in ('audio_capture_start', 'audio_capture_end', 'audio_source'):
+            value = getattr(self, key)
+            if value is not None and key not in excluded and (included is None or key in included):
+                data[key] = value
         return data
 
     def __init__(self, **data: Any):
@@ -114,6 +155,14 @@ class TranscriptSegment(BaseModel):
         speaker_in_payload = data.get('speaker') is not None
         speaker_id_in_payload = data.get('speaker_id') is not None
         super().__init__(**data)
+        self.speaker_label_source = project_source(
+            {
+                'person_id': self.person_id,
+                'is_user': self.is_user,
+                'speaker_label_source': self.speaker_label_source,
+                'speaker_match_source': self.speaker_match_source,
+            }
+        )
         self._speaker_id_synthesized = not speaker_in_payload and not speaker_id_in_payload
         if not self.id:
             self.id = str(uuid.uuid4())
@@ -127,6 +176,55 @@ class TranscriptSegment(BaseModel):
                 self.speaker_id = 0
         else:
             self.speaker_id = 0
+
+    def _clear_audio_capture_window(self) -> None:
+        self.audio_capture_start = self.audio_capture_end = None
+
+    def _clear_audio_evidence(self) -> None:
+        self._clear_audio_capture_window()
+        self.audio_source = None
+
+    def _merge_audio_source(self, other: 'TranscriptSegment') -> None:
+        a_window = _sync_source_window(self.audio_source)
+        b_window = _sync_source_window(other.audio_source)
+        if a_window is None or b_window is None:
+            self.audio_source = None
+            return
+        offsets = (
+            a_window[0] - self.start,
+            a_window[1] - self.end,
+            b_window[0] - other.start,
+            b_window[1] - other.end,
+        )
+        if (
+            max(offsets) - min(offsets) > AUDIO_SOURCE_MERGE_TOLERANCE_SECONDS
+            or max(a_window[0], b_window[0]) > min(a_window[1], b_window[1]) + AUDIO_SOURCE_MERGE_TOLERANCE_SECONDS
+        ):
+            self.audio_source = None
+            return
+        self.audio_source = {
+            'type': 'sync',
+            'start': min(a_window[0], b_window[0]),
+            'end': max(a_window[1], b_window[1]),
+        }
+
+    def _merge_audio_capture_window(self, other: 'TranscriptSegment') -> None:
+        a_start, a_end = self.audio_capture_start, self.audio_capture_end
+        b_start, b_end = other.audio_capture_start, other.audio_capture_end
+        if (
+            a_start is not None
+            and a_end is not None
+            and b_start is not None
+            and b_end is not None
+            and all(math.isfinite(value) for value in (a_start, a_end, b_start, b_end))
+            and a_start < a_end
+            and b_start < b_end
+            and max(a_start, b_start) <= min(a_end, b_end)
+        ):
+            self.audio_capture_start = min(a_start, b_start)
+            self.audio_capture_end = max(a_end, b_end)
+        else:
+            self._clear_audio_capture_window()
 
     def assign_resolved_speaker(self, speaker_id: int, scope: str) -> None:
         """Adopt a conversation-wide speaker id; it is real diarization, not the SPEAKER_00 default."""
@@ -180,6 +278,7 @@ class TranscriptSegment(BaseModel):
         delta_seconds: int = 0,
         *,
         protected_segment_ids: Optional[set[str]] = None,
+        speaker_bound_ids: Optional[set[int]] = None,
     ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
             return CombineSegmentsResult(segments, [], [], {})
@@ -245,11 +344,15 @@ class TranscriptSegment(BaseModel):
             return (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
                 and a.speech_profile_processed == b.speech_profile_processed
-                and (b.start - a.end < 3)
+                and _is_chronological_continuation(a, b)
                 and (len(a.text) < 125 or a.text[-1] not in SENTENCE_ENDERS)
             )
 
         def _should_merge_lowercase_continuation(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
+            # No gap bound here by design: an incomplete lowercase sentence still belongs
+            # to its speaker's next word no matter how long the pause was. But it must
+            # still be b's predecessor, not a late arrival from an earlier batch -- that
+            # ordering check is the part shared with _is_chronological_continuation.
             return (
                 bool(a.text)
                 and bool(b.text)
@@ -257,7 +360,37 @@ class TranscriptSegment(BaseModel):
                 and a.text[-1] not in SENTENCE_ENDERS
                 and _starts_with_lowercase_cased(b.text)
                 and a.speech_profile_processed == b.speech_profile_processed
+                and b.start >= a.start
+                and b.end >= a.end
             )
+
+        def _join_translations(a: 'TranscriptSegment', b: 'TranscriptSegment') -> List[Translation]:
+            # A language translated on only one side would describe part of the merged
+            # text; drop it so the translation path treats the segment as a miss.
+            theirs = {t.lang: t.text for t in b.translations or []}
+            return [
+                Translation(lang=t.lang, text=f'{t.text} {theirs[t.lang]}')
+                for t in a.translations or []
+                if t.lang in theirs
+            ]
+
+        def _append_decided_speaker(
+            a: 'TranscriptSegment', b: 'TranscriptSegment'
+        ) -> Tuple[Optional['TranscriptSegment'], Optional['TranscriptSegment']]:
+            # Both sides carry the same decided speaker_id (the caller refused any other
+            # pair), though their SPEAKER_ spellings may differ. Only append in order:
+            # sentence repair would retire a saved ID, and a late arrival would invert the span.
+            if not _is_chronological_continuation(a, b) or a.speech_profile_processed != b.speech_profile_processed:
+                return a, b
+            if len(a.text) >= 125 and a.text[-1:] in SENTENCE_ENDERS and not _starts_with_lowercase_cased(b.text):
+                return a, b
+            a.text += f' {b.text}'
+            a._merge_audio_source(b)
+            a.end = b.end
+            a.translations = _join_translations(a, b)
+            a._merge_audio_capture_window(b)
+            _absorb(b, a)
+            return a, None
 
         absorbed_into: Dict[str, str] = {}
         removed_ids: List[str] = []
@@ -278,9 +411,19 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if protected_segment_ids and (a.id in protected_segment_ids or b.id in protected_segment_ids):
                 return a, b
+            # A speaker-wide decision covers every segment of that speaker, so its
+            # segments may merge with each other but never trade words across it.
+            if (
+                speaker_bound_ids
+                and a.speaker_id != b.speaker_id
+                and (a.speaker_id in speaker_bound_ids or b.speaker_id in speaker_bound_ids)
+            ):
+                return a, b
             if b.stt_provider != a.stt_provider:
                 return a, b
             if b.speaker_match_source != a.speaker_match_source:
+                return a, b
+            if b.speaker_label_source != a.speaker_label_source:
                 return a, b
             if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b
@@ -290,6 +433,8 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if b.audio_capture_run != a.audio_capture_run:
                 return a, b
+            if speaker_bound_ids and a.speaker_id in speaker_bound_ids:
+                return _append_decided_speaker(a, b)
 
             if (
                 a.speaker != b.speaker
@@ -304,9 +449,13 @@ class TranscriptSegment(BaseModel):
                     if _can_backward_merge_first_sentence(first_sentence, rest, last_incomplete):
                         a.text = f'{a.text} {first_sentence}'.strip()
                         b.text = rest
+                        a._clear_audio_evidence()
+                        b._clear_audio_evidence()
                         return a, b
                     if _can_backward_merge_single_sentence(first_sentence, last_incomplete):
                         a.text = f'{a.text} {first_sentence}'.strip()
+                        a.audio_source = None
+                        a._merge_audio_capture_window(b)
                         _absorb(b, a)
                         return a, None
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
@@ -314,19 +463,27 @@ class TranscriptSegment(BaseModel):
                     if prefix:
                         a.text = prefix
                         a.end = min(a.end, b.start)
+                        a._clear_audio_evidence()
+                        b._clear_audio_evidence()
                         return a, b
                     a.text = ""
+                    b.audio_source = None
+                    b._merge_audio_capture_window(a)
                     _absorb(a, b)
                     return None, b
             if _should_merge_same_speaker(a, b):
                 a.text += f' {b.text}'
+                a._merge_audio_source(b)
                 a.end = b.end
+                a._merge_audio_capture_window(b)
                 _absorb(b, a)
                 return a, None
 
             if _should_merge_lowercase_continuation(a, b):
                 a.text += f' {b.text}'
+                a._merge_audio_source(b)
                 a.end = b.end
+                a._merge_audio_capture_window(b)
                 _absorb(b, a)
                 return a, None
 
@@ -364,6 +521,14 @@ class TranscriptSegment(BaseModel):
             )
 
         return CombineSegmentsResult(segments, joined_similar_segments, removed_ids, absorbed_into)
+
+
+def transcript_segment_for_client(segment: Mapping[str, Any]) -> Dict[str, Any]:
+    return {
+        key: value
+        for key, value in segment.items()
+        if key not in ('audio_capture_start', 'audio_capture_end', 'audio_source')
+    }
 
 
 class ImprovedTranscriptSegment(BaseModel):

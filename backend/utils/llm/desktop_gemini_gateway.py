@@ -178,6 +178,9 @@ def gemini_body_to_openai_chat(
                             'function': {'name': name, 'arguments': json.dumps(dict(arguments))},
                         }
                     )
+                    signature = part.get('thoughtSignature') or part.get('thought_signature')
+                    if isinstance(signature, str) and signature:
+                        tool_calls[-1]['extra_content'] = {'google': {'thought_signature': signature}}
                 text_parts = [p.get('text') for p in parts if isinstance(p, Mapping) and isinstance(p.get('text'), str)]
                 messages.append(
                     {
@@ -212,11 +215,13 @@ def gemini_body_to_openai_chat(
         if isinstance(stop, list) and stop:
             request['stop'] = stop
         thinking = config.get('thinkingConfig') or config.get('thinking_config')
-        if isinstance(thinking, Mapping) and isinstance(
-            thinking.get('thinkingBudget') or thinking.get('thinking_budget'), int
-        ):
-            budget = thinking.get('thinkingBudget') or thinking.get('thinking_budget')
-            request['google'] = {'thinking_config': {'thinking_budget': budget}}
+        if isinstance(thinking, Mapping):
+            level = thinking.get('thinkingLevel', thinking.get('thinking_level'))
+            budget = thinking.get('thinkingBudget', thinking.get('thinking_budget'))
+            if level in {'minimal', 'low', 'medium', 'high'}:
+                request['google'] = {'thinking_config': {'thinking_level': level}}
+            elif isinstance(budget, int):
+                request['google'] = {'thinking_config': {'thinking_budget': budget}}
         response_schema = config.get('responseSchema') or config.get('response_schema')
         mime = config.get('responseMimeType') or config.get('response_mime_type')
         if isinstance(response_schema, Mapping):
@@ -307,7 +312,13 @@ def openai_completion_to_gemini(body: Mapping[str, Any]) -> dict[str, Any]:
             arguments = {}
         if not isinstance(arguments, Mapping):
             arguments = {}
-        parts.append({'functionCall': {'name': function.get('name'), 'args': dict(arguments)}})
+        part: dict[str, Any] = {'functionCall': {'name': function.get('name'), 'args': dict(arguments)}}
+        extra = call.get('extra_content')
+        google = extra.get('google') if isinstance(extra, Mapping) else None
+        signature = google.get('thought_signature') if isinstance(google, Mapping) else None
+        if isinstance(signature, str) and signature:
+            part['thoughtSignature'] = signature
+        parts.append(part)
     if not parts:
         parts = [{'text': ''}]
     candidate: dict[str, Any] = {
@@ -353,6 +364,11 @@ def openai_sse_payload_to_gemini_event(
         raw_index = call.get('index')
         index = raw_index if isinstance(raw_index, int) else 0
         accumulated = pending_tool_calls.setdefault(index, {'name': '', 'arguments': ''})
+        extra = call.get('extra_content')
+        google = extra.get('google') if isinstance(extra, Mapping) else None
+        signature = google.get('thought_signature') if isinstance(google, Mapping) else None
+        if isinstance(signature, str) and signature:
+            accumulated['thoughtSignature'] = signature
         function = call.get('function')
         if isinstance(function, Mapping):
             if isinstance(function.get('name'), str) and function['name']:
@@ -368,7 +384,10 @@ def openai_sse_payload_to_gemini_event(
                 arguments = {}
             if not isinstance(arguments, Mapping):
                 arguments = {}
-            parts.append({'functionCall': {'name': accumulated['name'], 'args': dict(arguments)}})
+            part = {'functionCall': {'name': accumulated['name'], 'args': dict(arguments)}}
+            if 'thoughtSignature' in accumulated:
+                part['thoughtSignature'] = accumulated['thoughtSignature']
+            parts.append(part)
         pending_tool_calls.clear()
         return {
             'candidates': [
@@ -396,9 +415,12 @@ def _gateway_error(result: httpx.Response) -> DesktopGeminiGatewayError:
     return DesktopGeminiGatewayError(status_code=status, code=code, message=message)
 
 
-def _desktop_gateway_headers(*, uid: str) -> dict[str, str]:
+def _desktop_gateway_headers(*, uid: str, request_id: str, product_lane: str, client_platform: str) -> dict[str, str]:
     headers = llm_gateway_headers(feature=DESKTOP_GATEWAY_FEATURE, platform='desktop')
     headers['X-Omi-User-Uid'] = uid
+    headers['X-Omi-Request-Id'] = request_id
+    headers['X-Omi-Lane'] = product_lane
+    headers['X-Omi-Client-Platform'] = client_platform
     return headers
 
 
@@ -408,6 +430,9 @@ async def gateway_desktop_chat(
     model: str,
     action: str,
     uid: str,
+    request_id: str,
+    product_lane: str,
+    client_platform: str,
 ) -> GatewayChatResult:
     """Run a company-paid desktop generateContent request through the gateway."""
     payload = json.loads(body)
@@ -421,7 +446,9 @@ async def gateway_desktop_chat(
         client = get_llm_gateway_client()
         result = await client.post(
             f'{get_llm_gateway_base_url()}/v1/chat/completions',
-            headers=_desktop_gateway_headers(uid=uid),
+            headers=_desktop_gateway_headers(
+                uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
+            ),
             json=request,
             timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
         )
@@ -435,6 +462,9 @@ async def gateway_desktop_chat_stream(
     *,
     model: str,
     uid: str,
+    request_id: str,
+    product_lane: str,
+    client_platform: str,
 ) -> AsyncIterator[bytes]:
     """Stream a company-paid desktop streamGenerateContent request through the gateway."""
     payload = json.loads(body)
@@ -449,7 +479,9 @@ async def gateway_desktop_chat_stream(
         async with client.stream(
             'POST',
             f'{get_llm_gateway_base_url()}/v1/chat/completions',
-            headers=_desktop_gateway_headers(uid=uid),
+            headers=_desktop_gateway_headers(
+                uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
+            ),
             json=request,
             timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
         ) as result:
@@ -479,7 +511,9 @@ async def gateway_desktop_chat_stream(
                         yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode('utf-8')
 
 
-async def gateway_desktop_embed_content(body: bytes, *, uid: str) -> GatewayEmbeddingResult:
+async def gateway_desktop_embed_content(
+    body: bytes, *, uid: str, request_id: str, product_lane: str, client_platform: str
+) -> GatewayEmbeddingResult:
     """Run a company-paid desktop embedContent request through the gateway embeddings lane."""
     payload = json.loads(body)
     try:
@@ -497,7 +531,9 @@ async def gateway_desktop_embed_content(body: bytes, *, uid: str) -> GatewayEmbe
         client = get_llm_gateway_client()
         result = await client.post(
             f'{get_llm_gateway_base_url()}/v1/embeddings',
-            headers=_desktop_gateway_headers(uid=uid),
+            headers=_desktop_gateway_headers(
+                uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
+            ),
             json=request,
             timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
         )
@@ -595,9 +631,14 @@ async def proxy_company_paid_via_gateway(
     telemetry.provider = 'llm_gateway'
     telemetry.credential_source = 'omi_gateway'
     telemetry.phase = 'gateway'
+    attribution = dict(
+        request_id=telemetry.request_id, product_lane=telemetry.lane, client_platform=telemetry.client_platform
+    )
     try:
         if action == 'embedContent':
-            result = await envelope.cancel_on_disconnect(request, gateway_desktop_embed_content(body, uid=uid))
+            result = await envelope.cancel_on_disconnect(
+                request, gateway_desktop_embed_content(body, uid=uid, **attribution)
+            )
             content = json.dumps({'embedding': {'values': result.values}}, separators=(',', ':')).encode()
             telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
             return Response(
@@ -609,12 +650,18 @@ async def proxy_company_paid_via_gateway(
 
             async def stream_gateway():
                 try:
-                    async for chunk in gateway_desktop_chat_stream(body, model=model, uid=uid):
+                    async for chunk in gateway_desktop_chat_stream(body, model=model, uid=uid, **attribution):
                         yield chunk
                     telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
                 except DesktopGeminiGatewayError as error:
-                    status_code = 429 if error.status_code == 429 else 503 if error.status_code >= 500 else 502
-                    telemetry.complete(outcome=error.code, status_code=status_code, retryable=True, phase='gateway')
+                    status_code = 503 if error.status_code >= 500 else error.status_code
+                    telemetry.complete(
+                        outcome=error.code,
+                        status_code=status_code,
+                        retryable=error.status_code == 429 or error.status_code >= 500,
+                        upstream_status=error.status_code,
+                        phase='gateway',
+                    )
                     yield envelope.stream_error_event(code=error.code, phase='gateway', telemetry=telemetry)
                 except (httpx.TimeoutException, TimeoutError):
                     telemetry.complete(outcome='provider_timeout', status_code=504, retryable=False, phase='gateway')
@@ -633,7 +680,7 @@ async def proxy_company_paid_via_gateway(
                 headers=envelope.response_headers(telemetry),
             )
         result = await envelope.cancel_on_disconnect(
-            request, gateway_desktop_chat(body, model=model, action=action, uid=uid)
+            request, gateway_desktop_chat(body, model=model, action=action, uid=uid, **attribution)
         )
         payload = dict(result.gemini_payload)
         telemetry.observe_gemini_response(payload)

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -22,8 +23,8 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart' as siri_events;
-import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Small test seam for the conversation capture path used by Siri's foreground
@@ -104,6 +105,7 @@ class SiriIntegration extends SiriEventsApi {
         _testMemoryPageFetcher = null,
         _testTaskPageFetcher = null,
         _testConversationPageFetcher = null,
+        _testRouteOpener = null,
         _prepareTimeout = const Duration(milliseconds: 1500),
         _nativeTimeout = const Duration(seconds: 12),
         _indexCooldown = const Duration(seconds: 30),
@@ -119,6 +121,7 @@ class SiriIntegration extends SiriEventsApi {
     SiriMemoryPageFetcher? memoryPageFetcher,
     SiriTaskPageFetcher? taskPageFetcher,
     SiriConversationPageFetcher? conversationPageFetcher,
+    Future<bool> Function(String route, String uid, int generation)? routeOpener,
     Duration prepareTimeout = const Duration(milliseconds: 1500),
     Duration nativeTimeout = const Duration(seconds: 12),
     Duration indexCooldown = const Duration(seconds: 30),
@@ -132,6 +135,7 @@ class SiriIntegration extends SiriEventsApi {
         _testMemoryPageFetcher = memoryPageFetcher,
         _testTaskPageFetcher = taskPageFetcher,
         _testConversationPageFetcher = conversationPageFetcher,
+        _testRouteOpener = routeOpener,
         _prepareTimeout = prepareTimeout,
         _nativeTimeout = nativeTimeout,
         _indexCooldown = indexCooldown,
@@ -150,17 +154,49 @@ class SiriIntegration extends SiriEventsApi {
   final SiriMemoryPageFetcher? _testMemoryPageFetcher;
   final SiriTaskPageFetcher? _testTaskPageFetcher;
   final SiriConversationPageFetcher? _testConversationPageFetcher;
+  final Future<bool> Function(String route, String uid, int generation)? _testRouteOpener;
   final Duration _prepareTimeout;
   final Duration _nativeTimeout;
   final Duration _indexCooldown;
   final Duration _retryBase;
   final Future<void> Function(Duration) _delay;
   void installEvents() {
-    if (_isIOS) SiriEventsApi.setUp(this);
+    if (!_isIOS) return;
+    SiriEventsApi.setUp(this);
+    // Intents can finish while Flutter is absent; drain the native buffer on
+    // every launch, then again after the signed-in session mirror is refreshed.
+    _drainLaunchTelemetry();
+    HomeNavigation.onHomeMounted = () => unawaited(deliverPendingRoute());
+  }
+
+  /// The launch drain destructively takes the native telemetry buffer, so it
+  /// must not race startup auth: events emitted before identity binding land in
+  /// the pre-auth analytics epoch and are discarded when bindIdentity clears
+  /// the queue. Wait for that bind (signed in or explicitly signed out) first.
+  void _drainLaunchTelemetry() {
+    void drain() {
+      unawaited(
+        _flushTelemetry().catchError((Object error) {
+          Logger.debug('Siri launch telemetry drain failed: $error');
+        }),
+      );
+    }
+
+    if (AnalyticsManager.identityKnown) {
+      drain();
+      return;
+    }
+    final previous = AnalyticsManager.identityChanged;
+    AnalyticsManager.identityChanged = (identity, enabled) {
+      AnalyticsManager.identityChanged = previous;
+      previous?.call(identity, enabled);
+      drain();
+    };
   }
 
   int _accountGeneration = 0;
   int? _nativeGeneration;
+  bool _deliveringPendingRoute = false;
   Future<void> _nativeTail = Future<void>.value();
   Future<void> _queuedIndexTail = Future<void>.value();
   DateTime? _indexSuspendedUntil;
@@ -192,13 +228,13 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<T> _nativeOperation<T>(Future<T> Function() operation, {bool indexWork = false}) {
     final result = _nativeTail.then((_) async {
-      if (indexWork && (_indexSuspendedUntil?.isAfter(DateTime.now()) ?? false)) {
+      if (indexWork && (_indexSuspendedUntil?.isAfter(clock.now()) ?? false)) {
         throw TimeoutException('Siri index is cooling down after a native timeout');
       }
       try {
         return await operation().timeout(_nativeTimeout);
       } on TimeoutException {
-        if (indexWork) _indexSuspendedUntil = DateTime.now().add(_indexCooldown);
+        if (indexWork) _indexSuspendedUntil = clock.now().add(_indexCooldown);
         rethrow;
       }
     });
@@ -288,7 +324,7 @@ class SiriIntegration extends SiriEventsApi {
 
   void _scheduleRemovalRetry(String uid, int generation) {
     if (_removalRetry != null || _uid != uid || _accountGeneration != generation) return;
-    final remaining = _indexSuspendedUntil?.difference(DateTime.now()) ?? Duration.zero;
+    final remaining = _indexSuspendedUntil?.difference(clock.now()) ?? Duration.zero;
     // A failed attempt owns one timer; its callback clears the slot before
     // queueing the next attempt, so prolonged outages cannot stack retries.
     final backoff = siriRemovalRetryDelay(_retryBase, _retryAttempt);
@@ -375,9 +411,10 @@ class SiriIntegration extends SiriEventsApi {
     final epoch = _nextEpoch();
     final now = DateTime.now();
     _fenceIneligible(
-        'memory',
-        frozen.where((row) => row.uid == _uid && !siriMemoryIsIndexable(row, now, owner: _uid)).map((row) => row.id),
-        epoch);
+      'memory',
+      frozen.where((row) => row.uid == _uid && !siriMemoryIsIndexable(row, now, owner: _uid)).map((row) => row.id),
+      epoch,
+    );
     if (restoreDeleted) _suppressedIds['memory']!.removeAll(frozen.map((row) => row.id));
     queueIndex((siri) async {
       if (restoreDeleted) siri._pendingRemovals['memory']!.removeAll(frozen.map((row) => row.id));
@@ -395,7 +432,10 @@ class SiriIntegration extends SiriEventsApi {
     final frozen = List<ActionItemWithMetadata>.of(rows);
     final epoch = _nextEpoch();
     _fenceIneligible(
-        'task', frozen.where((row) => !siriTaskIsIndexable(row, DateTime.now())).map((row) => row.id), epoch);
+      'task',
+      frozen.where((row) => !siriTaskIsIndexable(row, DateTime.now())).map((row) => row.id),
+      epoch,
+    );
     if (restoreDeleted) _suppressedIds['task']!.removeAll(frozen.map((row) => row.id));
     queueIndex((siri) async {
       if (restoreDeleted) siri._pendingRemovals['task']!.removeAll(frozen.map((row) => row.id));
@@ -428,15 +468,19 @@ class SiriIntegration extends SiriEventsApi {
     final epoch = _nextEpoch();
     if (!_repairRequired) _suppressedIds[type]?.addAll(frozen);
     _checkFenceBudget();
-    queueIndex((siri) => epoch < siri._minimumSourceEpoch
-        ? Future<void>.value()
-        : siri.deleteMany(type, frozen, expectedUid: expectedUid));
+    queueIndex(
+      (siri) => epoch < siri._minimumSourceEpoch
+          ? Future<void>.value()
+          : siri.deleteMany(type, frozen, expectedUid: expectedUid),
+    );
   }
 
   void queueRefreshAuthoritativeTasks({String? expectedUid}) {
-    unawaited(refreshAuthoritativeTasks(expectedUid: expectedUid).catchError((Object error) {
-      Logger.debug('Siri task refresh failed: $error');
-    }));
+    unawaited(
+      refreshAuthoritativeTasks(expectedUid: expectedUid).catchError((Object error) {
+        Logger.debug('Siri task refresh failed: $error');
+      }),
+    );
   }
 
   @visibleForTesting
@@ -467,8 +511,11 @@ class SiriIntegration extends SiriEventsApi {
     if (expectedUid != null && expectedUid != _uid) return;
     final frozenRows = List<ServerConversation>.of(rows);
     final epoch = _nextEpoch();
-    _fenceIneligible('conversation',
-        frozenRows.where((row) => !siriConversationIsIndexable(row, DateTime.now())).map((row) => row.id), epoch);
+    _fenceIneligible(
+      'conversation',
+      frozenRows.where((row) => !siriConversationIsIndexable(row, DateTime.now())).map((row) => row.id),
+      epoch,
+    );
     if (restoreDeleted) _suppressedIds['conversation']!.removeAll(frozenRows.map((row) => row.id));
     queueIndex((siri) async {
       if (restoreDeleted) siri._pendingRemovals['conversation']!.removeAll(frozenRows.map((row) => row.id));
@@ -525,6 +572,7 @@ class SiriIntegration extends SiriEventsApi {
     if (uid == null || generation != _accountGeneration) return;
     _uid = uid;
     await refreshSession(user!);
+    if (_currentOwner(uid, generation)) unawaited(deliverPendingRoute());
     _scheduleOwnerWideRefresh(uid, generation);
   }
 
@@ -726,7 +774,10 @@ class SiriIntegration extends SiriEventsApi {
     _pendingReconciles['conversation'] = _PendingSiriReconcile('conversation', () async {
       if (_currentOwner(uid, generation) && epoch >= _minimumSourceEpoch) {
         await _host.reconcileConversations(
-            uid, _conversationProjection(rows, epoch), coveredAfter?.millisecondsSinceEpoch);
+          uid,
+          _conversationProjection(rows, epoch),
+          coveredAfter?.millisecondsSinceEpoch,
+        );
       }
     });
     await _flushPendingWork(uid, generation);
@@ -884,8 +935,11 @@ class SiriIntegration extends SiriEventsApi {
 
   /// Only a completed unfiltered task traversal may call this. An active-only
   /// result cannot remove recent completed tasks from the native snapshot.
-  Future<void> reconcileTasks(List<ActionItemWithMetadata> rows,
-      {required bool includeCompleted, int? sourceEpoch}) async {
+  Future<void> reconcileTasks(
+    List<ActionItemWithMetadata> rows, {
+    required bool includeCompleted,
+    int? sourceEpoch,
+  }) async {
     final uid = _uid;
     final generation = _accountGeneration;
     if (!_isIOS || uid == null) return;
@@ -936,6 +990,19 @@ class SiriIntegration extends SiriEventsApi {
     return _host.isEnabled().timeout(_nativeTimeout);
   }
 
+  /// Whether the running Runner can serve App Shortcuts UI. False on Android,
+  /// on stable-compiler (Xcode 26.6) builds where the Siri toolchain compiled
+  /// out, and whenever the native bridge cannot answer. Callers must treat
+  /// false or an error as "do not request omi/shortcuts_button".
+  Future<bool> appShortcutsAvailable() async {
+    if (!_isIOS) return false;
+    try {
+      return await _host.appShortcutsAvailable().timeout(_nativeTimeout);
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> setEnabled(bool enabled) async {
     if (!_isIOS) return;
     await _nativeOperation(() => _host.setEnabled(enabled));
@@ -945,7 +1012,24 @@ class SiriIntegration extends SiriEventsApi {
     }
   }
 
-  Future<String?> takePendingRoute() async => _isIOS ? _host.takePendingRoute() : null;
+  Future<void> deliverPendingRoute() async {
+    if (!_isIOS || _deliveringPendingRoute) return;
+    _deliveringPendingRoute = true;
+    try {
+      final pending = await _host.takePendingRoute();
+      if (pending == null) return;
+      var delivered = false;
+      try {
+        delivered = await openRoute(pending.route, pending.uid, pending.generation);
+      } finally {
+        await _host.finishPendingRoute(pending.route, pending.uid, pending.generation, delivered);
+      }
+    } catch (error) {
+      Logger.debug('Siri pending route delivery failed: $error');
+    } finally {
+      _deliveringPendingRoute = false;
+    }
+  }
 
   @override
   void memoryCreated(String id) {
@@ -960,7 +1044,12 @@ class SiriIntegration extends SiriEventsApi {
   }
 
   @override
-  Future<bool> openRoute(String route) => HomeNavigation.openRoute(route);
+  Future<bool> openRoute(String route, String uid, int generation) =>
+      _testRouteOpener?.call(route, uid, generation) ??
+      HomeNavigation.openRoute(
+        route,
+        canOpen: () => _uid == uid && _nativeGeneration == generation && FirebaseAuth.instance.currentUser?.uid == uid,
+      );
 
   @override
   Future<void> setListening(bool enabled) async {
@@ -1034,12 +1123,14 @@ class SiriIntegration extends SiriEventsApi {
       if (row.kind == 'intent') {
         if (row.intent == 'askOmi') {
           final outcomes = siri_events.SiriAskOmiPerformedOutcome.values.where((value) => value.name == row.outcome);
-          const TypedEvents().emit(siri_events.SiriAskOmiPerformed(
-            platform: siri_events.SiriAskOmiPerformedPlatform.ios,
-            outcome: outcomes.isEmpty ? siri_events.SiriAskOmiPerformedOutcome.server : outcomes.first,
-            latencyMs: row.latencyMs,
-            invokedVia: siri_events.SiriAskOmiPerformedInvokedVia.unknown,
-          ));
+          const TypedEvents().emit(
+            siri_events.SiriAskOmiPerformed(
+              platform: siri_events.SiriAskOmiPerformedPlatform.ios,
+              outcome: outcomes.isEmpty ? siri_events.SiriAskOmiPerformedOutcome.server : outcomes.first,
+              latencyMs: row.latencyMs,
+              invokedVia: siri_events.SiriAskOmiPerformedInvokedVia.unknown,
+            ),
+          );
           continue;
         }
         final intents = siri_events.SiriIntentPerformedIntent.values.where((value) => value.name == row.intent);
@@ -1051,7 +1142,10 @@ class SiriIntegration extends SiriEventsApi {
             platform: siri_events.SiriIntentPerformedPlatform.ios,
             outcome: outcomes.isEmpty ? siri_events.SiriIntentPerformedOutcome.server : outcomes.first,
             latencyMs: row.latencyMs,
-            invokedVia: siri_events.SiriIntentPerformedInvokedVia.unknown,
+            invokedVia: siri_events.SiriIntentPerformedInvokedVia.values.firstWhere(
+              (value) => value.wireName == row.entryPath,
+              orElse: () => siri_events.SiriIntentPerformedInvokedVia.unknown,
+            ),
           ),
         );
       } else if (row.kind == 'index') {

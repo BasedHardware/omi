@@ -5,7 +5,8 @@ import 'package:omi/backend/schema/geolocation.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
-const sdcardChunkSizeSecs = 180;
+
+const sdcardChunkSizeSecs = 60;
 const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
@@ -211,6 +212,12 @@ class Wal {
   int? sourceFrameStart;
   int? sourceClockEpoch;
 
+  int? liveRingId;
+  int? liveOrdinalStart;
+  int? liveOrdinalEnd;
+
+  int? liveConnectionEpoch;
+
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? geolocation;
 
@@ -227,6 +234,15 @@ class Wal {
 
   /// Unix timestamp (seconds) when the audio was uploaded (202 received).
   int uploadedAt;
+
+  /// Unix timestamp (seconds) when the server confirmed this recording synced
+  /// (job resolved to [WalStatus.synced], or the live-stream ack completed it).
+  /// 0 = unknown: records synced before this field existed, and WALs whose
+  /// status was migrated without a timestamp. The synced-copy auto-remove
+  /// policy deliberately skips records with 0 — never delete on unknown age.
+  int syncedAt;
+
+  bool keptForTranscriptRecovery;
 
   String get id => '${device}_$timerStart';
 
@@ -333,11 +349,16 @@ class Wal {
     this.captureRoot,
     this.sourceFrameStart,
     this.sourceClockEpoch,
+    this.liveRingId,
+    this.liveOrdinalStart,
+    this.liveOrdinalEnd,
     this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
     this.jobId,
     this.uploadedAt = 0,
+    this.syncedAt = 0,
+    this.keptForTranscriptRecovery = false,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -367,6 +388,9 @@ class Wal {
       captureRoot: json['capture_root'],
       sourceFrameStart: json['source_frame_start'],
       sourceClockEpoch: json['source_clock_epoch'],
+      liveRingId: json['live_ring_id'],
+      liveOrdinalStart: json['live_ordinal_start'],
+      liveOrdinalEnd: json['live_ordinal_end'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -374,6 +398,8 @@ class Wal {
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
       uploadedAt: json['uploaded_at'] ?? 0,
+      syncedAt: json['synced_at'] ?? 0,
+      keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
     );
   }
 
@@ -401,11 +427,16 @@ class Wal {
       if (captureRoot != null) 'capture_root': captureRoot,
       if (sourceFrameStart != null) 'source_frame_start': sourceFrameStart,
       if (sourceClockEpoch != null) 'source_clock_epoch': sourceClockEpoch,
+      if (liveRingId != null) 'live_ring_id': liveRingId,
+      if (liveOrdinalStart != null) 'live_ordinal_start': liveOrdinalStart,
+      if (liveOrdinalEnd != null) 'live_ordinal_end': liveOrdinalEnd,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
       'job_id': jobId,
       'uploaded_at': uploadedAt,
+      'synced_at': syncedAt,
+      if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
     };
   }
 
