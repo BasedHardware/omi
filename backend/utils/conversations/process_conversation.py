@@ -547,24 +547,6 @@ def _get_structured(
         episode_enabled = _conversation_notes_v2_enabled() and _meeting_notes_episode_evidence_enabled()
         episode_items = []
         roster, meeting_context_block, desktop_capture, screen_frames = None, None, False, ()
-        if episode_enabled:
-            roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
-                uid,
-                main_conv,
-                calendar_context,
-                tz_str,
-                include_background=True,
-                include_screen_text=_meeting_notes_screen_text_context_enabled(),
-                evidence_items=episode_items,
-            )
-            episode_items[:0] = capture_evidence(
-                main_conv,
-                transcript=action_items_transcript,
-                speaker_map=speaker_map,
-                roster=roster,
-                desktop_capture=desktop_capture,
-            )
-        episode_observed = any(item.source_kind in {'screen_frame', 'screen_ocr'} for item in episode_items)
 
         def model_discards(on_error: Callable[[Exception], None], neighbor: Optional[Neighbor]) -> bool:
             with track_usage(uid, Features.CONVERSATION_DISCARD):
@@ -601,7 +583,7 @@ def _get_structured(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
             )
-            if ordinary.discard and ordinary.decided_by == 'rule' and not episode_observed:
+            if ordinary.discard and ordinary.decided_by == 'rule':
                 logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
                 if relevance_observer is not None:
                     relevance_observer(
@@ -639,8 +621,6 @@ def _get_structured(
             arm=arm,
             record_arm=relevance_experiment_active(),
         )
-        if decision.discard and episode_observed:
-            decision = RelevanceDecision('keep', 'rule', 'episode_evidence', trigger)
         submit_relevance_shadow(
             uid=uid,
             conversation_id=prompt_conversation_id,
@@ -669,7 +649,7 @@ def _get_structured(
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
         if _conversation_notes_v2_enabled():
-            if _meeting_notes_rich_context_enabled() and not episode_enabled:
+            if _meeting_notes_rich_context_enabled() or episode_enabled:
                 roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
                     uid,
                     main_conv,
@@ -677,6 +657,15 @@ def _get_structured(
                     tz_str,
                     include_background=True,
                     include_screen_text=_meeting_notes_screen_text_context_enabled(),
+                    **({'evidence_items': episode_items} if episode_enabled else {}),
+                )
+            if episode_enabled:
+                episode_items[:0] = capture_evidence(
+                    main_conv,
+                    transcript=action_items_transcript,
+                    speaker_map=speaker_map,
+                    roster=roster,
+                    desktop_capture=desktop_capture,
                 )
             prefix = build_conversation_prompt_prefix(
                 conversation_id=prompt_conversation_id,

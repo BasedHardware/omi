@@ -9,7 +9,9 @@ existing schemas and prompt bytes. No source retrieval window is widened here.
 Each evidence item has an episode-local `id`, `source_kind`, nullable `time`
 (ISO timestamp, date, or capture offset), nullable `actor`, `content`,
 `sensitivity` (`standard` or `private`), and `source_ref`. Unknown times/actors
-stay null; capture time is never substituted for a message's sent time.
+stay null. Speech also carries server-authored `wake_word_invocation` metadata
+from the same matcher as the trusted transcript renderer; content cannot forge it.
+Capture time is never substituted for a message's sent time.
 
 | Existing input | Evidence kind / attribution |
 | --- | --- |
@@ -41,8 +43,11 @@ The server validates reference IDs and source/provenance compatibility and
 propagates private sensitivity. It stores source kind, original reference, time
 and actor with each claim so ephemeral pack IDs remain auditable after persistence. Vacuity is checked on title, compatibility overview,
 and projected recap; one targeted retry is allowed, shared with provenance repair.
-A remaining violation fails extraction rather than silently accepting bad evidence
-metadata. Existing presentation repair remains a separate bounded guard.
+After that retry, accept the structurally valid retry (otherwise the initial note),
+drop invalid claim entries and emit bounded violation-class fallback telemetry.
+Coverage gaps and residual vacuity never fail processing. Episode IDs are stripped
+from visible prose without converting them to transcript citations.
+Existing presentation repair remains a separate bounded guard.
 
 `note_claims` is optional and omitted when unset in both backend fallback and SDK
 models. Existing Dart explicit JSON decoding, Swift keyed decoding, and web typed
@@ -56,6 +61,11 @@ inspect their generated notes/scores to revise the prompt. Record prompt hashes
 and split in reports; a later revision requires a new held-out cohort. Fake-model
 unit tests prove harness mechanics, not note quality. Live scoring requires an
 explicit key and endpoint; this stage makes no production or live-quality claim.
+
+Stage 1 retains existing relevance/discard decisions exactly and gathers episode
+inputs only after a keep decision. Later evidence-aware relevance first needs
+stratified keep/discard precision and recall, junk/mic-check retention rate, and
+Firestore reads plus model cost per capture measured against the existing gate.
 
 Later stages add evidence-sufficiency retrieval across windows/sources,
 expectation-versus-observation using calendar and commitments, episode/thread
