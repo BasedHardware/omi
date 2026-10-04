@@ -21,8 +21,17 @@ void main() {
       expect(planForCheckout(plans, interval: 'year', selectedTierId: 'unlimited_v2')?['id'], 'unlimited-year');
     });
 
+    test('a multi-tier catalog without a selected tier matches nothing', () {
+      expect(planForCheckout(plans, interval: 'month'), isNull);
+    });
+
     test('single-tier legacy catalogs can still match by interval', () {
-      expect(planForCheckout(plans, interval: 'month')?['id'], 'plus-month');
+      final legacy = <Map<String, dynamic>>[
+        {'id': 'neo-month', 'plan_id': 'unlimited', 'interval': 'month'},
+        {'id': 'neo-year', 'plan_id': 'unlimited', 'interval': 'year'},
+      ];
+      expect(planForCheckout(legacy, interval: 'month')?['id'], 'neo-month');
+      expect(planForCheckout(legacy, interval: 'year')?['id'], 'neo-year');
     });
   });
 

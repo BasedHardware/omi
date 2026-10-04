@@ -823,13 +823,16 @@ class _PlansSheetState extends State<PlansSheet> {
         return (ai == -1 ? 999 : ai).compareTo(bi == -1 ? 999 : bi);
       });
 
-    // Auto-select current plan's tier, or first tier if none selected
-    if (selectedTierId == null) {
-      final activeTier = sortedTierIds.firstWhereOrNull((tid) => grouped[tid]!.any((p) => p['is_active'] == true));
-      selectedTierId = activeTier ?? sortedTierIds.first;
-    }
-
     final isYearly = selectedPlan == 'yearly';
+    final interval = isYearly ? 'year' : 'month';
+
+    // A tier with no price for this billing period renders no card, so it cannot stay selected.
+    // Select the current plan's tier, or the first tier, among those shown for this period.
+    final visibleTierIds = sortedTierIds.where((tid) => grouped[tid]!.any((p) => p['interval'] == interval)).toList();
+    if (visibleTierIds.isNotEmpty && !visibleTierIds.contains(selectedTierId)) {
+      final activeTier = visibleTierIds.firstWhereOrNull((tid) => grouped[tid]!.any((p) => p['is_active'] == true));
+      selectedTierId = activeTier ?? visibleTierIds.first;
+    }
     final subPlans = context.read<UsageProvider>().subscription?.availablePlans ?? [];
 
     return Column(
