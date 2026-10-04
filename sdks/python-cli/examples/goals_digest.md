@@ -11,17 +11,16 @@ It reads saved JSON exports, makes zero network requests, and generates a self-c
 
 ## 1. Export your goals
 
-Export your active and archived goals using the CLI:
+Export your active goals (up to the maximum 100 limit):
 
 ```sh
-omi --json goal list > goals.json
+omi --json goal list --limit 100 > goals.json
 ```
 
-If you manage a large collection of goals across multiple pagination windows, export each page with `--offset`:
+To include inactive and archived goals in the export, pass the `--include-inactive` flag:
 
 ```sh
-omi --json goal list --limit 100 --offset 0 > goals_page1.json
-omi --json goal list --limit 100 --offset 100 > goals_page2.json
+omi --json goal list --limit 100 --include-inactive > all_goals.json
 ```
 
 ## 2. Generate the Markdown digest
@@ -37,15 +36,15 @@ python goals_digest.py goals.json -o GOALS_DIGEST.md
 You can stream directly from the Omi CLI through Unix pipes without creating intermediate JSON files:
 
 ```sh
-omi --json goal list | python goals_digest.py - -o GOALS_DIGEST.md --force
+omi --json goal list --include-inactive | python goals_digest.py - -o GOALS_DIGEST.md --force
 ```
 
-### Multi-page aggregation and deduplication
+### Multi-file aggregation and deduplication
 
-When passing multiple files from paginated exports, `goals_digest.py` automatically merges records and deduplicates by `id`, keeping the most recently updated entry:
+When combining exports across multiple snapshots or recurring backup files (e.g. weekly snapshots or combining active and archived exports), `goals_digest.py` automatically merges records and deduplicates by `id`, keeping the most recently updated entry:
 
 ```sh
-python goals_digest.py goals_page1.json goals_page2.json -o monthly_digest.md --force
+python goals_digest.py snapshot_week1.json snapshot_week2.json -o monthly_digest.md --force
 ```
 
 ### Filtering by status or type

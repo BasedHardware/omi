@@ -14,11 +14,11 @@ Features:
 - Zero third-party dependencies: strictly Python standard library.
 
 Usage:
-    # Pipe directly from omi CLI
-    omi --json goal list | python goals_digest.py - -o digest.md
+    # Pipe directly from omi CLI (optionally including inactive/archived goals)
+    omi --json goal list --include-inactive | python goals_digest.py - -o digest.md
 
-    # Summarize multiple export pages
-    python goals_digest.py goals_p1.json goals_p2.json -o weekly_digest.md --force
+    # Summarize multiple export files or snapshots
+    python goals_digest.py goals_w1.json goals_w2.json -o weekly_digest.md --force
 
     # Filter by status or goal type
     python goals_digest.py goals.json --status active --type scale
@@ -333,7 +333,7 @@ def generate_markdown_digest(
 
         filtered.append(g)
 
-    # Sort goals: Achieved first, then active by progress descending, then title
+    # Sort goals: Active first (by progress descending), then achieved, then inactive
     def sort_key(item: Dict[str, Any]):
         p = calculate_progress(item)
         c, _ = determine_status(item, p)
