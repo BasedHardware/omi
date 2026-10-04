@@ -91,6 +91,11 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: PROACTIVITY_REDIS_HOST

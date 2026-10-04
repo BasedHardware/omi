@@ -4,10 +4,25 @@ compute_project: based-hardware-dev
 data_plane_project: based-hardware
 overlay:
   llm_gateway:
+    env:
+      # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+      PROACTIVITY_V2_POSTHOG_TOKEN:
+        value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+        category: rollout
+      PROACTIVITY_V2_POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: rollout
     static_address_name: dev-llm-gateway-ilb-ip-address
   gke:
     backend-listen:
       env:
+        # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -154,6 +169,13 @@ overlay:
           category: rollout
     pusher:
       env:
+        # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -417,6 +439,13 @@ overlay:
           source: environment
   desktop_backend:
     env:
+      # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+      PROACTIVITY_V2_POSTHOG_TOKEN:
+        value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+        category: rollout
+      PROACTIVITY_V2_POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         value: 'true'
       FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -447,6 +476,13 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -588,6 +624,13 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -731,6 +774,13 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -835,6 +885,13 @@ overlay:
             secret: POSTHOG_EVENTS_API_KEY
             version: latest
         env:
+          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}

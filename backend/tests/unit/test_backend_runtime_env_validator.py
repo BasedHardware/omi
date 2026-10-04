@@ -502,6 +502,24 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
+    # These gateway/secret fixtures still need the dedicated public v2 binding.
+    public_token = re.search(
+        r'apiKey = "(phc_[^"]+)"',
+        (ROOT.parent / 'desktop/macos/Desktop/Sources/PostHogManager.swift').read_text(),
+    )[1]
+    entries = ',\n'.join(
+        '        ' + json.dumps({'name': name, 'value': value})
+        for name, value in {
+            'PROACTIVITY_V2_POSTHOG_TOKEN': public_token,
+            'PROACTIVITY_V2_POSTHOG_HOST': 'https://us.posthog.com',
+        }.items()
+    )
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        lambda match: match.group(1) + '\n' + entries + ',',
+        payload,
+        flags=re.DOTALL,
+    )
     return with_backend_integration_events_secret(payload)
 
 

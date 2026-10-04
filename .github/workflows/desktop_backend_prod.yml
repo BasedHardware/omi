@@ -355,6 +355,8 @@ jobs:
             --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json
           env_vars: |
+            PROACTIVITY_V2_POSTHOG_TOKEN=phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            PROACTIVITY_V2_POSTHOG_HOST=https://us.posthog.com
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             USE_VERTEX_AI=true
             TTS_PROVIDER=gemini
