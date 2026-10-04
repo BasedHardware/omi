@@ -26,6 +26,13 @@ from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from routers import imports as imports_mod
 from utils.rate_limit_config import RATE_POLICIES
 
+# A test that leaves a file open fails rather than leaking the descriptor (the
+# warning is raised while the file object is collected, so it arrives unraisable).
+pytestmark = [
+    pytest.mark.filterwarnings('error::ResourceWarning'),
+    pytest.mark.filterwarnings('error::pytest.PytestUnraisableExceptionWarning'),
+]
+
 UID = "u1"
 
 
@@ -35,7 +42,8 @@ def _upload(name: str, data: bytes = b"1\n00:00:01,000 --> 00:00:02,000\nhello\n
 
 def _call(upload: UploadFile, **kwargs):
     params = {'language': 'en', 'tz': 'UTC', 'origin': 'other', **kwargs}
-    return asyncio.run(imports_mod.import_transcript_files(file=upload, uid=UID, **params))
+    with upload.file:
+        return asyncio.run(imports_mod.import_transcript_files(file=upload, uid=UID, **params))
 
 
 class _Worker:
@@ -102,11 +110,12 @@ def test_supported_upload_is_staged_and_queued(staged, name):
     response = _call(_upload(name, data), language='es', tz='Europe/Madrid', origin='plaud')
 
     assert (response.job_id, response.status) == ('job-9', ImportJobStatus.pending)
+    assert response.source_type == ImportSourceType.transcript_files
     create.assert_called_once_with(UID)
     queued = worker.wait()
     job_id, uid, staged_path = queued.args
     assert (job_id, uid) == ('job-9', UID)
-    assert open(staged_path, 'rb').read() == data
+    assert Path(staged_path).read_bytes() == data
     assert os.path.dirname(staged_path) == str(tmp_path)
     assert queued.kwargs == {
         'original_filename': name,
