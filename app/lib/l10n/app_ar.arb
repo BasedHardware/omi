@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "تحقق من الاتصال",
     "forYou": "من أجلك",
     "stopThese": "إيقاف هذه",
-    "dismiss": "تجاهل"
+    "dismiss": "تجاهل",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Tarkista yhteys",
     "forYou": "Sinulle",
     "stopThese": "Lopeta nämä",
-    "dismiss": "Hylkää"
+    "dismiss": "Hylkää",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

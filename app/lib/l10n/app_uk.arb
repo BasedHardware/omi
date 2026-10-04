@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Перевірте з'єднання",
     "forYou": "Для вас",
     "stopThese": "Вимкнути такі",
-    "dismiss": "Приховати"
+    "dismiss": "Приховати",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

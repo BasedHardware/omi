@@ -9203,6 +9203,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncCardDownloadingTitle => 'جارٍ التنزيل من جهازك';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current من $total';
   }

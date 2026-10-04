@@ -10972,6 +10972,27 @@
     "@syncCardDownloadingTitle": {
         "description": "Top status card: phase title when downloading recordings from the Omi device over BLE/Wi-Fi"
     },
+    "syncCardDownloadPercent": "{percent}%",
+    "@syncCardDownloadPercent": {
+        "description": "Offline Sync status card: overall device-download percent. Not shown on recording rows.",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "@syncCardDownloadPercentSpeed": {
+        "description": "Offline Sync status card: overall device-download percent and speed. Not shown on recording rows.",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "speed": {
+                "type": "String"
+            }
+        }
+    },
     "syncCardProgressOf": "{current} of {total}",
     "@syncCardProgressOf": {
         "description": "Top status card: secondary progress line under the phase title.",

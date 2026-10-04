@@ -9285,6 +9285,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Pobieranie z Twojego urządzenia';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current z $total';
   }

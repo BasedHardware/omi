@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Skontrolujte pripojenie",
     "forYou": "Pre vás",
     "stopThese": "Zastaviť tieto",
-    "dismiss": "Skryť"
+    "dismiss": "Skryť",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

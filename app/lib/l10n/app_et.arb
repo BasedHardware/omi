@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Kontrollige ühendust",
     "forYou": "Sulle",
     "stopThese": "Peata need",
-    "dismiss": "Peida"
+    "dismiss": "Peida",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }
