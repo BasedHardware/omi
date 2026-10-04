@@ -348,11 +348,11 @@ def test_log_line_is_fixed_format_and_content_free(caplog):
     lines = [r.message for r in caplog.records]
     assert lines[0] == (
         'event=capture_group_containment mode=shadow phase=jev would_join=true '
-        'reason=contained jev_p=0.750000 basis=full dropped_segments=0'
+        'reason=contained jev_p=0.750000 basis=full dropped_segments=0 speech=user'
     )
     assert lines[1] == (
         'event=capture_group_containment mode=off phase=rule would_join=false '
-        'reason=timing jev_p=unavailable basis=full dropped_segments=0'
+        'reason=timing jev_p=unavailable basis=full dropped_segments=0 speech=user'
     )
 
 
@@ -362,7 +362,7 @@ def test_log_labels_and_score_are_clamped(caplog):
         cc.record_capture_containment(decision, mode='bogus', phase='bogus', jev_p=1.5)
     assert caplog.records[0].message == (
         'event=capture_group_containment mode=off phase=rule would_join=false '
-        'reason=ineligible jev_p=unavailable basis=full dropped_segments=0'
+        'reason=ineligible jev_p=unavailable basis=full dropped_segments=0 speech=user'
     )
 
 
@@ -374,7 +374,7 @@ def test_log_dropped_segments_is_allowlisted_and_clamped(caplog, value, expected
     object.__setattr__(decision, 'dropped_segments', value)
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
         cc.record_capture_containment(decision, mode='shadow')
-    assert caplog.records[0].message.endswith('dropped_segments=%d' % expected)
+    assert caplog.records[0].message.endswith('dropped_segments=%d speech=user' % expected)
 
 
 @pytest.mark.parametrize('basis', ['full', 'sampled', 'PRIVATE-SENTINEL', 42])
@@ -384,7 +384,7 @@ def test_log_basis_is_allowlisted_and_clamped(caplog, basis):
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
         cc.record_capture_containment(decision, mode='shadow')
     expected = basis if basis in ('full', 'sampled') else 'full'
-    assert caplog.records[0].message.endswith('jev_p=unavailable basis=%s dropped_segments=0' % expected)
+    assert caplog.records[0].message.endswith('jev_p=unavailable basis=%s dropped_segments=0 speech=user' % expected)
     assert 'PRIVATE-SENTINEL' not in caplog.records[0].message
 
 
@@ -1344,7 +1344,7 @@ def test_all_degenerate_pair_reports_drops_without_user_speech():
     large = row('laptop', 'desktop', 0, 300, [segment('d e f', 100.0, end=99.0)])
     for first, second in ((small, large), (large, small)):
         decision = cc.measure_capture_containment(first, second)
-        assert not decision.would_join and decision.reason == 'no_user_speech'
+        assert not decision.would_join and decision.reason == 'no_speech'
         assert decision.dropped_segments == 2
 
 
