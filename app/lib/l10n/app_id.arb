@@ -3867,5 +3867,11 @@
     "playbackBackToCurrent": "Kembali ke Saat Ini",
     "playbackAudioUnavailable": "Audio Tidak Tersedia",
     "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuat",
-    "playbackAudioNetworkFailed": "Periksa Koneksi"
+    "playbackAudioNetworkFailed": "Periksa Koneksi",
+    "capturePendantDisconnectedShort": "Omi akan menyambung kembali sendiri",
+    "forYou": "Untuk Anda",
+    "stopThese": "Hentikan Ini",
+    "dismiss": "Tutup",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

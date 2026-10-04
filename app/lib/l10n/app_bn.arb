@@ -11389,5 +11389,11 @@
     "playbackBackToCurrent": "বর্তমানে ফিরে যান",
     "playbackAudioUnavailable": "অডিও উপলব্ধ নয়",
     "playbackAudioLoadFailed": "অডিও লোড করা যায়নি",
-    "playbackAudioNetworkFailed": "সংযোগ পরীক্ষা করুন"
+    "playbackAudioNetworkFailed": "সংযোগ পরীক্ষা করুন",
+    "capturePendantDisconnectedShort": "Omi নিজে থেকেই আবার সংযোগ করবে",
+    "forYou": "আপনার জন্য",
+    "stopThese": "এগুলো বন্ধ করুন",
+    "dismiss": "সরিয়ে দিন",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

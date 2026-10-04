@@ -78,6 +78,7 @@ def test_capture_fields_stay_out_of_both_json_schemas(mode):
     schema = TranscriptSegment.model_json_schema(mode=mode)
     assert 'audio_capture_start' not in json.dumps(schema)
     assert 'audio_capture_end' not in json.dumps(schema)
+    assert 'audio_source' not in json.dumps(schema)
 
 
 def test_known_window_survives_copy_parent_dump_and_roundtrip():
@@ -119,6 +120,46 @@ def test_for_client_strips_capture_fields_only():
     assert 'audio_capture_start' not in stripped and 'audio_capture_end' not in stripped
     assert stripped['id'] == 'k'
     assert transcript_segment_for_client(BASELINE_DUMP) == BASELINE_DUMP
+
+
+def test_for_client_strips_audio_source():
+    seg = segment(
+        'k',
+        start=0.0,
+        end=1.0,
+        audio_source={'type': 'sync', 'start': 100.0, 'end': 101.0},
+    )
+    stripped = transcript_segment_for_client(seg.model_dump())
+    assert 'audio_source' not in stripped
+    assert stripped['id'] == 'k'
+
+
+def test_audio_source_survives_parent_dump_and_roundtrip_python_only():
+    seg = segment('k', 'Hi.', start=0.0, end=1.0, audio_source={'type': 'sync', 'start': 100.0, 'end': 101.0})
+    dumped = seg.model_dump()
+    assert dumped['audio_source'] == {'type': 'sync', 'start': 100.0, 'end': 101.0}
+    copied = seg.model_copy(deep=True)
+    assert copied.audio_source == {'type': 'sync', 'start': 100.0, 'end': 101.0}
+    assert TranscriptSegment(**json.loads(json.dumps(dumped))).audio_source == {
+        'type': 'sync',
+        'start': 100.0,
+        'end': 101.0,
+    }
+
+    conversation = Conversation(
+        id='c',
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        structured={},
+        transcript_segments=[seg],
+    )
+    nested = conversation.model_dump()['transcript_segments'][0]
+    assert nested['audio_source'] == {'type': 'sync', 'start': 100.0, 'end': 101.0}
+    served = conversation.model_dump(mode='json')['transcript_segments'][0]
+    assert 'audio_source' not in served
+
+    assert 'audio_source' not in segment('plain').model_dump()
 
 
 def _merged_window(persisted, fresh):

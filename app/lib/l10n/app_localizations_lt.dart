@@ -9272,6 +9272,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Atsisiunčiama iš jūsų įrenginio';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current iš $total';
   }
@@ -11267,6 +11277,9 @@ class AppLocalizationsLt extends AppLocalizations {
       'Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi pats vėl prisijungs';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name ir kiti';
   }
@@ -12412,4 +12425,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Patikrinkite ryšį';
+
+  @override
+  String get forYou => 'Jums';
+
+  @override
+  String get stopThese => 'Sustabdyti šiuos';
+
+  @override
+  String get dismiss => 'Slėpti';
 }

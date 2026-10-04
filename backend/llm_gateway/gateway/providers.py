@@ -22,6 +22,7 @@ from llm_gateway.gateway.accounting import (
     cache_requested_for_anthropic_request,
     cache_write_ttl_for_anthropic_request,
     cache_requested_for_openai_request,
+    complete_openai_billable_usage,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
@@ -327,17 +328,23 @@ class OpenAICompatibleChatCompletionProvider:
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
         raw_usage = parsed.get('usage')
         usage_raw = raw_usage if isinstance(raw_usage, Mapping) else {}
-        input_tokens = _nonnegative_int_or_zero(usage_raw.get('input_tokens', usage_raw.get('prompt_tokens')))
+        raw_input = usage_raw.get('input_tokens', usage_raw.get('prompt_tokens'))
+        input_tokens = _nonnegative_int_or_zero(raw_input)
         output_tokens = _nonnegative_int_or_zero(usage_raw.get('output_tokens', usage_raw.get('completion_tokens')))
         return ProviderResponse(
             response=parsed,
             accounting=ProviderResponseMetadata(
-                usage=ProviderUsage(
-                    prompt_tokens=input_tokens,
-                    uncached_input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    total_tokens=input_tokens + output_tokens,
-                )
+                billable_usage_complete=complete_openai_billable_usage(usage_raw),
+                usage=(
+                    ProviderUsage(
+                        prompt_tokens=input_tokens,
+                        uncached_input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        total_tokens=input_tokens + output_tokens,
+                    )
+                    if isinstance(raw_input, int) and not isinstance(raw_input, bool) and raw_input >= 0
+                    else None
+                ),
             ),
         )
 

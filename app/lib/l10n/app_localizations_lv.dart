@@ -9281,6 +9281,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Lejupielāde no jūsu ierīces';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current no $total';
   }
@@ -11273,6 +11283,9 @@ class AppLocalizationsLv extends AppLocalizations {
       'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi pats atjaunos savienojumu';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name un citi';
   }
@@ -12418,4 +12431,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Pārbaudiet savienojumu';
+
+  @override
+  String get forYou => 'Jums';
+
+  @override
+  String get stopThese => 'Apturēt šos';
+
+  @override
+  String get dismiss => 'Paslēpt';
 }

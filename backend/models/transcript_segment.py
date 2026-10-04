@@ -26,6 +26,26 @@ SENTENCE_FINDALL_RE = re.compile(
 # treated as one continuing utterance. Mirrors the window _should_merge_same_speaker uses.
 CROSS_SPEAKER_REPAIR_MAX_GAP_SECONDS = 3
 
+AUDIO_SOURCE_MERGE_TOLERANCE_SECONDS = 0.001
+
+
+def _sync_source_window(source: Any) -> Optional[Tuple[float, float]]:
+    """Absolute ``(start, end)`` of a stored sync provenance marker, or None."""
+    if not isinstance(source, dict) or source.get('type') != 'sync':
+        return None
+    start, end = source.get('start'), source.get('end')
+    if (
+        isinstance(start, bool)
+        or isinstance(end, bool)
+        or not isinstance(start, (int, float))
+        or not isinstance(end, (int, float))
+        or not math.isfinite(start)
+        or not math.isfinite(end)
+        or start >= end
+    ):
+        return None
+    return float(start), float(end)
+
 
 def legacy_conversation_segment_id(conversation_id: str, index: int) -> str:
     """Stable IDs for legacy stored transcripts, shared by reads and manual writes."""
@@ -95,6 +115,7 @@ class TranscriptSegment(BaseModel):
     audio_capture_run: SkipJsonSchema[Optional[int]] = Field(default=None, exclude=True)
     audio_capture_start: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     audio_capture_end: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
+    audio_source: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
     # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
     # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
     voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
@@ -122,7 +143,7 @@ class TranscriptSegment(BaseModel):
         # rewrites; JSON-mode dumps are API responses, which must never carry them.
         if getattr(info, 'mode', 'python') == 'json':
             return data
-        for key in ('audio_capture_start', 'audio_capture_end'):
+        for key in ('audio_capture_start', 'audio_capture_end', 'audio_source'):
             value = getattr(self, key)
             if value is not None and key not in excluded and (included is None or key in included):
                 data[key] = value
@@ -158,6 +179,34 @@ class TranscriptSegment(BaseModel):
 
     def _clear_audio_capture_window(self) -> None:
         self.audio_capture_start = self.audio_capture_end = None
+
+    def _clear_audio_evidence(self) -> None:
+        self._clear_audio_capture_window()
+        self.audio_source = None
+
+    def _merge_audio_source(self, other: 'TranscriptSegment') -> None:
+        a_window = _sync_source_window(self.audio_source)
+        b_window = _sync_source_window(other.audio_source)
+        if a_window is None or b_window is None:
+            self.audio_source = None
+            return
+        offsets = (
+            a_window[0] - self.start,
+            a_window[1] - self.end,
+            b_window[0] - other.start,
+            b_window[1] - other.end,
+        )
+        if (
+            max(offsets) - min(offsets) > AUDIO_SOURCE_MERGE_TOLERANCE_SECONDS
+            or max(a_window[0], b_window[0]) > min(a_window[1], b_window[1]) + AUDIO_SOURCE_MERGE_TOLERANCE_SECONDS
+        ):
+            self.audio_source = None
+            return
+        self.audio_source = {
+            'type': 'sync',
+            'start': min(a_window[0], b_window[0]),
+            'end': max(a_window[1], b_window[1]),
+        }
 
     def _merge_audio_capture_window(self, other: 'TranscriptSegment') -> None:
         a_start, a_end = self.audio_capture_start, self.audio_capture_end
@@ -336,6 +385,7 @@ class TranscriptSegment(BaseModel):
             if len(a.text) >= 125 and a.text[-1:] in SENTENCE_ENDERS and not _starts_with_lowercase_cased(b.text):
                 return a, b
             a.text += f' {b.text}'
+            a._merge_audio_source(b)
             a.end = b.end
             a.translations = _join_translations(a, b)
             a._merge_audio_capture_window(b)
@@ -399,11 +449,12 @@ class TranscriptSegment(BaseModel):
                     if _can_backward_merge_first_sentence(first_sentence, rest, last_incomplete):
                         a.text = f'{a.text} {first_sentence}'.strip()
                         b.text = rest
-                        a._clear_audio_capture_window()
-                        b._clear_audio_capture_window()
+                        a._clear_audio_evidence()
+                        b._clear_audio_evidence()
                         return a, b
                     if _can_backward_merge_single_sentence(first_sentence, last_incomplete):
                         a.text = f'{a.text} {first_sentence}'.strip()
+                        a.audio_source = None
                         a._merge_audio_capture_window(b)
                         _absorb(b, a)
                         return a, None
@@ -412,15 +463,17 @@ class TranscriptSegment(BaseModel):
                     if prefix:
                         a.text = prefix
                         a.end = min(a.end, b.start)
-                        a._clear_audio_capture_window()
-                        b._clear_audio_capture_window()
+                        a._clear_audio_evidence()
+                        b._clear_audio_evidence()
                         return a, b
                     a.text = ""
+                    b.audio_source = None
                     b._merge_audio_capture_window(a)
                     _absorb(a, b)
                     return None, b
             if _should_merge_same_speaker(a, b):
                 a.text += f' {b.text}'
+                a._merge_audio_source(b)
                 a.end = b.end
                 a._merge_audio_capture_window(b)
                 _absorb(b, a)
@@ -428,6 +481,7 @@ class TranscriptSegment(BaseModel):
 
             if _should_merge_lowercase_continuation(a, b):
                 a.text += f' {b.text}'
+                a._merge_audio_source(b)
                 a.end = b.end
                 a._merge_audio_capture_window(b)
                 _absorb(b, a)
@@ -470,7 +524,11 @@ class TranscriptSegment(BaseModel):
 
 
 def transcript_segment_for_client(segment: Mapping[str, Any]) -> Dict[str, Any]:
-    return {key: value for key, value in segment.items() if key not in ('audio_capture_start', 'audio_capture_end')}
+    return {
+        key: value
+        for key, value in segment.items()
+        if key not in ('audio_capture_start', 'audio_capture_end', 'audio_source')
+    }
 
 
 class ImprovedTranscriptSegment(BaseModel):

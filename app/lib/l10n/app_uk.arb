@@ -3832,5 +3832,11 @@
     "playbackBackToCurrent": "Назад до поточного",
     "playbackAudioUnavailable": "Аудіо недоступне",
     "playbackAudioLoadFailed": "Не вдалося завантажити аудіо",
-    "playbackAudioNetworkFailed": "Перевірте з'єднання"
+    "playbackAudioNetworkFailed": "Перевірте з'єднання",
+    "capturePendantDisconnectedShort": "Omi перепідключиться сам",
+    "forYou": "Для вас",
+    "stopThese": "Вимкнути такі",
+    "dismiss": "Приховати",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

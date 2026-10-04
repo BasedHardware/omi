@@ -9279,6 +9279,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Memuat turun daripada peranti anda';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current daripada $total';
   }
@@ -11272,6 +11282,9 @@ class AppLocalizationsMs extends AppLocalizations {
       'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi akan bersambung semula sendiri';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name dan lain-lain';
   }
@@ -12421,4 +12434,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Semak Sambungan';
+
+  @override
+  String get forYou => 'Untuk Anda';
+
+  @override
+  String get stopThese => 'Hentikan Ini';
+
+  @override
+  String get dismiss => 'Tutup';
 }

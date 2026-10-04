@@ -3832,5 +3832,11 @@
     "playbackBackToCurrent": "Zurück zum Aktuellen",
     "playbackAudioUnavailable": "Audio nicht verfügbar",
     "playbackAudioLoadFailed": "Audio konnte nicht geladen werden",
-    "playbackAudioNetworkFailed": "Verbindung prüfen"
+    "playbackAudioNetworkFailed": "Verbindung prüfen",
+    "capturePendantDisconnectedShort": "Omi verbindet sich von selbst neu",
+    "forYou": "Für dich",
+    "stopThese": "Diese stoppen",
+    "dismiss": "Ausblenden",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

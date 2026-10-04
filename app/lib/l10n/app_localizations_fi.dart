@@ -9260,6 +9260,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Ladataan laitteeltasi';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current / $total';
   }
@@ -11248,6 +11258,9 @@ class AppLocalizationsFi extends AppLocalizations {
       'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi yhdistää itsestään uudelleen';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name ja muut';
   }
@@ -12394,4 +12407,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Tarkista yhteys';
+
+  @override
+  String get forYou => 'Sinulle';
+
+  @override
+  String get stopThese => 'Lopeta nämä';
+
+  @override
+  String get dismiss => 'Hylkää';
 }

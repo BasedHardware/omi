@@ -3832,5 +3832,11 @@
     "playbackBackToCurrent": "Πίσω στο τρέχον",
     "playbackAudioUnavailable": "Ο ήχος δεν είναι διαθέσιμος",
     "playbackAudioLoadFailed": "Δεν ήταν δυνατή η φόρτωση του ήχου",
-    "playbackAudioNetworkFailed": "Ελέγξτε τη σύνδεση"
+    "playbackAudioNetworkFailed": "Ελέγξτε τη σύνδεση",
+    "capturePendantDisconnectedShort": "Το Omi θα επανασυνδεθεί μόνο του",
+    "forYou": "Για εσάς",
+    "stopThese": "Διακοπή αυτών",
+    "dismiss": "Απόρριψη",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

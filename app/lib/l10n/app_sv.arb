@@ -3832,5 +3832,11 @@
     "playbackBackToCurrent": "Tillbaka till aktuell",
     "playbackAudioUnavailable": "Ljudet är inte tillgängligt",
     "playbackAudioLoadFailed": "Ljudet kunde inte laddas",
-    "playbackAudioNetworkFailed": "Kontrollera anslutningen"
+    "playbackAudioNetworkFailed": "Kontrollera anslutningen",
+    "capturePendantDisconnectedShort": "Omi ansluter igen av sig själv",
+    "forYou": "För dig",
+    "stopThese": "Stoppa dessa",
+    "dismiss": "Avvisa",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

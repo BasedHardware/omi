@@ -9296,6 +9296,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Letöltés az eszközödről';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current / $total';
   }
@@ -11290,6 +11300,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Az Omi magától újracsatlakozik';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name és mások';
   }
@@ -12438,4 +12451,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Ellenőrizze a kapcsolatot';
+
+  @override
+  String get forYou => 'Önnek';
+
+  @override
+  String get stopThese => 'Ezek leállítása';
+
+  @override
+  String get dismiss => 'Elrejtés';
 }

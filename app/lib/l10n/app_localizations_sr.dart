@@ -9265,6 +9265,16 @@ class AppLocalizationsSr extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Преузимање са вашег уређаја';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current од $total';
   }
@@ -11256,6 +11266,9 @@ class AppLocalizationsSr extends AppLocalizations {
       'Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi ће се сам поново повезати';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
@@ -12402,4 +12415,13 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Proverite vezu';
+
+  @override
+  String get forYou => 'За вас';
+
+  @override
+  String get stopThese => 'Заустави ово';
+
+  @override
+  String get dismiss => 'Сакриј';
 }

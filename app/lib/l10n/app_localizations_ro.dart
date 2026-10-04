@@ -9302,6 +9302,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Se descarcă de pe dispozitivul tău';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current din $total';
   }
@@ -11298,6 +11308,9 @@ class AppLocalizationsRo extends AppLocalizations {
       'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi se va reconecta singur';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name și alții';
   }
@@ -12445,4 +12458,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Verificați conexiunea';
+
+  @override
+  String get forYou => 'Pentru tine';
+
+  @override
+  String get stopThese => 'Oprește acestea';
+
+  @override
+  String get dismiss => 'Ascunde';
 }

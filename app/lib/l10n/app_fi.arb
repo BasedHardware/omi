@@ -3832,5 +3832,11 @@
     "playbackBackToCurrent": "Takaisin nykyiseen",
     "playbackAudioUnavailable": "Ääni ei saatavilla",
     "playbackAudioLoadFailed": "Ääntä ei voitu ladata",
-    "playbackAudioNetworkFailed": "Tarkista yhteys"
+    "playbackAudioNetworkFailed": "Tarkista yhteys",
+    "capturePendantDisconnectedShort": "Omi yhdistää itsestään uudelleen",
+    "forYou": "Sinulle",
+    "stopThese": "Lopeta nämä",
+    "dismiss": "Hylkää",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

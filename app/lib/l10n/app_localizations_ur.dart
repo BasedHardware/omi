@@ -9273,6 +9273,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncCardDownloadingTitle => 'آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$total میں سے $current';
   }
@@ -11257,6 +11267,9 @@ class AppLocalizationsUr extends AppLocalizations {
       'آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi خود دوبارہ جڑ جائے گا';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name اور دیگر';
   }
@@ -12403,4 +12416,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'کنکشن چیک کریں';
+
+  @override
+  String get forYou => 'آپ کے لیے';
+
+  @override
+  String get stopThese => 'یہ روکیں';
+
+  @override
+  String get dismiss => 'چھپائیں';
 }

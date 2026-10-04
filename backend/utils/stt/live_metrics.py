@@ -211,6 +211,15 @@ COST_SHADOW = Counter(
     ['agreement', 'static_primary', 'proposed_primary'],
 )
 COST_FAIL_OPEN = Counter('omi_stt_cost_routing_fail_open_total', 'Configured-order router recovery', ['reason'])
+COST_NO_PERMITTED_TARGET = Counter(
+    'omi_stt_cost_routing_no_permitted_target_total',
+    'Routing decisions with no permitted live STT target',
+)
+COST_LANGUAGE_STATE = Counter(
+    'omi_stt_cost_routing_language_state_total',
+    'Global vs language target health disagreements observed at selection',
+    ['target', 'comparison'],
+)
 
 PROVIDER_FAMILIES = ('parakeet', 'modulate', 'soniox', 'deepgram', 'unknown')
 

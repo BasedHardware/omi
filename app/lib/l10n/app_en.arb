@@ -10972,6 +10972,27 @@
     "@syncCardDownloadingTitle": {
         "description": "Top status card: phase title when downloading recordings from the Omi device over BLE/Wi-Fi"
     },
+    "syncCardDownloadPercent": "{percent}%",
+    "@syncCardDownloadPercent": {
+        "description": "Offline Sync status card: overall device-download percent. Not shown on recording rows.",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "@syncCardDownloadPercentSpeed": {
+        "description": "Offline Sync status card: overall device-download percent and speed. Not shown on recording rows.",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "speed": {
+                "type": "String"
+            }
+        }
+    },
     "syncCardProgressOf": "{current} of {total}",
     "@syncCardProgressOf": {
         "description": "Top status card: secondary progress line under the phase title.",
@@ -13365,6 +13386,10 @@
     "@capturePendantDisconnectedDetail": {
         "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
     },
+    "capturePendantDisconnectedShort": "Omi reconnects on its own",
+    "@capturePendantDisconnectedShort": {
+        "description": "Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation."
+    },
     "participantsSummaryUncounted": "{name} + others",
     "@participantsSummaryUncounted": {
         "description": "Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'",
@@ -14803,5 +14828,17 @@
     "playbackAudioNetworkFailed": "Check Connection",
     "@playbackAudioNetworkFailed": {
         "description": "Inline label when fetching the audio URLs fails on transport"
+    },
+    "forYou": "For You",
+    "@forYou": {
+        "description": "Home proactivity feed section title"
+    },
+    "stopThese": "Stop These",
+    "@stopThese": {
+        "description": "Disable the producer of a For You card"
+    },
+    "dismiss": "Dismiss",
+    "@dismiss": {
+        "description": "Hide a For You card"
     }
 }

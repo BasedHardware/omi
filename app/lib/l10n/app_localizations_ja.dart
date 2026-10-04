@@ -9115,6 +9115,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncCardDownloadingTitle => 'デバイスからダウンロード中';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$total件中$current件';
   }
@@ -11067,6 +11077,9 @@ class AppLocalizationsJa extends AppLocalizations {
       'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omiは自動で再接続します';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
   }
@@ -12200,4 +12213,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => '接続を確認してください';
+
+  @override
+  String get forYou => 'あなたへのおすすめ';
+
+  @override
+  String get stopThese => 'この種類を停止';
+
+  @override
+  String get dismiss => '非表示';
 }

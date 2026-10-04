@@ -9102,6 +9102,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCardDownloadingTitle => '正在从你的设备下载';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '第 $current 项,共 $total 项';
   }
@@ -11045,6 +11055,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi 会自动重新连接';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name等人';
   }
@@ -12179,4 +12192,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => '请检查网络连接';
+
+  @override
+  String get forYou => '为你推荐';
+
+  @override
+  String get stopThese => '停止此类推荐';
+
+  @override
+  String get dismiss => '忽略';
 }

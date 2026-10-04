@@ -9322,6 +9322,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Λήψη από τη συσκευή σας';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current από $total';
   }
@@ -11320,6 +11330,9 @@ class AppLocalizationsEl extends AppLocalizations {
       'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Το Omi θα επανασυνδεθεί μόνο του';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name και άλλοι';
   }
@@ -12470,4 +12483,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Ελέγξτε τη σύνδεση';
+
+  @override
+  String get forYou => 'Για εσάς';
+
+  @override
+  String get stopThese => 'Διακοπή αυτών';
+
+  @override
+  String get dismiss => 'Απόρριψη';
 }

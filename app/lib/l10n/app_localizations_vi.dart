@@ -9257,6 +9257,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Đang tải xuống từ thiết bị của bạn';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current trên $total';
   }
@@ -11242,6 +11252,9 @@ class AppLocalizationsVi extends AppLocalizations {
       'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi sẽ tự kết nối lại';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name và những người khác';
   }
@@ -12385,4 +12398,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Kiểm tra kết nối';
+
+  @override
+  String get forYou => 'Dành Cho Bạn';
+
+  @override
+  String get stopThese => 'Dừng Loại Này';
+
+  @override
+  String get dismiss => 'Ẩn';
 }
