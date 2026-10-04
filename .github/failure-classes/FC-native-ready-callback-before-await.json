@@ -8,7 +8,7 @@
     "app/test/services/devices/transports/native_ble_transport_test.dart"
   ],
   "evidence_prs": [
-    "https://github.com/BasedHardware/omi/pull/20373"
+    20373
   ],
   "scope_hints": [
     "app/lib/services/devices/transports/**"
