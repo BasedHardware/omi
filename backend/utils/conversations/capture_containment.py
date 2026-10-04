@@ -159,11 +159,12 @@ def _in_window_segments(
     placed: list[tuple[datetime, datetime, bool, tuple[str, ...], int]] = []
     for index, segment in enumerate(collected):
         text = _field(segment, 'text')
+        if isinstance(text, str):
+            total_chars += len(text)
+            if len(text) > MAX_SEGMENT_CHARS or total_chars > MAX_CAPTURE_CHARS:
+                return None
         if not isinstance(text, str) or not text.strip():
             continue
-        total_chars += len(text)
-        if len(text) > MAX_SEGMENT_CHARS or total_chars > MAX_CAPTURE_CHARS:
-            return None
         if _field(segment, 'audio_alignment') == 'unplaced':
             return None
         start, end = _field(segment, 'start'), _field(segment, 'end')
@@ -198,8 +199,8 @@ def _match_utterances(
     matched_words = 0
     matched_tokens: set[str] = set()
     matched_utterances: set[tuple[str, ...]] = set()
-    support_start: datetime | None = None
-    support_end: datetime | None = None
+    covered_until: datetime | None = None
+    support_seconds = 0.0
     last_consumed = -1
     for u_start, u_end, u_words in small_user:
         candidates = []
@@ -242,11 +243,11 @@ def _match_utterances(
         for block in blocks:
             matched_tokens.update(u_words[block.a : block.a + block.size])
         matched_utterances.add(u_words)
-        support_start = u_start if support_start is None else min(support_start, u_start)
-        support_end = u_end if support_end is None else max(support_end, u_end)
-    support_seconds = (
-        (support_end - support_start).total_seconds() if support_start is not None and support_end is not None else 0.0
-    )
+        if covered_until is None or u_start >= covered_until:
+            support_seconds += (u_end - u_start).total_seconds()
+        elif u_end > covered_until:
+            support_seconds += (u_end - covered_until).total_seconds()
+        covered_until = u_end if covered_until is None else max(covered_until, u_end)
     return matched_words, matched_tokens, matched_utterances, support_seconds
 
 

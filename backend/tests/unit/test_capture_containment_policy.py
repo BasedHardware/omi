@@ -60,7 +60,7 @@ def segment(text, start, is_user=True, end=None, **extra):
     return {
         'text': text,
         'start': start,
-        'end': start + 8.0 if end is None else end,
+        'end': start + 12.0 if end is None else end,
         'is_user': is_user,
         'speaker': 'SPEAKER_00',
         **extra,
@@ -149,6 +149,7 @@ def test_on_mode_joins_the_complementary_pair_with_containment_evidence(seam, mo
     assert methods == {'user_speech_containment'}
     assert ('capture_group_joined', 'applied') in seam['events']
     lines = containment_lines(caplog)
+    assert all(token not in '\n'.join(lines) for token in (UID, 'pendant', 'laptop', 'alpha', 'bravo'))
     assert len(lines) == 1
     assert lines[0] == (
         'event=capture_group_containment mode=on phase=rule would_join=true ' 'reason=contained jev_p=unavailable'
@@ -160,6 +161,18 @@ def test_on_mode_joins_the_complementary_pair_with_containment_evidence(seam, mo
     for cid in ('pendant', 'laptop'):
         assert seam['store'].rows[path(cid)]['transcript_segments'] == before[path(cid)]['transcript_segments']
         assert seam['store'].rows[path(cid)]['structured'] == before[path(cid)]['structured']
+
+
+def test_sparse_matches_with_long_span_do_not_group(seam, monkeypatch):
+    monkeypatch.setenv(containment_module.MODE_ENV, 'on')
+    pendant, laptop = complementary_rows()
+    for record in (pendant, laptop):
+        for item in record['transcript_segments']:
+            if item.get('is_user'):
+                item['end'] = item['start'] + 8.0
+    seam['store'].rows.update({path('pendant'): pendant, path('laptop'): laptop})
+    policy.link_duplicate_captures(UID, Conversation(**seam['store'].rows[path('laptop')]))
+    assert all('capture_group' not in r for r in seam['store'].rows.values())
 
 
 def test_shadow_computes_and_logs_without_grouping(seam, monkeypatch, caplog):

@@ -539,11 +539,13 @@ on the other side (both ends within 12 seconds), and accepts a pair only when
 difflib matching blocks cover at least 0.8 of the utterance tokens and share at
 least two distinct adjacent bigrams. A join additionally requires 40+ matched
 words, 20+ distinct matched tokens, 3+ distinct matched utterances, 45+ seconds
-of matched support, and matched/total coverage of at least 0.8. Every threshold
+of union duration of matched utterance intervals (not wall-span gaps), and
+matched/total coverage of at least 0.8. Every threshold
 is a deliberately conservative heuristic, not calibrated on real account data.
 All inputs are
 bounded (segments, characters, words, candidate bundles) and every bound fails
-closed as `bounds`; missing or non-`is_user` attribution, malformed timing, and
+closed as `bounds`; every string, including whitespace-only text, counts toward
+the character budgets; missing or non-`is_user` attribution, malformed timing, and
 speech outside the shared window are never evidence. Modes: `off` runs nothing
 new, `shadow` computes and logs the fixed content-free line
 `event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=…`

@@ -40,7 +40,7 @@ def segment(text, start, is_user=True, end=None, **extra):
     return {
         'text': text,
         'start': start,
-        'end': start + 8.0 if end is None else end,
+        'end': start + 12.0 if end is None else end,
         'is_user': is_user,
         'speaker': 'SPEAKER_00',
         **extra,
@@ -86,7 +86,7 @@ def test_complementary_pair_joins_in_both_orders_and_symmetric_rule_cannot():
         assert decision.would_join and decision.reason == 'contained'
         assert decision.matched_words == 52 and decision.smaller_words == 64
         assert decision.matched_utterances == 4 and decision.distinct_words >= 20
-        assert decision.support_seconds == 188.0 and decision.coverage == 0.8125
+        assert decision.support_seconds == 48.0 and decision.coverage == 0.8125
 
 
 def test_evidence_is_numeric_only():
@@ -368,8 +368,12 @@ def test_natural_language_pair_with_residual_skew():
 def test_three_tiny_exact_fragments_are_too_small():
     fragments = [' '.join(text.split()[:10]) for text in UTTERANCES[:3]]
     times = [80.0, 140.0, 200.0]
-    pendant = row('pendant', 'omi', 0, 300, [segment(text, start) for text, start in zip(fragments, times)])
-    laptop = row('laptop', 'desktop', 0, 300, [segment(text, start) for text, start in zip(fragments, times)])
+    pendant = row(
+        'pendant', 'omi', 0, 300, [segment(text, start, end=start + 16.0) for text, start in zip(fragments, times)]
+    )
+    laptop = row(
+        'laptop', 'desktop', 0, 300, [segment(text, start, end=start + 16.0) for text, start in zip(fragments, times)]
+    )
     decision = cc.measure_capture_containment(pendant, laptop)
     assert not decision.would_join and decision.reason == 'too_small'
 
@@ -378,9 +382,15 @@ def test_two_large_matched_utterances_do_not_join():
     texts = [text + ' extra' + ' word' * 7 for text in UTTERANCES[:2]]
     texts = [' '.join(text.split()[:24]) for text in texts]
     times = [80.0, 200.0]
-    pendant = row('pendant', 'omi', 0, 300, [segment(text, start) for text, start in zip(texts, times)])
+    pendant = row(
+        'pendant', 'omi', 0, 300, [segment(text, start, end=start + 30.0) for text, start in zip(texts, times)]
+    )
     laptop = row(
-        'laptop', 'desktop', 0, 300, [segment(transcript_variant(text), start) for text, start in zip(texts, times)]
+        'laptop',
+        'desktop',
+        0,
+        300,
+        [segment(transcript_variant(text), start, end=start + 30.0) for text, start in zip(texts, times)],
     )
     decision = cc.measure_capture_containment(pendant, laptop)
     assert not decision.would_join and decision.reason == 'too_small' and decision.matched_utterances == 2
@@ -403,8 +413,8 @@ def test_capture_character_bound_rejects():
 def test_capture_word_bound_rejects():
     text = ' '.join('word%03d' % index for index in range(124))
     segments = [segment(text, index * 10.0) for index in range(130)]
-    pendant = row('pendant', 'omi', 0, 1300, segments)
-    laptop = row('laptop', 'desktop', 0, 1300, [dict(item) for item in segments])
+    pendant = row('pendant', 'omi', 0, 1310, segments)
+    laptop = row('laptop', 'desktop', 0, 1310, [dict(item) for item in segments])
     assert cc.measure_capture_containment(pendant, laptop).reason == 'bounds'
 
 
@@ -448,7 +458,7 @@ def test_segment_end_past_capture_window_rejects():
 def _pair_with_laptop_split(splits):
     pendant, laptop = complementary_pair()
     tokens = transcript_variant(UTTERANCES[0]).split()
-    bounds = [83.0 + index * (8.0 / splits) for index in range(splits + 1)]
+    bounds = [83.0 + index * (12.0 / splits) for index in range(splits + 1)]
     chunks = [tokens[index * len(tokens) // splits : (index + 1) * len(tokens) // splits] for index in range(splits)]
     pieces = [segment(' '.join(chunk), bounds[index], end=bounds[index + 1]) for index, chunk in enumerate(chunks)]
     laptop['transcript_segments'] = [
@@ -464,3 +474,40 @@ def test_utterance_matched_across_split_target_segments(splits):
     pendant, laptop = _pair_with_laptop_split(splits)
     decision = cc.measure_capture_containment(pendant, laptop)
     assert decision.would_join and decision.matched_words == 52 and decision.matched_utterances == 4
+
+
+def test_sparse_matches_with_long_span_reject():
+    pendant, laptop = complementary_pair()
+    for record in (pendant, laptop):
+        for item in record['transcript_segments']:
+            if item.get('is_user'):
+                item['end'] = item['start'] + 8.0
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert not decision.would_join and decision.reason == 'too_small'
+    assert decision.matched_words == 52 and decision.coverage == 0.8125 and decision.support_seconds == 32.0
+
+
+def test_overlapping_matched_intervals_merge_in_support():
+    pendant, laptop = complementary_pair()
+    for item in pendant['transcript_segments']:
+        item['start'], item['end'] = 80.0, 92.0
+    for item in laptop['transcript_segments']:
+        if item.get('is_user'):
+            item['start'], item['end'] = 83.0, 95.0
+    decision = cc.measure_capture_containment(pendant, laptop)
+    assert not decision.would_join and decision.reason == 'too_small' and decision.support_seconds == 12.0
+
+
+def test_whitespace_only_segment_counts_against_character_bounds():
+    pendant, laptop = complementary_pair()
+    laptop['transcript_segments'].insert(0, {'text': ' ' * 2049, 'start': 83.0, 'end': 91.0})
+    assert cc.measure_capture_containment(pendant, laptop).reason == 'bounds'
+
+
+def test_whitespace_segments_accumulate_capture_character_budget():
+    segments = [
+        {'text': ' ' * 2000, 'start': index * 9.0, 'end': index * 9.0 + 8.0, 'is_user': False} for index in range(66)
+    ]
+    pendant, _ = complementary_pair()
+    laptop = row('laptop', 'desktop', 0, 600, segments)
+    assert cc.measure_capture_containment(pendant, laptop).reason == 'bounds'
