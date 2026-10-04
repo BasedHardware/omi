@@ -25,7 +25,7 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
 from config.soniox_idle import idle_close_seconds
-from utils.stt.soniox_idle import IdleSonioxSocket
+from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
@@ -574,6 +574,7 @@ async def process_audio_soniox(
     *,
     profile: LiveLanguageProfile | None = None,
     keywords: list[str] | None = None,
+    idle_budget: SonioxIdleBudget | None = None,
 ) -> STTSocket:
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -639,7 +640,7 @@ async def process_audio_soniox(
     sock = await connect(stream_transcript)
     seconds = idle_close_seconds()
     if seconds:
-        return IdleSonioxSocket(sock, connect, stream_transcript, sample_rate, seconds)
+        return IdleSonioxSocket(sock, connect, stream_transcript, sample_rate, seconds, idle_budget=idle_budget)
     return sock
 
 

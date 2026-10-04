@@ -279,7 +279,12 @@ class LiveChainSession:
                     raw = await st.process_audio_parakeet(callback, language, sample_rate, 1, keywords=keywords)
                 elif service == st.STTService.soniox:
                     raw = await st.process_audio_soniox(
-                        callback, sample_rate, language, profile=host.language_profile, keywords=keywords
+                        callback,
+                        sample_rate,
+                        language,
+                        profile=host.language_profile,
+                        keywords=keywords,
+                        idle_budget=getattr(self.receiver, 'soniox_idle_budget', None),
                     )
                 elif service == st.STTService.modulate:
                     raw = await connect_modulate(callback, sample_rate, language)

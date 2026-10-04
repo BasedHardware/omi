@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from typing import Any, Awaitable, Callable
 
+from config.soniox_idle import idle_max_closes_per_hour, idle_rearm_seconds
 from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
 from utils.stt.replay_delivery import abort_replay_socket
@@ -22,17 +24,43 @@ from utils.stt.live_reason import normalize_live_stt_reason
 IDLE_DRAIN_SECONDS = 2.0
 
 
+class SonioxIdleBudget:
+    """Session-owned churn limits, retained through leg rotation/recovery."""
+
+    def __init__(self):
+        self.rearm_seconds = idle_rearm_seconds()
+        self.max_closes_per_hour = idle_max_closes_per_hour()
+        self.rearm_at = 0.0
+        self.close_times: deque[float] = deque()
+
+    def reserve_close(self, now: float) -> bool:
+        while self.close_times and now - self.close_times[0] >= 3600.0:
+            self.close_times.popleft()
+        if now < self.rearm_at or len(self.close_times) >= self.max_closes_per_hour:
+            return False
+        self.close_times.append(now)
+        return True
+
+
 class IdleSonioxSocket(STTSocket):
     idle_close_enabled = True
 
     def __init__(
-        self, transport: Any, connect: Callable[..., Awaitable[Any]], callback: Any, rate: int, seconds: float
+        self,
+        transport: Any,
+        connect: Callable[..., Awaitable[Any]],
+        callback: Any,
+        rate: int,
+        seconds: float,
+        *,
+        idle_budget: SonioxIdleBudget | None = None,
     ):
         self._transport = transport
         self._connect = connect
         self._callback = callback
         self._rate = rate
         self._seconds = seconds
+        self._idle_budget = idle_budget if idle_budget is not None else SonioxIdleBudget()
         self.recovery_enabled = transport.recovery_enabled
         self._finishing = False
         self._closed = False
@@ -78,6 +106,11 @@ class IdleSonioxSocket(STTSocket):
         elif self._silent_since is None:
             self._silent_since = now
         elif not output.audio_to_send and self._idle_since is None and now - self._silent_since >= self._seconds:
+            if not self._idle_budget.reserve_close(now):
+                return
+            # Reserve before scheduling so repeated VAD callbacks cannot spend
+            # the same rolling-hour slot. These limits belong to the logical
+            # session and survive each replacement transport.
             # Fence death publication before any await. The logical leg stays
             # alive while the paid transport finishes its last committed text.
             self._transport._planned_close = True
@@ -154,6 +187,7 @@ class IdleSonioxSocket(STTSocket):
             if self._finishing:
                 await abort_replay_socket(self._transport)
                 return False
+            self._idle_budget.rearm_at = time.monotonic() + self._idle_budget.rearm_seconds
             self._idle_since = None
             self._idle_closed_at = None
             data = bytes(self._pending)

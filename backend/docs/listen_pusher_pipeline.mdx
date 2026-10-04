@@ -2916,7 +2916,16 @@ its 30-minute denominator and dwell rather than adding a raw-count page.
 
 `SONIOX_IDLE_CLOSE_SECONDS` is default-off (unset, zero, invalid or negative
 values preserve the existing adapter and keepalive wire behavior). Suggested
-first canary value: `45`. Only active VAD on a Soniox leg participates; shadow,
+first canary value: `45`. Positive values below `20` seconds clamp to `20`, with
+one warning per process. `SONIOX_IDLE_REARM_SECONDS` defaults to `60` seconds
+and cannot be set below `60`: after a successful reopen, the socket stays
+connected for at least that interval even if VAD flaps. Non-finite or invalid
+rearm values use `60`. `SONIOX_IDLE_MAX_CLOSES_PER_HOUR` defaults to `12` planned
+closes per logical session in a rolling monotonic hour; invalid or non-positive
+values use `12`. Both legacy and managed connectors retain one receiver-owned
+budget through provider leg rotation/recovery. When either limit blocks a close, the transport stays open and
+continues normal audio/keepalive handling. Expired hourly slots rearm naturally
+without resetting the silence timer. Only active VAD on a Soniox leg participates; shadow,
 VAD-off, Modulate and Deepgram continue their existing paths.
 
 The first raw VAD silence decision starts a monotonic timer. After the threshold

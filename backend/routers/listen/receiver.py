@@ -69,6 +69,7 @@ from utils.stt.live_failure import (
 from utils.stt.live_chain import LiveChainExhausted, ProviderChainUnavailable
 from utils.stt.live_recovery import select_live_replacement
 from config.live_stt_recovery import current_recovery_enabled, session_recovery_enabled
+from utils.stt.soniox_idle import SonioxIdleBudget
 from routers.listen import legacy_recovery
 from utils.stt import legacy_replay
 from utils.stt.recovery_state import (
@@ -239,6 +240,7 @@ def _strip_capture_word_ranges(segments: List[Dict[str, Any]]) -> None:
 
 class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
+        self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
         self.translation_demand = TranslationDemand()
         self._translation_expiry_task: asyncio.Task[Any] | None = None
@@ -963,6 +965,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self.host.stt_language,
                     profile=self.host.language_profile,
                     keywords=keywords,
+                    idle_budget=self.soniox_idle_budget,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
             # they inherit the same chain a Modulate primary uses.
@@ -988,6 +991,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self.host.stt_language,
                     profile=self.host.language_profile,
                     keywords=keywords,
+                    idle_budget=self.soniox_idle_budget,
                 ),
                 connect_modulate=(
                     (
