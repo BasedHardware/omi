@@ -27,7 +27,7 @@ request, and a listen process is not a GPU pod.
 | Prerecorded client | Per-call sync HTTP client: connect 10 s/read 120 s/write 30 s/pool 10 s; one retry; v2 with diarization by default, v1 fallback on 404. URL download 100 MiB cap. | `utils/stt/pre_recorded.py:759`, `:819`, `:893`, `:907` |
 | Client-facing STT proxy | Separate STT proxy semaphore 4, isolated from the shared STT semaphore. | `utils/http_client.py:396`, `:549` |
 | Upstream sync producers | VAD segments <=300 s; per-pipeline groups of five chunks; inline fresh pipelines 16 / backfill 2. Cloud Tasks handlers use Cloud Run container concurrency instead. These producers are bypassed by this probe. | `utils/sync/pipeline.py:195`, `:1677`, `:1906`, `:2651` |
-| HPA | Total active v1/v2 requests + legacy streams, **not live sessions**: requestsPerPod 2. GPU target 35. Bounds 3–7; scale up one pod/300 s, down one/600 s with 600 s stabilization. HPA is a scaling signal, not an admission cap. | prod Parakeet values `:203`; `charts/parakeet/templates/hpa.yaml:49`; `charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml:123` |
+| HPA | Total active v1/v2 requests + legacy streams, **not live sessions**: requestsPerPod 2. GPU target 35 (namespace DCGM mean smoothed over 1 minute; no pod selector). Bounds 3–7; scale up one pod/300 s, down one/600 s with 600 s stabilization. HPA is a scaling signal, not an admission cap. | prod Parakeet values `:203`; `charts/parakeet/templates/hpa.yaml:49`; `charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml:123` |
 
 The reported refusal near three active HTTP requests is an observed operating
 point, not a coded `3` cap. More slots on listen do not necessarily create more
@@ -110,9 +110,41 @@ Transport/upload/scheduling effects therefore remain part of the observed
 capacity boundary. There were no telemetry gaps or GPU errors in these repeats.
 Do not infer a GPU-only ceiling from a port-forward test.
 
+### Full-context and synchronized-burst checks
+
+All requests in these repeats used full 24-second contexts and connection reuse,
+with the same 0.683 RPS diarized batch floor and three-minute duration.
+
+| Sessions / starts | Client POST p50 / p95 / p99 (s) | Server POST p95 (s) | Live / backfill queue p95 (s) | Inference p95 (s) | Backfill RPS | Errors |
+| --- | --- | ---: | --- | ---: | ---: | ---: |
+| 8 / synchronized | 1.70 / 3.34 / 3.78 | 0.95 | 0.24 / 0.50 | 0.49 | 0.681 | 0 |
+| 6 / synchronized | 1.55 / 3.02 / 3.99 | 0.92 | 0.38 / 0.65 | 0.50 | 0.680 | 0 |
+| 8 / staggered | 0.85 / 1.95 / 2.37 | 0.93 | 0.50 / 0.65 | 0.48 | 0.680 | 0 |
+
+Eight staggered full-context sessions passed; six and eight synchronized sessions
+missed the strict **client** p95 target, despite server p95 below 1 s. All had
+nonempty successful live/backfill responses and zero OOM/fatal GPU errors.
+The final staggered step had 181 DCGM samples, all zero despite active GPU
+inference. This confirms that the DCGM series is unsuitable for proving GPU
+headroom in this run; preserve its raw values rather than treating zero as idle.
+The 45% GPU target needs telemetry validation during a separate production bake.
+
+Eight is therefore a **provisional paced-session operating budget**, not a
+qualified guarantee for synchronized uploads or end-to-end product delivery.
+A direct tunnel test cannot fully separate transport, upload, and scheduler
+latency. Do not roll this draft to prod without the stated delivery bake.
+
+The [content-free receipts](receipts/parakeet-l4-2026-10-04.json) preserve
+intervals, counters, quantiles, coarse DCGM readings, and fixture hashes for all
+12 measured steps. Reproduce with the checked-in harness through an explicit
+dev pod port-forward; use `--sessions 2 4 6 8 12 16 24 --seconds 180` for the
+closed-connection sweep, `--sessions 8 12 --keepalive-connections 8` for reuse,
+and `--sessions 8 --keepalive-connections 8 --live-context-seconds 24` with or
+without `--synchronized` for established-session confirmations.
+
 ## Proposed settings and cost
 
-Plan conservatively for **eight continuously paced live sessions per L4** with
+Propose **eight staggered, continuously paced live sessions per L4** with
 the tested batch floor. This is a capacity budget, not a newly introduced hard
 GPU-session lease. Keep listen's local lease cap at 16: it belongs to a listen
 process and cannot enforce per-GPU ownership through a load-balanced service.
@@ -141,7 +173,7 @@ Contract tests exercise the checked-in prod settings at the busy boundaries,
 unknown-pod quorum, rendered HPA targets, and runtime/Helm parity.
 
 Prod reads were aggregate Prometheus only, under `ro-prod` (cutoff approximately
-2026-10-04 11:30 UTC). The requested `scratchpad/q.sh` was absent; equivalent
+2026-10-04 11:45 UTC). The requested `scratchpad/q.sh` was absent; equivalent
 explicit-context Prometheus service-proxy queries were used. Last-day live
 requests were about 322k and prerecorded requests 116k: 74% live, versus the
 supplied 84% profile. The probe deliberately used the higher 177k/day batch
@@ -153,8 +185,8 @@ at every peak.
 
 Counterfactual desired pods per minute = clamp(3, 7,
 max(ceil((total active HTTP + legacy streams) / 3),
-ceil(current replicas * fleet GPU percent / 45))). Applying this to observed
-aggregates yielded 3.12 pods over 24 h and 3.26 over seven days, with peaks at
+ceil(current replicas * namespace DCGM 1-minute mean percent / 45))). Applying this to observed
+aggregates yielded 3.06 pods over 24 h and 3.22 over seven days, with peaks at
 seven. This omits HPA tolerance/stabilization, cold start, node retention,
 changed admission and correlated peaks. It is a planning model, not a forecast.
 
@@ -177,6 +209,9 @@ This covers GPU nodes only and excludes fallback-provider costs.
 - **L4 stockout / zone failure:** retain floor three and max seven across the
   existing two-zone pools (ceilings four plus three). Existing soft zone spread
   cannot guarantee stock availability or a particular placement during outage.
+- **GPU signal scope:** the existing adapter averages namespace DCGM, with
+  one-minute smoothing and no Parakeet-only selector. Other GPU services can
+  dilute this signal; the request metric remains necessary.
 - **Scale-up lag:** +1/minute still trails a burst and needs node provisioning;
   keep fallback and conservative pressure/POST guards. Higher admission changes
   the load distribution used by the cost model.

@@ -1,0 +1,1039 @@
+{
+  "schema_version": 1,
+  "tested_image": "40ce87543b36c34870f704ea1ca53a0ca1e8e312",
+  "cluster": "gke_based-hardware-dev_us-central1_dev-omi-gke",
+  "pod": "dev-omi-parakeet-6b7c6dd979-dvkws",
+  "gpu": "NVIDIA L4",
+  "max_inflight": 1,
+  "gpu_count": 1,
+  "fixtures": [
+    {
+      "manifest": "transcription-release-probe.json",
+      "sha256": "1fb553adb5a6389eef5b7ebdbf9ed2a6082518a646ce9bf872bf33b964eedc14"
+    },
+    {
+      "manifest": "parakeet-canary-pt.json",
+      "sha256": "c1176081d3ae91ffabae503cfc34177c296f4c9537e5ec9618cb379e6343fba5"
+    }
+  ],
+  "notes": "Direct dev pod HTTP through loopback port-forward; prod-equivalent ASR env/resources; diarized batch; no user content. DCGM values change much less often than scrapes.",
+  "steps": [
+    {
+      "sessions": 2,
+      "seconds": 180.0,
+      "pace": 6,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "start_epoch": 1791111902.626509,
+      "end_epoch": 1791112083.685879,
+      "live": {
+        "count": 60,
+        "p50": 1.298503499943763,
+        "p95": 2.7761715420056134,
+        "p99": 3.1371870409930125,
+        "statuses": {
+          "200": 60
+        },
+        "nonempty": 60,
+        "completed_rps": 0.33138526091348575,
+        "audio_seconds": 876,
+        "queue_wait": {
+          "count": 60.0,
+          "mean": 0.05322855238725121,
+          "p50": 0.006382978723404255,
+          "p95": 0.5,
+          "p99": 0.8999999999999997
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 1.7320361250313,
+        "p95": 4.234396334039047,
+        "p99": 6.861682208022103,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6793388643716108,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.07243452433731437,
+          "p50": 0.006758241758241758,
+          "p95": 0.44027777777777766,
+          "p99": 0.961666666666666
+        }
+      },
+      "inference": {
+        "count": 183.0,
+        "mean": 0.24201947170095978,
+        "p50": 0.21250000000000002,
+        "p95": 0.6187499999999998,
+        "p99": 0.9237499999999994
+      },
+      "batch_size": {
+        "count": 183.0,
+        "mean": 1.0,
+        "p50": 0.5,
+        "p95": 0.95,
+        "p99": 0.9899999999999999
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 112,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.0,
+      "max_live_pending": 1,
+      "max_live_oldest": 0.28260204102844,
+      "gpu_mean": 27.417582417582416,
+      "gpu_max": 100.0,
+      "gpu_samples": 182.0,
+      "gpu_changes": 6.0,
+      "gpu_free_min_mib": 19189.0,
+      "server_live_p50": 0.18776595744680852,
+      "server_live_p95": 0.562499999999998,
+      "server_live_p99": 1.6749999999999958,
+      "profile": "closed-connections"
+    },
+    {
+      "sessions": 4,
+      "seconds": 180.0,
+      "pace": 6,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "start_epoch": 1791112084.421016,
+      "end_epoch": 1791112266.558478,
+      "live": {
+        "count": 120,
+        "p50": 1.2739481660537422,
+        "p95": 2.764656374929473,
+        "p99": 3.671463291044347,
+        "statuses": {
+          "200": 120
+        },
+        "nonempty": 120,
+        "completed_rps": 0.6588489028456094,
+        "audio_seconds": 1752,
+        "queue_wait": {
+          "count": 120.0,
+          "mean": 0.0935459529418343,
+          "p50": 0.007407407407407407,
+          "p95": 0.6428571428571428,
+          "p99": 0.9857142857142855
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 1.7705569999525324,
+        "p95": 4.305858624982648,
+        "p99": 5.039747291011736,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6753196140543276,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.07270679825810882,
+          "p50": 0.00634020618556701,
+          "p95": 0.44027777777777766,
+          "p99": 0.961666666666666
+        }
+      },
+      "inference": {
+        "count": 240.0,
+        "mean": 0.22002921833967168,
+        "p50": 0.20227272727272727,
+        "p95": 0.5,
+        "p99": 0.8999999999999997
+      },
+      "batch_size": {
+        "count": 240.0,
+        "mean": 1.0125,
+        "p50": 0.5063291139240507,
+        "p95": 0.9620253164556962,
+        "p99": 1.1999999999999982
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 110,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.00909090909090909,
+      "max_live_pending": 1,
+      "max_live_oldest": 1.233544202055782,
+      "gpu_mean": 19.781420765027324,
+      "gpu_max": 100.0,
+      "gpu_samples": 183.0,
+      "gpu_changes": 3.0,
+      "gpu_free_min_mib": 19189.0,
+      "server_live_p50": 0.19910714285714287,
+      "server_live_p95": 0.8708333333333333,
+      "server_live_p99": 2.08375,
+      "profile": "closed-connections"
+    },
+    {
+      "sessions": 6,
+      "seconds": 180.0,
+      "pace": 6,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "start_epoch": 1791112267.3059468,
+      "end_epoch": 1791112449.001057,
+      "live": {
+        "count": 180,
+        "p50": 1.30289220798295,
+        "p95": 2.877500041970052,
+        "p99": 3.8283637090353295,
+        "statuses": {
+          "200": 180
+        },
+        "nonempty": 180,
+        "completed_rps": 0.9906876075818807,
+        "audio_seconds": 2628,
+        "queue_wait": {
+          "count": 180.0,
+          "mean": 0.10201677242035254,
+          "p50": 0.007758620689655172,
+          "p95": 0.7142857142857143,
+          "p99": 0.9714285714285711
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 1.9945369169581681,
+        "p95": 4.8188795410096645,
+        "p99": 5.200448999996297,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6769689936258552,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.1258813017596892,
+          "p50": 0.008092105263157895,
+          "p95": 0.8113636363636361,
+          "p99": 1.577499999999997
+        }
+      },
+      "inference": {
+        "count": 288.0,
+        "mean": 0.2150011965681592,
+        "p50": 0.1968609865470852,
+        "p95": 0.49326923076923057,
+        "p99": 0.8892307692307694
+      },
+      "batch_size": {
+        "count": 288.0,
+        "mean": 1.0520833333333333,
+        "p50": 0.5255474452554745,
+        "p95": 0.9985401459854013,
+        "p99": 1.8553846153846156
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 109,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.0,
+      "max_live_pending": 2,
+      "max_live_oldest": 0.7027035560458899,
+      "gpu_mean": 16.263736263736263,
+      "gpu_max": 36.0,
+      "gpu_samples": 182.0,
+      "gpu_changes": 4.0,
+      "gpu_free_min_mib": 19189.0,
+      "server_live_p50": 0.2014344262295082,
+      "server_live_p95": 0.9196428571428574,
+      "server_live_p99": 2.087500000000002,
+      "profile": "closed-connections"
+    },
+    {
+      "sessions": 8,
+      "seconds": 180.0,
+      "pace": 6,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "start_epoch": 1791112449.743979,
+      "end_epoch": 1791112631.438384,
+      "live": {
+        "count": 240,
+        "p50": 1.3535575000569224,
+        "p95": 2.7899471250129864,
+        "p99": 3.2310075840214267,
+        "statuses": {
+          "200": 240
+        },
+        "nonempty": 240,
+        "completed_rps": 1.3209113972452562,
+        "audio_seconds": 3504,
+        "queue_wait": {
+          "count": 240.0,
+          "mean": 0.1300633482664125,
+          "p50": 0.008888888888888889,
+          "p95": 0.7666666666666666,
+          "p99": 1.7799999999999983
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 2.0617811660049483,
+        "p95": 5.120094083948061,
+        "p99": 9.556469167000614,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6769667264168626,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.1530393709833696,
+          "p50": 0.0076875,
+          "p95": 0.9178571428571425,
+          "p99": 2.130999999999999
+        }
+      },
+      "inference": {
+        "count": 337.0,
+        "mean": 0.20884615275110685,
+        "p50": 0.19258241758241756,
+        "p95": 0.4905612244897958,
+        "p99": 0.9473076923076922
+      },
+      "batch_size": {
+        "count": 337.0,
+        "mean": 1.0771513353115727,
+        "p50": 0.5349206349206349,
+        "p95": 1.271052631578946,
+        "p99": 1.9805263157894735
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 110,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.00909090909090909,
+      "max_live_pending": 2,
+      "max_live_oldest": 1.1618503229692578,
+      "gpu_mean": 40.27472527472528,
+      "gpu_max": 100.0,
+      "gpu_samples": 182.0,
+      "gpu_changes": 5.0,
+      "gpu_free_min_mib": 17997.0,
+      "server_live_p50": 0.21180124223602484,
+      "server_live_p95": 1.468749999999999,
+      "server_live_p99": 2.36875,
+      "profile": "closed-connections"
+    },
+    {
+      "sessions": 12,
+      "seconds": 180.0,
+      "pace": 6,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "start_epoch": 1791112632.189197,
+      "end_epoch": 1791112818.848145,
+      "live": {
+        "count": 360,
+        "p50": 1.482330625061877,
+        "p95": 3.0431684169452637,
+        "p99": 5.001370124984533,
+        "statuses": {
+          "200": 360
+        },
+        "nonempty": 360,
+        "completed_rps": 1.9286672450246627,
+        "audio_seconds": 5256,
+        "queue_wait": {
+          "count": 360.0,
+          "mean": 0.1276059468645447,
+          "p50": 0.034375,
+          "p95": 0.6590909090909091,
+          "p99": 0.9863636363636359
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 2.3122622499940917,
+        "p95": 9.238591458066367,
+        "p99": 13.62421433290001,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6589605823531566,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.17671621091497258,
+          "p50": 0.008661971830985915,
+          "p95": 0.9361111111111108,
+          "p99": 2.130999999999999
+        }
+      },
+      "inference": {
+        "count": 422.0,
+        "mean": 0.20094362611913286,
+        "p50": 0.18890449438202248,
+        "p95": 0.4744999999999999,
+        "p99": 0.8926666666666658
+      },
+      "batch_size": {
+        "count": 422.0,
+        "mean": 1.1445497630331753,
+        "p50": 0.5611702127659575,
+        "p95": 1.7323529411764698,
+        "p99": 3.2966666666666624
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 111,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.009009009009009009,
+      "max_live_pending": 2,
+      "max_live_oldest": 0.9360604579560459,
+      "gpu_mean": 11.390374331550802,
+      "gpu_max": 26.0,
+      "gpu_samples": 187.0,
+      "gpu_changes": 6.0,
+      "gpu_free_min_mib": 19989.0,
+      "server_live_p50": 0.23297297297297295,
+      "server_live_p95": 1.5159999999999962,
+      "server_live_p99": 2.303199999999998,
+      "profile": "closed-connections"
+    },
+    {
+      "sessions": 16,
+      "seconds": 180.0,
+      "pace": 6,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "start_epoch": 1791112819.5990222,
+      "end_epoch": 1791113005.1950989,
+      "live": {
+        "count": 462,
+        "p50": 3.6880975409876555,
+        "p95": 8.004087209003046,
+        "p99": 8.006661250023171,
+        "statuses": {
+          "200": 430,
+          "transport_error": 32
+        },
+        "nonempty": 430,
+        "completed_rps": 2.3168798975120524,
+        "audio_seconds": 6204,
+        "queue_wait": {
+          "count": 462.0,
+          "mean": 0.5935915039919792,
+          "p50": 0.14642857142857144,
+          "p95": 3.8629032258064497,
+          "p99": 7.433333333333331
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 13.663732958957553,
+        "p95": 41.301847791997716,
+        "p99": 52.235948667046614,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6627350688472186,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 1.2504247163395905,
+          "p50": 0.38815789473684215,
+          "p95": 7.424999999999997,
+          "p99": 9.884999999999998
+        }
+      },
+      "inference": {
+        "count": 283.0,
+        "mean": 0.36129856785815273,
+        "p50": 0.19872093023255813,
+        "p95": 0.9967391304347819,
+        "p99": 6.46250000000002
+      },
+      "batch_size": {
+        "count": 283.0,
+        "mean": 2.067137809187279,
+        "p50": 0.6970443349753694,
+        "p95": 7.3857142857142755,
+        "p99": 14.113333333333344
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 82,
+      "telemetry_errors": {
+        "ReadTimeout": 1
+      },
+      "old_gate_busy_share": 0.15853658536585366,
+      "max_live_pending": 16,
+      "max_live_oldest": 5.453044185880572,
+      "gpu_mean": 21.29032258064516,
+      "gpu_max": 100.0,
+      "gpu_samples": 186.0,
+      "gpu_changes": 5.0,
+      "gpu_free_min_mib": 6635.0,
+      "server_live_p50": 0.625,
+      "server_live_p95": 5.445652173913044,
+      "server_live_p99": 9.089130434782609,
+      "profile": "closed-connections"
+    },
+    {
+      "sessions": 24,
+      "seconds": 180.0,
+      "pace": 6,
+      "batch_rps": 0.7619047619047619,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "start_epoch": 1791113005.937312,
+      "end_epoch": 1791113187.844206,
+      "live": {
+        "count": 720,
+        "p50": 1.9904502090066671,
+        "p95": 4.094798290985636,
+        "p99": 5.68190450000111,
+        "statuses": {
+          "200": 720
+        },
+        "nonempty": 720,
+        "completed_rps": 3.95809377469001,
+        "audio_seconds": 10512,
+        "queue_wait": {
+          "count": 720.0,
+          "mean": 0.3441957155358978,
+          "p50": 0.16999999999999998,
+          "p95": 1.849056603773585,
+          "p99": 3.6153846153846065
+        }
+      },
+      "backfill": {
+        "count": 138,
+        "p50": 4.955932750017382,
+        "p95": 20.88366158294957,
+        "p99": 27.971603041980416,
+        "statuses": {
+          "200": 138
+        },
+        "nonempty": 138,
+        "completed_rps": 0.7586333261033871,
+        "audio_seconds": 12660,
+        "queue_wait": {
+          "count": 138.0,
+          "mean": 0.7717238518264333,
+          "p50": 0.47,
+          "p95": 2.892857142857141,
+          "p99": 4.864285714285716
+        }
+      },
+      "inference": {
+        "count": 432.0,
+        "mean": 0.26948446926339614,
+        "p50": 0.19908256880733943,
+        "p95": 0.8147058823529408,
+        "p99": 2.0028571428571444
+      },
+      "batch_size": {
+        "count": 432.0,
+        "mean": 1.9861111111111112,
+        "p50": 0.8470588235294118,
+        "p95": 5.599999999999996,
+        "p99": 12.680000000000007
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 102,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.11764705882352941,
+      "max_live_pending": 14,
+      "max_live_oldest": 3.039770595030859,
+      "gpu_mean": 57.2967032967033,
+      "gpu_max": 100.0,
+      "gpu_samples": 182.0,
+      "gpu_changes": 5.0,
+      "gpu_free_min_mib": 14005.0,
+      "server_live_p50": 0.4426229508196722,
+      "server_live_p95": 2.386206896551723,
+      "server_live_p99": 4.33703703703704,
+      "profile": "closed-connections"
+    },
+    {
+      "sessions": 8,
+      "seconds": 180.0,
+      "pace": 6,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "keepalive_connections": 8,
+      "start_epoch": 1791113374.8715122,
+      "end_epoch": 1791113555.7918231,
+      "live": {
+        "count": 240,
+        "p50": 0.818490167031996,
+        "p95": 1.8441512500867248,
+        "p99": 2.568386333063245,
+        "statuses": {
+          "200": 240
+        },
+        "nonempty": 240,
+        "completed_rps": 1.326561553195707,
+        "audio_seconds": 3504,
+        "queue_wait": {
+          "count": 240.0,
+          "mean": 0.11263467945391312,
+          "p50": 0.008333333333333333,
+          "p95": 0.6428571428571428,
+          "p99": 0.9857142857142855
+        },
+        "server_post": {
+          "count": 240.0,
+          "mean": 0.2838564407555774,
+          "p50": 0.21180124223602487,
+          "p95": 1.3,
+          "p99": 2.2599999999999993
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 1.4415258329827338,
+        "p95": 4.122117084101774,
+        "p99": 5.351729916990735,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.679860738447783,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.10786820938848565,
+          "p50": 0.008310810810810811,
+          "p95": 0.7406249999999996,
+          "p99": 1.577499999999997
+        },
+        "server_post": {
+          "count": 123.0,
+          "mean": 0.9425764828390344,
+          "p50": 0.7445652173913043,
+          "p95": 3.0781249999999982,
+          "p99": 4.615624999999999
+        }
+      },
+      "inference": {
+        "count": 344.0,
+        "mean": 0.20003251340456826,
+        "p50": 0.19148936170212766,
+        "p95": 0.47857142857142865,
+        "p99": 0.8676923076923078
+      },
+      "batch_size": {
+        "count": 344.0,
+        "mean": 1.055232558139535,
+        "p50": 0.524390243902439,
+        "p95": 0.9963414634146341,
+        "p99": 1.9661538461538464
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 182,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.005494505494505495,
+      "max_live_pending": 2,
+      "max_live_oldest": 1.0860667380038649,
+      "gpu_mean": 6.7292817679558015,
+      "gpu_max": 36.0,
+      "gpu_samples": 181.0,
+      "gpu_changes": 4.0,
+      "gpu_free_min_mib": 19987.0,
+      "server_live_p50": 0.21326530612244898,
+      "server_live_p95": 1.310714285714286,
+      "server_live_p99": 2.2621428571428583,
+      "profile": "reuse-connections"
+    },
+    {
+      "sessions": 12,
+      "seconds": 180.0,
+      "pace": 6,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "keepalive_connections": 8,
+      "start_epoch": 1791113556.04863,
+      "end_epoch": 1791113736.498831,
+      "live": {
+        "count": 360,
+        "p50": 0.9457942079752684,
+        "p95": 4.780390082974918,
+        "p99": 6.131397874909453,
+        "statuses": {
+          "200": 360
+        },
+        "nonempty": 360,
+        "completed_rps": 1.9950287978695,
+        "audio_seconds": 5256,
+        "queue_wait": {
+          "count": 360.0,
+          "mean": 0.14429747683073704,
+          "p50": 0.009230769230769232,
+          "p95": 0.763157894736842,
+          "p99": 2.0124999999999957
+        },
+        "server_post": {
+          "count": 360.0,
+          "mean": 0.32620125100042463,
+          "p50": 0.21065573770491802,
+          "p95": 1.3571428571428572,
+          "p99": 2.3857142857142843
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 1.8195909999776632,
+        "p95": 13.002985958009958,
+        "p99": 24.870585667085834,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6816343464705216,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.2735765199233755,
+          "p50": 0.037500000000000006,
+          "p95": 1.3964285714285702,
+          "p99": 2.4507142857142847
+        },
+        "server_post": {
+          "count": 123.0,
+          "mean": 2.101933964459998,
+          "p50": 0.9621212121212122,
+          "p95": 9.916666666666664,
+          "p99": 25.899999999999984
+        }
+      },
+      "inference": {
+        "count": 397.0,
+        "mean": 0.1990129768259598,
+        "p50": 0.1875735294117647,
+        "p95": 0.47113095238095226,
+        "p99": 0.9595833333333321
+      },
+      "batch_size": {
+        "count": 397.0,
+        "mean": 1.216624685138539,
+        "p50": 0.5907738095238095,
+        "p95": 1.8572916666666663,
+        "p99": 3.8059999999999947
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 157,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.03184713375796178,
+      "max_live_pending": 7,
+      "max_live_oldest": 1.9340924290008843,
+      "gpu_mean": 1.1767955801104972,
+      "gpu_max": 8.0,
+      "gpu_samples": 181.0,
+      "gpu_changes": 2.0,
+      "gpu_free_min_mib": 18225.0,
+      "server_live_p50": 0.21199095022624437,
+      "server_live_p95": 1.4124999999999979,
+      "server_live_p99": 2.402499999999999,
+      "profile": "reuse-connections"
+    },
+    {
+      "sessions": 8,
+      "seconds": 180.0,
+      "pace": 6,
+      "live_context_seconds": 24,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": true,
+      "diarize_backfill": true,
+      "keepalive_connections": 8,
+      "start_epoch": 1791113773.3232498,
+      "end_epoch": 1791113954.0526888,
+      "live": {
+        "count": 240,
+        "p50": 1.7012390419840813,
+        "p95": 3.343040958046913,
+        "p99": 3.78190512501169,
+        "statuses": {
+          "200": 240
+        },
+        "nonempty": 240,
+        "completed_rps": 1.327963304867518,
+        "audio_seconds": 5760,
+        "queue_wait": {
+          "count": 240.0,
+          "mean": 0.08616839955599669,
+          "p50": 0.07075471698113209,
+          "p95": 0.24259259259259258,
+          "p99": 0.8999999999999986
+        },
+        "server_post": {
+          "count": 240.0,
+          "mean": 0.3238131929615823,
+          "p50": 0.2902542372881356,
+          "p95": 0.95,
+          "p99": 2.172727272727272
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 1.6621740410337225,
+        "p95": 4.30431974993553,
+        "p99": 5.187428666977212,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6805801275603235,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.08372814123655056,
+          "p50": 0.006542553191489361,
+          "p95": 0.4958333333333332,
+          "p99": 1.577499999999997
+        },
+        "server_post": {
+          "count": 123.0,
+          "mean": 0.8591905332045493,
+          "p50": 0.4857954545454546,
+          "p95": 2.493181818181818,
+          "p99": 4.487499999999998
+        }
+      },
+      "inference": {
+        "count": 270.0,
+        "mean": 0.2368955475571393,
+        "p50": 0.20175879396984925,
+        "p95": 0.4936440677966102,
+        "p99": 0.9227272727272733
+      },
+      "batch_size": {
+        "count": 270.0,
+        "mean": 1.3444444444444446,
+        "p50": 0.6164383561643836,
+        "p95": 3.0,
+        "p99": 6.200000000000008
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 158,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.012658227848101266,
+      "max_live_pending": 8,
+      "max_live_oldest": 1.0477964640595019,
+      "gpu_mean": 33.48066298342541,
+      "gpu_max": 100.0,
+      "gpu_samples": 181.0,
+      "gpu_changes": 5.0,
+      "gpu_free_min_mib": 18225.0,
+      "server_live_p50": 0.2912844036697248,
+      "server_live_p95": 0.9899999999999987,
+      "server_live_p99": 2.1945454545454526,
+      "profile": "synchronized-24s-eight"
+    },
+    {
+      "sessions": 6,
+      "seconds": 180.0,
+      "pace": 6,
+      "live_context_seconds": 24,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": true,
+      "diarize_backfill": true,
+      "keepalive_connections": 8,
+      "start_epoch": 1791113994.017449,
+      "end_epoch": 1791114174.92975,
+      "live": {
+        "count": 180,
+        "p50": 1.5542310840683058,
+        "p95": 3.021603292087093,
+        "p99": 3.994553666911088,
+        "statuses": {
+          "200": 180
+        },
+        "nonempty": 180,
+        "completed_rps": 0.994965258145179,
+        "audio_seconds": 4320,
+        "queue_wait": {
+          "count": 180.0,
+          "mean": 0.09020477023441345,
+          "p50": 0.065,
+          "p95": 0.3833333333333333,
+          "p99": 0.5499999999999972
+        },
+        "server_post": {
+          "count": 180.0,
+          "mean": 0.32658671638928355,
+          "p50": 0.2988505747126437,
+          "p95": 0.9230769230769231,
+          "p99": 2.114285714285712
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 1.6506108329631388,
+        "p95": 4.460774124949239,
+        "p99": 6.70758270798251,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6798908240236334,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.08718407294728105,
+          "p50": 0.0064736842105263155,
+          "p95": 0.6541666666666662,
+          "p99": 1.577499999999997
+        },
+        "server_post": {
+          "count": 123.0,
+          "mean": 0.9218958985189173,
+          "p50": 0.7338709677419355,
+          "p95": 2.494230769230769,
+          "p99": 4.487499999999998
+        }
+      },
+      "inference": {
+        "count": 243.0,
+        "mean": 0.24863898638758516,
+        "p50": 0.20414285714285713,
+        "p95": 0.4993303571428571,
+        "p99": 0.8987499999999997
+      },
+      "batch_size": {
+        "count": 243.0,
+        "mean": 1.2469135802469136,
+        "p50": 0.5985221674876847,
+        "p95": 2.3083333333333322,
+        "p99": 3.928333333333332
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 165,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.006060606060606061,
+      "max_live_pending": 4,
+      "max_live_oldest": 0.430493941064924,
+      "gpu_mean": 16.574585635359117,
+      "gpu_max": 100.0,
+      "gpu_samples": 181.0,
+      "gpu_changes": 2.0,
+      "gpu_free_min_mib": 19985.0,
+      "server_live_p50": 0.31626506024096385,
+      "server_live_p95": 0.9576923076923063,
+      "server_live_p99": 2.1528571428571435,
+      "profile": "synchronized-24s-six"
+    },
+    {
+      "sessions": 8,
+      "seconds": 180.0,
+      "pace": 6,
+      "live_context_seconds": 24,
+      "batch_rps": 0.6828703703703703,
+      "synchronized": false,
+      "diarize_backfill": true,
+      "keepalive_connections": 8,
+      "start_epoch": 1791114176.415472,
+      "end_epoch": 1791114357.400383,
+      "live": {
+        "count": 240,
+        "p50": 0.8521329580107704,
+        "p95": 1.9537607500096783,
+        "p99": 2.3732341659488156,
+        "statuses": {
+          "200": 240
+        },
+        "nonempty": 240,
+        "completed_rps": 1.3260653984918094,
+        "audio_seconds": 5760,
+        "queue_wait": {
+          "count": 240.0,
+          "mean": 0.11467599469663886,
+          "p50": 0.00975609756097561,
+          "p95": 0.5,
+          "p99": 0.8999999999999997
+        },
+        "server_post": {
+          "count": 240.0,
+          "mean": 0.29346459386191176,
+          "p50": 0.2208053691275168,
+          "p95": 0.925,
+          "p99": 2.0999999999999988
+        }
+      },
+      "backfill": {
+        "count": 123,
+        "p50": 1.5636549170594662,
+        "p95": 4.576371000031941,
+        "p99": 5.455226459074765,
+        "statuses": {
+          "200": 123
+        },
+        "nonempty": 123,
+        "completed_rps": 0.6796080149625797,
+        "audio_seconds": 11370,
+        "queue_wait": {
+          "count": 123.0,
+          "mean": 0.1147467567910993,
+          "p50": 0.007592592592592593,
+          "p95": 0.6541666666666662,
+          "p99": 1.577499999999997
+        },
+        "server_post": {
+          "count": 123.0,
+          "mean": 0.9975492868977561,
+          "p50": 0.7990196078431373,
+          "p95": 3.4624999999999986,
+          "p99": 4.692499999999999
+        }
+      },
+      "inference": {
+        "count": 339.0,
+        "mean": 0.2125182060063281,
+        "p50": 0.19211956521739132,
+        "p95": 0.47573529411764715,
+        "p99": 0.8587500000000006
+      },
+      "batch_size": {
+        "count": 339.0,
+        "mean": 1.0707964601769913,
+        "p50": 0.5347003154574133,
+        "p95": 1.2525000000000006,
+        "p99": 1.9305000000000008
+      },
+      "oom": 0.0,
+      "fatal_cuda": 0.0,
+      "pressure_samples": 184,
+      "telemetry_errors": {},
+      "old_gate_busy_share": 0.0,
+      "max_live_pending": 2,
+      "max_live_oldest": 0.6108575209509581,
+      "gpu_mean": 0.0,
+      "gpu_max": 0.0,
+      "gpu_samples": 181.0,
+      "gpu_changes": 0.0,
+      "gpu_free_min_mib": 19985.0,
+      "server_live_p50": 0.22313432835820896,
+      "server_live_p95": 0.9500000000000002,
+      "server_live_p99": 2.1333333333333346,
+      "profile": "staggered-24s-eight"
+    }
+  ]
+}
