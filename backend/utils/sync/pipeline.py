@@ -990,14 +990,20 @@ def retrieve_vad_segments(
     logger.info('event=sync_vad outcome=success segment_count=%d', len(segments))
 
     aseg = AudioSegment.from_wav(path)
-    path_dir = '/'.join(path.split('/')[:-1])
+    path_dir = os.path.dirname(path)
+    # Equal wall-clock starts do not mean equal audio. Keep each WAL's VAD
+    # outputs in its own retry-stable namespace, including concurrent workers.
+    # Retain the timestamp basename used by parsing and durable content IDs.
+    source_key = hashlib.sha256(os.path.basename(path).encode('utf-8')).hexdigest()
+    segment_dir = os.path.join(path_dir, '.vad', source_key).replace(os.sep, '/')
 
     try:
         for i, segment in enumerate(segments):
             if segment['end'] - segment['start'] < 1 and not (source_frame_map or {}).get('coverage_trimmed'):
                 continue
             segment_timestamp = start_timestamp + segment['start']
-            segment_path = f'{path_dir}/{segment_timestamp}.wav'
+            os.makedirs(segment_dir, exist_ok=True)
+            segment_path = f'{segment_dir}/{segment_timestamp}.wav'
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
             segment_aseg.export(segment_path, format='wav')
             segmented_paths.add(segment_path)

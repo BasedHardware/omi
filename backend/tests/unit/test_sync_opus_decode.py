@@ -12,19 +12,23 @@ focusing on failure modes that cause WALs to become permanently stuck:
 Each scenario corresponds to a real-world sticky-pending failure mode.
 """
 
+import asyncio
 import importlib.util
 import io
 import os
 import struct
 import sys
 import tempfile
+import threading
 import wave
+from pathlib import Path
 from types import ModuleType
 from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from pydub import AudioSegment
 
 # ---------------------------------------------------------------------------
 # Stubs — isolate from heavy deps before importing sync
@@ -221,14 +225,21 @@ sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 
 _remove_python_multipart_stub = _install_python_multipart_stub()
 try:
-    from utils.sync.pipeline import _merge_and_cap_vad_segments, MAX_VAD_SEGMENT_SECONDS  # noqa: E402
+    from utils.sync.pipeline import (  # noqa: E402
+        _merge_and_cap_vad_segments,
+        _run_sync_vad_phase,
+        MAX_VAD_SEGMENT_SECONDS,
+        retrieve_vad_segments,
+    )
     from utils.sync.files import (  # noqa: E402
         MAX_SYNC_FRAME_BYTES,
         decode_files_to_wav,
         decode_opus_file_to_wav,
+        get_timestamp_from_path,
         get_wav_duration,
         retrieve_file_paths,
     )
+    from utils.sync.content_id import compute_sync_segment_id  # noqa: E402
 finally:
     if _remove_python_multipart_stub:
         sys.modules.pop('python_multipart', None)
@@ -542,7 +553,7 @@ class TestRetrieveFilePaths:
 
         paths = retrieve_file_paths(cast(list, [self._Upload("audio_omi_opus_16000_1_fs160_1710000000.bin")]), "u1")
 
-        assert paths == [os.path.join("syncing/u1", "audio_omi_opus_16000_1_fs160_1710000000.bin")]
+        assert [Path(path) for path in paths] == [Path("syncing/u1") / "audio_omi_opus_16000_1_fs160_1710000000.bin"]
         assert (tmp_path / paths[0]).read_bytes() == b'payload'
 
 
@@ -710,6 +721,85 @@ class TestDecodeFilesToWavOpus:
 
             assert wav_files == [bin_path.replace('.bin', '.wav')]
             assert get_wav_duration(wav_files[0]) > 0
+
+
+class TestVadSegmentFiles:
+    """Distinct WALs must reach STT with their own bytes and source maps."""
+
+    @staticmethod
+    def _source(directory, name, sample, duration):
+        path = (directory / name).as_posix()
+        with wave.open(path, 'wb') as output:
+            output.setnchannels(1)
+            output.setsampwidth(2)
+            output.setframerate(16000)
+            output.writeframes(struct.pack('<h', sample) * (16000 * duration))
+        return path
+
+    @pytest.mark.parametrize('order', [(0, 1), (1, 0), None])
+    def test_equal_absolute_starts_preserve_both_wals(self, tmp_path, order):
+        sources = [
+            self._source(tmp_path, 'audio_omi_pcm16_16000_1_1710000000.wav', 1000, 4),
+            self._source(tmp_path, 'audio_omi_pcm16_16000_1_1710000001.wav', 2000, 4),
+        ]
+        vad = {
+            sources[0]: [{'start': 1, 'end': 3}],
+            sources[1]: [{'start': 0, 'end': 4}],
+        }
+        paths, maps = set(), {}
+        map_lock = threading.Lock()
+        source_maps = [{'claim': {'rate_hz': 16000}, 'source': index} for index in range(2)]
+
+        def retrieve(index):
+            retrieve_vad_segments(
+                sources[index],
+                paths,
+                source_frame_map=source_maps[index],
+                segment_source_maps=maps,
+                segment_source_lock=map_lock,
+            )
+
+        with patch('utils.sync.pipeline.AudioSegment', AudioSegment), patch(
+            'utils.sync.pipeline.vad_is_empty', side_effect=lambda path, **kwargs: vad[path]
+        ):
+            if order is None:
+
+                async def run_leaf(_executor, function, *args, **kwargs):
+                    return await asyncio.to_thread(function, *args, **kwargs)
+
+                with patch('utils.sync.pipeline.run_blocking', run_leaf):
+                    errors, _ = asyncio.run(_run_sync_vad_phase(sources, paths, dict(zip(sources, source_maps)), maps))
+                assert errors == []
+                assert not any(os.path.exists(path) for path in sources)
+            else:
+                for index in order:
+                    retrieve(index)
+
+        assert len(paths) == 2, 'one WAL overwrote the other before STT'
+        assert {get_timestamp_from_path(path) for path in paths} == {1710000001}
+        actual = set()
+        for path in paths:
+            with wave.open(path, 'rb') as result:
+                actual.add((struct.unpack('<h', result.readframes(1))[0], result.getnframes()))
+        assert actual == {(1000, 32000), (2000, 64000)}
+        assert {(value[0]['source'], value[1]) for value in maps.values()} == {(0, 16000), (1, 0)}
+
+    def test_retry_in_another_job_directory_keeps_content_identity(self, tmp_path, monkeypatch):
+        monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'synthetic-test-secret')
+        ids = []
+        for job in ('first', 'retry'):
+            directory = tmp_path / job
+            directory.mkdir()
+            source = self._source(directory, 'audio_omi_pcm16_16000_1_1710000000.wav', 1000, 2)
+            paths = set()
+            with patch('utils.sync.pipeline.AudioSegment', AudioSegment), patch(
+                'utils.sync.pipeline.vad_is_empty', return_value=[{'start': 0, 'end': 2}]
+            ):
+                retrieve_vad_segments(source, paths)
+            assert len(paths) == 1
+            path = paths.pop()
+            ids.append((os.path.basename(path), compute_sync_segment_id('synthetic-user', path)))
+        assert ids[0] == ids[1]
 
 
 class TestMergeAndCapVadSegments:

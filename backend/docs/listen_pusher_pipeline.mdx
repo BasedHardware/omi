@@ -13,6 +13,14 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 > pipeline changes.
 
 Phone safety-WAL uploads may carry the client recording id and audio interval.
+VAD writes each source WAV's segments into a deterministic `.vad/<source-basename-hash>/`
+directory inside the job. Two distinct WALs whose speech begins at the same absolute
+timestamp therefore keep separate bytes and source maps before STT. Segment basenames
+remain timestamps, preserving parsing and the basename-plus-bytes durable content IDs;
+the new full paths are stable within a job, and job cleanup removes their directories.
+Pre-change Redis path checkpoints no longer match the new paths, but durable content
+checkpoints still match identical audio. Legacy jobs without that ledger may replay STT
+once after deployment and retain the existing transcript assignment dedupe.
 Listen creates a new server recording id and conversation on every silence
 rollover, while the phone tags all WALs with `client_conversation_id`, stored
 on each live generation as `external_data.recording_origin_id`. Sync binds each
