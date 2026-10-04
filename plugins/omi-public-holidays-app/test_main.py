@@ -143,6 +143,10 @@ _saved_modules = _install_dependency_stubs()
 try:
     if "main" in sys.modules:
         del sys.modules["main"]
+    from pathlib import Path
+    _dir = str(Path(__file__).resolve().parent)
+    if _dir not in sys.path:
+        sys.path.insert(0, _dir)
     import main  # noqa: E402
 finally:
     for _name, _original in _saved_modules.items():
