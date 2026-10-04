@@ -527,3 +527,46 @@ def test_routed_idle_close_keeps_cost_evidence_and_circuits_unchanged(monkeypatc
         await leg.drain_and_close()
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    'error,reason',
+    [
+        (TimeoutError('dial'), 'timeout'),
+        (RuntimeError('dial'), 'provider_5xx'),
+        (soniox.SonioxRateLimitError('dial'), 'provider_429'),
+    ],
+)
+def test_failed_reopen_has_normal_connect_reason(monkeypatch, error, reason):
+    async def run():
+        socket, idle, _, _, _, tick = build(monkeypatch)
+        socket.send(b'\x00\x00' * 1600, wall_time=100)
+        tick[0] += 3
+        socket.send(b'\x00\x00' * 1600, wall_time=103)
+        await idle._close_task
+
+        async def connect(callback):
+            raise error
+
+        idle._connect = connect
+        assert socket.send(b'\x01\x00' * 1600, wall_time=104)
+        assert not await socket.complete_send()
+        assert idle.typed_death_reason == reason
+        assert idle.idle_reopen_failed
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_tail_rejects_onset_without_capture_spans():
+    async def run():
+        connection = SimpleNamespace(is_connection_dead=False)
+        host = SimpleNamespace(state=SimpleNamespace(active=True, stt_terminal_failure=False))
+        tail = replay_delivery.ReplayTailSocket(
+            connection, replay_delivery.ReplayPacer(16000, 'soniox', connection), deque(), host
+        )
+        assert not tail.send_admitted_audio(b'onset!', ())
+        assert tail._tail_bytes == 0
+        assert not tail.tail
+
+    asyncio.run(run())

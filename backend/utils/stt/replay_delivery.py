@@ -636,6 +636,8 @@ class ReplayTailSocket:
     def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
         # Queue an already gated onset behind every older replay/tail packet.
         # Preserve each capture interval; concatenated pre-roll can have gaps.
+        if data and not spans:
+            return False  # No capture proof: never accept bytes without queuing them.
         if self._closing or self.is_connection_dead:
             return False
         if self._tail_bytes + len(data) > self._tail_bound_bytes():

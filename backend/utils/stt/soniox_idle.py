@@ -147,6 +147,9 @@ class IdleSonioxSocket(STTSocket):
             if self._writer_pacing is not None:
                 self._transport.enable_writer_pacing(*self._writer_pacing)
             if self._transport.is_connection_dead:
+                self._reason = normalize_live_stt_reason(
+                    self._transport.typed_death_reason, self._transport.death_reason
+                )
                 raise RuntimeError('Soniox rejected reopened transport')
             if self._finishing:
                 await abort_replay_socket(self._transport)
@@ -167,9 +170,11 @@ class IdleSonioxSocket(STTSocket):
             await abort_replay_socket(self._transport)
             raise
         except Exception as error:
+            from utils.stt.live_chain import failure_reason
+
             self._metrics.failures.inc()
             self._dead = True
-            self._reason = normalize_live_stt_reason(getattr(error, 'reason', None), default='connection_lost')
+            self._reason = normalize_live_stt_reason(self._reason, failure_reason(error), default='other')
             self.idle_reopen_failed = True
             record_stt_provider_connect(provider='soniox', outcome=CONNECT_FAILURE, reason=self._reason)
             return False
