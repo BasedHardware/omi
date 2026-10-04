@@ -15,3 +15,9 @@ Build logic lives in `omi/firmware/scripts/ci/`.
 ## Formatting
 
 C/C++ files: `clang-format -i <files>` (the repo pre-commit hook covers this).
+
+## DevKit storage verification
+
+Run `python3 omi/firmware/devkit/tests/storage_transfer/run.py` for changes to
+DevKit stored-audio transfer or filesystem reads. This executes the production C
+functions with injected I/O faults; the same check runs in local and CI lanes.

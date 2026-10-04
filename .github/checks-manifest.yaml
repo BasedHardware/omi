@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: devkit-storage-transfer-tests
+    command: ["python3", "omi/firmware/devkit/tests/storage_transfer/run.py"]
+    triggers: ["omi/firmware/devkit/src/storage.c", "omi/firmware/devkit/src/sdcard.c", "omi/firmware/devkit/tests/storage_transfer/**"]
+    lanes: ["local", "ci"]
+    reason: "2026-10-03 DevKit 2.0.10 fault reproduction: failed BLE enqueue skipped a stored block, failed reads transmitted stale data, and a short final block underflowed remaining bytes"
   - id: firestore-index-guard
     command: ["python3", "backend/scripts/run_firestore_index_guard.py"]
     triggers: ["@firestore-index-guard", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/actions/release-eligibility/action.yml"]

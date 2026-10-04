@@ -1,5 +1,6 @@
 #include "storage.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -147,7 +148,11 @@ static int setup_storage_tx()
         remaining_length = get_file_size(file_count);
     }
 
-    remaining_length = remaining_length - offset;
+    if (offset > remaining_length) {
+        remaining_length = 0;
+        return -EINVAL;
+    }
+    remaining_length -= offset;
 
     // offset=offset_;
     LOG_INF("remaining length: %d", remaining_length);
@@ -231,7 +236,9 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
                                      uint8_t flags)
 {
     LOG_INF("about to schedule the storage");
-    LOG_INF("was sent %d  ", ((uint8_t *) buf)[0]);
+    if (len > 0) {
+        LOG_INF("was sent %d  ", ((const uint8_t *) buf)[0]);
+    }
 
     uint8_t result_buffer[1] = {0};
     uint8_t result = parse_storage_command(buf, len);
@@ -269,20 +276,38 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
 //     }
 // }
 
-static void write_to_gatt(struct bt_conn *conn)
-{ // unsafe. designed for max speeds. udp?
-
+/* The legacy client decodes each 440-byte notification as a storage block.
+ * Do not split blocks to fit a smaller MTU without versioning that protocol.
+ */
+static int write_to_gatt(struct bt_conn *conn)
+{
     uint32_t packet_size = MIN(remaining_length, SD_BLE_SIZE);
-
-    int r = read_audio_data(storage_write_buffer, packet_size, offset);
-    offset = offset + packet_size;
-    int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer, packet_size);
-    if (err) {
-        LOG_PRINTK("error writing to gatt: %d\n", err);
-    } else {
-        remaining_length = remaining_length - SD_BLE_SIZE;
+    if (packet_size == 0) {
+        return 0;
     }
-    // LOG_PRINTK("wrote to gatt %d\n",err);
+    if (bt_gatt_get_mtu(conn) < packet_size + 3) {
+        return -EMSGSIZE;
+    }
+
+    int result = read_audio_data(storage_write_buffer, packet_size, offset);
+    if (result < 0) {
+        return result;
+    }
+    if ((uint32_t) result != packet_size) {
+        return -EIO;
+    }
+
+    result = bt_gatt_notify(conn, &storage_service.attrs[1], storage_write_buffer, packet_size);
+    if (result < 0) {
+        return result;
+    }
+
+    /* Queue acceptance is not a durable phone acknowledgment. It is the
+     * earliest point at which this legacy protocol can advance its cursor.
+     */
+    offset += packet_size;
+    remaining_length -= packet_size;
+    return 0;
 }
 
 void storage_write(void)
@@ -340,7 +365,12 @@ void storage_write(void)
             }
             // LOG_PRINTK("remaining length: %d\n",remaining_length);
 
-            write_to_gatt(conn);
+            int result = write_to_gatt(conn);
+            if (result < 0) {
+                LOG_DBG("Storage transfer paused at %u (err %d)", offset, result);
+                k_msleep(10);
+                continue;
+            }
             heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
 
             transport_started = 0;
@@ -355,7 +385,11 @@ void storage_write(void)
                 }
             }
         }
-        k_yield();
+        if (remaining_length == 0) {
+            k_msleep(10);
+        } else {
+            k_yield();
+        }
     }
 }
 
