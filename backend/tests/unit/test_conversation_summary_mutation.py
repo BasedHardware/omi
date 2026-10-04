@@ -7,6 +7,7 @@ import zlib
 from datetime import datetime, timezone
 
 import pytest
+from google.cloud.firestore_v1 import _helpers as firestore_serialization
 
 from database import conversations as conversations_db
 
@@ -288,3 +289,16 @@ def test_generic_section_edit_invalidates_section_claims_in_same_transaction(mon
     assert ref.update_calls == [
         {'structured.sections': [], 'structured.note_claims': [claims[0], claims[1], claims[3]]}
     ]
+
+
+def test_generic_structured_replacement_serializes_without_nested_delete(monkeypatch):
+    ref = _install_db(monkeypatch, {'structured': {'note_claims': _claims()}, 'data_protection_level': 'standard'})
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_args: None)
+    assert conversations_db.update_conversation(UID, CONVERSATION_ID, {'structured': {'title': 'Replacement'}})
+    assert ref.update_calls == [{'structured': {'title': 'Replacement'}}]
+    # Pure SDK encoding validates the actual write shape without constructing a client.
+    writes = firestore_serialization.pbs_for_update(
+        'projects/synthetic/databases/(default)/documents/users/u/conversations/c', ref.update_calls[0], None
+    )
+    assert list(writes[0].update_mask.field_paths) == ['structured']
+    assert 'note_claims' not in writes[0].update.fields['structured'].map_value.fields

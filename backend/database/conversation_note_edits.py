@@ -24,17 +24,9 @@ def write_note_edit(ref: Any, transaction: Any, fields: dict, prepare: Callable[
             return False
         current = snapshot.to_dict() or {}
         patch = prepare(copy.deepcopy(fields), current.get('data_protection_level', 'standard'))
-        if 'structured' in fields:
-            # Complete replacement carries its own claims; absent metadata must
-            # not survive a recursively merged legacy replacement.
-            note = patch.get('structured')
-            if (
-                isinstance(note, dict)
-                and 'note_claims' not in note
-                and 'note_claims' in (current.get('structured') or {})
-            ):
-                note['note_claims'] = firestore.DELETE_FIELD
-        elif 'structured.note_claims' not in fields:
+        # update() replaces a whole map. Only partial field edits need a claim patch;
+        # nested DELETE_FIELD sentinels inside a replacement are invalid SDK input.
+        if 'structured' not in fields and 'structured.note_claims' not in fields:
             patch.update(claim_invalidation_patch(current.get('structured'), note_edit_targets(fields)))
         tx.update(ref, patch)
         return True
