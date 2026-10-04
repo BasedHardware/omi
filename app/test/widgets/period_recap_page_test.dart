@@ -272,6 +272,27 @@ void main() {
     expect(calls, 2);
   });
 
+  testWidgets('pulling down on a failed load retries it', (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(
+      _app(
+        PeriodRecapPage(
+          load: (period) async {
+            calls++;
+            return calls == 1 ? const ApiFailure(ApiProblem(ApiProblemKind.server)) : ApiSuccess(_recap(period.name));
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.fling(find.byType(OmiErrorState), const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+
+    expect(calls, 2);
+    expect(find.text('Sam'), findsOneWidget);
+  });
+
   testWidgets('a highlight without a topic is titled by its summary', (tester) async {
     await tester.pumpWidget(
       _app(

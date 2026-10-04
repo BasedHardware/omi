@@ -14853,13 +14853,13 @@
     "@timeRecorded": {
         "description": "Recap row: total conversation time in the period"
     },
-    "peopleYouTalkedToMost": "People you talked to most",
+    "peopleYouTalkedToMost": "People You Talked to Most",
     "@peopleYouTalkedToMost": {
         "description": "Recap section header listing people by talk time"
     },
     "recapPrevious": "Previous: {value}",
     "@recapPrevious": {
-        "description": "Recap trend: the same figure for the same stretch of the previous week or month (as many days in as the current one so far)",
+        "description": "Recap trend: the same figure for the same stretch of the previous week or month (as many days in as the current one so far, or the whole previous period once the current one is complete)",
         "placeholders": {
             "value": {
                 "type": "String",

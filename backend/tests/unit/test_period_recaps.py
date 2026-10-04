@@ -385,15 +385,32 @@ def test_the_last_day_with_its_recap_compares_with_the_whole_previous_month():
     }
 
 
-def test_the_last_day_with_its_recap_compares_with_the_whole_previous_week():
-    week = [_day('2026-10-04', conversations=1, minutes=10)]
-    previous = [_day('2026-09-27', conversations=2, minutes=20)]
+def test_a_30_day_month_on_its_last_day_compares_with_all_of_a_31_day_one():
+    # April 30 is 29 days after April 1, but March has 31: the last day with its
+    # recap compares with all of March, not March 1-30.
+    april = [_day('2026-04-30', conversations=1, minutes=10)]
+    march = [_day('2026-03-30', conversations=2, minutes=20), _day('2026-03-31', conversations=3, minutes=30)]
 
     recap = pr.build_period_recap(
-        'week', date(2026, 9, 28), date(2026, 10, 4), week, previous_summaries=previous, today=date(2026, 10, 4)
+        'month', date(2026, 4, 1), date(2026, 4, 30), april, previous_summaries=march, today=date(2026, 4, 30)
     )
 
-    assert (recap['previous']['end_date'], recap['previous']['total_conversations']) == ('2026-09-27', 2)
+    assert (recap['previous']['end_date'], recap['previous']['total_conversations']) == ('2026-03-31', 5)
+
+
+def test_a_weeks_last_day_counts_only_once_its_recap_exists():
+    previous = [_day('2026-09-26', conversations=2, minutes=20), _day('2026-09-27', conversations=3, minutes=30)]
+    saturday = [_day('2026-10-03', conversations=1, minutes=10)]
+    sunday = saturday + [_day('2026-10-04', conversations=1, minutes=10)]
+
+    def compared(days):
+        recap = pr.build_period_recap(
+            'week', date(2026, 9, 28), date(2026, 10, 4), days, previous_summaries=previous, today=date(2026, 10, 4)
+        )
+        return recap['previous']['end_date'], recap['previous']['total_conversations']
+
+    assert compared(saturday) == ('2026-09-26', 2)
+    assert compared(sunday) == ('2026-09-27', 5)
 
 
 def test_the_busiest_day_tie_goes_to_the_earliest_date():

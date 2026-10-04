@@ -12411,7 +12411,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get timeRecorded => 'Time recorded';
 
   @override
-  String get peopleYouTalkedToMost => 'People you talked to most';
+  String get peopleYouTalkedToMost => 'People You Talked to Most';
 
   @override
   String recapPrevious(String value) {

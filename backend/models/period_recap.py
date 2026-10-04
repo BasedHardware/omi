@@ -16,8 +16,9 @@ class PeriodRecapPrevious(BaseModel):
     start_date: str = Field(description='First local date compared (YYYY-MM-DD)')
     end_date: str = Field(
         description=(
-            'Last local date compared (YYYY-MM-DD). While the current period is in progress it matches the days so '
-            'far: through today once its daily recap exists, else through yesterday'
+            'Last local date compared (YYYY-MM-DD). The previous period\'s last day once the current period has '
+            'ended, or reached its last day with that day\'s daily recap; before that, as many days in as the current '
+            'period so far: through today once its daily recap exists, else through yesterday'
         )
     )
     total_conversations: int = 0

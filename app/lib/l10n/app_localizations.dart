@@ -22242,10 +22242,10 @@ abstract class AppLocalizations {
   /// Recap section header listing people by talk time
   ///
   /// In en, this message translates to:
-  /// **'People you talked to most'**
+  /// **'People You Talked to Most'**
   String get peopleYouTalkedToMost;
 
-  /// Recap trend: the same figure for the same stretch of the previous week or month (as many days in as the current one so far)
+  /// Recap trend: the same figure for the same stretch of the previous week or month (as many days in as the current one so far, or the whole previous period once the current one is complete)
   ///
   /// In en, this message translates to:
   /// **'Previous: {value}'**
