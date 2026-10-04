@@ -104,3 +104,74 @@ def test_export_is_aggregate_rate_limited_and_best_effort(monkeypatch):
     )
     metrics.export_snapshot()  # export failure cannot turn a successful job into a retry
     assert metrics._last_export == 1301
+
+
+def test_request_completes_while_export_is_blocked_and_queue_is_bounded(monkeypatch):
+    import threading
+
+    entered = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def blocked_export():
+        entered.set()
+        release.wait(timeout=2)
+        finished.set()
+
+    monkeypatch.setenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'true')
+    monkeypatch.setattr(metrics, 'export_snapshot', blocked_export)
+    monkeypatch.setattr(metrics, '_flush', None)
+
+    @metrics.sync_attempt
+    async def request(sync_lane='backfill'):
+        return 'completed'
+
+    try:
+        assert asyncio.run(request()) == 'completed'
+        assert entered.wait(timeout=1)
+        assert not finished.is_set()  # A real export is in flight, still blocked.
+        flush = metrics._flush
+        for _ in range(10):
+            assert asyncio.run(request()) == 'completed'
+        assert flush.pending.qsize() == 1  # Overflow signals are dropped.
+        assert metrics._attempt.get() is None
+    finally:
+        release.set()
+        if metrics._flush is not None:
+            metrics._flush.pending.join()
+
+
+def test_export_disabled_records_metrics_without_starting_worker(monkeypatch):
+    monkeypatch.setenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'false')
+    monkeypatch.setattr(metrics, '_flush', None)
+    monkeypatch.setattr(metrics, '_BackgroundFlush', lambda: pytest.fail('disabled export started a worker'))
+    before = _count(metrics.CALLS, 'backfill', 'firestore')
+
+    @metrics.sync_attempt
+    async def request(sync_lane='backfill'):
+        return 42
+
+    assert asyncio.run(request()) == 42
+    assert metrics._flush is None
+    assert _count(metrics.CALLS, 'backfill', 'firestore') == before + 1
+
+
+def test_worker_start_failure_does_not_fail_success_or_replace_request_error(monkeypatch):
+    monkeypatch.setenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'true')
+    monkeypatch.setattr(metrics, '_flush', None)
+
+    def failed_start():
+        raise RuntimeError('synthetic thread-start failure')
+
+    monkeypatch.setattr(metrics, '_BackgroundFlush', failed_start)
+
+    @metrics.sync_attempt
+    async def request(sync_lane='fresh', fail=False):
+        if fail:
+            raise ValueError('request error')
+        return 42
+
+    assert asyncio.run(request()) == 42
+    with pytest.raises(ValueError, match='request error'):
+        asyncio.run(request(fail=True))
+    assert metrics._attempt.get() is None

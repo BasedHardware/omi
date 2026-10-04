@@ -9,6 +9,7 @@ from functools import wraps
 import inspect
 import logging
 import os
+import queue
 import uuid
 from datetime import datetime, timezone
 import threading
@@ -96,13 +97,59 @@ def sync_attempt(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         finally:
             attempt.finish()
             _attempt.reset(token)
-            # Await the offloaded export before the handler returns. No idle CPU required.
-            if os.getenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'false').lower() == 'true':
-                from utils.executors import run_blocking, db_executor
-
-                await run_blocking(db_executor, export_snapshot)
+            _enqueue_export()
 
     return observed
+
+
+class _BackgroundFlush:
+    """One worker and one pending signal, regardless of request volume."""
+
+    def __init__(self) -> None:
+        self.pending: queue.Queue[None] = queue.Queue(maxsize=1)
+        self.worker = threading.Thread(target=self._run, name='sync-metrics-export', daemon=True)
+        self.worker.start()
+
+    def enqueue(self) -> None:
+        try:
+            self.pending.put_nowait(None)
+        except queue.Full:
+            pass  # Cumulative histograms retain samples; redundant signals may be dropped.
+
+    def _run(self) -> None:
+        while True:
+            self.pending.get()
+            try:
+                export_snapshot()
+            except Exception:
+                # Keep the worker alive even if a future exporter implementation raises.
+                _logger.warning('event=sync_phase_metrics_export outcome=failed')
+            finally:
+                self.pending.task_done()
+
+
+_flush: _BackgroundFlush | None = None
+_flush_start_lock = threading.Lock()
+
+
+def _enqueue_export() -> None:
+    """No network/ADC, waits, or export exceptions on the request path."""
+    global _flush
+    if os.getenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'false').lower() != 'true':
+        return
+    try:
+        if _flush is None:
+            if not _flush_start_lock.acquire(blocking=False):
+                return
+            try:
+                if _flush is None:
+                    _flush = _BackgroundFlush()
+            finally:
+                _flush_start_lock.release()
+        _flush.enqueue()
+    except Exception:
+        # Starting a diagnostic worker must never fail a successful sync request.
+        pass
 
 
 _export_lock = threading.Lock()
