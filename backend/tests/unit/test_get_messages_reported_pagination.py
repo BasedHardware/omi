@@ -69,7 +69,7 @@ class _FakeCollection:
         return _FakeQuery(self)
 
 
-def _message(document_id, *, reported=False):
+def _message(document_id, *, reported=False, **fields):
     return _FakeDocument(
         document_id,
         {
@@ -83,6 +83,7 @@ def _message(document_id, *, reported=False):
             'reported': reported,
             'memories_id': [],
             'files_id': [],
+            **fields,
         },
     )
 
@@ -201,3 +202,21 @@ def test_scan_continues_across_batches_through_a_dense_block_of_reported_rows():
 
     assert [row['id'] for row in page] == ['visible-a', 'visible-b']
     assert collection.streamed > 2, 'the page must have required more than its own rows'
+
+
+def test_automatic_entries_do_not_consume_visible_history_slots_or_offsets():
+    collection = _FakeCollection(
+        [
+            _message('user'),
+            _message('opener', metadata='{"chatFirstIntentSource":"daily_opener"}'),
+            _message('meeting', metadata='{"chatFirstIntentId":"old-meeting"}'),
+            _message('reply', content_blocks=[{'type': 'taskCard', 'taskId': 'task'}]),
+            _message('older-user'),
+        ]
+    )
+    with _patch_db(collection):
+        page = chat_db.get_messages('uid', limit=2)
+        older = chat_db.get_messages('uid', limit=1, offset=2)
+    assert [row['id'] for row in page] == ['user', 'reply']
+    assert page[1]['content_blocks'] == [{'type': 'taskCard', 'taskId': 'task'}]
+    assert [row['id'] for row in older] == ['older-user']

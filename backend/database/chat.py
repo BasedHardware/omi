@@ -63,6 +63,30 @@ class MessageReconcileCursorError(ValueError):
     """A desktop journal cursor is absent or outside the authenticated scope."""
 
 
+def is_automatic_chat_message(message: Dict[str, Any]) -> bool:
+    """Filter provenance, never rich block types or assistant-only text guesses."""
+    metadata = message.get('metadata') or {}
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except (ValueError, TypeError):
+            metadata = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return bool(
+        metadata.get('chatFirstIntentId')
+        or metadata.get('chatFirstIntentSource')
+        or metadata.get('origin') == 'proactive_notification'
+        or message.get('message_source') == 'proactive_notification'
+        or str(metadata.get('continuityKey', '')).startswith('notification:')
+        or message.get('type') in {'task', 'goal', 'question', 'day_summary'}
+        or any(
+            isinstance(block, dict) and (block.get('coldStartSequence') or block.get('cold_start_sequence'))
+            for block in message.get('content_blocks', metadata.get('content_blocks', [])) or []
+        )
+    )
+
+
 def _typed_doc(doc: Any) -> Dict[str, Any]:
     """Typed adapter for a Firestore DocumentSnapshot.to_dict() result.
 
@@ -268,7 +292,7 @@ def get_app_messages(
             scanned += 1
             cursor_snapshot = document
             message: Dict[str, Any] = _typed_doc(document)
-            if message.get('reported') is True:
+            if message.get('reported') is True or is_automatic_chat_message(message):
                 reported_row_seen = True
                 continue
             messages.append(message)
@@ -367,7 +391,7 @@ def get_messages(
             scanned += 1
             cursor_snapshot = document
             message: Dict[str, Any] = _typed_doc(document)
-            if message.get('reported') is True:
+            if message.get('reported') is True or is_automatic_chat_message(message):
                 continue
             if visible_skipped < offset:
                 visible_skipped += 1
@@ -544,7 +568,7 @@ def get_messages_reconcile_page(
             cursor_snapshot = document
             next_cursor = str(document.id)
             message = _typed_doc(document)
-            if message.get('reported') is not True:
+            if message.get('reported') is not True and not is_automatic_chat_message(message):
                 messages.append(message)
                 if len(messages) == limit:
                     reached_return_limit = True

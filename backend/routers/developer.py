@@ -91,7 +91,7 @@ from utils.conversations.factory import deserialize_conversations
 from utils.llm.chat import qa_rag
 from utils.conversations.meeting_receipt import (
     projected_meeting_treatment_eligible,
-    record_and_persist_finalized_meeting_receipt,
+    record_finalized_meeting_receipt,
 )
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
@@ -1992,7 +1992,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
                         receipt.get('meeting_treatment_eligible')
@@ -2078,7 +2078,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
-                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
                         receipt.get('meeting_treatment_eligible')
@@ -2152,7 +2152,7 @@ def _create_conversation_from_segments(
             else {}
         ),
     }
-    receipt = record_and_persist_finalized_meeting_receipt(uid, conversation)
+    receipt = record_finalized_meeting_receipt(uid, conversation)
     meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
     # Only new successful ingests reach here; idempotent replays return above.

@@ -13,7 +13,6 @@ from routers.action_items import SyncBatchItem, SyncBatchRequest, sync_batch_upd
 
 @pytest.fixture(autouse=True)
 def _quiet_side_effects(monkeypatch):
-    monkeypatch.setattr(action_items_router, 'run_task_changed_wake', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(action_items_router, 'upsert_action_item_vectors_batch', lambda *_args, **_kwargs: None)
 
 
