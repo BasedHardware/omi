@@ -307,7 +307,7 @@ struct NativeSurfaceView: View {
                                         if row.kind == "text" { rowView(row).padding(12).modifier(NativeGlassComposerStyle()) }
                                         else {
                                             rowView(row, compact: true).frame(minWidth: 44, minHeight: 44)
-                                                .modifier(NativeGlassButtonStyle())
+                                                .modifier(NativeGlassButtonStyle(menu: row.kind == "menu"))
                                                 .disabled(!row.enabled || state.pending.contains(row.id))
                                                 .accessibilityIdentifier(row.id)
                                         }

@@ -10,8 +10,14 @@ struct NativeGlassControls<Content: View>: View {
 }
 
 struct NativeGlassButtonStyle: ViewModifier {
+    var menu = false
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) { content.buttonStyle(.glass) }
+        if menu {
+            if #available(iOS 26.0, *) {
+                content.padding(.horizontal, 12).padding(.vertical, 7)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+            } else { content.padding(7).background(.ultraThinMaterial, in: Capsule()) }
+        } else if #available(iOS 26.0, *) { content.buttonStyle(.glass) }
         else { content.buttonStyle(.bordered) }
     }
 }
