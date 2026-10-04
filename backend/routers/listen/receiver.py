@@ -1442,9 +1442,12 @@ class ListenReceiver(ReplayFilterMixin):
             await self._reject_candidate(raw, epoch, hop, previous)
             return False
         delivery.connection = self._wrap_legacy_stt_socket(raw, epoch)
-        self.stt_socket = delivery if replay or self._replay_live_tail else delivery.connection
-        # Transfer this bounded tail to the adopted socket; the next failed leg
-        # snapshots the capture ring, never this queue's already accepted prefix.
+        # Empty prefixes still need the independent paced tail for subsequent
+        # capture; exposing the raw paced writer stalls receive/disconnect
+        # observation behind a buffered client burst.
+        self.stt_socket = delivery
+        # Transfer this bounded tail to the adopted socket. A later failover
+        # uses the capture ring, or takes the unwritten tail when no ring exists.
         self._replay_live_tail = deque()
         self._replay_tail_bytes = 0
         delivery.start_tail(draining=self.client_closing)
@@ -1605,10 +1608,13 @@ class ListenReceiver(ReplayFilterMixin):
             )
             for packet in self._replay_live_tail:
                 self._live_birth.note(packet.start, packet.start + len(packet.data) // 2, packet.received)
-            self._replay_live_tail.clear()
-            self._replay_tail_bytes = 0
             if window_ring is not None:
+                self._replay_live_tail.clear()
+                self._replay_tail_bytes = 0
                 self._window_replay_cutoff_sample = window_ring.finalized_sample
+            elif isinstance(previous, ReplayTailSocket):
+                self._replay_live_tail.extendleft(reversed(previous.take_tail()))
+                self._replay_tail_bytes = sum(len(packet.data) for packet in self._replay_live_tail)
             retire = getattr(previous, 'retire_for_replay', None)
             if window_ring is not None and callable(retire):
                 retire()
@@ -1815,6 +1821,24 @@ class ListenReceiver(ReplayFilterMixin):
                 # cursor and those samples simply have no provider mapping.
                 self._stt_buffer_start_sample = None
                 return
+            socket = self.stt_socket
+            if socket is not None and not isinstance(socket, ReplayTailSocket) and not socket_is_finishing(socket):
+                # Reuse the bounded tail on initial paid legs too. Capacity
+                # waits belong to its supervised pump, so receive_data can
+                # keep reading audio and observe disconnect immediately.
+                wait_capacity = getattr(replay_delivery.raw_transport(socket), 'wait_send_capacity', None)
+                if callable(wait_capacity) and self._serving_provider() in {'soniox', 'modulate', 'deepgram'}:
+                    self.stt_socket = ReplayTailSocket(
+                        socket,
+                        ReplayPacer(request.sample_rate, self.host.stt_service.value, socket),
+                        deque(),
+                        self.host,
+                        source=self._serving_provider(),
+                        birth=self._live_birth,
+                        retire_interval=(lambda end: ring.finalize_through(end) if ring is not None else 0),
+                        write_wait_seconds=socket_replay_limits(socket).queue_wait_seconds,
+                    )
+                    self.stt_socket.start_tail(draining=self.client_closing)
             outbound_audio = bytes(buffer)
             outbound_start_sample = self._stt_buffer_start_sample
             window_ring = self._window_ring()

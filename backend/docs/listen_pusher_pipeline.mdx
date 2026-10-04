@@ -924,6 +924,24 @@ separately enabled canary Deployment — the recovery paths below apply. No
 deployment or enablement is performed by this change. See the rollout gate in
 `backend/docs/operational/windowed-live-stt.md`.
 
+Recovery-armed initial paid legs and recovered successors use the independent
+paced tail, including when the replay prefix is empty. Its supervised pump
+waits for bounded send-queue headroom; capture and disconnect observation
+continue while wire delivery waits. A stalled writer still times out within
+the adapter's two-second queue bound. On later failover without a window replay
+ring, the old wrapper transfers its unwritten tail to the next successor before
+abort, preserving capture timestamps and debiting confirmed writes. This path
+retains the 26-second tail admission cap and 28-second packet residence bound;
+overload/expired backlog keeps the existing failure/skipped-audio accounting. A synchronous enqueue that latches a typed
+capacity failure retains that cause; it does not open a provider-outage circuit
+as `send_failed`. Flag-off sends retain their original behavior.
+
+A client disconnect with code 1006 is a cancellation unless separate terminal
+STT or runtime failure evidence exists. Recovery's graceful drain eligibility
+is separate from that label. Any-text attempt success is irreversible, so later
+STT loss needs a session-close gate; see the comparison notes in
+`backend/docs/runbooks/listen-stt-careful-rollout.md`.
+
 For an allocated windowed-TDT session, listen retains a bounded 90-second
 capture-positioned PCM ring. Delivered window segments advance its finalized
 sample boundary. If the socket dies after accepting audio, the receiver starts
