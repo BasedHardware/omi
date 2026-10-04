@@ -21,7 +21,7 @@ import logging
 import math
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Mapping
 
@@ -50,8 +50,11 @@ _REASONS = (
     'bounds_cells',
     'layout_shape',
     'layout_timing',
+    'layout_non_finite',
+    'layout_out_of_window',
+    'layout_window_slop',
     'layout_unplaced',
-    'layout_overlap',
+    'layout_overlap_ratio',
     'ineligible',
 )
 
@@ -80,6 +83,8 @@ MAX_MATCHER_CALLS = 128
 MAX_COMPARED_TOKENS = 16384
 MAX_TOKEN_COMPARISONS = 262144
 MAX_BUNDLE_CHECKS = 4096
+MAX_LAYOUT_SLOP_SECONDS = 2.0
+MAX_LAYOUT_OVERLAP_FRACTION = 0.5
 
 _WORD = re.compile(r"[^\W_]+(?:'[^\W_]+)?", re.UNICODE)
 
@@ -95,6 +100,7 @@ class CaptureContainment:
     support_seconds: float = 0.0
     coverage: float = 0.0
     basis: str = 'full'
+    dropped_segments: int = 0
 
     def evidence(self) -> dict:
         """Numeric-only record; never carries transcript text or identifiers."""
@@ -127,15 +133,25 @@ def record_capture_containment(
     if isinstance(jev_p, (int, float)) and not isinstance(jev_p, bool):
         if math.isfinite(jev_p) and 0 <= jev_p <= 1:
             score = f'{round(float(jev_p), 6):f}'
+    dropped = getattr(decision, 'dropped_segments', 0)
+    if not isinstance(dropped, int) or isinstance(dropped, bool):
+        dropped = 0
+    dropped = max(0, min(dropped, 2 * MAX_SEGMENTS))
     logger.info(
-        'event=capture_group_containment mode=%s phase=%s would_join=%s reason=%s jev_p=%s basis=%s',
+        'event=capture_group_containment mode=%s phase=%s would_join=%s reason=%s jev_p=%s basis=%s dropped_segments=%d',
         safe_mode,
         safe_phase,
         'true' if decision.would_join else 'false',
         reason,
         score,
         basis,
+        dropped,
     )
+
+
+@dataclass
+class _LayoutStats:
+    dropped_segments: int = 0
 
 
 class _ContainmentRejected(Exception):
@@ -166,7 +182,22 @@ def _window(row: Any) -> tuple[datetime, datetime, str, Any] | None:
 
 
 def _valid_time(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def _segment_track(segment: Any) -> tuple[bool, int | str | None]:
+    if _field(segment, 'is_user') is True:
+        return (True, None)
+    speaker_id = _field(segment, 'speaker_id')
+    if isinstance(speaker_id, int) and not isinstance(speaker_id, bool):
+        return (False, speaker_id)
+    speaker = _field(segment, 'speaker')
+    return (False, speaker if isinstance(speaker, str) and len(speaker) <= 128 else None)
 
 
 def _in_window_segments(
@@ -175,6 +206,8 @@ def _in_window_segments(
     ix_start: datetime,
     ix_end: datetime,
     segments: Any,
+    *,
+    stats: _LayoutStats,
 ) -> tuple[list[tuple[datetime, datetime, bool, tuple[str, ...], int]], int]:
     """Wholly-in-window text segments; raises _ContainmentRejected on the first violation."""
     if segments is None:
@@ -186,18 +219,28 @@ def _in_window_segments(
         raise _ContainmentRejected('bounds_segments')
     total_chars = 0
     total_words = 0
+    tracks: dict[int, tuple[bool, int | str | None]] = {}
     placed: list[tuple[datetime, datetime, bool, tuple[str, ...], int]] = []
     for index, segment in enumerate(collected):
         text = _field(segment, 'text')
         if not isinstance(text, str) or not text:
             continue
         start, end = _field(segment, 'start'), _field(segment, 'end')
+        if any(not isinstance(value, (int, float)) or isinstance(value, bool) for value in (start, end)):
+            raise _ContainmentRejected('layout_timing')
         if not _valid_time(start) or not _valid_time(end):
-            raise _ContainmentRejected('layout_timing')
-        if not (0 <= start < end <= duration_seconds):
-            raise _ContainmentRejected('layout_timing')
+            raise _ContainmentRejected('layout_non_finite')
         if _field(segment, 'audio_alignment') == 'unplaced':
             raise _ContainmentRejected('layout_unplaced')
+        if end <= start:
+            stats.dropped_segments += 1
+            continue
+        raw_duration = end - start
+        if end <= 0 or start >= duration_seconds:
+            raise _ContainmentRejected('layout_out_of_window')
+        if start < -MAX_LAYOUT_SLOP_SECONDS or end > duration_seconds + MAX_LAYOUT_SLOP_SECONDS:
+            raise _ContainmentRejected('layout_window_slop')
+        start, end = max(0.0, start), min(duration_seconds, end)
         wall_start = started_at + timedelta(seconds=start)
         wall_end = started_at + timedelta(seconds=end)
         if wall_start < ix_start or wall_end > ix_end:
@@ -213,19 +256,33 @@ def _in_window_segments(
         total_words += len(words)
         if total_words > MAX_CAPTURE_WORDS:
             raise _ContainmentRejected('bounds_words')
-        if end - start > MAX_SEGMENT_SECONDS:
+        if raw_duration > MAX_SEGMENT_SECONDS:
             raise _ContainmentRejected('bounds_segment_seconds')
         if not words:
             continue
         placed.append((wall_start, wall_end, _field(segment, 'is_user') is True, words, index))
+        tracks[index] = _segment_track(segment)
     placed.sort(key=lambda item: (item[0], item[1], item[4]))
-    latest_end: dict[bool, datetime] = {}
+    latest_end: dict[tuple[bool, int | str | None], datetime] = {}
+    durations: dict[tuple[bool, int | str | None], float] = {}
+    redundant: dict[tuple[bool, int | str | None], float] = {}
+    seen: set[tuple[tuple[bool, int | str | None], datetime, datetime, tuple[str, ...]]] = set()
+    normalized: list[tuple[datetime, datetime, bool, tuple[str, ...], int]] = []
     for item in placed:
-        previous = latest_end.get(item[2])
-        if previous is not None and item[0] < previous:
-            raise _ContainmentRejected('layout_overlap')
-        latest_end[item[2]] = item[1]
-    return placed, total_words
+        track = tracks[item[4]]
+        previous = latest_end.get(track)
+        seconds = (item[1] - item[0]).total_seconds()
+        durations[track] = durations.get(track, 0.0) + seconds
+        overlap = max(0.0, (min(previous, item[1]) - item[0]).total_seconds()) if previous is not None else 0.0
+        redundant[track] = redundant.get(track, 0.0) + overlap
+        latest_end[track] = item[1] if previous is None else max(previous, item[1])
+        key = (track, item[0], item[1], item[3])
+        if key not in seen:
+            seen.add(key)
+            normalized.append(item)
+    if any(redundant[track] > durations[track] * MAX_LAYOUT_OVERLAP_FRACTION for track in durations):
+        raise _ContainmentRejected('layout_overlap_ratio')
+    return normalized, total_words
 
 
 def _bigrams(words: tuple[str, ...]) -> set[tuple[str, str]]:
@@ -357,13 +414,15 @@ def _sample_utterances(
 
 def measure_capture_containment(first: Any, second: Any, *, mode: str = 'on') -> CaptureContainment:
     """Decide whether the smaller capture's user speech is contained in the other."""
+    stats = _LayoutStats()
     try:
-        return _measure_capture_containment(first, second, mode=mode)
+        decision = _measure_capture_containment(first, second, mode=mode, stats=stats)
     except _ContainmentRejected as exc:
-        return CaptureContainment(would_join=False, reason=exc.reason)
+        decision = CaptureContainment(would_join=False, reason=exc.reason)
+    return replace(decision, dropped_segments=stats.dropped_segments)
 
 
-def _measure_capture_containment(first: Any, second: Any, *, mode: str) -> CaptureContainment:
+def _measure_capture_containment(first: Any, second: Any, *, mode: str, stats: _LayoutStats) -> CaptureContainment:
     row_a, row_b = _window(first), _window(second)
     if row_a is None or row_b is None or row_a[2] == row_b[2]:
         return CaptureContainment(would_join=False, reason='ineligible')
@@ -373,7 +432,7 @@ def _measure_capture_containment(first: Any, second: Any, *, mode: str) -> Captu
     sides = []
     for start, finish, _source, segments in (row_a, row_b):
         duration = (finish - start).total_seconds()
-        loaded = _in_window_segments(start, duration, ix_start, ix_end, segments)
+        loaded = _in_window_segments(start, duration, ix_start, ix_end, segments, stats=stats)
         sides.append(loaded)
     words_a = sum(len(words) for _, _, _, words, _ in sides[0][0])
     words_b = sum(len(words) for _, _, _, words, _ in sides[1][0])

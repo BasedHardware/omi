@@ -581,54 +581,54 @@ of union duration of matched utterance intervals (not wall-span gaps), and
 matched coverage of at least 0.8 of the smaller side — always exact matched
 words divided by all in-window smaller-side words for the full population that
 authorizes a join; only the shadow path extrapolates from the strided sample
-described below.
-Every threshold
-is a deliberately conservative heuristic, not calibrated on real account data.
-All inputs are
-bounded and every bound fails closed with a specific label. The raw scan caps
-at 4,096 segments including out-of-window text (`bounds_segments`); character
-and word totals (524,288 / 64,000, `bounds_chars` / `bounds_words`) count only
-text wholly inside the intersection, and valid out-of-window text is skipped
-before any tokenization or accounting. Per-segment caps stay 2,048 characters,
-128 words, and 90 seconds (`bounds_segment_chars`, `bounds_segment_words`,
+described below. Every threshold is a deliberately conservative heuristic, not
+calibrated on real account data. All inputs are bounded and every bound fails
+closed with a specific label. The raw scan caps at 4,096 segments including
+out-of-window text (`bounds_segments`); character and word totals
+(524,288 / 64,000, `bounds_chars` / `bounds_words`) count only text wholly
+inside the intersection, and valid out-of-window text is skipped before any
+tokenization or accounting. Per-segment caps stay 2,048 characters, 128 words,
+and 90 seconds (`bounds_segment_chars`, `bounds_segment_words`,
 `bounds_segment_seconds`); candidate discovery fails at 16 bundles per
 utterance (`bounds_candidates`). Layout violations report separately:
 `layout_shape` for a malformed segment list, `layout_timing` for missing,
-non-finite or out-of-capture times, `layout_unplaced` for `audio_alignment`
-`unplaced` text, and `layout_overlap` for overlapping or duplicated intervals
-within one attribution track (own-voice versus all other speakers; touching
-endpoints are allowed, and the two tracks may overlap each other). Every
-in-window string, including whitespace-only text, counts toward the character
+non-numeric or boolean times, `layout_non_finite` for NaN/inf or oversized
+ints, `layout_out_of_window` for intervals wholly outside the capture window,
+`layout_window_slop` beyond a ±2 s tolerance (within it, endpoints clamp to the
+window), `layout_unplaced` for `audio_alignment` `unplaced` text, and
+`layout_overlap_ratio` when one track's redundant overlap exceeds half its
+placed duration — own-voice is one track, non-user tracks key on speaker id or
+bounded spelling, and exact time+word duplicates dedup after the ratio counts
+(one copy allowed, triples reject). Degenerate durations drop and count in the
+clamped `dropped_segments` log field. Every in-window
+string, including whitespace-only text, counts toward the character
 budgets; missing or non-`is_user` attribution, malformed timing, and speech
 outside the shared window are never evidence. Work per pair is additionally
 bounded end to end: candidate windows are located by index lookups over the
 sorted target starts rather than a full rescan, the two-shared-bigram half of
 the acceptance conjunction (the pair still needs the 0.8 ordered-LCS coverage)
 is evaluated before any alignment so lexically disjoint candidates never reach
-the DP, and four pair-wide budgets — 4,096
-bundle-check span attempts, 128 matcher calls, 16,384 summed compared tokens,
-and 262,144 summed LCS cells — bound discovery and all alignments together, so
-even candidates that never qualify cannot rescan the target; any projected
-overflow returns its specific bound label (`bounds_bundle_checks`,
-`bounds_matcher_calls`, `bounds_tokens`, `bounds_cells`) with no partial
-evidence. In `shadow` mode only, when the smaller side carries more than 32
-eligible utterances, the matcher inspects a deterministic sample of at most 32
-unique utterances strided evenly by cumulative eligible word mass — quantile
-positions over the running word total, including both endpoints, never a
-first-N prefix; repeated quantile hits on one utterance retain their
-multiplicity as its coverage weight — and extrapolates coverage as
-(sum of weight × per-utterance matched fraction / sum of weights) ×
+the DP, and four pair-wide budgets — 4,096 bundle-check span attempts, 128
+matcher calls, 16,384 summed compared tokens, and 262,144 summed LCS cells —
+bound discovery and all alignments together, so even candidates that never
+qualify cannot rescan the target; any projected overflow returns its specific
+bound label (`bounds_bundle_checks`, `bounds_matcher_calls`, `bounds_tokens`,
+`bounds_cells`) with no partial evidence. In `shadow` mode only, when the
+smaller side carries more than 32 eligible utterances, the matcher inspects a
+deterministic sample of at most 32 unique utterances strided evenly by
+cumulative eligible word mass — quantile positions over the running word total,
+including both endpoints, never a first-N prefix; repeated quantile hits on one
+utterance retain their multiplicity as its coverage weight — and extrapolates
+coverage as (sum of weight × per-utterance matched fraction / sum of weights) ×
 (eligible/total in-window words); rejected matches contribute zero. When the
 matcher inspects every eligible utterance, each weight equals the utterance's
 word count and the estimator reduces to the original matched/total ratio. The
 sampled coverage is a weighted heuristic estimate, not whole-transcript proof
-and not a raw matched/smaller ratio. The numeric evidence keeps
-`smaller_words` as the full in-window denominator while the matched fields
-count actual matched words in the sampled utterances only. Total work stays O(N log N)
-sorting and index lookups plus at most 4,096×384 candidate-word construction
-and the fixed alignment budgets. Modes: `off` runs nothing
-new, `shadow` computes and logs the fixed content-free line
-`event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=… basis=…`
+and not a raw matched/smaller ratio. The numeric evidence keeps `smaller_words`
+as the full in-window denominator while the matched fields count actual matched
+words in the sampled utterances only. Modes: `off` runs nothing new, `shadow`
+computes and logs the fixed content-free line
+`event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=… basis=… dropped_segments=…`
 (labels and numbers only — never transcript, identifiers, or errors), and `on`
 authorizes the same `join_capture_group` writer with the detector's numeric
 evidence and the existing expected windows and transcript fingerprints — but
