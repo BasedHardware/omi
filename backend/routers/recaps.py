@@ -4,7 +4,7 @@ import logging
 from datetime import date as Date
 from datetime import datetime
 from itertools import islice
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -90,11 +90,12 @@ def _period_people(request: Request, uid: str, start: Date, end: Date, time_zone
         budget = conversation_scan_budget(request, route='period_recap')
         conversations = recap_people_scan(uid, start_date=start_utc, end_date=end_utc, budget=budget)
         stats = aggregate_people_stats(islice(conversations, RECAP_PEOPLE_SCAN_CAP))
-        names = {
-            person.get('id'): person.get('name')
-            for person in users_db.get_people(uid)
-            if isinstance(person, dict) and person.get('id') in stats
-        }
+        names: Dict[str, str] = {}
+        for person in users_db.get_people(uid):
+            person_id = person.get('id') if isinstance(person, dict) else None
+            name = person.get('name') if isinstance(person, dict) else None
+            if isinstance(person_id, str) and person_id in stats and isinstance(name, str):
+                names[person_id] = name
         return stats, names
     except Exception as exc:
         record_fallback(
