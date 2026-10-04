@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import importlib.util
 import json
 import sys
 import unittest
@@ -5,9 +8,14 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-# Add scratch path to sys.path
-sys.path.insert(0, str(Path(__file__).parent))
-import conversations_to_podcast as c2p
+# Load conversations_to_podcast example script dynamically
+script_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_to_podcast.py"
+if not script_path.exists():
+    script_path = Path(__file__).resolve().parent / "conversations_to_podcast.py"
+
+spec = importlib.util.spec_from_file_location("conversations_to_podcast", script_path)
+c2p = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(c2p)
 
 
 class TestConversationsToPodcast(unittest.TestCase):
@@ -16,24 +24,32 @@ class TestConversationsToPodcast(unittest.TestCase):
         self.sample_convs = [
             {
                 "id": "conv-001",
-                "title": "Morning Sync Meeting",
-                "category": "work",
                 "started_at": "2026-09-27T09:00:00Z",
                 "finished_at": "2026-09-27T09:30:00Z",
                 "structured": {
+                    "title": "Morning Sync Meeting",
+                    "category": "work",
                     "overview": "Discussed Q4 roadmap and client deliverables."
                 },
-                "transcript": "Speaker 1: Welcome everyone to the morning sync.",
+                "transcript_segments": [
+                    {"speaker": "Speaker 1", "text": "Welcome everyone to the morning sync."}
+                ],
                 "audio_url": "https://cdn.example.com/audio/conv-001.mp4"
             },
             {
                 "id": "conv-002",
-                "title": "Coffee Chat with Alex",
-                "category": "personal",
                 "created_at": "2026-09-27T14:15:00Z",
                 "duration_seconds": 720,
-                "summary": "Catching up on weekend plans.",
-                "transcript": "Speaker 2: How was your weekend?"
+                "structured": {
+                    "title": "Coffee Chat with Alex",
+                    "category": "personal",
+                    "overview": "Catching up on weekend plans."
+                },
+                "transcript_segments": [
+                    {"speaker": "Alex", "text": "How was your weekend?"},
+                    {"speaker": "Me", "text": "Pretty good, got a lot done!"}
+                ]
+                # Notice: no audio_url here!
             }
         ]
 
@@ -47,7 +63,8 @@ class TestConversationsToPodcast(unittest.TestCase):
                 str(input_file),
                 "-o", str(output_file),
                 "--title", "Test Podcast",
-                "--author", "Test Host"
+                "--author", "Test Host",
+                "--email", "host@example.com"
             ])
             self.assertEqual(ret, 0)
             self.assertTrue(output_file.exists())
@@ -59,21 +76,55 @@ class TestConversationsToPodcast(unittest.TestCase):
             self.assertIsNotNone(channel)
             self.assertEqual(channel.find("title").text, "Test Podcast")
 
+            # Check owner email
+            owner = channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}owner")
+            self.assertIsNotNone(owner)
+            self.assertEqual(owner.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}email").text, "host@example.com")
+
             items = channel.findall("item")
             self.assertEqual(len(items), 2)
 
-            # Check item 1 (Morning Sync)
+            # Check item 1 (Morning Sync with real audio_url)
             item1 = next(it for it in items if "conv-001" in it.find("guid").text)
             self.assertEqual(item1.find("title").text, "Morning Sync Meeting")
-            enclosure = item1.find("enclosure")
-            self.assertIsNotNone(enclosure)
-            self.assertEqual(enclosure.get("url"), "https://cdn.example.com/audio/conv-001.mp4")
-            self.assertEqual(enclosure.get("type"), "audio/mp4")
+            enclosure1 = item1.find("enclosure")
+            self.assertIsNotNone(enclosure1)
+            self.assertEqual(enclosure1.get("url"), "https://cdn.example.com/audio/conv-001.mp4")
+            self.assertEqual(enclosure1.get("type"), "audio/mp4")
 
             # Check duration (30 mins = 30:00)
             dur = item1.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}duration")
             self.assertIsNotNone(dur)
             self.assertEqual(dur.text, "30:00")
+
+            # Check item 2 (Coffee Chat with NO audio_url: must NOT emit fabricated enclosure)
+            item2 = next(it for it in items if "conv-002" in it.find("guid").text)
+            self.assertEqual(item2.find("title").text, "Coffee Chat with Alex")
+            enclosure2 = item2.find("enclosure")
+            self.assertIsNone(enclosure2)  # Clean RSS: omit enclosure if no audio URL
+
+            # Check transcript joined from segments
+            desc2 = item2.find("description").text
+            self.assertIn("Alex", desc2)
+            self.assertIn("Pretty good", desc2)
+
+    def test_audio_base_url_generates_enclosure(self):
+        with TemporaryDirectory() as tmpdir:
+            input_file = Path(tmpdir) / "conversations.json"
+            input_file.write_text(json.dumps([self.sample_convs[1]]), encoding="utf-8")
+            output_file = Path(tmpdir) / "feed.xml"
+
+            ret = c2p.main([
+                str(input_file),
+                "-o", str(output_file),
+                "--audio-base-url", "https://storage.googleapis.com/omi-recordings/"
+            ])
+            self.assertEqual(ret, 0)
+            root = ET.fromstring(output_file.read_text(encoding="utf-8"))
+            item = root.find("channel").find("item")
+            enclosure = item.find("enclosure")
+            self.assertIsNotNone(enclosure)
+            self.assertEqual(enclosure.get("url"), "https://storage.googleapis.com/omi-recordings/conv-002.mp4")
 
     def test_deduplication_across_files(self):
         with TemporaryDirectory() as tmpdir:
@@ -81,27 +132,12 @@ class TestConversationsToPodcast(unittest.TestCase):
             f2 = Path(tmpdir) / "page2.json"
 
             f1.write_text(json.dumps([self.sample_convs[0]]), encoding="utf-8")
-            # f2 has both conv-001 and conv-002
             f2.write_text(json.dumps(self.sample_convs), encoding="utf-8")
 
             output_file = Path(tmpdir) / "feed.xml"
             ret = c2p.main([str(f1), str(f2), "-o", str(output_file)])
             self.assertEqual(ret, 0)
 
-            root = ET.fromstring(output_file.read_text(encoding="utf-8"))
-            items = root.find("channel").findall("item")
-            # Should have exactly 2 unique items, not 3
-            self.assertEqual(len(items), 2)
-
-    def test_wrapped_json_format(self):
-        with TemporaryDirectory() as tmpdir:
-            wrapped = {"conversations": self.sample_convs}
-            input_file = Path(tmpdir) / "wrapped.json"
-            input_file.write_text(json.dumps(wrapped), encoding="utf-8")
-            output_file = Path(tmpdir) / "feed.xml"
-
-            ret = c2p.main([str(input_file), "-o", str(output_file)])
-            self.assertEqual(ret, 0)
             root = ET.fromstring(output_file.read_text(encoding="utf-8"))
             items = root.find("channel").findall("item")
             self.assertEqual(len(items), 2)

@@ -17,15 +17,15 @@ You need Python 3.10+ and an authenticated `omi-cli` for the initial export.
 
 ## 1. Export conversations from Omi
 
-Export your conversation history into JSON files:
+Export your conversation history into JSON files (include transcripts so speaker turns are captured):
 
 ```bash
-# Export recent conversations
-omi conversation list --limit 50 --json > conversations.json
+# Export recent conversations with transcripts
+omi --json conversation list --limit 100 --include-transcript > conversations.json
 
 # Or export across multiple pages
-omi conversation list --limit 100 --offset 0 --json > page1.json
-omi conversation list --limit 100 --offset 100 --json > page2.json
+omi --json conversation list --limit 100 --offset 0 --include-transcript > page1.json
+omi --json conversation list --limit 100 --offset 100 --include-transcript > page2.json
 ```
 
 ---
@@ -43,6 +43,7 @@ python conversations_to_podcast.py conversations.json \
   -o podcast.xml \
   --title "My Life Journal" \
   --author "Alice" \
+  --email "alice@example.com" \
   --description "Daily conversations, thoughts, and meeting recaps" \
   --audio-base-url "https://my-bucket.s3.amazonaws.com/recordings/"
 
@@ -65,7 +66,8 @@ python conversations_to_podcast.py conversations.json \
 | `--title` | `"Omi Conversations"` | Podcast show title |
 | `--description` | `"Audio life-log..."` | Podcast show description |
 | `--author` | `"Omi User"` | Author / Host name |
-| `--audio-base-url` | `None` | Custom base URL prefix for audio recordings |
+| `--email` | `None` | Optional owner contact email |
+| `--audio-base-url` | `None` | Custom base URL prefix for hosted audio files |
 | `--filter-category`| `None` | Filter items by category (e.g. `work`, `personal`) |
 | `--force` | `False` | Overwrite the output file if it already exists |
 
@@ -87,5 +89,5 @@ python conversations_to_podcast.py conversations.json \
 Run the test suite:
 
 ```bash
-python test_conversations_to_podcast.py
+python -m pytest tests/test_conversations_to_podcast.py
 ```

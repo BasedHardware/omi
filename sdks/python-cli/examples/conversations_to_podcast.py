@@ -9,7 +9,8 @@ Options:
     -o, --output FILE         Output path for the RSS feed (default: podcast.xml)
     --title TITLE             Podcast show title (default: "Omi Conversations")
     --description DESC        Podcast show description (default: "Audio life-log and conversation transcripts from Omi")
-    --author AUTHOR           Podcast author / owner (default: "Omi User")
+    --author AUTHOR           Podcast author / host (default: "Omi User")
+    --email EMAIL             Podcast owner contact email (optional)
     --audio-base-url URL      Base URL prefix for audio attachments (e.g. "https://storage.googleapis.com/my-recordings/")
     --filter-category CAT     Only include conversations matching this category
     --force                   Overwrite output file if it already exists
@@ -111,7 +112,8 @@ def extract_conversations(pages: Sequence[str], category_filter: Optional[str] =
             seen_ids.add(conv_id)
 
             if category_filter:
-                item_cat = str(item.get("category", "")).lower()
+                structured = item.get("structured") or {}
+                item_cat = str(structured.get("category") or item.get("category") or "").lower()
                 if item_cat != category_filter.lower():
                     continue
 
@@ -125,6 +127,7 @@ def build_podcast_feed(
     title: str = "Omi Conversations",
     description: str = "Audio life-log and conversation transcripts from Omi",
     author: str = "Omi User",
+    email_addr: Optional[str] = None,
     audio_base_url: Optional[str] = None
 ) -> str:
     """Generate an RSS 2.0 XML string with iTunes podcast tags."""
@@ -145,9 +148,10 @@ def build_podcast_feed(
     # iTunes tags
     ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}author").text = author
     ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}summary").text = description
-    itunes_owner = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}owner")
-    ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}name").text = author
-    ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}email").text = "support@omi.me"
+    if email_addr:
+        itunes_owner = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}owner")
+        ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}name").text = author
+        ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}email").text = email_addr
     ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit").text = "false"
     ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", {"text": "Technology"})
 
@@ -163,7 +167,7 @@ def build_podcast_feed(
 
         # Item title
         structured = item.get("structured") or {}
-        item_title = item.get("title") or structured.get("title")
+        item_title = structured.get("title") or item.get("title")
         if not item_title:
             started = item.get("started_at") or item.get("created_at") or "Unknown Date"
             item_title = f"Conversation {started[:16].replace('T', ' ')}"
@@ -179,15 +183,32 @@ def build_podcast_feed(
 
         # Description / Content
         desc_parts = []
-        if structured.get("overview"):
-            desc_parts.append(f"Overview: {structured['overview']}")
-        elif item.get("summary"):
-            desc_parts.append(f"Summary: {item['summary']}")
+        overview = structured.get("overview") or item.get("summary") or item.get("overview")
+        if overview:
+            desc_parts.append(f"Overview: {overview}")
 
-        if item.get("category"):
-            desc_parts.append(f"Category: {item['category']}")
+        cat = structured.get("category") or item.get("category")
+        if cat:
+            desc_parts.append(f"Category: {cat}")
 
-        if item.get("transcript"):
+        # Support transcript_segments from real exports, with fallback to item.get("transcript")
+        segments = item.get("transcript_segments")
+        if isinstance(segments, list) and segments:
+            lines = []
+            for seg in segments:
+                if isinstance(seg, dict):
+                    speaker = seg.get("speaker") or seg.get("speaker_id")
+                    text = seg.get("text", "").strip()
+                    if text:
+                        if speaker:
+                            lines.append(f"[{speaker}]: {text}")
+                        else:
+                            lines.append(text)
+                elif isinstance(seg, str) and seg.strip():
+                    lines.append(seg.strip())
+            if lines:
+                desc_parts.append("\nTranscript:\n" + "\n".join(lines))
+        elif item.get("transcript"):
             desc_parts.append(f"\nTranscript:\n{item['transcript']}")
 
         full_desc = "\n\n".join(desc_parts) if desc_parts else "No transcript available."
@@ -198,19 +219,22 @@ def build_podcast_feed(
         if dur:
             ET.SubElement(entry, "{http://www.itunes.com/dtds/podcast-1.0.dtd}duration").text = dur
 
-        # Audio enclosure
+        # Audio enclosure: only emit if real audio URL exists or base URL is configured
         audio_url = item.get("audio_url") or item.get("recording_url")
         if not audio_url and audio_base_url:
             base = audio_base_url.rstrip("/")
             audio_url = f"{base}/{conv_id}.mp4"
-        elif not audio_url:
-            audio_url = f"https://recordings.omi.me/audio/{conv_id}.mp4"
 
-        ET.SubElement(entry, "enclosure", {
-            "url": audio_url,
-            "type": "audio/mp4",
-            "length": str(item.get("audio_size_bytes") or 1048576)
-        })
+        if audio_url:
+            attribs = {
+                "url": audio_url,
+                "type": "audio/mp4"
+            }
+            if item.get("audio_size_bytes"):
+                attribs["length"] = str(item["audio_size_bytes"])
+            else:
+                attribs["length"] = "0"
+            ET.SubElement(entry, "enclosure", attribs)
 
     # Indent XML for readability
     ET.indent(rss, space="  ", level=0)
@@ -227,6 +251,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--title", default="Omi Conversations", help="Podcast title")
     parser.add_argument("--description", default="Audio life-log and conversation transcripts from Omi", help="Podcast description")
     parser.add_argument("--author", default="Omi User", help="Podcast author name")
+    parser.add_argument("--email", default=None, help="Podcast owner contact email (optional)")
     parser.add_argument("--audio-base-url", default=None, help="Base URL prefix for hosted audio files")
     parser.add_argument("--filter-category", default=None, help="Filter conversations by category")
     parser.add_argument("--force", action="store_true", help="Overwrite existing output file")
@@ -253,6 +278,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         title=args.title,
         description=args.description,
         author=args.author,
+        email_addr=args.email,
         audio_base_url=args.audio_base_url
     )
 
