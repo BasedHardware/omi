@@ -6,6 +6,8 @@ import argparse
 import hashlib
 import json
 import os
+from dataclasses import dataclass
+from time import perf_counter
 from pathlib import Path
 from typing import Callable, Literal
 from urllib.parse import urlparse
@@ -117,9 +119,29 @@ def load_fixtures(path: Path = FIXTURES) -> FixtureSet:
     return fixtures
 
 
+@dataclass(frozen=True)
+class LLMResult:
+    content: dict
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    latency_seconds: float | None = None
+
+    def cost(self) -> dict:
+        return {
+            'input_tokens': self.input_tokens,
+            'output_tokens': self.output_tokens,
+            'latency_seconds': self.latency_seconds,
+        }
+
+
+def _result(value: dict | LLMResult) -> LLMResult:
+    # Legacy fake callbacks have no measured usage; never invent zero counts.
+    return value if isinstance(value, LLMResult) else LLMResult(content=value)
+
+
 def evaluate(
     fixtures: FixtureSet,
-    llm: Callable[[str, dict], dict],
+    llm: Callable[[str, dict], dict | LLMResult],
     *,
     split: Literal['dev', 'held_out'] = 'dev',
     candidate_prompt: str = CANDIDATE_PROMPT,
@@ -164,24 +186,28 @@ def evaluate(
             evidence_block=render_episode_evidence(items),
             task_intelligence_capture=False,
         )
-        candidate = llm(candidate_prompt, {'instructions': volatile})
-        reference = llm(REFERENCE_PROMPT, {'evidence': evidence})
+        candidate_result = _result(llm(candidate_prompt, {'instructions': volatile}))
+        candidate = candidate_result.content
+        reference = _result(llm(REFERENCE_PROMPT, {'evidence': evidence})).content
         score = JudgeScore.model_validate(
-            llm(
-                JUDGE_PROMPT,
-                {
-                    'evidence': evidence,
-                    'candidate': candidate,
-                    'reference': reference,
-                    'expected': episode.expected.model_dump(),
-                },
-            )
+            _result(
+                llm(
+                    JUDGE_PROMPT,
+                    {
+                        'evidence': evidence,
+                        'candidate': candidate,
+                        'reference': reference,
+                        'expected': episode.expected.model_dump(),
+                    },
+                )
+            ).content
         )
         rows.append(
             {
                 'id': episode.id,
                 'stratum': episode.stratum,
                 'candidate': candidate,
+                'candidate_cost': candidate_result.cost(),
                 'reference': reference,
                 **score.model_dump(),
                 'deterministic_vacuity': is_vacuous_note(candidate),
@@ -240,7 +266,7 @@ class CompatibleEndpoint:
             raise ValueError('disallowed endpoint')
         self.key, self.url, self.model = key, base_url.rstrip('/') + '/chat/completions', model
 
-    def __call__(self, prompt: str, payload: dict) -> dict:
+    def __call__(self, prompt: str, payload: dict) -> LLMResult:
         body = json.dumps(
             {
                 'model': self.model,
@@ -261,9 +287,17 @@ class CompatibleEndpoint:
                 'Content-Type': 'application/json',
             },
         )
+        started = perf_counter()
         with urlopen(request, timeout=60) as response:
             result = json.load(response)
-        return json.loads(result['choices'][0]['message']['content'])
+        latency = perf_counter() - started
+        usage = result.get('usage') or {}
+        return LLMResult(
+            content=json.loads(result['choices'][0]['message']['content']),
+            input_tokens=usage.get('prompt_tokens'),
+            output_tokens=usage.get('completion_tokens'),
+            latency_seconds=latency,
+        )
 
 
 def main() -> None:

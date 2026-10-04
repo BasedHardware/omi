@@ -36,7 +36,13 @@ EPISODE_EVAL_MODEL=... .venv/bin/python -m testing.episode_notes.eval \
 
 No key/endpoint/model means an error before network use. Provider requests use
 zero temperature, bounded output, a 60-second timeout and no retries. Reports
-record model, split and prompt hashes. Keep generated outputs outside git.
+record model, split and prompt hashes. Each note has `candidate_cost` with provider
+`prompt_tokens` / `completion_tokens` as input/output counts and request latency
+in seconds (through response body read; excludes reference/judge calls). Missing
+provider usage is null, never zero. Fake callbacks can return `LLMResult` with
+fixed measurements. Compare matched model/split reports and prompt hashes for
+episode versus baseline candidate runs; token counts include the additive claims.
+The harness does not estimate production retrieval or retry costs. Keep generated outputs outside git.
 Unit tests inject a fake LLM through `evaluate`; they verify mechanics, not
 model quality. Run tests only through `backend/test.sh` with an explicit list.
 Later acceptance should add independent judges, multiple cases per stratum,

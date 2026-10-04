@@ -7,6 +7,7 @@ from testing.episode_notes.eval import (
     JUDGE_PROMPT,
     REFERENCE_PROMPT,
     CompatibleEndpoint,
+    LLMResult,
     evaluate,
     load_fixtures,
 )
@@ -29,7 +30,12 @@ def test_fake_llm_reports_per_stratum_and_does_not_leak_expectations():
         calls.append((prompt, payload))
         if prompt == CANDIDATE_PROMPT:
             assert 'expected' not in payload
-            return {'title': 'Quick chat', 'overview': 'A brief exchange'}
+            return LLMResult(
+                content={'title': 'Quick chat', 'overview': 'A brief exchange'},
+                input_tokens=120,
+                output_tokens=45,
+                latency_seconds=0.25,
+            )
         if prompt == REFERENCE_PROMPT:
             assert 'expected' not in payload
             return {'narrative': 'All available evidence was considered', 'claims': []}
@@ -52,6 +58,10 @@ def test_fake_llm_reports_per_stratum_and_does_not_leak_expectations():
     assert all(group['wrong_provenance_claims'] == 2 for group in report['strata'].values())
     assert json.loads(json.dumps(report)) == report
     assert len(report['prompt_sha256']) == 64
+    assert all(
+        row['candidate_cost'] == {'input_tokens': 120, 'output_tokens': 45, 'latency_seconds': 0.25}
+        for row in report['cases']
+    )
 
 
 def test_endpoint_requires_explicit_opt_in_and_rejects_production():
@@ -65,6 +75,14 @@ def test_endpoint_requires_explicit_opt_in_and_rejects_production():
     'note,expected',
     [
         ({'title': 'Quick chat', 'overview': 'No clear topic'}, True),
+        ({'title': 'Capture', 'overview': 'A brief exchange; no clear topic or concrete decision is captured.'}, True),
+        ({'title': 'Agenda', 'overview': 'Ari said the meeting had no clear topic and asked for an agenda'}, False),
+        ({'title': 'Quick chat with Ana about pricing', 'overview': 'Ana said pricing rose.'}, False),
+        ({'title': 'Topic', 'overview': 'The slide was titled "No clear topic".'}, False),
+        (
+            {'title': 'Capture', 'overview': 'Nothing was captured. Audio stopped after Ari introduced the budget.'},
+            False,
+        ),
         ({'title': 'Empty capture', 'overview': 'Audio captured only you; no other speaker was recorded.'}, False),
         ({'title': 'Budget', 'overview': 'The budget was approved at 5 percent.'}, False),
         ({'title': 'Title without content'}, True),
@@ -73,3 +91,22 @@ def test_endpoint_requires_explicit_opt_in_and_rejects_production():
 )
 def test_deterministic_vacuity(note, expected):
     assert is_vacuous_note(note) is expected
+
+
+def test_endpoint_reports_provider_usage_and_candidate_latency(monkeypatch):
+    import io
+    from testing.episode_notes import eval as module
+
+    response = {
+        'choices': [{'message': {'content': '{"title": "Synthetic"}'}}],
+        'usage': {'prompt_tokens': 321, 'completion_tokens': 123},
+    }
+    monkeypatch.setattr(module, 'urlopen', lambda *a, **k: io.StringIO(json.dumps(response)))
+    ticks = iter([10.0, 10.75, 20.0, 21.0])
+    monkeypatch.setattr(module, 'perf_counter', lambda: next(ticks))
+    endpoint = CompatibleEndpoint(key='fake', base_url='https://example.com/v1', model='fake')
+    result = endpoint('prompt', {})
+    assert result.content == {'title': 'Synthetic'}
+    assert result.cost() == {'input_tokens': 321, 'output_tokens': 123, 'latency_seconds': 0.75}
+    del response['usage']
+    assert endpoint('prompt', {}).cost() == {'input_tokens': None, 'output_tokens': None, 'latency_seconds': 1.0}
