@@ -413,7 +413,8 @@ def test_the_route_policy_declares_the_byok_check_its_auth_dependency_runs():
     # the manifest says so, as it does for the daily-summaries routes.
     [route] = [r for r in recaps_mod.router.routes if getattr(r, 'path', None) == '/v1/users/recaps/{period}']
     assert any(dep.call is recaps_mod.auth.get_current_user_uid for dep in route.dependant.dependencies)
-    manifest = yaml.safe_load((Path(__file__).resolve().parents[2] / 'route_policy_manifest.yaml').read_text())
+    manifest_text = (Path(__file__).resolve().parents[2] / 'route_policy_manifest.yaml').read_text()
+    manifest = yaml.load(manifest_text, Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
     [entry] = [
         e for e in manifest['routes'] if e.get('method') == 'GET' and e.get('path') == '/v1/users/recaps/{period}'
     ]
