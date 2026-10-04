@@ -8,10 +8,10 @@ import database.advice as advice_db
 
 def test_user_col_validates_uid():
     with pytest.raises(ValueError, match="uid must be a non-empty string"):
-        advice_db._user_col("", "advice")
+        advice_db._user_col("", "advice")  # pyright: ignore[reportPrivateUsage]
 
     with pytest.raises(ValueError, match="uid must be a non-empty string"):
-        advice_db._user_col("   ", "advice")
+        advice_db._user_col("   ", "advice")  # pyright: ignore[reportPrivateUsage]
 
 
 def test_create_advice_validates_content(monkeypatch):
@@ -52,7 +52,6 @@ def test_update_and_delete_validate_advice_id():
 def test_mark_all_advice_read_batch_chunking(monkeypatch):
     """Verify mark_all_advice_read handles >500 items by chunking batch commits."""
     mock_col = MagicMock()
-    mock_batch = MagicMock()
     mock_db = MagicMock()
 
     # Create 550 mock documents
