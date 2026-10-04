@@ -302,9 +302,11 @@ async def test_exclusive_dispatch(lane, pipeline, flag, expected):
             raise ConnectionError('flag service unavailable')
         return flag is True
 
-    lane.monkeypatch.setattr(integration.proactivity_flags, 'enabled', resolve)
+    flag_lookup = MagicMock(side_effect=resolve)
+    lane.monkeypatch.setattr(integration.proactivity_flags, 'enabled', flag_lookup)
     lane.monkeypatch.setattr(integration, 'is_trial_paywalled', lambda *args: False)
-    lane.monkeypatch.setattr(integration, 'process_mentor_notification', lambda *args: [{'text': 'test'}])
+    admission = MagicMock(return_value=[{'text': 'test'}])
+    lane.monkeypatch.setattr(integration, 'process_mentor_notification', admission)
     old = MagicMock(return_value=None)
     new = AsyncMock(return_value=None)
     lane.monkeypatch.setattr(integration, '_process_mentor_proactive_notification', old)
@@ -313,6 +315,35 @@ async def test_exclusive_dispatch(lane, pipeline, flag, expected):
     await integration._async_trigger_realtime_integrations('u', [], 'c')
     assert old.call_count == int(expected == 'legacy')
     assert new.await_count == int(expected == 'v2')
+    assert admission.call_count == int(pipeline != 'typo')
+    assert flag_lookup.call_count == int(pipeline == 'cohort')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('messages', [None, [], [{'text': 'test'}]])
+async def test_cohort_resolves_only_after_shared_admission(lane, messages):
+    lane.monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
+    lane.monkeypatch.setattr(integration, 'is_trial_paywalled', lambda *args: False)
+    calls = []
+
+    def admit(uid, segments):
+        calls.append('admit')
+        return messages
+
+    def resolve(uid):
+        calls.append('flag')
+        return True
+
+    lane.monkeypatch.setattr(integration, 'process_mentor_notification', admit)
+    lane.monkeypatch.setattr(integration.proactivity_flags, 'enabled', resolve)
+    new, old = AsyncMock(), MagicMock()
+    lane.monkeypatch.setattr(producers, 'evaluate_mentor_event', new)
+    lane.monkeypatch.setattr(integration, '_process_mentor_proactive_notification', old)
+    lane.monkeypatch.setattr(integration, 'get_available_apps', lambda *args: [])
+    await integration._async_trigger_realtime_integrations('u', [], 'c')
+    assert calls == (['admit', 'flag'] if messages else ['admit'])
+    assert new.await_count == int(bool(messages))
+    old.assert_not_called()
 
 
 @pytest.mark.asyncio

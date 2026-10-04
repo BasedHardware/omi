@@ -1157,10 +1157,14 @@ async def _async_trigger_realtime_integrations(
 
     # Both paths share buffering and deterministic admission. Invalid flips invoke neither.
     mentor_results = {}
-    pipeline = await run_blocking(db_executor, proactivity_flags.mentor_pipeline, uid)
-    if pipeline in {'legacy', 'v2'}:
+    pipeline = os.getenv('MENTOR_PIPELINE', 'legacy')
+    if pipeline in {'legacy', 'v2', 'cohort'}:
         conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
         if conversation_messages:
+            # Cohort selection can call PostHog: only resolve it after the shared
+            # paid/opt-in/buffering/debounce gate has admitted actual messages.
+            if pipeline == 'cohort':
+                pipeline = await run_blocking(db_executor, proactivity_flags.mentor_pipeline, uid)
             if pipeline == 'legacy':
                 with track_usage(uid, Features.REALTIME_INTEGRATIONS):
                     mentor_message = await run_blocking(

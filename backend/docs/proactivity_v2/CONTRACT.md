@@ -507,6 +507,16 @@ or enablement require explicit coordinator action with new version/evidence.
 | User producer preference | Explicit false wins every admission/publication/push check. |
 | `LLM_GATEWAY_ACCOUNTING_ENABLED` | Must be true for v2; existing sink semantics unchanged for other traffic. |
 
+Server flag resolution caches both true and false per UID for **300 seconds**
+per process, with a **60-second** failure cache and a 4,096-entry LRU bound.
+Concurrent same-user misses share one lookup. Errors still select legacy for
+cohort mentor and deny v2 admission; a content-free warning records exception
+type and HTTP status at most once per minute per process. Realtime mentor
+validates the env value first, then runs its existing shared paid/opt-in,
+buffering and debounce admission. Only admitted messages resolve a cohort flag;
+`legacy`/`v2` env selection makes no flag lookup on this dispatch path (v2's
+separate generation/publication/push admission still requires the flag).
+
 Structured events: `proactivity_v2_admission`, `proactivity_v2_budget_reserved`,
 `proactivity_v2_budget_settled`, `proactivity_v2_item_terminal`,
 `proactivity_v2_feed_exposed`, `proactivity_v2_push_terminal`,
@@ -578,8 +588,10 @@ Create the PostHog **`proactivity_v2`** boolean flag in the same project used by
 these server/gateway clients, initially **disabled / zero-percent**. Its registry
 entry is a declaration, not creation or enablement. Absent, unknown or failed flag
 resolution denies v2 generation and push; do not use a user-ID bypass. Verify all
-hosts resolve the same bounded cohort before increasing exposure. No creation or
-flag update is performed by this PR.
+hosts resolve the same bounded cohort before increasing exposure. Allow up to
+300 seconds for cached flag results to reflect an enablement or rollback change,
+and 60 seconds before retrying a failed lookup (see rollback notes below).
+No creation or flag update is performed by this PR.
 
 The rollout defaults remain off: `proactivity_v2` absent/false,
 `MENTOR_PIPELINE=legacy`, and empty commitment queue bindings. Producer registry
@@ -607,8 +619,15 @@ released clients while v2 feed cards target the source conversation.
 5. Flag off initially. Enable bounded cohort only with provisional or measured producer rows,
    readiness checks and actual mobile/macOS feed-to-object/action verification.
 
-Rollback: set `proactivity_v2=false`; all new v2 generation/push stops, in-flight
-calls retain reservations and settle, publication rechecks flag and suppresses.
+Rollback: set `proactivity_v2=false`; cached enabled results expire within
+**300 seconds per process** before new v2 generation/push stops and feed reads
+return disabled. Enablement/ramp changes have the same maximum cache latency;
+flag failures deny immediately on the next uncached check and retry after
+**60 seconds**. Allow this rollback window when checking all serving hosts;
+for an urgent mentor-only rollback, explicitly set `MENTOR_PIPELINE=legacy`
+on every mentor host (effective once that env change reaches the process).
+In-flight calls retain reservations and settle; publication rechecks the cached
+flag and suppresses after disable becomes visible.
 Feed returns disabled, outcomes for existing items still work. Coordinator may
 explicitly flip mentor to legacy; never an automatic failure fallback. Preserve
 ledger/budgets/attempt IDs until TTL; no historical rewrite or refund-on-rollback.
