@@ -115,6 +115,14 @@ describe('TranscriptionTab — custom vocabulary', () => {
     expect(vocab.saveVocabulary).not.toHaveBeenCalled()
   })
 
+  it('retries a failed load', async () => {
+    vocab.fetchVocabulary.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(['Omi'])
+    renderTab()
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('Omi')).toBeTruthy()
+    expect(vocab.fetchVocabulary).toHaveBeenCalledTimes(2)
+  })
+
   it('reverts the optimistic change when saving fails', async () => {
     vocab.fetchVocabulary.mockResolvedValue(['Omi'])
     vocab.saveVocabulary.mockRejectedValue(new Error('500'))
@@ -122,7 +130,47 @@ describe('TranscriptionTab — custom vocabulary', () => {
     await screen.findByText('Omi')
     fireEvent.change(input(), { target: { value: 'Callie' } })
     fireEvent.keyDown(input(), { key: 'Enter' })
+    // The save was attempted and the term shown optimistically, so the check below
+    // observes a real revert rather than an add that never happened.
+    expect(vocab.saveVocabulary).toHaveBeenCalledWith(['Omi', 'Callie'])
+    expect(screen.getByText('Callie')).toBeTruthy()
     await waitFor(() => expect(screen.queryByText('Callie')).toBeNull())
     expect(screen.getByText('Omi')).toBeTruthy()
+  })
+
+  it('a failed earlier save does not undo a newer one that succeeded', async () => {
+    vocab.fetchVocabulary.mockResolvedValue(['Omi'])
+    let failFirst: (e: Error) => void = () => {}
+    vocab.saveVocabulary
+      .mockImplementationOnce(() => new Promise<void>((_, reject) => (failFirst = reject)))
+      .mockResolvedValueOnce(undefined)
+    renderTab()
+    await screen.findByText('Omi')
+    fireEvent.change(input(), { target: { value: 'Callie' } })
+    fireEvent.keyDown(input(), { key: 'Enter' })
+    fireEvent.change(input(), { target: { value: 'OpenAI' } })
+    fireEvent.keyDown(input(), { key: 'Enter' })
+    expect(vocab.saveVocabulary).toHaveBeenLastCalledWith(['Omi', 'Callie', 'OpenAI'])
+    failFirst(new Error('500'))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.getByText('Callie')).toBeTruthy()
+    expect(screen.getByText('OpenAI')).toBeTruthy()
+  })
+
+  it('does not add a term on the Enter that confirms an IME composition', async () => {
+    vocab.fetchVocabulary.mockResolvedValue([])
+    renderTab()
+    await waitFor(() => expect(input().disabled).toBe(false))
+    fireEvent.change(input(), { target: { value: 'にほん' } })
+    fireEvent.keyDown(input(), { key: 'Enter', isComposing: true })
+    expect(vocab.saveVocabulary).not.toHaveBeenCalled()
+    expect(input().value).toBe('にほん')
+  })
+
+  it('says the list is full at the limit instead of silently ignoring input', async () => {
+    vocab.fetchVocabulary.mockResolvedValue(Array.from({ length: 100 }, (_, i) => `term${i}`))
+    renderTab()
+    expect(await screen.findByText(/100\/100 • Remove a word to add another/)).toBeTruthy()
+    expect(input().disabled).toBe(true)
   })
 })

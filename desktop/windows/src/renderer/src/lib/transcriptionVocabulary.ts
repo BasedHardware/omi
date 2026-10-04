@@ -4,20 +4,22 @@
 // provider as keywords, so no listen/PTT parameter is needed here. Shared with the
 // macOS and mobile clients. Mac reference: SettingsContentView+Transcription.swift.
 import { omiApi } from './apiClient'
+import { setUserVocabulary } from './ptt/userVocabulary'
 
-/** Backend cap (database/users.set_user_transcription_preferences). */
+/** Backend cap (database/users.set_user_transcription_preferences). The backend and
+ *  macOS put no limit on a term's length, so neither do we. */
 export const MAX_VOCABULARY_TERMS = 100
-export const MAX_VOCABULARY_TERM_LENGTH = 60
 
-/** Trim, drop empties and over-long terms, de-duplicate case-insensitively (first
- *  spelling wins), and cap at the backend's 100-term limit. */
+/** Trim, drop empties, de-duplicate case-insensitively (first spelling wins; plain
+ *  toLowerCase like the PTT keyword path, so the result never depends on the OS
+ *  locale), and cap at the backend's 100-term limit. */
 export function normalizeVocabulary(terms: readonly string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const raw of terms) {
     const term = raw.replace(/\s+/g, ' ').trim()
-    if (!term || term.length > MAX_VOCABULARY_TERM_LENGTH) continue
-    const key = term.toLocaleLowerCase()
+    if (!term) continue
+    const key = term.toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
     out.push(term)
@@ -37,8 +39,10 @@ export async function fetchVocabulary(): Promise<string[]> {
   return normalizeVocabulary(list.filter((t): t is string => typeof t === 'string'))
 }
 
+/** Save the list and, once the backend accepted it, hand it to the PTT keyword cache
+ *  so the next push-to-talk turn uses the new terms without a refetch. */
 export async function saveVocabulary(terms: readonly string[]): Promise<void> {
-  await omiApi.patch('/v1/users/transcription-preferences', {
-    vocabulary: normalizeVocabulary(terms)
-  })
+  const vocabulary = normalizeVocabulary(terms)
+  await omiApi.patch('/v1/users/transcription-preferences', { vocabulary })
+  setUserVocabulary(vocabulary)
 }

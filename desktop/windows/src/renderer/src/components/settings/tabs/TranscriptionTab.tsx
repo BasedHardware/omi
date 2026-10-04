@@ -20,7 +20,7 @@
 // Deliberately NOT built — no Windows machinery for it:
 //  - A separate voice-assistant languages multi-select (Windows uses the single
 //    `language` for PTT too; there is no per-turn LID / voiceLanguages backend).
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Languages, Plus, SpellCheck, Waves, X } from 'lucide-react'
 import { LANGUAGES, DEFAULT_LANGUAGE } from '../../../lib/languages'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
@@ -127,7 +127,11 @@ export function TranscriptionTab(): React.JSX.Element {
 function VocabularyRow(): React.JSX.Element {
   const [terms, setTerms] = useState<string[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [draft, setDraft] = useState('')
+  // Sequence of the newest save: a failed save only reverts when no later save has
+  // been made since, so it can never undo a newer change that did reach the server.
+  const latestSave = useRef(0)
 
   useEffect(() => {
     let alive = true
@@ -141,15 +145,16 @@ function VocabularyRow(): React.JSX.Element {
     return () => {
       alive = false
     }
-  }, [])
+  }, [loadAttempt])
 
   const commit = (next: string[]): void => {
     if (!terms) return
     const previous = terms
     const normalized = normalizeVocabulary(next)
     setTerms(normalized) // optimistic
+    const seq = ++latestSave.current
     void saveVocabulary(normalized).catch(() => {
-      setTerms(previous)
+      if (seq === latestSave.current) setTerms(previous)
       toast('Vocabulary sync failed', { tone: 'warn' })
     })
   }
@@ -161,6 +166,7 @@ function VocabularyRow(): React.JSX.Element {
   }
 
   const editable = terms !== null
+  const full = terms !== null && terms.length >= MAX_VOCABULARY_TERMS
   return (
     <SettingRow
       icon={SpellCheck}
@@ -169,9 +175,19 @@ function VocabularyRow(): React.JSX.Element {
       keywords="vocabulary custom words names brands jargon keywords transcription accuracy"
     >
       {loadFailed ? (
-        <p className="text-xs text-text-tertiary">
-          Couldn’t load your vocabulary. Reopen Settings to try again.
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-text-tertiary">Couldn’t load your vocabulary.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoadFailed(false)
+              setLoadAttempt((n) => n + 1)
+            }}
+            className="rounded-md bg-white/10 px-2 py-1 text-xs text-white hover:bg-white/15"
+          >
+            Retry
+          </button>
+        </div>
       ) : (
         <div className="space-y-2">
           {terms && terms.length > 0 && (
@@ -198,22 +214,23 @@ function VocabularyRow(): React.JSX.Element {
             <input
               type="text"
               value={draft}
-              disabled={!editable}
+              disabled={!editable || full}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                // Enter that confirms an IME composition (Chinese, Japanese…) is not a submit.
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                   e.preventDefault()
                   addDraft()
                 }
               }}
-              placeholder={editable ? 'Add a word…' : 'Loading…'}
+              placeholder={!editable ? 'Loading…' : full ? 'Vocabulary is full' : 'Add a word…'}
               aria-label="Add a vocabulary word"
               className="min-w-0 flex-1 rounded-md bg-white/10 px-2 py-1.5 text-sm text-white placeholder:text-text-tertiary focus:outline-none disabled:opacity-50"
             />
             <button
               type="button"
               onClick={addDraft}
-              disabled={!editable || !draft.trim()}
+              disabled={!editable || full || !draft.trim()}
               aria-label="Add word"
               className="rounded-md bg-white/10 p-1.5 text-white hover:bg-white/15 disabled:opacity-40"
             >
@@ -221,8 +238,9 @@ function VocabularyRow(): React.JSX.Element {
             </button>
           </div>
           <p className="text-xs text-text-tertiary">
-            Press Enter or click + to add • Click × to remove
-            {terms ? ` • ${terms.length}/${MAX_VOCABULARY_TERMS}` : ''}
+            {full
+              ? `${MAX_VOCABULARY_TERMS}/${MAX_VOCABULARY_TERMS} • Remove a word to add another`
+              : `Press Enter or click + to add • Click × to remove${terms ? ` • ${terms.length}/${MAX_VOCABULARY_TERMS}` : ''}`}
           </p>
         </div>
       )}
