@@ -16,6 +16,17 @@ def clean_text(value):
     return " ".join(value.split())
 
 
+def spreadsheet_text(value):
+    """Avoid treating common formula prefixes as formulas on spreadsheet import."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
+        return "'" + value
+    return value
+
+
 def parse_time(value):
     """Parse an ISO-8601 timestamp into an aware UTC datetime, or None if unusable."""
     if not isinstance(value, str) or not value:
@@ -60,6 +71,7 @@ def load_action_items(sources):
 def format_linear_row(raw, offset=timedelta(0), default_status="Todo", extra_labels=None):
     """Format single action item into Linear CSV compatible dictionary."""
     desc = clean_text(raw.get("description")) or "Untitled action item"
+    desc = spreadsheet_text(desc)
     is_completed = bool(raw.get("completed"))
     status = "Done" if is_completed else default_status
 
@@ -85,7 +97,7 @@ def format_linear_row(raw, offset=timedelta(0), default_status="Todo", extra_lab
 
     return {
         "Title": desc,
-        "Description": " ".join(description_parts),
+        "Description": spreadsheet_text(" ".join(description_parts)),
         "Status": status,
         "Priority": "",
         "Due Date": due_str,
