@@ -34,6 +34,8 @@ vi.mock('../core/session', () => ({
   getBackendSession: h.getBackendSession,
   getSessionEpoch: () => 1
 }))
+// The language lookup has its own tests; here the prompt passes through unchanged.
+vi.mock('../core/outputLanguage', () => ({ withOutputLanguage: async (p: string) => p }))
 vi.mock('../../ipc/db', () => ({ recentMemories: h.recentMemories }))
 vi.mock('./gemini', () => ({ extractMemory: h.extractMemory }))
 vi.mock('./persist', () => ({ persistMemory: h.persistMemory }))
