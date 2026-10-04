@@ -48,6 +48,15 @@ void main() {
       expect(url.path, '/v1/users/recaps/week');
       expect(url.queryParameters, isEmpty);
     });
+
+    test('joins a base URL with or without its trailing slash', () {
+      for (final base in ['https://api.omi.me', 'https://api.omi.me/']) {
+        final url = Uri.parse(periodRecapUrl(base, RecapPeriod.week, date: DateTime(2026, 10, 7)));
+
+        expect((url.host, url.path), ('api.omi.me', '/v1/users/recaps/week'), reason: base);
+        expect(url.queryParameters, {'date': '2026-10-07'}, reason: base);
+      }
+    });
   });
 
   group('getPeriodRecap', () {
