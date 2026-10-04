@@ -47,7 +47,9 @@ SONIOX_KEEPALIVE_SECONDS: Final = 10.0
 SONIOX_CONNECT_RETRY_DEADLINE_SECONDS: Final = 5.0
 SONIOX_CONNECT_RETRY_DELAYS: Final = (0.35, 0.8, 1.6)
 SONIOX_RATE_LIMIT_ERROR_LOG_SECONDS: Final = 300.0
-_last_rate_limit_error_log = 0.0
+# Compared against time.monotonic(), which counts from boot: a 0.0 start would mute the
+# first escalation on any host up for less than one window.
+_last_rate_limit_error_log = float('-inf')
 _rate_limit_events: list[float] = []
 _rate_limit_log_lock = threading.Lock()
 
