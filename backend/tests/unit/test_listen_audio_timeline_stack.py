@@ -650,6 +650,7 @@ async def test_prod_order_failover_keeps_text_and_locates_second_leg_audio(monke
             callback = passthrough_callback if provider == 'modulate' else gated_callback
             if provider == 'modulate':
                 adapter = object.__new__(SafeModulateSocket)
+                adapter._protocol_guard = False
                 adapter._stream_transcript = callback
                 adapter._preseconds = 0
                 adapter._prev_partial_text = ''
