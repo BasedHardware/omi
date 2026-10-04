@@ -106,7 +106,15 @@ class NativeRow {
       'choice' => value is String && options.containsKey(value),
       'text' => value is String && (value as String).characters.length <= (maximumLength ?? 10000),
       'date' => value is String && ((value as String).isEmpty || _validDate(value as String)),
-      'label' || 'button' || 'menu' || 'message_user' || 'message_ai' || 'chart' || 'waveform' => value == null,
+      'label' ||
+      'button' ||
+      'navigation' ||
+      'menu' ||
+      'message_user' ||
+      'message_ai' ||
+      'chart' ||
+      'waveform' =>
+        value == null,
       _ => false,
     };
   }
@@ -191,6 +199,7 @@ class IosNativeSurface extends StatefulWidget {
     required this.sections,
     required this.fallback,
     this.toolbar = const [],
+    this.largeTitle = false,
     this.loading = false,
     this.failed = false,
     this.empty = '',
@@ -212,7 +221,7 @@ class IosNativeSurface extends StatefulWidget {
   /// Mount an existing service-owning widget only when the native renderer is active.
   /// It receives lifecycle events but contributes no Flutter presentation or animation.
   final Widget? nativeOwner;
-  final bool loading, failed, publicSurface;
+  final bool loading, failed, publicSurface, largeTitle;
   final NativeAction? onRefresh, search;
 
   @override
@@ -254,6 +263,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         'version': 1,
         'revision': _revision++,
         'title': widget.title,
+        'largeTitle': widget.largeTitle,
         'appearance': context.read<AppearanceProvider>().mode.name,
         'locale': Localizations.localeOf(context).toLanguageTag(),
         'direction': Directionality.of(context).name,

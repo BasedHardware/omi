@@ -12,6 +12,18 @@ struct NativeSurfaceTests {
             "error": "Error", "retry": "Retry", "loadingLabel": "Loading"]
         let snapshot = try NativeSurfaceSnapshot.decode(input)
         precondition(snapshot.sections[0].rows[0].value?.text == "system")
+        precondition(snapshot.largeTitle == nil)
+        var navigation = row
+        navigation["kind"] = "navigation"
+        navigation.removeValue(forKey: "value")
+        var settings = input
+        settings["largeTitle"] = true
+        settings["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [navigation]]]
+        let nativeSettings = try NativeSurfaceSnapshot.decode(settings)
+        precondition(nativeSettings.largeTitle == true)
+        navigation["value"] = "arbitrary mutation"
+        settings["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [navigation]]]
+        rejects(settings)
         let cleared = snapshot.withoutContent()
         precondition(cleared.sections.isEmpty && cleared.toolbar.isEmpty && cleared.searchValue.isEmpty && cleared.title.isEmpty)
         var invalid = row

@@ -42,15 +42,16 @@ private final class NativeSurfacePlatformView: NSObject, @preconcurrency Flutter
                 }
             }
         }
-        container = NativeHostingContainer(frame: frame, rootView: NativeSurfaceView(state: state))
+        container = NativeHostingContainer(frame: frame, rootView: NativeSurfaceView(state: state), appearance: snapshot.appearance)
         super.init()
-        channel.setMethodCallHandler { [weak state] call, result in
+        channel.setMethodCallHandler { [weak state, weak container] call, result in
             guard let state else { result(nil); return }
             do {
                 switch call.method {
                 case "update":
                     guard let args = call.arguments else { throw NativeSurfaceSnapshot.ContractError.invalidSnapshot }
                     state.update(try NativeSurfaceSnapshot.decode(args))
+                    container?.updateAppearance(state.snapshot.appearance)
                     result(nil)
                 case "invalidate": state.invalidate(); result(nil)
                 default: result(FlutterMethodNotImplemented)

@@ -32,8 +32,8 @@ class SettingsDrawer extends StatefulWidget {
   /// Opens Settings; resolves when the sheet closes (callers compare settings after that).
   static Future<void> show(BuildContext context) {
     if (iosSwiftUiEnabled) {
-      return Navigator.of(context)
-          .push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: SettingsDrawer())));
+      return Navigator.of(context).push<void>(
+          MaterialPageRoute(fullscreenDialog: true, builder: (_) => const Scaffold(body: SettingsDrawer())));
     }
     // Settings is a grouped list: surface1 rows on the page colour, so the sheet itself is surface0
     // (showOmiSheet paints surface1). Same shell otherwise: framework drag handle, own header with
@@ -316,34 +316,41 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   @override
   Widget build(BuildContext context) {
     final motion = OmiMotion.of(context);
-    final classic = Column(
-      children: [
-        AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
-        const SizedBox(height: OmiSpacing.xs),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child:
-                _isSearching && _searchQuery.trim().isNotEmpty ? _buildSearchResults(context) : _buildSettings(context),
-          ),
-        ),
-      ],
-    );
+    final classic = SafeArea(
+        top: iosSwiftUiEnabled,
+        bottom: false,
+        child: Column(
+          children: [
+            AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
+            const SizedBox(height: OmiSpacing.xs),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                child: _isSearching && _searchQuery.trim().isNotEmpty
+                    ? _buildSearchResults(context)
+                    : _buildSettings(context),
+              ),
+            ),
+          ],
+        ));
     final settings = _buildSettings(context) as Column;
     final sections = _searchQuery.trim().isNotEmpty
         ? [
             NativeSection('settings_search', [
               for (final entry in searchSettings(context.l10n, _searchQuery, _searchScope(context)))
                 NativeRow('settings_search_${entry.destination.name}', entry.title(context.l10n),
+                    kind: entry.destination == SettingsDestination.signOut ? 'button' : 'navigation',
                     destructive: entry.destination == SettingsDestination.signOut,
                     action: (_) => _open(entry.destination))
             ])
           ]
-        : nativeSettingsSections(settings.children);
+        : nativeSettingsSections(settings.children,
+            trailingText: (widget) => widget is SettingsTag ? widget.label : null);
     if (sections == null) return classic;
     return IosNativeSurface(
         title: context.l10n.settings,
+        largeTitle: true,
         sections: sections,
         fallback: classic,
         empty: context.l10n.noResultsFound,

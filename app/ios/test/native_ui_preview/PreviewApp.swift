@@ -6,7 +6,7 @@ struct PreviewApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if ProcessInfo.processInfo.arguments.contains("surface") || ProcessInfo.processInfo.arguments.contains("chat") {
+                if ProcessInfo.processInfo.arguments.contains("surface") || ProcessInfo.processInfo.arguments.contains("chat") || ProcessInfo.processInfo.arguments.contains("settings-menu") {
                     NativeSurfaceView(state: harness.surface)
                 } else { NativeHomeView(state: harness.state) }
             }
@@ -100,6 +100,18 @@ final class PreviewHarness: ObservableObject {
         let data = try! Data(contentsOf: Bundle.main.url(forResource: "native_home_v1", withExtension: "json")!)
         original = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
         raw = original
+        if ProcessInfo.processInfo.arguments.contains("settings-menu") {
+            surfaceRaw["largeTitle"] = true
+            surfaceRaw["toolbar"] = [["id": "settings_close", "title": "Close", "kind": "button", "symbol": "xmark", "subtitle": "", "options": [], "enabled": true, "destructive": false]]
+            func navigation(_ id: String, _ title: String, _ symbol: String, _ subtitle: String = "") -> [String: Any] {
+                ["id": id, "title": title, "kind": "navigation", "symbol": symbol, "subtitle": subtitle, "options": [], "enabled": true, "destructive": false]
+            }
+            surfaceRaw["sections"] = [
+                ["id": "account", "title": "", "footer": "", "rows": [navigation("account", "Ada", "person.crop.circle", "ada@example.com")]],
+                ["id": "plan", "title": "", "footer": "", "rows": [navigation("plan", "Plan & Usage", "chart.xyaxis.line"), navigation("referral", "Referral Program", "gift", "NEW")]],
+                ["id": "groups", "title": "", "footer": "", "rows": [navigation("device", "Device", "antenna.radiowaves.left.and.right"), navigation("integrations", "Integrations", "point.3.connected.trianglepath.dotted", "BETA")]],
+            ]
+        }
         if ProcessInfo.processInfo.arguments.contains("chat") {
             surfaceRaw["title"] = "Ask Omi"
             surfaceRaw["searchEnabled"] = false

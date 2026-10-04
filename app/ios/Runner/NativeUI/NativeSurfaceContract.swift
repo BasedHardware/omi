@@ -59,6 +59,7 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     let revision: Int
     let title: String
     let appearance: String
+    let largeTitle: Bool?
     let locale: String
     let direction: String
     let loading: Bool
@@ -77,7 +78,7 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     var allRows: [NativeSurfaceRow] { toolbar + sections.flatMap(\.rows) + (chat?.actions ?? []) }
 
     func withoutContent() -> Self {
-        Self(chat: nil, version: version, revision: revision, title: "", appearance: appearance, locale: locale,
+        Self(chat: nil, version: version, revision: revision, title: "", appearance: appearance, largeTitle: false, locale: locale,
              direction: direction, loading: false, failed: false, empty: "", sections: [], toolbar: [],
              searchEnabled: false, searchValue: "", searchPlaceholder: "", refreshEnabled: false,
              error: error, retry: retry, loadingLabel: loadingLabel)
@@ -93,7 +94,7 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
               Set(snapshot.sections.map(\.id)).count == snapshot.sections.count,
               Set(ids).count == ids.count, !ids.contains(where: { $0.isEmpty || $0.hasPrefix("_") }),
               rows.allSatisfy({ row in
-                  ["label", "button", "toggle", "task", "choice", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform"].contains(row.kind)
+                  ["label", "button", "navigation", "toggle", "task", "choice", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform"].contains(row.kind)
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue

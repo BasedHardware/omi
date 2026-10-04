@@ -74,7 +74,8 @@ class _GroupPage extends StatelessWidget {
         children: children,
       ),
     );
-    final sections = nativeSections ?? nativeSettingsSections(children);
+    final sections = nativeSections ??
+        nativeSettingsSections(children, trailingText: (widget) => widget is SettingsTag ? widget.label : null);
     if (sections == null) return classic;
     return IosNativeSurface(title: title, sections: sections, fallback: fallback ?? classic, toolbar: [
       NativeRow('settings_back', context.l10n.back, symbol: 'chevron.left', action: (_) {
@@ -202,14 +203,20 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
       nativeSections: [
         NativeSection('transcription', [
           NativeRow('recording_transcription', l10n.transcription,
-              subtitle: _transcriptionValue(), action: (_) => open(SettingsDestination.transcription)),
-          NativeRow('recording_language', l10n.language, action: (_) => open(SettingsDestination.language)),
+              kind: 'navigation',
+              symbol: 'mic',
+              subtitle: _transcriptionValue(),
+              action: (_) => open(SettingsDestination.transcription)),
+          NativeRow('recording_language', l10n.language,
+              kind: 'navigation', symbol: 'globe', action: (_) => open(SettingsDestination.language)),
           NativeRow('recording_vocabulary', l10n.customVocabulary,
-              action: (_) => open(SettingsDestination.customVocabulary)),
+              kind: 'navigation', symbol: 'book', action: (_) => open(SettingsDestination.customVocabulary)),
         ]),
         NativeSection('speakers', [
-          NativeRow('recording_profile', l10n.speechProfile, action: (_) => open(SettingsDestination.voiceProfile)),
-          NativeRow('recording_people', l10n.identifyingOthers, action: (_) => open(SettingsDestination.people)),
+          NativeRow('recording_profile', l10n.speechProfile,
+              kind: 'navigation', symbol: 'waveform', action: (_) => open(SettingsDestination.voiceProfile)),
+          NativeRow('recording_people', l10n.identifyingOthers,
+              kind: 'navigation', symbol: 'person.2', action: (_) => open(SettingsDestination.people)),
           NativeRow('recording_voice', l10n.voiceResponseMode,
               kind: 'choice',
               value: '${_prefs.voiceResponseMode}',
@@ -225,6 +232,8 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
             'recording',
             [
               NativeRow('recording_timeout', l10n.conversationTimeout,
+                  kind: 'navigation',
+                  symbol: 'clock',
                   subtitle: l10n.setWhenConversationsAutoEnd,
                   action: (_) => open(SettingsDestination.conversationTimeout)),
               NativeRow('recording_batch', l10n.transcribeLaterTitle,
@@ -233,7 +242,8 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
                   subtitle: batchStorageFull ? l10n.transcribeLaterStorageFull : l10n.transcribeLaterDescription,
                   action: (value) => _setTranscribeLater(value as bool)),
             ],
-            title: l10n.recording),
+            title: l10n.recording,
+            footer: l10n.beta),
       ],
       children: [
         OmiSettingsGroup(

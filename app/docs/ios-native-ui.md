@@ -62,6 +62,8 @@ containment. Both Runner targets compile the same renderer.
   clears its submitted draft without discarding text typed after that submission.
 - Copy, dates and speaker names come from the current localization and formatting primitives.
   System/Dark/Light follows `AppearanceProvider`; native code does not store a second choice.
+  The embedded UIKit host applies that choice to its traits too, including live changes and
+  returning to System, so Flutter containment cannot leave native controls in the wrong theme.
 
 The presentation contract can support Kotlin later without changing backend wire schemas or
 moving service ownership into the platform UI. Android presentation is outside this iOS change.
@@ -87,6 +89,8 @@ locked rows, retry/empty states, session invalidation, large text, reachable Hom
 rapid editing and chat submission. It is a Simulator-only fixture; it has no live account or
 backend. The integration test also exercises the actual Flutter platform view and containment.
 `NATIVE_UI_EVIDENCE_DIR` selects the host screenshot directory for the integration driver.
+The host test opens the actual Settings route, retaining NEW/BETA copy and native navigation,
+then checks rendered Dark/Light/System screenshots rather than only snapshot values.
 
 Run the full hermetic Flutter suite, analyzer ratchet, SwiftLint, `mobile-verify fast --all` and
 `make preflight` before pushing. Personal phone installs use a signed `Release-prod` AOT build

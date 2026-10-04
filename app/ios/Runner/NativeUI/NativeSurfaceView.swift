@@ -109,7 +109,7 @@ struct NativeSurfaceView: View {
             if state.valid {
                 content
                     .navigationTitle(state.snapshot.title)
-                    .navigationBarTitleDisplayMode(.inline)
+                    .navigationBarTitleDisplayMode(state.snapshot.largeTitle == true ? .large : .inline)
                     .toolbar {
                         ForEach(state.snapshot.toolbar) { row in
                             ToolbarItem(placement: row.symbol == "chevron.left" ? .navigationBarLeading : .navigationBarTrailing) { rowView(row, compact: true) }
@@ -191,6 +191,16 @@ struct NativeSurfaceView: View {
                     Task { await state.send(row.id, value: value) }
                 })) { label(row) }
                     .toggleStyle(.switch)
+            case "navigation":
+                Button {
+                    Task { await state.send(row.id) }
+                } label: {
+                    HStack(spacing: 12) {
+                        actionLabel(row)
+                        Image(systemName: "chevron.forward")
+                            .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                    }.frame(minHeight: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain)
             case "task":
                 HStack(spacing: 12) {
                     Button { Task { await state.send(row.id, value: !(row.value?.bool ?? false)) } } label: {

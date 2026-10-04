@@ -9,6 +9,8 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/settings/settings_drawer.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 import 'journeys/support/hermetic_boot.dart';
@@ -30,6 +32,65 @@ int nativeViewId(WidgetTester tester, Finder finder) {
 /// Run on Simulator with OMI_APP_PROFILE=local_dev and OMI_IOS_SWIFTUI=true.
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('real Settings uses native navigation despite NEW and BETA labels', (tester) async {
+    await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark', 'givenName': 'Ada'});
+    addTearDown(JourneyHermeticBoot.stop);
+    await tester.pumpWidget(MultiProvider(
+      providers: defaultAuditProviders(),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        theme: buildOmiTheme(brightness: Brightness.dark),
+        home: Builder(
+            builder: (context) => Scaffold(
+                    body: TextButton(
+                  onPressed: () => SettingsDrawer.show(context),
+                  child: const Text('Open Settings'),
+                ))),
+      ),
+    ));
+    await tester.tap(find.text('Open Settings'));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 2));
+    final native = find.byType(UiKitView);
+    expect(native, findsOneWidget);
+    final viewId = nativeViewId(tester, native);
+    final snapshot = tester.widget<UiKitView>(native).creationParams as Map;
+    expect(snapshot['appearance'], 'dark');
+    expect(snapshot['largeTitle'], true);
+    await MethodChannel('com.omi.native_ui/surface/$viewId').invokeMethod<void>('update', snapshot);
+    expect(tester.takeException(), isNull);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await tester.pump();
+    expect(await binding.takeScreenshot('real-native-settings-dark'), isNotEmpty);
+    final appearance = tester.element(find.byType(IosNativeSurface)).read<AppearanceProvider>();
+    await appearance.setMode(ThemeMode.light);
+    await tester.pump(const Duration(seconds: 2));
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await tester.pump();
+    expect(await binding.takeScreenshot('real-native-settings-light'), isNotEmpty);
+    await appearance.setMode(ThemeMode.system);
+    await tester.pump(const Duration(seconds: 2));
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await tester.pump();
+    expect(
+      await binding.takeScreenshot('real-native-settings-system-${binding.platformDispatcher.platformBrightness.name}'),
+      isNotEmpty,
+    );
+    await appearance.setMode(ThemeMode.dark);
+    await tester.pump(const Duration(seconds: 2));
+    tester.widget<IosNativeSurface>(find.byType(IosNativeSurface)).search!('permissions');
+    await tester.pump(const Duration(seconds: 2));
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await tester.pump();
+    final search = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+    expect(search.sections.single.id, 'settings_search');
+    expect(search.sections.single.rows, isNotEmpty);
+    expect(await binding.takeScreenshot('real-native-settings-search-dark'), isNotEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('native Home fills its Flutter host without splitting the scroll area', (tester) async {
     await JourneyHermeticBoot.start();
     addTearDown(JourneyHermeticBoot.stop);

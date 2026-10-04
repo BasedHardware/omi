@@ -54,15 +54,16 @@ private final class NativeHomePlatformView: NSObject, @preconcurrency FlutterPla
                 }
             }
         }
-        container = NativeHostingContainer(frame: frame, rootView: NativeHomeView(state: state))
+        container = NativeHostingContainer(frame: frame, rootView: NativeHomeView(state: state), appearance: snapshot.appearance)
         super.init()
-        channel.setMethodCallHandler { [weak state] call, result in
+        channel.setMethodCallHandler { [weak state, weak container] call, result in
             guard let state else { result(nil); return }
             switch call.method {
             case "update":
                 do {
                     guard let arguments = call.arguments else { throw NativeHomeSnapshot.ContractError.invalidSnapshot }
                     state.update(try NativeHomeSnapshot.decode(arguments))
+                    container?.updateAppearance(state.snapshot.appearance)
                     result(nil)
                 } catch {
                     result(FlutterError(code: "invalid_native_snapshot", message: nil, details: nil))
@@ -91,9 +92,10 @@ private enum NativePresentationError: Error {
 final class NativeHostingContainer<Content: View>: UIView {
     private let host: UIHostingController<Content>
 
-    init(frame: CGRect, rootView: Content) {
+    init(frame: CGRect, rootView: Content, appearance: String) {
         host = UIHostingController(rootView: rootView)
         super.init(frame: frame)
+        updateAppearance(appearance)
         host.view.backgroundColor = .clear
         host.view.translatesAutoresizingMaskIntoConstraints = false
         addSubview(host.view)
@@ -106,6 +108,15 @@ final class NativeHostingContainer<Content: View>: UIView {
     }
 
     required init?(coder: NSCoder) { return nil }
+
+    // A child hosting controller cannot reliably apply a preferredColorScheme
+    // presentation preference through Flutter's parent controller. Set its UIKit
+    // traits as well so native bars, lists and controls share the saved choice.
+    func updateAppearance(_ appearance: String) {
+        let style: UIUserInterfaceStyle = appearance == "dark" ? .dark : appearance == "light" ? .light : .unspecified
+        overrideUserInterfaceStyle = style
+        host.overrideUserInterfaceStyle = style
+    }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()

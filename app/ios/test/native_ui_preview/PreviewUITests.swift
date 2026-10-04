@@ -97,6 +97,24 @@ final class PreviewUITests: XCTestCase {
         capture(app, "native-settings-edit")
     }
 
+    func testSettingsNavigationTagsAndSafeHeader() {
+        let app = start(["settings-menu"])
+        let close = app.buttons["settings_close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 10))
+        XCTAssertTrue(close.isHittable)
+        if app.statusBars.firstMatch.exists {
+            XCTAssertGreaterThanOrEqual(close.frame.minY, app.statusBars.firstMatch.frame.maxY)
+        }
+        XCTAssertTrue(app.buttons["account"].isHittable)
+        XCTAssertTrue(app.staticTexts["NEW"].exists)
+        XCTAssertTrue(app.staticTexts["BETA"].exists)
+        capture(app, "native-settings-menu-dark")
+        app.buttons["account"].tap()
+        XCTAssertTrue(app.staticTexts["account:"].waitForExistence(timeout: 5))
+        close.tap()
+        XCTAssertTrue(app.staticTexts["settings_close:"].waitForExistence(timeout: 5))
+    }
+
     func testSaveWaitsForLastQueuedEdit() {
         let app = start(["surface"])
         let field = app.textFields["draft"].exists ? app.textFields["draft"] : app.textViews["draft"]

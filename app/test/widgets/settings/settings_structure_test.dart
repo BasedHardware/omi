@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -181,6 +182,26 @@ void main() {
     // The search field and close button stay in the header.
     expect(find.byType(OmiCloseButton), findsOneWidget);
     expect(find.bySemanticsLabel(en.search), findsOneWidget);
+  });
+
+  testWidgets('real Settings tags and Recording section headers retain the native renderer', (tester) async {
+    await pumpSheet(tester);
+    final root = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+    final rows = root.sections.expand((section) => section.rows).toList();
+    expect(root.largeTitle, true);
+    expect(rows.singleWhere((row) => row.id == 'settings_row_referral').subtitle, en.newTag);
+    expect(rows.singleWhere((row) => row.id == 'settings_group_integrations').subtitle, en.beta);
+    for (final row in rows) {
+      expect(row.valid, true, reason: row.id);
+      expect(row.kind, 'navigation', reason: row.id);
+      expect(row.symbol, isNotNull, reason: row.id);
+    }
+    await tester.tap(find.byKey(const ValueKey('settings_group_recording')));
+    await tester.pumpAndSettle();
+    final recording = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+    expect(recording.sections.last.title, en.recording);
+    expect(recording.sections.last.footer, en.beta);
+    expect(recording.sections.last.rows.singleWhere((row) => row.id == 'recording_batch').kind, 'toggle');
   });
 
   testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less', (

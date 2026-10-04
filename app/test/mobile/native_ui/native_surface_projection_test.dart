@@ -42,6 +42,22 @@ void main() {
         isNull);
   });
 
+  test('section headers preserve copy and reject unsupported or dangling controls', () {
+    final sections = nativeSettingsSections([
+      const OmiSectionHeader('Recording', subtitle: 'Your choice', trailing: Text('BETA')),
+      OmiSettingsGroup(children: [OmiSettingsRow.toggle(title: 'Offline', value: false, onChanged: (_) {})]),
+    ], trailingText: (widget) => widget is Text ? widget.data : null)!;
+    expect(sections.single.title, 'Recording');
+    expect(sections.single.footer, 'Your choice\nBETA');
+    expect(nativeSettingsSections([const OmiSectionHeader('Unrepresented')]), isNull);
+    expect(
+        nativeSettingsSections([
+          const OmiSectionHeader('Recording', trailing: CircularProgressIndicator()),
+          const OmiSettingsGroup(children: []),
+        ]),
+        isNull);
+  });
+
   test('commands reject unexpected payloads and choices', () {
     const action = NativeRow('delete', 'Delete');
     expect(action.accepts(null), true);
