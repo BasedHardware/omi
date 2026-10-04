@@ -30,7 +30,7 @@ from database.document_ids import document_id_from_seed
 from models.conversation import Conversation
 from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
 from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
-from models.structured import Structured
+from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.projection_payload import omit_null_processing_state
