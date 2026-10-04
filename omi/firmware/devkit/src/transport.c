@@ -30,6 +30,7 @@ extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
 extern uint32_t file_num_array[2];
+extern struct bt_gatt_service storage_service;
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
@@ -729,7 +730,13 @@ void pusher(void)
             }
 
             bool progressed = false;
-            if (!valid && !storage_is_on) {
+            /* A connection alone does not mean the app is receiving audio.
+             * Pause SD appends for an actual storage-sync subscription, not
+             * for the connection flag set before any CCC is enabled.
+             */
+            bool storage_subscribed =
+                conn && bt_gatt_is_subscribed(conn, &storage_service.attrs[1], BT_GATT_CCC_NOTIFY);
+            if (!valid && !storage_subscribed) {
                 bool result = false;
                 if (file_num_array[1] < MAX_STORAGE_BYTES) {
                     k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
@@ -765,7 +772,6 @@ void pusher(void)
         }
     }
 }
-extern struct bt_gatt_service storage_service;
 //
 // Public functions
 //
