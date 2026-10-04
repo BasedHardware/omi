@@ -831,19 +831,33 @@ class PendantRingCustody {
     return true;
   }
 
-  /// Completes once every checkpoint write queued so far has landed, including
-  /// writes queued while waiting. Mismatch invalidation and ring reincarnation
-  /// persist without awaiting, so this is the completion a caller waits on before
-  /// tearing the custody directory down (#20500).
+  /// Completes once every checkpoint write queued so far has settled (written or
+  /// failed), including writes queued while waiting and the persists that open
+  /// sessions' live-mark chains still owe. Mismatch invalidation, ring
+  /// reincarnation and live marks persist without awaiting, so this is the
+  /// completion a caller waits on before tearing the custody directory down
+  /// (#20500). It also waits for any advance callback a mark chain is running.
   Future<void> flush() async {
-    Future<void> queued;
-    do {
-      queued = _saveQueue;
-      await queued;
-      // A checkpoint queued during the store wait reaches the I/O queue only after
-      // its predecessor's save, so the checkpoint queue is re-checked after it.
+    while (true) {
+      final saves = _saveQueue;
+      final marks = _markTasks();
+      await saves;
+      await Future.wait(marks);
+      // A checkpoint queued during these waits reaches the I/O queue only after
+      // its predecessor's save, so both queues are re-checked after the store.
       await _store.flush();
-    } while (!identical(queued, _saveQueue));
+      if (identical(saves, _saveQueue) && _sameFutures(marks, _markTasks())) return;
+    }
+  }
+
+  List<Future<void>> _markTasks() => [for (final state in _devices.values) state.markTask];
+
+  static bool _sameFutures(List<Future<void>> a, List<Future<void>> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) return false;
+    }
+    return true;
   }
 
   Future<void> _persist(RingCustodyCheckpoint cp) {
@@ -875,7 +889,8 @@ class PendantCustodyStore {
   String _filePath(Directory dir, String deviceId) =>
       '${dir.path}/custody_${deviceId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')}.json';
 
-  /// Completes once the I/O queue is idle, including work queued while waiting.
+  /// Completes once the I/O queue is idle (every queued read or write settled,
+  /// written or failed), including work queued while waiting.
   Future<void> flush() async {
     Future<void> queued;
     do {

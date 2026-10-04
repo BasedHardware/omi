@@ -61,6 +61,8 @@ void main() {
 
   late Directory tempDir;
   late Directory custodyDir;
+  // Every custody manager() hands out; tearDown flushes them before deleting storage (#20500).
+  final custodies = <PendantRingCustody>[];
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -78,6 +80,10 @@ void main() {
   });
 
   tearDown(() async {
+    for (final custody in custodies) {
+      await custody.flush();
+    }
+    custodies.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       null,
@@ -86,10 +92,14 @@ void main() {
     if (custodyDir.existsSync()) custodyDir.deleteSync(recursive: true);
   });
 
-  PendantRingCustody manager() => PendantRingCustody(
-        store: PendantCustodyStore(directoryProvider: () async => custodyDir),
-        walValidator: walFileManagerCustodyValidator,
-      );
+  PendantRingCustody manager() {
+    final custody = PendantRingCustody(
+      store: PendantCustodyStore(directoryProvider: () async => custodyDir),
+      walValidator: walFileManagerCustodyValidator,
+    );
+    custodies.add(custody);
+    return custody;
+  }
 
   RingInfo info(int ringId, {int readSeq = 0, int writeSeq = 100}) => RingInfo(
         readSeq: readSeq,

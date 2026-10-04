@@ -473,8 +473,9 @@ void main() {
   test('explicit disconnect ends the custody session even without a transport event', () async {
     const ringId = 0x1122334455667788;
     final tmp = await Directory.systemTemp.createTemp('custody_disconnect_test');
+    PendantRingCustody? custody;
     try {
-      final custody = PendantRingCustody(
+      custody = PendantRingCustody(
         store: PendantCustodyStore(directoryProvider: () async => tmp),
         walValidator: (_) async => true,
       );
@@ -489,8 +490,8 @@ void main() {
       await _settle();
       expect(custody.hasConnection('omi-1', epoch), isFalse);
       expect(custody.currentRingId('omi-1'), isNull);
-      await custody.flush();
     } finally {
+      await custody?.flush();
       if (await tmp.exists()) await tmp.delete(recursive: true);
     }
   });
