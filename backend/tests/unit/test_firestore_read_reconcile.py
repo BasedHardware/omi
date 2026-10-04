@@ -17,11 +17,11 @@ END_SNAPSHOT = "2026-10-02T23:58:00+00:00"
 
 def _set_ledger(monkeypatch):
     monkeypatch.setattr(probe, "_LEDGER_ENABLED", True)
-    monkeypatch.setattr(probe, "_LEDGER_DAY", DAY)
-    monkeypatch.setattr(probe, "_LEDGER_COUNTS", {"lookup": 0, "not_found": 0, "query": 0})
-    monkeypatch.setattr(probe, "_LEDGER_UNSCOPED", 0)
-    monkeypatch.setattr(probe, "_LEDGER_SEQ", 0)
-    monkeypatch.setattr(probe, "_LEDGER_LAST_EMIT", 0.0)
+    monkeypatch.setattr(probe, "_ledger_day", DAY)
+    monkeypatch.setattr(probe, "_ledger_counts", {"lookup": 0, "not_found": 0, "query": 0})
+    monkeypatch.setattr(probe, "_ledger_unscoped", 0)
+    monkeypatch.setattr(probe, "_ledger_seq", 0)
+    monkeypatch.setattr(probe, "_ledger_last_emit", 0.0)
     monkeypatch.setattr(
         probe.dt,
         "datetime",
@@ -56,7 +56,7 @@ def test_ledger_service_prefers_explicit_name_then_cloud_run_identity(monkeypatc
 def test_ledger_off_by_default(monkeypatch):
     monkeypatch.setattr(probe, "_LEDGER_ENABLED", False)
     probe._ledger_record(3, "query", "based-hardware")
-    assert probe._LEDGER_COUNTS == {"lookup": 0, "not_found": 0, "query": 0}
+    assert probe._ledger_counts == {"lookup": 0, "not_found": 0, "query": 0}
 
 
 def test_ledger_scopes_projects_and_flags_unscoped(monkeypatch):
@@ -67,8 +67,8 @@ def test_ledger_scopes_projects_and_flags_unscoped(monkeypatch):
     probe._record((), True, amount=7, kind="query", sdk_object=_client("another-project"))
     probe._record((), False, amount=3, kind="not_found", sdk_object=_client(None))
     probe._record((), True, amount=4, kind="query", sdk_object=object())
-    assert probe._LEDGER_COUNTS == {"lookup": 2, "not_found": 3, "query": 4}
-    assert probe._LEDGER_UNSCOPED == 1
+    assert probe._ledger_counts == {"lookup": 2, "not_found": 3, "query": 4}
+    assert probe._ledger_unscoped == 1
     probe._ledger_atexit()
     assert lines[-1]["unscoped"] == 1
 
@@ -82,7 +82,7 @@ def test_snapshots_are_cumulative_rate_limited_and_private(monkeypatch):
     assert len(lines) == 1
     assert lines[0]["lookup"] == 2 and lines[0]["query"] == 0
     assert not any("uid" in key.lower() for key in lines[0])
-    probe._LEDGER_LAST_EMIT = -100
+    probe._ledger_last_emit = -100
     probe._ledger_record(3, "query", "based-hardware")
     assert lines[-1]["seq"] == lines[0]["seq"] + 1
     assert lines[-1]["query"] == 4
@@ -102,8 +102,8 @@ def test_day_rollover_emits_previous_day(monkeypatch):
     monkeypatch.setattr(probe.dt, "datetime", Tomorrow)
     probe._ledger_record(1, "query", "based-hardware")
     assert lines[0]["day"] == DAY and lines[0]["lookup"] == 2
-    assert probe._LEDGER_DAY == "2026-10-03"
-    assert probe._LEDGER_COUNTS["query"] == 1
+    assert probe._ledger_day == "2026-10-03"
+    assert probe._ledger_counts["query"] == 1
 
 
 def _records(include_all=True, instrumented=97, timestamps=None):

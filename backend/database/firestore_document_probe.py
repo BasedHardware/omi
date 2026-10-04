@@ -193,56 +193,56 @@ _LEDGER_ENABLED = os.environ.get('FIRESTORE_READ_LEDGER') == '1'
 _LEDGER_EPOCH = secrets.token_hex(8)
 _LEDGER_SERVICE = _ledger_service_name()
 _LEDGER_LOCK = threading.Lock()
-_LEDGER_DAY: str | None = None
-_LEDGER_COUNTS = {'lookup': 0, 'not_found': 0, 'query': 0}
-_LEDGER_UNSCOPED = 0
-_LEDGER_SEQ = 0
-_LEDGER_LAST_EMIT = 0.0
+_ledger_day: str | None = None
+_ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
+_ledger_unscoped = 0
+_ledger_seq = 0
+_ledger_last_emit = 0.0
 
 
 def _ledger_emit_locked(day: str) -> None:
-    global _LEDGER_SEQ, _LEDGER_LAST_EMIT
-    _LEDGER_SEQ += 1
+    global _ledger_seq, _ledger_last_emit
+    _ledger_seq += 1
     payload = {
         'event': 'firestore_read_ledger',
         'schema': 1,
         'service': _LEDGER_SERVICE,
         'epoch': _LEDGER_EPOCH,
-        'seq': _LEDGER_SEQ,
+        'seq': _ledger_seq,
         'day': day,
-        'lookup': _LEDGER_COUNTS['lookup'],
-        'not_found': _LEDGER_COUNTS['not_found'],
-        'query': _LEDGER_COUNTS['query'],
-        'unscoped': _LEDGER_UNSCOPED,
+        'lookup': _ledger_counts['lookup'],
+        'not_found': _ledger_counts['not_found'],
+        'query': _ledger_counts['query'],
+        'unscoped': _ledger_unscoped,
     }
     try:
         logger.info('%s', json.dumps(payload, separators=(',', ':'), sort_keys=True))
     except Exception:
         pass
-    _LEDGER_LAST_EMIT = time.monotonic()
+    _ledger_last_emit = time.monotonic()
 
 
 def _ledger_record(amount: float, kind: str, project: str | None) -> None:
-    global _LEDGER_DAY, _LEDGER_COUNTS, _LEDGER_UNSCOPED
+    global _ledger_day, _ledger_counts, _ledger_unscoped
     if not _LEDGER_ENABLED:
         return
     try:
         today = dt.datetime.now(dt.timezone.utc).date().isoformat()
         with _LEDGER_LOCK:
             now = time.monotonic()
-            if _LEDGER_DAY is None:
-                _LEDGER_DAY = today
-            elif today != _LEDGER_DAY:
-                _ledger_emit_locked(_LEDGER_DAY)
-                _LEDGER_DAY = today
-                _LEDGER_COUNTS = {'lookup': 0, 'not_found': 0, 'query': 0}
+            if _ledger_day is None:
+                _ledger_day = today
+            elif today != _ledger_day:
+                _ledger_emit_locked(_ledger_day)
+                _ledger_day = today
+                _ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
             if project is not None and project != 'based-hardware':
                 return
             if project is None:
-                _LEDGER_UNSCOPED = 1
-            _LEDGER_COUNTS[kind if kind in _LEDGER_COUNTS else 'query'] += int(amount)
-            if now - _LEDGER_LAST_EMIT >= 60:
-                _ledger_emit_locked(_LEDGER_DAY)
+                _ledger_unscoped = 1
+            _ledger_counts[kind if kind in _ledger_counts else 'query'] += int(amount)
+            if now - _ledger_last_emit >= 60:
+                _ledger_emit_locked(_ledger_day)
     except Exception:
         # Ledger failures may never affect the Firestore caller.
         return
@@ -268,8 +268,8 @@ def _ledger_atexit() -> None:
         return
     try:
         with _LEDGER_LOCK:
-            if _LEDGER_DAY is not None:
-                _ledger_emit_locked(_LEDGER_DAY)
+            if _ledger_day is not None:
+                _ledger_emit_locked(_ledger_day)
     except Exception:
         return
 
