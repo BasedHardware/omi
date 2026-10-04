@@ -350,9 +350,32 @@ async def test_proof_is_absent_from_model_storage_and_client_projection(monkeypa
     (incoming,) = receiver.collected
     proof = incoming['_capture_merge_proof']
     segment = TranscriptSegment(**raw('a', 'Hello', 0.1, 0.4), audio_capture_start=T0 + 0.1, audio_capture_end=T0 + 0.4)
-    segment._capture_merge_proof = proof
+    segment.capture_merge_proof = proof
     for payload in (segment.model_dump(), segment.model_dump(mode='json')):
         assert '_capture_merge_proof' not in payload
         assert 'accepted_run' not in payload and 'epoch' not in payload
     assert 'audio_capture_start' not in segment.model_dump(mode='json')
     assert known(await tick(receiver, processor, store)) == 1
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+async def test_first_gap_becomes_unknown_side_inside_one_provider_batch(monkeypatch, enabled):
+    receiver, callback, epoch, sender, processor, store = harness(monkeypatch, enabled)
+    accept(receiver, sender, 0, 2)
+
+    def value(reason):
+        return sum(
+            s.value
+            for f in REGISTRY.collect()
+            for s in f.samples
+            if s.name == 'omi_live_audio_capture_attribution_total'
+            and s.labels == dict(population='segment', reason=reason)
+        )
+
+    reason = 'known_window' if enabled else 'merge_unknown_side'
+    before = value(reason)
+    callback([raw('a', 'We', 0.1, 0.4), raw('b', 'heard', 0.6, 0.9), raw('c', 'audio.', 1.1, 1.4)])
+    rows = await tick(receiver, processor, store)
+    assert [s['text'] for s in rows] == ['We heard audio.']
+    assert known(rows) == int(enabled)
+    assert value(reason) == before + 1

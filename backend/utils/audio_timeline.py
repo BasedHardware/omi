@@ -369,6 +369,13 @@ class SendMap:
         """Count accepted VAD output in a capture interval, excluding gated gaps."""
         return sum(max(0, min(end, start + length) - max(first, start)) for _, start, length in self._spans)
 
+    def capture_run_containing(self, first: int, end: int) -> Optional[Tuple[int, int]]:
+        """One coalesced accepted span covering [first, end), without edge tolerance."""
+        for _, start, length in self._spans:
+            if start <= first < end <= start + length:
+                return start, start + length
+        return None
+
     def point_interval(self, provider_sample: int) -> Optional[Tuple[int, int]]:
         """A one-sample interval for an in-span zero-duration provider point.
 
@@ -590,21 +597,21 @@ class ProviderEpochTranslator:
         axes. Failed/missing sends, VAD skips and elapsed-axis holes break them.
         No translator edge tolerance is used to extend this proof.
         """
-        for _, start, length in self.send_map._spans:
-            last = start + length
-            if not start <= first < end <= last:
-                continue
-            start = max(start, self.timeline.compacted_below_sample or start)
-            for sample, _ in self.timeline.anchors[1:]:
-                if sample <= first:
-                    start = max(start, sample)
-                elif sample < last:
-                    last = sample
-                    break
-            window = self.timeline.project_window(first, end)
-            run = self.timeline.project_window(start, last)
-            if window is not None and run is not None:
-                return CaptureWindowProof(self._capture_merge_epoch, window, run)
+        accepted = self.send_map.capture_run_containing(first, end)
+        if accepted is None:
+            return None
+        start, last = accepted
+        start = max(start, self.timeline.compacted_below_sample or start)
+        for sample, _ in self.timeline.anchors[1:]:
+            if sample <= first:
+                start = max(start, sample)
+            elif sample < last:
+                last = sample
+                break
+        window = self.timeline.project_window(first, end)
+        run = self.timeline.project_window(start, last)
+        if window is not None and run is not None:
+            return CaptureWindowProof(self._capture_merge_epoch, window, run)
         return None
 
     def stitch_replayed_timestamps(self, segments: Sequence[Dict[str, Any]]) -> None:

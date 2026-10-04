@@ -941,7 +941,7 @@ class TranscriptProcessor:
                     proof = raw.pop('_capture_merge_proof', None)
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
                     if isinstance(proof, CaptureWindowProof) and proof.matches(segment.capture_window_bounds()):
-                        segment._capture_merge_proof = proof
+                        segment.capture_merge_proof = proof
                     segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
@@ -1200,7 +1200,7 @@ class TranscriptProcessor:
                     proof = raw.pop('_capture_merge_proof', None)
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
                     if isinstance(proof, CaptureWindowProof) and proof.matches(segment.capture_window_bounds()):
-                        segment._capture_merge_proof = proof
+                        segment.capture_merge_proof = proof
                     segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None

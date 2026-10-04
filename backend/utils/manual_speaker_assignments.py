@@ -432,7 +432,7 @@ def merge_live_segments(
         for segment in [*tail, *incoming]:
             proof = (capture_proofs or {}).get(str(segment.id))
             if proof and proof.matches(segment.capture_window_bounds()):
-                segment._capture_merge_proof = proof
+                segment.capture_merge_proof = proof
     # Selected-segment decisions are keyed by ID, so those segments must keep it.
     # Speaker-wide decisions are keyed by speaker: same-speaker merges keep them.
     covered = set(_receipt_section(receipt, 'segments'))
@@ -464,8 +464,8 @@ def merge_live_segments(
         {str(s.id): s.capture_window_reason for s in combined.joined if s.id},
         {str(s.id) for s in combined.segments if s.id and str(s.id) not in prior_ids},
         {
-            str(s.id): s._capture_merge_proof
+            str(s.id): s.capture_merge_proof
             for s in combined.segments
-            if result and s.id == result[-1].get('id') and s._capture_merge_proof is not None
+            if result and s.id == result[-1].get('id') and s.capture_merge_proof is not None
         },
     )

@@ -130,6 +130,14 @@ class TranscriptSegment(BaseModel):
     _capture_merge_proof: Optional[CaptureWindowProof] = PrivateAttr(default=None)
 
     @property
+    def capture_merge_proof(self) -> Optional[CaptureWindowProof]:
+        return self._capture_merge_proof
+
+    @capture_merge_proof.setter
+    def capture_merge_proof(self, proof: Optional[CaptureWindowProof]) -> None:
+        self._capture_merge_proof = proof if proof and proof.matches(self.capture_window_bounds()) else None
+
+    @property
     def capture_window_reason(self) -> str:
         return self._audio_capture_reason
 

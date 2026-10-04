@@ -15,7 +15,7 @@ def snapshot_proofs(
     if not live_capture_window_merge_union_enabled():
         return {}
     proofs = dict(tails.get(conversation_id, {}))
-    proofs.update({str(s.id): s._capture_merge_proof for s in fresh if s._capture_merge_proof is not None})
+    proofs.update({str(s.id): s.capture_merge_proof for s in fresh if s.capture_merge_proof is not None})
     return {'live_capture_proofs': proofs}
 
 
