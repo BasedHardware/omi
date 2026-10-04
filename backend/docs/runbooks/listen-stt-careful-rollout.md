@@ -384,14 +384,18 @@ if ! helm rollback prod-omi-prometheus-adapter "$ADAPTER_BEFORE" \
 fi
 # Also set RESTORE_CAPTURED_LIVE=yes for a confirmed incomplete historical rollback.
 if [ "${RESTORE_CAPTURED_LIVE:-no}" = yes ]; then
-  kprod apply -f "$ADAPTER_REVIEW_DIR/restore-apiservices-configmap.yaml"
-  kprod -n "$MON_NS" rollout restart deployment/prod-omi-prometheus-adapter
-  kprod -n "$MON_NS" rollout status deployment/prod-omi-prometheus-adapter --timeout=5m
+  kprod apply -f "$ADAPTER_REVIEW_DIR/restore-apiservices-configmap.yaml" \
+    || { echo "FAIL: restore apply failed; adapter state unknown, escalate"; exit 1; }
+  kprod -n "$MON_NS" rollout restart deployment/prod-omi-prometheus-adapter \
+    || { echo "FAIL: adapter restart failed; escalate"; exit 1; }
+  kprod -n "$MON_NS" rollout status deployment/prod-omi-prometheus-adapter --timeout=5m \
+    || { echo "FAIL: adapter rollout did not complete; escalate"; exit 1; }
 fi
 # Re-run both APIService, listen/Parakeet metric API and HPA post-checks above.
 # Set ROLLBACK_STACK=yes only if the stack also needs rollback.
 if [ "${ROLLBACK_STACK:-no}" = yes ]; then
   helm rollback prod-omi-kube-prometheus-stack "$STACK_BEFORE" \
-    --namespace "$MON_NS" --kube-context "$PROD_CTX" --wait --timeout 15m
+    --namespace "$MON_NS" --kube-context "$PROD_CTX" --wait --timeout 15m \
+    || { echo "FAIL: stack rollback failed; escalate"; exit 1; }
 fi
 ```
