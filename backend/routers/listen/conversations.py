@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
 from config.sync_lineage import sync_lineage_resolve_enabled
-from database._client import firestore_document_kind, firestore_error_document_path, firestore_failure_reason
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
@@ -24,6 +23,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.live_continuation import resolve_live_continuation
 from utils.conversation_continuity import resumable_continuation
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.transcribe_decisions import (
@@ -50,21 +50,6 @@ STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
 # fanning dozens of LLM finalizations out of one reconnect.
 STALE_IN_PROGRESS_RECOVERY_BATCH = 10
 RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
-
-
-def _error_names_conversation(error: BaseException, conversation_id: str) -> bool:
-    """Whether a Firestore rejection names this conversation's own document.
-
-    In-process only: the path carries the uid and is never logged.
-    """
-    segments = firestore_error_document_path(error)
-    return (
-        segments is not None
-        and len(segments) == 4
-        and segments[0] == 'users'
-        and segments[2] == 'conversations'
-        and segments[3] == conversation_id
-    )
 
 
 def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
@@ -673,19 +658,19 @@ class LiveConversationController:
         try:
             await finalize(conversation_id)
         except Exception as error:
-            reason = firestore_failure_reason(error)
-            if reason == 'document_size_limit' and _error_names_conversation(error, conversation_id):
+            failure = classify_finalization_failure(error, conversation_id)
+            if failure.conversation_at_size_limit:
                 await self._close_oversized(conversation_id, stage=stage)
                 return
-            # A bounded reason token, never the message: Firestore names the
-            # rejected document by its path, which carries the uid.
+            # Bounded tokens, never the message: Firestore names the rejected
+            # document by its path, which carries the uid.
             logger.error(
                 'Listen pending finalization failed stage=%s conversation=%s type=%s reason=%s document=%s',
                 stage,
                 conversation_id,
                 type(error).__name__,
-                reason,
-                firestore_document_kind(error),
+                failure.reason,
+                failure.document,
             )
 
     async def _close_oversized(self, conversation_id: str, *, stage: str) -> None:
@@ -710,7 +695,7 @@ class LiveConversationController:
                 stage,
                 conversation_id,
                 type(error).__name__,
-                firestore_failure_reason(error),
+                classify_finalization_failure(error, conversation_id).reason,
             )
             return
         logger.warning(

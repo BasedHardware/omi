@@ -20,6 +20,7 @@ from database import oversized_conversation_terminal as oversized_terminal_db
 from database._client import firestore_failure_reason
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.finalization_failure import FinalizationFailure, classify_finalization_failure
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 
 _PATH = 'users/uid-1/conversations/conv-1'
@@ -172,3 +173,17 @@ def test_failure_reason_tokens_are_bounded_and_carry_no_message():
     assert firestore_failure_reason(InvalidArgument('some other 400')) == 'other'
     assert firestore_failure_reason(ValueError('unrelated')) == 'other'
     assert firestore_failure_reason(RuntimeError('boom')) == 'other'
+
+
+def test_only_a_rejection_of_the_rows_own_document_is_its_size_limit():
+    own = InvalidArgument(
+        "Document 'projects/p/databases/(default)/documents/users/uid-1/conversations/conv-1' cannot be "
+        'written because its size (1,048,684 bytes) exceeds the maximum allowed size of 1,048,576 bytes.'
+    )
+    assert classify_finalization_failure(own, 'conv-1') == FinalizationFailure(
+        reason='document_size_limit', document='conversation', names_conversation=True
+    )
+    assert classify_finalization_failure(own, 'conv-1').conversation_at_size_limit
+    assert not classify_finalization_failure(own, 'conv-2').conversation_at_size_limit
+    contention = classify_finalization_failure(ValueError('Failed to commit transaction in 5 attempts.'), 'conv-1')
+    assert contention == FinalizationFailure(reason='contention', document='none', names_conversation=False)
