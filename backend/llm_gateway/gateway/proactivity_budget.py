@@ -14,7 +14,6 @@ from typing import Any
 from uuid import UUID
 
 from config.proactivity_v2 import AttemptEnvelope, ProactivityDenied, producer_for
-from database.proactivity_budget import BudgetAuthority
 from llm_gateway.gateway.accounting import (
     AccountingContext,
     AttemptTrace,
@@ -24,7 +23,6 @@ from llm_gateway.gateway.accounting import (
 )
 from llm_gateway.gateway.errors import GatewayInvalidRequestError
 from utils.executors import db_executor, run_blocking
-from utils.proactivity import ensure_admitted
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +156,11 @@ async def execute_budgeted_provider(
     try:
         if os.getenv('LLM_GATEWAY_ACCOUNTING_ENABLED', '').lower() not in {'true', '1', 'yes'}:
             raise ProactivityDenied('accounting_disabled')
+        # Backend admission dependencies are needed only for v2 attempts, never
+        # for gateway startup or ordinary gateway traffic.
+        from database.proactivity_budget import BudgetAuthority
+        from utils.proactivity import ensure_admitted
+
         await ensure_admitted(context.uid, context.producer)
         envelope = envelope_for(context, provider_ref.provider, provider_ref.model, request)
         authority = BudgetAuthority()
