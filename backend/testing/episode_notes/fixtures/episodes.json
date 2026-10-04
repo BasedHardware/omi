@@ -250,10 +250,11 @@
       "expected": {
         "must_cover": [
           "Vendor choice deferred",
-          "Call ended before decision"
+          "Local capture ended before any recorded decision"
         ],
         "must_not_claim": [
-          "Vendor selected"
+          "Vendor selected",
+          "The meeting definitely ended for all participants"
         ],
         "provenance": {
           "network disconnect": "shown"
@@ -367,7 +368,7 @@
             "id": "device_state-1",
             "time": "2026-01-12T10:14:00Z",
             "actor": null,
-            "content": "Recording began at 10:14.",
+            "content": "Call app reports joined at 10:14; recording began at 10:14.",
             "sensitivity": "standard",
             "source_ref": "synthetic:late-arrival:device_state:1"
           }
