@@ -874,13 +874,17 @@ def test_upload_without_transcripts_fails_with_a_clear_message(tmp_path, job):
 
 def test_oversized_member_is_reported_and_others_still_import(tmp_path, job, monkeypatch):
     monkeypatch.setattr(tf, 'MAX_TRANSCRIPT_FILE_BYTES', 200)
+    small = '1\n00:00:01,000 --> 00:00:02,000\nJane Doe: Short call.\n\n2\n00:00:02,000 --> 00:00:03,000\nSam: Bye.\n'
+    assert len(small.encode('utf-8')) <= 200
     big = 'x' * 500
-    _run(tmp_path, 'export.zip', _zip({'ok.srt': SRT[:150], 'huge.txt': big}))
+    _run(tmp_path, 'export.zip', _zip({'ok.srt': small, 'huge.txt': big}))
 
     final = job.final()
     assert final['status'] == ImportJobStatus.completed.value
     assert final['conversations_created'] == 1
     assert final['error'] == '1 file(s) could not be imported'
+    (conversation,) = job.store.docs.values()
+    assert [s['text'] for s in conversation['transcript_segments']] == ['Short call.', 'Bye.']
 
 
 def _spy_on_member_reads(monkeypatch) -> list:
