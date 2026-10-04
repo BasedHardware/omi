@@ -28,6 +28,13 @@ READINESS_PROPOSAL_ARGS = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _fast_safe_yaml_for_contract_fixtures(monkeypatch):
+    # Keep the same safe YAML schema and every validator assertion, without
+    # spending the call-phase budget on Python tokenization of large manifests.
+    monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
+
+
 def load_validator():
     spec = importlib.util.spec_from_file_location('validate_backend_runtime_env', SCRIPT)
     module = importlib.util.module_from_spec(spec)

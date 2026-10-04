@@ -20,7 +20,8 @@ _MANIFEST = _MODULE['_load_yaml'](_MODULE['DEFAULT_MANIFEST'])
 
 @pytest.fixture(autouse=True)
 def _reuse_parsed_repo_manifest(monkeypatch):
-    monkeypatch.setitem(_MODULE, '_load_yaml', lambda _path: _MANIFEST)
+    # runpy's returned mapping is distinct from the function's globals.
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: _MANIFEST)
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:
