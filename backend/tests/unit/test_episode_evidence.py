@@ -659,3 +659,29 @@ def test_short_aliases_expand_before_validation_and_never_become_speech_citation
     assert all(c.evidence_sources[0].id == 'screen_ocr:1' for c in result.note_claims)
     assert not result.sections
     assert '"id":"evidence:0"' in calls[0][1].content
+
+
+@pytest.mark.parametrize('ending', ['', '\n', '\r\n'])
+def test_coverage_checks_each_unpunctuated_bullet(ending):
+    item = EvidenceItem(id='speech:1', source_kind='speech', content='Alice agreed; Bob declined.')
+    note = Structured(
+        title='Two responses',
+        sections=[Section(heading='Responses', body_markdown='- Alice agreed\n- Bob declined' + ending)],
+        note_claims=[
+            claim('/title', 'Two responses', item.id, 'inferred'),
+            claim('/sections/0/body_markdown', 'Alice agreed', item.id, 'said'),
+        ],
+    )
+    assert 'missing_claim_coverage' in claim_violations(note, [item])
+    note.note_claims.append(claim('/sections/0/body_markdown', 'Bob declined', item.id, 'said'))
+    assert not claim_violations(note, [item])
+
+
+def test_written_roster_provenance_is_valid():
+    item = EvidenceItem(id='roster:0', source_kind='roster', content='Synthetic roster name')
+    note = Structured(
+        title='Synthetic roster name',
+        note_claims=[claim('/title', 'Synthetic roster name', item.id, 'written')],
+    )
+    assert not claim_violations(note, [item], drop_invalid=True)
+    assert note.note_claims[0].evidence_sources[0].source_kind == 'roster'

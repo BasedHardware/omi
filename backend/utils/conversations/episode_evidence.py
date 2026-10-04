@@ -309,6 +309,7 @@ _PROVENANCE_KINDS = {
     'said': {'speech'},
     'shown': {'screen_frame', 'screen_ocr', 'roster', 'device_state'},
     'written': {
+        'roster',
         'screen_ocr',
         'screen_frame',
         'message',
@@ -386,7 +387,7 @@ def claim_violations(structured: Structured, items: Sequence[EvidenceItem], *, d
         # A unique exact anchor binds a factual sentence/bullet, rather than requiring
         # the model to echo all its words. Distinct units still require coverage.
         spans = [match.span() for text in covered.get(target, []) for match in re.finditer(re.escape(text), value)]
-        for unit in re.finditer(r'[^.!?。！？\n]+(?:[.!?。！？]+|$)', value):
+        for unit in re.finditer(r'[^.!?。！？\n]+(?:[.!?。！？]+|\n|$)', value):
             if re.search(r'\w', unit.group()) and not any(
                 start < unit.end() and end > unit.start() for start, end in spans
             ):
