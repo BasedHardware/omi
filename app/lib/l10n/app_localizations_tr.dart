@@ -12236,24 +12236,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Ses';
-
-  @override
-  String get assistantVoice => 'Asistan Sesi';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Ses seçiminiz mobil ve masaüstü arasında paylaşılır.';
-
-  @override
-  String get readChatRepliesAloud => 'Sohbet yanıtlarını sesli oku';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Yalnızca Sesli yanıt izin verdiğinde konuşur.';
-
-  @override
-  String get voicePreviewSample => 'Merhaba, ben Omi. Bu benim sesim.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return 'Bu sesten $duration';
   }
@@ -12323,7 +12305,51 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Bağlanılamıyor. Bağlantınızı kontrol edin ve yeniden deneyin.';
+
+  @override
+  String get chatReplyServerError => 'Bizim tarafta bir sorun oluştu. Lütfen tekrar deneyin.';
+
+  @override
+  String get chatReplyTimeout => 'Yanıt çok uzun sürdü. Lütfen tekrar deneyin.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Oturum açmadınız. Oturum açın ve tekrar deneyin.';
+
+  @override
+  String get chatAppsLoadFailed => 'Sohbet uygulamaları yüklenemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Ses';
+
+  @override
+  String get assistantVoice => 'Asistan Sesi';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ses seçiminiz mobil ve masaüstü arasında paylaşılır.';
+
+  @override
+  String get readChatRepliesAloud => 'Sohbet yanıtlarını sesli oku';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Yalnızca Sesli yanıt izin verdiğinde konuşur.';
+
+  @override
+  String get voicePreviewSample => 'Merhaba, ben Omi. Bu benim sesim.';
+
+  @override
   String get peopleStatsIncomplete => 'Sayımlar eksik olabilir.';
+
+  @override
+  String get previousDay => 'Önceki gün';
+
+  @override
+  String get nextDay => 'Sonraki gün';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date için görev yok';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Konuşma yeniden işleniyor…';
@@ -12376,4 +12402,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Bağlantıyı Kontrol Edin';
+
+  @override
+  String get forYou => 'Sizin İçin';
+
+  @override
+  String get stopThese => 'Bunları Durdur';
+
+  @override
+  String get dismiss => 'Gizle';
 }

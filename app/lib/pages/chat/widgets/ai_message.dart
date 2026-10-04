@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -233,6 +234,8 @@ class AIMessage extends StatefulWidget {
   /// The reply failed; a localized error with [onRetry] replaces the raw server text.
   final bool replyFailed;
 
+  final ChatStreamFailureClass? replyFailure;
+
   /// Sends the user's message again. Null when the failed reply cannot be retried (voice).
   final VoidCallback? onRetry;
 
@@ -249,6 +252,7 @@ class AIMessage extends StatefulWidget {
     this.showThinkingAfterText = false,
     this.fetchConversation,
     this.replyFailed = false,
+    this.replyFailure,
     this.onRetry,
   });
 
@@ -267,7 +271,7 @@ class _AIMessageState extends State<AIMessage> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.replyFailed) return ChatReplyError(onRetry: widget.onRetry);
+    if (widget.replyFailed) return ChatReplyError(failure: widget.replyFailure, onRetry: widget.onRetry);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1167,7 +1171,9 @@ class InitialOptionWidget extends StatelessWidget {
 
 /// A reply that failed: a localized reason and Try Again, which sends the user's message again.
 class ChatReplyError extends StatelessWidget {
-  const ChatReplyError({super.key, this.onRetry});
+  const ChatReplyError({super.key, this.failure, this.onRetry});
+
+  final ChatStreamFailureClass? failure;
 
   /// Null when the message cannot be sent again from here (a voice message).
   final VoidCallback? onRetry;
@@ -1175,6 +1181,14 @@ class ChatReplyError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final reason = switch (failure) {
+      ChatStreamFailureClass.offline => l10n.chatReplyOffline,
+      ChatStreamFailureClass.server => l10n.chatReplyServerError,
+      ChatStreamFailureClass.timeout => l10n.chatReplyTimeout,
+      ChatStreamFailureClass.notSignedIn => l10n.chatReplyNotSignedIn,
+      ChatStreamFailureClass.quota => l10n.chatQuotaExceededReply,
+      _ => l10n.chatReplyFailed,
+    };
     return Semantics(
       liveRegion: true,
       child: Container(
@@ -1185,7 +1199,7 @@ class ChatReplyError extends StatelessWidget {
             ExcludeSemantics(child: Icon(Icons.error_outline_rounded, size: 20, color: OmiColors.danger)),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
-              child: Text(l10n.chatReplyFailed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+              child: Text(reason, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
             ),
             if (onRetry != null)
               Padding(

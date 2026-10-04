@@ -393,13 +393,15 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
           }
         }
       }
-      unawaited(Future.wait(controlSubscriptions).then((_) {
-        for (final key in _activeSubscriptionKeys) {
-          final parts = key.split(':');
-          if (parts.length != 2 || !isBleAudioCharacteristicUuid(parts[1])) continue;
-          unawaited(_subscribeCharacteristic(parts[0], parts[1]));
-        }
-      }));
+      unawaited(
+        Future.wait(controlSubscriptions).then((_) {
+          for (final key in _activeSubscriptionKeys) {
+            final parts = key.split(':');
+            if (parts.length != 2 || !isBleAudioCharacteristicUuid(parts[1])) continue;
+            unawaited(_subscribeCharacteristic(parts[0], parts[1]));
+          }
+        }),
+      );
 
       _updateState(DeviceTransportState.connected);
       _audioSilenceResubscribes = 0;
@@ -454,7 +456,8 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     // Waiting for the native confirmation is not a retry. In particular its
     // confirmation wait must not consume the one retry at the 4-second watch.
     if (_pendingSubscriptions.entries.any(
-        (entry) => entry.value == _subscriptionGeneration && isBleAudioCharacteristicUuid(entry.key.split(':').last))) {
+      (entry) => entry.value == _subscriptionGeneration && isBleAudioCharacteristicUuid(entry.key.split(':').last),
+    )) {
       _armAudioLivenessWatch();
       return;
     }

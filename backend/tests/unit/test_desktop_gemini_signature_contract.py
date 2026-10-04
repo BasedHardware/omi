@@ -231,11 +231,16 @@ def test_proxy_rejected_gateway_request_is_nonretryable():
 @pytest.mark.asyncio
 async def test_streamed_provider_400_stays_nonretryable(monkeypatch):
     async def rejected(*args, **kwargs):
+        assert kwargs['request_id'] == 'c168e257-0ec6-4451-8aa9-b00bc0e322d9'
+        assert kwargs['product_lane'] == 'insight'
+        assert kwargs['client_platform'] == 'macos'
         raise dgg.DesktopGeminiGatewayError(status_code=400, code='provider_rejected', message='synthetic')
         yield b''  # async-generator transport seam
 
     monkeypatch.setattr(dgg, 'gateway_desktop_chat_stream', rejected)
-    telemetry = SimpleNamespace(complete=Mock())
+    telemetry = SimpleNamespace(
+        complete=Mock(), request_id='c168e257-0ec6-4451-8aa9-b00bc0e322d9', lane='insight', client_platform='macos'
+    )
     envelope = SimpleNamespace(response_headers=Mock(return_value={}), stream_error_event=Mock(return_value=b'error'))
     response = await dgg.proxy_company_paid_via_gateway(
         None,

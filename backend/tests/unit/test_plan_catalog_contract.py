@@ -262,3 +262,18 @@ def test_compatibility_guard_requires_revision_bump():
     assert 'compatibility: catalog_revision must increase when the catalog changes' in validate_compatibility(
         previous, current
     )
+
+
+@pytest.mark.parametrize(
+    'patch',
+    [
+        {'fraction_basis_points': 999},
+        {'days_per_month': 31},
+        {'monthly_reference_cents': {'basic': 0, 'plus': -1}},
+        {'monthly_reference_cents': {'basic': 0, 'plus': True}},
+    ],
+)
+def test_proactivity_budget_rejects_unsafe_policy(patch):
+    catalog = deepcopy(load_catalog())
+    catalog['proactivity_v2_budget'].update(patch)
+    assert any('proactivity_v2_budget' in error for error in validate_catalog(catalog))

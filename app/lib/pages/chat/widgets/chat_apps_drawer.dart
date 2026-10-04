@@ -37,9 +37,7 @@ class ChatAppsDrawer extends StatelessWidget {
     final l10n = context.l10n;
     return Drawer(
       backgroundColor: OmiColors.surface1,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg))),
       child: SafeArea(
         child: Consumer2<MessageProvider, AppProvider>(
           builder: (context, messageProvider, appProvider, child) {
@@ -86,6 +84,19 @@ class ChatAppsDrawer extends StatelessWidget {
                           isSelected: selectedAppId == app.id,
                           onTap: () => choose(app.id),
                           onDisable: selectedAppId != app.id ? () => onDisableApp(app) : null,
+                        ),
+                      if (messageProvider.isLoadingChatApps && chatApps.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(OmiSpacing.lg),
+                          child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
+                        )
+                      else if (messageProvider.chatAppsProblem != null)
+                        Padding(
+                          padding: const EdgeInsets.all(OmiSpacing.md),
+                          child: OmiErrorState(
+                            message: l10n.chatAppsLoadFailed,
+                            onRetry: messageProvider.fetchChatApps,
+                          ),
                         ),
                       ListTile(
                         leading: Padding(

@@ -45,8 +45,14 @@ AudioFileUrlInfo _url(String id, String status, {double duration = 60}) => Audio
       duration: duration,
     );
 
-TranscriptSegment _segment(String id, double start, double end,
-    {bool isUser = false, int speakerId = 0, String? text}) {
+TranscriptSegment _segment(
+  String id,
+  double start,
+  double end, {
+  bool isUser = false,
+  int speakerId = 0,
+  String? text,
+}) {
   return TranscriptSegment(
     id: id,
     text: text ?? 'Words for $id',
@@ -159,10 +165,7 @@ void _fakeAudioPlatform(WidgetTester tester, _FakeAudioDevice fake) {
   });
 }
 
-ServerConversation _conversation({
-  List<TranscriptSegment>? segments,
-  List<AudioFile>? audioFiles,
-}) =>
+ServerConversation _conversation({List<TranscriptSegment>? segments, List<AudioFile>? audioFiles}) =>
     ServerConversation(
       id: 'conv-sync',
       createdAt: _start,
@@ -316,11 +319,13 @@ Future<void> _removeDetail(WidgetTester tester) async {
 
 Finder _currentFill(Finder scope) => find.ancestor(
       of: scope,
-      matching: find.byWidgetPredicate((widget) =>
-          widget is DecoratedBox &&
-          widget.decoration is BoxDecoration &&
-          (widget.decoration as BoxDecoration).color == OmiColors.surface2 &&
-          (widget.decoration as BoxDecoration).borderRadius == OmiRadius.smAll),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration as BoxDecoration).color == OmiColors.surface2 &&
+            (widget.decoration as BoxDecoration).borderRadius == OmiRadius.smAll,
+      ),
     );
 
 ServerConversation _snapshotConversation({required double audioSeconds, required double transcriptEnd}) =>
@@ -381,8 +386,11 @@ void main() {
     await tester.pump();
 
     expect(find.text('Audio Unavailable'), findsOneWidget);
-    expect(find.byKey(const Key('detail_audio_retry')), findsOneWidget,
-        reason: 'a persistent inline retry pill, not a vanishing SnackBar');
+    expect(
+      find.byKey(const Key('detail_audio_retry')),
+      findsOneWidget,
+      reason: 'a persistent inline retry pill, not a vanishing SnackBar',
+    );
     expect(find.byType(SnackBar), findsNothing, reason: 'audio errors are inline, not toasts');
 
     await tester.tap(find.byKey(const Key('detail_audio_retry')));
@@ -460,8 +468,11 @@ void main() {
     );
     final top = _topOf(tester, const ValueKey('transcript_current_seg3'));
     final listTop = tester.getTopLeft(find.byType(ListView)).dy;
-    expect(top - listTop, moreOrLessEquals(_viewportHeight(tester) / 3, epsilon: 2),
-        reason: 'the followed line sits one third down the viewport');
+    expect(
+      top - listTop,
+      moreOrLessEquals(_viewportHeight(tester) / 3, epsilon: 2),
+      reason: 'the followed line sits one third down the viewport',
+    );
     await _removeDetail(tester);
   });
 
@@ -476,7 +487,8 @@ void main() {
       fetch: (_) async {
         fetches++;
         return ApiSuccess(
-            _dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]));
+          _dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]),
+        );
       },
     );
 
@@ -490,12 +502,18 @@ void main() {
     expect(fetches, 0, reason: 'a pre-Play scrub answers the gesture without loading audio');
     expect(find.byKey(const ValueKey('transcript_current_seg3')), findsOneWidget);
     final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
-    expect(painter.progress, moreOrLessEquals(35 / 120, epsilon: 0.01),
-        reason: 'the waveform tracks the scrubbed wall point before audio exists');
+    expect(
+      painter.progress,
+      moreOrLessEquals(35 / 120, epsilon: 0.01),
+      reason: 'the waveform tracks the scrubbed wall point before audio exists',
+    );
     final scrubTop =
         _topOf(tester, const ValueKey('transcript_current_seg3')) - tester.getTopLeft(find.byType(ListView)).dy;
-    expect(scrubTop, moreOrLessEquals(_viewportHeight(tester) / 3, epsilon: 2),
-        reason: 'a pre-Play scrub still scrolls the target line into the reading zone');
+    expect(
+      scrubTop,
+      moreOrLessEquals(_viewportHeight(tester) / 3, epsilon: 2),
+      reason: 'a pre-Play scrub still scrolls the target line into the reading zone',
+    );
 
     // An idle reader drag while unloaded only moves the point; still no fetch.
     final scroll = tester.widget<ListView>(find.byType(ListView)).controller!;
@@ -514,8 +532,11 @@ void main() {
     await _flushPlatform(tester);
 
     expect(fetches, 1);
-    expect(_seekArtifacts(fake.calls).last, closeTo(topSeg.start, 0.01),
-        reason: 'Play applies the newest reader point, not the earlier scrub');
+    expect(
+      _seekArtifacts(fake.calls).last,
+      closeTo(topSeg.start, 0.01),
+      reason: 'Play applies the newest reader point, not the earlier scrub',
+    );
     await _flushPlatform(tester);
     expect(fake.calls.last, 'play');
     await _removeDetail(tester);
@@ -532,7 +553,8 @@ void main() {
       fetch: (_) async {
         fetches++;
         return ApiSuccess(
-            _dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]));
+          _dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]),
+        );
       },
     );
 
@@ -589,8 +611,11 @@ void main() {
 
     expect(scroll.offset, offsetAfterDrag);
     expect(fake.calls, isNot(contains('pause')), reason: 'a reader gesture never pauses the playing audio');
-    expect(fake.calls.where((c) => c.startsWith('seek:')), isEmpty,
-        reason: 'a playing reader drag does not seek the player either');
+    expect(
+      fake.calls.where((c) => c.startsWith('seek:')),
+      isEmpty,
+      reason: 'a playing reader drag does not seek the player either',
+    );
     expect(find.byKey(const Key('detail_audio_back_to_current')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('detail_audio_back_to_current')));
@@ -626,8 +651,11 @@ void main() {
     // line — derive which line that is rather than hardcoding an index.
     final topSeg = _topVisibleSegment(tester, segments)!;
     expect(topSeg.start, greaterThan(0), reason: 'the drag moved the top line off the first row');
-    expect(_seekArtifacts(fake.calls), contains(closeTo(topSeg.start, 0.01)),
-        reason: 'a paused reader drag seeks to the actual rendered top line');
+    expect(
+      _seekArtifacts(fake.calls),
+      contains(closeTo(topSeg.start, 0.01)),
+      reason: 'a paused reader drag seeks to the actual rendered top line',
+    );
     expect(fake.calls.last, isNot('play'));
 
     fake.calls.clear();
@@ -635,8 +663,11 @@ void main() {
     await _flushPlatform(tester);
     await _flushPlatform(tester);
 
-    expect(_seekArtifacts(fake.calls), isNot(contains(closeTo(2, 0.01))),
-        reason: 'Play resumes from the line the reader left, not the paused artifact spot');
+    expect(
+      _seekArtifacts(fake.calls),
+      isNot(contains(closeTo(2, 0.01))),
+      reason: 'Play resumes from the line the reader left, not the paused artifact spot',
+    );
     expect(fake.calls.last, 'play');
     await _removeDetail(tester);
   });
@@ -645,13 +676,7 @@ void main() {
     final fake = _FakeAudioDevice();
     final segments = [
       for (var i = 0; i < 500; i++)
-        _segment(
-          'seg$i',
-          i * 2.0,
-          i * 2.0 + 1.5,
-          speakerId: i % 4,
-          text: 'Words for seg$i ' * (i % 12 + 1),
-        ),
+        _segment('seg$i', i * 2.0, i * 2.0 + 1.5, speakerId: i % 4, text: 'Words for seg$i ' * (i % 12 + 1)),
     ];
     await _pumpDetail(
       tester,
@@ -669,8 +694,11 @@ void main() {
     expect(find.byKey(const ValueKey('transcript_current_seg400')), findsOneWidget);
     final top = _topOf(tester, const ValueKey('transcript_current_seg400'));
     final listTop = tester.getTopLeft(find.byType(ListView)).dy;
-    expect(top - listTop, moreOrLessEquals(_viewportHeight(tester) / 3, epsilon: 2),
-        reason: 'a variable-height row top lands exactly a third down, not approximately');
+    expect(
+      top - listTop,
+      moreOrLessEquals(_viewportHeight(tester) / 3, epsilon: 2),
+      reason: 'a variable-height row top lands exactly a third down, not approximately',
+    );
     await _removeDetail(tester);
   });
 
@@ -686,10 +714,12 @@ void main() {
       tester,
       _conversation(segments: segments),
       fake: fake,
-      fetch: (_) async => ApiSuccess(_dense(const [
-        ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 60),
-        ConversationAudioSpan(fileId: 'b', wallOffset: 360, artifactOffset: 60, len: 60),
-      ])),
+      fetch: (_) async => ApiSuccess(
+        _dense(const [
+          ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 60),
+          ConversationAudioSpan(fileId: 'b', wallOffset: 360, artifactOffset: 60, len: 60),
+        ]),
+      ),
     );
 
     await tester.tap(find.bySemanticsLabel('Play'));
@@ -706,10 +736,16 @@ void main() {
     expect(find.byKey(const ValueKey('transcript_current_seg2')), findsOneWidget);
 
     final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
-    expect(painter.progress, moreOrLessEquals(365 / 420, epsilon: 0.01),
-        reason: 'the waveform advances on the wall clock, not the artifact clock');
-    expect((painter.dimRanges as List).cast<(double, double)>(), contains((60 / 420, 360 / 420)),
-        reason: 'the collapsed five-minute gap renders as a dimmed band');
+    expect(
+      painter.progress,
+      moreOrLessEquals(365 / 420, epsilon: 0.01),
+      reason: 'the waveform advances on the wall clock, not the artifact clock',
+    );
+    expect(
+      (painter.dimRanges as List).cast<(double, double)>(),
+      contains((60 / 420, 360 / 420)),
+      reason: 'the collapsed five-minute gap renders as a dimmed band',
+    );
     await _removeDetail(tester);
   });
 
@@ -734,13 +770,17 @@ void main() {
     await tester.pump();
 
     release.complete(
-        ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)])));
+      ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)])),
+    );
     await _flushPlatform(tester);
     await _flushPlatform(tester);
 
     expect(fake.calls.where((c) => c == 'load'), hasLength(1), reason: 'one init for both intents');
-    expect(_seekArtifacts(fake.calls), equals([closeTo(40, 0.01)]),
-        reason: 'only the newest wall point is applied — the stale line tap never seeks');
+    expect(
+      _seekArtifacts(fake.calls),
+      equals([closeTo(40, 0.01)]),
+      reason: 'only the newest wall point is applied — the stale line tap never seeks',
+    );
     await _flushPlatform(tester);
     expect(fake.calls.last, 'play', reason: 'the line tap still asked for playback');
     await _removeDetail(tester);
@@ -766,8 +806,11 @@ void main() {
     await tester.fling(find.byType(ListView), const Offset(0, 300), 800);
     await tester.pumpAndSettle(const Duration(seconds: 3));
 
-    expect(find.byKey(const ValueKey('transcript_current_seg401')), findsNothing,
-        reason: 'the cancelled locate never re-grabs the scroll to finish');
+    expect(
+      find.byKey(const ValueKey('transcript_current_seg401')),
+      findsNothing,
+      reason: 'the cancelled locate never re-grabs the scroll to finish',
+    );
     await _removeDetail(tester);
   });
 
@@ -795,15 +838,21 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, 25));
     await tester.pumpAndSettle();
     final topSeg = _topVisibleSegment(tester, segments)!;
-    expect(_seekArtifacts(fake.calls), contains(closeTo(topSeg.start, 0.01)),
-        reason: 'a reader gesture snaps the read point to the top line start');
+    expect(
+      _seekArtifacts(fake.calls),
+      contains(closeTo(topSeg.start, 0.01)),
+      reason: 'a reader gesture snaps the read point to the top line start',
+    );
 
     fake.calls.clear();
     await tester.tap(find.bySemanticsLabel('Play'));
     await _flushPlatform(tester);
     await _flushPlatform(tester);
-    expect(_seekArtifacts(fake.calls), isNot(contains(closeTo(23, 0.01))),
-        reason: 'Play never resumes the stale in-line artifact position');
+    expect(
+      _seekArtifacts(fake.calls),
+      isNot(contains(closeTo(23, 0.01))),
+      reason: 'Play never resumes the stale in-line artifact position',
+    );
     expect(fake.calls.last, 'play');
     await _removeDetail(tester);
   });
@@ -839,8 +888,11 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Play'));
     await _flushPlatform(tester);
     await _flushPlatform(tester);
-    expect(_seekArtifacts(fake.calls), contains(closeTo(35, 0.01)),
-        reason: 'the detached bar preserved the wall point the player left');
+    expect(
+      _seekArtifacts(fake.calls),
+      contains(closeTo(35, 0.01)),
+      reason: 'the detached bar preserved the wall point the player left',
+    );
     expect(fake.calls.last, 'play');
     await _removeDetail(tester);
   });
@@ -862,17 +914,26 @@ void main() {
     await _flushPlatform(tester);
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(harness.controller.isPlaying, isFalse,
-        reason: 'just_audio keeps playing:true at completed — the controller must not');
-    expect(find.bySemanticsLabel('Play'), findsOneWidget,
-        reason: 'the button reads Play at the end of the track, not Pause');
+    expect(
+      harness.controller.isPlaying,
+      isFalse,
+      reason: 'just_audio keeps playing:true at completed — the controller must not',
+    );
+    expect(
+      find.bySemanticsLabel('Play'),
+      findsOneWidget,
+      reason: 'the button reads Play at the end of the track, not Pause',
+    );
 
     fake.calls.clear();
     await tester.tap(find.bySemanticsLabel('Play'));
     await _flushPlatform(tester);
     await _flushPlatform(tester);
-    expect(_seekArtifacts(fake.calls), contains(closeTo(0, 0.01)),
-        reason: 'restarting a completed track rewinds to the beginning');
+    expect(
+      _seekArtifacts(fake.calls),
+      contains(closeTo(0, 0.01)),
+      reason: 'restarting a completed track rewinds to the beginning',
+    );
     expect(fake.calls.last, 'play');
     await _removeDetail(tester);
   });
@@ -965,8 +1026,11 @@ void main() {
     await _flushPlatform(tester);
 
     expect(_seekArtifacts(fake.calls), contains(closeTo(20, 0.01)));
-    expect(fake.calls.last, 'play',
-        reason: 'the completed player\'s stale playing flag must not swallow the play request');
+    expect(
+      fake.calls.last,
+      'play',
+      reason: 'the completed player\'s stale playing flag must not swallow the play request',
+    );
     await _removeDetail(tester);
   });
 
@@ -988,10 +1052,9 @@ void main() {
         ],
       ),
       fake: fake,
-      fetch: (_) async => ApiSuccess(AudioUrlsResponse(files: [
-        _url('a', 'cached', duration: 60),
-        _url('b', 'unavailable', duration: 60),
-      ])),
+      fetch: (_) async => ApiSuccess(
+        AudioUrlsResponse(files: [_url('a', 'cached', duration: 60), _url('b', 'unavailable', duration: 60)]),
+      ),
     );
 
     await tester.tap(find.bySemanticsLabel('Play'));
@@ -1004,8 +1067,11 @@ void main() {
     expect(find.byKey(const ValueKey('transcript_current_seg1')), findsOneWidget);
 
     final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
-    expect((painter.dimRanges as List).cast<(double, double)>(), contains((360 / 420, 1.0)),
-        reason: 'the unavailable part renders dimmed at its wall position');
+    expect(
+      (painter.dimRanges as List).cast<(double, double)>(),
+      contains((360 / 420, 1.0)),
+      reason: 'the unavailable part renders dimmed at its wall position',
+    );
     expect(find.byType(SnackBar), findsNothing);
     await _removeDetail(tester);
   });
@@ -1015,10 +1081,7 @@ void main() {
     final segments = [for (var i = 0; i < 6; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     final harness = await _pumpDetail(
       tester,
-      _conversation(
-        segments: segments,
-        audioFiles: [_file('a', duration: 60)],
-      ),
+      _conversation(segments: segments, audioFiles: [_file('a', duration: 60)]),
       fake: fake,
       fetch: (_) async => ApiSuccess(AudioUrlsResponse(files: [_url('a', 'cached', duration: 60)])),
     );
@@ -1031,8 +1094,11 @@ void main() {
     await _flushPlatform(tester);
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(harness.controller.currentSegmentId, isNull,
-        reason: 'no mapper means no line can honestly claim the position');
+    expect(
+      harness.controller.currentSegmentId,
+      isNull,
+      reason: 'no mapper means no line can honestly claim the position',
+    );
     expect(find.byKey(const ValueKey('transcript_current_seg3')), findsNothing);
     final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
     expect(painter.progress, 0, reason: 'the waveform must not imply speech is aligned to the heard audio');
@@ -1063,8 +1129,11 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('-2:00'), findsOneWidget,
-        reason: 'the refreshed snapshot re-derives the cached duration for the same id');
+    expect(
+      find.text('-2:00'),
+      findsOneWidget,
+      reason: 'the refreshed snapshot re-derives the cached duration for the same id',
+    );
     expect(fetches, 0, reason: 'metadata alone never fetches playback URLs');
     await _removeDetail(tester);
   });
@@ -1095,8 +1164,11 @@ void main() {
     await tester.tapAt(Offset(box.left + box.width / 2, box.center.dy));
     await tester.pump();
 
-    expect(harness.controller.wallPosition.value, closeTo(60, 0.5),
-        reason: 'the tap lands on the refreshed wall timeline');
+    expect(
+      harness.controller.wallPosition.value,
+      closeTo(60, 0.5),
+      reason: 'the tap lands on the refreshed wall timeline',
+    );
     expect(harness.controller.pendingWallSeconds, closeTo(60, 0.5));
     final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
     expect(painter.progress, moreOrLessEquals(0.5, epsilon: 0.01));
@@ -1130,11 +1202,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.byKey(const ValueKey('transcript_current_s0')), findsOneWidget);
-      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s0'))), findsOneWidget,
-          reason:
-              'the playing owner line paints its own background (${palette == OmiPalette.dark ? 'dark' : 'light'})');
-      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s1'))), findsNothing,
-          reason: 'the adjacent inactive owner line keeps no fill');
+      expect(
+        _currentFill(find.byKey(const ValueKey('transcript_seek_s0'))),
+        findsOneWidget,
+        reason: 'the playing owner line paints its own background (${palette == OmiPalette.dark ? 'dark' : 'light'})',
+      );
+      expect(
+        _currentFill(find.byKey(const ValueKey('transcript_seek_s1'))),
+        findsNothing,
+        reason: 'the adjacent inactive owner line keeps no fill',
+      );
       expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s2'))), findsNothing);
 
       fake.emit(playing: true, positionSec: 15);
@@ -1142,10 +1219,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.byKey(const ValueKey('transcript_current_s1')), findsOneWidget);
-      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s1'))), findsOneWidget,
-          reason: 'the fill migrates to the newly current owner line');
-      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s0'))), findsNothing,
-          reason: 'the previous owner line clears its fill');
+      expect(
+        _currentFill(find.byKey(const ValueKey('transcript_seek_s1'))),
+        findsOneWidget,
+        reason: 'the fill migrates to the newly current owner line',
+      );
+      expect(
+        _currentFill(find.byKey(const ValueKey('transcript_seek_s0'))),
+        findsNothing,
+        reason: 'the previous owner line clears its fill',
+      );
       expect(
         find.ancestor(
           of: find.byKey(const ValueKey('transcript_current_s1')),
@@ -1180,18 +1263,27 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.byKey(const ValueKey('transcript_current_s0')), findsOneWidget);
-    expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s0'))), findsOneWidget,
-        reason: 'the playing non-owner line paints its own background');
-    expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s1'))), findsNothing,
-        reason: 'the adjacent inactive line keeps no fill');
+    expect(
+      _currentFill(find.byKey(const ValueKey('transcript_seek_s0'))),
+      findsOneWidget,
+      reason: 'the playing non-owner line paints its own background',
+    );
+    expect(
+      _currentFill(find.byKey(const ValueKey('transcript_seek_s1'))),
+      findsNothing,
+      reason: 'the adjacent inactive line keeps no fill',
+    );
 
     fake.emit(playing: true, positionSec: 15);
     await _flushPlatform(tester);
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.byKey(const ValueKey('transcript_current_s1')), findsOneWidget);
-    expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s1'))), findsOneWidget,
-        reason: 'the fill migrates between same-speaker non-owner lines');
+    expect(
+      _currentFill(find.byKey(const ValueKey('transcript_seek_s1'))),
+      findsOneWidget,
+      reason: 'the fill migrates between same-speaker non-owner lines',
+    );
     expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s0'))), findsNothing);
     await _removeDetail(tester);
   });
@@ -1243,8 +1335,11 @@ void main() {
 
     expect(fetches, 2, reason: 'Play re-resolves the new sources');
     expect(fake.calls.where((c) => c == 'load'), hasLength(1));
-    expect(_seekArtifacts(fake.calls), contains(closeTo(4, 0.01)),
-        reason: 'the preserved wall point resumes through the new mapping');
+    expect(
+      _seekArtifacts(fake.calls),
+      contains(closeTo(4, 0.01)),
+      reason: 'the preserved wall point resumes through the new mapping',
+    );
     expect(fake.calls.last, 'play');
     await _removeDetail(tester);
   });
@@ -1285,13 +1380,22 @@ void main() {
     final box = tester.getRect(find.byKey(const Key('detail_audio_waveform')));
     await tester.tapAt(Offset(box.left + box.width / 2, box.center.dy));
     await _flushPlatform(tester);
-    expect(fake.calls.where((c) => c == 'load' || c == 'pause' || c == 'play'), isEmpty,
-        reason: 'a scrub seeks but never reloads or restarts playback');
-    expect(_seekArtifacts(fake.calls), contains(closeTo(10, 0.01)),
-        reason: 'midpoint of the refreshed 120 s wall snaps to the span end — the stale 10 s wall would seek 5');
+    expect(
+      fake.calls.where((c) => c == 'load' || c == 'pause' || c == 'play'),
+      isEmpty,
+      reason: 'a scrub seeks but never reloads or restarts playback',
+    );
+    expect(
+      _seekArtifacts(fake.calls),
+      contains(closeTo(10, 0.01)),
+      reason: 'midpoint of the refreshed 120 s wall snaps to the span end — the stale 10 s wall would seek 5',
+    );
     final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
-    expect(painter.progress, moreOrLessEquals(10 / 120, epsilon: 0.01),
-        reason: 'the snapped playhead paints on the refreshed 120 s wall');
+    expect(
+      painter.progress,
+      moreOrLessEquals(10 / 120, epsilon: 0.01),
+      reason: 'the snapped playhead paints on the refreshed 120 s wall',
+    );
     await _removeDetail(tester);
   });
 
@@ -1303,10 +1407,9 @@ void main() {
       _segment('seg2', 360, 368),
       _segment('seg3', 390, 398),
     ];
-    urls() => ApiSuccess(AudioUrlsResponse(files: [
-          _url('a', 'cached', duration: 60),
-          _url('b', 'unavailable', duration: 60),
-        ]));
+    urls() => ApiSuccess(
+          AudioUrlsResponse(files: [_url('a', 'cached', duration: 60), _url('b', 'unavailable', duration: 60)]),
+        );
     final harness = await _pumpDetail(
       tester,
       _conversation(
@@ -1344,8 +1447,11 @@ void main() {
 
     expect(harness.controller.isLoaded, isTrue, reason: 'identical sources never invalidate the player');
     expect(harness.controller.isPlaying, isTrue);
-    expect(find.text('-0:30'), findsOneWidget,
-        reason: 'the adopted plan duration and part offsets are not clobbered by metadata');
+    expect(
+      find.text('-0:30'),
+      findsOneWidget,
+      reason: 'the adopted plan duration and part offsets are not clobbered by metadata',
+    );
     expect(fake.calls.where((c) => c == 'load' || c == 'pause' || c == 'seek'), isEmpty);
     await _removeDetail(tester);
   });
@@ -1374,18 +1480,23 @@ void main() {
       fetch: (_) async {
         fetches++;
         return ApiSuccess(
-            _dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]));
+          _dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)]),
+        );
       },
       controllerParam: harness.controller,
     );
     await tester.pump();
 
     release.complete(
-        ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 10)])));
+      ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 10)])),
+    );
     await _flushPlatform(tester);
 
-    expect(fake.calls.where((c) => c == 'load'), isEmpty,
-        reason: 'the stale answer never loads a player for superseded sources');
+    expect(
+      fake.calls.where((c) => c == 'load'),
+      isEmpty,
+      reason: 'the stale answer never loads a player for superseded sources',
+    );
     expect(harness.controller.isLoaded, isFalse);
     expect(find.bySemanticsLabel('Play'), findsOneWidget);
 

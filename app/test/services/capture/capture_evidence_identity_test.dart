@@ -67,262 +67,255 @@ void main() {
     world.emitNativeState(PhoneMicCaptureState.running);
   }
 
-  group(
-    'dark-write enabled',
-    skip: _darkWrite ? null : 'requires CAPTURE_EVIDENCE_V1_DARK_WRITE=true',
-    () {
-      test('one capture session keeps one root with strictly increasing ordinals', () async {
-        await startRunning();
-        await captureSeconds(2, frameCursor: 0);
+  group('dark-write enabled', skip: _darkWrite ? null : 'requires CAPTURE_EVIDENCE_V1_DARK_WRITE=true', () {
+    test('one capture session keeps one root with strictly increasing ordinals', () async {
+      await startRunning();
+      await captureSeconds(2, frameCursor: 0);
 
-        final records = evidenceRecords();
-        expect(records, hasLength(200));
-        singleRoot(records);
-        expect(
-          [for (final r in records) r['source_frame']],
-          List.generate(200, (i) => i),
-        );
-        expect(records.map((r) => r['clock_epoch']).toSet(), {0});
-      });
+      final records = evidenceRecords();
+      expect(records, hasLength(200));
+      singleRoot(records);
+      expect([for (final r in records) r['source_frame']], List.generate(200, (i) => i));
+      expect(records.map((r) => r['clock_epoch']).toSet(), {0});
+    });
 
-      test('direct phone WAL reset mid-capture rotates the evidence root', () async {
-        await startRunning();
-        await captureSeconds(1, frameCursor: 0);
-        final before = evidenceRecords();
-        expect(before, hasLength(100));
-        final rootBefore = singleRoot(before);
+    test('direct phone WAL reset mid-capture rotates the evidence root', () async {
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final before = evidenceRecords();
+      expect(before, hasLength(100));
+      final rootBefore = singleRoot(before);
 
-        world.wal.syncs.phone.clearUserData();
-        await captureSeconds(1, frameCursor: 10000);
+      world.wal.syncs.phone.clearUserData();
+      await captureSeconds(1, frameCursor: 10000);
 
-        final all = evidenceRecords();
-        final after = all.sublist(before.length);
-        expect(after, hasLength(100));
-        final rootAfter = singleRoot(after);
-        expect(rootAfter, isNot(rootBefore));
-        expect(tuples(after).intersection(tuples(before)), isEmpty);
-        expect(all.sublist(0, before.length).every((r) => r['capture_root'] == rootBefore), isTrue);
-      });
+      final all = evidenceRecords();
+      final after = all.sublist(before.length);
+      expect(after, hasLength(100));
+      final rootAfter = singleRoot(after);
+      expect(rootAfter, isNot(rootBefore));
+      expect(tuples(after).intersection(tuples(before)), isEmpty);
+      expect(all.sublist(0, before.length).every((r) => r['capture_root'] == rootBefore), isTrue);
+    });
 
-      test('controller clearUserData alone rotates the evidence root', () async {
-        await startRunning();
-        await captureSeconds(1, frameCursor: 0);
-        final before = evidenceRecords();
-        final rootBefore = singleRoot(before);
+    test('controller clearUserData alone rotates the evidence root', () async {
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final before = evidenceRecords();
+      final rootBefore = singleRoot(before);
 
-        world.controller.clearUserData();
-        await captureSeconds(1, frameCursor: 10000);
+      world.controller.clearUserData();
+      await captureSeconds(1, frameCursor: 10000);
 
-        final after = evidenceRecords().sublist(before.length);
-        expect(after, hasLength(100));
-        expect(singleRoot(after), isNot(rootBefore));
-        expect(tuples(after).intersection(tuples(before)), isEmpty);
-      });
+      final after = evidenceRecords().sublist(before.length);
+      expect(after, hasLength(100));
+      expect(singleRoot(after), isNot(rootBefore));
+      expect(tuples(after).intersection(tuples(before)), isEmpty);
+    });
 
-      test('logout order and bare uid changes rotate the evidence root', () async {
-        SharedPreferencesUtil().uid = 'account-a';
-        await startRunning();
-        await captureSeconds(1, frameCursor: 0);
-        final rootA = singleRoot(evidenceRecords());
-        var cursor = evidenceRecords().length;
+    test('logout order and bare uid changes rotate the evidence root', () async {
+      SharedPreferencesUtil().uid = 'account-a';
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final rootA = singleRoot(evidenceRecords());
+      var cursor = evidenceRecords().length;
 
-        world.wal.syncs.phone.clearUserData();
-        world.injectAudioFrames(1, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: 10000);
-        SharedPreferencesUtil().uid = 'account-b';
-        await captureSeconds(1, frameCursor: 20000);
+      world.wal.syncs.phone.clearUserData();
+      world.injectAudioFrames(1, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: 10000);
+      SharedPreferencesUtil().uid = 'account-b';
+      await captureSeconds(1, frameCursor: 20000);
 
-        final afterSwitch = evidenceRecords().sublist(cursor);
-        expect(afterSwitch, hasLength(101));
-        final rootReset = afterSwitch.first['capture_root'] as String;
-        expect(rootReset, isNot(rootA));
-        final rootB = singleRoot(afterSwitch.sublist(1));
-        expect(rootB, isNot(rootA));
-        expect(rootB, isNot(rootReset));
-        cursor += afterSwitch.length;
+      final afterSwitch = evidenceRecords().sublist(cursor);
+      expect(afterSwitch, hasLength(101));
+      final rootReset = afterSwitch.first['capture_root'] as String;
+      expect(rootReset, isNot(rootA));
+      final rootB = singleRoot(afterSwitch.sublist(1));
+      expect(rootB, isNot(rootA));
+      expect(rootB, isNot(rootReset));
+      cursor += afterSwitch.length;
 
-        SharedPreferencesUtil().uid = 'account-c';
-        await captureSeconds(1, frameCursor: 30000);
-        final afterUid = evidenceRecords().sublist(cursor);
-        expect(afterUid, hasLength(100));
-        final rootC = singleRoot(afterUid);
-        expect(rootC, isNot(rootB));
-        expect(rootC, isNot(rootA));
-      });
+      SharedPreferencesUtil().uid = 'account-c';
+      await captureSeconds(1, frameCursor: 30000);
+      final afterUid = evidenceRecords().sublist(cursor);
+      expect(afterUid, hasLength(100));
+      final rootC = singleRoot(afterUid);
+      expect(rootC, isNot(rootB));
+      expect(rootC, isNot(rootA));
+    });
 
-      test('codec change on the same allocator rotates the root and restarts the ordinal', () async {
-        await startRunning();
-        await captureSeconds(1, frameCursor: 0);
-        final before = evidenceRecords();
-        final rootBefore = singleRoot(before);
+    test('codec change on the same allocator rotates the root and restarts the ordinal', () async {
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final before = evidenceRecords();
+      final rootBefore = singleRoot(before);
 
-        await world.wal.syncs.phone.onAudioCodecChanged(BleAudioCodec.pcm16);
-        await captureSeconds(1, frameCursor: 10000);
+      await world.wal.syncs.phone.onAudioCodecChanged(BleAudioCodec.pcm16);
+      await captureSeconds(1, frameCursor: 10000);
 
-        final after = evidenceRecords().sublist(before.length);
-        expect(after, hasLength(100));
-        expect(singleRoot(after), isNot(rootBefore));
-        expect(after.first['source_frame'], 0);
-        expect(tuples(after).intersection(tuples(before)), isEmpty);
-      });
+      final after = evidenceRecords().sublist(before.length);
+      expect(after, hasLength(100));
+      expect(singleRoot(after), isNot(rootBefore));
+      expect(after.first['source_frame'], 0);
+      expect(tuples(after).intersection(tuples(before)), isEmpty);
+    });
 
-      test('deleting WALs never reissues a tuple inside one process', () async {
-        SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
-        await startRunning();
-        await captureSeconds(1, frameCursor: 0);
-        final onlineRecords = evidenceRecords();
-        final root = singleRoot(onlineRecords);
-        final consumed = tuples(onlineRecords);
+    test('deleting WALs never reissues a tuple inside one process', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final onlineRecords = evidenceRecords();
+      final root = singleRoot(onlineRecords);
+      final consumed = tuples(onlineRecords);
 
-        await world.wal.syncs.phone.finalizeCurrentSession();
-        await captureSeconds(1, frameCursor: 10000);
-        consumed.addAll(tuples(evidenceRecords().sublist(onlineRecords.length)));
+      await world.wal.syncs.phone.finalizeCurrentSession();
+      await captureSeconds(1, frameCursor: 10000);
+      consumed.addAll(tuples(evidenceRecords().sublist(onlineRecords.length)));
 
-        world.setConnected(false);
-        world.socket!.emitClose();
-        await world.settle();
-        await captureSeconds(1, frameCursor: 20000);
-        await world.wal.syncs.phone.finalizeCurrentSession();
-        await captureSeconds(1, frameCursor: 30000);
-        await world.wal.syncs.phone.finalizeCurrentSession();
+      world.setConnected(false);
+      world.socket!.emitClose();
+      await world.settle();
+      await captureSeconds(1, frameCursor: 20000);
+      await world.wal.syncs.phone.finalizeCurrentSession();
+      await captureSeconds(1, frameCursor: 30000);
+      await world.wal.syncs.phone.finalizeCurrentSession();
 
-        final wals = await world.wal.syncs.phone.getAllWals();
-        final pending = wals.where((w) => w.status == WalStatus.miss).toList();
-        expect(pending.length, greaterThanOrEqualTo(2));
-        for (final wal in wals) {
-          if (wal.captureRoot != null && wal.sourceFrameStart != null) {
-            consumed.addAll(List.generate(
-                wal.totalFrames, (i) => '${wal.captureRoot}/${wal.sourceClockEpoch}/${wal.sourceFrameStart! + i}'));
-          }
+      final wals = await world.wal.syncs.phone.getAllWals();
+      final pending = wals.where((w) => w.status == WalStatus.miss).toList();
+      expect(pending.length, greaterThanOrEqualTo(2));
+      for (final wal in wals) {
+        if (wal.captureRoot != null && wal.sourceFrameStart != null) {
+          consumed.addAll(
+            List.generate(
+              wal.totalFrames,
+              (i) => '${wal.captureRoot}/${wal.sourceClockEpoch}/${wal.sourceFrameStart! + i}',
+            ),
+          );
         }
-        await world.wal.syncs.phone.deleteWal(pending.first);
-        wals.last.markCorrupted();
-        await world.wal.syncs.phone.deleteAllCorruptedWals();
-        await world.wal.syncs.phone.deleteAllPendingWals();
-        await world.wal.syncs.phone.deleteAllSyncedWals();
-        expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
+      }
+      await world.wal.syncs.phone.deleteWal(pending.first);
+      wals.last.markCorrupted();
+      await world.wal.syncs.phone.deleteAllCorruptedWals();
+      await world.wal.syncs.phone.deleteAllPendingWals();
+      await world.wal.syncs.phone.deleteAllSyncedWals();
+      expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
 
-        await captureSeconds(1, frameCursor: 40000);
-        final newFrames = world.wal.syncs.phone.testFrames;
-        expect(newFrames, hasLength(100));
-        expect(newFrames.map((f) => f.captureRoot).toSet(), {root});
-        expect(
-          newFrames
-              .map((f) => '${f.captureRoot}/${f.sourceClockEpoch}/${f.sourceFramePosition}')
-              .toSet()
-              .intersection(consumed),
-          isEmpty,
-        );
-      });
+      await captureSeconds(1, frameCursor: 40000);
+      final newFrames = world.wal.syncs.phone.testFrames;
+      expect(newFrames, hasLength(100));
+      expect(newFrames.map((f) => f.captureRoot).toSet(), {root});
+      expect(
+        newFrames
+            .map((f) => '${f.captureRoot}/${f.sourceClockEpoch}/${f.sourceFramePosition}')
+            .toSet()
+            .intersection(consumed),
+        isEmpty,
+      );
+    });
 
-      test('fresh install with no surviving WALs allocates a new root', () async {
-        SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
-        await startRunning();
-        await captureSeconds(1, frameCursor: 0);
-        final rootBefore = singleRoot(evidenceRecords());
-        await world.dispose();
+    test('fresh install with no surviving WALs allocates a new root', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final rootBefore = singleRoot(evidenceRecords());
+      await world.dispose();
 
-        final freshDir = Directory('${tempDir.path}/fresh')..createSync();
-        SharedPreferences.setMockInitialValues({});
-        world = await CaptureReplayWorld.boot(tempDir: freshDir);
-        expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
+      final freshDir = Directory('${tempDir.path}/fresh')..createSync();
+      SharedPreferences.setMockInitialValues({});
+      world = await CaptureReplayWorld.boot(tempDir: freshDir);
+      expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
 
-        await startRunning();
-        await captureSeconds(1, frameCursor: 10000);
-        final records = evidenceRecords();
-        final after = records.sublist(records.length - 100);
-        expect(singleRoot(after), isNot(rootBefore));
-      });
+      await startRunning();
+      await captureSeconds(1, frameCursor: 10000);
+      final records = evidenceRecords();
+      final after = records.sublist(records.length - 100);
+      expect(singleRoot(after), isNot(rootBefore));
+    });
 
-      test('restart keeps stored WAL claim roots but opens a new live namespace', () async {
-        await startRunning();
-        await captureSeconds(1, frameCursor: 0);
-        final rootBefore = singleRoot(evidenceRecords());
-        world.setConnected(false);
-        world.socket!.emitClose();
-        await world.settle();
-        await captureSeconds(1, frameCursor: 10000);
-        await world.wal.syncs.phone.finalizeCurrentSession();
-        final stored = (await world.wal.syncs.phone.getAllWals()).single;
-        expect(stored.captureRoot, rootBefore);
-        final storedClaim = '${stored.captureRoot}/${stored.sourceClockEpoch}/${stored.sourceFrameStart}';
+    test('restart keeps stored WAL claim roots but opens a new live namespace', () async {
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final rootBefore = singleRoot(evidenceRecords());
+      world.setConnected(false);
+      world.socket!.emitClose();
+      await world.settle();
+      await captureSeconds(1, frameCursor: 10000);
+      await world.wal.syncs.phone.finalizeCurrentSession();
+      final stored = (await world.wal.syncs.phone.getAllWals()).single;
+      expect(stored.captureRoot, rootBefore);
+      final storedClaim = '${stored.captureRoot}/${stored.sourceClockEpoch}/${stored.sourceFrameStart}';
 
-        world.killProcess();
-        world.connected = true;
-        await world.reconstructProcess();
+      world.killProcess();
+      world.connected = true;
+      await world.reconstructProcess();
 
-        final reloaded = (await world.wal.syncs.phone.getAllWals()).single;
-        expect(reloaded.captureRoot, rootBefore);
-        final walPath = await Wal.getFilePath(reloaded.filePath);
-        final header = jsonDecode(captureEvidenceUploadHeader([reloaded], [File(walPath!)])!);
-        expect(
-          '${header['files'].single['capture_root']}/${header['files'].single['clock_epoch']}/${header['files'].single['source_frame_start']}',
-          storedClaim,
-        );
+      final reloaded = (await world.wal.syncs.phone.getAllWals()).single;
+      expect(reloaded.captureRoot, rootBefore);
+      final walPath = await Wal.getFilePath(reloaded.filePath);
+      final header = jsonDecode(captureEvidenceUploadHeader([reloaded], [File(walPath!)])!);
+      expect(
+        '${header['files'].single['capture_root']}/${header['files'].single['clock_epoch']}/${header['files'].single['source_frame_start']}',
+        storedClaim,
+      );
 
-        await startRunning();
-        await captureSeconds(1, frameCursor: 20000);
-        final records = evidenceRecords();
-        final live = records.sublist(records.length - 100);
-        final liveRoot = singleRoot(live);
-        expect(liveRoot, isNot(rootBefore));
-        expect(live.first['source_frame'], 0);
-      });
+      await startRunning();
+      await captureSeconds(1, frameCursor: 20000);
+      final records = evidenceRecords();
+      final live = records.sublist(records.length - 100);
+      final liveRoot = singleRoot(live);
+      expect(liveRoot, isNot(rootBefore));
+      expect(live.first['source_frame'], 0);
+    });
 
-      test('WAL serialization and the upload boundary carry the live root', () async {
-        await startRunning();
-        await captureSeconds(1, frameCursor: 0);
-        final root = singleRoot(evidenceRecords());
-        world.setConnected(false);
-        world.socket!.emitClose();
-        await world.settle();
-        await captureSeconds(1, frameCursor: 10000);
-        await world.wal.syncs.phone.finalizeCurrentSession();
+    test('WAL serialization and the upload boundary carry the live root', () async {
+      await startRunning();
+      await captureSeconds(1, frameCursor: 0);
+      final root = singleRoot(evidenceRecords());
+      world.setConnected(false);
+      world.socket!.emitClose();
+      await world.settle();
+      await captureSeconds(1, frameCursor: 10000);
+      await world.wal.syncs.phone.finalizeCurrentSession();
 
-        final wal = (await world.wal.syncs.phone.getAllWals()).single;
-        expect(wal.captureRoot, root);
-        final roundTripped = Wal.fromJson(wal.toJson());
-        expect(roundTripped.captureRoot, root);
-        expect(roundTripped.sourceFrameStart, wal.sourceFrameStart);
-        expect(roundTripped.sourceClockEpoch, wal.sourceClockEpoch);
+      final wal = (await world.wal.syncs.phone.getAllWals()).single;
+      expect(wal.captureRoot, root);
+      final roundTripped = Wal.fromJson(wal.toJson());
+      expect(roundTripped.captureRoot, root);
+      expect(roundTripped.sourceFrameStart, wal.sourceFrameStart);
+      expect(roundTripped.sourceClockEpoch, wal.sourceClockEpoch);
 
-        world.setConnected(true);
-        await world.wal.syncs.phone.syncAll();
-        final claim = world.uploads.attempts.last.captureEvidence;
-        expect(claim, isNotNull);
-        final parsed = jsonDecode(claim!);
-        expect(parsed['version'], 1);
-        expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {root});
-      });
-    },
-  );
+      world.setConnected(true);
+      await world.wal.syncs.phone.syncAll();
+      final claim = world.uploads.attempts.last.captureEvidence;
+      expect(claim, isNotNull);
+      final parsed = jsonDecode(claim!);
+      expect(parsed['version'], 1);
+      expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {root});
+    });
+  });
 
-  group(
-    'dark-write disabled',
-    skip: _darkWrite ? 'CAPTURE_EVIDENCE_V1_DARK_WRITE is on' : null,
-    () {
-      test('no evidence control records, binary audio unchanged, no WAL fields, no header', () async {
-        await startRunning();
-        final sent = await captureSeconds(1, frameCursor: 0);
+  group('dark-write disabled', skip: _darkWrite ? 'CAPTURE_EVIDENCE_V1_DARK_WRITE is on' : null, () {
+    test('no evidence control records, binary audio unchanged, no WAL fields, no header', () async {
+      await startRunning();
+      final sent = await captureSeconds(1, frameCursor: 0);
 
-        expect(world.socket!.sentBinary, hasLength(100));
-        expect(world.socket!.sentBinary, sent);
-        expect(evidenceRecords(), isEmpty);
-        expect(world.socket!.sentText.where((t) => t.contains('capture_evidence')), isEmpty);
+      expect(world.socket!.sentBinary, hasLength(100));
+      expect(world.socket!.sentBinary, sent);
+      expect(evidenceRecords(), isEmpty);
+      expect(world.socket!.sentText.where((t) => t.contains('capture_evidence')), isEmpty);
 
-        world.setConnected(false);
-        world.socket!.emitClose();
-        await world.settle();
-        await captureSeconds(1, frameCursor: 10000);
-        await world.wal.syncs.phone.finalizeCurrentSession();
-        final wal = (await world.wal.syncs.phone.getAllWals()).single;
-        expect(wal.captureRoot, isNull);
-        expect(wal.sourceFrameStart, isNull);
-        expect(wal.sourceClockEpoch, isNull);
-        expect(wal.toJson().containsKey('capture_root'), isFalse);
+      world.setConnected(false);
+      world.socket!.emitClose();
+      await world.settle();
+      await captureSeconds(1, frameCursor: 10000);
+      await world.wal.syncs.phone.finalizeCurrentSession();
+      final wal = (await world.wal.syncs.phone.getAllWals()).single;
+      expect(wal.captureRoot, isNull);
+      expect(wal.sourceFrameStart, isNull);
+      expect(wal.sourceClockEpoch, isNull);
+      expect(wal.toJson().containsKey('capture_root'), isFalse);
 
-        final walPath = await Wal.getFilePath(wal.filePath);
-        expect(captureEvidenceUploadHeader([wal], [File(walPath!)]), isNull);
-      });
-    },
-  );
+      final walPath = await Wal.getFilePath(wal.filePath);
+      expect(captureEvidenceUploadHeader([wal], [File(walPath!)]), isNull);
+    });
+  });
 }

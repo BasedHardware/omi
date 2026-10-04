@@ -84,6 +84,7 @@ from utils import byok
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
+    parse_search_date_range,
     conversation_matches_date_range,
     conversation_matches_speaker,
     browse_conversations_by_speaker,
@@ -1922,71 +1923,60 @@ async def generate_conversation_topic_endpoint(
     return ConversationTopicResponse(emoji=topic.emoji or "", title=topic.title or "")
 
 
-@router.post("/v1/conversations/search", response_model=SearchConversationsResponse, tags=['conversations'])
-def search_conversations_endpoint(
+async def _search_exact_conversation_reference(
+    exact_conversation_id: str,
     search_request: SearchRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
-    request: Request = None,  # type: ignore[assignment]
-    response: Response = None,  # type: ignore[assignment]
-):
-    if search_request.speaker_id and search_request.speaker_id != 'user':
-        person = users_db.get_person(uid, search_request.speaker_id)
-        if person is None:
-            raise HTTPException(status_code=404, detail="Speaker not found")
+    uid: str,
+    start_timestamp: Optional[int],
+    end_timestamp: Optional[int],
+) -> Dict[str, Any]:
+    exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
+    conversations = await run_blocking(
+        db_executor,
+        conversations_db.get_conversations_by_id_without_photos,
+        uid,
+        [exact_conversation_id],
+        include_discarded=bool(search_request.include_discarded),
+    )
+    conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    conversations = [
+        conversation
+        for conversation in conversations
+        if conversation_matches_speaker(conversation, search_request.speaker_id)
+        and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
+    ]
+    if exact_page != 1:
+        conversations = []
+    redact_conversations_for_list(conversations)
+    return {
+        'items': conversations[:exact_per_page],
+        'total_pages': 1,
+        'current_page': exact_page,
+        'per_page': exact_per_page,
+    }
 
-    # Convert ISO datetime strings to Unix timestamps if provided
-    start_timestamp = None
-    end_timestamp = None
 
-    if search_request.start_date:
-        try:
-            start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid start_date; expected an ISO 8601 datetime string")
-
-    if search_request.end_date:
-        try:
-            end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
-
-    exact_conversation_id = parse_exact_conversation_reference(search_request.query)
-    if exact_conversation_id:
-        exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
-        conversations = conversations_db.get_conversations_by_id_without_photos(
-            uid,
-            [exact_conversation_id],
-            include_discarded=bool(search_request.include_discarded),
-        )
-        conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
-        conversations = [
-            conversation
-            for conversation in conversations
-            if conversation_matches_speaker(conversation, search_request.speaker_id)
-            and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
-        ]
-        if exact_page != 1:
-            conversations = []
-        redact_conversations_for_list(conversations)
-        return {
-            'items': conversations[:exact_per_page],
-            'total_pages': 1,
-            'current_page': exact_page,
-            'per_page': exact_per_page,
-        }
-
-    if search_request.speaker_id and not (search_request.query or '').strip():
-        # Browsing one speaker's conversations: Typesense cannot filter by speaker, so walk Firestore
-        # (a post-filter over Typesense's first page only ever found the latest 20 conversations).
-        browse_page, browse_per_page = clamp_conversation_search_pagination(
-            search_request.page, search_request.per_page
-        )
-        include_discarded = bool(search_request.include_discarded)
-        start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
-        end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
-        budget = conversation_scan_db.conversation_scan_budget(request, route='speaker-browse')
-        # One bounded snapshot-cursor pass (never offset): invisible rows advance the cursor (#19908).
-        browse_results = browse_conversations_by_speaker(
+async def _browse_speaker_conversations(
+    search_request: SearchRequest,
+    uid: str,
+    start_timestamp: Optional[int],
+    end_timestamp: Optional[int],
+    request: Request,
+    response: Response,
+) -> Dict[str, Any]:
+    # Browsing one speaker's conversations: Typesense cannot filter by speaker, so walk Firestore
+    # (a post-filter over Typesense's first page only ever found the latest 20 conversations).
+    browse_page, browse_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
+    include_discarded = bool(search_request.include_discarded)
+    start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
+    end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
+    budget = await run_blocking(
+        db_executor, conversation_scan_db.conversation_scan_budget, request, route='speaker-browse'
+    )
+    # One bounded snapshot-cursor pass (never offset): invisible rows advance the cursor (#19908).
+    browse_results = await run_blocking(
+        db_executor,
+        lambda: browse_conversations_by_speaker(
             conversation_scan_db.speaker_browse_scan(
                 uid, include_discarded=include_discarded, start_date=start_dt, end_date=end_dt, budget=budget
             ),
@@ -1995,53 +1985,100 @@ def search_conversations_endpoint(
             per_page=browse_per_page,
             include_discarded=include_discarded,
             budget=budget,
-        )
-        redact_conversations_for_list(browse_results['items'])
-        finish_list_budget(response, budget)
-        return browse_results
+        ),
+    )
+    redact_conversations_for_list(browse_results['items'])
+    finish_list_budget(response, budget)
+    return browse_results
+
+
+@router.post("/v1/conversations/search", response_model=SearchConversationsResponse, tags=['conversations'])
+async def search_conversations_endpoint(
+    search_request: SearchRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
+):
+    if search_request.speaker_id and search_request.speaker_id != 'user':
+        person = await run_blocking(db_executor, users_db.get_person, uid, search_request.speaker_id)
+        if person is None:
+            raise HTTPException(status_code=404, detail="Speaker not found")
 
     try:
+        start_timestamp, end_timestamp = parse_search_date_range(search_request.start_date, search_request.end_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    exact_conversation_id = parse_exact_conversation_reference(search_request.query)
+    if exact_conversation_id:
+        return await _search_exact_conversation_reference(
+            exact_conversation_id, search_request, uid, start_timestamp, end_timestamp
+        )
+
+    if search_request.speaker_id and not (search_request.query or '').strip():
+        return await _browse_speaker_conversations(
+            search_request, uid, start_timestamp, end_timestamp, request, response
+        )
+
+    effective_page, effective_per_page = clamp_conversation_search_pagination(
+        search_request.page, search_request.per_page
+    )
+
+    def _typesense_page() -> Dict[str, Any]:
         search_results = search_conversations(
             query=search_request.query,
-            page=search_request.page,
-            per_page=search_request.per_page,
+            page=effective_page,
+            per_page=effective_per_page,
             uid=uid,
             include_discarded=search_request.include_discarded,
             start_date=start_timestamp,
             end_date=end_timestamp,
             speaker_id=search_request.speaker_id,
         )
-    except ConversationSearchUnavailableError:
-        raise HTTPException(status_code=503, detail="Search temporarily unavailable")
-    typesense_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
-    effective_page = search_results.get('current_page', 1)
-    effective_per_page = search_results.get('per_page', 10)
+        return search_results
+
     # Spoken-word hits (optional transcript-chunk index) are merged on page 1 only so
     # Typesense pagination stays stable. Snippets still attach for every hydrated hit.
     # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page
     # without permanently dropping displaced Typesense hits that lost the merge race.
-    transcript_ids: List[str] = []
     merge_cap = effective_per_page
     if effective_page == 1 and (search_request.query or '').strip():
-        merge_cap = min(max(effective_per_page * 3, effective_per_page), 250)
-        transcript_ids = search_transcript_conversation_ids(
-            uid,
-            search_request.query,
-            limit=merge_cap,
-            starts_at=start_timestamp,
-            ends_at=end_timestamp,
-            search_transcript_chunks=vector_db.search_transcript_chunks,
-        )
+        merge_cap = min(effective_per_page * 2, 250)
+    try:
+        async with asyncio.TaskGroup() as tg:
+            tasks = [tg.create_task(run_blocking(db_executor, _typesense_page))]
+            if effective_page == 1 and (search_request.query or '').strip() and vector_db.index is not None:
+                tasks.append(
+                    tg.create_task(
+                        search_transcript_conversation_ids(
+                            uid,
+                            search_request.query,
+                            limit=merge_cap,
+                            starts_at=start_timestamp,
+                            ends_at=end_timestamp,
+                            search_transcript_chunks=vector_db.search_transcript_chunks,
+                            embed_query=vector_db.embeddings.aembed_query,
+                        )
+                    )
+                )
+    except* ConversationSearchUnavailableError:
+        raise HTTPException(status_code=503, detail="Search temporarily unavailable")
+    search_results = tasks[0].result()
+    transcript_ids: List[str] = tasks[1].result() if len(tasks) > 1 else []
+    typesense_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    effective_page = search_results.get('current_page', 1)
+    effective_per_page = search_results.get('per_page', 10)
     conversation_ids = merge_typesense_page_with_transcript_hits(
         typesense_ids,
         transcript_ids,
         page=effective_page,
         per_page=merge_cap,
     )
-    conversations = conversations_db.get_conversations_by_id_without_photos(
-        uid,
-        conversation_ids,
-        include_discarded=bool(search_request.include_discarded),
+    conversations = await run_blocking(
+        db_executor,
+        lambda: conversations_db.get_conversations_by_id_without_photos(
+            uid, conversation_ids, include_discarded=bool(search_request.include_discarded)
+        ),
     )
     # Preserve merge order (transcript-first on page 1); Firestore fetch may reshuffle.
     by_id = {c.get('id'): c for c in conversations if c.get('id')}
@@ -2060,11 +2097,11 @@ def search_conversations_endpoint(
         if conversation_matches_speaker(conversation, search_request.speaker_id)
         and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
     ]
+    conversations = conversations[:effective_per_page]
     # Attach grep-style transcript snippets (start/end for seek-to-moment) before list redaction
     # clears segments on locked rows.
     if (search_request.query or '').strip():
         conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
-    conversations = conversations[:effective_per_page]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the

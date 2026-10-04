@@ -259,7 +259,7 @@ def _validate_env_entries(
     strict_provisional: bool,
     config_maps: set[str] | None = None,
 ) -> list[ValidationError]:
-    errors: list[ValidationError] = []
+    errors: list[ValidationError] = validate_mentor_pipeline(scope=scope, config=actual)
     for name, expected_entry in expected.items():
         if 'config_map' in expected_entry:
             config_map = _as_config_dict(expected_entry['config_map']) or {}
@@ -311,3 +311,27 @@ def _validate_forbidden_env_entries(
         ValidationError(scope, f'forbidden env {name} is present')
         for name in sorted(set(forbidden_names).intersection(actual))
     ]
+
+
+def validate_mentor_pipeline(
+    *, scope: str, config: object, _seen: frozenset[int] = frozenset()
+) -> list[ValidationError]:
+    """Validate manifest, Helm and exported env forms, including resolved env-var values."""
+    if id(config) in _seen:
+        return []
+    seen = _seen | {id(config)}
+    errors: list[ValidationError] = []
+    if isinstance(config, dict):
+        entry = config.get('MENTOR_PIPELINE')
+        if config.get('name') == 'MENTOR_PIPELINE':
+            entry = config
+        if entry is not None:
+            value = entry.get('value', entry.get('default', 'legacy')) if isinstance(entry, dict) else entry
+            if not isinstance(value, str) or value not in {'legacy', 'v2', 'cohort'}:
+                errors.append(ValidationError(scope, 'MENTOR_PIPELINE must be legacy, v2 or cohort (default legacy)'))
+        for name, value in config.items():
+            errors.extend(validate_mentor_pipeline(scope=f'{scope}/{name}', config=value, _seen=seen))
+    elif isinstance(config, list):
+        for index, value in enumerate(config):
+            errors.extend(validate_mentor_pipeline(scope=f'{scope}/{index}', config=value, _seen=seen))
+    return errors

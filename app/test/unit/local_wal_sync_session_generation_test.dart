@@ -121,18 +121,24 @@ void main() {
         await hang.future;
       },
     );
-    sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])), captureRoot: 'root-a');
+    sync.onFrameCaptured(
+      WalFrame(payload: [1], syncKey: FrameSyncKey([1])),
+      captureRoot: 'root-a',
+    );
 
     final stale = sync.onAudioCodecChanged(BleAudioCodec.opus);
     await persistEntered.future;
     sync.clearUserData();
     final generationAfterClear = sync.captureEvidenceGeneration;
-    sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])), captureRoot: 'root-b');
+    sync.onFrameCaptured(
+      WalFrame(payload: [2], syncKey: FrameSyncKey([2])),
+      captureRoot: 'root-b',
+    );
     hang.complete();
     await stale;
 
     expect(sync.testFrames.map((f) => f.payload), [
-      [2]
+      [2],
     ]);
     expect(sync.testFrames.single.sourceFramePosition, 0);
     expect(sync.testFrames.single.sourceClockEpoch, 0);

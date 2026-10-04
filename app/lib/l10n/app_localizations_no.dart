@@ -12224,24 +12224,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Stemme';
-
-  @override
-  String get assistantVoice => 'Assistentstemme';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Stemmevalget ditt deles på tvers av mobil og desktop.';
-
-  @override
-  String get readChatRepliesAloud => 'Les chatsvar høyt';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Snakker bare når Stemmesvar tillater det.';
-
-  @override
-  String get voicePreviewSample => 'Hei, jeg er Omi. Dette er stemmen min.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration av denne stemmen';
   }
@@ -12311,7 +12293,51 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Kan ikke koble til. Sjekk tilkoblingen din og prøv igjen.';
+
+  @override
+  String get chatReplyServerError => 'Noe gikk galt på vår side. Prøv igjen.';
+
+  @override
+  String get chatReplyTimeout => 'Svaret tok for lang tid. Prøv igjen.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Du er ikke logget inn. Logg inn og prøv igjen.';
+
+  @override
+  String get chatAppsLoadFailed => 'Kunne ikke laste inn chat-apper. Prøv igjen.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Stemme';
+
+  @override
+  String get assistantVoice => 'Assistentstemme';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Stemmevalget ditt deles på tvers av mobil og desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Les chatsvar høyt';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Snakker bare når Stemmesvar tillater det.';
+
+  @override
+  String get voicePreviewSample => 'Hei, jeg er Omi. Dette er stemmen min.';
+
+  @override
   String get peopleStatsIncomplete => 'Antallene kan være ufullstendige.';
+
+  @override
+  String get previousDay => 'Forrige dag';
+
+  @override
+  String get nextDay => 'Neste dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ingen oppgaver $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Behandler samtalen på nytt…';
@@ -12364,4 +12390,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Sjekk tilkoblingen';
+
+  @override
+  String get forYou => 'For deg';
+
+  @override
+  String get stopThese => 'Stopp disse';
+
+  @override
+  String get dismiss => 'Avvis';
 }

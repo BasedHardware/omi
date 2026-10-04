@@ -12242,24 +12242,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Voz';
-
-  @override
-  String get assistantVoice => 'Voz do assistente';
-
-  @override
-  String get voiceSharedAcrossDevices => 'A tua escolha de voz é partilhada entre o telemóvel e o computador.';
-
-  @override
-  String get readChatRepliesAloud => 'Ler respostas do chat em voz alta';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Só fala quando a Resposta por voz o permite.';
-
-  @override
-  String get voicePreviewSample => 'Olá, eu sou a Omi. Esta é a minha voz.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration desta voz';
   }
@@ -12329,7 +12311,51 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Não foi possível conectar. Verifique sua conexão e tente novamente.';
+
+  @override
+  String get chatReplyServerError => 'Algo deu errado do nosso lado. Tente novamente.';
+
+  @override
+  String get chatReplyTimeout => 'A resposta demorou demais. Tente novamente.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Você não está conectado à sua conta. Entre e tente novamente.';
+
+  @override
+  String get chatAppsLoadFailed => 'Não foi possível carregar os aplicativos de chat. Tente novamente.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voz';
+
+  @override
+  String get assistantVoice => 'Voz do assistente';
+
+  @override
+  String get voiceSharedAcrossDevices => 'A tua escolha de voz é partilhada entre o telemóvel e o computador.';
+
+  @override
+  String get readChatRepliesAloud => 'Ler respostas do chat em voz alta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Só fala quando a Resposta por voz o permite.';
+
+  @override
+  String get voicePreviewSample => 'Olá, eu sou a Omi. Esta é a minha voz.';
+
+  @override
   String get peopleStatsIncomplete => 'As contagens podem estar incompletas.';
+
+  @override
+  String get previousDay => 'Dia anterior';
+
+  @override
+  String get nextDay => 'Dia seguinte';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Sem tarefas em $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Reprocessando a conversa…';
@@ -12382,4 +12408,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Verifique a ligação';
+
+  @override
+  String get forYou => 'Para você';
+
+  @override
+  String get stopThese => 'Parar estes';
+
+  @override
+  String get dismiss => 'Dispensar';
 }

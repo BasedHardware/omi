@@ -188,8 +188,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                         ),
                       )
                     : provider.photos.isNotEmpty
-                        ? _buildChronologicalTimeline(provider, transcriptSessionId, transcriptScrollState,
-                            widget.topConversationId ?? provider.topConversationId)
+                        ? _buildChronologicalTimeline(
+                            provider,
+                            transcriptSessionId,
+                            transcriptScrollState,
+                            widget.topConversationId ?? provider.topConversationId,
+                          )
                         : getTranscriptWidget(
                             false,
                             provider.segments,
@@ -460,8 +464,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
-        final saved = await provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds,
-            applyToSpeaker: applyToSpeaker);
+        final saved = await provider.assignSpeakerToConversation(
+          speakerId,
+          personId,
+          personName,
+          segmentIds,
+          applyToSpeaker: applyToSpeaker,
+        );
         if (saved) {
           // The user's own answer now: no longer a label Omi carried over.
           for (final segment in provider.segments) {
@@ -544,14 +553,23 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         if (s.speakerId == segment.speakerId && !s.isUser && s.personId == null) s.id,
     ];
     OmiHaptics.light();
-    final ok = await provider.assignSpeakerToConversation(segment.speakerId, person.id, person.name, ids,
-        applyToSpeaker: true);
+    final ok = await provider.assignSpeakerToConversation(
+      segment.speakerId,
+      person.id,
+      person.name,
+      ids,
+      applyToSpeaker: true,
+    );
     if (!mounted) return;
     ok ? OmiHaptics.success() : OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain);
   }
 
   Widget _buildTranscriptTimelineItem(
-      TranscriptSegment segment, CaptureProvider provider, List<Person> people, SpeakerNames names) {
+    TranscriptSegment segment,
+    CaptureProvider provider,
+    List<Person> people,
+    SpeakerNames names,
+  ) {
     final bool isUser = segment.isUser;
     final name = names.forSegment(segment, person: personById(people, segment.personId));
     Widget avatar() => Semantics(
@@ -579,10 +597,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          if (!isUser) ...[
-            avatar(),
-            const SizedBox(width: 8),
-          ],
+          if (!isUser) ...[avatar(), const SizedBox(width: 8)],
           Flexible(
             child: GestureDetector(
               onTap: () => _editSegmentSpeaker(segment, provider),
@@ -614,10 +629,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
               ),
             ),
           ),
-          if (isUser) ...[
-            const SizedBox(width: 8),
-            avatar(),
-          ],
+          if (isUser) ...[const SizedBox(width: 8), avatar()],
         ],
       ),
     );

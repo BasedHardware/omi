@@ -62,12 +62,8 @@ class AnalyticsManager {
   /// at the same production boundary as PostHog so tests can assert the real
   /// event payload without initializing analytics or exposing a mutable global.
   private var suggestionAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
-  private var insightAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
   /// Delivery callbacks can race (for example a floating-bar enqueue and a system-banner
   /// completion). Keep one terminal outcome per opaque advice delivery ID at this boundary.
-  private var recordedInsightDeliveryIDSet: Set<UUID> = []
-  private var recordedInsightDeliveryIDOrder: [UUID] = []
-  private static let maxRecordedInsightDeliveryIDs = 512
 
   func setSuggestionAssistantTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
@@ -81,19 +77,6 @@ class AnalyticsManager {
 
   /// Scoped observation of Advice delivery telemetry. Tests install a capture at the same
   /// production boundary as PostHog; production leaves it nil.
-  func setInsightAssistantTelemetryCaptureForTests(
-    _ capture: (@MainActor (String, [String: Any]) -> Void)?
-  ) {
-    if capture != nil {
-      recordedInsightDeliveryIDSet.removeAll()
-      recordedInsightDeliveryIDOrder.removeAll()
-    }
-    insightAssistantTelemetryCaptureForTests = capture
-  }
-
-  private func captureInsightAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
-    insightAssistantTelemetryCaptureForTests?(event, properties)
-  }
 
   /// Test observer for integration-connect telemetry. Mirrors the
   /// MemoryAssistant seam: nil in production; tests install a scoped capture
@@ -1368,53 +1351,8 @@ class AnalyticsManager {
     PostHogManager.shared.suggestionAssistantDeliveryOutcome(outcome, identity: identity)
   }
 
-  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
-    let properties: [String: Any] = {
-      var value: [String: Any] = [:]
-      if let category = InsightAssistantTelemetry.boundedCategory(category) {
-        value["category"] = category
-      }
-      if let deliveryID {
-        value["delivery_id"] = deliveryID.uuidString
-      }
-      return value
-    }()
-    captureInsightAssistantTelemetryForTests("Advice Generated", properties: properties)
-    PostHogManager.shared.insightGenerated(category: category, deliveryID: deliveryID)
-  }
-
   /// Record one terminal outcome for a generated Advice item. The bounded recent-ID window
   /// absorbs racing presentation callbacks without allowing process-lifetime growth.
-  func insightAssistantDeliveryOutcome(
-    _ outcome: InsightAssistantTelemetry.Outcome,
-    reason: InsightAssistantTelemetry.Reason,
-    deliveryID: UUID,
-    surface: InsightAssistantTelemetry.Surface? = nil
-  ) {
-    guard recordedInsightDeliveryIDSet.insert(deliveryID).inserted else { return }
-    recordedInsightDeliveryIDOrder.append(deliveryID)
-    if recordedInsightDeliveryIDOrder.count > Self.maxRecordedInsightDeliveryIDs {
-      let evicted = recordedInsightDeliveryIDOrder.removeFirst()
-      recordedInsightDeliveryIDSet.remove(evicted)
-    }
-    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
-    let payload = InsightAssistantTelemetry.deliveryOutcomePayload(
-      outcome,
-      reason: reason,
-      identity: identity,
-      surface: surface
-    )
-    captureInsightAssistantTelemetryForTests(
-      InsightAssistantTelemetry.deliveryOutcomeEventName,
-      properties: payload
-    )
-    PostHogManager.shared.insightAssistantDeliveryOutcome(
-      outcome,
-      reason: reason,
-      deliveryID: deliveryID,
-      surface: surface
-    )
-  }
 
   // MARK: - Apps Events
 
@@ -1524,15 +1462,11 @@ class AnalyticsManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    attention: InterjectAttention? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["dismissal_kind"] = dismissalKind.rawValue
-      if let attention {
-        properties["attention"] = attention.rawValue
-      }
       captureSuggestionAssistantTelemetryForTests(
         "Notification Dismissed",
         properties: properties
@@ -1544,62 +1478,8 @@ class AnalyticsManager {
       assistantId: assistantId,
       surface: surface,
       dismissalKind: dismissalKind,
-      suggestionIdentity: suggestionIdentity,
-      attention: attention
-    )
-  }
-
-  func notificationHovered(
-    notificationId: String,
-    assistantId: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    if let suggestionIdentity {
-      captureSuggestionAssistantTelemetryForTests(
-        "Notification Hovered",
-        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
-      )
-    }
-    PostHogManager.shared.notificationHovered(
-      notificationId: notificationId,
-      assistantId: assistantId,
       suggestionIdentity: suggestionIdentity
     )
-  }
-
-  func suggestionFeedbackRecorded(
-    verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    provenance: InterjectFeedbackProvenance? = nil
-  ) {
-    if let suggestionIdentity {
-      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
-      properties["verb"] = verb
-      appendInterjectFeedbackProvenance(provenance, to: &properties)
-      captureSuggestionAssistantTelemetryForTests(
-        "Suggestion Feedback Recorded",
-        properties: properties
-      )
-    }
-    PostHogManager.shared.suggestionFeedbackRecorded(
-      verb: verb,
-      suggestionIdentity: suggestionIdentity,
-      provenance: provenance
-    )
-  }
-
-  private func appendInterjectFeedbackProvenance(
-    _ provenance: InterjectFeedbackProvenance?,
-    to properties: inout [String: Any]
-  ) {
-    guard let provenance else { return }
-    // Owner identity remains in the local owner fence and is never sent as an
-    // analytics property. The opaque delivery/candidate joins are enough to
-    // correlate the event with the bounded JIT receipt.
-    properties["feedback_lane"] = provenance.lane
-    properties["feedback_delivery_id"] = provenance.deliveryID
-    properties["feedback_candidate_id"] = provenance.candidateID
-    properties["feedback_account_generation"] = provenance.accountGeneration
   }
 
   func notificationWillPresent(notificationId: String, title: String) {

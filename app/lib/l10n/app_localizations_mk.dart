@@ -12284,24 +12284,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Глас';
-
-  @override
-  String get assistantVoice => 'Глас на асистентот';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Вашиот избор на глас се споделува меѓу мобилен и десктоп.';
-
-  @override
-  String get readChatRepliesAloud => 'Читај ги одговорите од разговорот наглас';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Зборува само кога \"Гласовен одговор\" дозволува.';
-
-  @override
-  String get voicePreviewSample => 'Здраво, јас сум Omi. Ова е мојот глас.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration од овој глас';
   }
@@ -12371,7 +12353,51 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Не може да се воспостави врска. Проверете ја врската и обидете се повторно.';
+
+  @override
+  String get chatReplyServerError => 'Нешто тргна наопаку од наша страна. Обидете се повторно.';
+
+  @override
+  String get chatReplyTimeout => 'Одговорот траеше предолго. Обидете се повторно.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Не сте најавени. Најавете се и обидете се повторно.';
+
+  @override
+  String get chatAppsLoadFailed => 'Не може да се вчитаат апликациите за разговор. Обидете се повторно.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Глас';
+
+  @override
+  String get assistantVoice => 'Глас на асистентот';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Вашиот избор на глас се споделува меѓу мобилен и десктоп.';
+
+  @override
+  String get readChatRepliesAloud => 'Читај ги одговорите од разговорот наглас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Зборува само кога \"Гласовен одговор\" дозволува.';
+
+  @override
+  String get voicePreviewSample => 'Здраво, јас сум Omi. Ова е мојот глас.';
+
+  @override
   String get peopleStatsIncomplete => 'Бројките може да се нецелосни.';
+
+  @override
+  String get previousDay => 'Претходен ден';
+
+  @override
+  String get nextDay => 'Следен ден';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Нема задачи на $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Разговорот повторно се обработува…';
@@ -12424,4 +12450,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Проверете ја врската';
+
+  @override
+  String get forYou => 'За вас';
+
+  @override
+  String get stopThese => 'Запри ги овие';
+
+  @override
+  String get dismiss => 'Сокриј';
 }

@@ -12220,24 +12220,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Hlas';
-
-  @override
-  String get assistantVoice => 'Hlas asistenta';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Váš výber hlasu je zdieľaný medzi mobilnou a desktopovou aplikáciou.';
-
-  @override
-  String get readChatRepliesAloud => 'Čítať odpovede četu nahlas';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Hovorí iba vtedy, keď to povolí \"Hlasová odpoveď\".';
-
-  @override
-  String get voicePreviewSample => 'Ahoj, som Omi. Toto je môj hlas.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration tohto hlasu';
   }
@@ -12307,7 +12289,51 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Nedá sa pripojiť. Skontrolujte pripojenie a skúste to znova.';
+
+  @override
+  String get chatReplyServerError => 'Niečo sa pokazilo na našej strane. Skúste to znova.';
+
+  @override
+  String get chatReplyTimeout => 'Odpoveď trvala príliš dlho. Skúste to znova.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nie ste prihlásení. Prihláste sa a skúste to znova.';
+
+  @override
+  String get chatAppsLoadFailed => 'Chatové aplikácie sa nepodarilo načítať. Skúste to znova.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hlas';
+
+  @override
+  String get assistantVoice => 'Hlas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Váš výber hlasu je zdieľaný medzi mobilnou a desktopovou aplikáciou.';
+
+  @override
+  String get readChatRepliesAloud => 'Čítať odpovede četu nahlas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hovorí iba vtedy, keď to povolí \"Hlasová odpoveď\".';
+
+  @override
+  String get voicePreviewSample => 'Ahoj, som Omi. Toto je môj hlas.';
+
+  @override
   String get peopleStatsIncomplete => 'Počty môžu byť neúplné.';
+
+  @override
+  String get previousDay => 'Predchádzajúci deň';
+
+  @override
+  String get nextDay => 'Nasledujúci deň';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Žiadne úlohy na $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Konverzácia sa znova spracúva…';
@@ -12360,4 +12386,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Skontrolujte pripojenie';
+
+  @override
+  String get forYou => 'Pre vás';
+
+  @override
+  String get stopThese => 'Zastaviť tieto';
+
+  @override
+  String get dismiss => 'Skryť';
 }

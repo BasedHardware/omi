@@ -59,8 +59,10 @@ class _FakeSpeaker implements ChatReplySpeaker {
       calls.add('update:$messageId:$isFinal:$fullText');
 
   @override
-  Future<void> interruptResponse(
-          {required String messageId, required VoiceReplyPlaybackInterruptSource source}) async =>
+  Future<void> interruptResponse({
+    required String messageId,
+    required VoiceReplyPlaybackInterruptSource source,
+  }) async =>
       interrupts.add(messageId);
 }
 
@@ -86,8 +88,11 @@ void main() {
     await PlatformManager.initializeServices();
   });
 
-  MessageProvider buildProvider(_FakeSpeaker speaker, Stream<ServerMessageChunk> Function() stream,
-      {bool enabled = true}) {
+  MessageProvider buildProvider(
+    _FakeSpeaker speaker,
+    Stream<ServerMessageChunk> Function() stream, {
+    bool enabled = true,
+  }) {
     var playbackSerial = 0;
     return MessageProvider(
       sessionsApi: _FakeSessions(),
