@@ -559,6 +559,8 @@ env:
     value: "false"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

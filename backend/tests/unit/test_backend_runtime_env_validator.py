@@ -250,7 +250,8 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "AUDIO_TIMELINE_SPANS", "value": "false"},\n'
         '        {"name": "LIVE_SPEAKER_SPAN_RESOLUTION", "value": "false"},\n'
-        '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},',
+        '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},\n'
+        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},',
     )
 
 

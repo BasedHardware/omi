@@ -188,6 +188,8 @@ env:
     value: "true"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_CHAT_AGENT_ROUTE

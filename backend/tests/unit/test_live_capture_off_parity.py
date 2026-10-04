@@ -24,6 +24,7 @@ def counters():
 
 
 async def test_off_payload_and_existing_metric_parity(monkeypatch):
+    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'false')
     output = []
     before = counters()
     for provider in ('deepgram', 'soniox', 'modulate'):

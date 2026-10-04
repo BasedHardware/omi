@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from config.audio_timeline import live_capture_window_retention_enabled
+from config.audio_timeline import live_capture_window_retention_enabled, live_capture_window_merge_preservation_enabled
 from utils.audio_timeline import CaptureTimeline, SendMap
 
 FLAG = 'LIVE_CAPTURE_WINDOW_RETENTION'
@@ -35,12 +35,18 @@ def test_composed_and_helm_declarations_are_all_off():
     manifest = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text())
     for env in manifest['environments'].values():
         for service in (*env['gke'].values(), *env['cloud_run']['services'].values()):
-            if FLAG in service.get('env', {}):
-                assert service['env'][FLAG] == {'category': 'rollout', 'value': 'false'}
+            for flag in (FLAG, 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION'):
+                if flag in service.get('env', {}):
+                    assert service['env'][flag] == {'category': 'rollout', 'value': 'false'}
     for chart in ('backend-listen', 'pusher'):
         for path in (BACKEND / 'charts' / chart).glob('*values.yaml'):
             declarations = [v for v in yaml.safe_load(path.read_text())['env'] if v.get('name') == FLAG]
             assert declarations == [{'name': FLAG, 'value': 'false'}]
+            assert [
+                v
+                for v in yaml.safe_load(path.read_text())['env']
+                if v.get('name') == 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION'
+            ] == [{'name': 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'value': 'false'}]
 
 
 @pytest.mark.parametrize('enabled', [False, True])
@@ -57,3 +63,13 @@ def test_bounds_still_evict_and_refuse_old_positions(monkeypatch, enabled):
     assert sends.span_count == sends._max_spans
     assert sends.map_interval(0, 50) is None
     assert sends.map_interval(150, 250) is None  # gap is still unobserved
+
+
+@pytest.mark.parametrize('value', [None, '', 'false', '0', 'garbage', 'true', '1', 'yes', 'on'])
+def test_merge_preservation_default_off_parser(monkeypatch, value):
+    flag = 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION'
+    if value is None:
+        monkeypatch.delenv(flag, raising=False)
+    else:
+        monkeypatch.setenv(flag, value)
+    assert live_capture_window_merge_preservation_enabled() == (value in ('true', '1', 'yes', 'on'))

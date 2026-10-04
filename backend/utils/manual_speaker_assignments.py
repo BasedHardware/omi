@@ -11,6 +11,7 @@ import uuid
 from pydantic import BaseModel, Field, StrictStr
 
 from config.live_capture import capture_window_reason
+from config.audio_timeline import live_capture_window_merge_preservation_enabled
 from database.read_boundary import parse_payload_strict
 from models.speaker_label_provenance import project_source
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
@@ -435,7 +436,11 @@ def merge_live_segments(
     if replayed_commit or len(incoming) > LIVE_TRANSCRIPT_REPLAY_RECEIPT_BATCH_LIMIT:
         covered.update(s.id for s in [*tail, *incoming] if s.id)
     combined = TranscriptSegment.combine_segments(
-        tail, incoming, protected_segment_ids=covered, speaker_bound_ids=speaker_bound
+        tail,
+        incoming,
+        protected_segment_ids=covered,
+        speaker_bound_ids=speaker_bound,
+        preserve_capture_windows=live_capture_window_merge_preservation_enabled(),
     )
     result = persisted[:-1] + [segment.model_dump() for segment in combined.segments]
     result.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))

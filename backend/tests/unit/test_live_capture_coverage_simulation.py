@@ -76,22 +76,29 @@ def retention_pressure(kind):
 
 def sticky_merge():
     persisted = []
-    known_versions = 0
+    timeline = CaptureTimeline(10)
+    epoch = ProviderEpochTranslator(timeline, 10, project_times=False)
+    known_versions = versions = 0
     for i in range(60):
+        first, _, _ = timeline.accept(b'\0\0' * 60, 100 + (i + 1) * 6, (i + 1) * 6)
+        epoch.note_accepted(first, 40)
+        window = mapped(epoch, i * 4 + 0.1, i * 4 + 3.9)
+        assert window is not None
         incoming = dict(
             id=str(i),
             text='word',
             speaker='SPEAKER_00',
             is_user=False,
-            start=i,
-            end=i + 1,
-            audio_capture_start=100 + i * 2,
-            audio_capture_end=101 + i * 2,
+            start=i * 4 + 0.1,
+            end=i * 4 + 3.9,
+            audio_capture_start=window[0],
+            audio_capture_end=window[1],
         )
         result = merge_live_segments(persisted, [incoming], {})
         persisted = result.segments
+        versions += len(result.updated_ids)
         known_versions += sum('audio_capture_start' in s for s in persisted if s['id'] in result.updated_ids)
-    return dict(known=known_versions, versions=60, distinct_stored_ids=len(persisted))
+    return dict(known=known_versions, versions=versions, distinct_stored_ids=len(persisted))
 
 
 def test_simulated_coverage_recovers_only_retention_pressure(monkeypatch):
@@ -110,6 +117,9 @@ def test_simulated_coverage_recovers_only_retention_pressure(monkeypatch):
     assert report['off']['anchor_pressure_delayed_finals']['known'] == 0
     assert report['off']['send_map_pressure_delayed_finals']['known'] == 0
     assert report['on']['positive_gap_sticky_merge'] == report['off']['positive_gap_sticky_merge']
+    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'true')
+    report['merge_preservation_on'] = sticky_merge()
+    assert report['merge_preservation_on'] == dict(known=119, versions=119, distinct_stored_ids=60)
     print('SIMULATION ' + json.dumps(report, sort_keys=True))
     if os.environ.get('CAPTURE_SIMULATION_OUTPUT'):
         Path(os.environ['CAPTURE_SIMULATION_OUTPUT']).write_text(json.dumps(report, sort_keys=True, indent=2) + '\n')

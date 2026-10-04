@@ -23,6 +23,9 @@ environments:
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -480,6 +483,9 @@ environments:
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -880,6 +886,9 @@ environments:
             LIVE_CAPTURE_WINDOW_RETENTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -1195,6 +1204,9 @@ environments:
             LIVE_CAPTURE_WINDOW_RETENTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -1472,6 +1484,9 @@ environments:
             LIVE_CAPTURE_WINDOW_RETENTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -1700,6 +1715,9 @@ environments:
               value: 'false'
               category: rollout
             LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
@@ -2199,6 +2217,9 @@ environments:
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2689,6 +2710,9 @@ environments:
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -3001,6 +3025,9 @@ environments:
               value: 'true'
               category: rollout
             LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
@@ -3338,6 +3365,9 @@ environments:
             LIVE_CAPTURE_WINDOW_RETENTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -3608,6 +3638,9 @@ environments:
             LIVE_CAPTURE_WINDOW_RETENTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
@@ -3850,6 +3883,9 @@ environments:
               value: 'true'
               category: rollout
             LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:

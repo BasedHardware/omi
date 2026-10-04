@@ -74,3 +74,8 @@ def capture_anchor_limit() -> int:
 
 def capture_send_span_limit() -> int:
     return 16384 if live_capture_window_retention_enabled() else 4096
+
+
+def live_capture_window_merge_preservation_enabled() -> bool:
+    """Keep provider pieces when live text repair would discard known capture proof. Default off."""
+    return os.getenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', '').strip().lower() in _TRUTHY
