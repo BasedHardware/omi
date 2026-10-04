@@ -44,4 +44,4 @@ Static source inventory for the shared app and sync-reachable producers, 2026-10
 | `backend/utils/stt/live_health.py:394` | `launch` | `start_background_task` | `coroutine` |
 | `backend/utils/stt/live_health.py:545` | `launch` | `start_background_task` | `coroutine` |
 | `backend/utils/stt/batch_pressure.py:73` | `start` | `start_background_task` | `self._refresh_forever(pool_host, min_replicas)` |
-| `backend/utils/metrics.py:1374` | `start_metrics_sidecar_server` | `start_http_server` | `port` |
+| `backend/utils/metrics.py:1379` | `start_metrics_sidecar_server` | `start_http_server` | `port` |
