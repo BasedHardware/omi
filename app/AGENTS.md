@@ -105,12 +105,11 @@ Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../script
 CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
 
 ### Test Patterns
-
 - Test state machine logic via minimal abstractions mirroring production flow
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
 - HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
-- Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
+- `test/` is hermetic: no network, live backends or real devices; CI runs it via `bash test.sh`.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
 - Tests needing a live service/device/real API go under `integration_test/` (plain `test.sh` skips them); the hermetic seeded journeys there run in CI via `mobile-verify fast --all` with loopback fixtures only. Local-backend tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`.
 - Coverage: root `AGENTS.md` → Testing.
