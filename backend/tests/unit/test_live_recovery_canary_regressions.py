@@ -29,6 +29,7 @@ from utils.stt import parakeet_window as window, streaming as st
 from utils.stt.live_metrics import WINDOW_FIRST_TEXT
 from utils.stt.live_failure import send_live_stt_audio
 from utils.stt.resilient_stream import ResilientAudio
+from utils.stt.replay_delivery import ReplayTailSocket
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from config.live_stt_replay import ReplayLimits
@@ -82,27 +83,35 @@ async def test_buffered_client_burst_does_not_kill_healthy_paid_leg(monkeypatch,
         if recovered:
             actual.stt_socket.raw.fail('connection_lost')
             assert await actual._failover_stt_socket()
+            assert isinstance(actual.stt_socket, ReplayTailSocket)
         raw = raws[0]
         # Compress the 2,000-slot incident into four slots; this exercises
         # identical queue admission without spending CPU on 84s of PCM.
         raw._send_queue._maxsize = 4
         if recovered:
             assert raw._writer_pace is not None
+            # Capture must continue independently while the paced wire is held.
+            raw._ws.gate.clear()
             raw._ws.on_send = lambda: raw._stream_transcript(
                 [{'text': 'Recovered.', 'start': 0, 'end': 0.04, 'speaker': 'speaker_0'}]
             )
         for n in range(16):
             actual._stt_buffer_start_sample = n * 640
             buffer = bytearray(b'\x01\x00' * 640)
-            await actual._flush_stt_buffer(buffer, force=True)
+            await asyncio.wait_for(actual._flush_stt_buffer(buffer, force=True), timeout=0.5)
             assert not raw.is_connection_dead, raw.typed_death_reason
             assert not actual.host.state.stt_terminal_failure
             assert not buffer
-        await until(lambda: raw._send_queue.qsize() == 0 and raw._send_queue.inflight == 0)
-        assert raw._ws.byte_count > 0
+        if recovered:
+            assert raw._ws.byte_count == 0
+            assert len(actual.stt_socket.tail) == 16
+            raw._ws.gate.set()
+        await until(lambda: raw._ws.byte_count == 16 * 640 * 2)
+        assert raw._ws.pcm == b'\x01\x00' * (16 * 640)
         assert len(raws) == 1
         assert raw._send_queue.high_water <= 3
     finally:
+        actual.stt_socket.finish()
         for leg in legs:
             leg.finish()
         await stop(raws)

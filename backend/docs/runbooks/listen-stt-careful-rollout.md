@@ -150,8 +150,9 @@ For active sessions terminated by STT, count
 `omi_listen_stt_unavailable_total`: the former covers ordinary terminal failures
 (including after text), the latter covers the disjoint provider-unavailable or
 reconnect-budget close path. Show their counts beside completed sockets,
-including short/quiet sockets; early backoff occurs before accepted-STT counting
-and session-end outcomes, so this sum is not a completed-socket loss fraction.
+including short/quiet sockets. Pre-admit reconnect-budget backoff exits before
+accepted-STT counting and session-end outcomes; in-runtime unavailable backoff
+does emit a session outcome. This sum is not a completed-socket loss fraction.
 Neither counter measures how much audio was lost. Failure/backoff label series
 are created lazily: first increments can be missed by `increase()`, especially
 on short-lived pods. Check series presence and scrape continuity; an absent
@@ -170,7 +171,8 @@ cross-check window deadline/empty outcomes, POST latency, actual recovery dials,
 replay wall time, skipped audio and session outcomes before attributing harm.
 
 Fallback `capacity_full` on `stt_live_session` describes the **source leg**.
-Soniox/Modulate sources mean a local paid-adapter or replay delivery bound;
+Soniox/Modulate sources mean a local paid-adapter or replay delivery bound
+(including the wrapper's tail admission cap);
 Parakeet admission refusal is `stt_selection` with subtype `admission`.
 Provider cooling is a circuit/backoff decision, not that source capacity cause.
 This label does not establish why the successor path exhausted: cooling or

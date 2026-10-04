@@ -1438,7 +1438,10 @@ class ListenReceiver(ReplayFilterMixin):
             await self._reject_candidate(raw, epoch, hop, previous)
             return False
         delivery.connection = self._wrap_legacy_stt_socket(raw, epoch)
-        self.stt_socket = delivery if replay or self._replay_live_tail else delivery.connection
+        # Empty prefixes still need the independent paced tail for subsequent
+        # capture; exposing the raw paced writer stalls receive/disconnect
+        # observation behind a buffered client burst.
+        self.stt_socket = delivery
         # Transfer this bounded tail to the adopted socket; the next failed leg
         # snapshots the capture ring, never this queue's already accepted prefix.
         self._replay_live_tail = deque()
