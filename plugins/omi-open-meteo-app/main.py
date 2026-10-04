@@ -13,7 +13,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
@@ -23,6 +22,24 @@ MAX_FORECAST_DAYS = 7
 
 class MalformedResponseError(httpx.HTTPError):
     """Raised when a third-party body is not the documented JSON object shape."""
+
+
+_KNOWN_MALFORMED_RESPONSES = {
+    "malformed JSON payload (expected an object)": "malformed JSON payload",
+    "malformed JSON payload (could not decode body)": "malformed JSON payload",
+    "malformed JSON payload": "malformed JSON payload",
+    "geocoding results were not a JSON array": "geocoding results were not a JSON array",
+    "geocoding result was missing numeric coordinates": "missing numeric coordinates",
+    "missing numeric coordinates": "missing numeric coordinates",
+}
+
+
+def _sanitize_malformed_error(exc: Exception, prefix: str) -> str:
+    msg = str(exc)
+    for known_literal, display in _KNOWN_MALFORMED_RESPONSES.items():
+        if known_literal in msg or display == msg:
+            return f"{prefix}: {display}"
+    return f"{prefix}."
 
 
 app = FastAPI(
@@ -431,8 +448,10 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
             f"Wind: {_format_number(_as_number(current.get('wind_speed_10m')), wind_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Open-Meteo request failed: {exc}")
+    except MalformedResponseError as exc:
+        return ChatToolResponse(error=_sanitize_malformed_error(exc, "Open-Meteo request failed"))
+    except httpx.HTTPError:
+        return ChatToolResponse(error="Open-Meteo request failed.")
 
 
 @app.post("/tools/get_weather_forecast", response_model=ChatToolResponse)
@@ -489,8 +508,10 @@ async def get_weather_forecast(request: ForecastRequest) -> ChatToolResponse:
             lines.append(f"- {day}: {condition}; high {high}, low {low}; rain {rain}; wind up to {wind}")
 
         return ChatToolResponse(result="\n".join(lines))
-    except (httpx.HTTPError, IndexError) as exc:
-        return ChatToolResponse(error=f"Open-Meteo forecast request failed: {exc}")
+    except MalformedResponseError as exc:
+        return ChatToolResponse(error=_sanitize_malformed_error(exc, "Open-Meteo forecast request failed"))
+    except (httpx.HTTPError, IndexError):
+        return ChatToolResponse(error="Open-Meteo forecast request failed.")
 
 
 @app.post("/tools/get_air_quality", response_model=ChatToolResponse)
@@ -532,5 +553,7 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
             f"Nitrogen dioxide: {_format_number(_as_number(current.get('nitrogen_dioxide')), no2_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Open-Meteo air-quality request failed: {exc}")
+    except MalformedResponseError as exc:
+        return ChatToolResponse(error=_sanitize_malformed_error(exc, "Open-Meteo air-quality request failed"))
+    except httpx.HTTPError:
+        return ChatToolResponse(error="Open-Meteo air-quality request failed.")
