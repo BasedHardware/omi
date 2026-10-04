@@ -25,7 +25,7 @@ same layout. Flutter no longer puts a small native list below its own Home heade
 | Diagnostics | Connection summaries, live signal and battery charts, day/week choice, disconnect history, export | Same Bluetooth polling and export owners |
 | Chat | Transcript/composer, send/retry, follow-up, scoped context, voice waveform/Stop/Send/Retry/Discard, attachment picker/removal/previews and app picker | Structured interactive message inspector and full attachment viewers |
 | First run | Sign-in actions, consent, name, primary language, acquisition survey, permission rows, guided voice prompts/waveform/review/edit/save receipts, step navigation and completion | Device discovery, interactive pendant setup and knowledge graph |
-| Calls | Setup disclosure, country/phone entry, verification status/retry and caller-ID management | Active call, keypad, contacts and call history |
+| Calls | Setup disclosure, country/phone entry, verification status/retry, caller-ID management, contacts/search/permissions, dialer/DTMF, active-call transcript/controls and audio output | Physical call/audio-route verification |
 | Confirmations | System alerts, action menus, guarded native input/opt-out sheets | Specialized dialog widgets that have not yet adopted the shared presentation API |
 
 These retained surfaces are explicit parity work, not a completed full-app migration. Keep them
@@ -71,7 +71,12 @@ containment. Both Runner targets compile the same renderer.
   verification polling and confirmed deletion. Text keyboard metadata is a typed allowlist;
   country choices open a searchable native sheet that matches country names, dial codes and
   country IDs. The selected country has its own full-width row above the phone input.
-  entering or selecting a number never starts verification before explicit Continue.
+  Entering or selecting a number never starts verification before explicit Continue.
+  Calls retain their existing provider and native call engine. Dialer edits never start a call before
+  explicit Call; contact selection uses the original number normalization and verified-country
+  prefix. DTMF is a typed keypad command with a FIFO queue, never latest-edit coalescing; subsequent
+  actions wait for its acknowledgment and a rejected command stops the queue. Dialer zero/erase
+  holds exclude their tap actions. Raw call transcript text remains literal, including translations.
   Guided voice actions project the existing action group; microphone, transcription, voice
   enrollment, memory/goal persistence and capture restoration stay with the existing controller.
 - Copy, dates and speaker names come from the current localization and formatting primitives.

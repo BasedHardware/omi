@@ -1,6 +1,59 @@
 import XCTest
 
 final class PreviewUITests: XCTestCase {
+    func testDialerHoldPlusAndClearDoNotAlsoTap() {
+        let app = start(["surface", "keypad"])
+        let zero = app.buttons["keypad_key_0"]
+        XCTAssertTrue(zero.waitForExistence(timeout: 10))
+        zero.press(forDuration: 0.8)
+        XCTAssertTrue(app.staticTexts["keypad:+"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["keypad"].label, "+")
+        app.buttons["keypad_key_1"].tap()
+        XCTAssertTrue(app.staticTexts["keypad:1"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["keypad"].label, "+1")
+        app.buttons["keypad"].press(forDuration: 0.8)
+        XCTAssertTrue(app.staticTexts["keypad:clear"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["keypad"].label, "Enter number")
+        capture(app, "native-phone-keypad")
+    }
+
+    func testDtmfKeepsEveryRapidDigitInOrderBeforeAction() {
+        let app = start(["surface", "keypad", "dtmf"])
+        app.buttons["preview-burst-keys"].tap()
+        XCTAssertTrue(app.staticTexts["keys:1,2,3,*,#,"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["keypad"].label, "123*#")
+        XCTAssertFalse(app.buttons["keypad"].exists)
+        app.buttons["keypad_key_0"].press(forDuration: 0.8)
+        XCTAssertTrue(app.staticTexts["keypad:0"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["keypad"].label, "123*#0")
+        capture(app, "native-dtmf-ordered-keys")
+    }
+
+    func testFailedKeypadStopsQueuedCommandsAndPreventsFollowingAction() {
+        let app = start(["surface", "keypad", "dtmf", "failed-key"])
+        app.buttons["preview-burst-keys"].tap()
+        XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["keys:1,2,3,*,#,"].exists)
+        XCTAssertEqual(app.staticTexts["keypad"].label, "Enter number")
+    }
+
+    func testCallTranscriptIsPlainTextRatherThanMarkdown() {
+        let app = start(["surface", "plain-transcript"])
+        XCTAssertTrue(app.staticTexts["Say **two stars** and [a link](https://example.com)"].waitForExistence(timeout: 10))
+    }
+
+    func testLargeTextKeypadKeepsLastRowAndNavigationReachable() {
+        let app = start(["surface", "keypad", "large"])
+        XCTAssertTrue(app.buttons["keypad_key_1"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["keypad_key_1"].isHittable)
+        for _ in 0..<4 where !app.buttons["keypad_key_#"].isHittable { app.swipeUp() }
+        XCTAssertTrue(app.buttons["keypad_key_#"].isHittable)
+        app.buttons["keypad_key_#"].tap()
+        XCTAssertTrue(app.staticTexts["keypad:#"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["save"].isHittable)
+        capture(app, "native-keypad-large-text")
+    }
+
     func testCountryChoiceFitsAbovePhoneAndPreservesSearch() {
         let app = start(["surface", "country"])
         let country = app.buttons["country"]

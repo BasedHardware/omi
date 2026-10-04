@@ -11,6 +11,32 @@ struct NativeSurfaceTests {
             "searchEnabled": true, "searchValue": "private search", "searchPlaceholder": "Search", "refreshEnabled": false,
             "error": "Error", "retry": "Retry", "loadingLabel": "Loading"]
         let snapshot = try NativeSurfaceSnapshot.decode(input)
+        var keypad: [String: Any] = ["id": "keys", "title": "Keypad", "kind": "keypad", "subtitle": "",
+            "value": "123", "keypadMode": "dtmf", "options": "0123456789*#".map { ["id": String($0), "title": ""] },
+            "destructive": false, "enabled": true]
+        var dialer = input
+        dialer["sections"] = [["id": "keys", "title": "", "footer": "", "rows": [keypad]]]
+        let keys = try NativeSurfaceSnapshot.decode(dialer)
+        precondition(keys.replacingValue(id: "keys", value: .text("1234")).sections[0].rows[0].keypadMode == "dtmf")
+        keypad["keypadMode"] = "dialer"
+        dialer["sections"] = [["id": "keys", "title": "", "footer": "", "rows": [keypad]]]
+        rejects(dialer)
+        keypad["eraseLabel"] = "Delete"
+        keypad["clearLabel"] = "Clear All"
+        dialer["sections"] = [["id": "keys", "title": "", "footer": "", "rows": [keypad]]]
+        _ = try NativeSurfaceSnapshot.decode(dialer)
+        keypad["options"] = [["id": "1", "title": ""]]
+        dialer["sections"] = [["id": "keys", "title": "", "footer": "", "rows": [keypad]]]
+        rejects(dialer)
+        var literal = row
+        literal["kind"] = "message_ai"
+        literal.removeValue(forKey: "value")
+        literal["plainText"] = true
+        dialer["sections"] = [["id": "literal", "title": "", "footer": "", "rows": [literal]]]
+        _ = try NativeSurfaceSnapshot.decode(dialer)
+        literal["kind"] = "button"
+        dialer["sections"] = [["id": "literal", "title": "", "footer": "", "rows": [literal]]]
+        rejects(dialer)
         precondition(snapshot.sections[0].rows[0].value?.text == "system")
         precondition(snapshot.largeTitle == nil)
         var searchable = row

@@ -23,7 +23,7 @@ and physical recording tests were performed. Existing service owners remain auth
 | Billing | Current plan selection/management and existing checkout actions | Specialized payment/referral surfaces; checkout/OAuth continue through their native SDK owners |
 | Devices | Settings and diagnostics, live battery/signal charts, disconnect history/export | Discovery, storage/sync/OTA and advanced firmware controls |
 | First run | Auth, consent, name, language, acquisition survey, permissions, guided voice prompts/review/receipts, step navigation and completion | Knowledge graph and interactive pendant setup |
-| Calls | Setup disclosure, country/phone entry, verification status/retry and verified caller-ID management; existing native call engine retained | Active-call controls/transcript, contacts, keypad and history presentation |
+| Calls | Setup disclosure, country/phone entry, verification status/retry, verified caller-ID management, contacts/search/permission states, dialer/DTMF and active-call controls/transcript/audio routes; existing native call engine retained | Physical call/audio-route verification |
 | Shared feedback | System confirmations/action menus and guarded native input sheets | Specialized legacy dialog widgets and transient feedback presentation |
 
 ## Completion checks

@@ -35,6 +35,9 @@ struct PreviewApp: App {
                         Spacer()
                         Button("End test session") { harness.state.invalidate(); harness.surface.invalidate() }
                             .accessibilityIdentifier("preview-end-session")
+                        if ProcessInfo.processInfo.arguments.contains("keypad") {
+                            Button("Burst 123*#") { harness.burstKeys() }.accessibilityIdentifier("preview-burst-keys")
+                        }
                     }.font(.caption).padding()
                     }
                 }
@@ -124,6 +127,16 @@ final class PreviewHarness: ObservableObject {
     @Published var lastSaved = ""
     var raw: [String: Any]
     var lastDraft = ""
+    var keysSent = ""
+    func burstKeys() {
+        Task {
+            let first = Task { await surface.send("keypad", value: "1") }
+            while !surface.pending.contains("keypad") { await Task.yield() }
+            for key in "23*#" { await surface.send("keypad", value: String(key)) }
+            await surface.send("save")
+            await first.value
+        }
+    }
     func revealOnboardingChrome() {
         surfaceRaw["revision"] = (surfaceRaw["revision"] as? Int ?? 0) + 1
         surfaceRaw["toolbar"] = [["id": "onboarding_back", "title": "Back", "kind": "button",
@@ -148,18 +161,30 @@ final class PreviewHarness: ObservableObject {
         // Visibility notifications do not change fixture content or erase a command receipt.
         if id.hasPrefix("_visible:") { return }
         try await Task.sleep(nanoseconds: 200_000_000)
+        if ProcessInfo.processInfo.arguments.contains("failed-key") && id == "keypad" {
+            throw NSError(domain: "Fixture", code: 2)
+        }
         if ProcessInfo.processInfo.arguments.contains("failed-edit") && id == "draft" {
             throw NSError(domain: "Fixture", code: 1)
         }
         if id == "draft" || id == "chat_draft" { self.lastDraft = value as? String ?? "" }
         self.lastAction = "\(id):\(value ?? "")"
-        if id == "save" || id == "chat_send" { self.lastSaved = "saved:\(self.lastDraft)" }
+        if id == "keypad", let key = value as? String { self.keysSent += key + "," }
+        if id == "save" && ProcessInfo.processInfo.arguments.contains("keypad") {
+            self.lastSaved = "keys:\(self.keysSent)"
+        }
+        else if id == "save" || id == "chat_send" { self.lastSaved = "saved:\(self.lastDraft)" }
         var next = self.surfaceRaw
         next["revision"] = (next["revision"] as! Int) + 1
         if var sections = next["sections"] as? [[String: Any]] {
             for index in sections.indices {
                 var rows = sections[index]["rows"] as! [[String: Any]]
-                for rowIndex in rows.indices where rows[rowIndex]["id"] as? String == id { rows[rowIndex]["value"] = value }
+                for rowIndex in rows.indices where rows[rowIndex]["id"] as? String == id {
+                    if id == "keypad", let key = value as? String {
+                        let previous = rows[rowIndex]["value"] as? String ?? ""
+                        rows[rowIndex]["value"] = key == "clear" ? "" : key == "erase" ? String(previous.dropLast()) : previous + key
+                    } else { rows[rowIndex]["value"] = value }
+                }
                 sections[index]["rows"] = rows
             }
             next["sections"] = sections
@@ -190,6 +215,25 @@ final class PreviewHarness: ObservableObject {
         let data = try! Data(contentsOf: Bundle.main.url(forResource: "native_home_v1", withExtension: "json")!)
         original = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
         raw = original
+        if ProcessInfo.processInfo.arguments.contains("keypad") {
+            surfaceRaw["title"] = "Phone Calls"
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sections"] = [["id": "dialer", "title": "", "footer": "", "rows": [
+                ["id": "keypad", "title": "Enter number", "kind": "keypad", "subtitle": "", "value": "",
+                 "keypadMode": ProcessInfo.processInfo.arguments.contains("dtmf") ? "dtmf" : "dialer",
+                 "eraseLabel": "Delete", "clearLabel": "Clear All",
+                 "options": "123456789*0#".map { ["id": String($0), "title": $0 == "0" ? "+" : ""] },
+                 "enabled": true, "destructive": false]
+            ]]]
+        }
+        if ProcessInfo.processInfo.arguments.contains("plain-transcript") {
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sections"] = [["id": "transcript", "title": "", "footer": "", "rows": [
+                ["id": "plain_segment", "title": "Say **two stars** and [a link](https://example.com)",
+                 "kind": "message_ai", "plainText": true, "subtitle": "Speaker 1", "options": [],
+                 "enabled": false, "destructive": false]
+            ]]]
+        }
         if ProcessInfo.processInfo.arguments.contains("late-toolbar") {
             surfaceRaw["title"] = "Here is what I heard"
             surfaceRaw["toolbar"] = []

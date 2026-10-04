@@ -16,6 +16,9 @@ final class NativeSurfaceState: ObservableObject {
     private var latestEdits: [String: String] = [:]
     private(set) var sentDraft: String?
     private var queued: [String: Any] = [:]
+    // Keypad commands have side effects (DTMF), so every accepted press retains FIFO order.
+    // Text edits continue to coalesce to the latest draft instead.
+    private var queuedKeys: [String: [String]] = [:]
     private var revision = NativeSnapshotRevision()
     private let perform: (String, Any?) async throws -> Void
 
@@ -33,6 +36,7 @@ final class NativeSurfaceState: ObservableObject {
     func invalidate() {
         valid = false
         queued.removeAll()
+        queuedKeys.removeAll()
         latestEdits.removeAll()
         failedEdits.removeAll()
         sentDraft = nil
@@ -42,14 +46,16 @@ final class NativeSurfaceState: ObservableObject {
 
     func send(_ id: String, value: Any? = nil) async {
         guard valid else { return }
+        let isKeypad = snapshot.allRows.contains { $0.id == id && $0.kind == "keypad" }
         let isEdit = snapshot.allRows.contains {
-            $0.id == id && ["text", "toggle", "choice", "color", "date"].contains($0.kind)
-        }
+            $0.id == id && ["text", "toggle", "choice", "segmented", "color", "date"].contains($0.kind)
+        } || isKeypad
         if let text = value as? String, snapshot.allRows.contains(where: { $0.id == id && $0.kind == "text" }) {
             latestEdits[id] = text
         }
         if pending.contains(id) {
-            if let value, id == "_search" || isEdit { queued[id] = value }
+            if isKeypad, let key = value as? String { queuedKeys[id, default: []].append(key) }
+            else if let value, id == "_search" || isEdit { queued[id] = value }
             return
         }
         pending.insert(id)
@@ -62,7 +68,8 @@ final class NativeSurfaceState: ObservableObject {
         if !isEdit && !id.hasPrefix("_visible:") {
             if !pendingEdits.isEmpty { await withCheckedContinuation { editWaiters.append($0) } }
             guard valid else { return }
-            guard failedEdits.isEmpty else { actionFailed = true; return }
+            let isCancellation = snapshot.toolbar.contains { $0.id == id && ["xmark", "chevron.left"].contains($0.symbol ?? "") }
+            guard failedEdits.isEmpty || isCancellation else { actionFailed = true; return }
         }
         if id == "chat_send" { sentDraft = latestEdits["chat_draft"] ?? snapshot.chat?.draft }
         actionFailed = false
@@ -78,8 +85,12 @@ final class NativeSurfaceState: ObservableObject {
                     actionFailed = true
                     if isEdit { failedEdits.insert(id) }
                 }
+                if isKeypad { queuedKeys.removeValue(forKey: id); break }
             }
-            next = queued.removeValue(forKey: id)
+            if isKeypad, var keys = queuedKeys[id], !keys.isEmpty {
+                next = keys.removeFirst()
+                queuedKeys[id] = keys.isEmpty ? nil : keys
+            } else { next = queued.removeValue(forKey: id) }
         } while valid && next != nil
     }
     private func finishEditWaiters() {
@@ -246,6 +257,12 @@ struct NativeSurfaceView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 }
+            case "segmented":
+                Picker(row.title, selection: Binding(get: { row.value?.text ?? "" }, set: { value in
+                    Task { await state.send(row.id, value: value) }
+                })) {
+                    ForEach(row.options) { option in Text(option.title).tag(option.id) }
+                }.pickerStyle(.segmented)
             case "color":
                 VStack(alignment: .leading, spacing: 8) {
                     label(row)
@@ -291,11 +308,13 @@ struct NativeSurfaceView: View {
                 message(row)
             case "text":
                 NativeTextRow(row: row, state: state)
+            case "keypad":
+                NativeKeypadRow(row: row, state: state)
             case "label": label(row).textSelection(.enabled)
             default: action(row, compact: compact)
             }
         }
-        .disabled(!row.enabled && !["label", "chart", "waveform", "message_ai", "message_user"].contains(row.kind) || (state.pending.contains(row.id) && row.kind != "text"))
+        .disabled(!row.enabled && !["label", "chart", "waveform", "message_ai", "message_user"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad"].contains(row.kind)))
         .accessibilityIdentifier(row.id)
     }
 
@@ -384,7 +403,10 @@ struct NativeSurfaceView: View {
         HStack {
             if row.kind == "message_user" { Spacer(minLength: 30) }
             VStack(alignment: .leading, spacing: 8) {
-                Text(.init(row.title)).textSelection(.enabled)
+                Group {
+                    if row.plainText == true { Text(verbatim: row.title) }
+                    else { Text(.init(row.title)) }
+                }.textSelection(.enabled)
                 if !row.subtitle.isEmpty { Text(row.subtitle).font(.caption).foregroundStyle(.secondary) }
                 if row.enabled {
                     Button { Task { await state.send(row.id) } } label: {
@@ -410,12 +432,16 @@ struct NativeSurfaceView: View {
                 .contentShape(Rectangle())
         }
             .disabled(!row.enabled || state.pending.contains(row.id))
+            .opacity(row.enabled && !state.pending.contains(row.id) ? 1 : 0.45)
             .accessibilityIdentifier(row.id)
     }
 
     @ViewBuilder private func actionLabel(_ row: NativeSurfaceRow, iconOnly: Bool = false, compact: Bool = false) -> some View {
         if let symbol = row.symbol {
-            if iconOnly || compact { Image(systemName: symbol).accessibilityLabel(row.title) }
+            if iconOnly || compact {
+                Image(systemName: symbol).foregroundStyle(row.destructive ? Color.red : Color.primary)
+                    .accessibilityLabel(row.title)
+            }
             else { Label { label(row) } icon: { Image(systemName: symbol) } }
         } else if compact { Text(row.title) }
         else { label(row) }
@@ -437,6 +463,83 @@ struct NativeSurfaceView: View {
                 if !row.subtitle.isEmpty { Text(row.subtitle).font(.subheadline).foregroundStyle(.secondary) }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+@available(iOS 16.0, *)
+private struct NativeKeypadRow: View {
+    let row: NativeSurfaceRow
+    @ObservedObject var state: NativeSurfaceState
+
+    private var keys: [NativeSurfaceRow.Option] {
+        "123456789*0#".compactMap { digit in row.options.first { $0.id == String(digit) } }
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            HStack {
+                Text(row.value?.text.isEmpty == false ? row.value?.text ?? "" : row.title)
+                    .font(.title.weight(.light)).lineLimit(2)
+                    .frame(maxWidth: .infinity).textSelection(.enabled)
+                    .accessibilityIdentifier("\(row.id)_number")
+                if row.keypadMode == "dialer" && row.value?.text.isEmpty == false {
+                    Button { send("erase") } label: {
+                        Image(systemName: "delete.left").frame(minWidth: 44, minHeight: 44)
+                    }.buttonStyle(.plain)
+                        .modifier(NativeKeypadPress(tap: { send("erase") }, hold: { send("clear") }))
+                        .accessibilityLabel(row.eraseLabel ?? "")
+                        .accessibilityAction(named: Text(row.clearLabel ?? "")) { send("clear") }
+                        .accessibilityIdentifier("\(row.id)_erase")
+                }
+            }
+            NativeGlassControls {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
+                    ForEach(keys) { key in
+                        Button { send(key.id) } label: {
+                            VStack(spacing: 2) {
+                                Text(key.id).font(.largeTitle.weight(.light))
+                                if !key.title.isEmpty { Text(key.title).font(.caption2.weight(.medium)) }
+                            }.frame(maxWidth: .infinity).frame(minHeight: 72).padding(4)
+                        }.buttonStyle(.plain).modifier(NativeKeypadGlass())
+                            .modifier(NativeKeypadPress(tap: { send(key.id) }, hold:
+                                row.keypadMode == "dialer" && key.id == "0" ? { send("+") } : nil))
+                            .accessibilityLabel(key.id)
+                            .accessibilityActions {
+                                if row.keypadMode == "dialer" && key.id == "0" {
+                                    Button("+") { send("+") }
+                                }
+                            }
+                            .accessibilityIdentifier("\(row.id)_key_\(key.id)")
+                    }
+                }
+            }
+        }.padding(.vertical, 12)
+    }
+
+    private func send(_ key: String) { Task { await state.send(row.id, value: key) } }
+}
+
+/// A hold excludes a tap; it must not append both '+' and '0' or erase after Clear.
+private struct NativeKeypadPress: ViewModifier {
+    let tap: () -> Void
+    let hold: (() -> Void)?
+    @ViewBuilder func body(content: Content) -> some View {
+        if let hold {
+            content.highPriorityGesture(LongPressGesture(minimumDuration: 0.5).exclusively(before: TapGesture())
+                .onEnded { value in
+                    switch value {
+                    case .first: hold()
+                    case .second: tap()
+                    }
+                })
+        } else { content }
+    }
+}
+
+private struct NativeKeypadGlass: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 26, *) { content.glassEffect(.regular.interactive(), in: .circle) }
+        else { content.background(.thinMaterial, in: Circle()) }
     }
 }
 

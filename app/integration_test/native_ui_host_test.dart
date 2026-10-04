@@ -34,6 +34,10 @@ import 'package:omi/ui/ui.dart';
 import 'journeys/support/hermetic_boot.dart';
 import 'visual_audit/fakes.dart';
 import '../test/providers/guided_voice_controller_test.dart' show FakeVoiceIO;
+import '../test/mobile/native_ui/native_calls_test.dart' show FakeNativeCallOwner;
+import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/pages/phone_calls/active_call_page.dart';
+import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 
 class _NativePhoneOwner extends PhoneCallProvider {
   _NativePhoneOwner() : super.forTesting();
@@ -105,6 +109,58 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(await captureScreenshot(screenshot), isNotEmpty);
   }
+
+  testWidgets('native calls host keeps dialer and active-call commands with their original owner', (tester) async {
+    await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+    addTearDown(JourneyHermeticBoot.stop);
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const contacts = MethodChannel('flutter_contacts');
+    const events = 'com.omi/phone_calls/events';
+    messenger.setMockMessageHandler(events, (_) async => const StandardMethodCodec().encodeSuccessEnvelope(null));
+    messenger.setMockMethodCallHandler(contacts, (call) async => call.method == 'permissions.request' ? 'denied' : []);
+    addTearDown(() {
+      messenger.setMockMessageHandler(events, null);
+      messenger.setMockMethodCallHandler(contacts, null);
+    });
+    final owner = FakeNativeCallOwner();
+    addTearDown(owner.dispose);
+    Widget host(Widget page) => MultiProvider(
+        providers: [...defaultAuditProviders(), ChangeNotifierProvider<PhoneCallProvider>.value(value: owner)],
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: const [Locale('en')],
+            theme: buildOmiTheme(brightness: Brightness.dark),
+            home: page));
+    await tester.pumpWidget(host(const PhoneCallsPage()));
+    await checkNativeHost(tester, 'real-native-call-contacts-dark');
+    NativeRow row(String id) {
+      final surface = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+      return [...surface.toolbar, ...surface.sections.expand((s) => s.rows), ...?surface.chat?.actions]
+          .singleWhere((row) => row.id == id);
+    }
+
+    expect(row('phone_permission_allow').enabled, true);
+    await row('phone_tab').action!('1');
+    await tester.pump();
+    await checkNativeHost(tester, 'real-native-call-keypad-dark');
+    for (final key in ['+', '3', '7', '2']) {
+      await row('phone_keypad').action!(key);
+      await tester.pump();
+    }
+    expect(row('phone_keypad').value, '+372');
+    expect(owner.commands, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+    owner.state = PhoneCallState.active;
+    await tester.pumpWidget(host(const ActiveCallPage()));
+    await checkNativeHost(tester, 'real-native-active-call-dark');
+    expect(row('call_segment_0').plainText, true);
+    await row('call_mute').action!(null);
+    await row('call_speaker').action!(null);
+    expect(owner.commands, ['mute', 'speaker']);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('native voice review keeps original goal, selection and navigation owners', (tester) async {
     await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});

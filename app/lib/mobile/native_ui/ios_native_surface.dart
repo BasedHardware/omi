@@ -43,6 +43,10 @@ class NativeRow {
     this.keyboard,
     this.optionSearch,
     this.optionClose,
+    this.keypadMode,
+    this.eraseLabel,
+    this.clearLabel,
+    this.plainText = false,
     this.imageUri,
     this.level,
     this.points = const [],
@@ -58,6 +62,8 @@ class NativeRow {
   final int? maximumLength;
   final String? keyboard;
   final String? optionSearch, optionClose;
+  final String? keypadMode, eraseLabel, clearLabel;
+  final bool plainText;
 
   /// The existing three-band confidence meter; never a probability or a new score.
   final int? level;
@@ -82,6 +88,10 @@ class NativeRow {
         'keyboard': keyboard,
         'optionSearch': optionSearch,
         'optionClose': optionClose,
+        'keypadMode': keypadMode,
+        'eraseLabel': eraseLabel,
+        'clearLabel': clearLabel,
+        'plainText': plainText,
         'imageUri': imageUri,
         'level': level,
         'points': points,
@@ -92,6 +102,8 @@ class NativeRow {
 
   bool get valid {
     if (id.isEmpty || id.startsWith('_') || options.keys.any((id) => id.isEmpty)) return false;
+    if (plainText && !['message_ai', 'message_user'].contains(kind)) return false;
+    if (kind != 'keypad' && (keypadMode != null || eraseLabel != null || clearLabel != null)) return false;
     if (level != null && (level! < 0 || level! > 3)) return false;
     if (imageUri != null) {
       final uri = Uri.tryParse(imageUri!);
@@ -130,8 +142,15 @@ class NativeRow {
     if (minimumDate != null && !_validDate(minimumDate!)) return false;
     if (kind == 'waveform' && points.any((point) => (point['y'] as num).abs() > 1)) return false;
     return switch (kind) {
+      'keypad' => value is String &&
+          (value as String).length <= 10000 &&
+          ['dialer', 'dtmf'].contains(keypadMode) &&
+          options.length == 12 &&
+          options.keys.every('0123456789*#'.contains) &&
+          options.keys.every((key) => key.length == 1) &&
+          (keypadMode == 'dtmf' || (eraseLabel?.isNotEmpty == true && clearLabel?.isNotEmpty == true)),
       'toggle' || 'task' => value is bool,
-      'choice' => value is String && options.containsKey(value),
+      'choice' || 'segmented' => value is String && options.containsKey(value),
       'color' => value is String &&
           options.containsKey(value) &&
           options.keys.every((key) => RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(key)),
@@ -156,9 +175,11 @@ class NativeRow {
   }
 
   bool accepts(Object? input) => switch (kind) {
+        'keypad' => input is String &&
+            (options.containsKey(input) || keypadMode == 'dialer' && ['+', 'erase', 'clear'].contains(input)),
         'toggle' => input is bool,
         'task' => input is bool || input is String && options.containsKey(input),
-        'choice' || 'color' || 'menu' => input is String && options.containsKey(input),
+        'choice' || 'segmented' || 'color' || 'menu' => input is String && options.containsKey(input),
         'navigation' => input == null || input is String && options.containsKey(input),
         'date' =>
           input is String && _validDate(input) && (minimumDate == null || int.parse(input) >= int.parse(minimumDate!)),

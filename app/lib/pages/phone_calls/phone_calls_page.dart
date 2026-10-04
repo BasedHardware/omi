@@ -17,6 +17,8 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_phone_projection.dart';
 
 class PhoneCallsPage extends StatefulWidget {
   const PhoneCallsPage({super.key});
@@ -39,6 +41,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_tabChanged);
     _loadContacts();
     PlatformManager.instance.analytics.phoneCallPageOpened();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -48,10 +51,15 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
 
   @override
   void dispose() {
+    _tabController.removeListener(_tabChanged);
     _tabController.dispose();
     _searchController.dispose();
     _dialpadController.dispose();
     super.dispose();
+  }
+
+  void _tabChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadContacts() async {
@@ -148,7 +156,15 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
         if (!provider.numbersLoaded) {
-          return Scaffold(appBar: AppBar(leading: const OmiBackButton()), body: const OmiLoadingState());
+          return IosNativeSurface(
+              title: context.l10n.phonePageTitle,
+              sections: const [],
+              loading: true,
+              toolbar: [
+                NativeRow('phone_back', context.l10n.back,
+                    symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+              ],
+              fallback: Scaffold(appBar: AppBar(leading: const OmiBackButton()), body: const OmiLoadingState()));
         }
         if (provider.verifiedNumbers.isEmpty) {
           return const PhoneSetupIntroPage();
@@ -159,7 +175,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
   }
 
   Widget _buildMainPage(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.phonePageTitle),
@@ -192,6 +208,114 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         ],
       ),
     );
+    return Consumer<UsageProvider>(builder: (context, usage, _) {
+      final quota = _phoneQuotaText(context, usage);
+      return IosNativeSurface(
+        title: context.l10n.phonePageTitle,
+        loading: _tabController.index == 0 && _loadingContacts,
+        search: _tabController.index == 0 && !_permissionDenied && !_loadingContacts
+            ? (value) {
+                _searchController.text = value as String;
+                _filterContacts(value);
+              }
+            : null,
+        searchValue: _searchController.text,
+        searchPlaceholder: context.l10n.searchContacts,
+        toolbar: [
+          NativeRow('phone_back', context.l10n.back,
+              symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+          NativeRow('phone_settings', context.l10n.settings,
+              symbol: 'gearshape', action: (_) => routeToPage(context, const PhoneCallSettingsPage())),
+        ],
+        sections: [
+          NativeSection('phone_tabs', [
+            NativeRow('phone_tab', context.l10n.phonePageTitle,
+                kind: 'segmented',
+                value: _tabController.index.toString(),
+                options: {'0': context.l10n.phoneContactsTab, '1': context.l10n.phoneKeypadTab},
+                action: (value) => _tabController.animateTo(int.parse(value as String))),
+            if (quota != null) NativeRow('phone_quota', quota, kind: 'label'),
+          ]),
+          if (_tabController.index == 0)
+            NativeSection('phone_contacts', [
+              if (_permissionDenied) ...[
+                NativeRow('phone_permission_reason', context.l10n.phoneContactsAccessTitle,
+                    subtitle: context.l10n.grantContactsAccess, kind: 'label'),
+                NativeRow('phone_permission_allow', context.l10n.phoneAllow, action: (_) => _allowContacts()),
+              ] else if (!_loadingContacts) ...[
+                if (_filteredContacts.isEmpty)
+                  NativeRow('phone_contacts_empty', context.l10n.phoneNoContactsFound, kind: 'label'),
+                for (final contact in _filteredContacts)
+                  NativeRow('phone_contact_${contact.id}', contact.displayName ?? '',
+                      subtitle: '${contact.phones.first.label.label.name} ${contact.phones.first.number}',
+                      symbol: 'phone',
+                      action: (_) => _makeCall(contact.phones.first.number, contactName: contact.displayName)),
+              ],
+            ]),
+          if (_tabController.index == 1)
+            NativeSection('phone_dialer', [
+              nativePhoneKeypad(
+                  id: 'phone_keypad',
+                  title: context.l10n.phoneEnterNumber,
+                  digits: _dialpadController.text,
+                  dtmf: false,
+                  eraseLabel: context.l10n.delete,
+                  clearLabel: context.l10n.clearAll,
+                  action: (value) {
+                    HapticFeedback.lightImpact();
+                    setState(() {
+                      if (value == 'clear') {
+                        _dialpadController.clear();
+                      } else if (value == 'erase') {
+                        if (_dialpadController.text.isNotEmpty) {
+                          _dialpadController.text =
+                              _dialpadController.text.substring(0, _dialpadController.text.length - 1);
+                        }
+                      } else {
+                        _dialpadController.text += value as String;
+                      }
+                    });
+                  }),
+              NativeRow('phone_paste', context.l10n.paste, symbol: 'doc.on.clipboard', action: (_) => _nativePaste()),
+              NativeRow('phone_call', context.l10n.phoneCallButton,
+                  symbol: 'phone.fill', enabled: _dialpadController.text.isNotEmpty, action: (_) {
+                HapticFeedback.mediumImpact();
+                return _makeCall(_dialpadController.text);
+              }),
+            ]),
+        ],
+        fallback: classic,
+      );
+    });
+  }
+
+  Future<void> _allowContacts() async {
+    final status = await Permission.contacts.status;
+    if (status.isPermanentlyDenied || status.isDenied) {
+      await openAppSettings();
+    } else {
+      await FlutterContacts.permissions.request(PermissionType.read);
+    }
+    if (mounted) await _loadContacts();
+  }
+
+  Future<void> _nativePaste() async {
+    HapticFeedback.lightImpact();
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted || data?.text == null) return;
+    final number = _sanitizePastedNumber(data!.text!);
+    if (number.isEmpty) return;
+    await showOmiRowMenu(context, actions: [
+      OmiMenuAction(
+          icon: Icons.content_paste,
+          label: context.l10n.paste,
+          onSelected: () {
+            if (mounted) {
+              HapticFeedback.mediumImpact();
+              setState(() => _dialpadController.text = number);
+            }
+          })
+    ]);
   }
 
   Widget _buildContactsTab() {
@@ -203,15 +327,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         action: OmiButton(
           label: context.l10n.phoneAllow,
           size: OmiButtonSize.compact,
-          onPressed: () async {
-            var status = await Permission.contacts.status;
-            if (status.isPermanentlyDenied || status.isDenied) {
-              await openAppSettings();
-            } else {
-              await FlutterContacts.permissions.request(PermissionType.read);
-            }
-            _loadContacts();
-          },
+          onPressed: _allowContacts,
         ),
       );
     }
@@ -541,21 +657,8 @@ class _FreeQuotaBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<UsageProvider>(
       builder: (context, usage, _) {
-        final quota = usage.phoneCallQuota;
-        if (quota == null || quota.isPaid) return const SizedBox.shrink();
-        final limit = quota.monthlyLimit;
-        if (limit == null || limit <= 0) return const SizedBox.shrink();
-        final remaining = quota.remaining ?? (limit - quota.monthlyUsed);
-        final maxMinutes = (quota.maxDurationSeconds ?? 0) ~/ 60;
-        final l10n = context.l10n;
-        final String text;
-        if (remaining <= 0) {
-          text = l10n.phoneFreeCallLimitReached;
-        } else if (maxMinutes > 0) {
-          text = l10n.phoneFreeCallsRemainingWithMax(remaining, limit, maxMinutes);
-        } else {
-          text = l10n.phoneFreeCallsRemaining(remaining, limit);
-        }
+        final text = _phoneQuotaText(context, usage);
+        if (text == null) return const SizedBox.shrink();
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 10),
@@ -571,6 +674,19 @@ class _FreeQuotaBanner extends StatelessWidget {
       },
     );
   }
+}
+
+String? _phoneQuotaText(BuildContext context, UsageProvider usage) {
+  final quota = usage.phoneCallQuota;
+  if (quota == null || quota.isPaid) return null;
+  final limit = quota.monthlyLimit;
+  if (limit == null || limit <= 0) return null;
+  final remaining = quota.remaining ?? (limit - quota.monthlyUsed);
+  final maxMinutes = (quota.maxDurationSeconds ?? 0) ~/ 60;
+  final l10n = context.l10n;
+  if (remaining <= 0) return l10n.phoneFreeCallLimitReached;
+  if (maxMinutes > 0) return l10n.phoneFreeCallsRemainingWithMax(remaining, limit, maxMinutes);
+  return l10n.phoneFreeCallsRemaining(remaining, limit);
 }
 
 class _DialpadKey extends StatelessWidget {
