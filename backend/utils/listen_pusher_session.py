@@ -5,7 +5,7 @@ import random
 import struct
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Awaitable, Callable, cast, Deque, Dict, List, Optional, Tuple, TYPE_CHECKING
 
@@ -110,8 +110,11 @@ class AudioRun:
     raised after the frame may have been delivered. Only a negotiated
     timeline socket can prove such an envelope: it is reconciled against
     committed storage before any resend instead of being recombined with
-    newer audio or retimed. On a legacy socket the attempted envelope is
-    discarded once and counted, never retained or replayed.
+    newer audio or retimed. On a legacy socket a failed send keeps main's
+    semantics: the raw runs return to the buffer and are regrouped and retried
+    while the same socket stays installed (``failed_socket``); once a
+    replacement socket is installed they are discarded once and counted, never
+    replayed, because legacy storage cannot prove whether they were committed.
     """
 
     conversation_id: Optional[str]
@@ -119,6 +122,8 @@ class AudioRun:
     data: bytes
     header_timestamp: Optional[float] = None
     uncertain: bool = False
+    failed_socket: Any = field(default=None, repr=False, compare=False)
+    source_runs: Optional[List['AudioRun']] = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -332,6 +337,21 @@ class ListenPusherSession:
             self.audio_runs = deque()
             self.audio_total_size = 0
             timeline_active = self.audio_timeline_active
+            # A legacy send that failed on a socket that has since been
+            # replaced cannot be proven committed or uncommitted; main never
+            # replays it (the replacement was unannounced), so it is discarded
+            # once and counted. Same-socket retries keep main's
+            # regroup-and-resend semantics.
+            kept: Deque[AudioRun] = deque()
+            for run in pending_runs:
+                if run.failed_socket is not None and run.failed_socket is not pusher_ws:
+                    OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send').inc(
+                        len(run.data)
+                    )
+                    pending_total_size -= len(run.data)
+                    continue
+                kept.append(run)
+            pending_runs = kept
             sent_envelopes = 0
             envelopes: List[AudioRun] = []
             try:
@@ -368,6 +388,7 @@ class ListenPusherSession:
                         conversation_id=group_conversation,
                         start_wall=group[0].start_wall,
                         data=b''.join(run.data for run in group),
+                        source_runs=list(group),
                     )
                     envelope.header_timestamp = (
                         envelope.start_wall if honor_projection and envelope.start_wall is not None else legacy_header
@@ -438,10 +459,8 @@ class ListenPusherSession:
                         if timeline_active:
                             envelope.uncertain = True
                         else:
-                            sent_envelopes += 1
-                            OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send').inc(
-                                len(envelope.data)
-                            )
+                            for run in envelope.source_runs or [envelope]:
+                                run.failed_socket = pusher_ws
                         raise
                     sent_envelopes += 1
                 if current_conversation_id and current_conversation_id != self.last_synced_conversation_id:
@@ -454,7 +473,14 @@ class ListenPusherSession:
                     await pusher_ws.send(cast(bytes, data))
                     self.last_synced_conversation_id = current_conversation_id
             except (asyncio.CancelledError, Exception) as e:
-                unsent = envelopes[sent_envelopes:]
+                unsent: List[AudioRun] = []
+                for envelope in envelopes[sent_envelopes:]:
+                    if not timeline_active and envelope.source_runs is not None:
+                        # Legacy envelopes return as their raw runs so the next
+                        # flush regroups and re-stamps them exactly as main does.
+                        unsent.extend(envelope.source_runs)
+                    else:
+                        unsent.append(envelope)
                 self.audio_runs.extendleft(reversed(unsent))
                 self.audio_total_size += sum(len(run.data) for run in unsent)
                 while self.audio_total_size > self.config.max_audio_buffer_size and self.audio_runs:
