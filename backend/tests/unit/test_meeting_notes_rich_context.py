@@ -1062,7 +1062,7 @@ class TestRichFailOpen:
         import utils.conversations.meeting_notes_wiring as wiring
 
         monkeypatch.setattr(
-            wiring,
+            wiring.meeting_context_sources(),
             'gather_meeting_context_pack',
             lambda *a, **k: (_ for _ in ()).throw(RuntimeError('pack exploded')),
         )
@@ -1072,7 +1072,7 @@ class TestRichFailOpen:
             is None
         )
         monkeypatch.setattr(
-            wiring,
+            wiring.meeting_context_sources(),
             'gather_meeting_context_pack',
             lambda *a, **k: MeetingContextPack(goals=('g',)),
         )

@@ -45,6 +45,9 @@ def processing():
         from utils.llm import conversation_processing
         import utils.conversations.meeting_notes_wiring
 
+        # Optional retrieval is now lazy; exclude its cold import from per-test call timing.
+        import utils.conversations.meeting_context_pack
+
         yield conversation_processing
 
 
