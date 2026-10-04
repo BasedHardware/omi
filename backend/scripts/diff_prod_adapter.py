@@ -8,6 +8,14 @@ from pathlib import Path
 
 import yaml
 
+NLLB_RULE = {
+    'name': {'as': 'nllb_active_requests_total'},
+    'seriesQuery': 'nllb_active_requests{namespace!=""}',
+    'metricsQuery': 'sum(nllb_active_requests{<<.LabelMatchers>>})',
+    'resources': {'overrides': {'namespace': {'resource': 'namespace'}}},
+}
+API_SERVICES = {'v1beta1.custom.metrics.k8s.io', 'v1beta1.external.metrics.k8s.io'}
+
 
 def normalized_config(config):
     """Rule order and YAML mapping order do not affect adapter behavior."""
@@ -39,6 +47,11 @@ def expected_config(live):
         if rule[field] not in (before, after):
             raise ValueError(f'Unexpected live listen {field}: reconcile and review first')
         rule[field] = after
+    nllb = [rule for rule in expected['externalRules'] if rule['name']['as'] == NLLB_RULE['name']['as']]
+    if nllb and nllb != [NLLB_RULE]:
+        raise ValueError('Unexpected live NLLB rule: reconcile and review first')
+    if not nllb:
+        expected['externalRules'].append(copy.deepcopy(NLLB_RULE))
     return normalized_config(expected)
 
 
@@ -60,13 +73,13 @@ def diff(label, before, after):
     )
 
 
-def compare(rendered, configmap, deployment, apiservices, allow_canary_filter=True):
+def compare(rendered, configmap, deployment, apiservices, allow_reviewed_changes=True):
     config = yaml.safe_load(next(obj for obj in rendered if obj['kind'] == 'ConfigMap')['data']['config.yaml'])
     live = yaml.safe_load(configmap['data']['config.yaml'])
     actual = normalized_config(config)
     reports = [diff('config.yaml', normalized_config(live), actual)]
     errors = []
-    expected = expected_config(live) if allow_canary_filter else normalized_config(live)
+    expected = expected_config(live) if allow_reviewed_changes else normalized_config(live)
     if expected != actual:
         errors.append('Rules differ from the reviewed expectation')
 
@@ -79,10 +92,13 @@ def compare(rendered, configmap, deployment, apiservices, allow_canary_filter=Tr
 
     actual_apis = {obj['metadata']['name']: api_spec(obj) for obj in rendered if obj['kind'] == 'APIService'}
     live_apis = {obj['metadata']['name']: api_spec(obj) for obj in apiservices['items']}
+    if set(actual_apis) != API_SERVICES or set(live_apis) != API_SERVICES:
+        errors.append('Both custom and external APIService specs are required; HOLD the upgrade')
     if actual_apis != live_apis:
         reports.append(diff('APIService.spec', live_apis, actual_apis))
         errors.append('APIService specs differ')
-    for api in apiservices['items']:
+    # Rollback review checks stored specs/rules before adopting live ownership.
+    for api in apiservices['items'] if allow_reviewed_changes else []:
         metadata = api['metadata']
         annotations = metadata.get('annotations', {})
         if (
@@ -108,7 +124,7 @@ def main():
         yaml.safe_load(args.configmap.read_text()),
         yaml.safe_load(args.deployment.read_text()),
         yaml.safe_load(args.apiservices.read_text()),
-        allow_canary_filter=not args.require_live_config,
+        allow_reviewed_changes=not args.require_live_config,
     )
     for report in reports:
         print(report, end='')

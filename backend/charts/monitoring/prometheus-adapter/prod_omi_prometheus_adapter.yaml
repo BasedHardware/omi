@@ -126,6 +126,14 @@ rules:
           namespace:
             resource: namespace
       seriesQuery: DCGM_FI_DEV_GPU_UTIL{namespace!=""}
+    # Keep for the prod NLLB chart's concurrency HPA, even while live is CPU-only.
+    - name:
+        as: "nllb_active_requests_total"
+      seriesQuery: 'nllb_active_requests{namespace!=""}'
+      metricsQuery: 'sum(nllb_active_requests{<<.LabelMatchers>>})'
+      resources:
+        overrides:
+          namespace: { resource: "namespace" }
   custom:
     - metricsQuery: sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>)
       name:

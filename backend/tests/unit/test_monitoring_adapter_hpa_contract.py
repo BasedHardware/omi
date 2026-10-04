@@ -8,14 +8,16 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.diff_prod_adapter import compare, expected_config
+from scripts.diff_prod_adapter import API_SERVICES, NLLB_RULE, compare, expected_config
 from scripts import select_backend_unit_tests as selector
 
 CHARTS = Path(__file__).resolve().parents[2] / 'charts'
 ADAPTER = CHARTS / 'monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml'
 
 
-@pytest.mark.parametrize('service', ['parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'deepgram-self-hosted'])
+@pytest.mark.parametrize(
+    'service', ['parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'nllb-translation', 'deepgram-self-hosted']
+)
 def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
     helm = shutil.which('helm')
     if helm is None:
@@ -69,7 +71,16 @@ def test_hpa_and_adapter_changes_select_this_contract():
     sources = [ADAPTER] + list(CHARTS.glob('*/prod*values.yaml'))
     sources += list(CHARTS.glob('*/templates/hpa.yaml'))
     sources += [CHARTS / 'deepgram-self-hosted/nova-3/prod_omi_values.yaml']
-    owned = {'parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'deepgram-self-hosted', 'monitoring'}
+    owned = {
+        'parakeet',
+        'backend-listen',
+        'pusher',
+        'vad',
+        'diarizer',
+        'nllb-translation',
+        'deepgram-self-hosted',
+        'monitoring',
+    }
     all_tests = selector.discover_all_tests()
     for source in sources:
         if source.relative_to(CHARTS).parts[0] not in owned:
@@ -83,6 +94,7 @@ def _comparison_inputs():
     values = yaml.safe_load(ADAPTER.read_text())['rules']
     config = {'externalRules': values['external'], 'rules': values['custom']}
     live = copy.deepcopy(config)
+    live['externalRules'].remove(NLLB_RULE)
     listen = live['externalRules'][0]
     listen['seriesQuery'] = 'backend_listen_active_ws_connections'
     listen['metricsQuery'] = 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})'
@@ -90,7 +102,7 @@ def _comparison_inputs():
     api = {
         'kind': 'APIService',
         'metadata': {
-            'name': 'external',
+            'name': 'v1beta1.external.metrics.k8s.io',
             'labels': {'app.kubernetes.io/managed-by': 'Helm'},
             'annotations': {
                 'meta.helm.sh/release-name': 'prod-omi-prometheus-adapter',
@@ -99,13 +111,16 @@ def _comparison_inputs():
         },
         'spec': {'service': {'name': 'adapter'}},
     }
-    rendered = [{'kind': 'ConfigMap', 'data': {'config.yaml': yaml.safe_dump(config)}}, deployment, api]
-    live_api = copy.deepcopy(api)
-    live_api['spec']['service']['port'] = 443
-    return rendered, {'data': {'config.yaml': yaml.safe_dump(live)}}, deployment, {'items': [live_api]}
+    custom_api = copy.deepcopy(api)
+    custom_api['metadata']['name'] = 'v1beta1.custom.metrics.k8s.io'
+    rendered = [{'kind': 'ConfigMap', 'data': {'config.yaml': yaml.safe_dump(config)}}, deployment, api, custom_api]
+    live_apis = copy.deepcopy([api, custom_api])
+    for live_api in live_apis:
+        live_api['spec']['service']['port'] = 443
+    return rendered, {'data': {'config.yaml': yaml.safe_dump(live)}}, deployment, {'items': live_apis}
 
 
-def test_diff_allows_only_canary_filter_and_api_port_default():
+def test_diff_allows_only_canary_filter_nllb_rule_and_api_port_default():
     assert compare(*_comparison_inputs())[1] == []
 
 
@@ -121,9 +136,9 @@ def test_diff_accepts_reconciled_live_and_rule_reordering():
 
 def test_rollback_manifest_must_preserve_exact_live_rules():
     rendered, live, deployment, apiservices = _comparison_inputs()
-    assert compare(rendered, live, deployment, apiservices, allow_canary_filter=False)[1]
+    assert compare(rendered, live, deployment, apiservices, allow_reviewed_changes=False)[1]
     rendered[0]['data']['config.yaml'] = live['data']['config.yaml']
-    assert compare(rendered, live, deployment, apiservices, allow_canary_filter=False)[1] == []
+    assert compare(rendered, live, deployment, apiservices, allow_reviewed_changes=False)[1] == []
 
 
 def test_diff_rejects_api_service_without_release_ownership():
@@ -160,3 +175,39 @@ def test_diff_rejects_unexpected_live_listen_query():
                 ]
             }
         )
+
+
+@pytest.mark.parametrize('missing', sorted(API_SERVICES))
+def test_rollback_requires_both_api_service_specs(missing):
+    rendered, live, deployment, apiservices = _comparison_inputs()
+    rendered[0]['data']['config.yaml'] = live['data']['config.yaml']
+    rendered = [obj for obj in rendered if obj.get('metadata', {}).get('name') != missing]
+    assert any(
+        'APIService specs' in error
+        for error in compare(rendered, live, deployment, apiservices, allow_reviewed_changes=False)[1]
+    )
+
+
+def test_rollback_review_before_live_ownership_adoption():
+    rendered, live, deployment, apiservices = _comparison_inputs()
+    rendered[0]['data']['config.yaml'] = live['data']['config.yaml']
+    apiservices['items'][1]['metadata'].pop('annotations')
+    assert compare(rendered, live, deployment, apiservices, allow_reviewed_changes=False)[1] == []
+
+
+def test_diff_rejects_modified_nllb_addition():
+    rendered, live, deployment, apiservices = _comparison_inputs()
+    config = yaml.safe_load(rendered[0]['data']['config.yaml'])
+    next(rule for rule in config['externalRules'] if rule['name']['as'] == NLLB_RULE['name']['as'])[
+        'metricsQuery'
+    ] = 'vector(0)'
+    rendered[0]['data']['config.yaml'] = yaml.safe_dump(config)
+    assert compare(rendered, live, deployment, apiservices)[1]
+
+
+def test_diff_rejects_unexpected_live_nllb_query():
+    _, live, _, _ = _comparison_inputs()
+    config = yaml.safe_load(live['data']['config.yaml'])
+    config['externalRules'].append(dict(NLLB_RULE, metricsQuery='vector(0)'))
+    with pytest.raises(ValueError, match='Unexpected live NLLB'):
+        expected_config(config)
