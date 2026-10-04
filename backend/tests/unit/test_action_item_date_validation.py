@@ -136,10 +136,6 @@ _SYS_MODULE_NAMES = [
     "utils.llm.meeting_notes_presentation",
     "utils.llm.action_item_normalization",
     "utils.llm.conversation_notes_prompts",
-    "utils.llm.episode_notes_prompts",
-    "utils.llm.episode_notes_validation",
-    "utils.conversations.episode_evidence",
-    "utils.conversations.episode_vacuity",
     "utils.observability",
     "utils.observability.fallback",
     "models.structured_extraction",
@@ -414,19 +410,12 @@ _load_module_from_file(
     BACKEND_DIR / "utils" / "llm" / "action_item_normalization.py",
 )
 
-# Episode helpers are pure but also imported when their feature flag is off.
-# Preserve the isolated import graph while exercising the real prompt adapters.
+# Episode helpers are lazy and unused by these flag-off action-item tests.
+# Keep the isolated graph limited to the production imports exercised here.
 _stub_package("utils.observability")
 fallback_stub = _stub_module("utils.observability.fallback")
 fallback_stub.record_fallback = MagicMock()
-for module_name, relative_path in [
-    ("utils.conversations.episode_evidence", "utils/conversations/episode_evidence.py"),
-    ("utils.conversations.episode_vacuity", "utils/conversations/episode_vacuity.py"),
-    ("utils.llm.conversation_notes_prompts", "utils/llm/conversation_notes_prompts.py"),
-    ("utils.llm.episode_notes_prompts", "utils/llm/episode_notes_prompts.py"),
-    ("utils.llm.episode_notes_validation", "utils/llm/episode_notes_validation.py"),
-]:
-    _load_module_from_file(module_name, BACKEND_DIR / relative_path)
+_load_module_from_file("utils.llm.conversation_notes_prompts", BACKEND_DIR / "utils/llm/conversation_notes_prompts.py")
 
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",

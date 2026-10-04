@@ -6,8 +6,9 @@ import json
 import pytest
 
 from testing.episode_notes import eval as cli
+from testing.episode_notes.cache import cached_call, fingerprint
 from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT, evaluate
-from testing.episode_notes.schema import LLMCallError, LLMResult, load_fixtures
+from testing.episode_notes.schema import JudgeScore, LLMCallError, LLMResult, load_fixtures
 
 
 def bundle():
@@ -101,3 +102,21 @@ def test_transport_failure_and_invalid_judge_are_case_errors(monkeypatch):
     assert report['arms']['episode']['overall']['count'] == 0
     assert report['arms']['episode']['overall']['mean_informativeness_gap'] is None
     assert not report['paired']
+
+
+def test_invalid_cached_judge_is_replaced_and_success_is_reused(tmp_path):
+    payload = {'candidate': {'title': 'Invented decision'}}
+    key = fingerprint({'model': 'fake', 'prompt': JUDGE_PROMPT, 'payload': payload})
+    path = tmp_path / f'judge-episode-{key}.json'
+    path.write_text(json.dumps({'key': key, 'result': {'content': {}}}))
+    calls = []
+
+    def judge(prompt, data):
+        calls.append(data)
+        return fake(prompt, data)
+
+    result = cached_call(tmp_path, 'judge-episode', 'fake', JUDGE_PROMPT, payload, judge, JudgeScore.model_validate)
+    reused = cached_call(tmp_path, 'judge-episode', 'fake', JUDGE_PROMPT, payload, judge, JudgeScore.model_validate)
+    assert result.content == reused.content
+    assert len(calls) == 1
+    assert json.loads(path.read_text())['result']['content']['informativeness_gap'] == 0.1
