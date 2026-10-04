@@ -12,6 +12,7 @@
 		2C62D3AB2B45A141921699F0 /* NativeGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C8C0EA0179610FE3BD6292 /* NativeGlass.swift */; };
 		409C0AAB325C309B7954B495 /* native_home_v1.json in Resources */ = {isa = PBXBuildFile; fileRef = AE1159B5206DEF2789FB7D8F /* native_home_v1.json */; };
 		56C0B1375C778BC5A4C533BA /* NativeSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F312B2548DBC6DA768DA3267 /* NativeSurfaceView.swift */; };
+		B0887F2695D874F315F5FCBD /* NativeReaderComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232D127408C8C64C5674E080 /* NativeReaderComponents.swift */; };
 		6099496A98CDE6FB652CA40F /* PreviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D27B1031DDE8583F2CA747 /* PreviewUITests.swift */; };
 		67FEC9CAB30F258C23D08B31 /* PreviewApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51CDC6B151864D7EF2E98348 /* PreviewApp.swift */; };
 		769111CF47973A6347C4FE86 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7D65CD2BBD03EF907D6979B /* Foundation.framework */; };
@@ -44,6 +45,7 @@
 		BA2F8E25709F7288D41E8E22 /* NativeSurfaceContract.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeSurfaceContract.swift; path = "../../Runner/NativeUI/NativeSurfaceContract.swift"; sourceTree = "<group>"; };
 		D2C8C0EA0179610FE3BD6292 /* NativeGlass.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeGlass.swift; path = "../../Runner/NativeUI/NativeGlass.swift"; sourceTree = "<group>"; };
 		F312B2548DBC6DA768DA3267 /* NativeSurfaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeSurfaceView.swift; path = "../../Runner/NativeUI/NativeSurfaceView.swift"; sourceTree = "<group>"; };
+		232D127408C8C64C5674E080 /* NativeReaderComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeReaderComponents.swift; path = ../../Runner/NativeUI/NativeReaderComponents.swift; sourceTree = "<group>"; };
 		F7D65CD2BBD03EF907D6979B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -81,6 +83,7 @@
 				D2C8C0EA0179610FE3BD6292 /* NativeGlass.swift */,
 				BA2F8E25709F7288D41E8E22 /* NativeSurfaceContract.swift */,
 				F312B2548DBC6DA768DA3267 /* NativeSurfaceView.swift */,
+				232D127408C8C64C5674E080 /* NativeReaderComponents.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -216,6 +219,7 @@
 				2C62D3AB2B45A141921699F0 /* NativeGlass.swift in Sources */,
 				E83BDDB1C883CAD7AD90461F /* NativeSurfaceContract.swift in Sources */,
 				56C0B1375C778BC5A4C533BA /* NativeSurfaceView.swift in Sources */,
+				B0887F2695D874F315F5FCBD /* NativeReaderComponents.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

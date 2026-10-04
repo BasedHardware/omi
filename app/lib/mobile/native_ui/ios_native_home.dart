@@ -164,6 +164,7 @@ class IosNativeHomeState extends State<IosNativeHome> {
     final l10n = context.l10n;
     return {
       'version': 1,
+      'nativeDetail': true,
       'revision': _revision++,
       'appearance': context.read<AppearanceProvider>().mode.name,
       'locale': Localizations.localeOf(context).toLanguageTag(),

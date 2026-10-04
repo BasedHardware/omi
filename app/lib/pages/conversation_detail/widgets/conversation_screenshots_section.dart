@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/api/screen_frames.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -37,6 +38,7 @@ class ConversationScreenshotsSection extends StatefulWidget {
     this.loadBytes,
     this.now,
     this.gutter = OmiSpacing.md,
+    this.onNativePresentation,
   });
 
   final String conversationId;
@@ -50,6 +52,7 @@ class ConversationScreenshotsSection extends StatefulWidget {
   /// The page's side margin. The strip scrolls edge to edge; the heading and the first tile line
   /// up with the rest of the note by padding this much inside.
   final double gutter;
+  final ValueChanged<List<NativeRow>>? onNativePresentation;
 
   static const tileWidth = 144.0;
   static const tileHeight = 90.0;
@@ -63,6 +66,7 @@ class ConversationScreenshotsSection extends StatefulWidget {
 }
 
 class _ConversationScreenshotsSectionState extends State<ConversationScreenshotsSection> {
+  bool _nativeScheduled = false;
   ConversationScreenshots? _set;
 
   /// The server `revision` of the last set drawn. The server bumps it on every change (adjudication,
@@ -265,6 +269,26 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
   @override
   Widget build(BuildContext context) {
     final frames = _set?.frames ?? const <ConversationScreenshot>[];
+    if (widget.onNativePresentation != null) {
+      if (!_nativeScheduled) {
+        _nativeScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _nativeScheduled = false;
+          if (!mounted || widget.onNativePresentation == null) return;
+          widget.onNativePresentation!([
+            if (frames.isNotEmpty) NativeRow('detail_screenshots', context.l10n.meetingScreenshotsTitle, kind: 'label'),
+            for (final frame in frames)
+              NativeRow('detail_screenshot:${frame.id}', _captionOf(context, frame),
+                  kind: 'navigation',
+                  imageUri: nativeImageUri(_isStale ? null : frame.thumbnailUrl),
+                  options: {'delete': context.l10n.delete},
+                  action: (value) => value == 'delete' ? _confirmDelete(frame) : _open(frame)),
+          ]);
+        });
+        WidgetsBinding.instance.ensureVisualUpdate();
+      }
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
     if (frames.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
     // A horizontal list needs a fixed height; measure one caption line at the reader's text size
     // rather than guessing, so large text grows the strip instead of clipping it.

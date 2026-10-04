@@ -13,6 +13,10 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
+part 'name_speaker_native.dart';
 
 /// Number of people (excluding the synthetic "You" row) above which the
 /// person picker shows a search field.
@@ -150,6 +154,16 @@ Future<void> showNameSpeakerSheet(
     title: unresolvedSpeakers
         ? context.l10n.nameSpeakerTitle
         : context.l10n.tagSpeaker(TranscriptSegment.getDisplaySpeakerId(speakerId, segments)),
+    nativeBuilder: (_) => NameSpeakerBottomSheet(
+      speakerId: speakerId,
+      segmentId: segmentId,
+      segments: segments,
+      suggestion: suggestion,
+      defaultApplyToSpeaker: defaultApplyToSpeaker,
+      onSpeakerAssigned: onSpeakerAssigned,
+      onSpeakerRejected: onSpeakerRejected,
+      feedbackContext: context,
+    ),
     builder: (_) => NameSpeakerBottomSheet(
       speakerId: speakerId,
       segmentId: segmentId,
@@ -202,6 +216,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
 }
 
 class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
+  void _nativeRebuild(VoidCallback update) => setState(update);
   final TextEditingController _controller = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   String selectedPerson = '';
@@ -381,7 +396,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     final people = peopleProvider.people;
     final userName = SharedPreferencesUtil().givenName;
 
-    return SingleChildScrollView(
+    final classic = SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
         child: Column(
@@ -416,6 +431,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
         ),
       ),
     );
+    return _nativeSpeakerSurface(classic, people, userName);
   }
 
   Widget _buildHeader() {
@@ -790,47 +806,47 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
       label: context.l10n.save,
       expand: true,
       isLoading: loading,
-      onPressed: !allowSave || loading
-          ? null
-          : () async {
-              setLoading(true);
-              String personIdToAssign = selectedPerson;
-              String personNameToAssign = selectedPersonName;
-
-              if (_controller.text.isNotEmpty && selectedPerson.isEmpty) {
-                personNameToAssign =
-                    _controller.text.toString()[0].toUpperCase() + _controller.text.toString().substring(1);
-                personIdToAssign = ''; // Indicates a new person
-              }
-
-              bool saved = false;
-              try {
-                saved = await widget.onSpeakerAssigned(
-                  widget.speakerId,
-                  personIdToAssign,
-                  personNameToAssign,
-                  List<String>.of(_selectedSegmentIds),
-                  _applyToSpeaker,
-                );
-              } catch (_) {
-                saved = false;
-              }
-
-              // Fire-and-forget recency tracking; new persons have no known id
-              // yet and are recorded on their next assignment from this sheet.
-              if (saved && personIdToAssign.isNotEmpty) {
-                _recordSpeakerLabelUsage(personIdToAssign);
-              }
-
-              setLoading(false);
-              if (mounted) {
-                if (saved) {
-                  Navigator.pop(context);
-                } else {
-                  setState(() => _saveFailed = true);
-                }
-              }
-            },
+      onPressed: !allowSave || loading ? null : _saveSpeaker,
     );
+  }
+
+  Future<void> _saveSpeaker() async {
+    if (!allowSave || loading) return;
+    setLoading(true);
+    String personIdToAssign = selectedPerson;
+    String personNameToAssign = selectedPersonName;
+
+    if (_controller.text.isNotEmpty && selectedPerson.isEmpty) {
+      personNameToAssign = _controller.text.toString()[0].toUpperCase() + _controller.text.toString().substring(1);
+      personIdToAssign = ''; // Indicates a new person
+    }
+
+    bool saved = false;
+    try {
+      saved = await widget.onSpeakerAssigned(
+        widget.speakerId,
+        personIdToAssign,
+        personNameToAssign,
+        List<String>.of(_selectedSegmentIds),
+        _applyToSpeaker,
+      );
+    } catch (_) {
+      saved = false;
+    }
+
+    // Fire-and-forget recency tracking; new persons have no known id
+    // yet and are recorded on their next assignment from this sheet.
+    if (saved && personIdToAssign.isNotEmpty) {
+      _recordSpeakerLabelUsage(personIdToAssign);
+    }
+
+    setLoading(false);
+    if (mounted) {
+      if (saved) {
+        Navigator.pop(context);
+      } else {
+        setState(() => _saveFailed = true);
+      }
+    }
   }
 }

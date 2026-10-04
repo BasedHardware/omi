@@ -3,7 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
 import 'package:omi/utils/l10n_extensions.dart';
+
+part 'fair_use_native.dart';
 
 class FairUsePage extends StatefulWidget {
   const FairUsePage({super.key});
@@ -60,7 +65,7 @@ class _FairUsePageState extends State<FairUsePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.fairUsePolicy)),
       body: _isLoading
           ? const OmiLoadingState()
@@ -85,6 +90,7 @@ class _FairUsePageState extends State<FairUsePage> {
                   ),
                 ),
     );
+    return _nativeFairUseSurface(classic);
   }
 
   Widget _buildStatusBanner() {

@@ -17,11 +17,17 @@ import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+
+part 'developer_native.dart';
 
 /// Developer Settings: developer tools only (D4) — creator payouts, debug logs, API keys, MCP,
 /// webhooks, experiments and custom firmware. Everyday settings live in top-level Settings.
@@ -322,7 +328,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     return Consumer<DeveloperModeProvider>(
       builder: (context, provider, child) {
         final dirty = provider.hasUnsavedWebhookChanges;
-        return PopScope(
+        final classic = PopScope(
           canPop: !dirty,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
@@ -378,8 +384,13 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             ),
           ),
         );
+        return _nativeDeveloperSurface(provider, classic);
       },
     );
+  }
+
+  void _nativeRebuild(VoidCallback update) {
+    if (mounted) setState(update);
   }
 }
 

@@ -22,12 +22,31 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
     let plainText: Bool?
     let imageUri: String?
     let level: Int?
+    let maximumValue: Double?
     let visibilityEnabled: Bool?
+    let visibilityHiddenEnabled: Bool?
     struct Point: Decodable, Equatable, Identifiable {
         let x: Double; let y: Double; let label: String
         var id: Double { x }
     }
     let points: [Point]?
+    struct RichBlock: Decodable, Equatable {
+        let kind: String; let text: String; let indent: Int; let prefix: String
+        let level: Int?; let uri: String?; let cells: [[String]]?
+        var valid: Bool {
+            guard ["text", "heading", "quote", "code", "table", "image", "rule"].contains(kind),
+                  (0...32).contains(indent) else { return false }
+            if kind == "heading" && !(1...6).contains(level ?? 0) { return false }
+            if kind == "table" && (cells == nil || cells?.contains(where: \.isEmpty) == true) { return false }
+            if kind == "image" {
+                guard let uri, uri.count <= 4096, let url = URL(string: uri), url.user == nil, url.password == nil,
+                      (url.scheme == "https" && !(url.host ?? "").isEmpty) ||
+                      (url.isFileURL && (url.host ?? "").isEmpty && url.path.hasPrefix("/")) else { return false }
+            }
+            return true
+        }
+    }
+    let blocks: [RichBlock]?
 
     func replacingValue(_ value: Value?) -> Self {
         Self(id: id, title: title, kind: kind, subtitle: subtitle, value: value,
@@ -35,12 +54,17 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
              minimumDate: minimumDate, maximumLength: maximumLength, keyboard: keyboard,
              optionSearch: optionSearch, optionClose: optionClose, keypadMode: keypadMode,
              eraseLabel: eraseLabel, clearLabel: clearLabel, plainText: plainText, imageUri: imageUri,
-             level: level, visibilityEnabled: visibilityEnabled, points: points)
+             level: level, maximumValue: maximumValue, visibilityEnabled: visibilityEnabled,
+             visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks)
     }
 
 
     var hasValidValue: Bool {
         switch kind {
+        case "image": return value == nil && URL(string: imageUri ?? "")?.isFileURL == true && (1...16).contains(maximumValue ?? 0)
+        case "slider", "progress":
+            guard case let .number(number) = value, let maximumValue else { return false }
+            return number.isFinite && maximumValue.isFinite && maximumValue > 0 && (0...maximumValue).contains(number)
         case "keypad":
             guard case let .text(text) = value else { return false }
             return text.count <= 10000 && ["dialer", "dtmf"].contains(keypadMode ?? "")
@@ -50,21 +74,25 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
         case "choice", "segmented": return options.contains { $0.id == value?.text }
         case "color": return options.contains { $0.id == value?.text }
             && options.allSatisfy { $0.id.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil }
-        case "date": return value?.text == "" || value.flatMap { Double($0.text) }.map { $0.isFinite && abs($0) <= 8640000000000000 } == true
+        case "date":
+            guard case let .text(text) = value else { return false }
+            return text.isEmpty || Double(text).map { $0.isFinite && abs($0) <= 8640000000000000 } == true
         case "text": if case let .text(text) = value { return text.count <= (maximumLength ?? 10000) }; return false
         default: return value == nil
         }
     }
 
     enum Value: Decodable, Equatable {
-        case text(String), bool(Bool)
+        case text(String), bool(Bool), number(Double)
         init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
             if let flag = try? container.decode(Bool.self) { self = .bool(flag) }
+            else if let number = try? container.decode(Double.self) { self = .number(number) }
             else { self = .text(try container.decode(String.self)) }
         }
         var text: String { if case let .text(text) = self { return text }; return "" }
         var bool: Bool { if case let .bool(flag) = self { return flag }; return false }
+        var number: Double { if case let .number(number) = self { return number }; return 0 }
     }
 }
 
@@ -79,6 +107,16 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
         let draft: String; let placeholder: String; let followup: String
         let streaming: Bool; let actions: [NativeSurfaceRow]
     }
+    struct Reader: Decodable, Equatable {
+        let currentId: String?
+        let targetId: String?
+        let request: Int
+        let following: Bool
+        let footer: [NativeSurfaceRow]
+        let scroll: NativeSurfaceRow?
+        var actions: [NativeSurfaceRow] { footer + (scroll.map { [$0] } ?? []) }
+    }
+    let reader: Reader?
     let chat: Chat?
     let version: Int
     let revision: Int
@@ -100,14 +138,20 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     let retry: String
     let loadingLabel: String
 
-    var allRows: [NativeSurfaceRow] { toolbar + sections.flatMap(\.rows) + (chat?.actions ?? []) }
+    var allRows: [NativeSurfaceRow] { toolbar + sections.flatMap(\.rows) + (chat?.actions ?? []) + (reader?.actions ?? []) }
 
     func replacingValue(id: String, value: NativeSurfaceRow.Value) -> Self {
         let sections = sections.map { section in
             Section(id: section.id, title: section.title, footer: section.footer,
                     rows: section.rows.map { $0.id == id ? $0.replacingValue(value) : $0 })
         }
-        return Self(chat: chat, version: version, revision: revision + 1, title: title,
+        let reader = reader.map { reader in
+            Reader(currentId: reader.currentId, targetId: reader.targetId, request: reader.request,
+                   following: reader.following,
+                   footer: reader.footer.map { $0.id == id ? $0.replacingValue(value) : $0 },
+                   scroll: reader.scroll)
+        }
+        return Self(reader: reader, chat: chat, version: version, revision: revision + 1, title: title,
                     appearance: appearance, largeTitle: largeTitle, locale: locale, direction: direction,
                     loading: loading, failed: failed, empty: empty, sections: sections, toolbar: toolbar,
                     searchEnabled: searchEnabled, searchValue: searchValue, searchPlaceholder: searchPlaceholder,
@@ -115,7 +159,7 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     }
 
     func withoutContent() -> Self {
-        Self(chat: nil, version: version, revision: revision, title: "", appearance: appearance, largeTitle: false, locale: locale,
+        Self(reader: nil, chat: nil, version: version, revision: revision, title: "", appearance: appearance, largeTitle: false, locale: locale,
              direction: direction, loading: false, failed: false, empty: "", sections: [], toolbar: [],
              searchEnabled: false, searchValue: "", searchPlaceholder: "", refreshEnabled: false,
              error: error, retry: retry, loadingLabel: loadingLabel)
@@ -123,18 +167,29 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
 
     static func decode(_ input: Any) throws -> Self {
         let snapshot = try JSONDecoder().decode(Self.self, from: SafeJSON.data(withJSONObject: input))
-        let rows = snapshot.toolbar + snapshot.sections.flatMap(\.rows) + (snapshot.chat?.actions ?? [])
+        let rows = snapshot.allRows
         let ids = rows.map(\.id)
         guard snapshot.version == 1, snapshot.revision >= 0, (snapshot.chat?.draft.count ?? 0) <= 10000,
+              snapshot.reader == nil || snapshot.chat == nil,
+              snapshot.reader.map({ reader in
+                  let contentIds = Set(snapshot.sections.flatMap(\.rows).map(\.id))
+                  return reader.request >= 0
+                      && reader.currentId.map { contentIds.contains($0) } != false
+                      && reader.targetId.map { contentIds.contains($0) } != false
+                      && (reader.scroll == nil || (reader.scroll?.kind == "menu"
+                          && reader.scroll?.options.allSatisfy { $0.id == "suspend" || contentIds.contains($0.id) } == true))
+              }) != false,
               ["system", "light", "dark"].contains(snapshot.appearance),
               ["ltr", "rtl"].contains(snapshot.direction), !snapshot.locale.isEmpty,
               Set(snapshot.sections.map(\.id)).count == snapshot.sections.count,
               Set(ids).count == ids.count, !ids.contains(where: { $0.isEmpty || $0.hasPrefix("_") }),
               rows.allSatisfy({ row in
-                  ["label", "button", "navigation", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad"].contains(row.kind)
+                  ["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress"].contains(row.kind)
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
+                      && ((row.blocks ?? []).isEmpty || (row.kind == "rich_text" && row.blocks?.allSatisfy(\.valid) == true))
+                      && (row.maximumValue == nil || ["slider", "progress", "image"].contains(row.kind))
                       && (row.plainText != true || ["message_ai", "message_user"].contains(row.kind))
                       && (row.kind == "keypad" || (row.keypadMode == nil && row.eraseLabel == nil && row.clearLabel == nil))
                       && row.hasValidImageURI

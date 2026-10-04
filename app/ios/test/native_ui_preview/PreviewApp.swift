@@ -159,7 +159,7 @@ final class PreviewHarness: ObservableObject {
     lazy var surface: NativeSurfaceState = NativeSurfaceState(snapshot: try! NativeSurfaceSnapshot.decode(surfaceRaw)) { [weak self] id, value in
         guard let self else { return }
         // Visibility notifications do not change fixture content or erase a command receipt.
-        if id.hasPrefix("_visible:") { return }
+        if id.hasPrefix("_visible:") || id.hasPrefix("_hidden:") { return }
         try await Task.sleep(nanoseconds: 200_000_000)
         if ProcessInfo.processInfo.arguments.contains("failed-key") && id == "keypad" {
             throw NSError(domain: "Fixture", code: 2)
@@ -183,7 +183,7 @@ final class PreviewHarness: ObservableObject {
                     if id == "keypad", let key = value as? String {
                         let previous = rows[rowIndex]["value"] as? String ?? ""
                         rows[rowIndex]["value"] = key == "clear" ? "" : key == "erase" ? String(previous.dropLast()) : previous + key
-                    } else { rows[rowIndex]["value"] = value }
+                    } else if ["text", "toggle", "choice", "slider"].contains(rows[rowIndex]["kind"] as? String ?? "") { rows[rowIndex]["value"] = value }
                 }
                 sections[index]["rows"] = rows
             }
@@ -196,6 +196,22 @@ final class PreviewHarness: ObservableObject {
             actions[0]["value"] = draft
             chat["actions"] = actions
             next["chat"] = chat
+        }
+        if var reader = next["reader"] as? [String: Any] {
+            if id.hasPrefix("segment:") {
+                reader["targetId"] = id
+                reader["currentId"] = id
+                reader["following"] = true
+                reader["request"] = (reader["request"] as? Int ?? 0) + 1
+            }
+            if id == "reader_scroll" { reader["following"] = false }
+            var footer = reader["footer"] as! [[String: Any]]
+            for index in footer.indices where footer[index]["id"] as? String == id {
+                if id == "position" { footer[index]["value"] = value }
+                if id == "play" { footer[index]["title"] = "Pause"; footer[index]["symbol"] = "pause.fill" }
+            }
+            reader["footer"] = footer
+            next["reader"] = reader
         }
         self.surfaceRaw = next
         self.surface.update(try NativeSurfaceSnapshot.decode(next))
@@ -215,6 +231,36 @@ final class PreviewHarness: ObservableObject {
         let data = try! Data(contentsOf: Bundle.main.url(forResource: "native_home_v1", withExtension: "json")!)
         original = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
         raw = original
+        if ProcessInfo.processInfo.arguments.contains("reader") {
+            func row(_ id: String, _ title: String, _ kind: String) -> [String: Any] {
+                ["id": id, "title": title, "kind": kind, "subtitle": "", "options": [], "enabled": true, "destructive": false]
+            }
+            surfaceRaw["title"] = "Sprint planning"
+            surfaceRaw["searchEnabled"] = true
+            var back = row("back", "Back", "button"); back["symbol"] = "chevron.left"
+            surfaceRaw["toolbar"] = [back]
+            let rows = (0..<20).map { index -> [String: Any] in
+                var value = row("segment:\(index)", "Line \(index): Keep **two stars** in the transcript. A longer line lets the reader move through the conversation without clipping its words.", "transcript")
+                value["subtitle"] = "Speaker 1 · \(index * 10)s"
+                value["options"] = [["id": "edit", "title": "Edit"], ["id": "speaker", "title": "Name Speaker"]]
+                return value
+            }
+            surfaceRaw["sections"] = [["id": "transcript", "title": "Transcript", "footer": "", "rows": rows]]
+            var slider = row("position", "Recordings", "slider"); slider["value"] = 0.0; slider["maximumValue"] = 200.0
+            slider["subtitle"] = "3m 20s left · Missing audio in the recording"
+            let points: [[String: Any]] = (0..<20).map { index in
+                let x = Double(index * 10 + 5)
+                let label = index == 5 ? "missing" : ""
+                return ["x": x, "y": 0.4, "label": label]
+            }
+            slider["points"] = points
+            var play = row("play", "Play", "button"); play["symbol"] = "play.fill"
+            var ask = row("ask", "Ask Omi", "button"); ask["symbol"] = "bubble.left"
+            var scroll = row("reader_scroll", "Transcript", "menu")
+            scroll["options"] = [["id": "suspend", "title": "Suspend"]] + rows.map { ["id": $0["id"] as! String, "title": "Line"] }
+            surfaceRaw["reader"] = ["currentId": "segment:0", "request": 0, "following": false,
+                "footer": [slider, play, ask], "scroll": scroll]
+        }
         if ProcessInfo.processInfo.arguments.contains("keypad") {
             surfaceRaw["title"] = "Phone Calls"
             surfaceRaw["searchEnabled"] = false
@@ -225,6 +271,26 @@ final class PreviewHarness: ObservableObject {
                  "options": "123456789*0#".map { ["id": String($0), "title": $0 == "0" ? "+" : ""] },
                  "enabled": true, "destructive": false]
             ]]]
+        }
+        if ProcessInfo.processInfo.arguments.contains("photo") {
+            let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("native-photo-fixture.png")
+            if !FileManager.default.fileExists(atPath: url.path) {
+                let image = UIGraphicsImageRenderer(size: CGSize(width: 640, height: 400)).image { context in
+                    UIColor.systemBlue.setFill()
+                    context.fill(CGRect(x: 0, y: 0, width: 640, height: 400))
+                    UIColor.systemYellow.setFill()
+                    context.fill(CGRect(x: 0, y: 0, width: 320, height: 200))
+                    UIColor.systemRed.setFill()
+                    context.fill(CGRect(x: 320, y: 200, width: 320, height: 200))
+                }
+                try? image.pngData()?.write(to: url)
+            }
+            var photo: [String: Any] = ["id": "photo", "title": "Synthetic photo", "kind": "image",
+                "subtitle": "", "options": [], "enabled": true, "destructive": false]
+            photo["imageUri"] = url.absoluteString
+            photo["maximumValue"] = 4.0
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sections"] = [["id": "photo_section", "title": "", "footer": "", "rows": [photo]]]
         }
         if ProcessInfo.processInfo.arguments.contains("plain-transcript") {
             surfaceRaw["searchEnabled"] = false

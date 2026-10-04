@@ -49,9 +49,12 @@ class NativeRow {
     this.plainText = false,
     this.imageUri,
     this.level,
+    this.maximumValue,
     this.points = const [],
+    this.blocks = const [],
     this.action,
     this.onVisible,
+    this.onHidden,
     this.destructive = false,
     this.enabled = true,
   });
@@ -67,10 +70,12 @@ class NativeRow {
 
   /// The existing three-band confidence meter; never a probability or a new score.
   final int? level;
+  final double? maximumValue;
   final List<Map<String, Object>> points;
+  final List<Map<String, Object>> blocks;
   final Object? value;
   final Map<String, String> options;
-  final NativeAction? action, onVisible;
+  final NativeAction? action, onVisible, onHidden;
   final bool destructive, enabled;
 
   Map<String, Object?> get projection => {
@@ -94,17 +99,42 @@ class NativeRow {
         'plainText': plainText,
         'imageUri': imageUri,
         'level': level,
+        'maximumValue': maximumValue,
         'points': points,
+        'blocks': blocks,
         'destructive': destructive,
         'enabled': enabled && action != null,
         'visibilityEnabled': onVisible != null,
+        'visibilityHiddenEnabled': onHidden != null,
       };
 
   bool get valid {
+    if (blocks.isNotEmpty &&
+        (kind != 'rich_text' ||
+            blocks.any((block) =>
+                !['text', 'heading', 'quote', 'code', 'table', 'image', 'rule'].contains(block['kind']) ||
+                block['text'] is! String ||
+                block['indent'] is! int ||
+                (block['indent'] as int) < 0 ||
+                (block['indent'] as int) > 32 ||
+                block['prefix'] is! String ||
+                block['kind'] == 'heading' &&
+                    (block['level'] is! int || (block['level'] as int) < 1 || (block['level'] as int) > 6) ||
+                block['kind'] == 'table' &&
+                    (block['cells'] is! List<List<String>> ||
+                        (block['cells'] as List<List<String>>).any((row) => row.isEmpty)) ||
+                block['kind'] == 'image' &&
+                    (block['uri'] is! String || nativeImageUri(block['uri'] as String) == null)))) {
+      return false;
+    }
     if (id.isEmpty || id.startsWith('_') || options.keys.any((id) => id.isEmpty)) return false;
     if (plainText && !['message_ai', 'message_user'].contains(kind)) return false;
     if (kind != 'keypad' && (keypadMode != null || eraseLabel != null || clearLabel != null)) return false;
     if (level != null && (level! < 0 || level! > 3)) return false;
+    if (maximumValue != null &&
+        (!['slider', 'progress', 'image'].contains(kind) || !maximumValue!.isFinite || maximumValue! <= 0)) {
+      return false;
+    }
     if (imageUri != null) {
       final uri = Uri.tryParse(imageUri!);
       if (imageUri!.length > 4096 ||
@@ -142,6 +172,17 @@ class NativeRow {
     if (minimumDate != null && !_validDate(minimumDate!)) return false;
     if (kind == 'waveform' && points.any((point) => (point['y'] as num).abs() > 1)) return false;
     return switch (kind) {
+      'image' => value == null &&
+          imageUri != null &&
+          Uri.tryParse(imageUri!)?.scheme == 'file' &&
+          maximumValue != null &&
+          maximumValue! >= 1 &&
+          maximumValue! <= 16,
+      'slider' || 'progress' => maximumValue != null &&
+          value is num &&
+          (value as num).isFinite &&
+          (value as num) >= 0 &&
+          (value as num) <= maximumValue!,
       'keypad' => value is String &&
           (value as String).length <= 10000 &&
           ['dialer', 'dtmf'].contains(keypadMode) &&
@@ -159,6 +200,8 @@ class NativeRow {
       'label' ||
       'button' ||
       'navigation' ||
+      'transcript' ||
+      'rich_text' ||
       'menu' ||
       'message_user' ||
       'message_ai' ||
@@ -175,12 +218,13 @@ class NativeRow {
   }
 
   bool accepts(Object? input) => switch (kind) {
+        'slider' => input is num && input.isFinite && input >= 0 && maximumValue != null && input <= maximumValue!,
         'keypad' => input is String &&
             (options.containsKey(input) || keypadMode == 'dialer' && ['+', 'erase', 'clear'].contains(input)),
         'toggle' => input is bool,
         'task' => input is bool || input is String && options.containsKey(input),
         'choice' || 'segmented' || 'color' || 'menu' => input is String && options.containsKey(input),
-        'navigation' => input == null || input is String && options.containsKey(input),
+        'navigation' || 'transcript' || 'rich_text' => input == null || input is String && options.containsKey(input),
         'date' =>
           input is String && _validDate(input) && (minimumDate == null || int.parse(input) >= int.parse(minimumDate!)),
         'text' => input is String && input.characters.length <= (maximumLength ?? 10000),
@@ -206,6 +250,7 @@ Future<void> dispatchNativeAction(
   if (id == '_search' && value is String && value.length <= 10000) action = search;
   for (final row in rows) {
     if (id == '_visible:${row.id}' && value == null) action = row.onVisible;
+    if (id == '_hidden:${row.id}' && value == null) action = row.onHidden;
     if (row.valid && row.id == id && row.enabled && row.accepts(value)) action = row.action;
   }
   if (action == null) throw PlatformException(code: 'invalid_native_action');
@@ -244,6 +289,43 @@ class NativeSection {
       };
 }
 
+/// A reading surface shares the existing timeline owner. Scroll commands are
+/// restricted to the current row IDs; no position or mutation is inferred natively.
+class NativeReader {
+  const NativeReader({
+    this.currentId,
+    this.targetId,
+    this.request = 0,
+    this.following = false,
+    this.footer = const [],
+    this.scroll,
+  });
+  final String? currentId, targetId;
+  final int request;
+  final bool following;
+  final List<NativeRow> footer;
+  final NativeRow? scroll;
+  Iterable<NativeRow> get actions => [...footer, if (scroll != null) scroll!];
+
+  bool validFor(Iterable<NativeSection> sections) {
+    final ids = sections.expand((section) => section.rows).map((row) => row.id).toSet();
+    return request >= 0 &&
+        (currentId == null || ids.contains(currentId)) &&
+        (targetId == null || ids.contains(targetId)) &&
+        (scroll == null ||
+            scroll!.kind == 'menu' && scroll!.options.keys.every((id) => id == 'suspend' || ids.contains(id)));
+  }
+
+  Map<String, Object?> get projection => {
+        'currentId': currentId,
+        'targetId': targetId,
+        'request': request,
+        'following': following,
+        'footer': footer.map((row) => row.projection).toList(),
+        'scroll': scroll?.projection,
+      };
+}
+
 /// Shared native list/form renderer. Each page supplies its existing callbacks and provider state.
 class IosNativeSurface extends StatefulWidget {
   const IosNativeSurface({
@@ -255,6 +337,7 @@ class IosNativeSurface extends StatefulWidget {
     this.largeTitle = false,
     this.loading = false,
     this.failed = false,
+    this.errorMessage,
     this.empty = '',
     this.onRefresh,
     this.search,
@@ -262,11 +345,15 @@ class IosNativeSurface extends StatefulWidget {
     this.searchPlaceholder = '',
     this.publicSurface = false,
     this.nativeOwner,
+    this.nativeWrapper,
     this.chat,
+    this.reader,
   });
 
   final NativeChat? chat;
+  final NativeReader? reader;
   final String title, empty, searchValue, searchPlaceholder;
+  final String? errorMessage;
   final List<NativeSection> sections;
   final List<NativeRow> toolbar;
   final Widget fallback;
@@ -274,6 +361,7 @@ class IosNativeSurface extends StatefulWidget {
   /// Mount an existing service-owning widget only when the native renderer is active.
   /// It receives lifecycle events but contributes no Flutter presentation or animation.
   final Widget? nativeOwner;
+  final Widget Function(Widget)? nativeWrapper;
   final bool loading, failed, publicSurface, largeTitle;
   final NativeAction? onRefresh, search;
 
@@ -332,10 +420,11 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         'searchValue': widget.searchValue,
         'searchPlaceholder': widget.searchPlaceholder,
         'refreshEnabled': widget.onRefresh != null,
-        'error': context.l10n.connectionErrorDesc,
+        'error': widget.errorMessage ?? context.l10n.connectionErrorDesc,
         'retry': context.l10n.retry,
         'loadingLabel': context.l10n.loading,
         'chat': widget.chat?.projection,
+        'reader': widget.reader?.projection,
       };
 
   Future<Object?> _handle(MethodCall call) async {
@@ -346,6 +435,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         ..._toolbar,
         ..._sections.expand((section) => section.rows),
         ...?widget.chat?.actions,
+        ...?widget.reader?.actions,
       ],
       refresh: widget.onRefresh,
       search: widget.search,
@@ -395,8 +485,11 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
       ..._toolbar,
       ..._sections.expand((section) => section.rows),
       ...?widget.chat?.actions,
+      ...?widget.reader?.actions,
     ];
     if (!iosSwiftUiEnabled ||
+        widget.chat != null && widget.reader != null ||
+        widget.reader?.validFor(_sections) == false ||
         rows.any((row) => !row.valid) ||
         rows.map((row) => row.id).toSet().length != rows.length ||
         _sections.map((section) => section.id).toSet().length != _sections.length) {
@@ -412,7 +505,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         if (support.connectionState != ConnectionState.done) return const OmiLoadingState();
         if (support.data != true) return _fallback();
         if (!_session.active) return const SizedBox.shrink();
-        final view = UiKitView(
+        final platformView = UiKitView(
           viewType: 'com.omi.native_ui/surface',
           creationParams: _snapshot(),
           creationParamsCodec: const StandardMessageCodec(),
@@ -427,6 +520,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
             _schedule();
           },
         );
+        final view = widget.nativeWrapper?.call(platformView) ?? platformView;
         return widget.nativeOwner == null
             ? view
             : Stack(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -12,11 +13,18 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
-import 'package:omi/backend/schema/person.dart';
+import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
+import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
+import 'package:omi/pages/apps/add_mcp_server_page.dart';
+import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
 import 'package:omi/pages/memories/widgets/memory_management_sheet.dart';
@@ -33,11 +41,26 @@ import 'package:omi/ui/ui.dart';
 
 import 'journeys/support/hermetic_boot.dart';
 import 'visual_audit/fakes.dart';
+import 'visual_audit/screen_frame_fixtures.dart';
 import '../test/providers/guided_voice_controller_test.dart' show FakeVoiceIO;
 import '../test/mobile/native_ui/native_calls_test.dart' show FakeNativeCallOwner;
-import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
+
+import 'package:omi/pages/apps/update_app.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/action_items/day_tasks_page.dart';
+import 'package:omi/pages/settings/fair_use_page.dart';
+import 'package:omi/pages/conversations/local_storage_page.dart';
+import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/pages/settings/data_export.dart';
+import 'package:omi/pages/apps/widgets/filter_sheet.dart';
+import 'package:omi/providers/app_provider.dart';
+part 'native_advanced_host_cases.dart';
 
 class _NativePhoneOwner extends PhoneCallProvider {
   _NativePhoneOwner() : super.forTesting();
@@ -108,6 +131,262 @@ void main() {
         reason: 'The UIKit owner must receive the current navigation projection');
     expect(tester.takeException(), isNull);
     expect(await captureScreenshot(screenshot), isNotEmpty);
+  }
+
+  if (!const bool.fromEnvironment('NATIVE_UI_ADVANCED_ONLY')) {
+    testWidgets('native conversation detail retains its player across summary, transcript and search', (tester) async {
+      await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+      addTearDown(JourneyHermeticBoot.stop);
+      final conversation = ServerConversation(
+          id: 'native-reader-fixture',
+          createdAt: DateTime(2026, 10, 4, 10),
+          status: ConversationStatus.completed,
+          structured: Structured('Native conversation',
+              '## Next steps\n- **Ship** the reader\n- Check playback\n\n> Preserve the session.'),
+          transcriptSegments: [
+            TranscriptSegment(
+                id: 'first',
+                text: 'Ship **literal** transcript text.',
+                speaker: 'SPEAKER_0',
+                personId: null,
+                isUser: true,
+                start: 0,
+                end: 20,
+                translations: []),
+            TranscriptSegment(
+                id: 'second',
+                text: 'Check playback and preserve the session.',
+                speaker: 'SPEAKER_1',
+                personId: null,
+                isUser: false,
+                start: 20,
+                end: 40,
+                translations: []),
+          ]);
+      final owner = ConversationDetailProvider(fetchConversation: (_) async => conversation);
+      addTearDown(owner.dispose);
+      await tester.pumpWidget(MultiProvider(
+          providers: [
+            ...defaultAuditProviders(),
+            ChangeNotifierProvider<ConversationDetailProvider>.value(value: owner)
+          ],
+          child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: const [Locale('en')],
+              theme: buildOmiTheme(brightness: Brightness.dark),
+              home: ConversationDetailPage(conversation: conversation, initialTab: ConversationTab.summary))));
+      await checkNativeHost(tester, 'real-native-conversation-summary-dark');
+      IosNativeSurface surface() => tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+      NativeRow row(String id) => [
+            ...surface().toolbar,
+            ...surface().sections.expand((s) => s.rows),
+            ...?surface().reader?.actions
+          ].singleWhere((row) => row.id == id);
+      expect(row('detail_summary_content').kind, 'rich_text');
+      expect(row('detail_summary_content').blocks.any((block) => block['kind'] == 'heading'), true);
+      final player = tester.state(find.byType(ConversationBottomBar, skipOffstage: false));
+      final viewId = nativeViewId(tester, find.byType(UiKitView));
+      await row('detail_tab').action!('transcript');
+      await tester.pump(const Duration(seconds: 1));
+      await checkNativeHost(tester, 'real-native-conversation-transcript-dark');
+      expect(row('detail_segment:first').title, 'Ship **literal** transcript text.');
+      expect(identical(tester.state(find.byType(ConversationBottomBar, skipOffstage: false)), player), true);
+      expect(nativeViewId(tester, find.byType(UiKitView)), viewId);
+      await surface().search!('playback');
+      await tester.pump(const Duration(seconds: 1));
+      expect(surface().reader!.targetId, 'detail_segment:second');
+      expect(row('detail_search_count').title, '1 / 1');
+      await checkNativeHost(tester, 'real-native-conversation-search-dark');
+      await row('detail_search_close').action!(null);
+      await row('detail_tab').action!('summary');
+      await tester.pump(const Duration(seconds: 1));
+      expect(identical(tester.state(find.byType(ConversationBottomBar, skipOffstage: false)), player), true);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('native speaker sheet selects lines and people without saving before Save', (tester) async {
+      await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+      addTearDown(JourneyHermeticBoot.stop);
+      final people = PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))
+        ..people = [Person(id: 'friend', name: 'Maya', createdAt: DateTime(2026), updatedAt: DateTime(2026))];
+      addTearDown(people.dispose);
+      final saves = <List<Object>>[];
+      final segments = [
+        for (final index in [0, 1])
+          TranscriptSegment(
+              id: 'line:$index',
+              text: 'Line $index',
+              speaker: 'SPEAKER_0',
+              isUser: true,
+              personId: null,
+              start: index * 10.0,
+              end: index * 10.0 + 10,
+              translations: [])
+      ];
+      await tester.pumpWidget(MultiProvider(
+          providers: [...defaultAuditProviders(), ChangeNotifierProvider<PeopleProvider>.value(value: people)],
+          child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: const [Locale('en')],
+              theme: buildOmiTheme(brightness: Brightness.dark),
+              home: Scaffold(
+                  body: NameSpeakerBottomSheet(
+                      speakerId: 0,
+                      segmentId: 'line:0',
+                      segments: segments,
+                      onSpeakerAssigned: (speaker, person, name, lines, all) async {
+                        saves.add([speaker, person, name, lines, all]);
+                        return true;
+                      })))));
+      await checkNativeHost(tester, 'real-native-speaker-picker-dark');
+      NativeRow row(String id) {
+        final surface = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+        return [...surface.toolbar, ...surface.sections.expand((s) => s.rows)].singleWhere((row) => row.id == id);
+      }
+
+      await row('speaker_add_person').action!(null);
+      await tester.pump();
+      await row('speaker_new_name').action!('Maya');
+      await tester.pump();
+      expect(row('speaker_save').enabled, false);
+      expect(saves, isEmpty);
+      await row('speaker_new_cancel').action!(null);
+      await tester.pump();
+      await row('speaker_person').action!('friend');
+      await row('speaker_apply').action!(true);
+      await tester.pump();
+      expect(row('speaker_line:line:1').value, true);
+      await row('speaker_line:line:1').action!(false);
+      await tester.pump();
+      expect(row('speaker_apply').value, false);
+      expect(saves, isEmpty);
+      await row('speaker_save').action!(null);
+      expect(saves, [
+        [
+          0,
+          'friend',
+          'Maya',
+          ['line:0'],
+          false
+        ]
+      ]);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('native photo viewer loads lazily, pages and removes its temporary images', (tester) async {
+      await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+      addTearDown(JourneyHermeticBoot.stop);
+      final frames = await renderScreenFrameFixtures();
+      var loads = 0;
+      final items = [
+        MediaViewerItem(
+            bytesLoader: () async {
+              loads++;
+              return frames.values.first;
+            },
+            showCaptionStrip: true,
+            caption: 'A synthetic meeting screenshot'),
+        MediaViewerItem(base64: base64Encode(frames.values.last)),
+      ];
+      await tester.pumpWidget(MultiProvider(
+          providers: defaultAuditProviders(),
+          child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: const [Locale('en')],
+              theme: buildOmiTheme(brightness: Brightness.dark),
+              home: MediaViewerPage(items: items))));
+      await checkNativeHost(tester, 'real-native-media-viewer-dark');
+      IosNativeSurface surface() => tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+      final image = surface().sections.single.rows.singleWhere((row) => row.kind == 'image');
+      expect(loads, 1);
+      final file = File.fromUri(Uri.parse(image.imageUri!));
+      expect(await file.exists(), true);
+      expect(image.maximumValue, 4);
+      await surface().reader!.footer.singleWhere((row) => row.id == 'media_next').action!(null);
+      await tester.pump();
+      await checkNativeHost(tester, 'real-native-media-second-page-dark');
+      expect(surface().title, 'Photos 2 / 2');
+      expect(loads, 1);
+      await surface().reader!.footer.singleWhere((row) => row.id == 'media_previous').action!(null);
+      await tester.pump();
+      expect(loads, 1, reason: 'Returning to a page retains its existing image loader');
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(await file.exists(), false);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('native MCP form validates before sending and preserves original connect owner', (tester) async {
+      final backend = await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+      addTearDown(JourneyHermeticBoot.stop);
+      await tester.pumpWidget(MultiProvider(
+          providers: defaultAuditProviders(),
+          child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: const [Locale('en')],
+              theme: buildOmiTheme(brightness: Brightness.dark),
+              home: const AddMcpServerPage())));
+      await checkNativeHost(tester, 'real-native-mcp-setup-dark');
+      NativeRow row(String id) {
+        final surface = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+        return [...surface.toolbar, ...surface.sections.expand((s) => s.rows)].singleWhere((row) => row.id == id);
+      }
+
+      await row('mcp_connect').action!(null);
+      await tester.pump();
+      expect(backend.countOf('POST', '/v1/apps/mcp'), 0);
+      expect(row('mcp_validation_error').title, isNotEmpty);
+      await row('mcp_name').action!('Fixture server');
+      await row('mcp_url').action!('invalid');
+      await tester.pump();
+      await row('mcp_connect').action!(null);
+      await tester.pump();
+      expect(backend.countOf('POST', '/v1/apps/mcp'), 0);
+      await row('mcp_url').action!('https://example.com/mcp');
+      await tester.pump();
+      backend.failNext('POST', '/v1/apps/mcp', status: 400, body: '{"detail":"Synthetic connection refusal"}');
+      await row('mcp_connect').action!(null);
+      await tester.pump();
+      expect(backend.countOf('POST', '/v1/apps/mcp'), 1);
+      expect(row('mcp_connect').enabled, true);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('native setup Markdown keeps links with their Dart owner and uses full reader', (tester) async {
+      await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+      addTearDown(JourneyHermeticBoot.stop);
+      await tester.pumpWidget(MultiProvider(
+          providers: defaultAuditProviders(),
+          child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: const [Locale('en')],
+              theme: buildOmiTheme(brightness: Brightness.dark),
+              home: const MarkdownViewer(
+                  title: 'Fixture setup',
+                  markdown:
+                      '## Connect your app\n\n1. **Open** [setup](https://example.com/setup).\n2. Keep your account.\n\n> Use the existing service owner.\n\n    {"mode":"native"}'))));
+      await checkNativeHost(tester, 'real-native-markdown-setup-dark');
+      final surface = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+      final rows = surface.sections.single.rows;
+      expect(surface.reader, isNotNull);
+      expect(rows.any((row) => row.blocks.single['kind'] == 'code'), true);
+      expect(rows.first.options, {'https://example.com/setup': 'https://example.com/setup'});
+      expect(rows.first.projection.toString(), isNot(contains('uid=')));
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+  }
+  registerNativeAdvancedHostChecks(checkNativeHost);
+  if (const bool.fromEnvironment('NATIVE_UI_DETAILS_ONLY') || const bool.fromEnvironment('NATIVE_UI_ADVANCED_ONLY')) {
+    return;
   }
 
   testWidgets('native calls host keeps dialer and active-call commands with their original owner', (tester) async {

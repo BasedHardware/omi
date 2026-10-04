@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,16 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/native_rich_text.dart';
+import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
+import 'package:omi/widgets/app_review_prompt.dart';
+import 'conversation_detail_meta.dart';
+import 'widgets.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
@@ -53,6 +64,8 @@ import 'widgets/summary_tab.dart';
 import 'widgets/share_to_contacts_sheet.dart';
 import 'widgets/summarized_apps_sheet.dart';
 import 'widgets/transcript_tab.dart';
+
+part 'native_conversation_detail.dart';
 
 /// Offset of the floating bottom bar from the bottom of the screen.
 ///
@@ -127,6 +140,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
   final GlobalKey _shareButtonKey = GlobalKey();
+  final GlobalKey _nativeShareKey = GlobalKey();
+  final Map<String, List<NativeSection>> _nativeSections = {};
+  final Map<String, String> _nativeValues = {};
+  List<NativeRow> _nativePlayback = [];
+  String _nativePlaybackValue = '';
+  int _nativeSearchRequest = 0;
   TabController? _controller;
   ConversationTab selectedTab = ConversationTab.summary;
 
@@ -144,6 +163,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   bool _didInitialSeek = false;
   bool _hasExplicitTabSelection = false;
   bool _resultViewedRecorded = false;
+
+  void _nativeRebuild(VoidCallback update) => setState(update);
 
   // Search functionality
   bool _isSearching = false;
@@ -182,18 +203,23 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     } else if (selectedTab == ConversationTab.summary) {
       final summarySelection = provider.getSummarySelection();
       if (summarySelection.content.isNotEmpty) {
-        count += countIn(summarySelection.content.decodeString.toLowerCase());
+        final content = iosSwiftUiEnabled
+            ? nativeRichText(summarySelection.content.decodeString).map(nativeRichBlockText).join('\n')
+            : summarySelection.content.decodeString;
+        count += countIn(content.toLowerCase());
       }
     }
 
     _totalSearchResults = count;
     _currentSearchIndex = count > 0 ? 1 : 0;
+    _nativeSearchRequest++;
   }
 
   void _navigateSearch(bool next) {
     if (_totalSearchResults == 0) return;
 
     setState(() {
+      _nativeSearchRequest++;
       if (next) {
         _currentSearchIndex = _currentSearchIndex >= _totalSearchResults ? 1 : _currentSearchIndex + 1;
       } else {
@@ -259,6 +285,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     // are hydrated after the first frame. Start on Summary, then select the
     // transcript only once the final summary state is known.
     _playbackController = ConversationPlaybackController()..updateSegments(widget.conversation.transcriptSegments);
+    _playbackController.addListener(_nativePlaybackChanged);
     _createTabController(initialIndex: _indexForTab(widget.initialTab ?? ConversationTab.summary));
     selectedTab = _tabForIndex(_controller!.index);
 
@@ -406,6 +433,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     focusOverviewField.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _playbackController.removeListener(_nativePlaybackChanged);
     _playbackController.dispose();
     super.dispose();
   }
@@ -576,10 +604,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         _copyContent(context, provider.conversation.id, null);
         break;
       case 'rename':
+        if (iosSwiftUiEnabled && await _renameNative(provider)) {
+          break;
+        }
         final controller = provider.titleController;
         provider.titleFocusNode?.requestFocus();
-        if (controller != null)
+        if (controller != null) {
           controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+        }
         break;
       case 'move_to_folder':
         await showConversationFolderSheet(context, provider.conversation, source: 'detail_page_menu');
@@ -688,7 +720,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         await SharePlus.instance.share(
           ShareParams(
             files: [XFile(file.path, mimeType: mimeType)],
-            sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
+            sharePositionOrigin:
+                shareSheetOrigin(_nativeShareKey.currentContext != null ? _nativeShareKey : _shareButtonKey),
           ),
         );
 
@@ -785,7 +818,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         }
         provider.updateVisibilityLocally(ConversationVisibility.shared);
       }
-      final origin = shareSheetOrigin(_shareButtonKey);
+      final origin = shareSheetOrigin(_nativeShareKey.currentContext != null ? _nativeShareKey : _shareButtonKey);
       // The sheet is up once the call is made; the button stops spinning while it is shown.
       final result = shareConversationLink(conversation, sharePositionOrigin: origin);
       await _delay(const Duration(milliseconds: 150));
@@ -1021,6 +1054,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
   void _onSearchChanged(String value) {
     setState(() {
+      if (iosSwiftUiEnabled) _isSearching = value.isNotEmpty;
       _searchQuery = value;
       _updateSearchResults();
       if (value.isNotEmpty) {
@@ -1092,157 +1126,161 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
             }
         }
       },
-      child: Scaffold(
-        key: scaffoldKey,
-        extendBody: true,
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          leading: const Center(child: OmiBackButton.circled()),
-          // No title: the tab bar below already names the active view, so a
-          // header label only crowds the row with the back button and actions.
-          // _getTabTitle still backs the `active_tab` search analytics property.
-          titleSpacing: 0,
-          actions: [_buildHeaderActions(context, detailProvider)],
-        ),
-        // Toasts float above the pinned Ask Omi bar instead of covering it.
-        body: OmiFeedbackClearance(
-          bottom: hasBar ? detailToastClearance(MediaQuery.viewPaddingOf(context).bottom) : 0,
-          child: Stack(
-            children: [
-              GestureDetector(
-                excludeFromSemantics: true,
-                behavior: HitTestBehavior.translucent,
-                // Tapping content closes an empty search. There is deliberately no horizontal
-                // gesture here: a sideways swipe moves between the tabs, never to another
-                // conversation (D2), and the iOS edge swipe always goes back.
-                onTap: _closeSearchIfEmpty,
-                child: Column(
-                  children: [
-                    // Title and facts, shared by both tabs (#17297), then the tab row (v3).
-                    ConversationDetailHeader(onOpenRecordings: _openRecordings),
-                    ConversationDetailTabs(controller: _controller!, onTap: (_) => _hasExplicitTabSelection = true),
-                    const ConversationActivityStrip(),
-                    Expanded(
-                      // Each tab owns the page's side margin, so a section can scroll edge to edge
-                      // (the Summary tab's screenshot strip) instead of clipping at the margin.
-                      child: TabBarView(
-                        controller: _controller,
-                        children: [
-                          SummaryTab(
-                            reviewEnabled: !widget.isFromOnboarding &&
-                                widget.initialSeekStart == null &&
-                                selectedTab == ConversationTab.summary &&
-                                !_controller!.indexIsChanging &&
-                                !_isSearching &&
-                                !_isSharing &&
-                                !_isDownloadingAudio &&
-                                !_reviewInterrupted,
-                            searchQuery: _searchQuery,
-                            currentResultIndex: getCurrentResultIndexForHighlighting(),
-                            onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                            child: TranscriptWidgets(
-                              searchQuery: _searchQuery,
-                              currentResultIndex: getCurrentResultIndexForHighlighting(),
-                              onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                              onSegmentTap: (segment) async {
-                                if (selectedTab != ConversationTab.transcript) {
-                                  setState(() {
-                                    selectedTab = ConversationTab.transcript;
-                                  });
-                                  _controller!.animateTo(_transcriptTabIndex);
-                                }
+      child: _nativeDetailSurface(
+          detailProvider,
+          conversation,
+          hasBar,
+          Scaffold(
+            key: scaffoldKey,
+            extendBody: true,
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
+              leading: const Center(child: OmiBackButton.circled()),
+              // No title: the tab bar below already names the active view, so a
+              // header label only crowds the row with the back button and actions.
+              // _getTabTitle still backs the `active_tab` search analytics property.
+              titleSpacing: 0,
+              actions: [_buildHeaderActions(context, detailProvider)],
+            ),
+            // Toasts float above the pinned Ask Omi bar instead of covering it.
+            body: OmiFeedbackClearance(
+              bottom: hasBar ? detailToastClearance(MediaQuery.viewPaddingOf(context).bottom) : 0,
+              child: Stack(
+                children: [
+                  GestureDetector(
+                    excludeFromSemantics: true,
+                    behavior: HitTestBehavior.translucent,
+                    // Tapping content closes an empty search. There is deliberately no horizontal
+                    // gesture here: a sideways swipe moves between the tabs, never to another
+                    // conversation (D2), and the iOS edge swipe always goes back.
+                    onTap: _closeSearchIfEmpty,
+                    child: Column(
+                      children: [
+                        // Title and facts, shared by both tabs (#17297), then the tab row (v3).
+                        ConversationDetailHeader(onOpenRecordings: _openRecordings),
+                        ConversationDetailTabs(controller: _controller!, onTap: (_) => _hasExplicitTabSelection = true),
+                        const ConversationActivityStrip(),
+                        Expanded(
+                          // Each tab owns the page's side margin, so a section can scroll edge to edge
+                          // (the Summary tab's screenshot strip) instead of clipping at the margin.
+                          child: TabBarView(
+                            controller: _controller,
+                            children: [
+                              SummaryTab(
+                                reviewEnabled: !widget.isFromOnboarding &&
+                                    widget.initialSeekStart == null &&
+                                    selectedTab == ConversationTab.summary &&
+                                    !_controller!.indexIsChanging &&
+                                    !_isSearching &&
+                                    !_isSharing &&
+                                    !_isDownloadingAudio &&
+                                    !_reviewInterrupted,
+                                searchQuery: _searchQuery,
+                                currentResultIndex: getCurrentResultIndexForHighlighting(),
+                                onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                                child: TranscriptWidgets(
+                                  searchQuery: _searchQuery,
+                                  currentResultIndex: getCurrentResultIndexForHighlighting(),
+                                  onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                                  onSegmentTap: (segment) async {
+                                    if (selectedTab != ConversationTab.transcript) {
+                                      setState(() {
+                                        selectedTab = ConversationTab.transcript;
+                                      });
+                                      _controller!.animateTo(_transcriptTabIndex);
+                                    }
 
-                                // Seek to segment start; playback keeps running past the segment end.
-                                if (_seekToSegmentCallback != null) {
-                                  await _seekToSegmentCallback!(segment.start, segment.end);
-                                }
-                              },
-                              playbackController: _playbackController,
-                            ),
+                                    // Seek to segment start; playback keeps running past the segment end.
+                                    if (_seekToSegmentCallback != null) {
+                                      await _seekToSegmentCallback!(segment.start, segment.end);
+                                    }
+                                  },
+                                  playbackController: _playbackController,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit). The page
+                  // colour fades in behind it so text never runs under the bar.
+                  if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar)
+                    _DetailBarBackdrop(barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom)),
+                  if (MediaQuery.of(context).viewInsets.bottom == 0)
+                    Positioned(
+                      // Stable key so the body Stack's collection-`if` diff matches
+                      // by identity, not by slot+type. Without it the surviving
+                      // search-overlay Positioned below was being reused into this
+                      // slot when the keyboard rose, tearing down the search
+                      // TextField subtree and dropping the IME mid-frame.
+                      key: const ValueKey('detail_floating_bottom_bar'),
+                      bottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
+                      left: 0,
+                      right: 0,
+                      child: ConversationBottomBar(
+                        onAudioInteraction: () {
+                          if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
+                        },
+                        mode: ConversationBottomBarMode.detail,
+                        onAskOmi: () => _openAskOmi(detailProvider),
+                        selectedTab: selectedTab,
+                        conversation: conversation,
+                        hasSegments: hasBar,
+                        playbackController: _playbackController,
+                        onSeekFunctionReady: (seekFunction) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() {
+                                _seekToSegmentCallback = seekFunction;
+                              });
+                              _maybePlayInitialSeek();
+                            }
+                          });
+                        },
+                        onTabSelected: (tab) {
+                          _hasExplicitTabSelection = true;
+                          final index = _indexForTab(tab);
+                          if (index < _controller!.length) _controller!.animateTo(index);
+                        },
+                        onStopPressed: () {
+                          // Empty since we don't show the stop button in detail mode
+                        },
                       ),
                     ),
-                  ],
-                ),
+
+                  // Search bar over the content
+                  if (_isSearching)
+                    Positioned(
+                      // Stable key — same reason as the floating bottom bar above.
+                      // Without it the keyboard pop-up flickered closed because
+                      // the body Stack's diff was reusing this Positioned's
+                      // element into the bar's slot and remounting the TextField.
+                      key: const ValueKey('detail_search_overlay'),
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: DetailSearchBar(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        query: _searchQuery,
+                        currentIndex: _currentSearchIndex,
+                        totalResults: _totalSearchResults,
+                        onChanged: _onSearchChanged,
+                        onPrevious: () => _navigateSearch(false),
+                        onNext: () => _navigateSearch(true),
+                        onCancel: _closeSearch,
+                      ),
+                    ),
+                ],
               ),
-
-              // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit). The page
-              // colour fades in behind it so text never runs under the bar.
-              if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar)
-                _DetailBarBackdrop(barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom)),
-              if (MediaQuery.of(context).viewInsets.bottom == 0)
-                Positioned(
-                  // Stable key so the body Stack's collection-`if` diff matches
-                  // by identity, not by slot+type. Without it the surviving
-                  // search-overlay Positioned below was being reused into this
-                  // slot when the keyboard rose, tearing down the search
-                  // TextField subtree and dropping the IME mid-frame.
-                  key: const ValueKey('detail_floating_bottom_bar'),
-                  bottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
-                  left: 0,
-                  right: 0,
-                  child: ConversationBottomBar(
-                    onAudioInteraction: () {
-                      if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
-                    },
-                    mode: ConversationBottomBarMode.detail,
-                    onAskOmi: () => _openAskOmi(detailProvider),
-                    selectedTab: selectedTab,
-                    conversation: conversation,
-                    hasSegments: hasBar,
-                    playbackController: _playbackController,
-                    onSeekFunctionReady: (seekFunction) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) {
-                          setState(() {
-                            _seekToSegmentCallback = seekFunction;
-                          });
-                          _maybePlayInitialSeek();
-                        }
-                      });
-                    },
-                    onTabSelected: (tab) {
-                      _hasExplicitTabSelection = true;
-                      final index = _indexForTab(tab);
-                      if (index < _controller!.length) _controller!.animateTo(index);
-                    },
-                    onStopPressed: () {
-                      // Empty since we don't show the stop button in detail mode
-                    },
-                  ),
-                ),
-
-              // Search bar over the content
-              if (_isSearching)
-                Positioned(
-                  // Stable key — same reason as the floating bottom bar above.
-                  // Without it the keyboard pop-up flickered closed because
-                  // the body Stack's diff was reusing this Positioned's
-                  // element into the bar's slot and remounting the TextField.
-                  key: const ValueKey('detail_search_overlay'),
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: DetailSearchBar(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    query: _searchQuery,
-                    currentIndex: _currentSearchIndex,
-                    totalResults: _totalSearchResults,
-                    onChanged: _onSearchChanged,
-                    onPrevious: () => _navigateSearch(false),
-                    onNext: () => _navigateSearch(true),
-                    onCancel: _closeSearch,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+            ),
+          )),
     );
   }
 }

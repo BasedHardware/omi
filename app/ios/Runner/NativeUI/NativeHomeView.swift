@@ -152,6 +152,9 @@ struct NativeHomeView: View {
                                 row(conversation)
                             }
                             .accessibilityIdentifier("native-conversation-\(conversation.id)")
+                        } else if state.snapshot.nativeDetail == true {
+                            Button { dispatch("open", conversation.id) } label: { row(conversation) }
+                                .accessibilityIdentifier("native-conversation-\(conversation.id)")
                         } else {
                             NavigationLink {
                                 NativeConversationView(conversation: conversation, state: state)

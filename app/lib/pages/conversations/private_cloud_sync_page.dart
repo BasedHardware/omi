@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -52,7 +54,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
     final l10n = context.l10n;
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
-        return Scaffold(
+        final classic = Scaffold(
           appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.storeAudioOnCloud)),
           body: userProvider.isLoading
               ? const OmiLoadingState()
@@ -73,6 +75,29 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                   ],
                 ),
         );
+        if (!iosSwiftUiEnabled) return classic;
+        return Scaffold(
+            body: IosNativeSurface(
+                title: l10n.storeAudioOnCloud,
+                fallback: classic,
+                loading: userProvider.isLoading,
+                toolbar: [
+              NativeRow('cloud_storage_back', l10n.back,
+                  symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+            ],
+                sections: [
+              NativeSection(
+                  'cloud_storage',
+                  [
+                    NativeRow('cloud_storage_enabled', l10n.enableCloudStorage,
+                        symbol: 'cloud',
+                        kind: 'toggle',
+                        value: userProvider.privateCloudSyncEnabled,
+                        enabled: !_isSaving,
+                        action: (value) => _togglePrivateCloudSync(value as bool))
+                  ],
+                  footer: l10n.storeAudioCloudDescription)
+            ]));
       },
     );
   }

@@ -77,6 +77,7 @@ struct NativeHomeSnapshot: Decodable, Equatable {
     }
 
     let version: Int
+    let nativeDetail: Bool?
     let revision: Int
     let appearance: String
     let locale: String
@@ -94,7 +95,7 @@ struct NativeHomeSnapshot: Decodable, Equatable {
     }
 
     func withoutContent() -> NativeHomeSnapshot {
-        NativeHomeSnapshot(version: version, revision: revision, appearance: appearance,
+        NativeHomeSnapshot(version: version, nativeDetail: nativeDetail, revision: revision, appearance: appearance,
                            locale: locale, direction: direction, loading: false, failed: false,
                            hasMore: false, localRecordingCount: 0, groups: [], copy: copy, chrome: nil)
     }

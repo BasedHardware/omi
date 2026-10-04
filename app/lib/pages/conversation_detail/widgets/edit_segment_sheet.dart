@@ -22,6 +22,8 @@ Future<void> showEditSegmentBottomSheet(
   return showOmiSheet<void>(
     context: context,
     title: speakerName,
+    nativeBuilder:
+        segment.text.characters.length <= 10000 ? (_) => EditSegmentSheet(segment: segment, onSave: onSave) : null,
     builder: (_) => EditSegmentSheet(segment: segment, onSave: onSave),
   ).whenComplete(() => onDismissed?.call());
 }

@@ -117,6 +117,7 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
             switch row.value {
             case let .text(text): return (row.id, text)
             case let .bool(flag): return (row.id, flag)
+            case let .number(number): return (row.id, number)
             case nil: return nil
             }
         }, uniquingKeysWith: { _, latest in latest })

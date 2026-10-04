@@ -1,6 +1,58 @@
 import XCTest
 
 final class PreviewUITests: XCTestCase {
+    func testPhotoSupportsDoubleTapPinchPanAndReset() {
+        let app = start(["surface", "photo"])
+        let photo = app.scrollViews["photo"]
+        XCTAssertTrue(photo.waitForExistence(timeout: 10))
+        XCTAssertEqual(photo.value as? String, "100%")
+        photo.doubleTap()
+        let zoomed = NSPredicate { _, _ in (photo.value as? String) == "200%" }
+        expectation(for: zoomed, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        photo.swipeLeft()
+        capture(app, "native-photo-zoom-pan")
+        photo.doubleTap()
+        let reset = NSPredicate { _, _ in (photo.value as? String) == "100%" }
+        expectation(for: reset, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        photo.pinch(withScale: 1.5, velocity: 1)
+        XCTAssertNotEqual(photo.value as? String, "100%")
+        photo.doubleTap()
+        expectation(for: reset, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.buttons["save"].isHittable)
+    }
+
+    func testReaderPlaybackScrubAndTranscriptContextMenu() {
+        let app = start(["surface", "reader"])
+        let slider = app.sliders["position"]
+        XCTAssertTrue(slider.waitForExistence(timeout: 10))
+        slider.adjust(toNormalizedSliderPosition: 0.5)
+        XCTAssertTrue(app.staticTexts["preview-last-action"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["preview-last-action"].label.hasPrefix("position:"))
+        app.buttons["play"].tap()
+        XCTAssertTrue(app.staticTexts["play:"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["play"].label, "Pause")
+        let line = app.buttons["segment:0"]
+        XCTAssertTrue(line.isHittable)
+        line.press(forDuration: 0.8)
+        app.buttons["Edit"].tap()
+        XCTAssertTrue(app.staticTexts["segment:0:edit"].waitForExistence(timeout: 5))
+        capture(app, "native-conversation-reader-player")
+    }
+
+    func testReaderLargeTextKeepsFooterAndBackReachable() {
+        let app = start(["surface", "reader", "large"])
+        XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["play"].isHittable)
+        XCTAssertTrue(app.buttons["ask"].isHittable)
+        XCTAssertTrue(app.buttons["back"].isHittable)
+        app.buttons["ask"].tap()
+        XCTAssertTrue(app.staticTexts["ask:"].waitForExistence(timeout: 5))
+        capture(app, "native-conversation-reader-large-text")
+    }
+
     func testDialerHoldPlusAndClearDoNotAlsoTap() {
         let app = start(["surface", "keypad"])
         let zero = app.buttons["keypad_key_0"]

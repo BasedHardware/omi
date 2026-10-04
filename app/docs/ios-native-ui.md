@@ -17,13 +17,13 @@ same layout. Flutter no longer puts a small native list below its own Home heade
 
 | Area | Native presentation | Existing feature surfaces retained |
 |---|---|---|
-| Home and library | Home, dated lists, local recording entry points, gaps, processing, paging, recap browsing, summary/transcript reader and guarded transcript-text editor | Recording playback, detailed summary/speaker/photo edits and bulk selection |
+| Home and library | Home, dated lists, local recording entry points, gaps, processing, paging, recap browsing, full rich summary/transcript detail, playback/timeline following, guarded title/summary/transcript/speaker editors, calendar/recording sheets and lazy photo zoom/paging/share | Specialized feedback/review sheets and bulk selection |
 | Search and People | Recent searches, folders, starred items, scoped results, People search/filters/pinning/confidence/voice samples/cleanup, create/edit/move/delete folder sheets | Advanced search result selection |
-| Tasks and Memories | Lists, search, completion, menus, create/edit forms with explicit Save and discard guard; memory categories, belief collection, device filter and bulk management | List selection, hierarchy/reorder and Mind Map |
-| Apps | Catalog, app detail, setup-step entry points, declared permission disclosures, enable/disable/subscribe actions and guarded review editor | Full screenshot viewer, Markdown instructions, app-owner editing and specialized filters |
-| Settings | Navigation, profile, display/notifications, language, privacy, permissions, recording groups, device settings, plan selection/management, integrations, Apple Health, vocabulary, JSON transcription editor and task service configuration (Asana/ClickUp/Todoist/Google Tasks) | Existing checkout/OAuth owners, custom transcription/developer tools, Shortcuts setup and device-specific controls |
+| Tasks and Memories | Lists, dated Tasks, search, completion, menus, create/edit forms with explicit Save and discard guard; memory categories, belief collection, device filter and bulk management | List selection, hierarchy/reorder and Mind Map |
+| Apps | Catalog, app detail, owner add/edit/confirmation, gallery, Markdown/MCP setup, filters, declared permission disclosures, enable/disable/subscribe actions and guarded review editor | Secure API-key creation/reveal, AI generator and specialized payout screens |
+| Settings | Navigation, profile, display/notifications, language, privacy, permissions, recording groups, device settings, plan selection/management, integrations, Apple Health, vocabulary, JSON transcription editor, developer/webhook forms, export progress/cancel, fair-use status, phone/cloud storage settings and task service configuration (Asana/ClickUp/Todoist/Google Tasks) | Existing checkout/OAuth owners, custom transcription/secure developer credentials, detailed usage/import/wrapped, Shortcuts setup and device-specific controls |
 | Diagnostics | Connection summaries, live signal and battery charts, day/week choice, disconnect history, export | Same Bluetooth polling and export owners |
-| Chat | Transcript/composer, send/retry, follow-up, scoped context, voice waveform/Stop/Send/Retry/Discard, attachment picker/removal/previews and app picker | Structured interactive message inspector and full attachment viewers |
+| Chat | Transcript/composer, send/retry, follow-up, scoped context, voice waveform/Stop/Send/Retry/Discard, attachment picker/removal/previews and app picker | Structured interactive message inspector and non-image attachment viewers |
 | First run | Sign-in actions, consent, name, primary language, acquisition survey, permission rows, guided voice prompts/waveform/review/edit/save receipts, step navigation and completion | Device discovery, interactive pendant setup and knowledge graph |
 | Calls | Setup disclosure, country/phone entry, verification status/retry, caller-ID management, contacts/search/permissions, dialer/DTMF, active-call transcript/controls and audio output | Physical call/audio-route verification |
 | Confirmations | System alerts, action menus, guarded native input/opt-out sheets | Specialized dialog widgets that have not yet adopted the shared presentation API |
@@ -79,6 +79,19 @@ containment. Both Runner targets compile the same renderer.
   holds exclude their tap actions. Raw call transcript text remains literal, including translations.
   Guided voice actions project the existing action group; microphone, transcription, voice
   enrollment, memory/goal persistence and capture restoration stay with the existing controller.
+- Conversation detail mounts the current audio and transcript owners once, offstage with their animations disabled.
+  SwiftUI projects their wall-time waveform, missing spans, scrub position, search matches and reader follow state;
+  Play/seek/edit commands return to those owners. No second audio player or transcript cache is created.
+  Rich summaries preserve headings, lists, task states, quotes, code, links and tables. Transcript text stays literal.
+  Links go through a whitelisted callback to the existing Dart URL owner; setup links add account context only there.
+  Speaker, title, summary, transcript, calendar and recording actions retain their original save and permission handlers.
+- Photo pages lazily load through the existing authenticated loader and cache. Only the current image crosses as a
+  temporary sandbox file. Native UIScrollView owns pinch/pan/double-tap zoom; the existing share owner retains its
+  file handoff. Session changes and disposal delete temporary presentation images, including late loader completions.
+- App-owner metadata/prompts/pricing keep the mounted original forms and validators. Native edits update their existing
+  controllers; submit/update occurs only after explicit confirmation. Secure key creation/reveal stays with its existing
+  credential owner. Export cancellation completes the original abort signal and cleanup; developer URL edits keep the
+  original explicit Save/discard semantics, while existing switches retain immediate persistence.
 - Copy, dates and speaker names come from the current localization and formatting primitives.
   System/Dark/Light follows `AppearanceProvider`; native code does not store a second choice.
   The embedded UIKit host applies that choice to its traits too, including live changes and
@@ -129,3 +142,8 @@ Run the full hermetic Flutter suite, analyzer ratchet, SwiftLint, `mobile-verify
 `make preflight` before pushing. Personal phone installs use a signed `Release-prod` AOT build
 over the existing identity, preserving data; never uninstall the release app. Verify production
 configuration and compare sanitized account, theme, onboarding and pairing state after launch.
+
+For a focused advanced-host rerun, add `--dart-define=NATIVE_UI_ADVANCED_ONLY=true`.
+`integration_test/native_ui_inspection.dart` is a separate local-dev Debug Simulator entry for
+agent-flutter/native accessibility inspection with synthetic Markdown, MCP and image routes.
+It never boots a real account or BLE device and refuses non-Debug/non-local-dev builds.

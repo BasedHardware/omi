@@ -81,6 +81,29 @@ struct NativeSurfaceTests {
         navigation["value"] = "arbitrary mutation"
         settings["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [navigation]]]
         rejects(settings)
+        var playback = input
+        let line: [String: Any] = ["id": "segment:1", "title": "Words", "kind": "transcript", "subtitle": "Speaker 1", "options": [], "enabled": true, "destructive": false]
+        var slider: [String: Any] = ["id": "position", "title": "Audio", "kind": "slider", "subtitle": "", "value": 25.5, "maximumValue": 100, "options": [], "enabled": true, "destructive": false]
+        playback["sections"] = [["id": "transcript", "title": "", "footer": "", "rows": [line]]]
+        playback["reader"] = ["currentId": "segment:1", "targetId": "segment:1", "request": 1, "following": true, "footer": [slider]]
+        let reader = try NativeSurfaceSnapshot.decode(playback)
+        precondition(reader.reader?.footer.first?.value?.number == 25.5)
+        precondition(reader.replacingValue(id: "position", value: .number(40)).reader?.footer.first?.value?.number == 40)
+        precondition(reader.withoutContent().reader == nil)
+        for value in [-1.0, 101.0] {
+            slider["value"] = value
+            playback["reader"] = ["request": 0, "following": false, "footer": [slider]]
+            rejects(playback)
+        }
+        playback["reader"] = ["targetId": "foreign", "request": 0, "following": false, "footer": []]
+        rejects(playback)
+        var date = row; date["kind"] = "date"; date["value"] = true
+        playback.removeValue(forKey: "reader")
+        playback["sections"] = [["id": "date", "title": "", "footer": "", "rows": [date]]]
+        rejects(playback)
+        date["value"] = 10
+        playback["sections"] = [["id": "date", "title": "", "footer": "", "rows": [date]]]
+        rejects(playback)
         let cleared = snapshot.withoutContent()
         precondition(cleared.sections.isEmpty && cleared.toolbar.isEmpty && cleared.searchValue.isEmpty && cleared.title.isEmpty)
         var invalid = row

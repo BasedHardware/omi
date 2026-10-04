@@ -8,6 +8,8 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'widgets/app_form_fields.dart';
@@ -25,6 +27,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
   final _descriptionController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  String? _validationError;
   bool _isLoading = false;
   bool _isPolling = false;
   String? _appId;
@@ -39,8 +42,21 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
     super.dispose();
   }
 
+  String? _validateName(String? value) => value == null || value.trim().isEmpty ? context.l10n.appName : null;
+  String? _validateUrl(String? value) {
+    if (value == null || value.trim().isEmpty) return context.l10n.mcpServerUrl;
+    final uri = Uri.tryParse(value.trim());
+    return uri == null || !uri.hasScheme || !uri.host.contains('.') ? context.l10n.mcpServerUrl : null;
+  }
+
   Future<void> _connect() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_isLoading || _isPolling) return;
+    final error = _validateName(_nameController.text) ?? _validateUrl(_urlController.text);
+    final valid = _formKey.currentState?.validate() ?? error == null;
+    if (!valid) {
+      setState(() => _validationError = error);
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -100,7 +116,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
   }
 
   void _startPollingForCompletion() {
-    if (_appId == null) return;
+    if (!mounted || _appId == null) return;
     setState(() => _isPolling = true);
 
     int attempts = 0;
@@ -156,7 +172,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
+    final classic = Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         backgroundColor: OmiColors.surface0,
@@ -176,12 +192,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
                 controller: _nameController,
                 decoration: appFormInputDecoration(label: l10n.appName, hint: 'e.g. Mixpanel Analytics'),
                 style: TextStyle(color: OmiColors.textPrimary),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return l10n.appName;
-                  }
-                  return null;
-                },
+                validator: _validateName,
               ),
               const SizedBox(height: OmiSpacing.md),
               TextFormField(
@@ -198,16 +209,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
                 style: TextStyle(color: OmiColors.textPrimary),
                 keyboardType: TextInputType.url,
                 autocorrect: false,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return l10n.mcpServerUrl;
-                  }
-                  final uri = Uri.tryParse(value.trim());
-                  if (uri == null || !uri.hasScheme || !uri.host.contains('.')) {
-                    return l10n.mcpServerUrl;
-                  }
-                  return null;
-                },
+                validator: _validateUrl,
               ),
               const SizedBox(height: OmiSpacing.xxl),
               if (_isPolling) ...[
@@ -232,5 +234,41 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
         ),
       ),
     );
+    if (!iosSwiftUiEnabled) return classic;
+    return Scaffold(
+        body: IosNativeSurface(title: l10n.addMcpServer, fallback: classic, toolbar: [
+      NativeRow('mcp_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+      NativeRow('mcp_connect', l10n.connect,
+          symbol: 'link', enabled: !_isLoading && !_isPolling, action: (_) => _connect())
+    ], sections: [
+      NativeSection('mcp_server', [
+        NativeRow('mcp_description', l10n.connectExternalAiTools, kind: 'label'),
+        NativeRow('mcp_name', l10n.appName,
+            kind: 'text',
+            value: _nameController.text,
+            enabled: !_isLoading && !_isPolling,
+            action: (value) => setState(() {
+                  _nameController.text = value as String;
+                  _validationError = null;
+                })),
+        NativeRow('mcp_optional_description', l10n.descriptionOptional,
+            kind: 'text',
+            value: _descriptionController.text,
+            enabled: !_isLoading && !_isPolling,
+            action: (value) => setState(() => _descriptionController.text = value as String)),
+        NativeRow('mcp_url', l10n.mcpServerUrl,
+            kind: 'text',
+            keyboard: 'url',
+            value: _urlController.text,
+            enabled: !_isLoading && !_isPolling,
+            action: (value) => setState(() {
+                  _urlController.text = value as String;
+                  _validationError = null;
+                })),
+        if (_validationError != null) NativeRow('mcp_validation_error', _validationError!, kind: 'label'),
+        if (_isPolling) NativeRow('mcp_authorizing', l10n.authorizingMcpServer, kind: 'label'),
+        if (_isLoading) NativeRow('mcp_loading', l10n.loading, kind: 'label'),
+      ])
+    ]));
   }
 }

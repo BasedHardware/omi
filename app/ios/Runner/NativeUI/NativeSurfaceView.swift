@@ -48,7 +48,7 @@ final class NativeSurfaceState: ObservableObject {
         guard valid else { return }
         let isKeypad = snapshot.allRows.contains { $0.id == id && $0.kind == "keypad" }
         let isEdit = snapshot.allRows.contains {
-            $0.id == id && ["text", "toggle", "choice", "segmented", "color", "date"].contains($0.kind)
+            $0.id == id && ["text", "toggle", "choice", "segmented", "color", "date", "slider"].contains($0.kind)
         } || isKeypad
         if let text = value as? String, snapshot.allRows.contains(where: { $0.id == id && $0.kind == "text" }) {
             latestEdits[id] = text
@@ -114,6 +114,10 @@ struct NativeSurfaceView: View {
     @State private var search = ""
     @State private var followingChat = true
     @State private var visibleMessages: Set<String> = []
+    @State private var readerFrames: [String: CGRect] = [:]
+    @State private var readerDragging = false
+    @State private var readerUserScroll = false
+    @State private var readerTopId: String?
 
     var body: some View {
         NavigationStack {
@@ -148,7 +152,12 @@ struct NativeSurfaceView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let chat = state.snapshot.chat {
+        if let reader = state.snapshot.reader {
+            if state.snapshot.searchEnabled {
+                readerView(reader).searchable(text: $search, prompt: state.snapshot.searchPlaceholder)
+                    .onChange(of: search) { value in Task { await state.send("_search", value: value) } }
+            } else { readerView(reader) }
+        } else if let chat = state.snapshot.chat {
             chatView(chat)
         } else if state.snapshot.searchEnabled {
             list.searchable(text: $search, prompt: state.snapshot.searchPlaceholder)
@@ -229,6 +238,19 @@ struct NativeSurfaceView: View {
                             }
                         }
                     }
+            case "transcript":
+                Button { Task { await state.send(row.id) } } label: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(row.subtitle).font(.caption).foregroundStyle(.secondary)
+                        Text(nativeHighlighted(AttributedString(row.title), query: state.snapshot.searchValue))
+                            .foregroundStyle(.primary)
+                    }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }.buttonStyle(.plain).contextMenu {
+                    ForEach(row.options) { option in
+                        Button(option.title) { Task { await state.send(row.id, value: option.id) } }
+                    }
+                }
             case "task":
                 HStack(spacing: 12) {
                     Button { Task { await state.send(row.id, value: !(row.value?.bool ?? false)) } } label: {
@@ -304,8 +326,20 @@ struct NativeSurfaceView: View {
                 }.frame(height: 36).chartYScale(domain: -1...1)
                     .chartXAxis(.hidden).chartYAxis(.hidden)
                     .accessibilityLabel(row.title)
+            case "slider":
+                NativePlaybackSlider(row: row, state: state)
+            case "progress":
+                VStack(alignment: .leading, spacing: 8) {
+                    label(row)
+                    ProgressView(value: row.value?.number ?? 0, total: row.maximumValue ?? 100)
+                }.accessibilityElement(children: .ignore)
+                    .accessibilityLabel(row.title).accessibilityValue(row.subtitle)
             case "message_user", "message_ai":
                 message(row)
+            case "rich_text":
+                NativeRichTextView(row: row, state: state, query: state.snapshot.reader == nil ? "" : state.snapshot.searchValue)
+            case "image":
+                NativeZoomImage(row: row)
             case "text":
                 NativeTextRow(row: row, state: state)
             case "keypad":
@@ -314,8 +348,110 @@ struct NativeSurfaceView: View {
             default: action(row, compact: compact)
             }
         }
-        .disabled(!row.enabled && !["label", "chart", "waveform", "message_ai", "message_user"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad"].contains(row.kind)))
+        .disabled(!row.enabled && !["label", "rich_text", "image", "progress", "chart", "waveform", "message_ai", "message_user"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad", "slider"].contains(row.kind)))
         .accessibilityIdentifier(row.id)
+    }
+
+    private func readerView(_ projection: NativeSurfaceSnapshot.Reader) -> some View {
+        ScrollViewReader { proxy in
+            GeometryReader { viewport in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        if state.snapshot.loading { ProgressView(state.snapshot.loadingLabel) }
+                        if state.snapshot.failed || state.actionFailed {
+                            Text(state.snapshot.error)
+                            if state.snapshot.refreshEnabled {
+                                Button(state.snapshot.retry) { Task { await state.send("_refresh") } }
+                            }
+                        }
+                        ForEach(state.snapshot.sections) { section in
+                            if !section.title.isEmpty { Text(section.title).font(.headline) }
+                            ForEach(section.rows) { row in
+                                rowView(row)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, row.kind == "rich_text" ? 4 : 8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(row.id == projection.currentId ? Color.primary.opacity(0.08) : .clear,
+                                                in: RoundedRectangle(cornerRadius: 12))
+                                    .id(row.id)
+                                    .background(GeometryReader { geometry in
+                                        Color.clear.preference(key: NativeChatMessageFramesPreference.self,
+                                            value: [row.id: geometry.frame(in: .named("native-reader-scroll"))])
+                                    })
+                            }
+                            if !section.footer.isEmpty { Text(section.footer).font(.footnote).foregroundStyle(.secondary) }
+                        }
+                    }.padding(.horizontal, 16).padding(.vertical, 12)
+                }
+                .coordinateSpace(name: "native-reader-scroll")
+                .refreshable { if state.snapshot.refreshEnabled { await state.send("_refresh") } }
+                .onPreferenceChange(NativeChatMessageFramesPreference.self) { frames in
+                    readerFrames = frames
+                    let visible = Set(frames.filter { $0.value.maxY > 0 && $0.value.minY < viewport.size.height }.keys)
+                    let appeared = visible.subtracting(visibleMessages)
+                    let disappeared = visibleMessages.subtracting(visible)
+                    visibleMessages = visible
+                    for id in appeared where state.snapshot.sections.flatMap(\.rows).contains(where: { $0.id == id && $0.visibilityEnabled == true }) {
+                        Task { await state.send("_visible:\(id)") }
+                    }
+                    for id in disappeared where state.snapshot.sections.flatMap(\.rows).contains(where: { $0.id == id && $0.visibilityHiddenEnabled == true }) {
+                        Task { await state.send("_hidden:\(id)") }
+                    }
+                    reportReaderScroll(projection, height: viewport.size.height)
+                }
+                .simultaneousGesture(DragGesture(minimumDistance: 8)
+                    .onChanged { gesture in
+                        guard abs(gesture.translation.height) > abs(gesture.translation.width) else { return }
+                        if !readerDragging {
+                            readerDragging = true
+                            readerUserScroll = true
+                            if let scroll = projection.scroll { Task { await state.send(scroll.id, value: "suspend") } }
+                        }
+                    }.onEnded { _ in
+                        readerDragging = false
+                        reportReaderScroll(projection, height: viewport.size.height)
+                    })
+                .onChange(of: projection.targetId) { _ in followReader(projection, proxy: proxy) }
+                .onChange(of: projection.request) { _ in followReader(projection, proxy: proxy) }
+                .onAppear { followReader(projection, proxy: proxy) }
+                .safeAreaInset(edge: .bottom) {
+                    NativeGlassControls {
+                        VStack(spacing: 8) {
+                            ForEach(projection.footer.filter { $0.kind == "slider" || $0.kind == "label" }) { row in
+                                rowView(row)
+                            }
+                            ViewThatFits(in: .horizontal) {
+                                HStack { readerButtons(projection.footer) }
+                                VStack { readerButtons(projection.footer) }
+                            }
+                        }.padding(12)
+                    }.background(Color(uiColor: .systemBackground))
+                }
+            }
+        }
+    }
+
+    private func followReader(_ reader: NativeSurfaceSnapshot.Reader, proxy: ScrollViewProxy) {
+        guard reader.following, !readerDragging, let target = reader.targetId else { return }
+        readerUserScroll = false
+        readerTopId = nil
+        proxy.scrollTo(target, anchor: .center)
+    }
+
+    private func reportReaderScroll(_ reader: NativeSurfaceSnapshot.Reader, height: CGFloat) {
+        guard readerUserScroll, let scroll = reader.scroll else { return }
+        let target = readerFrames.filter { entry in
+            entry.value.maxY > 0 && entry.value.minY < height && scroll.options.contains { $0.id == entry.key }
+        }.sorted { $0.value.minY < $1.value.minY }.first?.key
+        guard let target, target != readerTopId else { return }
+        readerTopId = target
+        Task { await state.send(scroll.id, value: target) }
+    }
+
+    @ViewBuilder private func readerButtons(_ rows: [NativeSurfaceRow]) -> some View {
+        ForEach(rows.filter { !["slider", "label"].contains($0.kind) }) { row in
+            rowView(row, compact: true).modifier(NativeGlassButtonStyle())
+        }
     }
 
     private func chatView(_ chat: NativeSurfaceSnapshot.Chat) -> some View {
