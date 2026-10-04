@@ -3833,6 +3833,7 @@
     "playbackAudioUnavailable": "Audio indisponibil",
     "playbackAudioLoadFailed": "Audio nu a putut fi încărcat",
     "playbackAudioNetworkFailed": "Verificați conexiunea",
+    "capturePendantDisconnectedShort": "Omi se va reconecta singur",
     "forYou": "Pentru tine",
     "stopThese": "Oprește acestea",
     "dismiss": "Ascunde",

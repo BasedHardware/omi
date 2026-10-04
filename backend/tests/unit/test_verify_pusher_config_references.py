@@ -182,6 +182,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
         "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
+        "CAPTURE_EVIDENCE_V1_DARK_WRITE": "true",
         "MENTOR_GATE_DEBOUNCE_ENABLED": "true",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
         "CONVERSATION_NOTES_V2_ENABLED": "true",

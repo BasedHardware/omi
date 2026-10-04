@@ -16,6 +16,7 @@ environment_shared:
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
         SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
@@ -335,6 +336,7 @@ environment_shared:
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
@@ -507,10 +509,15 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
@@ -675,10 +682,15 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-sync
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
@@ -826,10 +838,15 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-sync-backfill
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
@@ -962,10 +979,15 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-integration
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
@@ -1068,6 +1090,10 @@ environment_shared:
             secret: PINECONE_API_KEY
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: notifications-job
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9
@@ -1107,6 +1133,8 @@ environment_shared:
           --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           --task-timeout: 3600s
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
           BUCKET_FRAME_REQUESTS:
             env_var: BUCKET_FRAME_REQUESTS
             default: '{env}-omi-frame-requests'
@@ -1171,6 +1199,10 @@ environment_shared:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: frame-request-retention-job
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -1202,6 +1234,10 @@ environment_shared:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: daily-memory-sweep-job
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -1253,6 +1289,10 @@ environment_shared:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: knowledge-ledger-drain-job
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -1282,6 +1322,10 @@ environment_shared:
             secret: LIFECYCLE_EMAIL_SIGNING_SECRET
             version: latest
         env:
+          FIRESTORE_READ_LEDGER:
+            value: '1'
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: day3-reengagement-email-job
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity

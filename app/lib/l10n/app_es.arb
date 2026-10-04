@@ -3833,6 +3833,7 @@
     "playbackAudioUnavailable": "Audio no disponible",
     "playbackAudioLoadFailed": "No se pudo cargar el audio",
     "playbackAudioNetworkFailed": "Comprueba la conexión",
+    "capturePendantDisconnectedShort": "Omi se volverá a conectar solo",
     "forYou": "Para ti",
     "stopThese": "Dejar de recibir esto",
     "dismiss": "Descartar",
