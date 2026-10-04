@@ -783,6 +783,9 @@ class LiveLegSocket(STTSocket):
                 self.gate.mode = 'off'
                 self.gate = None
                 self.session.vad_mode = 'off'
+        observe = getattr(self.raw, 'observe_vad', None)
+        if callable(observe) and output is not None and self.gate is not None and not self._replaying:
+            observe(output, self.gate.mode)
         audio = data if output is None or self.passthrough else output.audio_to_send
         if output is not None and output.is_speech and self._first_speech_at is None:
             self._first_speech_at = time.monotonic()
@@ -831,6 +834,7 @@ class LiveLegSocket(STTSocket):
             self._dead = True
             self._finish_transport()
             return False
+        self._idle_send_spans = sent_spans
         if sent_spans and self._send_tracker is not None:
             self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
@@ -901,6 +905,25 @@ class LiveLegSocket(STTSocket):
         finally:
             self._replaying = False
             self._replay_passthrough = False
+
+    async def complete_send(self) -> bool:
+        complete = getattr(self.raw, 'complete_send', None)
+        return await complete() if callable(complete) else not self.is_connection_dead
+
+    def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        accepted = self.raw.send(data)
+        if accepted and self._send_tracker is not None and spans:
+            self._send_tracker.note_accepted_spans(spans)
+            self._note_replay_capture(data, spans[0][0])
+        return accepted
+
+    def take_unsent_packet(self) -> Any:
+        data = self.take_unsent_audio()
+        return (data, getattr(self, '_idle_send_spans', ())) if data else None
+
+    def take_unsent_audio(self) -> bytes:
+        take = getattr(self.raw, 'take_unsent_audio', None)
+        return take() if callable(take) else b''
 
     def finalize(self) -> None:
         self.raw.finalize()

@@ -1,0 +1,198 @@
+"""Planned Soniox transport suspension without ending the logical provider leg.
+
+VAD's admitted onset (including its original PCM pre-roll) is held until the
+old receive loop has flushed, then the identical connector opens a new socket.
+Only provider audio time is rebased; the existing send ledger / WallTimeMapper
+still owns capture and wall placement. No recovery episode is opened for idle.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from typing import Any, Awaitable, Callable
+
+from utils.async_tasks import create_named_task
+from utils.stt.socket import STTSocket
+from utils.stt.replay_delivery import abort_replay_socket
+from utils.stt.live_metrics import soniox_idle_metrics
+
+IDLE_DRAIN_SECONDS = 2.0
+
+
+class IdleSonioxSocket(STTSocket):
+    def __init__(
+        self, transport: Any, connect: Callable[..., Awaitable[Any]], callback: Any, rate: int, seconds: float
+    ):
+        self._transport = transport
+        self._connect = connect
+        self._callback = callback
+        self._rate = rate
+        self._seconds = seconds
+        self.recovery_enabled = transport.recovery_enabled
+        self._finishing = False
+        self._closed = False
+        self._dead = False
+        self._reason: str | None = None
+        self._silent_since: float | None = None
+        self._idle_since: float | None = None
+        self._idle_closed_at: float | None = None
+        self._close_task: asyncio.Task[Any] | None = None
+        self._pending = bytearray()
+        self._admitted_samples = 0
+        self._metrics = soniox_idle_metrics()
+        self._writer_pacing: tuple[Any, ...] | None = None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._transport, name)
+
+    @property
+    def is_connection_dead(self) -> bool:
+        return self._dead or (self._idle_since is None and self._transport.is_connection_dead)
+
+    @property
+    def death_reason(self) -> str | None:
+        return self._reason or (self._transport.death_reason if self._idle_since is None else None)
+
+    @property
+    def typed_death_reason(self) -> str | None:
+        return self._reason or (self._transport.typed_death_reason if self._idle_since is None else None)
+
+    def observe_vad(self, output: Any, mode: str) -> None:
+        if mode != 'active' or self._finishing or self.is_connection_dead:
+            return
+        now = time.monotonic()
+        if output.is_speech:
+            self._silent_since = None
+        elif self._silent_since is None:
+            self._silent_since = now
+        elif not output.audio_to_send and self._idle_since is None and now - self._silent_since >= self._seconds:
+            # Fence death publication before any await. The logical leg stays
+            # alive while the paid transport finishes its last committed text.
+            self._transport._planned_close = True
+            self._idle_since = now
+            self._close_task = create_named_task(self._close_idle(), name='soniox_idle_close')
+
+    async def _close_idle(self) -> None:
+        transport = self._transport
+        transport.finalize()
+        task = create_named_task(transport.drain_and_close(), name='soniox_idle_drain')
+        try:
+            done, _ = await asyncio.wait({task}, timeout=IDLE_DRAIN_SECONDS)
+            if not done:
+                task.cancel()
+                await abort_replay_socket(transport, timeout=0.5)
+                await asyncio.gather(task, return_exceptions=True)
+        finally:
+            if not task.done():
+                task.cancel()
+                await abort_replay_socket(transport, timeout=0.5)
+            # Avoided time starts only after the transport is actually closed.
+            self._idle_closed_at = time.monotonic()
+            self._metrics.closes.inc()
+
+    def send(self, data: bytes) -> bool:
+        if self._finishing or self.is_connection_dead:
+            return False
+        if self._idle_since is not None:
+            # The serving send boundary awaits complete_send before accepting
+            # this frame. Retain at most ten seconds, including VAD pre-roll.
+            if len(self._pending) + len(data) > self._rate * 2 * 10:
+                self._dead, self._reason = True, 'capacity_full'
+                return False
+            self._pending.extend(data)
+            return True
+        accepted = self._transport.send(data)
+        if accepted:
+            self._admitted_samples += len(data) // 2
+        return accepted
+
+    async def complete_send(self) -> bool:
+        if not self._pending:
+            return not self.is_connection_dead
+        started = time.monotonic()
+        if self._close_task is not None:
+            await self._close_task
+            self._close_task = None
+        if self._finishing:
+            return False
+        self._account_avoided()
+        offset = self._admitted_samples / self._rate
+
+        def callback(segments: list[dict[str, Any]]) -> None:
+            for segment in segments:
+                segment['start'] += offset
+                segment['end'] += offset
+                ranges = segment.get('_provider_word_ranges')
+                if ranges:
+                    segment['_provider_word_ranges'] = [(a + offset, b + offset) for a, b in ranges]
+            self._callback(segments)
+
+        self._metrics.reopens.inc()
+        try:
+            self._transport = await self._connect(callback)
+            if self._writer_pacing is not None:
+                self._transport.enable_writer_pacing(*self._writer_pacing)
+            if self._transport.is_connection_dead:
+                raise RuntimeError('Soniox rejected reopened transport')
+            if self._finishing:
+                await abort_replay_socket(self._transport)
+                return False
+            self._idle_since = None
+            self._idle_closed_at = None
+            data = bytes(self._pending)
+            self._pending.clear()
+            accepted = self.send(data)
+            if not accepted:
+                self._pending.extend(data)
+            return accepted
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            self._metrics.failures.inc()
+            self._dead = True
+            self._reason = getattr(error, 'reason', 'connection_lost')
+            return False
+        finally:
+            self._metrics.latency.observe(time.monotonic() - started)
+
+    def take_unsent_audio(self) -> bytes:
+        data = bytes(self._pending)
+        self._pending.clear()
+        return data
+
+    def _account_avoided(self) -> None:
+        if self._idle_closed_at is not None:
+            self._metrics.avoided.inc(max(0.0, time.monotonic() - self._idle_closed_at))
+            self._idle_closed_at = time.monotonic()
+
+    def enable_writer_pacing(self, *args: Any) -> None:
+        self._writer_pacing = args
+        self._transport.enable_writer_pacing(*args)
+
+    async def wait_send_capacity(self, **kwargs: Any) -> bool:
+        if self._idle_since is not None:
+            return not self._dead
+        return await self._transport.wait_send_capacity(**kwargs)
+
+    def finalize(self) -> None:
+        if self._idle_since is None:
+            self._transport.finalize()
+
+    def finish(self) -> None:
+        if self._finishing:
+            return
+        self._finishing = True
+        self._account_avoided()
+        if self._idle_since is None:
+            self._transport.finish()
+
+    async def drain_and_close(self) -> None:
+        self.finish()
+        if self._close_task is not None:
+            await self._close_task
+            self._close_task = None
+        elif self._idle_since is None:
+            await self._transport.drain_and_close()
+        self._account_avoided()
+        self._closed = True

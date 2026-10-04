@@ -1,6 +1,7 @@
 """Bounded live-chain and windowed TDT metrics, collected by the listen scrape."""
 
 from prometheus_client import Counter, Gauge, Histogram
+from typing import NamedTuple
 
 from config.live_stt_recovery import recovery_enabled
 
@@ -246,3 +247,32 @@ if recovery_enabled():
         LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider)
         for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):
             CONNECT_BACKOFF.labels(provider=_provider, event=_event)
+
+
+class SonioxIdleMetrics(NamedTuple):
+    closes: Counter
+    reopens: Counter
+    latency: Histogram
+    failures: Counter
+    avoided: Counter
+
+
+_soniox_idle_metrics: SonioxIdleMetrics | None = None
+
+
+def soniox_idle_metrics() -> SonioxIdleMetrics:
+    """Register only when an enabled Soniox socket is constructed; no off series."""
+    global _soniox_idle_metrics
+    if _soniox_idle_metrics is None:
+        _soniox_idle_metrics = SonioxIdleMetrics(
+            Counter('omi_soniox_idle_closes_total', 'Planned paid transport closes'),
+            Counter('omi_soniox_idle_reopens_total', 'Speech-triggered paid transport dials'),
+            Histogram(
+                'omi_soniox_idle_reopen_seconds',
+                'Onset to replacement audio admission',
+                buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+            ),
+            Counter('omi_soniox_idle_reopen_failures_total', 'Failed speech-triggered transport dials'),
+            Counter('omi_soniox_idle_connected_seconds_avoided_total', 'Estimated wall seconds with transport closed'),
+        )
+    return _soniox_idle_metrics

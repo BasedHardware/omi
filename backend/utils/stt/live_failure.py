@@ -619,10 +619,18 @@ async def send_live_stt_audio(
         await _recoverable_failure(live_stt_terminal_reason(stt_socket, 'connection_lost'))
         return False
 
+    receiver = getattr(attempt_failover, '__self__', None)
+    retry = getattr(receiver, '_idle_onset_retry', None)
     try:
-        accepted = (
-            stt_socket.send(audio, start_sample=start_sample) if start_sample is not None else stt_socket.send(audio)
-        )
+        if retry is not None:
+            admitted = getattr(stt_socket, 'send_admitted_audio', None)
+            accepted = admitted(*retry) if callable(admitted) else stt_socket.send(retry[0])
+        else:
+            accepted = (
+                stt_socket.send(audio, start_sample=start_sample)
+                if start_sample is not None
+                else stt_socket.send(audio)
+            )
     except TypeError:
         # A socket that predates the capture-position seam: send without it.
         try:
@@ -638,12 +646,24 @@ async def send_live_stt_audio(
         await _recoverable_failure('send_failed')
         return False
 
+    complete = getattr(stt_socket, 'complete_send', None)
+    if callable(complete) and not await complete():
+        take = getattr(stt_socket, 'take_unsent_packet', None)
+        if receiver is not None and callable(take):
+            packet = take()
+            if packet is not None:
+                receiver._idle_onset_retry = packet
+        await _recoverable_failure(live_stt_terminal_reason(stt_socket, 'connection_lost'))
+        return False
+
     # Safe socket wrappers report send failures through the death latch instead
     # of raising so every provider must be checked after the send as well.
     if live_stt_socket_is_dead(stt_socket):
         await _recoverable_failure('send_failed')
         return False
 
+    if receiver is not None and retry is not None:
+        receiver._idle_onset_retry = None
     return True
 
 

@@ -2911,3 +2911,35 @@ Neither field contains transcript content. Do not retry unreadable blobs as
 provider outages. The existing `omi-journey-capture-fail` alert
 uses the durable terminal projection; inspect the current alert manifest for
 its 30-minute denominator and dwell rather than adding a raw-count page.
+
+### Soniox idle transport canary
+
+`SONIOX_IDLE_CLOSE_SECONDS` is default-off (unset, zero, invalid or negative
+values preserve the existing adapter and keepalive wire behavior). Suggested
+first canary value: `45`. Only active VAD on a Soniox leg participates; shadow,
+VAD-off, Modulate and Deepgram continue their existing paths.
+
+The first raw VAD silence decision starts a monotonic timer. After the threshold
+and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
+queue `finalize` behind admitted audio, queue the empty end-of-audio frame, drain
+final tokens for at most two seconds, then close/abort the paid transport. The
+logical leg stays alive and owns its pending text through that drain; this is
+neither a provider death nor a recovery episode or router health observation.
+
+On the next onset, VAD returns its retained original PCM pre-roll followed by the
+onset chunk. The serving send boundary holds that packet until the old receive
+loop has finished, opens the same captured endpoint/config, then admits those
+bytes once in that order. Dial time adds transcript onset latency; capture keeps
+its original positions. Provider timestamps restart at zero on the new socket;
+its callback adds the cumulative admitted sample duration before the existing
+WallTimeMapper / capture send ledger projects wall and capture positions. A
+failed dial enters the ordinary failover boundary; its retained admitted onset
+packet bypasses re-scoring on the replacement, so the VAD pre-roll survives.
+Shutdown while closed never opens a socket just to finalize the session.
+
+The `omi_soniox_idle_*` close/reopen/failure counters, reopen latency histogram
+and estimated connected-seconds avoided counter register only for flag-on
+Soniox transports. Avoided seconds measure the actual closed interval, excluding
+the close drain. These are estimated connection savings, not vendor invoices.
+The fake-mode local soak establishes byte preservation and lifecycle behavior;
+it does not measure real provider handshake latency or acoustic quality.
