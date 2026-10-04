@@ -93,7 +93,7 @@ def conversation_tools_module(monkeypatch: pytest.MonkeyPatch):
         "database.conversations": (),
         "database.notifications": ("get_user_time_zone",),
         "database.users": (),
-        "database.vector_db": (),
+        "database.vector_db": ("search_transcript_chunks",),
         "models.other": ("Person",),
         "utils.conversations.factory": ("deserialize_conversation",),
         "utils.conversations.render": ("conversation_to_citation_card", "conversations_to_string"),
@@ -110,6 +110,24 @@ def conversation_tools_module(monkeypatch: pytest.MonkeyPatch):
         for attr in attrs:
             setattr(module, attr, MagicMock())
         install(name, module)
+
+    class ChatTranscriptSearch:
+        def __init__(self, rows, searched):
+            self.rows = rows
+            self.searched = searched
+
+        @property
+        def conversation_ids(self):
+            return list(dict.fromkeys(row['conversation_id'] for row in self.rows))
+
+    transcript_search = sys.modules["utils.conversations.mcp_transcript_search"]
+    transcript_search.ChatTranscriptSearch = ChatTranscriptSearch
+    transcript_search.chat_transcript_coverage_note = lambda _searched: ""
+    transcript_search.chat_transcript_excerpts = lambda _conversations, _search: {}
+    transcript_search.merge_summary_and_transcript_ids = lambda chunk_ids, summary_ids, limit: list(
+        dict.fromkeys(chunk_ids + summary_ids)
+    )[:limit]
+    transcript_search.search_chat_transcript_chunks = lambda *args, **kwargs: ChatTranscriptSearch([], False)
 
     chat_scope = sys.modules["utils.retrieval.chat_scope"]
     chat_scope.chat_scope_from_config = lambda _configurable: None
@@ -510,6 +528,35 @@ def test_gate_on_search_clamps_hydration_ids_before_database_read(conversation_t
 
     hydrated_ids = conversation_tools_module.conversations_db.get_conversations_by_id.call_args.args[1]
     assert hydrated_ids == [f"result-{index}" for index in range(20)]
+
+
+def test_gate_on_transcript_hit_returns_bounded_summary_card_before_hydration(conversation_tools_module) -> None:
+    raw = _conversation_fixture()
+    raw['transcript_segments'][0]['text'] = 'The private invoice was 47 dollars.'
+    conversation_tools_module.parse_exact_conversation_reference.return_value = None
+    conversation_tools_module.keyword_search_conversation_ids = MagicMock(return_value=[])
+    conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
+    conversation_tools_module.merge_conversation_search_ids = MagicMock(return_value=[])
+    chunk_search = MagicMock(
+        return_value=conversation_tools_module.ChatTranscriptSearch(
+            [{'conversation_id': raw['id'], 'chunk_index': 0}], True
+        )
+    )
+    conversation_tools_module.search_chat_transcript_chunks = chunk_search
+    conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[raw])
+    config = _tool_config(enabled=True)
+
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {'query': 'invoice amount', 'include_transcript': False},
+        config=config,
+    )
+
+    assert raw['id'] in result
+    assert '47 dollars' not in result
+    assert 'conversation:' + raw['id'] + ':summary' in result
+    assert [item['kind'] for item in config['configurable']['evidence_references']] == ['conversation_summary']
 
 
 def test_gate_on_rejects_fifth_summary_search_before_storage_access(conversation_tools_module) -> None:
