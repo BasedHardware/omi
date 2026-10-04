@@ -7,6 +7,8 @@ import pytest
 
 from config.live_capture import CAPTURE_WINDOW_REASONS, capture_window_reason
 from models.transcript_segment import TranscriptSegment
+from tests.unit.test_audio_timeline_round3 import RATE, T0
+from tests.unit.test_live_capture_retention import drain, setup
 from tests.unit.test_live_capture_windows import _processor, segment, speech
 from tests.unit.test_manual_speaker_assignments import world, read
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator, SendMap
@@ -119,9 +121,6 @@ async def test_transaction_counts_first_stored_id_once_and_versions_separately(w
     ],
 )
 async def test_original_loss_reason_reaches_committed_metric(monkeypatch, reason):
-    from tests.unit.test_live_capture_retention import setup, drain
-    from tests.unit.test_audio_timeline_round3 import RATE, T0
-
     receiver, callback, epoch, sender = setup(monkeypatch, False, 'modulate')
     pcm = b'\0\0' * RATE
     for i in range(70 if reason == 'anchor_compacted' else 1):

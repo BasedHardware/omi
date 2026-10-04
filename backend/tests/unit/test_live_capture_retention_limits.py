@@ -31,22 +31,33 @@ def test_unrecognized_or_falsy_flag_is_off(monkeypatch, value):
     assert not live_capture_window_retention_enabled()
 
 
-def test_composed_and_helm_declarations_are_all_off():
-    manifest = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text())
+_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+
+
+@pytest.fixture(scope='module')
+def declarations():
+    """Parse the manifest and chart values once, outside the timed call phase."""
+    manifest = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(), Loader=_LOADER)
+    charts = {
+        path: yaml.load(path.read_text(), Loader=_LOADER)['env']
+        for chart in ('backend-listen', 'pusher')
+        for path in (BACKEND / 'charts' / chart).glob('*values.yaml')
+    }
+    return manifest, charts
+
+
+def test_composed_and_helm_declarations_are_all_off(declarations):
+    manifest, charts = declarations
+    flags = (FLAG, 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION')
     for env in manifest['environments'].values():
         for service in (*env['gke'].values(), *env['cloud_run']['services'].values()):
-            for flag in (FLAG, 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION'):
+            for flag in flags:
                 if flag in service.get('env', {}):
                     assert service['env'][flag] == {'category': 'rollout', 'value': 'false'}
-    for chart in ('backend-listen', 'pusher'):
-        for path in (BACKEND / 'charts' / chart).glob('*values.yaml'):
-            declarations = [v for v in yaml.safe_load(path.read_text())['env'] if v.get('name') == FLAG]
-            assert declarations == [{'name': FLAG, 'value': 'false'}]
-            assert [
-                v
-                for v in yaml.safe_load(path.read_text())['env']
-                if v.get('name') == 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION'
-            ] == [{'name': 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'value': 'false'}]
+    assert charts
+    for values in charts.values():
+        for flag in flags:
+            assert [v for v in values if v.get('name') == flag] == [{'name': flag, 'value': 'false'}]
 
 
 @pytest.mark.parametrize('enabled', [False, True])
