@@ -454,6 +454,18 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
+    # Gateway/secret fixtures still need the required serving read-ledger
+    # bindings introduced on main; retain their unrelated negative assertions.
+    payload = re.sub(
+        r'("(backend(?:-sync|-sync-backfill|-integration)?)":\s*\{.*?"env":\s*\[)',
+        lambda match: match.group(1)
+        + '\n        {"name": "FIRESTORE_READ_LEDGER", "value": "1"},'
+        + '\n        {"name": "FIRESTORE_READ_LEDGER_SERVICE", "value": "'
+        + match.group(2)
+        + '"},',
+        payload,
+        flags=re.DOTALL,
+    )
     return with_backend_integration_events_secret(payload)
 
 
