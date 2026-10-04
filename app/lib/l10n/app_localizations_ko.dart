@@ -9117,6 +9117,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncCardDownloadingTitle => '기기에서 다운로드 중';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$total개 중 $current개';
   }
@@ -11069,6 +11079,9 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi가 자동으로 다시 연결해요';
 
   @override
   String participantsSummaryUncounted(String name) {

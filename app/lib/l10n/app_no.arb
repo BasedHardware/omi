@@ -3833,9 +3833,12 @@
     "playbackAudioUnavailable": "Lyd ikke tilgjengelig",
     "playbackAudioLoadFailed": "Kunne ikke laste lyden",
     "playbackAudioNetworkFailed": "Sjekk tilkoblingen",
+    "capturePendantDisconnectedShort": "Omi kobler til igjen av seg selv",
     "forYou": "For deg",
     "stopThese": "Stopp disse",
     "dismiss": "Avvis",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Transkripsjonsfiler",
     "importTranscriptFilesDescription": "Velg SRT-, VTT- eller TXT-transkripsjoner, eller en ZIP med dem"
 }

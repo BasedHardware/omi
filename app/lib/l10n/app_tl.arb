@@ -11390,9 +11390,12 @@
     "playbackAudioUnavailable": "Hindi Magagamit ang Audio",
     "playbackAudioLoadFailed": "Hindi Ma-load ang Audio",
     "playbackAudioNetworkFailed": "Suriin ang Koneksyon",
+    "capturePendantDisconnectedShort": "Kusang kokonekta muli ang Omi",
     "forYou": "Para Sa Iyo",
     "stopThese": "Itigil Ang Mga Ito",
     "dismiss": "Isara",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Mga file ng transcript",
     "importTranscriptFilesDescription": "Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito"
 }

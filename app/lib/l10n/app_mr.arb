@@ -11390,9 +11390,12 @@
     "playbackAudioUnavailable": "ऑडिओ उपलब्ध नाही",
     "playbackAudioLoadFailed": "ऑडिओ लोड होऊ शकला नाही",
     "playbackAudioNetworkFailed": "कनेक्शन तपासा",
+    "capturePendantDisconnectedShort": "Omi आपोआप पुन्हा कनेक्ट होईल",
     "forYou": "तुमच्यासाठी",
     "stopThese": "हे थांबवा",
     "dismiss": "लपवा",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "प्रतिलेख फाइल्स",
     "importTranscriptFilesDescription": "SRT, VTT किंवा TXT प्रतिलेख किंवा त्यांची ZIP फाइल निवडा"
 }

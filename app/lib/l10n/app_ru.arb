@@ -3868,9 +3868,12 @@
     "playbackAudioUnavailable": "Аудио недоступно",
     "playbackAudioLoadFailed": "Не удалось загрузить аудио",
     "playbackAudioNetworkFailed": "Проверьте соединение",
+    "capturePendantDisconnectedShort": "Omi переподключится сам",
     "forYou": "Для вас",
     "stopThese": "Отключить такие",
     "dismiss": "Скрыть",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Файлы расшифровок",
     "importTranscriptFilesDescription": "Выберите расшифровки SRT, VTT или TXT либо ZIP-архив с ними"
 }

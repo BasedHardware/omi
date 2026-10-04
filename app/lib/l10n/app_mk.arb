@@ -11390,9 +11390,12 @@
     "playbackAudioUnavailable": "Аудиото не е достапно",
     "playbackAudioLoadFailed": "Аудиото не можеше да се вчита",
     "playbackAudioNetworkFailed": "Проверете ја врската",
+    "capturePendantDisconnectedShort": "Omi ќе се поврзе повторно сам",
     "forYou": "За вас",
     "stopThese": "Запри ги овие",
     "dismiss": "Сокриј",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Датотеки со транскрипти",
     "importTranscriptFilesDescription": "Изберете SRT, VTT или TXT транскрипти или ZIP со нив"
 }

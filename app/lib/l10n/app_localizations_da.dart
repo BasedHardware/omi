@@ -9250,6 +9250,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Downloader fra din enhed';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current af $total';
   }
@@ -11232,6 +11242,9 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi genopretter forbindelsen af sig selv';
 
   @override
   String participantsSummaryUncounted(String name) {

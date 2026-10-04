@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from config.mentor_v2 import mentor_config
 from config.proactivity_v2 import ProactivityDenied
 from database import action_items as tasks
+from database import proactivity_redis
 from models.proactivity import ProactivityTarget
 from utils import proactivity as spine
 from utils.executors import db_executor, run_blocking
@@ -369,7 +370,7 @@ async def evaluate_mentor_event(uid: str, conversation_id: str, messages: list[d
             )
             await run_blocking(
                 db_executor,
-                integration.redis_db.set_proactive_noti_sent_at,
+                proactivity_redis.set_mentor_sent_at,
                 uid,
                 app_id='mentor',
                 ts=ts,

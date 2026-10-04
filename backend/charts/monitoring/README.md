@@ -179,7 +179,7 @@ The adapter translates Prometheus queries into K8s metrics APIs so HPAs can scal
 | `parakeet_gpu_utilization` | DCGM via Prometheus | parakeet HPA |
 | `parakeet_request_latency_p99` | parakeet histogram | parakeet HPA |
 
-Parakeet adapter rules are defined in the parakeet chart's `values.yaml` but must be merged into the cluster-wide adapter (see below).
+Parakeet adapter rules are defined in the parakeet chart's `values.yaml` and are mirrored in the production cluster-wide adapter (see below).
 
 ### Stackdriver Exporter
 
@@ -402,7 +402,7 @@ rules:
           namespace: { resource: "namespace" }
 ```
 
-2. Apply with Helm:
+2. Apply with Helm (prod requires the reconciliation/render review below first):
 ```bash
 helm -n {env}-omi-monitoring upgrade --install {env}-omi-prometheus-adapter \
   prometheus-community/prometheus-adapter \
@@ -441,7 +441,28 @@ metrics:
         averageValue: "25"
 ```
 
-**Parakeet adapter rules:** The parakeet chart defines adapter rules in its own `values.yaml` under `prometheus-adapter.rules`, but these are NOT yet present in the cluster-wide adapter config (`prometheus-adapter/` values in this directory). They must be manually merged into `prometheus-adapter/{env}_omi_prometheus_adapter.yaml` before parakeet HPA can use them. The parakeet sub-chart adapter is disabled (`prometheus-adapter.enabled: false`) to avoid deploying a second adapter that would conflict with the cluster-scoped APIService.
+**Parakeet adapter rules:** The five rules in the parakeet chart's
+`values.yaml` under `prometheus-adapter.rules` are mirrored in the cluster-wide
+**production** adapter values (three custom/Pods rules and two external rules).
+Keep both sources in sync; dev values need their own reconciliation before
+using these metrics. The parakeet sub-chart adapter is disabled
+(`prometheus-adapter.enabled: false`) to avoid a second adapter conflicting
+with the cluster-scoped APIService. The hermetic
+`backend/tests/unit/test_monitoring_adapter_hpa_contract.py` renders prod
+Parakeet, listen, pusher, VAD, diarizer and Deepgram HPAs and checks every
+consumed Pods/External metric against the correct prod adapter rule list.
+
+**Before any prod adapter upgrade**, follow the
+[monitoring prerequisite](../../docs/runbooks/listen-stt-careful-rollout.md#monitoring-prerequisite-coordinator-only):
+capture live config, Deployment and APIService objects read-only, render chart
+4.14.2 locally and run `backend/scripts/diff_prod_adapter.py`. Reconcile any
+missing live rules in a reviewed PR first. The only intended config difference
+for #20418 is `listen_track!="canary"` in both listen connection queries. Review
+all other object drift, including the manually created custom APIService's
+missing Helm ownership, and verify the deployed Helm rollback manifest retains
+all live rules. The linked prerequisite documents these remaining live HOLDs.
+The prod NLLB external rule is intentionally absent: the live NLLB HPA uses CPU,
+and adding a metric should be a separate reviewed change.
 
 ### Grafana Dashboards
 
@@ -838,10 +859,11 @@ helm upgrade prod-omi-kube-prometheus-stack prometheus-community/kube-prometheus
   --values kube-prometheus-stack/prod_omi_monitoring_values.yaml \
   --wait --timeout 10m
 
-# prometheus-adapter
-helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-prometheus-adapter \
-  prometheus-community/prometheus-adapter \
-  -f prometheus-adapter/prod_omi_prometheus_adapter.yaml
+# prometheus-adapter: complete the linked reconciliation/render review first.
+helm upgrade prod-omi-prometheus-adapter prometheus-community/prometheus-adapter \
+  --version 4.14.2 --namespace prod-omi-monitoring --kube-context "$PROD_CONTEXT" \
+  --values prometheus-adapter/prod_omi_prometheus_adapter.yaml \
+  --atomic --wait --timeout 10m
 
 # Loki
 helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-loki \

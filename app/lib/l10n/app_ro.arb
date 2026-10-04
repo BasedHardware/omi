@@ -3833,9 +3833,12 @@
     "playbackAudioUnavailable": "Audio indisponibil",
     "playbackAudioLoadFailed": "Audio nu a putut fi încărcat",
     "playbackAudioNetworkFailed": "Verificați conexiunea",
+    "capturePendantDisconnectedShort": "Omi se va reconecta singur",
     "forYou": "Pentru tine",
     "stopThese": "Oprește acestea",
     "dismiss": "Ascunde",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Fișiere de transcriere",
     "importTranscriptFilesDescription": "Selectează transcrieri SRT, VTT sau TXT ori o arhivă ZIP cu ele"
 }

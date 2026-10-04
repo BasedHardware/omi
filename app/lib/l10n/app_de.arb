@@ -3833,9 +3833,12 @@
     "playbackAudioUnavailable": "Audio nicht verfügbar",
     "playbackAudioLoadFailed": "Audio konnte nicht geladen werden",
     "playbackAudioNetworkFailed": "Verbindung prüfen",
+    "capturePendantDisconnectedShort": "Omi verbindet sich von selbst neu",
     "forYou": "Für dich",
     "stopThese": "Diese stoppen",
     "dismiss": "Ausblenden",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Transkriptdateien",
     "importTranscriptFilesDescription": "Wähle SRT-, VTT- oder TXT-Transkripte oder ein ZIP mit ihnen aus"
 }

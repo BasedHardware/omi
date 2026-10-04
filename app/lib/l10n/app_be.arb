@@ -11390,9 +11390,12 @@
     "playbackAudioUnavailable": "Аўдыё недаступнае",
     "playbackAudioLoadFailed": "Не ўдалося загрузіць аўдыё",
     "playbackAudioNetworkFailed": "Праверце злучэнне",
+    "capturePendantDisconnectedShort": "Omi перападключыцца сам",
     "forYou": "Для вас",
     "stopThese": "Спыніць гэта",
     "dismiss": "Схаваць",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Файлы стэнаграм",
     "importTranscriptFilesDescription": "Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі"
 }

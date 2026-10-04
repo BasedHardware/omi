@@ -3833,9 +3833,12 @@
     "playbackAudioUnavailable": "Heli pole saadaval",
     "playbackAudioLoadFailed": "Heli ei õnnestunud laadida",
     "playbackAudioNetworkFailed": "Kontrollige ühendust",
+    "capturePendantDisconnectedShort": "Omi loob ühenduse ise uuesti",
     "forYou": "Sulle",
     "stopThese": "Peata need",
     "dismiss": "Peida",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Transkriptsioonifailid",
     "importTranscriptFilesDescription": "Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP"
 }

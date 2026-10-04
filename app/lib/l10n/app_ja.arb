@@ -3833,9 +3833,12 @@
     "playbackAudioUnavailable": "音声を利用できません",
     "playbackAudioLoadFailed": "音声を読み込めませんでした",
     "playbackAudioNetworkFailed": "接続を確認してください",
+    "capturePendantDisconnectedShort": "Omiは自動で再接続します",
     "forYou": "あなたへのおすすめ",
     "stopThese": "この種類を停止",
     "dismiss": "非表示",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "文字起こしファイル",
     "importTranscriptFilesDescription": "SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください"
 }

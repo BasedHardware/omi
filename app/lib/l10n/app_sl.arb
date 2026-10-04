@@ -11390,9 +11390,12 @@
     "playbackAudioUnavailable": "Zvok ni na voljo",
     "playbackAudioLoadFailed": "Zvoka ni bilo mogoče naložiti",
     "playbackAudioNetworkFailed": "Preverite povezavo",
+    "capturePendantDisconnectedShort": "Omi se bo sam znova povezal",
     "forYou": "Za vas",
     "stopThese": "Ustavi te",
     "dismiss": "Skrij",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Datoteke prepisov",
     "importTranscriptFilesDescription": "Izberite prepise SRT, VTT ali TXT ali datoteko ZIP z njimi"
 }

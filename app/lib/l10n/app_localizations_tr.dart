@@ -9270,6 +9270,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Cihazınızdan indiriliyor';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$total / $current';
   }
@@ -11255,6 +11265,9 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi kendiliğinden yeniden bağlanır';
 
   @override
   String participantsSummaryUncounted(String name) {

@@ -3833,9 +3833,12 @@
     "playbackAudioUnavailable": "ऑडियो उपलब्ध नहीं है",
     "playbackAudioLoadFailed": "ऑडियो लोड नहीं हो सका",
     "playbackAudioNetworkFailed": "कनेक्शन जाँचें",
+    "capturePendantDisconnectedShort": "Omi अपने आप फिर से कनेक्ट हो जाएगा",
     "forYou": "आपके लिए",
     "stopThese": "इन्हें रोकें",
     "dismiss": "हटाएँ",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "ट्रांसक्रिप्ट फ़ाइलें",
     "importTranscriptFilesDescription": "SRT, VTT या TXT ट्रांसक्रिप्ट, या उनकी ZIP फ़ाइल चुनें"
 }

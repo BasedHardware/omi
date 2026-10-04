@@ -9333,6 +9333,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Wird von deinem Gerät heruntergeladen';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current von $total';
   }
@@ -11334,6 +11344,9 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi verbindet sich von selbst neu';
 
   @override
   String participantsSummaryUncounted(String name) {

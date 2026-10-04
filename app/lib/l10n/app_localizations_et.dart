@@ -9254,6 +9254,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Allalaadimine sinu seadmest';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current / $total';
   }
@@ -11237,6 +11247,9 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi loob ühenduse ise uuesti';
 
   @override
   String participantsSummaryUncounted(String name) {

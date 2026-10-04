@@ -11,7 +11,7 @@ from typing import Any
 from google.cloud import firestore
 
 from config.proactivity_v2 import AttemptEnvelope, ProactivityDenied, Reservation, producer_for, utc_now
-from database import redis_db
+from database import proactivity_redis
 from database.llm_gateway_accounting import record_llm_gateway_attempt
 from database.proactivity import (
     CONTROLS,
@@ -33,7 +33,7 @@ _RELEASE = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL
 class BudgetAuthority:
     def __init__(self, *, firestore_client: Any = None, redis_client: Any = None, clock=utc_now):
         self.client = client_or_default(firestore_client)
-        self.redis = redis_client if redis_client is not None else redis_db.r
+        self.redis = redis_client if redis_client is not None else proactivity_redis.get_client()
         self.clock = clock
 
     def reserve(self, *, uid: str, item_id: str, producer: str, call_id: str, envelope: AttemptEnvelope) -> Reservation:

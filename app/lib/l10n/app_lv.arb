@@ -3833,9 +3833,12 @@
     "playbackAudioUnavailable": "Audio nav pieejams",
     "playbackAudioLoadFailed": "Audio neizdevās ielādēt",
     "playbackAudioNetworkFailed": "Pārbaudiet savienojumu",
+    "capturePendantDisconnectedShort": "Omi pats atjaunos savienojumu",
     "forYou": "Jums",
     "stopThese": "Apturēt šos",
     "dismiss": "Paslēpt",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Transkripciju faili",
     "importTranscriptFilesDescription": "Atlasiet SRT, VTT vai TXT transkripcijas vai ZIP arhīvu ar tām"
 }

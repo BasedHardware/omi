@@ -17253,6 +17253,18 @@ abstract class AppLocalizations {
   /// **'Downloading from your device'**
   String get syncCardDownloadingTitle;
 
+  /// Offline Sync status card: overall device-download percent. Not shown on recording rows.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String syncCardDownloadPercent(int percent);
+
+  /// Offline Sync status card: overall device-download percent and speed. Not shown on recording rows.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% · {speed} KB/s'**
+  String syncCardDownloadPercentSpeed(int percent, String speed);
+
   /// Top status card: secondary progress line under the phase title.
   ///
   /// In en, this message translates to:
@@ -20498,6 +20510,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
   String get capturePendantDisconnectedDetail;
+
+  /// Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi reconnects on its own'**
+  String get capturePendantDisconnectedShort;
 
   /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
   ///

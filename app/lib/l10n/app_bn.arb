@@ -11390,9 +11390,12 @@
     "playbackAudioUnavailable": "অডিও উপলব্ধ নয়",
     "playbackAudioLoadFailed": "অডিও লোড করা যায়নি",
     "playbackAudioNetworkFailed": "সংযোগ পরীক্ষা করুন",
+    "capturePendantDisconnectedShort": "Omi নিজে থেকেই আবার সংযোগ করবে",
     "forYou": "আপনার জন্য",
     "stopThese": "এগুলো বন্ধ করুন",
     "dismiss": "সরিয়ে দিন",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "ট্রান্সক্রিপ্ট ফাইল",
     "importTranscriptFilesDescription": "SRT, VTT বা TXT ট্রান্সক্রিপ্ট, বা সেগুলোর একটি ZIP নির্বাচন করুন"
 }
