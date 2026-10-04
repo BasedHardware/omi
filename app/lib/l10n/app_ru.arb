@@ -3870,5 +3870,7 @@
     "playbackAudioNetworkFailed": "Проверьте соединение",
     "forYou": "Для вас",
     "stopThese": "Отключить такие",
-    "dismiss": "Скрыть"
+    "dismiss": "Скрыть",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

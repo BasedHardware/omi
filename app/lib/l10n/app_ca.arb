@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Comprova la connexió",
     "forYou": "Per a tu",
     "stopThese": "Atura aquests",
-    "dismiss": "Descarta"
+    "dismiss": "Descarta",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

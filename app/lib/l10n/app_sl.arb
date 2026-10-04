@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "Preverite povezavo",
     "forYou": "Za vas",
     "stopThese": "Ustavi te",
-    "dismiss": "Skrij"
+    "dismiss": "Skrij",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

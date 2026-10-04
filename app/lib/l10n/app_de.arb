@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Verbindung prüfen",
     "forYou": "Für dich",
     "stopThese": "Diese stoppen",
-    "dismiss": "Ausblenden"
+    "dismiss": "Ausblenden",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

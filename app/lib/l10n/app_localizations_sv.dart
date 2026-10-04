@@ -9261,6 +9261,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Laddar ned från din enhet';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current av $total';
   }

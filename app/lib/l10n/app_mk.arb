@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "Проверете ја врската",
     "forYou": "За вас",
     "stopThese": "Запри ги овие",
-    "dismiss": "Сокриј"
+    "dismiss": "Сокриј",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

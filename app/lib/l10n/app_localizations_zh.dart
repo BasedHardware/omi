@@ -9102,6 +9102,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCardDownloadingTitle => '正在从你的设备下载';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '第 $current 项,共 $total 项';
   }

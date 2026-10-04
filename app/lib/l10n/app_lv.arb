@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Pārbaudiet savienojumu",
     "forYou": "Jums",
     "stopThese": "Apturēt šos",
-    "dismiss": "Paslēpt"
+    "dismiss": "Paslēpt",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }

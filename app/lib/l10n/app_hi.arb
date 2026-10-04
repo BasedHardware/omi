@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "कनेक्शन जाँचें",
     "forYou": "आपके लिए",
     "stopThese": "इन्हें रोकें",
-    "dismiss": "हटाएँ"
+    "dismiss": "हटाएँ",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
 }
