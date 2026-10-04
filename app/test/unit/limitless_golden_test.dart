@@ -12,6 +12,7 @@ class FakeDeviceTransport extends DeviceTransport {
   final Map<String, StreamController<List<int>>> _rxControllers = {};
   final StreamController<DeviceTransportState> _stateController = StreamController<DeviceTransportState>.broadcast();
   final List<List<int>> writes = [];
+  void Function()? onWrite;
 
   StreamController<List<int>> _controllerFor(String characteristicUuid) {
     return _rxControllers.putIfAbsent(characteristicUuid, () => StreamController<List<int>>.broadcast());
@@ -51,6 +52,7 @@ class FakeDeviceTransport extends DeviceTransport {
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
     writes.add(List<int>.from(data));
+    onWrite?.call();
   }
 
   @override
@@ -873,8 +875,12 @@ void main() {
     await connection.connect();
     expect(transport.writes.length, 2);
 
+    final reconnected = Completer<void>();
+    transport.onWrite = () {
+      if (transport.writes.length == 4 && !reconnected.isCompleted) reconnected.complete();
+    };
     transport.emitState(DeviceTransportState.connected);
-    await Future<void>.delayed(const Duration(milliseconds: 450));
+    await reconnected.future.timeout(const Duration(seconds: 5));
 
     expect(transport.writes.length, 4, reason: 'a reconnect must repeat time sync before realtime activation');
     expect(decodeWrapperCommand(transport.writes[2])['messageNumber'], 6);
