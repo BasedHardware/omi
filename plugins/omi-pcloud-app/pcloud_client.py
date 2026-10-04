@@ -6,9 +6,15 @@ the CloudBackupProvider Protocol.
 
 from __future__ import annotations
 
+import os
 import re
+import sys
 from typing import Optional, Tuple
 import requests
+
+_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _CURRENT_DIR not in sys.path:
+    sys.path.insert(0, _CURRENT_DIR)
 
 try:
     from .provider_contract import BackupUploadResult, CloudBackupProvider
@@ -24,15 +30,9 @@ class PCloudClient(CloudBackupProvider):
     API_BASE_EU: str = "https://eapi.pcloud.com"
 
     def __init__(self, access_token: str, location_id: int = 1):
-        if location_id not in (1, 2):
-            raise ValueError(
-                f"Invalid location_id {location_id}: expected 1 (US) or 2 (EU)."
-            )
         self.access_token = access_token.strip()
         self.location_id = location_id
-        self.base_url = (
-            self.API_BASE_EU if self.location_id == 2 else self.API_BASE_US
-        )
+        self.base_url = self.API_BASE_EU if self.location_id == 2 else self.API_BASE_US
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -67,9 +67,7 @@ class PCloudClient(CloudBackupProvider):
         except Exception as ex:
             return None, f"Network exception: {str(ex)}"
 
-    def ensure_folder(
-        self, folder_path: str
-    ) -> Tuple[Optional[int], Optional[str]]:
+    def ensure_folder(self, folder_path: str) -> Tuple[Optional[int], Optional[str]]:
         """Ensures a folder hierarchy exists via /createfolderifnotexists.
 
         Sanitizes each path component and rejects relative traversal ('.'/'..').
@@ -124,13 +122,15 @@ class PCloudClient(CloudBackupProvider):
             "nopartial": 1,
             "renameifexists": 0 if overwrite else 1,
         }
-        if isinstance(folder_ref, int) or (
-            isinstance(folder_ref, str) and folder_ref.isdigit()
-        ):
+        if isinstance(folder_ref, int) or (isinstance(folder_ref, str) and folder_ref.isdigit()):
             params["folderid"] = int(folder_ref)
             folder_prefix = f"folderid:{folder_ref}"
         else:
-            clean_folder = f"/{str(folder_ref).strip('/')}"
+            raw_parts = [p for p in str(folder_ref).strip("/").split("/") if p]
+            sanitized_parts = [self.sanitize_path(p) for p in raw_parts if p not in (".", "..")]
+            clean_folder = "/" + "/".join(p for p in sanitized_parts if p)
+            if clean_folder == "/":
+                clean_folder = "/Untitled"
             params["path"] = clean_folder
             folder_prefix = clean_folder
 
@@ -147,9 +147,7 @@ class PCloudClient(CloudBackupProvider):
                 data = resp.json()
                 if data.get("result") == 0:
                     raw_meta = data.get("metadata", [])
-                    meta = (
-                        raw_meta[0] if isinstance(raw_meta, list) else raw_meta
-                    )
+                    meta = raw_meta[0] if isinstance(raw_meta, list) else raw_meta
                     file_id = str(meta.get("fileid", ""))
                     actual_name = meta.get("name", clean_filename)
                     size_bytes = meta.get("size", len(content))
