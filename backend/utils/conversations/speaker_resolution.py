@@ -843,7 +843,7 @@ def _no_embeddings_diagnostics(
     eligible = [s for s in non_omi if s.id and isinstance(s.speaker_id, (int, str)) and str(s.speaker_id).isdigit()]
     long = [s for s in eligible if _duration(s) >= MIN_EMBED_SECONDS]
     pending_ids = {s.id for s in pending}
-    available = [vectors[s.id] for s in long if vectors.get(s.id) is not None]
+    available = [vectors[s.id] for s in long if s.id is not None and vectors.get(s.id) is not None]
     valid = sum(unit_voice_vector(v) is not None for v in available)
     invalid = len(available) - valid
     # Population first, then invalid evidence, capacity, operational failure,
