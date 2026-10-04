@@ -11,6 +11,7 @@ import asyncio
 import codecs
 import inspect
 import io
+import re
 import struct
 import threading
 import time
@@ -289,12 +290,16 @@ def test_a_txt_that_only_mentions_a_cue_timing_is_not_read_as_srt(text):
     ids=['title', 'format-line', 'header-block', 'blank-lines'],
 )
 def test_an_srt_saved_as_txt_after_a_preface_is_still_read_as_srt(preface):
+    """The cues keep their timings and speakers; a .txt never drops the preface's words."""
     srt = '1\n00:00:01,000 --> 00:00:04,000\nAlice: Hello there.\n\n2\n00:00:05,000 --> 00:00:08,000\nBob: Hi Alice.\n'
 
     as_txt = tf.parse_transcript_file('x.txt', (preface + srt).encode('utf-8'))
 
     assert as_txt is not None
-    assert [(cue.speaker, cue.start) for cue in as_txt.cues] == [('Alice', 1.0), ('Bob', 5.0)]
+    timed = [(cue.speaker, cue.start, cue.text) for cue in as_txt.cues if cue.start is not None]
+    assert timed == [('Alice', 1.0, 'Hello there.'), ('Bob', 5.0, 'Hi Alice.')]
+    untimed = [f'{cue.speaker}: {cue.text}' if cue.speaker else cue.text for cue in as_txt.cues if cue.start is None]
+    assert ' '.join(untimed).split() == preface.split()
 
 
 @pytest.mark.parametrize(
@@ -336,6 +341,73 @@ def test_one_line_timed_cues_keep_their_text_and_start(text):
 
     assert parsed is not None
     assert [(cue.text, cue.start) for cue in parsed.cues] == [('Hello there.', 1.0), ('Hi Alice.', 5.0)]
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        pytest.param(
+            'Interview notes\nAlice: we should simplify step two.\n\n00:01:02,000 --> 00:01:09,000\n'
+            'customer said onboarding was confusing.\n\n00:03:10,000 --> 00:03:15,000\npricing page is unclear.\n',
+            id='notes-then-two-clips',
+        ),
+        pytest.param(
+            'Interview notes\n\n00:01:02,000 --> 00:01:09,000\nonboarding was confusing.\n\n'
+            'Alice: we should simplify step two.\nBob: agreed.\n\n00:03:10,000 --> 00:03:15,000\n'
+            'pricing page is unclear.\n\n00:05:00,000 --> 00:05:04,000\ncheckout is slow.\n',
+            id='mostly-clips-with-a-discussion',
+        ),
+        pytest.param(
+            'Clip\n00:24:21,000 --> 00:24:47,000\nshipping is on track\n\nQuote:\n00:28:22,000 --> 00:28:27,000\n\n'
+            '00:31:00,000 --> 00:31:05,000\nhiring is paused\n',
+            id='labels-above-timings',
+        ),
+    ],
+)
+def test_a_mostly_timed_txt_keeps_its_untimed_blocks(text):
+    """However a .txt is routed, every word in it reaches the transcript."""
+    parsed = tf.parse_transcript_file('notes.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    kept = ' '.join(f'{cue.speaker}: {cue.text}' if cue.speaker else cue.text for cue in parsed.cues).split()
+    words = [word for word in text.split() if word != '-->' and not re.fullmatch(r'[\d:,]+', word)]
+    assert sorted(kept) == sorted(words)
+
+
+@pytest.mark.parametrize('extension', ['.txt', '.srt'])
+def test_one_line_cues_without_blank_lines_each_become_a_cue(extension):
+    text = '00:00:01.000 --> 00:00:05.000 Hello there.\n00:00:05.000 --> 00:00:09.000 Hi Alice.\n'
+
+    parsed = tf.parse_transcript_file(f'call{extension}', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.text, cue.start, cue.end) for cue in parsed.cues] == [
+        ('Hello there.', 1.0, 5.0),
+        ('Hi Alice.', 5.0, 9.0),
+    ]
+
+
+@pytest.mark.parametrize(
+    'line',
+    ['00:00:01,000 --> 00:00:04,000', '[00:00:00.000 --> 00:00:05.000]'],
+    ids=['srt-timing', 'whisper-empty-segment'],
+)
+def test_a_bare_cue_timing_line_never_becomes_a_fragment_of_its_end_time(line):
+    match = tf._INLINE_TIMED_RE.match(line)
+
+    assert match is None or match.group('rest') not in ('0', ']', '0]')
+
+
+def test_empty_whisper_segments_add_nothing_to_the_cue_before_them():
+    text = (
+        '[00:00.000 --> 00:04.000]   thanks everyone\n\n[00:04.000 --> 00:08.000]   let us start\n\n'
+        '[00:08.000 --> 00:12.000]\n\n[00:12.000 --> 00:16.000]\n'
+    )
+
+    parsed = tf.parse_transcript_file('whisper.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.text, cue.start) for cue in parsed.cues] == [('thanks everyone', 0.0), ('let us start', 4.0)]
 
 
 def test_a_bom_survives_neither_utf8_nor_the_cp1252_fallback():
@@ -1421,6 +1493,28 @@ def _directory_offset_past_its_start(raw: bytearray) -> bytearray:
 )
 def test_a_member_zipfile_cannot_read_is_reported_as_damaged(tmp_path, job, damage):
     _run(tmp_path, 'export.zip', bytes(damage(bytearray(_zip({'a.srt': SRT})))))
+
+    assert job.final()['error'] == f'None of the 1 file(s) could be imported ({tf.FILE_DAMAGED}).'
+
+
+def _zip_with_header_offset(offset: int) -> bytes:
+    """A member whose central header defers its local-header offset to a zip64 extra field."""
+    buf = io.BytesIO()
+    info = zipfile.ZipInfo('a.srt')
+    info.extra = b'\x99\x99\x08\x00' + b'\0' * 8
+    with ZipFile(buf, 'w') as zf:
+        zf.writestr(info, SRT)
+    raw = bytearray(buf.getvalue())
+    central = raw.rfind(b'PK\x01\x02')
+    struct.pack_into('<L', raw, central + 42, 0xFFFFFFFF)
+    extra = raw.find(b'\x99\x99\x08\x00', central)
+    raw[extra : extra + 12] = b'\x01\x00\x08\x00' + struct.pack('<Q', offset)
+    return bytes(raw)
+
+
+@pytest.mark.parametrize('offset', [2**64 - 1, 2**63, 2**62, 2**50, 2**40], ids=['max', '2^63', '2^62', '2^50', '2^40'])
+def test_a_member_offset_beyond_the_archive_is_reported_as_damaged(tmp_path, job, offset):
+    _run(tmp_path, 'export.zip', _zip_with_header_offset(offset))
 
     assert job.final()['error'] == f'None of the 1 file(s) could be imported ({tf.FILE_DAMAGED}).'
 

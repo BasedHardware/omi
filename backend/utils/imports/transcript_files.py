@@ -137,7 +137,15 @@ _HEADER_NAME_FIRST_RE = re.compile(rf'^(?P<name>\S(?:[^\n]{{0,58}}\S)?)\s{{2,}}\
 _HEADER_TIME_FIRST_RE = re.compile(rf"^\[?(?P<ts>{_TIMESTAMP})\]?\s+(?P<name>[^\W\d_][\w .'-]{{0,39}})$")
 # An optional "--> end" (one-line cues, whisper.cpp's "[start --> end]") is consumed whole,
 # so its dash is never taken for the "-" separator before the text.
-_INLINE_TIMED_RE = re.compile(rf'^\[?(?P<ts>{_TIMESTAMP})(?:\s*-->\s*{_TIMESTAMP})?\]?\s*(?:-\s*)?(?P<rest>\S.*)$')
+_INLINE_TIMED_RE = re.compile(
+    rf'^\[?(?P<ts>{_TIMESTAMP})(?![\d.,:])(?:\s*-->\s*{_TIMESTAMP}(?![\d.,:]))?+\]?+\s*(?:-\s*)?(?P<rest>\S.*)$'
+)
+# A line that is only a timing ("[00:32.000 --> 00:36.000]", an empty whisper.cpp
+# segment): it carries no words.
+_BARE_TIMING_RE = re.compile(rf'^\[?{_TIMESTAMP}(?:\s*-->\s*{_TIMESTAMP})?\]?$')
+# What may follow an SRT timing line's end time: cue settings ("X1:40 Y1:20",
+# "align:start"). Anything else is the text of a one-line cue.
+_CUE_SETTINGS_RE = re.compile(r'(?:\s+[\w-]+:\S+)*\s*')
 
 
 def _seconds(value: str) -> Optional[float]:
@@ -203,17 +211,54 @@ def _assign_speakers(cues: Sequence[TranscriptCue]) -> List[TranscriptCue]:
     return result
 
 
+def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Optional[List[TranscriptCue]]:
+    """The cues in one SRT block, or None when neither of its first two lines is a cue timing.
+
+    A timing line followed by its text on the next lines is one cue. A timing line
+    that carries text itself ("00:00:01.000 --> 00:00:05.000 Hello") starts a run of
+    one-line cues, one per timing line; other lines continue the cue above them.
+    The line before a timing is the cue number; with ``keep_label`` (a .txt) a line
+    there that is not a number (a title, "Clip", "Quote:") is kept as its own cue.
+    """
+    timing_index = next((index for index, line in enumerate(lines[:2]) if _CUE_TIMING_RE.match(line)), None)
+    if timing_index is None:
+        return None
+    timing = _CUE_TIMING_RE.match(lines[timing_index])
+    assert timing is not None
+    label = lines[0] if keep_label and timing_index == 1 and not lines[0].isdigit() else ''
+    labels = [TranscriptCue(text=label)] if label else []
+    if _CUE_SETTINGS_RE.fullmatch(lines[timing_index], timing.end()):
+        body = ' '.join(lines[timing_index + 1 :]).strip()
+        start, end = _seconds(timing.group(1)), _seconds(timing.group(2))
+        return labels + ([TranscriptCue(text=body, start=start, end=end)] if body else [])
+    runs: List[tuple[re.Match[str], List[str]]] = []
+    for line in lines[timing_index:]:
+        line_timing = _CUE_TIMING_RE.match(line)
+        if line_timing:
+            runs.append((line_timing, [line[line_timing.end() :].strip()]))
+        else:
+            runs[-1][1].append(line)
+    cues: List[TranscriptCue] = labels
+    for line_timing, parts in runs:
+        body = ' '.join(part for part in parts if part)
+        if body:
+            cues.append(
+                TranscriptCue(text=body, start=_seconds(line_timing.group(1)), end=_seconds(line_timing.group(2)))
+            )
+    return cues
+
+
+def _paragraph_cues(block: Sequence[str]) -> List[TranscriptCue]:
+    """An untimed block: one cue per "Name: text" line when every line is one, else one cue."""
+    if len(block) > 1 and all(_LABEL_RE.match(line) for line in block):
+        return [TranscriptCue(text=line) for line in block]
+    return [TranscriptCue(text=' '.join(block))]
+
+
 def parse_srt(text: str) -> List[TranscriptCue]:
     cues: List[TranscriptCue] = []
     for lines in _blocks(text):
-        timing_index = next((index for index, line in enumerate(lines[:2]) if '-->' in line), None)
-        if timing_index is None:
-            continue
-        timing = _CUE_TIMING_RE.match(lines[timing_index])
-        body = ' '.join(lines[timing_index + 1 :]).strip()
-        if not timing or not body:
-            continue
-        cues.append(TranscriptCue(text=body, start=_seconds(timing.group(1)), end=_seconds(timing.group(2))))
+        cues.extend(_srt_block_cues(lines) or [])
     return _assign_speakers(cues)
 
 
@@ -290,7 +335,8 @@ def _parse_header_turns(content: Sequence[str], headers: Sequence[Optional[re.Ma
     return cues
 
 
-def parse_text_transcript(text: str) -> List[TranscriptCue]:
+def parse_text_transcript(text: str, *, blocks: Optional[Sequence[Sequence[str]]] = None) -> List[TranscriptCue]:
+    """Speaker-header, inline-timestamped or paragraph text. ``blocks`` reuses ``_blocks(text)``."""
     content = [line.strip() for line in _normalize(text).split('\n') if line.strip()]
     if not content:
         return []
@@ -305,17 +351,14 @@ def parse_text_transcript(text: str) -> List[TranscriptCue]:
         for line, match in zip(content, timed):
             if match:
                 turns.append((match, [match.group('rest').strip()]))
-            elif turns:
+            elif turns and not _BARE_TIMING_RE.match(line):
                 turns[-1][1].append(line)
         return _assign_speakers(
             [TranscriptCue(text=' '.join(parts), start=_seconds(match.group('ts'))) for match, parts in turns]
         )
     cues: List[TranscriptCue] = []
-    for block in _blocks(text):
-        if len(block) > 1 and all(_LABEL_RE.match(line) for line in block):
-            cues.extend(TranscriptCue(text=line) for line in block)
-        else:
-            cues.append(TranscriptCue(text=' '.join(block)))
+    for block in _blocks(text) if blocks is None else blocks:
+        cues.extend(_paragraph_cues(block))
     return _assign_speakers(cues)
 
 
@@ -399,14 +442,20 @@ def _decode_transcript(data: bytes) -> Optional[str]:
         return data.decode('cp1252', errors='replace')
 
 
-def _reads_as_srt(text: str) -> bool:
-    """Whether most blocks of a .txt are SRT cues: a cue timing on a block's first or
-    second line (after a cue number). The SRT parser keeps only such blocks, so a
-    title or header before the cues is fine, but notes that quote a timing or two
-    (a clip, an agenda) must stay text or most of them would be dropped."""
-    blocks = _blocks(text)
-    timed = sum(1 for lines in blocks if any(_CUE_TIMING_RE.match(line) for line in lines[:2]))
-    return timed * 2 > len(blocks)
+def _txt_srt_cues(blocks: Sequence[Sequence[str]]) -> Optional[List[TranscriptCue]]:
+    """A .txt read as SRT when most of its blocks are cues, else None.
+
+    Unlike a .srt, whose untimed blocks are not part of the format, a .txt keeps
+    them (a title, notes between quoted clips) as untimed text: reading it as SRT
+    only adds the timings and speakers, it never drops words.
+    """
+    per_block = [_srt_block_cues(lines, keep_label=True) for lines in blocks]
+    if sum(1 for cues in per_block if cues is not None) * 2 <= len(blocks):
+        return None
+    cues: List[TranscriptCue] = []
+    for lines, block_cues in zip(blocks, per_block):
+        cues.extend(_paragraph_cues(lines) if block_cues is None else block_cues)
+    return _assign_speakers(cues)
 
 
 def parse_transcript_file(filename: str, data: bytes, *, tz: Optional[str] = 'UTC') -> Optional[ParsedTranscript]:
@@ -420,14 +469,15 @@ def parse_transcript_file(filename: str, data: bytes, *, tz: Optional[str] = 'UT
     head = _normalize(text).lstrip()
     if head.startswith('WEBVTT'):
         cues = parse_vtt(text)
-    elif extension == '.srt' or (extension == '.txt' and _reads_as_srt(text)):
+    elif extension == '.srt':
         cues = parse_srt(text)
-        if extension == '.txt' and not cues:
-            cues = parse_text_transcript(text)
     elif extension == '.vtt':
         cues = parse_vtt(text)
     else:
-        cues = parse_text_transcript(text)
+        blocks = _blocks(text)
+        # Every cue timing holds "-->": text without one skips the SRT check.
+        srt_cues = _txt_srt_cues(blocks) if '-->' in text else None
+        cues = parse_text_transcript(text, blocks=blocks) if srt_cues is None else srt_cues
     cues = [cue for cue in cues if cue.text.strip()]
     if not cues:
         return None
@@ -611,8 +661,9 @@ def _read_limited(open_member: Callable[[], object]) -> bytes:
 
 
 def _read_member(archive: ZipFile, info: ZipInfo) -> bytes:
-    if info.header_offset < 0:
-        # The end record placed the directory past where it starts: no member is where it says.
+    if not 0 <= info.header_offset < archive.start_dir:
+        # A local header lies before the central directory; an offset outside that
+        # (a misplaced directory, a hostile zip64 extra) cannot be read, or even seeked to.
         raise TranscriptFileSkipped(FILE_DAMAGED)
     try:
         return _read_limited(lambda: archive.open(info))
