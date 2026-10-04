@@ -350,7 +350,7 @@ extension KernelJournalTurn {
       || origin == "proactive_notification"
       || metadata["origin"] as? String == "proactive_notification"
       || metadata["messageSource"] as? String == "proactive_notification"
-      || (metadata["continuityKey"] as? String)?.hasPrefix("notification:") == true
+      || (role == "assistant" && (metadata["continuityKey"] as? String)?.hasPrefix("notification:") == true)
   }
 
   func chatMessage() -> ChatMessage {

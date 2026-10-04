@@ -40,11 +40,6 @@ DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write p
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
 CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
 CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
-# Maximum number of reported (hidden) rows to over-fetch per raw Firestore
-# query when reading cache-aligned history. Keeps the raw read bounded even
-# when a user has thousands of lifetime reported messages; the newest page
-# rarely contains more reported rows than this cap.
-CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
 # Extra documents a visible page may stream *beyond* the rows it would need if none
 # were reported. The floor is the page itself, never this: the previous raw
 # ``.offset(n).limit(m)`` query already streamed n + m documents, so budgeting
@@ -78,7 +73,7 @@ def is_automatic_chat_message(message: Dict[str, Any]) -> bool:
         or metadata.get('chatFirstIntentSource')
         or metadata.get('origin') == 'proactive_notification'
         or message.get('message_source') == 'proactive_notification'
-        or str(metadata.get('continuityKey', '')).startswith('notification:')
+        or (message.get('sender') == 'ai' and str(metadata.get('continuityKey', '')).startswith('notification:'))
         or message.get('type') in {'task', 'goal', 'question', 'day_summary'}
         or any(
             isinstance(block, dict) and (block.get('coldStartSequence') or block.get('cold_start_sequence'))
@@ -252,7 +247,8 @@ def get_app_messages(
     not run before that visibility rule: a reported row inside the raw page
     would otherwise consume a caller-visible slot and leave an older visible
     message unfetched.  This follows the same bounded visible-row scan as
-    ``get_messages`` below.
+    ``get_messages`` below. Automatic rows do not consume its reported-row
+    budget: only collection exhaustion may end a page inside an automatic prefix.
     """
     visible_limit = max(0, int(limit))
     if visible_limit == 0:
@@ -270,7 +266,7 @@ def get_app_messages(
     # flat allowance to cross.
     scan_budget = visible_limit + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
     scanned = 0
-    reported_row_seen = False
+    hidden_row_seen = False
     cursor_snapshot: Any = None
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
@@ -281,7 +277,7 @@ def get_app_messages(
         # appeared, use capped batches to cross a dense hidden run without
         # turning a missing visible row into one read per document.
         batch_limit = min(100, scan_budget - scanned)
-        if not reported_row_seen:
+        if not hidden_row_seen:
             batch_limit = min(batch_limit, max(1, visible_limit - len(messages)))
         page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
         documents = list(page_query.limit(batch_limit).stream())
@@ -289,11 +285,14 @@ def get_app_messages(
             break
 
         for document in documents:
-            scanned += 1
             cursor_snapshot = document
             message: Dict[str, Any] = _typed_doc(document)
-            if message.get('reported') is True or is_automatic_chat_message(message):
-                reported_row_seen = True
+            if is_automatic_chat_message(message):
+                hidden_row_seen = True
+                continue
+            scanned += 1
+            if message.get('reported') is True:
+                hidden_row_seen = True
                 continue
             messages.append(message)
             conversations_id.update(message.get('memories_id', []))
@@ -336,14 +335,15 @@ def get_messages(
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Return a visible chat page with offset counted in non-reported rows.
+    """Return a visible chat page with offset counted only in visible rows.
 
     Firestore cannot apply ``reported != True`` cheaply for legacy docs that omit
     the field, so reported rows are filtered in Python. Applying ``limit`` /
     ``offset`` on the raw query first makes pages short and advances past
     visible messages the client never saw. Scan with a bounded budget (same
     spirit as ``get_messages_reconcile_page``) until ``offset`` visible rows are
-    skipped and ``limit`` visible rows are collected.
+    skipped and ``limit`` visible rows are collected. Automatic rows do not
+    consume that budget; a finite automatic prefix cannot masquerade as EOF.
     """
     logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
     user_ref = db.collection('users').document(uid)
@@ -369,6 +369,7 @@ def get_messages(
     scan_budget = needed + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
     scanned = 0
     visible_skipped = 0
+    hidden_row_seen = False
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
     files_id: set[str] = set()
@@ -380,18 +381,22 @@ def get_messages(
         # limit=15 reads streamed ~20x the documents they used to. Slack is only paid
         # for by a page that actually met a reported row.
         batch_limit = min(100, scan_budget - scanned)
-        if scanned == 0:
-            batch_limit = min(batch_limit, max(1, needed))
+        if not hidden_row_seen:
+            batch_limit = min(batch_limit, max(1, needed - scanned))
         page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
         documents = list(page_query.limit(batch_limit).stream())
         if not documents:
             break
 
         for document in documents:
-            scanned += 1
             cursor_snapshot = document
             message: Dict[str, Any] = _typed_doc(document)
-            if message.get('reported') is True or is_automatic_chat_message(message):
+            if is_automatic_chat_message(message):
+                hidden_row_seen = True
+                continue
+            scanned += 1
+            if message.get('reported') is True:
+                hidden_row_seen = True
                 continue
             if visible_skipped < offset:
                 visible_skipped += 1
@@ -469,9 +474,10 @@ def get_cache_aligned_messages(
 ) -> List[Dict[str, Any]]:
     """Read a cache-aligned, scope-safe chat history in newest-first order.
 
-    Reported messages are excluded from the visible count and read. Over-fetching
-    by the scoped reported count guarantees the target number of visible messages
-    even when hidden records fall inside the selected raw Firestore page.
+    Count the same visibility predicate as the page reader, preserving the
+    append epoch when historical automatic rows are present. Provenance can be
+    serialized JSON, so aggregates cannot express this exclusion: project only
+    visibility fields, without loading message text or attachments.
     """
     user_ref = db.collection('users').document(uid)
     scoped_ref = user_ref.collection('messages')
@@ -480,27 +486,22 @@ def get_cache_aligned_messages(
     else:
         scoped_ref = scoped_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
 
-    total_result = scoped_ref.count().get()
-    total = int(total_result[0][0].value) if total_result and total_result[0] else 0
-    reported_result = scoped_ref.where(filter=FieldFilter('reported', '==', True)).count().get()
-    reported = int(reported_result[0][0].value) if reported_result and reported_result[0] else 0
-    visible_total = max(0, total - reported)
+    visibility_fields = ['reported', 'sender', 'metadata', 'message_source', 'type', 'content_blocks']
+    visible_total = 0
+    for document in scoped_ref.select(visibility_fields).stream():
+        message = _typed_doc(document)
+        if message.get('reported') is not True and not is_automatic_chat_message(message):
+            visible_total += 1
     visible_limit = cache_aligned_history_limit(visible_total)
     if visible_limit == 0:
         return []
 
-    # Cap the raw Firestore read so a large lifetime reported count cannot
-    # cause unbounded document reads on every chat send. The over-fetch only
-    # needs to cover reported rows that fall inside the newest raw page, not
-    # the lifetime total.
-    reported_overfetch = min(reported, CHAT_HISTORY_REPORTED_RAW_SCAN_CAP)
-    raw_limit = min(total, visible_limit + reported_overfetch)
     return get_messages(
         uid,
-        limit=raw_limit,
+        limit=visible_limit,
         app_id=app_id,
         chat_session_id=chat_session_id,
-    )[:visible_limit]
+    )
 
 
 @prepare_for_read(decrypt_func=_prepare_message_for_read)

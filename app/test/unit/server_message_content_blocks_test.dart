@@ -45,6 +45,20 @@ void main() {
     expect(ServerMessage.fromJson(messageJson(text: 'Answer', metadata: 'broken')).isAutomaticChatEntry, isFalse);
   });
 
+  test('notification continuity and cold-start answer metadata keep user messages visible', () {
+    for (final metadata in [
+      '{"continuityKey":"notification:old"}',
+      '{"coldStartSequence":{"id":"old-sequence","step":1}}',
+    ]) {
+      final user = ServerMessage.fromJson({...messageJson(text: 'My answer', metadata: metadata), 'sender': 'human'});
+      expect(user.isAutomaticChatEntry, isFalse);
+      expect(ServerMessage.fromJson(user.toJson()).isAutomaticChatEntry, isFalse);
+    }
+    final automatic =
+        ServerMessage.fromJson(messageJson(text: 'Notice', metadata: '{"continuityKey":"notification:old"}'));
+    expect(automatic.isAutomaticChatEntry, isTrue);
+  });
+
   test(
     'uses first-class conversation block fallback instead of a blank bubble',
     () {

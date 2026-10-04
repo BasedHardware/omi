@@ -1469,6 +1469,21 @@ import XCTest
       XCTAssertEqual(provider.messages[0].contentBlocks.count, 3)
     }
 
+    func testUserNotificationFollowupAndColdStartAnswerStayInJournalProjection() throws {
+      let provider = ChatProvider()
+      let surface = provider.mainChatSurfaceReference()
+      let notification = try turn(
+        surface: surface, turnId: "notification-user", turnSeq: 1, role: "user",
+        content: "Follow up", metadata: #"{"continuityKey":"notification:old"}"#)
+      let answer = try turn(
+        surface: surface, turnId: "cold-start-answer", turnSeq: 2, role: "user",
+        content: "My answer", metadata: #"{"coldStartSequence":{"id":"old-sequence","step":1}}"#)
+      XCTAssertFalse(notification.isAutomaticChatEntry)
+      XCTAssertFalse(answer.isAutomaticChatEntry)
+      provider.projectJournalTurns([notification, answer])
+      XCTAssertEqual(Set(provider.messages.map(\.id)), ["notification-user", "cold-start-answer"])
+    }
+
     private func turn(
       surface: AgentSurfaceReference,
       turnId: String,

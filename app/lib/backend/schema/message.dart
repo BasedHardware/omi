@@ -642,7 +642,9 @@ class ServerMessage {
         origin['chatFirstIntentSource'] != null ||
         origin['origin'] == 'proactive_notification' ||
         messageSource == 'proactive_notification' ||
-        (origin['continuityKey'] is String && (origin['continuityKey'] as String).startsWith('notification:')) ||
+        (sender == MessageSender.ai &&
+            origin['continuityKey'] is String &&
+            (origin['continuityKey'] as String).startsWith('notification:')) ||
         (type == MessageType.daySummary || const {'task', 'goal', 'question'}.contains(wireType)) ||
         contentBlocks.any((block) => block['coldStartSequence'] != null || block['cold_start_sequence'] != null);
   }

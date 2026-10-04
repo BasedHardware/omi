@@ -162,3 +162,12 @@ def test_automatic_history_filter_uses_provenance_and_preserves_agent_rich_block
     assert chat_db.is_automatic_chat_message({**reply, 'metadata': '{"chatFirstIntentId":"old-intent"}'})
     assert chat_db.is_automatic_chat_message({**reply, 'metadata': '{"continuityKey":"notification:old"}'})
     assert not chat_db.is_automatic_chat_message({**reply, 'metadata': 'malformed'})
+
+
+def test_user_notification_followup_and_cold_start_answer_remain_visible():
+    user = {'sender': 'human', 'type': 'text', 'text': 'My answer'}
+    for metadata in (
+        {'continuityKey': 'notification:old'},
+        {'continuityKey': 'user-answer', 'coldStartSequence': {'id': 'old-sequence', 'step': 1}},
+    ):
+        assert not chat_db.is_automatic_chat_message({**user, 'metadata': metadata})
