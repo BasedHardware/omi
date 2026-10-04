@@ -1420,6 +1420,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: rollout
@@ -1695,6 +1701,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: rollout
@@ -3702,6 +3714,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: rollout
@@ -3970,6 +3988,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: rollout
