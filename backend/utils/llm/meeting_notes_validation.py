@@ -262,10 +262,14 @@ _UNSPACED_SCRIPT = re.compile(f'[{_UNSPACED_SCRIPT_RANGES}]')
 # A word character that continues a spaced-script word; an unspaced-script
 # neighbour is a boundary, so "与Sarah讨论预算" names Sarah while "Leeds" is not "Lee".
 _SPACED_WORD_CHAR = f'[^\\W{_UNSPACED_SCRIPT_RANGES}]'
-# Case endings and possessives ("Peters", "Сарой", "Anną", "Sarahin", "Sárával"):
-# a name token this long also matches its stem plus a short suffix.
+# Case endings and possessives: a name token this long also matches itself plus a
+# short suffix ("Peters", "Markiem", "Иваном", "Sarahin"), and a name ending in a
+# vowel also matches its stem plus a short suffix ("Сарой", "Anną", "Sárával").
+# The suffix is never empty, so a bare stem ("and" for Andy, "Dan" for Dana) is
+# not a mention.
 _INFLECTED_NAME_MIN_CHARACTERS = 4
 _INFLECTION_MAX_SUFFIX_CHARACTERS = 4
+_NAME_VOWELS = frozenset('aeiouyàáâãäåąæèééêëęìíîïòóôõöøùúûüýаеёиоуыэюяіїє')
 _APOSTROPHES = str.maketrans({'\u2019': "'"})
 
 
@@ -278,8 +282,11 @@ def _name_pattern(name: str) -> re.Pattern[str]:
     if _UNSPACED_SCRIPT.search(name):
         return re.compile(escaped, re.IGNORECASE)
     if len(name) >= _INFLECTED_NAME_MIN_CHARACTERS and len(name.split()) == 1:
-        suffix = f'{_SPACED_WORD_CHAR}{{0,{_INFLECTION_MAX_SUFFIX_CHARACTERS}}}'
-        escaped = f'(?:{escaped}|{re.escape(name[:-1])}{suffix})'
+        suffix = f'{_SPACED_WORD_CHAR}{{1,{_INFLECTION_MAX_SUFFIX_CHARACTERS}}}'
+        forms = [escaped, f'{escaped}{suffix}']
+        if name[-1].casefold() in _NAME_VOWELS:
+            forms.append(f'{re.escape(name[:-1])}{suffix}')
+        escaped = f'(?:{"|".join(forms)})'
     return re.compile(f'(?<!{_SPACED_WORD_CHAR}){escaped}(?!{_SPACED_WORD_CHAR})', re.IGNORECASE)
 
 

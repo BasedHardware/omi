@@ -523,6 +523,7 @@ def test_title_rules_are_static_while_names_stay_volatile(monkeypatch):
 
     assert GENERAL_TITLE_RULES in static
     assert 'Sarah Chen' not in static
+    assert 'David' not in static, 'the owner name must stay in the volatile message'
     assert 'PEOPLE IN THIS CONVERSATION' in volatile
     assert '- Sarah Chen' in volatile
     assert '- Account owner (never name them in the title): David' in volatile
@@ -681,6 +682,31 @@ def test_name_match_normalizes_unicode_and_apostrophes(title, people):
     from utils.llm.meeting_notes_validation import title_names_any_person
 
     assert title_names_any_person(title, people) is True
+
+
+@pytest.mark.parametrize(
+    ('title', 'people'),
+    [
+        ('Budget and Hiring Plan', ('Andy',)),  # "and" is Andy's stem, not Andy
+        ('Planning the Offsite', ('Theo',)),
+        ('Dan Reviews the Contract', ('Dana',)),
+        ('Joe Signs the Lease', ('Joel',)),
+        ('Leo Joins the Team', ('Leon',)),
+    ],
+)
+def test_a_bare_name_stem_is_not_a_mention(title, people):
+    from utils.llm.meeting_notes_validation import title_names_any_person
+
+    assert title_names_any_person(title, people) is False
+
+
+def test_negative_or_untimed_segments_add_no_speech_time():
+    from utils.conversations.transcript_for_llm import _speech_seconds
+
+    assert _speech_seconds(SimpleNamespace(start=10.0, end=4.0)) == 0.0
+    assert _speech_seconds(SimpleNamespace(start=3.0, end=3.0)) == 0.0
+    assert _speech_seconds(SimpleNamespace(start=0.0, end=float('inf'))) == 0.0
+    assert _speech_seconds(SimpleNamespace(start=1.0, end=3.5)) == 2.5
 
 
 def test_short_surname_is_not_a_mention():
