@@ -364,13 +364,20 @@ source .local/adapter-review.env || { echo "HOLD: .local/adapter-review.env miss
 [ -n "${ADAPTER_BEFORE:-}" ] && [ -n "${ADAPTER_REVIEW_DIR:-}" ] || { echo "HOLD: rollback state incomplete"; exit 1; }
 test -s "$ADAPTER_REVIEW_DIR/restore-apiservices-configmap.yaml" || { echo "HOLD: restore YAML missing"; exit 1; }
 if [ "${ROLLBACK_STACK:-no}" = yes ] && [ -z "${STACK_BEFORE:-}" ]; then echo "HOLD: set STACK_BEFORE before a stack rollback"; exit 1; fi
+# Drain the canary first; every step fails closed so the inclusive selector is
+# never restored while canary pods might still serve.
 kprod -n prod-omi-backend delete deployment prod-omi-backend-listen-canary \
-  --ignore-not-found --wait=true --timeout=5m
-CANARY_PODS=$(kprod -n prod-omi-backend get pod -l app.kubernetes.io/name=backend-listen,track=canary -o name)
+  --ignore-not-found --wait=true --timeout=5m || { echo "HOLD: canary delete failed"; exit 1; }
+CANARY_PODS=$(kprod -n prod-omi-backend get pod -l app.kubernetes.io/name=backend-listen,track=canary -o name) \
+  || { echo "HOLD: canary pod query failed"; exit 1; }
 if [ -n "$CANARY_PODS" ]; then
   kprod -n prod-omi-backend wait --for=delete pod \
-    -l app.kubernetes.io/name=backend-listen,track=canary --timeout=5m
+    -l app.kubernetes.io/name=backend-listen,track=canary --timeout=5m \
+    || { echo "HOLD: canary pods still present"; exit 1; }
 fi
+LEFT=$(kprod -n prod-omi-backend get pod -l app.kubernetes.io/name=backend-listen,track=canary -o name) \
+  || { echo "HOLD: canary pod re-check failed"; exit 1; }
+[ -z "$LEFT" ] || { echo "HOLD: canary pods remain: $LEFT"; exit 1; }
 if ! helm rollback prod-omi-prometheus-adapter "$ADAPTER_BEFORE" \
   --namespace "$MON_NS" --kube-context "$PROD_CTX" --wait --timeout 10m; then
   export RESTORE_CAPTURED_LIVE=yes
