@@ -38,7 +38,6 @@ import sys
 import tempfile
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-
 ACHIEVED_STATUSES = {"completed", "achieved", "done"}
 INACTIVE_STATUSES = {"inactive", "archived", "cancelled", "canceled", "abandoned"}
 
@@ -228,7 +227,11 @@ def load_and_deduplicate(sources: Sequence[str | Path]) -> List[Dict[str, Any]]:
 
         for goal in extracted:
             gid = str(goal["id"])
-            ts = parse_datetime(goal.get("updated_at")) or parse_datetime(goal.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc)
+            ts = (
+                parse_datetime(goal.get("updated_at"))
+                or parse_datetime(goal.get("created_at"))
+                or datetime.min.replace(tzinfo=timezone.utc)
+            )
 
             if gid not in goals_by_id:
                 goals_by_id[gid] = goal
@@ -356,21 +359,35 @@ def generate_markdown_digest(
         "| Metric | Count | Percentage |",
         "| :--- | :--- | :--- |",
         f"| 🎯 **Total Goals** | `{kpis.total_goals}` | `100.0%` |",
-        f"| 🟢 **Active Goals** | `{kpis.active_goals}` | `{kpis.active_goals / kpis.total_goals * 100:.1f}%` |" if kpis.total_goals > 0 else "| 🟢 **Active Goals** | `0` | `0.0%` |",
-        f"| ✅ **Achieved Goals** | `{kpis.achieved_goals}` | `{kpis.achieved_goals / kpis.total_goals * 100:.1f}%` |" if kpis.total_goals > 0 else "| ✅ **Achieved Goals** | `0` | `0.0%` |",
-        f"| ⚪ **Inactive Goals** | `{kpis.inactive_goals}` | `{kpis.inactive_goals / kpis.total_goals * 100:.1f}%` |" if kpis.total_goals > 0 else "| ⚪ **Inactive Goals** | `0` | `0.0%` |",
+        (
+            f"| 🟢 **Active Goals** | `{kpis.active_goals}` | `{kpis.active_goals / kpis.total_goals * 100:.1f}%` |"
+            if kpis.total_goals > 0
+            else "| 🟢 **Active Goals** | `0` | `0.0%` |"
+        ),
+        (
+            f"| ✅ **Achieved Goals** | `{kpis.achieved_goals}` | `{kpis.achieved_goals / kpis.total_goals * 100:.1f}%` |"
+            if kpis.total_goals > 0
+            else "| ✅ **Achieved Goals** | `0` | `0.0%` |"
+        ),
+        (
+            f"| ⚪ **Inactive Goals** | `{kpis.inactive_goals}` | `{kpis.inactive_goals / kpis.total_goals * 100:.1f}%` |"
+            if kpis.total_goals > 0
+            else "| ⚪ **Inactive Goals** | `0` | `0.0%` |"
+        ),
         f"| 📊 **Average Progress** | `{render_progress_bar(kpis.overall_progress, 12)}` | `{kpis.overall_progress:.1f}%` |",
         "",
     ]
 
     # Category / Type Breakdown
     if kpis.type_counts:
-        lines.extend([
-            "## Breakdown by Goal Type",
-            "",
-            "| Goal Type | Total | Achieved | Avg Progress |",
-            "| :--- | :--- | :--- | :--- |",
-        ])
+        lines.extend(
+            [
+                "## Breakdown by Goal Type",
+                "",
+                "| Goal Type | Total | Achieved | Avg Progress |",
+                "| :--- | :--- | :--- | :--- |",
+            ]
+        )
         for tname in sorted(kpis.type_counts.keys()):
             cnt = kpis.type_counts[tname]
             ach = kpis.type_achieved.get(tname, 0)
@@ -381,12 +398,14 @@ def generate_markdown_digest(
         lines.append("")
 
     # Detailed Goals Table
-    lines.extend([
-        "## Goal Details",
-        "",
-        "| Status | Title | Type | Progress | Target | Last Updated |",
-        "| :--- | :--- | :--- | :--- | :--- | :--- |",
-    ])
+    lines.extend(
+        [
+            "## Goal Details",
+            "",
+            "| Status | Title | Type | Progress | Target | Last Updated |",
+            "| :--- | :--- | :--- | :--- | :--- | :--- |",
+        ]
+    )
 
     if not filtered:
         lines.append("| _No goals found matching criteria_ | - | - | - | - | - |")
@@ -422,9 +441,7 @@ def generate_markdown_digest(
 
             prog_cell = render_progress_bar(prog, 8)
 
-            lines.append(
-                f"| {status_label} | {title_text} | `{gtype}` | {prog_cell} | {target_repr} | {updated_str} |"
-            )
+            lines.append(f"| {status_label} | {title_text} | `{gtype}` | {prog_cell} | {target_repr} | {updated_str} |")
 
     lines.append("")
     return "\n".join(lines)
@@ -441,18 +458,14 @@ def write_digest(content: str, dest_path: str | Path, force: bool = False) -> No
         raise ValueError(f"Path traversal sequence '..' is forbidden: {dest_path}")
 
     if dest.exists() and not force:
-        raise FileExistsError(
-            f"Destination file '{dest}' already exists. Use -f / --force to overwrite."
-        )
+        raise FileExistsError(f"Destination file '{dest}' already exists. Use -f / --force to overwrite.")
 
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     # Atomic write via temporary file
     temp_path: Optional[Path] = None
     try:
-        with tempfile.NamedTemporaryFile(
-            dir=dest.parent, prefix=f".{dest.name}.tmp_", delete=False
-        ) as tf:
+        with tempfile.NamedTemporaryFile(dir=dest.parent, prefix=f".{dest.name}.tmp_", delete=False) as tf:
             tf.write(content.encode("utf-8"))
             temp_path = Path(tf.name)
         os.replace(temp_path, dest)
@@ -466,9 +479,7 @@ def write_digest(content: str, dest_path: str | Path, force: bool = False) -> No
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Build an executive Markdown digest report from Omi goals exports."
-    )
+    parser = argparse.ArgumentParser(description="Build an executive Markdown digest report from Omi goals exports.")
     parser.add_argument(
         "sources",
         nargs="+",
