@@ -277,8 +277,13 @@ int main(void)
     int transportErr;
     transportErr = transport_start();
     if (transportErr) {
+#if defined(CONFIG_SOC_NRF5340_CPUAPP)
+        LOG_ERR("Failed to start transport on App Core (err %d)", transportErr);
+#elif defined(CONFIG_SOC_NRF5340_CPUNET)
+        LOG_ERR("Failed to start transport on Net Core (err %d)", transportErr);
+#else
         LOG_ERR("Failed to start transport (err %d)", transportErr);
-        // TODO: Detect the current core is app core or net core
+#endif
         // Blink green LED to indicate error
         for (int i = 0; i < 5; i++) {
             set_led_green(!gpio_pin_get_dt(&led_green));
