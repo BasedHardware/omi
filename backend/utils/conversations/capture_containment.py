@@ -36,17 +36,32 @@ _REASONS = (
     'too_small',
     'insufficient_coverage',
     'timing',
-    'bounds',
+    'bounds_segments',
+    'bounds_segment_chars',
+    'bounds_chars',
+    'bounds_words',
+    'bounds_segment_words',
+    'bounds_segment_seconds',
+    'bounds_candidates',
+    'bounds_bundle_checks',
+    'bounds_matcher_calls',
+    'bounds_tokens',
+    'bounds_cells',
+    'layout_shape',
+    'layout_timing',
+    'layout_unplaced',
+    'layout_overlap',
     'ineligible',
 )
 
-MAX_SEGMENTS = 1024
+MAX_SEGMENTS = 4096
 MAX_SEGMENT_CHARS = 2048
-MAX_CAPTURE_CHARS = 131072
-MAX_CAPTURE_WORDS = 16000
+MAX_CAPTURE_CHARS = 524288
+MAX_CAPTURE_WORDS = 64000
 MAX_SEGMENT_WORDS = 128
 MAX_SEGMENT_SECONDS = 90.0
 MAX_TARGET_CANDIDATES = 16
+MAX_SMALLER_UTTERANCES = 32
 MIN_SMALLER_WORDS = 40
 MIN_UTTERANCE_WORDS = 8
 MIN_MATCHED_WORDS = 40
@@ -118,6 +133,12 @@ def record_capture_containment(
     )
 
 
+class _ContainmentRejected(Exception):
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 def _field(row: Any, name: str) -> Any:
     return row.get(name) if isinstance(row, Mapping) else getattr(row, name, None)
 
@@ -149,50 +170,55 @@ def _in_window_segments(
     ix_start: datetime,
     ix_end: datetime,
     segments: Any,
-) -> tuple[list[tuple[datetime, datetime, bool, tuple[str, ...], int]], int] | None:
-    """Wholly-in-window text segments, or None on any budget/shape violation."""
+) -> tuple[list[tuple[datetime, datetime, bool, tuple[str, ...], int]], int]:
+    """Wholly-in-window text segments; raises _ContainmentRejected on the first violation."""
     if segments is None:
         return [], 0
     if isinstance(segments, (str, bytes)) or not isinstance(segments, Iterable):
-        return None
+        raise _ContainmentRejected('layout_shape')
     collected = list(itertools.islice(segments, MAX_SEGMENTS + 1))
     if len(collected) > MAX_SEGMENTS:
-        return None
+        raise _ContainmentRejected('bounds_segments')
     total_chars = 0
     total_words = 0
     placed: list[tuple[datetime, datetime, bool, tuple[str, ...], int]] = []
     for index, segment in enumerate(collected):
         text = _field(segment, 'text')
-        if isinstance(text, str):
-            total_chars += len(text)
-            if len(text) > MAX_SEGMENT_CHARS or total_chars > MAX_CAPTURE_CHARS:
-                return None
-        if not isinstance(text, str) or not text.strip():
+        if not isinstance(text, str) or not text:
             continue
-        if _field(segment, 'audio_alignment') == 'unplaced':
-            return None
         start, end = _field(segment, 'start'), _field(segment, 'end')
         if not _valid_time(start) or not _valid_time(end):
-            return None
+            raise _ContainmentRejected('layout_timing')
         if not (0 <= start < end <= duration_seconds):
-            return None
-        words = tuple(_WORD.findall(text.lower()))
-        total_words += len(words)
-        if total_words > MAX_CAPTURE_WORDS:
-            return None
+            raise _ContainmentRejected('layout_timing')
+        if _field(segment, 'audio_alignment') == 'unplaced':
+            raise _ContainmentRejected('layout_unplaced')
         wall_start = started_at + timedelta(seconds=start)
         wall_end = started_at + timedelta(seconds=end)
         if wall_start < ix_start or wall_end > ix_end:
             continue
-        if end - start > MAX_SEGMENT_SECONDS or len(words) > MAX_SEGMENT_WORDS:
-            return None
+        if len(text) > MAX_SEGMENT_CHARS:
+            raise _ContainmentRejected('bounds_segment_chars')
+        total_chars += len(text)
+        if total_chars > MAX_CAPTURE_CHARS:
+            raise _ContainmentRejected('bounds_chars')
+        words = tuple(_WORD.findall(text.lower()))
+        if len(words) > MAX_SEGMENT_WORDS:
+            raise _ContainmentRejected('bounds_segment_words')
+        total_words += len(words)
+        if total_words > MAX_CAPTURE_WORDS:
+            raise _ContainmentRejected('bounds_words')
+        if end - start > MAX_SEGMENT_SECONDS:
+            raise _ContainmentRejected('bounds_segment_seconds')
+        if not words:
+            continue
         placed.append((wall_start, wall_end, _field(segment, 'is_user') is True, words, index))
     placed.sort(key=lambda item: (item[0], item[1], item[4]))
     latest_end: dict[bool, datetime] = {}
     for item in placed:
         previous = latest_end.get(item[2])
         if previous is not None and item[0] < previous:
-            return None
+            raise _ContainmentRejected('layout_overlap')
         latest_end[item[2]] = item[1]
     return placed, total_words
 
@@ -231,7 +257,7 @@ def _ordered_match(u_words: tuple[str, ...], bundle_words: tuple[str, ...]) -> t
 def _match_utterances(
     small_user: list[tuple[datetime, datetime, tuple[str, ...]]],
     target_user: list[tuple[datetime, datetime, tuple[str, ...]]],
-) -> tuple[int, set[str], set[tuple[str, ...]], float] | None:
+) -> tuple[int, set[str], set[tuple[str, ...]], float]:
     """Greedily pair smaller user utterances with monotonic target bundles."""
     matched_words = 0
     matched_tokens: set[str] = set()
@@ -246,6 +272,7 @@ def _match_utterances(
     skew = timedelta(seconds=MAX_TIME_SKEW_SECONDS)
     target_starts = [item[0] for item in target_user]
     for u_start, u_end, u_words in small_user:
+        u_bigrams = _bigrams(u_words)
         candidates = []
         first = max(last_consumed + 1, bisect.bisect_left(target_starts, u_start - skew))
         last = bisect.bisect_right(target_starts, u_start + skew)
@@ -254,7 +281,7 @@ def _match_utterances(
                 if i + span > len(target_user):
                     break
                 if bundle_checks + 1 > MAX_BUNDLE_CHECKS:
-                    return None
+                    raise _ContainmentRejected('bounds_bundle_checks')
                 bundle_checks += 1
                 bundle = target_user[i : i + span]
                 if abs((bundle[-1][1] - u_end).total_seconds()) > MAX_TIME_SKEW_SECONDS:
@@ -266,24 +293,24 @@ def _match_utterances(
                     continue
                 candidates.append((i, i + span - 1, bundle, bundle_words))
                 if len(candidates) > MAX_TARGET_CANDIDATES:
-                    return None
+                    raise _ContainmentRejected('bounds_candidates')
         best = None
         for i, j, bundle, bundle_words in candidates:
+            if len(u_bigrams & _bigrams(bundle_words)) < MIN_SHARED_BIGRAMS:
+                continue
             tokens = len(u_words) + len(bundle_words)
             cells = len(u_words) * len(bundle_words)
-            if (
-                matcher_calls + 1 > MAX_MATCHER_CALLS
-                or compared_tokens + tokens > MAX_COMPARED_TOKENS
-                or token_comparisons + cells > MAX_TOKEN_COMPARISONS
-            ):
-                return None
+            if matcher_calls + 1 > MAX_MATCHER_CALLS:
+                raise _ContainmentRejected('bounds_matcher_calls')
+            if compared_tokens + tokens > MAX_COMPARED_TOKENS:
+                raise _ContainmentRejected('bounds_tokens')
+            if token_comparisons + cells > MAX_TOKEN_COMPARISONS:
+                raise _ContainmentRejected('bounds_cells')
             matcher_calls += 1
             compared_tokens += tokens
             token_comparisons += cells
             common, matched = _ordered_match(u_words, bundle_words)
             if common / len(u_words) < MIN_PAIR_COVERAGE:
-                continue
-            if len(_bigrams(u_words) & _bigrams(bundle_words)) < MIN_SHARED_BIGRAMS:
                 continue
             key = (common, -abs((bundle[0][0] - u_start).total_seconds()), -j)
             if best is None or key > best[0]:
@@ -303,8 +330,24 @@ def _match_utterances(
     return matched_words, matched_tokens, matched_utterances, support_seconds
 
 
+def _sample_utterances(
+    eligible: list[tuple[datetime, datetime, tuple[str, ...]]],
+) -> list[tuple[datetime, datetime, tuple[str, ...]]]:
+    if len(eligible) <= MAX_SMALLER_UTTERANCES:
+        return list(eligible)
+    last = len(eligible) - 1
+    return [eligible[i * last // (MAX_SMALLER_UTTERANCES - 1)] for i in range(MAX_SMALLER_UTTERANCES)]
+
+
 def measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
     """Decide whether the smaller capture's user speech is contained in the other."""
+    try:
+        return _measure_capture_containment(first, second)
+    except _ContainmentRejected as exc:
+        return CaptureContainment(would_join=False, reason=exc.reason)
+
+
+def _measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
     row_a, row_b = _window(first), _window(second)
     if row_a is None or row_b is None or row_a[2] == row_b[2]:
         return CaptureContainment(would_join=False, reason='ineligible')
@@ -315,8 +358,6 @@ def measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
     for start, finish, _source, segments in (row_a, row_b):
         duration = (finish - start).total_seconds()
         loaded = _in_window_segments(start, duration, ix_start, ix_end, segments)
-        if loaded is None:
-            return CaptureContainment(would_join=False, reason='bounds')
         sides.append(loaded)
     words_a = sum(len(words) for _, _, _, words, _ in sides[0][0])
     words_b = sum(len(words) for _, _, _, words, _ in sides[1][0])
@@ -328,11 +369,12 @@ def measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
         return CaptureContainment(would_join=False, reason='no_user_speech', smaller_words=smaller_words)
     if smaller_words < MIN_SMALLER_WORDS:
         return CaptureContainment(would_join=False, reason='too_small', smaller_words=smaller_words)
-    matched = _match_utterances([(s, e, w) for s, e, w in small_user if len(w) >= MIN_UTTERANCE_WORDS], large_user)
-    if matched is None:
-        return CaptureContainment(would_join=False, reason='bounds', smaller_words=smaller_words)
-    matched_words, matched_tokens, matched_utterances, support_seconds = matched
-    coverage = matched_words / smaller_words if smaller_words else 0.0
+    eligible = [(s, e, w) for s, e, w in small_user if len(w) >= MIN_UTTERANCE_WORDS]
+    eligible_words = sum(len(words) for _, _, words in eligible)
+    sample = _sample_utterances(eligible)
+    sample_words = sum(len(words) for _, _, words in sample)
+    matched_words, matched_tokens, matched_utterances, support_seconds = _match_utterances(sample, large_user)
+    coverage = (matched_words / sample_words) * (eligible_words / smaller_words) if sample_words else 0.0
     decision = CaptureContainment(
         would_join=(
             matched_words >= MIN_MATCHED_WORDS

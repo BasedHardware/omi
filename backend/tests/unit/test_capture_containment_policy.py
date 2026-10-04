@@ -22,6 +22,7 @@ import yaml
 from database import capture_groups as groups_db
 from database import conversations as conversations_db
 from models.conversation import Conversation
+from tests.unit.fixtures import containment_long_pair as long_pair
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import capture_containment as containment_module
 from utils.conversations import capture_jev_shadow as shadow
@@ -409,7 +410,7 @@ def test_pair_budget_exhaustion_blocks_join_through_the_seam(seam, monkeypatch, 
         assert all(m['evidence'].get('method') != 'user_speech_containment' for m in members)
     assert ('capture_group_joined', 'none') in seam['events']
     lines = containment_lines(caplog)
-    assert any('would_join=false' in line and 'reason=bounds' in line for line in lines)
+    assert any('would_join=false' in line and 'reason=bounds_matcher_calls' in line for line in lines)
 
 
 def test_pair_budget_exhaustion_bounds_every_candidate_pair(seam, monkeypatch, caplog):
@@ -427,8 +428,11 @@ def test_pair_budget_exhaustion_bounds_every_candidate_pair(seam, monkeypatch, c
     seam['store'].rows[path('pendant')] = pendant
     for index in range(6):
         utterances = [
-            segment('u%d w%d x%d y%d z%d v%d q%d r%d' % ((index,) * 8), t)
-            for t in (20.0, 50.0, 80.0, 140.0, 200.0, 260.0)
+            segment(
+                ' '.join(UTTERANCES[max(0, pos - 2)].split()[:3]) + ' u%d v%d w%d x%d y%d' % ((index,) * 5),
+                t,
+            )
+            for pos, t in enumerate((20.0, 50.0, 80.0, 140.0, 200.0, 260.0))
         ]
         seam['store'].rows[path('stranger%d' % index)] = row('stranger%d' % index, 'desktop', 0, 300, utterances)
     with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
@@ -436,9 +440,72 @@ def test_pair_budget_exhaustion_bounds_every_candidate_pair(seam, monkeypatch, c
     assert all('capture_group' not in r for r in seam['store'].rows.values())
     lines = containment_lines(caplog)
     assert len(lines) == 6
-    assert all('would_join=false' in line and 'reason=bounds' in line for line in lines)
+    assert all('would_join=false' in line and 'reason=bounds_matcher_calls' in line for line in lines)
     assert len(calls) <= 12
     assert all(token not in '\n'.join(lines) for token in (UID, 'pendant', 'stranger', 'alpha'))
+
+
+def _policy_row(item):
+    return {**item, 'created_at': T0, 'structured': {}, 'external_data': {}}
+
+
+def test_shadow_logs_contained_for_long_pair_without_grouping(seam, monkeypatch, caplog):
+    monkeypatch.setenv(containment_module.MODE_ENV, 'shadow')
+    pendant, desktop = long_pair.long_complementary_pair()
+    seam['store'].rows.update({path('pendant'): _policy_row(pendant), path('desktop'): _policy_row(desktop)})
+    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
+        policy.link_duplicate_captures(UID, Conversation(**seam['store'].rows[path('desktop')]))
+    assert all('capture_group' not in r for r in seam['store'].rows.values())
+    lines = containment_lines(caplog)
+    assert len(lines) == 1
+    assert 'mode=shadow' in lines[0] and 'would_join=true' in lines[0] and 'reason=contained' in lines[0]
+
+
+def test_on_mode_never_joins_an_unrelated_long_pair(seam, monkeypatch, caplog):
+    monkeypatch.setenv(containment_module.MODE_ENV, 'on')
+    pendant, desktop = long_pair.long_unrelated_pair()
+    seam['store'].rows.update({path('pendant'): _policy_row(pendant), path('desktop'): _policy_row(desktop)})
+    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
+        policy.link_duplicate_captures(UID, Conversation(**seam['store'].rows[path('desktop')]))
+    assert all('capture_group' not in r for r in seam['store'].rows.values())
+    assert ('capture_group_joined', 'none') in seam['events']
+    lines = containment_lines(caplog)
+    assert len(lines) == 1 and 'would_join=false' in lines[0]
+
+
+def test_long_pair_matcher_budget_logs_exact_reason(seam, monkeypatch, caplog):
+    monkeypatch.setenv(containment_module.MODE_ENV, 'on')
+    monkeypatch.setattr(containment_module, 'MAX_MATCHER_CALLS', 2)
+    pendant, desktop = long_pair.long_complementary_pair()
+    seam['store'].rows.update({path('pendant'): _policy_row(pendant), path('desktop'): _policy_row(desktop)})
+    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
+        policy.link_duplicate_captures(UID, Conversation(**seam['store'].rows[path('desktop')]))
+    assert all('capture_group' not in r for r in seam['store'].rows.values())
+    lines = containment_lines(caplog)
+    assert len(lines) == 1
+    assert 'would_join=false' in lines[0] and 'reason=bounds_matcher_calls' in lines[0]
+
+
+def test_shadow_logs_layout_overlap_from_detector_without_grouping(seam, monkeypatch, caplog):
+    monkeypatch.setenv(containment_module.MODE_ENV, 'shadow')
+    pendant = row('pendant', 'omi', 0, 300, [segment('alpha bravo charlie delta echo foxtrot golf hotel', 80.0)])
+    overlapped = row(
+        'desktop',
+        'desktop',
+        0,
+        300,
+        [
+            segment('alpha bravo charlie delta echo foxtrot golf hotel', 80.0, end=92.0),
+            segment('alpha bravo charlie delta echo foxtrot golf hotel', 88.0, end=100.0),
+        ],
+    )
+    seam['store'].rows.update({path('pendant'): _policy_row(pendant), path('desktop'): _policy_row(overlapped)})
+    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
+        policy.link_duplicate_captures(UID, Conversation(**seam['store'].rows[path('pendant')]))
+    assert all('capture_group' not in r for r in seam['store'].rows.values())
+    lines = containment_lines(caplog)
+    assert len(lines) == 1
+    assert 'would_join=false' in lines[0] and 'reason=layout_overlap' in lines[0]
 
 
 REPO = Path(__file__).resolve().parents[3]

@@ -1,0 +1,111 @@
+"""Synthetic long complementary capture pair for containment bound coverage.
+
+Builds a ~2h desktop meeting (2,500 non-overlapping segments at 2.88s spacing,
+2.4s durations) against a 1,250-segment pendant capture whose own-voice
+utterances match the desktop even-index own-voice segments with sparse ASR
+substitutions; desktop odd-index segments carry remote speech. Raw sizes
+deliberately exceed the retired 1,024-segment / 16,000-word scan budgets.
+"""
+
+from datetime import datetime, timedelta, timezone
+
+T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+VOCAB = (
+    'agenda budget calendar deadline effort forecast growth hiring invoice journal knowledge ledger '
+    'memo notebook outlook payroll quarter roadmap schedule timeline update vendor workflow '
+    'assembly battery calibration deposit enclosure firmware gasket housing inspection '
+    'microphone packaging sensor shipment tolerance voltage warranty '
+    'anchor beacon channel doorway engine fabric gateway harbor island journey kingdom '
+    'lantern meadow network orchard pioneer quarry river signal tower umbrella valley window'
+).split()
+
+REMOTE_VOCAB = (
+    'agree answer aside comment digress follow interject mention note observe opinion '
+    'question react reply respond summarize tangent'
+).split()
+
+DESKTOP_SECONDS = 7200.0
+DESKTOP_SKEW_SECONDS = 0.5
+SEGMENT_LEAD_SECONDS = 7.0
+SEGMENT_STEP = 2.88
+SEGMENT_DURATION = 2.4
+DESKTOP_SEGMENTS = 2500
+PENDANT_SEGMENTS = 1250
+
+
+def utterance(index):
+    """Distinct natural-vocabulary utterance of 14 words for pendant segment index."""
+    words = [VOCAB[(index * 7 + offset * 37) % len(VOCAB)] + '%04d' % index for offset in range(13)]
+    words.insert(5, 'topic%04d' % index)
+    return ' '.join(words)
+
+
+def remote_line(index):
+    """Distinct remote-participant line for the desktop odd-index segments."""
+    words = [REMOTE_VOCAB[(index * 5 + offset * 11) % len(REMOTE_VOCAB)] for offset in range(9)]
+    words.insert(3, 'remote%04d' % index)
+    return ' '.join(words)
+
+
+def variant(text):
+    """Sparse ASR noise: two substitutions plus three spread insertions."""
+    words = text.split()
+    words[4], words[9] = 'zz' + words[4], 'zz' + words[9]
+    words.insert(12, 'mm')
+    words.insert(7, 'hum')
+    words.insert(2, 'uh')
+    return ' '.join(words)
+
+
+def disjoint_utterance(index):
+    """Utterance sharing no vocabulary with any generated meeting utterance."""
+    return ' '.join('x%04d_%d' % (index, offset) for offset in range(14))
+
+
+def segment(text, start, is_user=True, end=None, **extra):
+    return {
+        'text': text,
+        'start': start,
+        'end': start + SEGMENT_DURATION if end is None else end,
+        'is_user': is_user,
+        'speaker': 'SPEAKER_00',
+        **extra,
+    }
+
+
+def row(id, source, start, end, segments, **extra):
+    return {
+        'id': id,
+        'source': source,
+        'status': 'completed',
+        'discarded': False,
+        'started_at': T0 + timedelta(seconds=start),
+        'finished_at': T0 + timedelta(seconds=end),
+        'transcript_segments': segments,
+        **extra,
+    }
+
+
+def long_complementary_pair():
+    """Pendant wearer speech is contained in the desktop meeting, both orders."""
+    pendant_segments = [segment(utterance(index), index * SEGMENT_STEP * 2.0) for index in range(PENDANT_SEGMENTS)]
+    desktop_segments = []
+    for index in range(DESKTOP_SEGMENTS):
+        start = index * SEGMENT_STEP + SEGMENT_LEAD_SECONDS
+        if index % 2 == 0:
+            desktop_segments.append(segment(variant(utterance(index // 2)), start))
+        else:
+            desktop_segments.append(segment(remote_line(index // 2), start, is_user=False))
+    pendant = row('pendant', 'omi', 0.0, DESKTOP_SECONDS, pendant_segments)
+    desktop = row('desktop', 'desktop', -DESKTOP_SKEW_SECONDS, DESKTOP_SECONDS + SEGMENT_LEAD_SECONDS, desktop_segments)
+    return pendant, desktop
+
+
+def long_unrelated_pair():
+    """Same layout with pendant vocabulary disjoint from the meeting."""
+    pendant, desktop = long_complementary_pair()
+    pendant['transcript_segments'] = [
+        segment(disjoint_utterance(index), index * SEGMENT_STEP * 2.0) for index in range(PENDANT_SEGMENTS)
+    ]
+    return pendant, desktop
