@@ -1077,11 +1077,17 @@ class SharedPreferencesUtil {
     saveStringList('cachedConversations', conversations);
   }
 
-  List<ServerMessage> get cachedMessages => _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
+  List<ServerMessage> get cachedMessages {
+    // Older caches discarded journal provenance, so automatic cards cannot be
+    // distinguished from rich replies. Rehydrate those from canonical history.
+    if (getInt('cachedMessagesSchema') != 1) return [];
+    return _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
+  }
 
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
+    saveInt('cachedMessagesSchema', 1);
   }
 
   /// Last owner-scoped memory projection used for offline/restart rendering.

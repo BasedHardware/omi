@@ -48,6 +48,17 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
+  test('old caches with discarded provenance are rehydrated instead of rendered', () async {
+    final prefs = SharedPreferencesUtil();
+    prefs.saveStringList('cachedMessages', [
+      '{"id":"old","created_at":"2026-01-01T00:00:00Z","sender":"ai","type":"text","text":"Task","content_blocks":[{"type":"taskCard","id":"card","taskId":"task"}]}',
+    ]);
+    final provider = MessageProvider(sessionsApi: FakeSessions());
+    addTearDown(provider.dispose);
+    provider.setMessagesFromCache();
+    expect(provider.messages, isEmpty);
+  });
+
   test('session history, cache and notification ingestion hide automatic rows only', () async {
     final automatic = ServerMessage.fromJson({
       ...message('auto').toJson(),

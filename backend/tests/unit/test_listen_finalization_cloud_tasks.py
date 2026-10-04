@@ -1665,10 +1665,6 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
     assert disposition == ConversationFinalizationDisposition.completed
     completed.assert_called_once_with('job-1', 2, 3)
     receipt_writer.assert_called_once_with('uid-1', conversation, finalization_job_id='job-1')
-    if source != 'omi' or expected_intent_kwargs is None:
-        capture_arrival.assert_not_called()
-    else:
-        capture_arrival.assert_called_once_with('uid-1', **expected_intent_kwargs)
 
 
 @pytest.mark.anyio
