@@ -17,7 +17,7 @@ void main() {
           'lostAudioSeconds': 5.5,
           'audioPacketsReceived': 8,
           'audioPacketsExpected': 10,
-        },
+        }
       ],
       'battery_history_v2': [
         {'ts': start, 'level': 80, 'charging': false},
@@ -27,7 +27,7 @@ void main() {
       'firmware_diagnostics': [
         {
           'ts': start + 1000,
-          'reset_cause_names': ['RESET_WATCHDOG'],
+          'reset_cause_names': ['RESET_WATCHDOG']
         },
       ],
     }, day);
