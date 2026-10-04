@@ -200,6 +200,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CAPTURE_JEV_SHADOW_ENABLED": "true",
         "CAPTURE_JEV_SHADOW_PERCENT": "0",
         "CAPTURE_JEV_SHADOW_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+        "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
         "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED": "true",
         "FREE_TIER_LOCAL_PROCESSING": "true",
         "FREE_TIER_EMERGENCY_STOP": "false",

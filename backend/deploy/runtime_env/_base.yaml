@@ -18,6 +18,7 @@ environment_shared:
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
         SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
+        CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
         TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
         TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
         TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
@@ -333,6 +334,7 @@ environment_shared:
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
+        CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -507,6 +509,7 @@ environment_shared:
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
             value: 'true'
@@ -672,6 +675,7 @@ environment_shared:
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
             value: 'true'
@@ -820,6 +824,7 @@ environment_shared:
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
             value: 'true'
@@ -953,6 +958,7 @@ environment_shared:
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
             value: 'true'
