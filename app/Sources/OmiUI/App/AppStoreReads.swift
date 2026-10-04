@@ -270,11 +270,26 @@ extension AppStore {
         var items: [T] = []
         var ids = Set<String>()
         var cursor: String?
+        var cursors = Set<String>()
         var latest: DomainRead<T>?
+        var pageCount = 0
         while items.count < 10_000 {
             if !stillCurrent() { return nil }
+            guard pageCount < 200 else {
+                throw ReadCopyError("Loaded page count exceeded limit")
+            }
+            pageCount += 1
             let page = try await load(cursor)
             if !stillCurrent() { return nil }
+            if items.count + page.items.count > 10_000 {
+                throw ReadCopyError("Loaded list is too large")
+            }
+            if page.page.hasMore {
+                guard let nextCursor = page.page.nextCursor,
+                    !cursors.contains(nextCursor)
+                else { throw ReadCopyError("Loaded page did not advance") }
+                cursors.insert(nextCursor)
+            }
             for item in page.items {
                 let itemId = idOf(item)
                 if ids.contains(itemId) {
@@ -290,7 +305,7 @@ extension AppStore {
             }
         }
         guard let latest, stillCurrent() else { return nil }
-        return DomainRead(items: items, page: latest.page)
+        return DomainRead(apiContract: latest.apiContract, items: items, page: latest.page)
     }
 
     private func revalidateTasksWindow(
@@ -301,11 +316,33 @@ extension AppStore {
         var items: [TaskProjection] = []
         var ids = Set<String>()
         var cursor: String?
+        var cursors = Set<String>()
+        var first: TaskRead?
         var latest: TaskRead?
+        var pageCount = 0
         while items.count < 10_000 {
             if !stillCurrent() { return nil }
+            guard pageCount < 200 else {
+                throw ReadCopyError("Loaded page count exceeded limit")
+            }
+            pageCount += 1
             let page = try await reads.loadTasks(cursor: cursor)
             if !stillCurrent() { return nil }
+            if let first,
+                page.accountEpoch != first.accountEpoch || page.apiContract != first.apiContract
+            {
+                throw ReadCopyError("Task account authority changed")
+            }
+            if first == nil { first = page }
+            if items.count + page.items.count > 10_000 {
+                throw ReadCopyError("Loaded list is too large")
+            }
+            if page.page.hasMore {
+                guard let nextCursor = page.page.nextCursor,
+                    !cursors.contains(nextCursor)
+                else { throw ReadCopyError("Loaded page did not advance") }
+                cursors.insert(nextCursor)
+            }
             for item in page.items {
                 if ids.contains(item.id) {
                     throw ReadCopyError("Loaded page did not advance")
@@ -675,4 +712,3 @@ extension AppStore {
 
 /// 5-minute remote-glance throttle (GLANCE_REFRESH_MS).
 public let glanceRefreshMs: Int64 = 5 * 60 * 1000
-

@@ -12,8 +12,16 @@ Platforms/
   ios/       xcodegen iOS app host (SwiftUI @main)
   macos/     xcodegen macOS app host (v5 glass window contract)
   android/   Gradle app module consuming the Skip skipstone Kotlin output
-  windows/   swift-winrt + WinUI 3 host (source-only)
+  linux/     standalone SwiftPM host package (OpenSwiftUI path; rendering pending)
+  windows/   OpenSwiftUI host path (source-only; WinUI 3 fallback skeleton)
 ```
+
+Desktop UI framework decision (2026-09): **macOS stays on Apple SwiftUI;
+Linux and Windows standardize on
+[OpenSwiftUI](https://github.com/OpenSwiftUIProject/OpenSwiftUI)** (MIT).
+Upstream reality check: OpenSwiftUI supports macOS/iOS Simulator today,
+Linux only through a stdout renderer (no windowing), and Windows not at all —
+see `linux/README.md` for the platform matrix and what that makes pending.
 
 ## The NativePolicyBridge injection contract
 
@@ -31,6 +39,9 @@ guarantee the bridge binds the SAME C++ on every platform:
   (`native-core/AGENTS.md`).
 - **Windows** — planned to link `CNativeCore` directly like Apple once the
   Windows Swift target exists (see `windows/README.md`).
+- **Linux** — same expectation (`linux/README.md`): the C ABI builds with the
+  Swift toolchain; the first Linux build confirms the C++ has no
+  Apple-specific leakage (the Android JNI bridge binds the same files).
 
 ## iOS (`ios/`)
 
@@ -89,13 +100,27 @@ developer steps (`swift build` → `gradlew :app:assembleDebug`), the
 skipstone output paths, and the JNI wiring
 (`externalNativeBuild` CMake → `omi_jni.c` → the same `native-core` C++).
 
+## Linux (`linux/`)
+
+**Bootstrap-real, rendering-pending.** A standalone SwiftPM host package
+(`omi-v5-linux`, kept out of the repo-root manifest) that wires the real
+OmiKit services (`HTTPBackendTransport`, chat/reads/tasks/cloud, settings) plus
+a 0600 file-backed interim `CredentialStoring` under XDG data home, and
+compiles an OpenSwiftUI view shell. Verified on macOS only (compiles and runs
+against OmiKit/OmiUI + OpenSwiftUI-spm 0.22.0); never built on Linux. Pending:
+Secret Service credentials, a `BrowserAuthControlling` loopback portal
+(no `NWListener` on Linux), BlueZ device transport, and — critical path —
+upstream OpenSwiftUI windowing/text-layout for Linux. See `linux/README.md`.
+
 ## Windows (`windows/`)
 
-**Source-only.** See `windows/README.md`: swift-winrt projections
-(`projections.yaml` + `generate-projections.ps1`, run on Windows), a WinUI 3
-(C++/WinRT) host skeleton, and Swift platform sources (URLSession transport +
-DPAPI credential stub) marked source-complete-but-unbuilt. Upstream
-`desktop/windows` is a Rust/C++ app — this directory is the Swift-first path.
+**Source-only; UI path = OpenSwiftUI.** See `windows/README.md`: the
+swift-winrt decision is resolved (archived tool pinned only for WinRT
+*platform API* seams — credentials/permissions; never for UI), the desktop UI
+layer is OpenSwiftUI, and the WinUI 3 (C++/WinRT) skeleton remains as a
+fallback shell. OpenSwiftUI has **no Windows support upstream yet** — that is
+the critical-path dependency. Existing Swift platform sources
+(`WindowsTransport.swift`) and the projection generator are preserved.
 
 ## What each host must never grow
 

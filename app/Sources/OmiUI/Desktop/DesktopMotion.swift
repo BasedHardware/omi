@@ -80,19 +80,24 @@ public enum DesktopMotion {
 
     // MARK: Easings (desktopMotion.ts)
 
+    // The desktopMotion.ts tokens are milliseconds (RN Animated.timing);
+    // SwiftUI durations are seconds, so every easing here takes a
+    // millisecond token and converts. Callers pass the `*Ms` tokens
+    // directly — never pre-divide.
+
     /// `desktopEaseSmoothOut` — bezier(0.22, 1, 0.36, 1).
-    public static func smoothOut(_ duration: Double) -> Animation {
-        .timingCurve(0.22, 1.0, 0.36, 1.0, duration: duration)
+    public static func smoothOut(_ ms: Double) -> Animation {
+        .timingCurve(0.22, 1.0, 0.36, 1.0, duration: ms / 1000)
     }
 
     /// `desktopEaseInOut` — inOut cubic.
-    public static func easeInOut(_ duration: Double) -> Animation {
-        .timingCurve(0.65, 0, 0.35, 1.0, duration: duration)
+    public static func easeInOut(_ ms: Double) -> Animation {
+        .timingCurve(0.65, 0, 0.35, 1.0, duration: ms / 1000)
     }
 
     /// `desktopEaseBounce` — bezier(0.34, 1.36, 0.64, 1).
-    public static func bounce(_ duration: Double) -> Animation {
-        .timingCurve(0.34, 1.36, 0.64, 1.0, duration: duration)
+    public static func bounce(_ ms: Double) -> Animation {
+        .timingCurve(0.34, 1.36, 0.64, 1.0, duration: ms / 1000)
     }
 
     // MARK: Reduce-motion gates (motionDuration et al)

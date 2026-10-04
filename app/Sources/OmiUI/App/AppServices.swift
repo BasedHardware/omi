@@ -112,6 +112,13 @@ final class AppRuntime {
     var connectedDeviceId: String?
     var connectionId: String?
     var captureMachine: CaptureSessionMachine?
+    var captureFinalizationTask: Task<Void, Never>?
+    var captureIngressTask: Task<Void, Never>?
+    var captureAssembler: AudioPacketAssembler?
+    var captureJournalHandle: String?
+    var captureJournalEntryCount = 0
+    var recordingRecoveryRunning = false
+    var recoveringJournalHandles: Set<String> = []
 }
 
 /// A locked mutable box so `@Sendable` service callbacks (chat streaming

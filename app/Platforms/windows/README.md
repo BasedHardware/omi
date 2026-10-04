@@ -11,6 +11,29 @@ branch `v5-swift`: the shared OmiKit/OmiUI Swift package reaches Windows via
 Swift's Windows toolchain, with swift-winrt providing the WinRT surface
 projections the host needs.
 
+## UI framework decision (resolved 2026-09): OpenSwiftUI
+
+Per the platform decision, the desktop UI layer for Windows (and Linux) is
+**[OpenSwiftUI](https://github.com/OpenSwiftUIProject/OpenSwiftUI)** (MIT).
+The previously-open swift-winrt question is resolved in that frame:
+
+- **swift-winrt (thebrowsercompany) stays archived and is not the UI path.**
+  It remains *relevant* only for WinRT **platform API** crossings — the
+  namespaces in `projections.yaml` (`Windows.Security.Credentials` for the
+  credential store, Bluetooth/Radios for devices, Storage/Networking, UI
+  ViewManagement for appearance). When upstream OpenSwiftUI grows Windows
+  support it is expected to make the same kind of swift-winrt crossings
+  internally; the host keeps `projections.yaml` + `generate-projections.ps1`
+  for its own platform seams.
+- **Honest upstream status (researched 2026-09):** OpenSwiftUI's platform
+  table marks Windows **"Not supported yet"** — no build, no deployment. macOS
+  and iOS Simulator are its supported targets; Linux deploys a stdout-only
+  renderer (no windowing). So this host cannot render via OpenSwiftUI until
+  upstream ships Windows support; that is the critical-path dependency for
+  everything below. The `host/` WinUI 3 (C++/WinRT) skeleton remains the
+  fallback shell: if OpenSwiftUI Windows support stalls, the C++/WinRT window
+  could host an OpenSwiftUI (or other) renderer once one exists.
+
 ## Components
 
 | File | What it is |
@@ -26,9 +49,11 @@ projections the host needs.
 `swift-winrt` is `thebrowsercompany/swift-winrt` on GitHub, which The Browser
 Company **archived** (early 2025). The last release still works for these
 namespaces and remains downloadable from GitHub Releases, but the project is
-unmaintained. Before committing to this path, decide and document one of:
-pin the last release, fork, or adopt a community continuation. The archived
-status is also noted inline in `generate-projections.ps1`.
+unmaintained. **Decision (2026-09): pin the last release** for the host's own
+WinRT platform-API seams (credentials/permissions); do not build UI on it —
+the UI path is OpenSwiftUI (see above), whose own future Windows support will
+carry its own interop layer. The archived status is also noted inline in
+`generate-projections.ps1`.
 
 ## Host pattern choice
 

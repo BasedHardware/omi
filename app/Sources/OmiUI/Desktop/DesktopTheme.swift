@@ -143,8 +143,6 @@ public struct DesktopRootSurface<Content: View>: View {
         content
             .environment(\.desktopTokens, tokens)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                tokens.isLight ? tokens.surfaceInk : Color.clear
-            )
+            .background(tokens.isLight ? tokens.surfaceInk : Color.clear)
     }
 }

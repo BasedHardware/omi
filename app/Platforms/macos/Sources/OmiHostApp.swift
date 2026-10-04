@@ -2,6 +2,9 @@ import AppKit
 import AVFoundation
 import CoreGraphics
 import SwiftUI
+#if DEBUG
+import Inject
+#endif
 
 import OmiKit
 import OmiUI
@@ -55,11 +58,20 @@ enum OmiPermissions {
 
 // MARK: - Window dressing
 
-/// Applies the v5 window contract to the hosting NSWindow. Idempotent: the
-/// SwiftUI lifecycle calls this more than once per window.
+/// Applies the v5 window contract to the hosting NSWindow, per the RN
+/// `applyOmiWindowPresentation` contract: two presentations over one
+/// window. `.app` reserves chrome row 1 (the omnibar row); `.onboarding`
+/// is a chrome-less centered card window — no header bar, no chrome
+/// spacer, sized to the card. Idempotent: the SwiftUI lifecycle calls this
+/// more than once per window and on every presentation change.
 @MainActor
 struct OmiWindowDresser {
     let window: NSWindow
+    var onboarding: Bool = false
+
+    private static let onboardingSize = NSSize(width: 640, height: 680)
+    private static let onboardingMinSize = NSSize(width: 520, height: 620)
+    private static let appSize = NSSize(width: 1_020, height: 720)
 
     func dress() {
         window.styleMask.insert(.fullSizeContentView)
@@ -68,17 +80,61 @@ struct OmiWindowDresser {
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
 
-        // Reserve chrome row 1 the way AppDelegate.mm does: a titlebar
-        // accessory spacer of the full chrome height plus the window inset.
-        installChromeSpacer()
-
         // The app draws its own traffic lights on the chrome row; the system
-        // buttons stay hidden behind the full-size content view.
+        // buttons stay hidden behind the full-size content view. Onboarding
+        // has no chrome row at all — the window is the card's stage.
         window.standardWindowButton(.closeButton)?.isHidden = true
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
+
+        let identifier = NSUserInterfaceItemIdentifier(
+            onboarding ? "omi-onboarding" : "omi-app")
+        let presentationChanged = window.identifier != identifier
+        window.identifier = identifier
+
+        if onboarding {
+            // Frameless: no titlebar at all — the window is the card's
+            // stage (Cmd-W still closes via the retained .closable mask).
+            // Titlebar accessories are illegal once `.titled` is gone —
+            // AppKit asserts in `titlebarAccessoryViewControllers`. Strip
+            // the spacer first, and never touch it again on a borderless
+            // window (SwiftUI re-dresses on every layout pass).
+            if window.styleMask.contains(.titled) {
+                removeChromeSpacer()
+                window.styleMask.remove(.titled)
+            }
+            // The window is the stage, not a glass panel. A clear opaque
+            // window still composites a blur; transparent + non-opaque is
+            // what lets the desktop show around the card.
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = false
+            window.titlebarAppearsTransparent = true
+            if let content = window.contentView {
+                content.wantsLayer = true
+                content.layer?.backgroundColor = NSColor.clear.cgColor
+                content.layer?.isOpaque = false
+            }
+            window.contentMinSize = OmiWindowDresser.onboardingMinSize
+            if presentationChanged {
+                window.setContentSize(OmiWindowDresser.onboardingSize)
+                window.center()
+            }
+        } else {
+            window.styleMask.insert(.titled)
+            window.backgroundColor = nil
+            window.isOpaque = true
+            installChromeSpacer()
+            window.contentMinSize = NSSize(width: 800, height: 680)
+            if presentationChanged {
+                window.setContentSize(OmiWindowDresser.appSize)
+                window.center()
+            }
+        }
     }
 
+    /// Reserve chrome row 1 the way AppDelegate.mm does: a titlebar
+    /// accessory spacer of the full chrome height plus the window inset.
     private func installChromeSpacer() {
         let spacerHeight = OmiChrome.chromeRowHeight + OmiChrome.windowInset
         let existing = window.titlebarAccessoryViewControllers.first {
@@ -90,6 +146,17 @@ struct OmiWindowDresser {
         spacer.view = view
         spacer.layoutAttribute = .top
         window.addTitlebarAccessoryViewController(spacer)
+    }
+
+    private func removeChromeSpacer() {
+        let spacerHeight = OmiChrome.chromeRowHeight + OmiChrome.windowInset
+        for (index, accessory) in window.titlebarAccessoryViewControllers
+            .enumerated().reversed()
+        where accessory.layoutAttribute == .top
+            && accessory.view.frame.height == spacerHeight
+        {
+            window.removeTitlebarAccessoryViewController(at: index)
+        }
     }
 }
 
@@ -116,20 +183,23 @@ struct OmiGlassBackground: NSViewRepresentable {
     }
 }
 
-/// Bridges the SwiftUI hierarchy to the window dresser.
+/// Bridges the SwiftUI hierarchy to the window dresser; re-dresses whenever
+/// the session phase flips the onboarding presentation.
 struct OmiWindowAccessor: NSViewRepresentable {
+    var onboarding: Bool = false
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
-            OmiWindowDresser(window: window).dress()
+            OmiWindowDresser(window: window, onboarding: onboarding).dress()
         }
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
         if let window = view.window {
-            OmiWindowDresser(window: window).dress()
+            OmiWindowDresser(window: window, onboarding: onboarding).dress()
         }
     }
 }
@@ -151,6 +221,29 @@ final class OmiAppDelegate: NSObject, NSApplicationDelegate {
         if OmiBootstrap.demoMode {
             NSApp.mainWindow?.title = "Omi — Demo Data"
         }
+    }
+
+    /// Single-window app (AppDelegate.mm contract): closing the window —
+    /// Cmd-W, the native menu, or the virtual traffic light — ends the
+    /// process. Without this a windowless process lingers and the next
+    /// activation spawns a fresh window with fresh surface state.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    /// Reopen (Dock click, second `open`) focuses the existing window and
+    /// returns false so SwiftUI's WindowGroup never spawns a duplicate —
+    /// two glass windows stack and their content composites into one
+    /// unreadable overlap.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if flag {
+            return false
+        }
+        let appWindow = NSApp.windows.first { window in
+            !(window is NSPanel) && window.isVisible
+        }
+        appWindow?.makeKeyAndOrderFront(nil)
+        return false
     }
 
     private func performWindowCommand(from note: Notification) {
@@ -180,15 +273,28 @@ struct OmiHostApp: App {
     @StateObject private var store: AppStore
 
     init() {
+        #if DEBUG
+        InjectConfiguration.animation = .easeOut(duration: 0.2)
+        #endif
         _store = StateObject(wrappedValue: OmiBootstrap.makeStore())
     }
 
     var body: some Scene {
         WindowGroup {
+            // The onboarding presentation is chrome-less: while the session
+            // is signed out the window re-dresses into a centered card
+            // stage (no header bar, no chrome spacer, no glass).
+            let onboarding = store.authState != AuthUiState.signedIn
             RootView()
                 .environmentObject(store)
-                .background(OmiGlassBackground())
-                .background(OmiWindowAccessor())
+                .background {
+                    if onboarding {
+                        Color.clear
+                    } else {
+                        OmiGlassBackground()
+                    }
+                }
+                .background(OmiWindowAccessor(onboarding: onboarding))
                 .onAppear { applyAppearance(store.preferences.appearance) }
                 .onChange(of: store.preferences.appearance) { appearance in
                     applyAppearance(appearance)

@@ -25,7 +25,7 @@ is the shared SwiftUI (SkipUI-compatible) surface layer. Root rules:
 - `Tests/OmiKitTests/`, `Tests/OmiUITests/` — `swift test` targets
   (in the gate via `bun run swift:test`).
 - `Platforms/` — per-platform host entry points (iOS / Android / macOS /
-  Windows). Host projects live here (`README` or `project.yml` per
+  Linux / Windows). Host projects live here (`README` or `project.yml` per
   platform); not yet created — port pending.
 
 ## Commands

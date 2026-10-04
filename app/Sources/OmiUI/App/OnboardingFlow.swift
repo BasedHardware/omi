@@ -220,3 +220,80 @@ public let desktopValueClaims: [String] = [
     "I listen — your microphone, and the audio of your calls.",
     "It lands in your Omi account, and you read it back from Home.",
 ]
+
+// MARK: - Mobile onboarding answers
+
+/// Preference keys written by the mobile onboarding steps. They ride the
+/// store's real `SettingsStoring` persistence (native defaults on iOS /
+/// SharedPreferences on Android); like `exploreProgress` they are additive
+/// keys outside the 17-entry JS whitelist.
+public enum MobileOnboardingPreferenceKey: String, CaseIterable, Sendable {
+    case consent = "omi.onboarding.mobile.consent"
+    case name = "omi.onboarding.mobile.name"
+    case language = "omi.onboarding.mobile.language"
+    case source = "omi.onboarding.mobile.source"
+    case speech = "omi.onboarding.mobile.speech"
+    case knowledge = "omi.onboarding.mobile.knowledge"
+}
+
+// MARK: - Pure step logic (unit-tested)
+
+/// The setup itinerary, honoring the upstream rule that voice-print
+/// enrollment (`speech`) is a browser-only capability and is skipped on
+/// native phones. The Swift native clients are phones, so the shipped
+/// itinerary excludes `speech` unless a host explicitly opts in.
+public func mobileOnboardingItinerary(includesSpeech: Bool = false)
+    -> [MobileSetupStep]
+{
+    MobileSetupStep.allCases.filter { includesSpeech || $0 != .speech }
+}
+
+/// Rank of a step inside the itinerary; `welcome` sits before the setup
+/// steps (−1, matching `mobileSetupIndex`).
+public func mobileOnboardingRank(
+    _ step: MobileOnboardingStep, itinerary: [MobileSetupStep]
+) -> Int {
+    switch step {
+    case .welcome: return -1
+    case .setup(let setup):
+        return itinerary.firstIndex(of: setup) ?? -1
+    }
+}
+
+/// `previousMobileSetupStep` over an itinerary: back never walks off the
+/// front of the list.
+public func previousMobileSetupStep(
+    _ step: MobileSetupStep, itinerary: [MobileSetupStep]
+) -> MobileSetupStep? {
+    guard let index = itinerary.firstIndex(of: step), index > 0 else {
+        return nil
+    }
+    return itinerary[index - 1]
+}
+
+/// `nextMobileSetupStep` over an itinerary.
+public func nextMobileSetupStep(
+    _ step: MobileSetupStep, itinerary: [MobileSetupStep]
+) -> MobileSetupStep? {
+    guard let index = itinerary.firstIndex(of: step) else { return nil }
+    let next = index + 1
+    return next < itinerary.count ? itinerary[next] : nil
+}
+
+/// Source-step commit rule (port of `persistSource`): "Other" resolves to
+/// the typed detail; any whitespace-only choice fails and keeps the card up.
+public func mobileChosenSource(
+    selected: String?, otherDetail: String
+) -> String? {
+    let chosen = selected == "Other"
+        ? otherDetail.trimmingCharacters(in: .whitespacesAndNewlines)
+        : (selected ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return chosen.isEmpty ? nil : chosen
+}
+
+/// Name-step commit rule: trimmed; empty stays empty (the name is optional,
+/// but a whitespace-only value is recorded as absent).
+public func mobileOnboardingName(_ raw: String) -> String {
+    raw.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+

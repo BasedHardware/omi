@@ -2,7 +2,7 @@ name: omi-v5-macOS
 options:
   bundleIdPrefix: org.reactjs.native
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "15.0"
   createIntermediateGroups: true
 
 packages:
@@ -23,6 +23,10 @@ targets:
           - OmiUI
     info:
       path: Info.plist
+      properties:
+        NSBluetoothAlwaysUsageDescription: Omi uses Bluetooth to connect to your Omi device and stream its audio.
+        NSMicrophoneUsageDescription: Omi records audio for your private transcript when capture is on.
+        OMIFirebaseAPIKey: ""
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.reactjs.native.omi-v5-macos
@@ -31,5 +35,10 @@ targets:
         SWIFT_VERSION: "5.10"
         CODE_SIGN_ENTITLEMENTS: OmiHost.entitlements
         ENABLE_PREVIEWS: true
+      configs:
+        Debug:
+          # Inject / InjectionIII. Not applied to Release.
+          OTHER_LDFLAGS: "-Xlinker -interposable"
+          EMIT_FRONTEND_COMMAND_LINES: YES
         # Single-window policy: WindowGroup hosts exactly one window; the
         # Info.plist carries no secondary window scenes.

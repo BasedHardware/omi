@@ -1,5 +1,10 @@
 import SwiftUI
 
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+import UIKit
+#endif
+
 import OmiKit
 import OmiUI
 
@@ -11,10 +16,10 @@ import OmiUI
 //     real native-core C++ through CNativeCore — nothing to replace on iOS.
 //   - Services come from OmiBootstrap: keychain credentials, the
 //     authenticated HTTP transport, UserDefaults-backed settings, and the
-//     CoreBluetooth device transport. Auth callbacks arrive via the
-//     app-specific `omi-rnruntime://auth/callback` scheme
-//     (docs/auth-and-sessions.md); the host hands the callback URL to the
-//     auth session's browser leg.
+//     CoreBluetooth device transport. Sign-in presents the system
+//     authentication session with the app-specific
+//     `omi-rnruntime://auth/callback` redirect and PKCE
+//     (docs/auth-and-sessions.md); the session owns the exchange.
 
 @main
 struct OmiHostApp: App {
@@ -22,17 +27,32 @@ struct OmiHostApp: App {
 
     init() {
         let credentials = KeychainCredentialStore()
+        let planeStore = UserDefaultsSoftwarePlaneStore()
+        let origin = Self.stampedV5Origin()
         let auth = OmiAuthSession(
             config: AuthSessionConfig(
                 firebaseApiKey: Bundle.main.object(
-                    forInfoDictionaryKey: "OMIFirebaseAPIKey") as? String ?? ""),
-            credentials: credentials)
-        let transport = HTTPBackendTransport(
+                    forInfoDictionaryKey: "OMIFirebaseAPIKey") as? String ?? "",
+                v5BackendOrigin: origin,
+                legacyRedirectURI: AppSchemeBrowserAuth.redirectURI),
+            credentials: credentials,
+            browserAuth: AppSchemeBrowserAuth(), planeStore: planeStore)
+        let backend = HTTPBackendTransport(
             credentials: credentials,
             planeSelection: HTTPBackendTransport.PlaneSelection(
                 storedPlane: UserDefaults.standard.string(
                     forKey: SOFTWARE_PLANE_DEFAULTS_KEY),
-                stampedValid: false))
+                stampedValid: origin != nil),
+            originOverride: origin,
+            bearerResolver: { await auth.resolveBearerToken() }, planeStore: planeStore)
+        let journalRoot = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Omi/RecordingJournals", isDirectory: true)
+        let transport = EncryptedRecordingJournalTransport(
+            backend: backend,
+            ownerProvider: AppleRecordingJournalOwnerProvider(transport: backend),
+            vault: AppleKeychainRecordingJournalVault(),
+            files: POSIXAtomicRecordingJournalFiles(), root: journalRoot)
         _store = StateObject(
             wrappedValue: AppStore(
                 services: AppServices(
@@ -50,26 +70,78 @@ struct OmiHostApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
-                .onOpenURL { url in
-                    handleCallback(url)
-                }
         }
     }
 
-    /// The auth callback route is `omi-rnruntime://auth/callback?...`.
-    /// Non-auth URLs are ignored here — hosts carry no product logic.
-    private func handleCallback(_ url: URL) {
-        guard url.scheme?.lowercased() == "omi-rnruntime",
-            url.host == "auth",
-            url.path == "/callback" || url.path.isEmpty
+    /// The stamped New-plane origin, per RELEASE.md (`OMI_V5_BACKEND_URL`,
+    /// allowlisted). Nil when unset, so sign-in uses the legacy flow.
+    private static func stampedV5Origin() -> String? {
+        guard
+            let raw = ProcessInfo.processInfo.environment[V5_BACKEND_URL_ENV],
+            let origin = parseOrigin(raw),
+            isAllowedV5Hostname(origin.hostname)
         else {
-            return
+            return nil
         }
-        // The OAuth callback query lands here once the iOS browser leg is
-        // wired to OmiAuthSession's BrowserAuthControlling; the session
-        // module owns the exchange.
+        return origin.origin
     }
 }
+
+#if canImport(AuthenticationServices)
+/// The iOS browser leg: the system authentication session with the
+/// app-specific callback scheme, mirroring the RN iOS module. The session
+/// intercepts `omi-rnruntime://auth/callback` itself, so no `onOpenURL`
+/// plumbing is involved.
+@MainActor
+final class AppSchemeBrowserAuth: NSObject, BrowserAuthControlling {
+    static let redirectURI = "omi-rnruntime://auth/callback"
+    private static let callbackScheme = "omi-rnruntime"
+
+    private var activeSession: ASWebAuthenticationSession?
+    private var sessionGeneration = BrowserAuthSessionGeneration()
+
+    func presentAuthorizeURL(_ url: String, state: String) async -> String? {
+        // One outstanding browser leg at a time: a new request cancels the
+        // previous wait (matches OmiAuthSession attempt fencing).
+        activeSession?.cancel()
+        activeSession = nil
+        let generation = sessionGeneration.beginAttempt()
+        guard let authorizeURL = URL(string: url) else { return nil }
+        return await startBrowserAuthSession { completion in
+            let session = ASWebAuthenticationSession(
+                url: authorizeURL,
+                callbackURLScheme: Self.callbackScheme
+            ) { [weak self] callbackURL, error in
+                let result = error == nil ? callbackURL?.absoluteString : nil
+                Task { @MainActor in
+                    if self?.sessionGeneration.isCurrent(generation) == true {
+                        self?.activeSession = nil
+                    }
+                    completion(result)
+                }
+            }
+            session.presentationContextProvider = self
+            activeSession = session
+            let started = session.start()
+            if !started, sessionGeneration.isCurrent(generation) {
+                activeSession = nil
+            }
+            return started
+        }
+    }
+}
+
+extension AppSchemeBrowserAuth: ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession)
+        -> ASPresentationAnchor
+    {
+        let scenes = UIApplication.shared.connectedScenes
+        let windowScene = scenes.first { $0.activationState == .foregroundActive }
+            as? UIWindowScene
+        return windowScene?.windows.first ?? ASPresentationAnchor()
+    }
+}
+#endif
 
 /// `UserDefaults` backend for `SettingsStore` (same typing rules as the
 /// macOS host: CFBoolean → bool, integer, string).

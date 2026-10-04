@@ -36,8 +36,10 @@ public struct DesktopSurface: View {
 
     private var session: DesktopSessionPhase {
         switch store.authState {
-        case AuthUiState.signedOut, AuthUiState.onboarding: return DesktopSessionPhase.signedOut
-        case AuthUiState.signingIn: return DesktopSessionPhase.probing
+        // Signing in stays on the card. The probe screen was a different
+        // window (chrome row, blur, no card) the moment Google opened.
+        case AuthUiState.signedOut, AuthUiState.onboarding, AuthUiState.signingIn:
+            return DesktopSessionPhase.signedOut
         case AuthUiState.signedIn: return DesktopSessionPhase.ready
         }
     }
@@ -47,8 +49,9 @@ public struct DesktopSurface: View {
         )
         DesktopRootSurface(tokens: palette) {
             content
-                .padding(DesktopLayout.windowInset)
+                .padding(session == DesktopSessionPhase.signedOut ? 0 : DesktopLayout.windowInset)
                 .environment(\.desktopTokens, palette)
+                .background(session == DesktopSessionPhase.signedOut ? Color.clear : nil)
         }
         .onAppear {
             if session != DesktopSessionPhase.ready {

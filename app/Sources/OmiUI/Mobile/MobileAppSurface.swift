@@ -96,6 +96,19 @@ public struct MobileAppSurface: View {
     }
 
     public var body: some View {
+        // Session gate (DesktopSurface parity): the signed-out and
+        // onboarding phases render the onboarding card flow; only a ready
+        // session gets the app shell.
+        if store.authState == AuthUiState.onboarding
+            || store.authState == AuthUiState.signedOut
+        {
+            MobileOnboardingPage(returning: store.returningUser)
+        } else {
+            appContent
+        }
+    }
+
+    private var appContent: some View {
         VStack(spacing: 0) {
             if chatActive {
                 MobileChat(onClose: closeChat, reduceMotion: reduceMotion)

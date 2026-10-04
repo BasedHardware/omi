@@ -535,6 +535,10 @@ extension AppStore {
             connectingDeviceId = nil
             deviceBusy = false
         }
+        // A disconnected link may still be draining its last accepted audio
+        // packet. Retire that capture before opening the next one so its
+        // finalizer cannot clear the replacement machine after an await.
+        await awaitCaptureFinalization()
         do {
             let event = try await transport.connect(deviceId: device.id)
             runtime.connectedDeviceId = device.id
@@ -547,8 +551,7 @@ extension AppStore {
                 info = await transport.deviceInfo(deviceId: device.id)
             }
             connectedDeviceInfo = info
-            openCapture(deviceId: device.id, deviceName: device.name)
-            captureStage = runtime.captureMachine?.stage ?? .waiting
+            captureStage = openCapture(deviceId: device.id, deviceName: device.name)
         } catch {
             deviceScanMessage =
                 "Could not connect to your Omi. Keep it nearby and try again."
@@ -563,9 +566,10 @@ extension AppStore {
         deviceScanMessage = nil
         defer { deviceBusy = false }
         await transport.disconnect(deviceId: id)
-        finishCapture()
         runtime.connectedDeviceId = nil
         runtime.connectionId = nil
+        scheduleCaptureFinalization()
+        await awaitCaptureFinalization()
         connectedDeviceName = nil
         connectedDeviceInfo = nil
         batteryLevel = nil
@@ -588,7 +592,7 @@ extension AppStore {
         })
         runtime.streamTasks.append(Task { [weak self] in
             for await packet in transport.audioPackets {
-                await MainActor.run { self?.ingestAudioPacket(packet) }
+                await self?.ingestAudioPacket(packet)
             }
         })
     }
@@ -621,79 +625,306 @@ extension AppStore {
                 connectingDeviceId = event.deviceId
             }
         case .connected:
-            guard runtime.connectedDeviceId == nil
-                || runtime.connectedDeviceId == event.deviceId
+            // Activation belongs to connect(_:), which receives the transport's
+            // successful connection result. A delayed stream event may update
+            // metadata only while that exact connection is still active.
+            guard runtime.connectedDeviceId == event.deviceId,
+                runtime.connectionId == event.connectionId
             else { return }
-            runtime.connectedDeviceId = event.deviceId
-            runtime.connectionId = event.connectionId
             if connectedDeviceName == nil {
                 connectedDeviceName = event.info?.model ?? "Omi"
             }
             connectedDeviceInfo = event.info ?? connectedDeviceInfo
             if runtime.captureMachine == nil {
-                openCapture(deviceId: event.deviceId, deviceName: connectedDeviceName)
+                captureStage = openCapture(
+                    deviceId: event.deviceId, deviceName: connectedDeviceName)
+            } else if captureStage != .failed {
+                captureStage = runtime.captureMachine?.stage ?? .failed
             }
-            captureStage = runtime.captureMachine?.stage ?? .waiting
         case .disconnected:
-            guard event.deviceId == runtime.connectedDeviceId else { return }
-            finishCapture()
+            guard event.deviceId == runtime.connectedDeviceId,
+                event.connectionId == runtime.connectionId
+            else { return }
             runtime.connectedDeviceId = nil
             runtime.connectionId = nil
             connectedDeviceName = nil
             connectedDeviceInfo = nil
             batteryLevel = nil
             captureStage = .idle
+            scheduleCaptureFinalization()
         }
     }
 
-    func ingestAudioPacket(_ packet: DeviceAudioPacket) {
+    func scheduleCaptureFinalization() {
+        guard runtime.captureFinalizationTask == nil else { return }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.finishCapture()
+        }
+        runtime.captureFinalizationTask = task
+        runtime.streamTasks.append(task)
+    }
+
+    private func awaitCaptureFinalization() async {
+        guard let task = runtime.captureFinalizationTask else { return }
+        await task.value
+        runtime.captureFinalizationTask = nil
+    }
+
+    func ingestAudioPacket(_ packet: DeviceAudioPacket) async {
+        let previous = runtime.captureIngressTask
+        let current = Task { [weak self] in
+            await previous?.value
+            await self?.persistAndIngestAudioPacket(packet)
+        }
+        runtime.captureIngressTask = current
+        await current.value
+    }
+
+    private func persistAndIngestAudioPacket(_ packet: DeviceAudioPacket) async {
         guard packet.deviceId == runtime.connectedDeviceId,
-            let machine = runtime.captureMachine
+            packet.connectionId == runtime.connectionId,
+            let machine = runtime.captureMachine,
+            captureStage != .failed
         else { return }
-        if machine.ingest(packet.raw, receivedAtMs: packet.receivedAtMs) != nil,
-            captureStage != .active
+        guard machine.chunkCount < recordingJournalMaxPackets,
+            machine.byteCount + packet.raw.count <= recordingJournalMaxBytes
+        else {
+            captureStage = .failed
+            deviceErrorCopy =
+                "Recording reached its capture limit. Disconnect your Omi to save audio already received."
+            return
+        }
+
+        if let transport = services.transport as? RecordingJournalStoring,
+            let assembler = runtime.captureAssembler
         {
+            let acceptedIndex: UInt16
+            let payload: [UInt8]
+            switch assembler.classify(packet.raw) {
+            case .accepted(let index, let bytes):
+                acceptedIndex = index
+                payload = bytes
+            case .duplicate, .shortFrame, .invalid:
+                return
+            }
+
+            do {
+                if runtime.captureJournalHandle == nil {
+                    let input = machine.journalInput(
+                        capturedAtMs: packet.receivedAtMs)
+                    let journal = try await createRecordingJournal(
+                        services.transport!, input: input)
+                    runtime.captureJournalHandle = journal.handle
+                    runtime.captureJournalEntryCount = journal.entries.count
+                }
+                guard runtime.captureMachine === machine,
+                    runtime.captureJournalHandle != nil
+                else { return }
+
+                let entry = JSON.serialize(
+                    JSONValue.array([
+                        JSONValue.string("p"),
+                        JSONValue.string(Data(payload).base64EncodedString()),
+                    ]))
+                let expectedAppend = runtime.captureJournalEntryCount + 1
+                // Reserve the sequence before awaiting storage. Disconnect
+                // waits for this ingress task, so it cannot retire an in-flight
+                // append or mistake it for an empty journal.
+                runtime.captureJournalEntryCount = expectedAppend
+                let acknowledged = try await transport.appendRecordingJournal(
+                    handle: runtime.captureJournalHandle!, entry: entry,
+                    expectedEntryCount: expectedAppend)
+                guard acknowledged == expectedAppend else {
+                    throw RecordingJournalReplayError.invalidStorageAcknowledgement
+                }
+            } catch {
+                captureStage = .failed
+                deviceErrorCopy =
+                    "A captured audio packet could not be saved. Disconnect your Omi to preserve audio already journaled."
+                return
+            }
+
+            // The encrypted journal append completes before C++ accepts the
+            // packet into its live capture batch. Both classification and
+            // capture framing remain in the shared C++ middleware.
+            guard runtime.captureMachine === machine,
+                runtime.connectedDeviceId == packet.deviceId,
+                runtime.connectionId == packet.connectionId
+            else { return }
+            guard
+                machine.ingest(packet.raw, receivedAtMs: packet.receivedAtMs)
+                    == acceptedIndex
+            else {
+                captureStage = .failed
+                deviceErrorCopy =
+                    "A captured audio packet could not be saved. Disconnect your Omi to preserve audio already journaled."
+                return
+            }
+        } else if machine.ingest(packet.raw, receivedAtMs: packet.receivedAtMs) == nil {
+            return
+        }
+
+        if captureStage != .active {
             captureStage = .active
         }
     }
 
-    /// Opens one capture machine for the connection. Codec negotiation rides
-    /// with the platform transport; 0 keeps the shared C++ framing rules
-    /// active without claiming a negotiated codec.
-    private func openCapture(deviceId: String, deviceName: String?) {
+    /// Opens one capture machine when a backend transport is available.
+    /// Codec negotiation rides with the platform transport; 0 keeps the
+    /// shared C++ framing rules active without claiming a negotiated codec.
+    private func openCapture(deviceId: String, deviceName: String?) -> CaptureStage {
+        guard services.transport != nil else {
+            runtime.captureMachine = nil
+            runtime.captureAssembler = nil
+            runtime.captureJournalHandle = nil
+            runtime.captureJournalEntryCount = 0
+            deviceErrorCopy =
+                "Audio recording is unavailable because the backend transport is not configured."
+            return .failed
+        }
         let machine = CaptureSessionMachine()
         machine.open(
             deviceId: deviceId, deviceName: deviceName, codec: 0,
             nowMs: appNowMilliseconds())
         runtime.captureMachine = machine
+        runtime.captureAssembler =
+            services.transport is RecordingJournalStoring ? AudioPacketAssembler() : nil
+        runtime.captureAssembler?.reset()
+        runtime.captureJournalHandle = nil
+        runtime.captureJournalEntryCount = 0
+        runtime.captureIngressTask = nil
+        return machine.stage
     }
 
-    /// Performs the journal handoff. With a journal-capable transport the
-    /// batch is stored packet-by-packet; without one the handoff is dropped
-    /// honestly rather than faked into storage.
-    private func finishCapture() {
+    /// Persists the capture in a local journal when available. Other backends
+    /// use the direct device-session upload path, matching the RN fallback.
+    func finishCapture() async {
+        await runtime.captureIngressTask?.value
+        runtime.captureIngressTask = nil
         guard let machine = runtime.captureMachine else { return }
+        guard let transport = services.transport else {
+            runtime.captureMachine = nil
+            runtime.captureAssembler = nil
+            deviceErrorCopy =
+                "Audio recording could not be saved because the backend transport is unavailable."
+            return
+        }
         runtime.captureMachine = nil
-        guard let handoff = machine.handoff(nowMs: appNowMilliseconds()) else {
+        runtime.captureAssembler = nil
+        let journalHandle = runtime.captureJournalHandle
+        let journalEntryCount = runtime.captureJournalEntryCount
+        runtime.captureJournalHandle = nil
+        runtime.captureJournalEntryCount = 0
+        let handoff = machine.handoff(nowMs: appNowMilliseconds())
+
+        if let journalHandle, let storing = transport as? RecordingJournalStoring {
+            runtime.streamTasks.append(
+                Task { [weak self] in
+                    do {
+                        if journalEntryCount == 0 {
+                            await storing.removeRecordingJournal(handle: journalHandle)
+                            return
+                        }
+                        _ = try await drainRecordingJournal(
+                            transport, handle: journalHandle)
+                    } catch {
+                        self?.deviceErrorCopy =
+                            "A saved recording is retained on this device. Reconnect after the connection is restored to retry its upload."
+                    }
+                })
             return
         }
-        guard let storing = services.transport as? RecordingJournalStoring else {
-            return
-        }
-        runtime.streamTasks.append(Task {
-            guard let record = try? await storing.createRecordingJournal(handoff.input)
-            else { return }
-            for (packetOffset, packet) in handoff.packets.enumerated() {
-                let entry = JSON.serialize(
-                    JSONValue.array([
-                        JSONValue.string("p"),
-                        JSONValue.string(
-                            Data(packet.payload).base64EncodedString()),
-                    ]))
-                _ = try? await storing.appendRecordingJournal(
-                    handle: record.handle, entry: entry,
-                    expectedEntryCount: packetOffset + 1)
+
+        guard let handoff else { return }
+        runtime.streamTasks.append(
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.uploadCaptureHandoff(handoff, transport: transport)
+                } catch {
+                    self.deviceErrorCopy =
+                        "Audio was captured, but the recording could not be saved. Check your connection and try again."
+                }
+            })
+    }
+
+    private func uploadCaptureHandoff(
+        _ handoff: CaptureHandoff, transport: BackendTransport
+    ) async throws {
+        guard let firstPacket = handoff.packets.first else { return }
+        let captureId = handoff.input.captureId
+        let session = try await openDeviceSession(
+            transport,
+            capturedAtMs: firstPacket.receivedAtMs,
+            captureId: captureId,
+            deviceId: handoff.input.deviceId,
+            deviceName: handoff.input.deviceName,
+            codec: handoff.input.codec)
+
+        var batch = [[UInt8]]()
+        var batchByteCount = 0
+        var chunkIndex = 0
+        for packet in handoff.packets {
+            guard !packet.payload.isEmpty,
+                packet.payload.count <= deviceSessionMaxBatchBytes
+            else {
+                throw DeviceSessionClientError.invalidAudioBatch
             }
-        })
+            if !batch.isEmpty
+                && (batch.count >= deviceSessionMaxBatchPackets
+                    || batchByteCount + packet.payload.count > deviceSessionMaxBatchBytes)
+            {
+                try await appendDeviceSessionAudio(
+                    transport, sessionId: session.id, packets: batch, chunkIndex: chunkIndex)
+                chunkIndex += batch.count
+                batch.removeAll(keepingCapacity: true)
+                batchByteCount = 0
+            }
+            batch.append(packet.payload)
+            batchByteCount += packet.payload.count
+        }
+        if !batch.isEmpty {
+            try await appendDeviceSessionAudio(
+                transport, sessionId: session.id, packets: batch, chunkIndex: chunkIndex)
+        }
+        _ = try await completeDeviceSession(transport, sessionId: session.id)
+    }
+
+    func recoverRecordingJournals() async {
+        guard sessionReady, !runtime.recordingRecoveryRunning,
+            let transport = services.transport,
+            let storing = transport as? RecordingJournalStoring
+        else { return }
+        runtime.recordingRecoveryRunning = true
+        defer { runtime.recordingRecoveryRunning = false }
+        do {
+            let journals = try await storing.listRecordingJournals()
+            for descriptor in journals {
+                guard sessionReady else { return }
+                guard descriptor.handle != runtime.captureJournalHandle,
+                    !runtime.recoveringJournalHandles.contains(descriptor.handle)
+                else { continue }
+                runtime.recoveringJournalHandles.insert(descriptor.handle)
+                defer { runtime.recoveringJournalHandles.remove(descriptor.handle) }
+                do {
+                    let journal = try await storing.readRecordingJournal(
+                        handle: descriptor.handle)
+                    let restored = try restoreRecording(journal)
+                    if restored.totalBytes == 0 {
+                        await storing.removeRecordingJournal(handle: journal.handle)
+                    } else {
+                        _ = try await drainRecordingJournal(
+                            transport, handle: journal.handle)
+                    }
+                } catch {
+                    deviceErrorCopy =
+                        "A saved recording is retained on this device. Reconnect after the connection is restored to retry its upload."
+                }
+            }
+        } catch {
+            deviceErrorCopy =
+                "Saved recordings could not be checked for recovery. They remain on this device."
+        }
     }
 }

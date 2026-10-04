@@ -1,6 +1,33 @@
 {
-  "originHash" : "655e2b9a0fb6f8ae2fdf507b6c37b96b1238c79520dcac01b7a3dc905940a7fd",
+  "originHash" : "baafeee01e7276231b585c8afd546ffdab04962d32c785355e7f732ed63149c5",
   "pins" : [
+    {
+      "identity" : "inject",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/krzysztofzablocki/Inject.git",
+      "state" : {
+        "revision" : "f53380e986a8b056e37d7ce9ca68de610b8415ef",
+        "version" : "1.6.0"
+      }
+    },
+    {
+      "identity" : "onboardingkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/danielsaidi/OnboardingKit.git",
+      "state" : {
+        "revision" : "64c54277c289fa1f8ddf5b07f1401e08c7222711",
+        "version" : "10.0.0"
+      }
+    },
+    {
+      "identity" : "pageview",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/danielsaidi/PageView.git",
+      "state" : {
+        "revision" : "b60c9ced36242eae0eb81ab0a8e7273386fdbb9b",
+        "version" : "0.2.0"
+      }
+    },
     {
       "identity" : "skip",
       "kind" : "remoteSourceControl",

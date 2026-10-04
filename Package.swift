@@ -19,7 +19,7 @@ let skipStone: Target.PluginUsage = .plugin(name: "skipstone", package: "skip")
 let package = Package(
     name: "omi-v5",
     defaultLocalization: "en",
-    platforms: [.iOS(.v17), .macOS(.v14)],
+    platforms: [.iOS(.v17), .macOS(.v15)],
     products: [
         .library(name: "OmiKit", targets: ["OmiKit"]),
         .library(name: "OmiUI", targets: ["OmiUI"]),
@@ -28,6 +28,18 @@ let package = Package(
         .package(url: "https://github.com/skiptools/skip.git", from: "1.9.11"),
         .package(url: "https://github.com/skiptools/skip-lib.git", from: "1.4.3"),
         .package(url: "https://github.com/skiptools/skip-ui.git", from: "1.60.0"),
+        // OnboardingKit (danielsaidi, MIT) powers the onboarding cards on
+        // Apple platforms. Skip cannot transpile it, so OmiUI imports it
+        // only inside `#if !SKIP` and keeps a native rendering for Android.
+        .package(
+            url: "https://github.com/danielsaidi/OnboardingKit.git",
+            from: "10.0.0"),
+        // Inject (MIT) is a no-op outside Debug. It lets the macOS host
+        // reload a saved SwiftUI file without restarting, once InjectionIII
+        // is running. Skip cannot transpile it.
+        .package(
+            url: "https://github.com/krzysztofzablocki/Inject.git",
+            from: "1.5.2"),
     ],
     targets: [
         .target(
@@ -56,6 +68,8 @@ let package = Package(
             dependencies: [
                 "OmiKit",
                 .product(name: "SkipUI", package: "skip-ui"),
+                .product(name: "OnboardingKit", package: "onboardingkit"),
+                .product(name: "Inject", package: "Inject"),
             ],
             path: "app/Sources/OmiUI",
             plugins: [skipStone]

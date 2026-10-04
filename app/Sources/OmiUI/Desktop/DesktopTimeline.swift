@@ -522,8 +522,9 @@ struct OmiLoadingMark: View {
             .onAppear {
                 guard !reduceMotion else { return }
                 withAnimation(
+                    // 900ms pulse token; SwiftUI durations are seconds.
                     .easeInOut(
-                        duration: DesktopMotion.motionDuration(900, reduceMotion: reduceMotion)
+                        duration: DesktopMotion.motionDuration(900, reduceMotion: reduceMotion) / 1000
                     )
                     .repeatForever(autoreverses: true)
                 ) {

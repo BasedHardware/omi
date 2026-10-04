@@ -54,10 +54,16 @@ extension AppStore {
     /// tearing the store down call this.
     public func stop() {
         runtime.started = false
-        for task in runtime.streamTasks {
+        let activeTasks = runtime.streamTasks
+        for task in activeTasks {
             task.cancel()
         }
         runtime.streamTasks.removeAll()
+        if runtime.captureMachine != nil {
+            runtime.connectedDeviceId = nil
+            runtime.connectionId = nil
+            scheduleCaptureFinalization()
+        }
     }
 
     // MARK: - Onboarding / session (useOnboarding.ts)
@@ -142,12 +148,16 @@ extension AppStore {
                     applySessionGate()
                 }
             } else {
-                authErrorCopy = "Sign in was not completed. Try again."
+                authErrorCopy = "Sign in did not return a session."
                 signInErrorCopy = authErrorCopy
             }
+        } catch let error as AuthError {
+            guard operation == runtime.authOperation else { return }
+            authErrorCopy = signInFailureCopy(error)
+            signInErrorCopy = authErrorCopy
         } catch {
             guard operation == runtime.authOperation else { return }
-            authErrorCopy = "Sign in was not completed. Try again."
+            authErrorCopy = "Sign in failed: \(error.localizedDescription)"
             signInErrorCopy = authErrorCopy
         }
     }
@@ -244,6 +254,9 @@ extension AppStore {
         if !sessionReady {
             resetChatSession()
         } else {
+            runtime.streamTasks.append(Task { [weak self] in
+                await self?.recoverRecordingJournals()
+            })
             runtime.streamTasks.append(Task { [weak self] in
                 await self?.refreshChatHistory()
             })
@@ -353,6 +366,11 @@ extension AppStore {
         }
     }
 
+    public func permissionStatus() async -> [PermissionKind: PermissionState] {
+        guard let settings = services.settings else { return [:] }
+        return await settings.permissionStatus()
+    }
+
     @discardableResult
     public func requestPermission(_ kind: PermissionKind) async -> PermissionState {
         guard let settings = services.settings else { return .unknown }
@@ -459,5 +477,15 @@ extension AppStore {
         homeChatOpen = false
         mobileRoute = destination
         route = destination.appRoute
+    }
+}
+
+extension AppStore {
+    /// Records one mobile-onboarding answer through the real settings store
+    /// (the same mechanism as `desktopPreferenceKeys.exploreProgress`).
+    public func recordMobileOnboarding(
+        _ key: MobileOnboardingPreferenceKey, value: String
+    ) async {
+        await setPreference(key.rawValue, PreferenceValue.string(value))
     }
 }
