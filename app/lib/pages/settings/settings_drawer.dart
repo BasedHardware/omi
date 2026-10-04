@@ -12,6 +12,7 @@ import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -24,7 +25,8 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// (settings_groups.dart), whose rows open the same pages the sheet used to open directly.
 /// Developer Settings keeps only developer tools.
 class SettingsDrawer extends StatefulWidget {
-  const SettingsDrawer({super.key});
+  const SettingsDrawer({super.key, this.asRoot = false});
+  final bool asRoot;
 
   @override
   State<SettingsDrawer> createState() => _SettingsDrawerState();
@@ -61,7 +63,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   }
 
   Future<void> _open(SettingsDestination destination) async {
+    final prefs = SharedPreferencesUtil();
+    final profile = (prefs.userPrimaryLanguage, prefs.hasSpeakerProfile, prefs.transcriptionModel);
     await openSettingsDestination(context, destination);
+    if (mounted &&
+        widget.asRoot &&
+        profile != (prefs.userPrimaryLanguage, prefs.hasSpeakerProfile, prefs.transcriptionModel)) {
+      context.read<CaptureProvider>().onRecordProfileSettingChanged();
+    }
     // The Account row shows the name, which may have changed on the page just closed.
     if (mounted) setState(() {});
   }
@@ -307,7 +316,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
             ),
           ),
-          const OmiCloseButton(),
+          if (!widget.asRoot) const OmiCloseButton(),
         ],
       ),
     );
@@ -360,9 +369,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         searchValue: _searchQuery,
         searchPlaceholder: context.l10n.searchSettings,
         toolbar: [
-          NativeRow('settings_close', context.l10n.close, symbol: 'xmark', action: (_) {
-            Navigator.of(context).pop();
-          })
+          if (!widget.asRoot)
+            NativeRow('settings_close', context.l10n.close, symbol: 'xmark', action: (_) {
+              Navigator.of(context).pop();
+            })
         ]);
   }
 }

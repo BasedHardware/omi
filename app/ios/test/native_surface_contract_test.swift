@@ -11,6 +11,23 @@ struct NativeSurfaceTests {
             "searchEnabled": true, "searchValue": "private search", "searchPlaceholder": "Search", "refreshEnabled": false,
             "error": "Error", "retry": "Retry", "loadingLabel": "Loading"]
         let snapshot = try NativeSurfaceSnapshot.decode(input)
+        var tabs = input
+        tabs["sections"] = []
+        tabs["searchEnabled"] = false
+        var destinations: [String: Any] = ["id": "main_destination", "title": "", "kind": "segmented", "subtitle": "",
+            "value": "home", "enabled": true, "destructive": false,
+            "options": ["home", "tasks", "memories", "apps", "settings"].map { ["id": $0, "title": $0.capitalized] }]
+        tabs["navigation"] = destinations
+        let bar = try NativeSurfaceSnapshot.decode(tabs)
+        precondition(bar.replacingValue(id: "main_destination", value: .text("settings")).navigation?.value?.text == "settings")
+        precondition(bar.withoutContent().navigation == nil && bar.withoutContent().allRows.isEmpty)
+        destinations["value"] = "arbitrary_route"
+        tabs["navigation"] = destinations
+        rejects(tabs)
+        destinations["value"] = "home"
+        destinations["options"] = [["id": "home", "title": "Home"]]
+        tabs["navigation"] = destinations
+        rejects(tabs)
         var keypad: [String: Any] = ["id": "keys", "title": "Keypad", "kind": "keypad", "subtitle": "",
             "value": "123", "keypadMode": "dtmf", "options": "0123456789*#".map { ["id": String($0), "title": ""] },
             "destructive": false, "enabled": true]

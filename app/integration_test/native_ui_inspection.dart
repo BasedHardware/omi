@@ -19,6 +19,13 @@ import 'package:omi/models/user_usage.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/providers/appearance_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_main_navigation.dart';
+import 'package:omi/pages/action_items/action_items_page.dart';
+import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/apps/page.dart';
+import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
@@ -77,6 +84,11 @@ class _InspectionRoutes extends StatelessWidget {
         appBar: AppBar(title: const Text('Synthetic native UI inspection')),
         body: ListView(children: [
           ListTile(
+              key: const Key('inspect_main_navigation'),
+              title: const Text('Main navigation'),
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute<void>(builder: (_) => const _MainNavigationInspection()))),
+          ListTile(
               key: const Key('inspect_transcription'),
               title: const Text('Transcription'),
               onTap: () => Navigator.of(context)
@@ -120,6 +132,31 @@ class _InspectionRoutes extends StatelessWidget {
                       )))),
         ]),
       );
+}
+
+class _MainNavigationInspection extends StatelessWidget {
+  const _MainNavigationInspection();
+  @override
+  Widget build(BuildContext context) {
+    final home = context.watch<HomeProvider>();
+    return Scaffold(
+        body: IosNativeMainShell(
+      homeIndex: home.selectedIndex,
+      navigationRevision: home.navigationRevision,
+      onHomeTabSelected: home.setIndex,
+      pages: {
+        'home': (_) => IosNativeHome(header: const [], footer: [
+              NativeHomeAction('chat', 'Ask Omi', 'bubble.left', () {}),
+              NativeHomeAction('voice', 'Voice', 'mic', () {}),
+              NativeHomeAction('record', 'Record', 'record.circle', () {}),
+            ]),
+        'tasks': (_) => const ActionItemsPage(),
+        'memories': (_) => const MemoriesPage(asRoot: true, showMindMap: false),
+        'apps': (_) => const AppsPage(),
+        'settings': (_) => const SettingsDrawer(asRoot: true),
+      },
+    ));
+  }
 }
 
 class _InspectionGateway implements AuthTokenGateway {

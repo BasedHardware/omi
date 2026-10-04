@@ -28,7 +28,9 @@ import 'widgets/memory_management_sheet.dart';
 import 'widgets/memories_load_error.dart';
 
 class MemoriesPage extends StatefulWidget {
-  const MemoriesPage({super.key, this.showMindMap = true, this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph});
+  const MemoriesPage(
+      {super.key, this.asRoot = false, this.showMindMap = true, this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph});
+  final bool asRoot;
 
   /// The live graph preview at the top. The graph needs a real canvas and network, so harnesses
   /// that pump the page without them turn it off.
@@ -181,7 +183,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       builder: (context, provider, _) {
         final classic = Scaffold(
           backgroundColor: OmiColors.surface0,
-          appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.memories)),
+          appBar: AppBar(
+              automaticallyImplyLeading: !widget.asRoot,
+              leading: widget.asRoot ? null : const OmiBackButton(),
+              title: Text(context.l10n.memories)),
           body: Stack(
             children: [
               RefreshIndicator(
@@ -290,9 +295,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
             search: (value) => provider.setSearchQuery(value as String),
             onRefresh: (_) => provider.init(),
             toolbar: [
-              NativeRow('memories_back', context.l10n.back, symbol: 'chevron.left', action: (_) {
-                Navigator.of(context).pop();
-              }),
+              if (!widget.asRoot)
+                NativeRow('memories_back', context.l10n.back, symbol: 'chevron.left', action: (_) {
+                  Navigator.of(context).pop();
+                }),
               NativeRow('memories_add', context.l10n.createMemoryTooltip,
                   symbol: 'plus', action: (_) => _createMemory(provider)),
               NativeRow('memories_manage', context.l10n.memoryManagement, symbol: 'line.3.horizontal.decrease',

@@ -13,6 +13,9 @@ import 'package:upgrader/upgrader.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_main_navigation.dart';
+import 'package:omi/pages/apps/page.dart';
+import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/home/device.dart';
 import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
@@ -83,6 +86,8 @@ import 'home_deep_links.dart';
 import 'home_navigation.dart';
 import 'home_prompt_gate.dart';
 import 'widgets/battery_info_widget.dart';
+
+part 'native_home_presentation.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -485,7 +490,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       await openHomeDeepLink(context, initialLink, openSettings: _openSettings, openSearch: _openSearch);
     });
 
-    HomeNavigation.register(_openRoute);
+    HomeNavigation.register(_openRoute,
+        selectHome: iosSwiftUiEnabled && Platform.isIOS
+            ? () => context.read<HomeProvider>().setIndex(HomeProvider.homeTab)
+            : null);
     _listenToMessagesFromNotification();
     _listenToFreemiumThreshold();
     _checkForAnnouncements();
@@ -766,9 +774,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           return child!;
         },
-        child: Selector<HomeProvider, int>(
-          selector: (_, homeProvider) => homeProvider.selectedIndex,
-          builder: (context, selectedIndex, _) {
+        child: Selector<HomeProvider, (int, int)>(
+          selector: (_, homeProvider) => (homeProvider.selectedIndex, homeProvider.navigationRevision),
+          builder: (context, selection, _) {
+            final (selectedIndex, navigationRevision) = selection;
             final onHome = selectedIndex == HomeProvider.homeTab;
             // D6: Android back on Tasks returns to Home before it leaves the app.
             final classic = PopScope(
@@ -875,11 +884,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   }
                   return Scaffold(
                       body: Stack(children: [
-                    IndexedStack(index: onHome ? 0 : 1, children: [
-                      _buildNativeHome(context),
-                      ActionItemsPage(key: _actionItemsPageKey),
-                    ]),
-                    if (!onHome) const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
+                    IosNativeMainShell(
+                      homeIndex: selectedIndex,
+                      navigationRevision: navigationRevision,
+                      onHomeTabSelected: context.read<HomeProvider>().setIndex,
+                      onHomeReselected: () => _scrollToTop(HomeProvider.homeTab),
+                      pages: {
+                        'home': _buildNativeHome,
+                        'tasks': (_) => Stack(children: [
+                              ActionItemsPage(key: _actionItemsPageKey),
+                              const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
+                            ]),
+                        'memories': (_) => const MemoriesPage(asRoot: true),
+                        'apps': (_) => const AppsPage(),
+                        'settings': (_) => const SettingsDrawer(asRoot: true),
+                      },
+                    ),
                     Offstage(child: HomeRecordButton(key: _nativeRecordKey)),
                   ]));
                 });
@@ -887,103 +907,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         ),
       ),
     );
-  }
-
-  Widget _buildNativeHome(BuildContext context) {
-    final l10n = context.l10n;
-    final device = context.watch<DeviceProvider>();
-    final capture = context.watch<CaptureProvider>();
-    final home = context.watch<HomeProvider>();
-    final prompts = context.watch<SpeakerTagPromptsProvider>();
-    final sync = context.watch<SyncProvider>();
-    final wedge = CaptureWedgeMonitor.instance;
-    final pending = sync.missingWalsOnDevice.length + sync.pendingLocalTranscriptionWals.length;
-    final phoneRecording = capture.recordingState == RecordingState.record || capture.isPhoneMicPaused;
-    final deviceLabel = device.isConnected
-        ? device.batteryLevel > 0
-            ? '${device.batteryLevel}%'
-            : device.connectedDevice!.name
-        : device.isConnecting
-            ? l10n.deviceConnecting
-            : device.pairedDevice == null
-                ? l10n.connect
-                : l10n.disconnected;
-    return ListenableBuilder(
-        listenable: wedge,
-        builder: (context, _) => IosNativeHome(
-              key: _nativeHomeKey,
-              header: [
-                NativeHomeAction(
-                    'device', deviceLabel, device.isCharging ? 'battery.100percent.bolt' : 'battery.75percent',
-                    () async {
-                  await routeToPage(
-                      context, device.pairedDevice == null ? const ConnectDevicePage() : const ConnectedDevice());
-                }),
-                NativeHomeAction('calls', l10n.phoneCallsWithOmi, 'phone', () async {
-                  await routeToPage(context, const PhoneCallsPage());
-                }),
-                if (device.pairedDevice != null || pending > 0)
-                  NativeHomeAction('sync', pending > 0 ? '${l10n.sync} ($pending)' : l10n.sync, 'icloud', () async {
-                    await routeToPage(context, device.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
-                  }),
-                NativeHomeAction('search', l10n.search, 'magnifyingglass', _openSearch),
-                NativeHomeAction('settings', l10n.settings, 'gearshape', _openSettings),
-              ],
-              footer: [
-                NativeHomeAction('chat', l10n.askOmi, 'bubble.left', () => _openChat()),
-                NativeHomeAction('voice', l10n.voiceMode, 'mic', () => _openChat(voice: true)),
-                NativeHomeAction('record', phoneRecording ? l10n.stopRecording : l10n.startRecording,
-                    phoneRecording ? 'stop.fill' : 'record.circle', () async {
-                  await _nativeRecordKey.currentState?.performPrimaryAction();
-                }, enabled: capture.recordingState != RecordingState.initialising),
-                NativeHomeAction('tasks', l10n.tasks, 'checklist', () {
-                  context.read<HomeProvider>().setIndex(HomeProvider.tasksTab);
-                }),
-              ],
-              alerts: [
-                if (wedge.visiblePrompt != null)
-                  NativeHomeAction('recovery', l10n.captureRecoveryBanner, 'exclamationmark.triangle', () async {
-                    wedge.markPromptShown();
-                    wedge.onRecoveryActioned(surface: 'banner');
-                    if (wedge.visiblePrompt?.trigger == CaptureWedgeMonitor.triggerStorageAtRisk) {
-                      wedge.retryVisibleEpisode();
-                    } else {
-                      await HomeNavigation.openRoute('/settings/device');
-                    }
-                  }),
-                if (!home.isLoading &&
-                    !home.hasSpeakerProfile &&
-                    device.isConnected &&
-                    device.pairedDevice?.firmwareRevision != '1.0.2')
-                  NativeHomeAction('voiceProfile', l10n.teachOmiYourVoice, 'waveform', () async {
-                    final before = SharedPreferencesUtil().hasSpeakerProfile;
-                    await openVoiceProfile(context);
-                    if (!mounted || before == SharedPreferencesUtil().hasSpeakerProfile) return;
-                    await capture.onRecordProfileSettingChanged();
-                    if (mounted) home.setSpeakerProfile(SharedPreferencesUtil().hasSpeakerProfile);
-                  }),
-                if (device.havingNewFirmware)
-                  NativeHomeAction('firmware', l10n.updateOmiFirmware, 'arrow.up.circle', () async {
-                    final isGlass = device.pairedDevice?.type == DeviceType.openglass ||
-                        (device.pairedDevice?.name.toLowerCase().contains('glass') ?? false);
-                    PlatformManager.instance.analytics.pageOpened('Update Firmware Memories');
-                    await routeToPage(
-                        context,
-                        isGlass
-                            ? OmiGlassOtaUpdate(
-                                device: device.pairedDevice,
-                                latestFirmwareDetails: device.latestOmiGlassFirmwareDetails)
-                            : FirmwareUpdate(device: device.pairedDevice));
-                  }),
-                if (prompts.visible && (prompts.finished || prompts.current != null))
-                  NativeHomeAction('speakers', l10n.speakerTagPromptTitle, 'person.wave.2', () async {
-                    await showOmiSheet<void>(
-                        context: context,
-                        title: l10n.speakerTagPromptTitle,
-                        builder: (_) => const SpeakerTagPromptCard());
-                  }),
-              ],
-            ));
   }
 
   /// Chat opens as a sheet that rises over Home (see chat_route.dart); the mic opens it listening.

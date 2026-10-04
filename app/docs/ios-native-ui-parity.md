@@ -8,6 +8,7 @@ and physical recording tests were performed. Existing service owners remain auth
 
 | Area | Native presentation implemented | Presentation still to migrate |
 |---|---|---|
+| Main navigation | Native system Home/Tasks/Memories/Apps/Settings tabs, lazy retained pages, root-safe Settings/Memories chrome and Home/deep-link selection | Physical navigation screenshots remain deferred; Simulator interaction evidence is used |
 | Home | Complete Home chrome, capture status/actions, notices, recaps, dated conversations, local recording entry points | Detailed capture flows and bulk library selection |
 | Library/search | Paging, scopes, folder/starred lists, recent searches, recap browsing | Advanced selections and conversation map |
 | Conversations | Full detail reader, rich summary/transcript, playback/scrub/waveform, follow/search, title/summary/transcript/speaker editors, calendar/recording sheets, lazy photo paging/zoom/share | Specialized feedback/review sheets and earlier-match chooser; physical audio confirmation |

@@ -117,6 +117,7 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
         var actions: [NativeSurfaceRow] { footer + (scroll.map { [$0] } ?? []) }
     }
     let reader: Reader?
+    let navigation: NativeSurfaceRow?
     let chat: Chat?
     let version: Int
     let revision: Int
@@ -138,7 +139,9 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     let retry: String
     let loadingLabel: String
 
-    var allRows: [NativeSurfaceRow] { toolbar + sections.flatMap(\.rows) + (chat?.actions ?? []) + (reader?.actions ?? []) }
+    var allRows: [NativeSurfaceRow] {
+        toolbar + sections.flatMap(\.rows) + (chat?.actions ?? []) + (reader?.actions ?? []) + (navigation.map { [$0] } ?? [])
+    }
 
     func replacingValue(id: String, value: NativeSurfaceRow.Value) -> Self {
         let sections = sections.map { section in
@@ -151,7 +154,8 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                    footer: reader.footer.map { $0.id == id ? $0.replacingValue(value) : $0 },
                    scroll: reader.scroll)
         }
-        return Self(reader: reader, chat: chat, version: version, revision: revision + 1, title: title,
+        return Self(reader: reader, navigation: navigation.map { $0.id == id ? $0.replacingValue(value) : $0 },
+                    chat: chat, version: version, revision: revision + 1, title: title,
                     appearance: appearance, largeTitle: largeTitle, locale: locale, direction: direction,
                     loading: loading, failed: failed, empty: empty, sections: sections, toolbar: toolbar,
                     searchEnabled: searchEnabled, searchValue: searchValue, searchPlaceholder: searchPlaceholder,
@@ -159,7 +163,7 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     }
 
     func withoutContent() -> Self {
-        Self(reader: nil, chat: nil, version: version, revision: revision, title: "", appearance: appearance, largeTitle: false, locale: locale,
+        Self(reader: nil, navigation: nil, chat: nil, version: version, revision: revision, title: "", appearance: appearance, largeTitle: false, locale: locale,
              direction: direction, loading: false, failed: false, empty: "", sections: [], toolbar: [],
              searchEnabled: false, searchValue: "", searchPlaceholder: "", refreshEnabled: false,
              error: error, retry: retry, loadingLabel: loadingLabel)
@@ -170,6 +174,13 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
         let rows = snapshot.allRows
         let ids = rows.map(\.id)
         guard snapshot.version == 1, snapshot.revision >= 0, (snapshot.chat?.draft.count ?? 0) <= 10000,
+              snapshot.navigation.map({ row in
+                  row.id == "main_destination" && row.kind == "segmented"
+                      && Set(row.options.map(\.id)) == Set(["home", "tasks", "memories", "apps", "settings"])
+                      && snapshot.chat == nil && snapshot.reader == nil
+                      && snapshot.sections.isEmpty && snapshot.toolbar.isEmpty
+                      && !snapshot.searchEnabled && !snapshot.refreshEnabled
+              }) != false,
               snapshot.reader == nil || snapshot.chat == nil,
               snapshot.reader.map({ reader in
                   let contentIds = Set(snapshot.sections.flatMap(\.rows).map(\.id))

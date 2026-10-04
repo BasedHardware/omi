@@ -20,6 +20,9 @@ class HomeProvider extends ChangeNotifier {
 
   int _sessionGeneration = 0;
   int selectedIndex = homeTab;
+
+  /// Explicit Home/Tasks navigation also dismisses another native root tab.
+  int navigationRevision = 0;
   Function(int idx)? onSelectedIndexChanged;
   final FocusNode chatFieldFocusNode = FocusNode();
   final FocusNode appsSearchFieldFocusNode = FocusNode();
@@ -162,6 +165,7 @@ class HomeProvider extends ChangeNotifier {
   void clearUserData() {
     _sessionGeneration++;
     selectedIndex = homeTab;
+    navigationRevision++;
     isAppsSearchFieldFocused = false;
     isChatFieldFocused = false;
     isConvoSearchFieldFocused = false;
@@ -194,6 +198,7 @@ class HomeProvider extends ChangeNotifier {
 
   void setIndex(int index) {
     selectedIndex = index;
+    navigationRevision++;
     onSelectedIndexChanged?.call(index);
     notifyListeners();
   }

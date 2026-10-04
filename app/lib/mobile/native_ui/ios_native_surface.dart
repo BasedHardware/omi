@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -359,9 +361,13 @@ class IosNativeSurface extends StatefulWidget {
     this.chat,
     this.reader,
     this.controller,
+    this.navigation,
   });
 
   final NativeSurfaceController? controller;
+
+  /// A root tab bar uses the same account-scoped, allowlisted command bridge.
+  final NativeRow? navigation;
   final NativeChat? chat;
   final NativeReader? reader;
   final String title, empty, searchValue, searchPlaceholder;
@@ -455,6 +461,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         'loadingLabel': context.l10n.loading,
         'chat': widget.chat?.projection,
         'reader': widget.reader?.projection,
+        'navigation': widget.navigation?.projection,
       };
 
   Future<Object?> _handle(MethodCall call) async {
@@ -466,6 +473,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         ..._sections.expand((section) => section.rows),
         ...?widget.chat?.actions,
         ...?widget.reader?.actions,
+        if (widget.navigation != null) widget.navigation!,
       ],
       refresh: widget.onRefresh,
       search: widget.search,
@@ -516,8 +524,20 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
       ..._sections.expand((section) => section.rows),
       ...?widget.chat?.actions,
       ...?widget.reader?.actions,
+      if (widget.navigation != null) widget.navigation!,
     ];
     if (!iosSwiftUiEnabled ||
+        widget.navigation != null &&
+            (widget.navigation!.id != 'main_destination' ||
+                widget.navigation!.kind != 'segmented' ||
+                widget.navigation!.options.length != 5 ||
+                !widget.navigation!.options.keys.every(['home', 'tasks', 'memories', 'apps', 'settings'].contains) ||
+                _sections.isNotEmpty ||
+                _toolbar.isNotEmpty ||
+                widget.chat != null ||
+                widget.reader != null ||
+                widget.search != null ||
+                widget.onRefresh != null) ||
         widget.chat != null && widget.reader != null ||
         widget.reader?.validFor(_sections) == false ||
         rows.any((row) => !row.valid) ||
@@ -537,6 +557,11 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         if (!_session.active) return const SizedBox.shrink();
         final platformView = UiKitView(
           viewType: 'com.omi.native_ui/surface',
+          // The independent system tab bar must receive its touch sequence
+          // immediately instead of waiting on the surrounding Flutter arena.
+          gestureRecognizers: widget.navigation == null
+              ? const {}
+              : {Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer())},
           creationParams: _snapshot(),
           creationParamsCodec: const StandardMessageCodec(),
           onPlatformViewCreated: (id) {

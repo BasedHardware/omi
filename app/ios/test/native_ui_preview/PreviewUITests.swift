@@ -1,6 +1,23 @@
 import XCTest
 
 final class PreviewUITests: XCTestCase {
+    func testMainTabsUseSystemGlassAndAcknowledgeEveryDestination() {
+        let app = start(["navigation", "chrome"])
+        for title in ["Tasks", "Memories", "Apps", "Settings", "Home"] {
+            let tab = app.tabBars.buttons[title]
+            XCTAssertTrue(tab.waitForExistence(timeout: 10))
+            XCTAssertTrue(tab.isHittable)
+            XCTAssertGreaterThanOrEqual(tab.frame.height, 44)
+            tab.tap()
+            let acknowledged = NSPredicate { _, _ in
+                app.staticTexts["preview-last-action"].label == "main_destination:\(title.lowercased())" && tab.isSelected
+            }
+            expectation(for: acknowledged, evaluatedWith: nil)
+            waitForExpectations(timeout: 5)
+        }
+        capture(app, "native-liquid-glass-main-tabs")
+    }
+
     func testPasswordInputIsSecureAndClearsWhenTheOwnerWithdrawsIt() {
         let app = start(["surface", "secure-input"])
         let input = app.secureTextFields["draft"]

@@ -15,8 +15,16 @@ Home is one SwiftUI screen: device/header actions, authoritative capture status 
 recovery notices, recaps, recordings, dated conversations and the bottom controls share the
 same layout. Flutter no longer puts a small native list below its own Home header.
 
+The preview has a persistent native `TabView` bar for Home, Tasks, Memories, Apps and
+Settings. iOS 26+ supplies its system Liquid Glass appearance; earlier iOS uses the
+standard native tab bar. Screens mount on first visit and retain their existing state.
+Pushed details cover the root bar and return to the selected tab. Explicit Home/Tasks
+navigation and deep links select the corresponding root tab without adding another Home
+route. The bar uses the existing account-scoped command bridge, with no separate data owner.
+
 | Area | Native presentation | Existing feature surfaces retained |
 |---|---|---|
+| Main navigation | System tab bar, localized labels, selected state and lazy retained root screens | Existing pushed routes and backend/provider owners |
 | Home and library | Home, dated lists, local recording entry points, gaps, processing, paging, recap browsing, full rich summary/transcript detail, playback/timeline following, guarded title/summary/transcript/speaker editors, calendar/recording sheets and lazy photo zoom/paging/share | Specialized feedback/review sheets and bulk selection |
 | Search and People | Recent searches, folders, starred items, scoped results, People search/filters/pinning/confidence/voice samples/cleanup, create/edit/move/delete folder sheets | Advanced search result selection |
 | Tasks and Memories | Lists, dated Tasks, search, completion, menus, create/edit forms with explicit Save and discard guard; memory categories, belief collection, device filter and bulk management | List selection, hierarchy/reorder and Mind Map |

@@ -126,6 +126,53 @@ struct NativeSurfaceView: View {
     @State private var readerTopId: String?
 
     var body: some View {
+        Group {
+            if state.valid, let navigation = state.snapshot.navigation {
+                mainNavigation(navigation)
+            } else {
+                screen
+            }
+        }
+        .tint(.primary)
+        .preferredColorScheme(state.snapshot.appearance == "system" ? nil
+            : state.snapshot.appearance == "dark" ? .dark : .light)
+        .environment(\.locale, Locale(identifier: state.snapshot.locale))
+        .environment(\.layoutDirection, state.snapshot.direction == "rtl" ? .rightToLeft : .leftToRight)
+        .onAppear { search = state.snapshot.searchValue }
+        .onChange(of: state.snapshot.searchValue) { value in
+            if !state.pending.contains("_search") { search = value }
+        }
+        .onChange(of: state.valid) { valid in if !valid { search = "" } }
+    }
+
+    /// TabView owns its system tab bar, including Liquid Glass on iOS 26+ and
+    /// the platform's accessible selection/large-content behavior on older iOS.
+    private func mainNavigation(_ navigation: NativeSurfaceRow) -> some View {
+        TabView(selection: Binding(get: { state.snapshot.navigation?.value?.text ?? "home" }, set: { id in
+            Task { await state.send(navigation.id, value: id) }
+        })) {
+            ForEach(navigation.options) { option in
+                Color.clear
+                    .tabItem { Label(option.title, systemImage: Self.tabSymbol(option.id)) }
+                    .tag(option.id)
+                    .accessibilityIdentifier("main-tab-\(option.id)")
+            }
+        }
+        .disabled(!navigation.enabled)
+        .accessibilityIdentifier("native-main-navigation")
+    }
+
+    private static func tabSymbol(_ id: String) -> String {
+        switch id {
+        case "tasks": return "checklist"
+        case "memories": return "brain"
+        case "apps": return "square.grid.2x2"
+        case "settings": return "gearshape"
+        default: return "house"
+        }
+    }
+
+    private var screen: some View {
         NavigationStack {
             if state.valid {
                 content
@@ -145,16 +192,6 @@ struct NativeSurfaceView: View {
                     }
             } else { Color.clear.accessibilityIdentifier("native-surface-invalidated") }
         }
-        .tint(.primary)
-        .preferredColorScheme(state.snapshot.appearance == "system" ? nil
-            : state.snapshot.appearance == "dark" ? .dark : .light)
-        .environment(\.locale, Locale(identifier: state.snapshot.locale))
-        .environment(\.layoutDirection, state.snapshot.direction == "rtl" ? .rightToLeft : .leftToRight)
-        .onAppear { search = state.snapshot.searchValue }
-        .onChange(of: state.snapshot.searchValue) { value in
-            if !state.pending.contains("_search") { search = value }
-        }
-        .onChange(of: state.valid) { valid in if !valid { search = "" } }
     }
 
     @ViewBuilder private var content: some View {

@@ -6,7 +6,12 @@ struct PreviewApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if ProcessInfo.processInfo.arguments.contains("modal") {
+                if ProcessInfo.processInfo.arguments.contains("navigation") {
+                    VStack(spacing: 0) {
+                        NativeHomeView(state: harness.state)
+                        NativeSurfaceView(state: harness.surface).frame(height: 98)
+                    }.ignoresSafeArea(edges: .bottom)
+                } else if ProcessInfo.processInfo.arguments.contains("modal") {
                     ModalFixture()
                 } else if ProcessInfo.processInfo.arguments.contains("surface") || ProcessInfo.processInfo.arguments.contains("chat") || ProcessInfo.processInfo.arguments.contains("settings-menu") {
                     NativeSurfaceView(state: harness.surface)
@@ -176,6 +181,10 @@ final class PreviewHarness: ObservableObject {
         else if id == "save" || id == "chat_send" { self.lastSaved = "saved:\(self.lastDraft)" }
         var next = self.surfaceRaw
         next["revision"] = (next["revision"] as! Int) + 1
+        if id == "main_destination", var navigation = next["navigation"] as? [String: Any] {
+            navigation["value"] = value
+            next["navigation"] = navigation
+        }
         if var sections = next["sections"] as? [[String: Any]] {
             for index in sections.indices {
                 var rows = sections[index]["rows"] as! [[String: Any]]
@@ -240,6 +249,14 @@ final class PreviewHarness: ObservableObject {
         let data = try! Data(contentsOf: Bundle.main.url(forResource: "native_home_v1", withExtension: "json")!)
         original = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
         raw = original
+        if ProcessInfo.processInfo.arguments.contains("navigation") {
+            surfaceRaw["sections"] = []
+            surfaceRaw["toolbar"] = []
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["navigation"] = ["id": "main_destination", "title": "", "kind": "segmented", "subtitle": "",
+                "value": "home", "enabled": true, "destructive": false,
+                "options": ["home", "tasks", "memories", "apps", "settings"].map { ["id": $0, "title": $0.capitalized] }]
+        }
         if ProcessInfo.processInfo.arguments.contains("reader") {
             func row(_ id: String, _ title: String, _ kind: String) -> [String: Any] {
                 ["id": id, "title": title, "kind": kind, "subtitle": "", "options": [], "enabled": true, "destructive": false]
