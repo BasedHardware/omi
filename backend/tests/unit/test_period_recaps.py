@@ -212,6 +212,15 @@ def test_a_non_string_conversation_id_is_dropped_not_served():
     PeriodRecapResponse(**recap)
 
 
+def test_a_non_string_daily_recap_id_leaves_the_busiest_day_unlinked():
+    days = [_day('2026-09-29', conversations=1, id=7)]
+
+    recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), days)
+
+    assert recap['busiest_day']['summary_id'] is None
+    PeriodRecapResponse(**recap)
+
+
 def test_open_tasks_are_capped_after_locked_ones_are_dropped():
     live = [
         {
