@@ -14871,7 +14871,7 @@
     "@noRecapForPeriod": {
         "description": "Empty state when a week or month has no recorded conversations"
     },
-    "openTasks": "Open tasks",
+    "openTasks": "Open Tasks",
     "@openTasks": {
         "description": "Recap section header: tasks created in the week or month that are still not done (distinct from the count of tasks created)"
     }

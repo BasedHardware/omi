@@ -22260,7 +22260,7 @@ abstract class AppLocalizations {
   /// Recap section header: tasks created in the week or month that are still not done (distinct from the count of tasks created)
   ///
   /// In en, this message translates to:
-  /// **'Open tasks'**
+  /// **'Open Tasks'**
   String get openTasks;
 }
 

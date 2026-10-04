@@ -212,6 +212,25 @@ def test_a_non_string_conversation_id_is_dropped_not_served():
     PeriodRecapResponse(**recap)
 
 
+def test_open_tasks_are_capped_after_locked_ones_are_dropped():
+    live = [
+        {
+            'id': f'locked-{i}',
+            'description': 'Locked',
+            'is_locked': True,
+            'created_at': datetime(2026, 10, 1, 12, tzinfo=timezone.utc),
+        }
+        for i in range(3)
+    ] + [
+        {'id': f'open-{i}', 'description': f'Open {i}', 'created_at': datetime(2026, 9, 30, 12, tzinfo=timezone.utc)}
+        for i in range(12)
+    ]
+
+    recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), [], action_items=live)
+
+    assert [item['id'] for item in recap['open_action_items']] == [f'open-{i}' for i in range(pr.MAX_RECAP_ITEMS)]
+
+
 def test_the_daily_recaps_task_snapshots_are_ignored():
     recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), WEEK)
 
@@ -346,6 +365,54 @@ def test_a_past_period_compares_with_the_whole_previous_one():
         'total_conversations': 5,
         'total_duration_minutes': 100,
     }
+
+
+def test_the_last_day_with_its_recap_compares_with_the_whole_previous_month():
+    # February 28 with its recap is the whole of February: compare with all of
+    # January, as tomorrow will, not January 1-28.
+    february = [_day('2026-02-28', conversations=1, minutes=10)]
+    january = [_day('2026-01-28', conversations=2, minutes=20), _day('2026-01-31', conversations=3, minutes=30)]
+
+    recap = pr.build_period_recap(
+        'month', date(2026, 2, 1), date(2026, 2, 28), february, previous_summaries=january, today=date(2026, 2, 28)
+    )
+
+    assert recap['previous'] == {
+        'start_date': '2026-01-01',
+        'end_date': '2026-01-31',
+        'total_conversations': 5,
+        'total_duration_minutes': 50,
+    }
+
+
+def test_the_last_day_with_its_recap_compares_with_the_whole_previous_week():
+    week = [_day('2026-10-04', conversations=1, minutes=10)]
+    previous = [_day('2026-09-27', conversations=2, minutes=20)]
+
+    recap = pr.build_period_recap(
+        'week', date(2026, 9, 28), date(2026, 10, 4), week, previous_summaries=previous, today=date(2026, 10, 4)
+    )
+
+    assert (recap['previous']['end_date'], recap['previous']['total_conversations']) == ('2026-09-27', 2)
+
+
+def test_the_busiest_day_tie_goes_to_the_earliest_date():
+    days = [_day('2026-09-29', conversations=3, minutes=60), _day('2026-10-02', conversations=3, minutes=60)]
+
+    recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), list(reversed(days)))
+
+    assert recap['busiest_day']['date'] == '2026-09-29'
+
+
+def test_a_non_canonical_stored_date_is_rejected():
+    # date.fromisoformat accepts the basic format '20261001' on Python 3.11;
+    # only the canonical YYYY-MM-DD form is a stored recap date.
+    days = [_day('20261001', conversations=5, minutes=50), _day('2026-10-02', conversations=1, minutes=10)]
+
+    recap = pr.build_period_recap('month', date(2026, 10, 1), date(2026, 10, 31), days)
+
+    assert recap['days_recorded'] == 1
+    assert recap['stats']['total_conversations'] == 1
 
 
 def test_people_are_ranked_by_talk_time_and_unnamed_people_are_left_out():

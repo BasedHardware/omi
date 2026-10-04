@@ -12422,5 +12422,5 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noRecapForPeriod => 'Nothing recorded in this period yet';
 
   @override
-  String get openTasks => 'Open tasks';
+  String get openTasks => 'Open Tasks';
 }
