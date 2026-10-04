@@ -481,6 +481,19 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
+    # Unrelated failure fixtures still need the explicit ledger bindings on
+    # each host declared by the runtime manifest.
+    payload = re.sub(
+        r'("(?P<service>backend(?:-sync|-sync-backfill|-integration)?)":\s*\{.*?"env":\s*\[)',
+        lambda match: match.group(1)
+        + '\n        '
+        + json.dumps({'name': 'FIRESTORE_READ_LEDGER', 'value': '1'})
+        + ',\n        '
+        + json.dumps({'name': 'FIRESTORE_READ_LEDGER_SERVICE', 'value': match.group('service')})
+        + ',',
+        payload,
+        flags=re.DOTALL,
+    )
     return with_backend_integration_events_secret(payload)
 
 
