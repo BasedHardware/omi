@@ -35,7 +35,7 @@ from langchain_core.runnables import RunnableLambda  # noqa: E402
 import utils.llm.model_config as model_config  # noqa: E402
 import utils.llm.working_observations as working_observations  # noqa: E402
 from models.transcript_segment import TranscriptSegment  # noqa: E402
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix  # noqa: E402
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 from utils.llm.gateway_resilience import DEFAULT_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS  # noqa: E402
 from utils.llm.memories import extract_canonical_l1_memory_candidates  # noqa: E402
 

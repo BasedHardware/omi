@@ -118,6 +118,7 @@ _SYS_MODULE_NAMES = [
     "utils.llm.clients",
     "utils.llm.conversation_folder",
     "utils.llm.conversation_prompt_prefix",
+    "utils.llm.conversation_prompt_context",
     "utils.llm.conversation_processing",
     "utils.llm.model_config",
     "utils.retrieval",
@@ -367,9 +368,9 @@ model_config_stub = _stub_module("utils.llm.model_config")
 model_config_stub.FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
 
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
-prompt_prefix_stub.ConversationPromptPrefix = MagicMock
+prompt_context_stub = _stub_module("utils.llm.conversation_prompt_context")
+prompt_context_stub.ConversationPromptPrefix = MagicMock
 prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
-prompt_prefix_stub.SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the account owner.'
 
 # wake_word is stdlib-only; load the real trust-boundary helper before the
 # isolated conversation-processing module imports it.

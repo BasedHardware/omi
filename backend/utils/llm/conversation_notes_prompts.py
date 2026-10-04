@@ -88,3 +88,42 @@ EVENTS AND CONSISTENCY
 - The same fact must never have conflicting certainty between events and action items.
 
 {format_instructions}'''
+
+
+def conversation_notes_volatile_instructions(
+    *,
+    response_language: str,
+    density: str,
+    task_intelligence_capture: bool,
+    existing_context: str,
+    started_local_iso: str,
+    current_local_iso: str,
+    tz_label: str,
+    conversation_context: str,
+    wake_word_rules: str = '',
+) -> str:
+    """Per-call suffix: language, density, dates, open tasks, and the transcript."""
+    task_filter = (
+        'capture clear commitments and direct requests'
+        if task_intelligence_capture
+        else 'apply the conservative legacy task filter'
+    )
+    text = f'''Respond entirely in {response_language}.
+
+- {density} These are flexible guides, not quotas. Prefer one or two substantial bullets per section,
+  with connected sentences rather than splitting every sentence into its own bullet.
+  Give distinct subtopics room instead of cramming them into a final bullet. Keep the main threads
+  while removing minor details if the note grows much beyond the target.
+- For task-intelligence capture, {task_filter}.
+- Potentially related open tasks:
+{existing_context}
+
+DATE CONTEXT
+- Conversation local time: {started_local_iso}
+- Current local time: {current_local_iso}
+- Timezone: {tz_label}
+
+{conversation_context}'''
+    if wake_word_rules:
+        text = f'{text}\n\n{wake_word_rules}'
+    return text

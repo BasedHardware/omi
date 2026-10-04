@@ -19,9 +19,11 @@ from utils.conversations.episode_evidence import EvidenceItem, context_pack_evid
 from utils.conversations.meeting_context_pack import (
     gather_meeting_context_pack,
     load_people_documents,
-    render_meeting_context_pack,
     resolve_owner_identity,
     should_gather_meeting_context,
+)
+from utils.conversations.meeting_context_render import (
+    render_meeting_context_pack,
 )
 from utils.conversations.meeting_participants import MeetingRoster, normalize_meeting_participants
 from utils.conversations.screen_frame_evidence import (

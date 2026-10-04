@@ -36,7 +36,9 @@ from utils.conversations.episode_evidence import (
 )
 from utils.llm.episode_notes_validation import parse_episode_response, repair_episode_note, sanitize_episode_ids
 from utils.llm.conversation_notes_prompts import (
+    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
+    SHARED_CONVERSATION_PREAMBLE,
 )
 from utils.llm.episode_notes_prompts import (
     EPISODE_WAKE_WORD_RULES,
@@ -73,11 +75,8 @@ from utils.llm.prompt_cache import (
     marked_prefix_request,
     prefix_cache_key,
 )
-from utils.llm.conversation_prompt_prefix import (
-    ConversationPromptPrefix,
-    SHARED_CONVERSATION_PREAMBLE,
-    shared_conversation_cache_supported,
-)
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+from utils.llm.conversation_prompt_prefix import shared_conversation_cache_supported
 
 try:
     from utils.llm.gateway_client import should_route_features_through_gateway
@@ -1155,45 +1154,6 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
 # the route's own 120s TimeoutMiddleware budget.
 # The budget itself is declared on the feature route now (see model_config).
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
-
-
-def _conversation_notes_volatile_instructions(
-    *,
-    response_language: str,
-    density: str,
-    task_intelligence_capture: bool,
-    existing_context: str,
-    started_local_iso: str,
-    current_local_iso: str,
-    tz_label: str,
-    conversation_context: str,
-    wake_word_rules: str = '',
-) -> str:
-    """Per-call suffix: language, density, dates, open tasks, and the transcript."""
-    task_filter = (
-        'capture clear commitments and direct requests'
-        if task_intelligence_capture
-        else 'apply the conservative legacy task filter'
-    )
-    text = f'''Respond entirely in {response_language}.
-
-- {density} These are flexible guides, not quotas. Prefer one or two substantial bullets per section,
-  with connected sentences rather than splitting every sentence into its own bullet.
-  Give distinct subtopics room instead of cramming them into a final bullet. Keep the main threads
-  while removing minor details if the note grows much beyond the target.
-- For task-intelligence capture, {task_filter}.
-- Potentially related open tasks:
-{existing_context}
-
-DATE CONTEXT
-- Conversation local time: {started_local_iso}
-- Current local time: {current_local_iso}
-- Timezone: {tz_label}
-
-{conversation_context}'''
-    if wake_word_rules:
-        text = f'{text}\n\n{wake_word_rules}'
-    return text
 
 
 def get_conversation_notes(

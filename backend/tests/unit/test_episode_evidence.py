@@ -142,7 +142,7 @@ def test_episode_prompt_replaces_speech_only_rules_and_binds_images():
 
 
 def invoke_notes(processing, monkeypatch, responses, *, episode=True, sections=False):
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
     calls = []
 
@@ -226,7 +226,7 @@ def test_claim_coverage_includes_each_factual_span():
 
 
 def test_wake_word_metadata_is_server_authored_and_prompted(processing, monkeypatch):
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
     from utils.conversations.wake_word import WAKE_WORD_MARKER
 
     segments = [
@@ -330,7 +330,7 @@ def test_claim_error_receives_one_retry(processing, monkeypatch):
 
 def test_actual_flag_off_request_uses_pinned_prompts(processing, monkeypatch):
     from langchain_core.output_parsers import PydanticOutputParser
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
     from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
 
     calls = []
@@ -433,7 +433,7 @@ def test_invalid_claim_schema_never_invalidates_usable_note(processing, monkeypa
 
 
 def test_retry_provider_error_never_invalidates_usable_note(processing, monkeypatch, caplog):
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
     bad = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
     calls = []
@@ -556,3 +556,28 @@ def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch
     else:
         assert observed[0].summary == frame.summary
         assert roster.entries[0].display_name == 'Screen identity'
+
+
+def test_frame_added_identity_in_calendar_roster_keeps_screen_sensitivity():
+    from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
+
+    roster = MeetingRoster(
+        entries=(
+            RosterEntry('Ari', None, None, 'human', 'google'),
+            RosterEntry('Bo', None, None, 'human', 'google'),
+        ),
+        display_title=None,
+        title_is_window_title=False,
+    )
+    calendar = SimpleNamespace(
+        calendar_source='google',
+        participants=[SimpleNamespace(name='Ari')],
+        start_time=START,
+        calendar_event_id='synthetic',
+        model_dump=lambda **k: {},
+    )
+    frame = SimpleNamespace(frame_id='f1', names=('Bo',), summary='Synthetic screen', role='strip', captured_at=START)
+    items = meeting_evidence(roster, calendar, [frame])
+    assert items[1].sensitivity == 'standard'
+    assert items[2].sensitivity == 'private'
+    assert json.loads(items[2].content)['source'] == 'screen_activity'

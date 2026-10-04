@@ -26,7 +26,7 @@ import google.auth.credentials  # noqa: F401,E402
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant  # noqa: E402
 from testing.import_isolation import stub_modules  # noqa: E402
 from utils.conversations import screen_frame_evidence as evidence_mod  # noqa: E402
-from utils.conversations.meeting_context_pack import (  # noqa: E402
+from utils.conversations.meeting_context_render import (
     MAX_CONTEXT_PACK_CHARACTERS,
     MeetingContextPack,
     render_meeting_context_pack,
@@ -157,7 +157,7 @@ class TestSpeakerBindingWithScreenRoster:
     """conversation_prompt_prefix binds the one remote voice to the one remote human."""
 
     def _prefix(self, names, extra_participants=()):
-        from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+        from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
         context = with_screen_frame_participants(
             (
@@ -353,7 +353,7 @@ def _image_urls(message) -> list[str]:
 class TestImagesReachTheProvider:
     def _notes(self, monkeypatch, *, screen_frames, rich=True):
         from utils.llm import conversation_processing
-        from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+        from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
         captured: dict = {}
 

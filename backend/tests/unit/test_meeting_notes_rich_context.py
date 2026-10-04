@@ -22,13 +22,15 @@ from testing.import_isolation import stub_modules  # noqa: E402
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant  # noqa: E402
 from models.conversation_enums import ConversationSource  # noqa: E402
 from models.transcript_segment import TranscriptSegment  # noqa: E402
-from utils.conversations.meeting_context_pack import (  # noqa: E402
+from utils.conversations.meeting_context_pack import (
+    should_gather_meeting_context,
+)
+from utils.conversations.meeting_context_render import (
     MAX_CONTEXT_PACK_CHARACTERS,
     MeetingContextPack,
     PersonFact,
     PriorMeetingNote,
     render_meeting_context_pack,
-    should_gather_meeting_context,
 )
 from utils.conversations.meeting_participants import (  # noqa: E402
     MeetingRoster,
@@ -399,7 +401,7 @@ class TestNormalizeMeetingParticipants:
 
 class TestRosterPromptPrefix:
     def _build(self, *, roster=None, speaker_map=None, calendar_context=None, desktop_capture=False):
-        from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+        from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
         return build_conversation_prompt_prefix(
             conversation_id='conv-rich',
@@ -524,7 +526,7 @@ class TestRosterPromptPrefix:
 class TestRichConversationNotes:
     def _call(self, monkeypatch, *, payload, meeting_context=None, roster=None, rich_enabled=True):
         from utils.llm import conversation_processing
-        from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+        from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
         captured: dict = {}
 

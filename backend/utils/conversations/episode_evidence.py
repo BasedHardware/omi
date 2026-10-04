@@ -145,7 +145,21 @@ def meeting_evidence(roster: Any, calendar: Any, frames: Sequence[Any]) -> list[
             )
         )
     if roster is not None:
+        frame_names = {name.casefold() for frame in frames for name in frame.names}
+        calendar_names = {
+            participant.name.casefold()
+            for participant in (calendar.participants if calendar is not None else ())
+            if participant.name and calendar.calendar_source != 'screen_activity'
+        }
         for index, entry in enumerate(roster.entries):
+            # Frame augmentation can retain the calendar's global source label.
+            # A newly observed identity still derives from private screen evidence.
+            frame_derived = (
+                bool(frame_names)
+                and entry.kind != 'owner'
+                and (not entry.display_name or entry.display_name.casefold() not in calendar_names)
+            )
+            source = 'screen_activity' if frame_derived else entry.source
             items.append(
                 _item(
                     'roster',
@@ -155,12 +169,12 @@ def meeting_evidence(roster: Any, calendar: Any, frames: Sequence[Any]) -> list[
                         'email': entry.email,
                         'organization': entry.organization,
                         'kind': entry.kind,
-                        'source': entry.source,
+                        'source': source,
                         'attendance': 'not established by listing',
                     },
                     actor=entry.display_name,
-                    ref=entry.person_id or entry.source,
-                    private=entry.source == 'screen_activity',
+                    ref=entry.person_id or source,
+                    private=source == 'screen_activity',
                 )
             )
     for frame in frames:

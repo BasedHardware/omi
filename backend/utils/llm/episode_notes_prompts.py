@@ -27,6 +27,7 @@ EPISODE_CONTRACT = '''EPISODE NOTES CONTRACT
 - Thin evidence needs concrete observations and missing coverage. Avoid "brief exchange", "no clear topic",
   "quick chat", "nothing captured", or similar filler. Say which speech or screen evidence exists and what is unknown.
 - Supply note_claims for every factual clause in title, overview, section headings/bullets, actions, events and insights.
+  Include action owner_name and participant names, emails, organizations and roles in this coverage.
   Each entry contains exact text, target as a JSON pointer (e.g. /sections/0/body_markdown), the smallest supporting
   evidence_ids, provenance (said/shown/written/inferred) and private. Use separate entries for different sources or
   sensitivity within one field. Evidence IDs stay in metadata, never visible prose. Include a claim for each nonempty

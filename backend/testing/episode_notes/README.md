@@ -1,49 +1,104 @@
 # Episode-notes offline evaluation
 
-All 16 cases are synthetic; names, text, dates and situations are invented.
-`EvidenceBundle` / `EpisodeFixture` in `eval.py` are the fixture schema. Each
-observation records an ID, nullable time/actor, content, sensitivity and source
-reference. Visible chat messages are written evidence observed on screen.
-Expected properties cover required content, prohibited claims, provenance, and
-private tagging. Categories are eval strata, never runtime situation branches.
+The bundled default has 16 synthetic episodes (11 dev, five held_out). Private
+sets with `synthetic: false` require an explicit `--fixtures PATH`; their report
+and cache paths must be outside **every git worktree**, including through
+symlinks. No real evidence belongs in git, tests, commit messages or reports in
+this repository. Output/cache files are atomic and mode 0600. The loader schema
+is in `schema.py`: typed observations, capture window, stratum, split and expected
+properties. Optional diarization/invocation metadata must be server authored.
 
-11 development cases may guide prompts. Five held-out cases (31%) are sealed:
-**never tune a prompt using held-out generated notes or scores**. Run that split
-only for a frozen candidate acceptance run. A revision after inspecting results
-needs a new held-out cohort. Mechanical unit checks of schema/split integrity
-are allowed; do not use their content to customize prompt rules.
+Held-out cases are sealed: never tune prompts using held-out generated notes or
+scores. The CLI and runner require `--split held_out --frozen` acknowledgement.
+A revision after inspecting acceptance results needs a fresh held-out cohort.
+Mechanical fake tests use invented stand-ins, never the private fixture set.
 
-Three calls per episode: candidate, independent all-evidence reference, judge.
-The candidate uses the production episode static/volatile helpers and extraction
-schema, with UTC dates and synthetic text evidence; image pixels and production
-repair retries are not exercised by the eval call. Production retries have separate
-fake-model unit coverage.
-Neither generation call gets expectations. The judge sees evidence, reference,
-candidate and expected properties; it must challenge the reference too.
-Unsupported or wrong-provenance claims are hard faithfulness failures regardless
-of informativeness. Gap is in [0,1]; count metrics include unsupported claims,
-wrong provenance, missed sensitive tags, deterministic/judged vacuity and expected
-property failures. Reports group by stratum and retain individual reasons.
-Each stratum currently has one episode: no statistical-quality claim is possible.
+Select `--arms episode baseline stored` (default: episode). All arms use identical
+full evidence and expected properties, one independent reference per episode,
+and the same judge. Expectations are never sent to generation or reference.
+The judge must challenge the reference against the evidence. `stored` skips
+candidate generation and maps the exact `fixture_id` field in each stored JSON
+file to the bundle ID; filenames are conversation IDs, not fixture prefixes.
+Retrieval/mapping metadata is stripped before scoring. Stored `sections_note`
+markdown is preserved as a section body; `action_items_note` is also visible to
+the judge. Original stored generation cost is unknown (null), not invented zero.
 
-Live invocation (from backend; no production account APIs or Google credentials):
+Candidate model is fixed to `openai/gpt-6-luna`. Production `conv_structure`
+uses `LUNA_MODEL` with provider openai in `utils/llm/model_config.py`; route options
+and `clients.get_llm` add no reasoning-effort override. The harness likewise sends
+no `reasoning_effort`, `reasoning`, or temperature override. Reference/judge default
+to `openai/gpt-6-sol`, configurable with `--reference-model` / `--judge-model` or
+`EPISODE_EVAL_REFERENCE_MODEL` / `EPISODE_EVAL_JUDGE_MODEL`. Live use requires an
+explicit key and HTTPS base URL. Requests have a 6000-token output cap, 60-second
+timeout, no transport retries. CLI concurrency defaults to four (maximum eight).
+
+The reference is cached next to the output (`OUTPUT.cache/`). Candidate and judge
+responses are cached separately. Keys include model, exact prompt and payload;
+reference keys exclude expected properties. Resume with the same command to reuse
+completed requests, even after a later arm fails. Prompt/model/evidence changes
+invalidate the applicable cache. Measurements on resumed rows are the original
+request's usage/latency, not incremental spend for the resume. Keep this cache
+private; it contains reference narratives and generated/scored notes derived from sensitive evidence.
+
+Reports include every note and per-arm/per-stratum gap, unsupported claims, wrong
+provenance, sensitive tagging misses, deterministic/judged vacuity, property
+failures, token counts and latency. Provider usage absent from the response is
+null. Cost aggregates include measured counts. Paired `episode_vs_baseline` and
+`episode_vs_stored` compare the same episode IDs, overall and per stratum;
+negative gap/error/vacuity/property deltas favor episode, while positive
+faithfulness deltas favor episode. Judge variability and small strata still
+require repeated acceptance runs before a quality claim.
+
+Both generation arms reuse production static/volatile helpers and schemas.
+Baseline uses rich notes v2: `build_conversation_prompt_prefix`, normalized roster,
+`rich_static_instructions`, `rich_volatile_instructions`,
+`render_meeting_context_pack` and `digest_screen_rows`. Pure context construction
+is separated from retrieval/cache-route imports; no Firestore/client module is
+imported by the eval. Prompt text is not rewritten in the harness. The baseline
+helpers retain the main/base prompt bytes, pinned by existing flag-off tests.
+
+Approximations (recorded in every report):
+
+- No image pixels, retrieval, repairs, task extraction, relevance gating or
+  persistence. This measures one generation per arm, not production retry cost.
+- English output, UTC dates; capture end stands in for generation time. Task
+  intelligence capture is disabled. Open tasks remain contextual evidence.
+- Flattened observations do not preserve raw calendar/roster fields. Explicit
+  actors are normalized as roster names; raw calendar/roster descriptions go into
+  meeting notes without inferring emails, organizations, title or attendance.
+  Owner identity/catalog and desktop mixed-channel bindings cannot be recovered.
+- Known actor labels define clusters; unnamed turns remain separately unresolved
+  unless an explicit diarization key is supplied. Baseline emits compact source
+  headers using source references/observation IDs. Wake-word metadata is used by
+  episode mode; legacy baseline invocation markers are not reconstructed.
+- Only supplied prior conversations are used: at most three, input order,
+  300-character gists. Open tasks lack prior-conversation linkage. People facts,
+  goals and memories absent from the bundle are not retrieved or invented.
+- OCR uses the production 80-row/2500-character digest. Unstructured OCR lacks
+  app/window metadata, so app-specific messaging exclusion cannot be reconstructed
+  exactly. Typed `messages` become Messages rows; the production digest excludes
+  their bodies. Screen moments retain supplied text (seven moments / 900 chars),
+  without reconstructing missing frame offsets/roles. The production overall
+  background cap remains 6000 characters.
+- Flattened evidence may omit production admission/retrieval boundaries. Baseline
+  treats supplied screen/prior context as already admitted; it does not simulate
+  consent or calendar/roster matching against data outside the bundle.
+
+From `backend/`, real dev comparison (David runs this; the agent does not):
 
 ```bash
-EPISODE_EVAL_API_KEY=... EPISODE_EVAL_BASE_URL=https://openrouter.ai/api/v1 \
-EPISODE_EVAL_MODEL=... .venv/bin/python -m testing.episode_notes.eval \
-  --split dev --output /tmp/episode-notes-dev.json
+EPISODE_EVAL_API_KEY="$(cat ~/.local/share/hostctl/secrets/david-experimental-openrouter-key)" \
+EPISODE_EVAL_BASE_URL=https://openrouter.ai/api/v1 \
+.venv/bin/python -m testing.episode_notes.eval \
+  --fixtures "$HOME/.local/share/omi-meeting-notes-eval/episode/real-episodes.json" \
+  --stored-notes "$HOME/.local/share/omi-meeting-notes-eval/episode/prod-notes" \
+  --arms episode baseline stored --split dev --concurrency 4 \
+  --output "$HOME/.local/share/omi-meeting-notes-eval/episode/round4-dev-report.json"
 ```
 
-No key/endpoint/model means an error before network use. Provider requests use
-zero temperature, bounded output, a 60-second timeout and no retries. Reports
-record model, split and prompt hashes. Each note has `candidate_cost` with provider
-`prompt_tokens` / `completion_tokens` as input/output counts and request latency
-in seconds (through response body read; excludes reference/judge calls). Missing
-provider usage is null, never zero. Fake callbacks can return `LLMResult` with
-fixed measurements. Compare matched model/split reports and prompt hashes for
-episode versus baseline candidate runs; token counts include the additive claims.
-The harness does not estimate production retrieval or retry costs. Keep generated outputs outside git.
-Unit tests inject a fake LLM through `evaluate`; they verify mechanics, not
-model quality. Run tests only through `backend/test.sh` with an explicit list.
-Later acceptance should add independent judges, multiple cases per stratum,
-model/version receipts and repeated runs to quantify judge variability.
+For a frozen acceptance run, change to `--split held_out --frozen` and a distinct
+outside-worktree output filename. Never inspect that report to tune this prompt.
+A single synthetic dev smoke can use `--episode-id launch-review --concurrency 1`.
+Tests run only through `backend/test.sh` with an explicit file list; fake scores
+prove harness mechanics, not note quality. No production account APIs or Google
+credentials are needed or permitted by this harness.

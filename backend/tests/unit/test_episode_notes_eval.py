@@ -2,15 +2,11 @@ import json
 
 import pytest
 
-from testing.episode_notes.eval import (
-    CANDIDATE_PROMPT,
-    JUDGE_PROMPT,
-    REFERENCE_PROMPT,
-    CompatibleEndpoint,
-    LLMResult,
-    evaluate,
-    load_fixtures,
-)
+from testing.episode_notes.eval import CompatibleEndpoint
+from testing.episode_notes.prompts import CANDIDATE_PROMPT
+from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT, evaluate
+from testing.episode_notes.schema import LLMResult, load_fixtures
+
 from utils.conversations.episode_vacuity import is_vacuous_note
 
 
@@ -55,9 +51,9 @@ def test_fake_llm_reports_per_stratum_and_does_not_leak_expectations():
     assert len(calls) == 33
     assert len(report['cases']) == 11
     assert all(row['deterministic_vacuity'] and not row['faithfulness_pass'] for row in report['cases'])
-    assert all(group['wrong_provenance_claims'] == 2 for group in report['strata'].values())
+    assert all(group['wrong_provenance_claims'] == 2 for group in report['arms']['episode']['strata'].values())
     assert json.loads(json.dumps(report)) == report
-    assert len(report['prompt_sha256']) == 64
+    assert len(report['arms']['episode']['prompt_sha256']) == 64
     assert all(
         row['candidate_cost'] == {'input_tokens': 120, 'output_tokens': 45, 'latency_seconds': 0.25}
         for row in report['cases']
@@ -101,7 +97,13 @@ def test_endpoint_reports_provider_usage_and_candidate_latency(monkeypatch):
         'choices': [{'message': {'content': '{"title": "Synthetic"}'}}],
         'usage': {'prompt_tokens': 321, 'completion_tokens': 123},
     }
-    monkeypatch.setattr(module, 'urlopen', lambda *a, **k: io.StringIO(json.dumps(response)))
+    requests = []
+
+    def respond(request, **kwargs):
+        requests.append(json.loads(request.data))
+        return io.StringIO(json.dumps(response))
+
+    monkeypatch.setattr(module, 'urlopen', respond)
     ticks = iter([10.0, 10.75, 20.0, 21.0])
     monkeypatch.setattr(module, 'perf_counter', lambda: next(ticks))
     endpoint = CompatibleEndpoint(key='fake', base_url='https://example.com/v1', model='fake')
@@ -110,3 +112,8 @@ def test_endpoint_reports_provider_usage_and_candidate_latency(monkeypatch):
     assert result.cost() == {'input_tokens': 321, 'output_tokens': 123, 'latency_seconds': 0.75}
     del response['usage']
     assert endpoint('prompt', {}).cost() == {'input_tokens': None, 'output_tokens': None, 'latency_seconds': 1.0}
+
+    assert all(
+        'reasoning_effort' not in request and 'reasoning' not in request and 'temperature' not in request
+        for request in requests
+    )
