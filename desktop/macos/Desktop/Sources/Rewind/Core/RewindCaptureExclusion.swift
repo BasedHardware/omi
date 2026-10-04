@@ -97,6 +97,12 @@ enum RewindCaptureExclusionGeneration {
 
   private static let state = State()
 
+  static func isExcluded(_ appName: String) -> Bool {
+    state.condition.lock()
+    defer { state.condition.unlock() }
+    return state.excludedApps.contains(appName)
+  }
+
   static func snapshot(appName: String) -> RewindCaptureExclusionSnapshot? {
     guard let ownerSnapshot = RewindCaptureOwnerSnapshot.capture() else { return nil }
     state.condition.lock()

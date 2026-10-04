@@ -98,6 +98,7 @@ final class ContextReminderCoordinator {
     let snapshot = arriving ?? Self.frontmostSnapshotContext()
     let resolvedApp = snapshot.appName ?? appName
     let resolvedTitle = snapshot.windowTitle ?? windowTitle
+    guard FocusLockController.shared.allows(appName: resolvedApp, windowTitle: resolvedTitle) else { return }
     guard
       let context = await Self.observedContext(appName: resolvedApp, windowTitle: resolvedTitle)
     else { return }
@@ -105,6 +106,11 @@ final class ContextReminderCoordinator {
   }
 
   func observe(_ context: ContextReminderObservedContext) async {
+    let focusRevision = FocusLockController.shared.revision()
+    guard
+      FocusLockController.shared.allows(
+        appName: context.appName, windowTitle: context.normalizedTitle)
+    else { return }
     let identity = "\(context.bundleID)|\(context.normalizedTitle)|\(context.bucketID ?? "")"
     if lastObservedIdentity != identity {
       lastObservedIdentity = identity
@@ -114,7 +120,10 @@ final class ContextReminderCoordinator {
       let due = try await store.dueReminders(for: context, now: now())
       // The store await can straddle a newer context switch; presenting the
       // old context's reminders then would fire a card for a place already left.
-      guard lastObservedIdentity == identity else { return }
+      guard lastObservedIdentity == identity,
+        FocusLockController.shared.revision() == focusRevision,
+        FocusLockController.shared.allows(appName: context.appName, windowTitle: context.normalizedTitle)
+      else { return }
       for reminder in due where !deliveredInCurrentContext.contains(reminder.id) {
         guard let ownerID = ownerIDProvider() else { return }
         if presenter(ownerID, reminder) {

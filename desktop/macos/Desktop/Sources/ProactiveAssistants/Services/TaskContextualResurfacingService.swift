@@ -51,6 +51,8 @@ struct TaskLocalContextEvent: Equatable, Sendable {
 
   let kind: TaskContextEventKind
   let referenceHash: String
+  /// App-only identity for app-wide Focus Lock; never contains a raw app or title.
+  let appReferenceHash: String?
   let subject: TaskContextSubject?
   let urgency: TaskContextUrgency
   let occurredAt: Date
@@ -78,6 +80,7 @@ struct TaskLocalContextEvent: Equatable, Sendable {
     return TaskLocalContextEvent(
       kind: kind,
       referenceHash: "sha256:\(digest)",
+      appReferenceHash: nil,
       subject: subject,
       urgency: urgency,
       occurredAt: occurredAt,
@@ -92,18 +95,27 @@ struct TaskLocalContextEvent: Equatable, Sendable {
     occurredAt: Date = Date()
   ) -> TaskLocalContextEvent? {
     let normalizedTitle = ContextDetection.normalizeWindowTitle(windowTitle, appName: appName) ?? "untitled"
-    return normalized(
-      kind: .appWindow,
-      rawReference: "\(appName)\n\(normalizedTitle)",
-      subject: subject,
-      occurredAt: occurredAt
-    )
+    guard
+      let event = normalized(
+        kind: .appWindow,
+        rawReference: "\(appName)\n\(normalizedTitle)",
+        subject: subject,
+        occurredAt: occurredAt
+      )
+    else { return nil }
+    let appDigest = SHA256.hash(data: Data(appName.trimmingCharacters(in: .whitespacesAndNewlines).utf8))
+      .map { String(format: "%02x", $0) }.joined()
+    return TaskLocalContextEvent(
+      kind: event.kind, referenceHash: event.referenceHash,
+      appReferenceHash: "sha256:\(appDigest)", subject: event.subject,
+      urgency: event.urgency, occurredAt: event.occurredAt, expiresAt: event.expiresAt)
   }
 
   func attaching(subject: TaskContextSubject) -> TaskLocalContextEvent {
     TaskLocalContextEvent(
       kind: kind,
       referenceHash: referenceHash,
+      appReferenceHash: appReferenceHash,
       subject: subject,
       urgency: urgency,
       occurredAt: occurredAt,
@@ -876,6 +888,7 @@ actor TaskContextualResurfacingService {
   }
 
   func observe(_ event: TaskLocalContextEvent) async {
+    guard FocusLockController.shared.allows(event) else { return }
     ensureOwnerChangeObserver()
     guard let lease = captureOwnerLease() else {
       resetOwnerState()
@@ -898,12 +911,23 @@ actor TaskContextualResurfacingService {
 
   func pendingWorkstreamCount() -> Int { accumulator.pendingWorkstreamCount }
 
+  /// Drop a queued context when the user changes the pinned source. An already
+  /// running network evaluation is fenced by the revision checks in flush().
+  func resetForFocusChange() {
+    debounceTask?.cancel()
+    debounceTask = nil
+    accumulator = TaskContextEventAccumulator()
+    lastMaterialHint = nil
+    lastEvaluationAt = nil
+  }
+
   func flush() async {
     guard let lease = activeLease else { return }
     await flush(lease: lease)
   }
 
   private func flush(lease: OwnerLease) async {
+    let focusRevision = FocusLockController.shared.revision()
     debounceTask?.cancel()
     debounceTask = nil
     guard isCurrent(lease), activeLease == lease else {
@@ -911,7 +935,7 @@ actor TaskContextualResurfacingService {
       return
     }
     let now = Date()
-    let events = accumulator.drain(now: now)
+    let events = accumulator.drain(now: now).filter { FocusLockController.shared.allows($0, now: now) }
     guard !events.isEmpty else { return }
     let matches = Self.contextMatches(events)
     let semanticFingerprint = matches.map { match in
@@ -943,7 +967,9 @@ actor TaskContextualResurfacingService {
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
-      guard isCurrent(lease), activeLease == lease else { return }
+      guard isCurrent(lease), activeLease == lease,
+        FocusLockController.shared.revision() == focusRevision
+      else { return }
       guard control.workflowMode == .read, let accountGeneration = control.accountGeneration else { return }
       let scopedDeviceID = deviceID()
       let snapshot = OmiAPI.NormalizedContextSnapshot(
@@ -960,28 +986,36 @@ actor TaskContextualResurfacingService {
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
-      guard isCurrent(lease), activeLease == lease else { return }
+      guard isCurrent(lease), activeLease == lease,
+        FocusLockController.shared.revision() == focusRevision
+      else { return }
       let projection = try await client.evaluateWhatMattersNow(
         OmiAPI.EvaluationRequest(deviceId: scopedDeviceID, materialHint: materialHint),
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
-      guard isCurrent(lease), activeLease == lease else { return }
+      guard isCurrent(lease), activeLease == lease,
+        FocusLockController.shared.revision() == focusRevision
+      else { return }
       lastMaterialHint = materialHint
       lastEvaluationAt = now
       let currentOwnerID = ownerID
       await MainActor.run {
         guard currentOwnerID() == lease.observedOwnerID,
-          RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
+          RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot),
+          FocusLockController.shared.revision() == focusRevision
         else { return }
         NotificationCenter.default.post(name: .whatMattersNowContextDidRefresh, object: projection)
       }
-      guard isCurrent(lease), activeLease == lease else { return }
+      guard isCurrent(lease), activeLease == lease,
+        FocusLockController.shared.revision() == focusRevision
+      else { return }
       await interruptIfEligible(
         projection: projection,
         events: events,
         now: now,
-        lease: lease
+        lease: lease,
+        focusRevision: focusRevision
       )
     } catch {
       if isCurrent(lease), activeLease == lease {
@@ -1043,9 +1077,12 @@ actor TaskContextualResurfacingService {
     projection: OmiAPI.WhatMattersNowProjection,
     events: [TaskLocalContextEvent],
     now: Date,
-    lease: OwnerLease
+    lease: OwnerLease,
+    focusRevision: UInt64
   ) async {
-    guard isCurrent(lease), activeLease == lease else { return }
+    guard isCurrent(lease), activeLease == lease,
+      FocusLockController.shared.revision() == focusRevision
+    else { return }
     let urgentSubjects = Set(events.filter { $0.urgency == .timeSensitive }.compactMap(\.subject))
     guard !urgentSubjects.isEmpty else { return }
     guard
@@ -1072,7 +1109,8 @@ actor TaskContextualResurfacingService {
     let currentOwnerID = ownerID
     await MainActor.run {
       guard currentOwnerID() == lease.observedOwnerID,
-        RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
+        RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot),
+        FocusLockController.shared.revision() == focusRevision
       else { return }
       interruptionSender(candidate, lease.authorizationSnapshot)
     }

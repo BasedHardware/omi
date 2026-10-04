@@ -20,6 +20,7 @@ class AssistantCoordinator {
   private var lastTrackedApp: String?
   private var lastTrackedWindowTitle: String?
   private var lastTrackedFrame: CapturedFrame?
+  private var latestCapturedFrame: CapturedFrame?
 
   /// Backpressure: track which assistants are currently analyzing a frame.
   /// Prevents Task closures from accumulating CapturedFrame JPEG data when analyze() is slow.
@@ -79,6 +80,10 @@ class AssistantCoordinator {
   /// - Returns: `true` if a context switch was detected and fired.
   @discardableResult
   func checkContextSwitch(newApp: String, newWindowTitle: String?) async -> Bool {
+    let focusRevision = FocusLockController.shared.revision()
+    // Keep the pinned context as the proactive baseline while unrelated apps are
+    // frontmost. Capture and memory extraction continue through their own paths.
+    guard FocusLockController.shared.allows(appName: newApp, windowTitle: newWindowTitle) else { return false }
     guard lastTrackedApp != nil else {
       lastTrackedApp = newApp
       lastTrackedWindowTitle = newWindowTitle
@@ -97,8 +102,11 @@ class AssistantCoordinator {
       let event = TaskLocalContextEvent.appWindow(appName: newApp, windowTitle: newWindowTitle)
     {
       let matched = await ContextSubjectBindingService.shared.resolve(event)
-      Task { await TaskContextualResurfacingService.shared.observe(matched) }
+      if FocusLockController.shared.revision() == focusRevision {
+        Task { await TaskContextualResurfacingService.shared.observe(matched) }
+      }
     }
+    guard FocusLockController.shared.revision() == focusRevision else { return false }
     await fireContextSwitchOnAllAssistants(
       departingFrame: departingFrame, newApp: newApp, newWindowTitle: newWindowTitle)
     return true
@@ -129,13 +137,41 @@ class AssistantCoordinator {
 
   /// Keep the latest frame reference fresh (call on every capture, even during delay).
   func trackFrame(_ frame: CapturedFrame) {
-    lastTrackedFrame = frame
+    latestCapturedFrame = frame
+    if FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle) {
+      lastTrackedFrame = frame
+    }
+  }
+
+  /// The last captured, non-private window is safer than asking AppKit for the
+  /// frontmost app after opening the menu (which may now be Omi itself).
+  func focusSourceCandidate(
+    now: Date = Date(),
+    liveWindow: (appName: String?, windowTitle: String?)? = nil
+  ) -> FocusLockSource? {
+    guard let frame = latestCapturedFrame, now.timeIntervalSince(frame.captureTime) < 20,
+      !RewindSettings.shared.isAppExcluded(frame.appName),
+      !ScreenTaskPrivacy.isPrivateWindow(app: frame.appName, title: frame.windowTitle)
+    else { return nil }
+    guard let source = FocusLockSource(appName: frame.appName, windowTitle: frame.windowTitle) else { return nil }
+    if let liveWindow {
+      guard let appName = liveWindow.appName,
+        source.matches(appName: appName, windowTitle: liveWindow.windowTitle)
+      else { return nil }
+    }
+    return source
   }
 
   /// Distribute a captured frame to all enabled assistants
   /// - Parameter frame: The captured frame to analyze
   func distributeFrame(_ frame: CapturedFrame) {
     for (identifier, assistant) in assistants {
+      let focusRevision = FocusLockController.shared.revision()
+      if identifier != "memory-extraction",
+        !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+      {
+        continue
+      }
       // Backpressure: skip if this assistant is still analyzing a previous frame
       guard !isAnalyzing.contains(identifier) else { continue }
 
@@ -151,6 +187,16 @@ class AssistantCoordinator {
 
         // Check if assistant is enabled
         guard await assistant.isEnabled else { return }
+        if identifier != "memory-extraction",
+          FocusLockController.shared.revision() != focusRevision
+        {
+          return
+        }
+        if identifier != "memory-extraction",
+          !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+        {
+          return
+        }
 
         // Check if assistant wants to analyze this frame
         guard
@@ -166,9 +212,26 @@ class AssistantCoordinator {
 
         // Analyze and handle result
         if let result = await assistant.analyze(frame: frame) {
+          if identifier != "memory-extraction",
+            FocusLockController.shared.revision() != focusRevision
+          {
+            return
+          }
+          if identifier != "memory-extraction",
+            !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+          {
+            return
+          }
           await assistant.handleResult(result) { [weak self] type, data in
             let dataBox = AssistantEventDataBox(data)
             Task { @MainActor in
+              if identifier != "memory-extraction",
+                FocusLockController.shared.revision() != focusRevision
+                  || !FocusLockController.shared.allows(
+                    appName: frame.appName, windowTitle: frame.windowTitle)
+              {
+                return
+              }
               self?.sendEvent(type: type, data: dataBox.value)
             }
           }
@@ -181,6 +244,12 @@ class AssistantCoordinator {
   /// Used for time-sensitive detections like refocus tracking.
   func distributeFrameDuringDelay(_ frame: CapturedFrame) {
     for (identifier, assistant) in assistants {
+      let focusRevision = FocusLockController.shared.revision()
+      if identifier != "memory-extraction",
+        !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+      {
+        continue
+      }
       // Backpressure: skip if this assistant is still analyzing a previous frame
       guard !isAnalyzing.contains(identifier) else { continue }
 
@@ -195,6 +264,16 @@ class AssistantCoordinator {
         }
 
         guard await assistant.isEnabled else { return }
+        if identifier != "memory-extraction",
+          FocusLockController.shared.revision() != focusRevision
+        {
+          return
+        }
+        if identifier != "memory-extraction",
+          !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+        {
+          return
+        }
         guard await assistant.needsFrameDuringDelay else { return }
         guard
           await assistant.shouldAnalyze(frameNumber: frame.frameNumber, timeSinceLastAnalysis: timeSinceLastAnalysis)
@@ -207,6 +286,16 @@ class AssistantCoordinator {
         }
 
         if let result = await assistant.analyze(frame: frame) {
+          if identifier != "memory-extraction",
+            FocusLockController.shared.revision() != focusRevision
+          {
+            return
+          }
+          if identifier != "memory-extraction",
+            !FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+          {
+            return
+          }
           await assistant.handleResult(result) { [weak self] type, data in
             let dataBox = AssistantEventDataBox(data)
             Task { @MainActor in
@@ -223,7 +312,12 @@ class AssistantCoordinator {
   /// Notify all assistants of an app switch (legacy onAppSwitch callback).
   /// Context switch detection is handled separately via `checkContextSwitch`.
   func notifyAppSwitch(newApp: String) {
-    for (_, assistant) in assistants {
+    for (identifier, assistant) in assistants {
+      if identifier != "memory-extraction", let session = FocusLockController.shared.snapshot(),
+        session.source.appName != newApp
+      {
+        continue
+      }
       Task {
         await assistant.onAppSwitch(newApp: newApp)
       }
@@ -236,6 +330,13 @@ class AssistantCoordinator {
       Task {
         await assistant.clearPendingWork()
       }
+    }
+  }
+
+  /// Starting Focus Lock must not discard a frame queued for memory capture.
+  func clearPendingProactiveWork() {
+    for (identifier, assistant) in assistants where identifier != "memory-extraction" {
+      Task { await assistant.clearPendingWork() }
     }
   }
 

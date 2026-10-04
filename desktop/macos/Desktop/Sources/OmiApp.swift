@@ -261,6 +261,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   private var statusBarItem: NSStatusItem?
   private var screenCaptureSwitch: NSSwitch?
   private var audioRecordingSwitch: NSSwitch?
+  private var focusLockMenuItem: NSMenuItem?
+  private var focusLockStatusItem: NSMenuItem?
+  private var focusLockReleaseItem: NSMenuItem?
+  private var focusLockDurationItems: [NSMenuItem] = []
+  private var focusLockTimer: Timer?
+  private var focusLockMenuIsOpen = false
+  private var focusLockTerminationObserver: NSObjectProtocol?
+  private var focusLockOwnerObserver: NSObjectProtocol?
   private var relaunchOnLoginSuppressedForOnboarding = false
   private var apiKeyFetchTask: Task<Void, Never>?
   private var floatingBarPlanFetchTask: Task<Void, Never>?
@@ -965,6 +973,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     menu.addItem(openItem)
     menu.addItem(FloatingBarMenuBarItem.make())  // Show/Hide Floating Bar: the way back after Hide
 
+    let focusItem = NSMenuItem(title: "Focus Lock", action: nil, keyEquivalent: "")
+    let focusMenu = NSMenu(title: "Focus Lock")
+    let statusItem = NSMenuItem(title: "Open an app window to start", action: nil, keyEquivalent: "")
+    statusItem.isEnabled = false
+    focusMenu.addItem(statusItem)
+    focusMenu.addItem(.separator())
+    focusLockDurationItems = [15, 30, 60].map { minutes in
+      let item = NSMenuItem(
+        title: "\(minutes) minutes", action: #selector(startFocusLockFromMenu(_:)), keyEquivalent: "")
+      item.target = self
+      item.tag = minutes
+      focusMenu.addItem(item)
+      return item
+    }
+    focusMenu.addItem(.separator())
+    let releaseItem = NSMenuItem(
+      title: "Release Focus Lock", action: #selector(releaseFocusLockFromMenu), keyEquivalent: "")
+    releaseItem.target = self
+    focusMenu.addItem(releaseItem)
+    focusItem.submenu = focusMenu
+    menu.addItem(focusItem)
+    focusLockMenuItem = focusItem
+    focusLockStatusItem = statusItem
+    focusLockReleaseItem = releaseItem
+    startFocusLockStatusUpdatesIfNeeded()
+    refreshFocusLockMenuState()
+
     let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettingsFromMenu), keyEquivalent: "")
     settingsItem.target = self
     menu.addItem(settingsItem)
@@ -1294,6 +1329,119 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     PushToTalkManager.shared.undoLastDictationAfterMenuTracking()
   }
 
+  @MainActor @objc private func startFocusLockFromMenu(_ sender: NSMenuItem) {
+    let activeWindow = ScreenCaptureService.getActiveWindowInfo()
+    guard [15, 30, 60].contains(sender.tag),
+      ProactiveAssistantsPlugin.shared.isMonitoring,
+      let source = AssistantCoordinator.shared.focusSourceCandidate(
+        liveWindow: (activeWindow.appName, activeWindow.windowTitle)),
+      FocusLockController.shared.activate(source: source, duration: TimeInterval(sender.tag * 60)) != nil
+    else { return }
+    AssistantCoordinator.shared.clearPendingProactiveWork()
+    Task { await TaskContextualResurfacingService.shared.resetForFocusChange() }
+    refreshFocusLockMenuState()
+  }
+
+  @MainActor @objc private func releaseFocusLockFromMenu() {
+    guard FocusLockController.shared.release() else { return }
+    Task { await TaskContextualResurfacingService.shared.resetForFocusChange() }
+    refreshFocusLockMenuState()
+  }
+
+  @MainActor private func startFocusLockStatusUpdatesIfNeeded() {
+    if focusLockTimer == nil {
+      focusLockTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+        Task { @MainActor in
+          guard let self else { return }
+          self.refreshFocusLockMenuState(inspectCurrentWindow: self.focusLockMenuIsOpen)
+        }
+      }
+    }
+    if focusLockTerminationObserver == nil {
+      focusLockTerminationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+        forName: NSWorkspace.didTerminateApplicationNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] notification in
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+          let name = app.localizedName
+        else { return }
+        Task { @MainActor in
+          guard FocusLockController.shared.releaseIfAppTerminated(name) else { return }
+          await TaskContextualResurfacingService.shared.resetForFocusChange()
+          self?.refreshFocusLockMenuState()
+        }
+      }
+    }
+    if focusLockOwnerObserver == nil {
+      focusLockOwnerObserver = NotificationCenter.default.addObserver(
+        forName: .runtimeOwnerDidChange,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor in
+          guard FocusLockController.shared.release(reason: .ownerChanged) else { return }
+          await TaskContextualResurfacingService.shared.resetForFocusChange()
+          self?.refreshFocusLockMenuState()
+        }
+      }
+    }
+  }
+
+  @MainActor private func refreshFocusLockMenuState(
+    now: Date = Date(), inspectCurrentWindow: Bool = false
+  ) {
+    var session = FocusLockController.shared.snapshot(now: now)
+    if let current = session, RewindSettings.shared.isAppExcluded(current.source.appName) {
+      _ = FocusLockController.shared.release(reason: .privacyExcluded)
+      Task { await TaskContextualResurfacingService.shared.resetForFocusChange() }
+      session = nil
+    }
+    for event in FocusLockController.shared.takeTelemetryEvents() {
+      AnalyticsManager.shared.focusLockEvent(event)
+    }
+    let candidate: FocusLockSource?
+    if inspectCurrentWindow && ProactiveAssistantsPlugin.shared.isMonitoring {
+      let activeWindow = ScreenCaptureService.getActiveWindowInfo()
+      candidate = AssistantCoordinator.shared.focusSourceCandidate(
+        now: now, liveWindow: (activeWindow.appName, activeWindow.windowTitle))
+    } else {
+      candidate = nil
+    }
+    if let session {
+      let minutes = max(1, Int(ceil(session.expiresAt.timeIntervalSince(now) / 60)))
+      focusLockMenuItem?.title = "Focus Lock · \(minutes)m"
+      focusLockStatusItem?.title = "Pinned: \(session.source.displayName) · \(minutes)m left"
+      focusLockReleaseItem?.isEnabled = true
+      statusBarItem?.button?.title = " \(session.source.appName.prefix(14)) · \(minutes)m"
+      statusBarItem?.button?.imagePosition = .imageLeading
+      statusBarItem?.button?.toolTip = "Focus Lock: \(session.source.displayName) · \(minutes)m left"
+    } else {
+      focusLockMenuItem?.title = "Focus Lock"
+      focusLockStatusItem?.title =
+        candidate.map { "Current: \($0.displayName)" }
+        ?? (ProactiveAssistantsPlugin.shared.isMonitoring
+          ? "Open an app window to start" : "Turn on Screen Capture to start")
+      focusLockReleaseItem?.isEnabled = false
+      statusBarItem?.button?.title = ""
+      statusBarItem?.button?.imagePosition = .imageOnly
+      statusBarItem?.button?.toolTip =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
+    }
+    for item in focusLockDurationItems {
+      item.isEnabled = candidate != nil
+      if let candidate {
+        let sameSource =
+          session?.source.matches(
+            appName: candidate.appName, windowTitle: candidate.normalizedTitle) == true
+        let action = session == nil ? "Lock" : (sameSource ? "Extend" : "Switch to")
+        item.title = "\(action) \(candidate.appName) · \(item.tag)m"
+      } else {
+        item.title = "\(item.tag) minutes"
+      }
+    }
+  }
+
   @MainActor func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     if menuItem.action == #selector(undoLastDictationFromMenu) {
       return PushToTalkManager.shared.canUndoLastDictation
@@ -1303,6 +1451,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
   // MARK: - NSMenuDelegate
   func menuWillOpen(_ menu: NSMenu) {
+    focusLockMenuIsOpen = true
     log("AppDelegate: [MENUBAR] Menu opened by user")
     AnalyticsManager.shared.menuBarOpened()
     // Refresh toggle states to match current runtime state. When paywalled,
@@ -1312,9 +1461,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
       (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
     audioRecordingSwitch?.state =
       (!paywalled && AssistantSettings.shared.audioRecordingMode != .off) ? .on : .off
+    refreshFocusLockMenuState(inspectCurrentWindow: true)
   }
 
   func menuDidClose(_ menu: NSMenu) {
+    focusLockMenuIsOpen = false
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
       MainActor.assumeIsolated {
         for window in NSApp.windows where self.isMenuPopupWindow(window) && window.isVisible {
@@ -1384,6 +1535,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    focusLockTimer?.invalidate()
+    focusLockTimer = nil
+    if let observer = focusLockTerminationObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(observer)
+      focusLockTerminationObserver = nil
+    }
+    if let observer = focusLockOwnerObserver {
+      NotificationCenter.default.removeObserver(observer)
+      focusLockOwnerObserver = nil
+    }
+    _ = FocusLockController.shared.release(reason: .appQuit)
+    for event in FocusLockController.shared.takeTelemetryEvents() {
+      AnalyticsManager.shared.focusLockEvent(event)
+    }
     // Mark clean exit so crash detection works on next launch
     UserDefaults.standard.set(true, forKey: "lastSessionCleanExit")
 

@@ -159,6 +159,34 @@ final class ContextReminderCoordinatorTests: XCTestCase {
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: ContextReminderCoordinator.assistantID), .task)
   }
 
+  func testFocusLockSuppressesUnrelatedContextReminderUntilRelease() async throws {
+    let store = try makeStore()
+    var presented = 0
+    let coordinator = ContextReminderCoordinator(
+      store: store,
+      contextProvider: { self.elsewhere },
+      presenter: { _, _ in
+        presented += 1
+        return true
+      },
+      dismisser: {},
+      now: { self.start },
+      ownerIDProvider: { "owner-1" },
+      createActionItem: { _, _, _, _ in nil },
+      completeActionItem: { _, _, _ in })
+    _ = await coordinator.createFromCurrentContext(text: "Check inbox", expectedOwnerID: "owner-1")
+
+    let source = try XCTUnwrap(FocusLockSource(appName: project.appName, windowTitle: project.normalizedTitle))
+    _ = FocusLockController.shared.activate(source: source, duration: 15 * 60)
+    defer { _ = FocusLockController.shared.release() }
+    await coordinator.observe(elsewhere)
+    XCTAssertEqual(presented, 0)
+
+    _ = FocusLockController.shared.release()
+    await coordinator.observe(elsewhere)
+    XCTAssertEqual(presented, 1)
+  }
+
   private func makeStore() throws -> ContextReminderStore {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("context-reminder-coord-\(UUID().uuidString)", isDirectory: true)

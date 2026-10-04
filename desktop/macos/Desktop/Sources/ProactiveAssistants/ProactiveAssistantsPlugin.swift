@@ -550,6 +550,9 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// call sites keep compiling unchanged.
   public func stopMonitoring(reason: MonitoringStopReason = .userToggle) {
     guard isMonitoring else { return }
+    if FocusLockController.shared.release(reason: .monitoringStopped) {
+      Task { await TaskContextualResurfacingService.shared.resetForFocusChange() }
+    }
 
     monitoringHeartbeatTimer?.invalidate()
     monitoringHeartbeatTimer = nil

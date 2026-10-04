@@ -197,6 +197,7 @@ actor MemoryAssistant: ProactiveAssistant {
       ownerID: ownerID,
       screenshotId: nil,
       captureTime: nil,
+      capturedAppName: nil,
       sendEvent: sendEvent
     )
   }
@@ -207,6 +208,8 @@ actor MemoryAssistant: ProactiveAssistant {
     ownerID: String,
     screenshotId: Int64?,
     captureTime: Date? = nil,
+    capturedAppName: String? = nil,
+    capturedFocusRevision: UInt64? = nil,
     windowTitle: String? = nil,
     sendEvent: @escaping (String, [String: Any]) -> Void
   ) async {
@@ -276,19 +279,25 @@ actor MemoryAssistant: ProactiveAssistant {
         ownerID: ownerID,
         memory: memory,
         result: memoryResult,
+        capturedAppName: capturedAppName,
+        capturedFocusRevision: capturedFocusRevision,
         windowTitle: windowTitle
       )
     }
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
     // Send event to Flutter
-    sendEvent(
-      "memoryExtracted",
-      [
-        "assistant": identifier,
-        "memory": memory.toDictionary(),
-        "contextSummary": memoryResult.contextSummary,
-      ])
+    if FocusLockController.shared.allowsCapturedResult(
+      appName: capturedAppName, windowTitle: windowTitle, revision: capturedFocusRevision)
+    {
+      sendEvent(
+        "memoryExtracted",
+        [
+          "assistant": identifier,
+          "memory": memory.toDictionary(),
+          "contextSummary": memoryResult.contextSummary,
+        ])
+    }
   }
 
   /// Record one analysis-outcome telemetry event, gated on the owner not having
@@ -311,6 +320,8 @@ actor MemoryAssistant: ProactiveAssistant {
     ownerID: String,
     memory: ExtractedMemory,
     result: MemoryExtractionResult,
+    capturedAppName: String?,
+    capturedFocusRevision: UInt64?,
     windowTitle: String?
   ) async {
     // One category, one name: every memory notification presents as "Memory" — the
@@ -322,7 +333,7 @@ actor MemoryAssistant: ProactiveAssistant {
     let context = FloatingBarNotificationContext(
       sourceTitle: title,
       assistantId: identifier,
-      sourceApp: memory.sourceApp.isEmpty ? nil : memory.sourceApp,
+      sourceApp: capturedAppName,
       windowTitle: windowTitle,
       contextSummary: result.contextSummary,
       currentActivity: result.currentActivity,
@@ -331,6 +342,10 @@ actor MemoryAssistant: ProactiveAssistant {
     )
 
     await MainActor.run {
+      guard
+        FocusLockController.shared.allowsCapturedResult(
+          appName: capturedAppName, windowTitle: windowTitle, revision: capturedFocusRevision)
+      else { return }
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
         title: title,
@@ -368,6 +383,7 @@ actor MemoryAssistant: ProactiveAssistant {
   // MARK: - Analysis
 
   func processFrame(_ frame: CapturedFrame) async {
+    let focusRevision = FocusLockController.shared.revision()
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     let enabled = await isEnabled
     guard enabled else {
@@ -393,10 +409,16 @@ actor MemoryAssistant: ProactiveAssistant {
         ownerID: ownerID,
         screenshotId: frame.screenshotId,
         captureTime: frame.captureTime,
+        capturedAppName: frame.appName,
+        capturedFocusRevision: focusRevision,
         windowTitle: frame.windowTitle
       ) { type, data in
         let payload = EventPayloadBox(value: data)
         Task { @MainActor in
+          guard
+            FocusLockController.shared.allowsCapturedResult(
+              appName: frame.appName, windowTitle: frame.windowTitle, revision: focusRevision)
+          else { return }
           AssistantCoordinator.shared.sendEvent(type: type, data: payload.value)
         }
       }

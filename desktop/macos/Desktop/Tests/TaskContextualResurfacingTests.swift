@@ -351,6 +351,42 @@ final class TaskContextualResurfacingTests: XCTestCase {
     XCTAssertEqual(client.evaluations.count, 1)
   }
 
+  @MainActor
+  func testFocusLockDropsUnrelatedQueuedContextBeforeEvaluation() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    let service = TaskContextualResurfacingService(
+      client: client, debounceInterval: 60, ownerIDProvider: { "owner-1" })
+    let event = try XCTUnwrap(TaskLocalContextEvent.appWindow(appName: "Slack", windowTitle: "DM"))
+    await service.observe(event)
+    let source = try XCTUnwrap(FocusLockSource(appName: "Teams", windowTitle: "Planning"))
+    _ = FocusLockController.shared.activate(source: source, duration: 15 * 60)
+    defer { _ = FocusLockController.shared.release() }
+
+    await service.flush()
+    XCTAssertEqual(client.controlRequests, 0)
+    XCTAssertTrue(client.snapshots.isEmpty)
+    XCTAssertTrue(client.evaluations.isEmpty)
+  }
+
+  @MainActor
+  func testFocusLockActivationDuringControlAbortsInFlightResurfacing() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    let source = try XCTUnwrap(FocusLockSource(appName: "Teams", windowTitle: "Planning"))
+    client.onControl = { _ = FocusLockController.shared.activate(source: source, duration: 15 * 60) }
+    defer { _ = FocusLockController.shared.release() }
+    let service = TaskContextualResurfacingService(
+      client: client, debounceInterval: 60, ownerIDProvider: { "owner-1" })
+    await service.observe(
+      try XCTUnwrap(
+        TaskLocalContextEvent.appWindow(
+          appName: "Slack", windowTitle: "DM")))
+
+    await service.flush()
+    XCTAssertEqual(client.controlRequests, 1)
+    XCTAssertTrue(client.snapshots.isEmpty)
+    XCTAssertTrue(client.evaluations.isEmpty)
+  }
+
   func testDifferentUnmatchedRawContextsShareOneSemanticEvaluationWithinFiveMinutes() async throws {
     let client = FakeTaskContextualResurfacingClient()
     let service = TaskContextualResurfacingService(

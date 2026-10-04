@@ -236,6 +236,7 @@ extension TaskAssistant {
     let mutation = Self.mutationAuthorization(authorization)
     guard (try? mutation.require()) != nil else { return .failure }
     guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else { return .failure }
+    guard (try? mutation.require()) != nil else { return .failure }
     guard let localRecord, let localID = localRecord.id else {
       log("Task: Capture outbox persistence failed; refusing an untracked backend write")
       return .failure
@@ -296,6 +297,7 @@ extension TaskAssistant {
         let delivery = CanonicalScreenCandidateDelivery(
           client: APICanonicalScreenCandidateClient(authorization: authorization)
         )
+        guard (try? mutation.require()) != nil else { return .failure }
         guard
           let canonicalState = try await delivery.deliver(
             decision,
@@ -304,6 +306,7 @@ extension TaskAssistant {
             accountGeneration: generation
           )
         else { return .failure }
+        guard (try? mutation.require()) != nil else { return .failure }
         let canonicalStatus = canonicalState.status
         let canonicalTaskID = canonicalState.taskID
         let completion = try await ScreenTaskReceiptDelivery.complete(

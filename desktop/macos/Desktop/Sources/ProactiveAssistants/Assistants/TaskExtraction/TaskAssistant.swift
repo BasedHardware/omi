@@ -287,6 +287,21 @@ actor TaskAssistant: ProactiveAssistant {
       return
     }
     for record in records {
+      // Durable outbox retries are delivery, not new extraction. They still
+      // need the same source and generation fence as a freshly captured frame.
+      let sourceApp = record.sourceApp ?? ""
+      let sourceWindow = record.windowTitle
+      let focusRevision = FocusLockController.shared.revision()
+      guard
+        FocusLockController.shared.allowsQueuedDelivery(
+          appName: sourceApp, windowTitle: sourceWindow, revision: focusRevision)
+      else { continue }
+      let validateFocus: @Sendable () throws -> Void = {
+        guard
+          FocusLockController.shared.allowsQueuedDelivery(
+            appName: sourceApp, windowTitle: sourceWindow, revision: focusRevision)
+        else { throw ScreenTaskFailure.stopped }
+      }
       let metadata = record.metadata ?? [:]
       let formatter = ISO8601DateFormatter()
       formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -310,19 +325,21 @@ actor TaskAssistant: ProactiveAssistant {
         refinesTask: metadata["refines_task"] as? String,
         ownershipConfidence: metadata["ownership_confidence"] as? Double
       )
-      _ = await syncTaskToBackend(
-        task: task,
-        taskResult: TaskExtractionResult(
-          hasNewTask: true,
+      _ = await ScreenTaskWorkAuthority.$validate.withValue(validateFocus) {
+        await syncTaskToBackend(
           task: task,
-          contextSummary: record.contextSummary ?? "",
-          currentActivity: record.currentActivity ?? ""
-        ),
-        localRecord: record,
-        windowTitle: record.windowTitle,
-        authorization: authorization,
-        deferred: true
-      )
+          taskResult: TaskExtractionResult(
+            hasNewTask: true,
+            task: task,
+            contextSummary: record.contextSummary ?? "",
+            currentActivity: record.currentActivity ?? ""
+          ),
+          localRecord: record,
+          windowTitle: record.windowTitle,
+          authorization: authorization,
+          deferred: true
+        )
+      }
     }
   }
 

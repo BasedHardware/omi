@@ -125,6 +125,8 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   func analyze(frame: CapturedFrame) async -> AssistantResult? {
     guard pendingContextSwitchAt != nil else { return nil }
+    guard FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+    else { return nil }
 
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
@@ -398,6 +400,9 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - Judgment
 
   private func evaluate(frame: CapturedFrame, grounding: SuggestionGrounding) async throws -> SuggestionResult? {
+    let focusRevision = FocusLockController.shared.revision()
+    guard FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+    else { return nil }
     let prompt = buildPrompt(frame: frame, grounding: grounding)
     let systemPrompt = await systemPrompt
     let preview = SuggestionFramePreview.downscaledJPEG(from: frame.jpegData)
@@ -424,6 +429,8 @@ actor SuggestionAssistant: ProactiveAssistant {
       }
 
       var result = try JSONDecoder().decode(SuggestionResult.self, from: data)
+      result.focusSource = FocusLockSource(appName: frame.appName, windowTitle: frame.windowTitle)
+      result.focusRevision = focusRevision
       let producedSuggestion = result.hasSuggestion && result.suggestion != nil
       let completedIdentity = producedSuggestion ? identity.withSuggestion() : identity
       result.telemetryIdentity = completedIdentity
@@ -546,6 +553,16 @@ actor SuggestionAssistant: ProactiveAssistant {
     sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
   ) async -> SuggestionAssistantTelemetry.DeliveryOutcome? {
     guard let result = result as? SuggestionResult else { return nil }
+    if let focusRevision = result.focusRevision,
+      FocusLockController.shared.revision() != focusRevision
+    {
+      return nil
+    }
+    if let session = FocusLockController.shared.snapshot(),
+      result.focusSource.map({ session.source.matches(appName: $0.appName, windowTitle: $0.normalizedTitle) }) != true
+    {
+      return nil
+    }
     guard result.hasSuggestion, let suggestion = result.suggestion else {
       log("Suggestion: nothing worth saying — \(result.currentActivity)")
       return nil
@@ -653,6 +670,16 @@ actor SuggestionAssistant: ProactiveAssistant {
     log("Suggestion: delivering [\(Int(suggestion.confidence * 100))%] \"\(suggestion.suggestion)\"")
 
     await MainActor.run {
+      if let focusRevision = result.focusRevision,
+        FocusLockController.shared.revision() != focusRevision
+      {
+        return
+      }
+      if let session = FocusLockController.shared.snapshot(),
+        result.focusSource.map({ session.source.matches(appName: $0.appName, windowTitle: $0.normalizedTitle) }) != true
+      {
+        return
+      }
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
         title: "Focus",

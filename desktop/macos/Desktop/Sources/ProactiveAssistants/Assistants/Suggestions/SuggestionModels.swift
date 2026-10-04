@@ -105,6 +105,9 @@ struct SuggestionResult: Codable, AssistantResult, Sendable {
   /// Opaque, in-memory-only evaluation correlation. This intentionally stays
   /// out of the model JSON and `toDictionary()` product payload.
   var telemetryIdentity: SuggestionAssistantTelemetry.Identity?
+  /// Local provenance only; never decoded from or sent to the model.
+  var focusSource: FocusLockSource?
+  var focusRevision: UInt64?
 
   enum CodingKeys: String, CodingKey {
     case hasSuggestion = "has_suggestion"

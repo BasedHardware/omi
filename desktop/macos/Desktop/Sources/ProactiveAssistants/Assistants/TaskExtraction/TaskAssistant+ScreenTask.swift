@@ -14,7 +14,11 @@ extension TaskAssistant {
           return
         }
         guard let binding = frame.taskBinding else { throw ScreenTaskFailure.ownerRevoked }
+        let focusRevision = FocusLockController.shared.revision()
         let validateFrame: @Sendable () throws -> Void = {
+          guard FocusLockController.shared.revision() == focusRevision else { throw ScreenTaskFailure.stopped }
+          guard FocusLockController.shared.allows(appName: frame.appName, windowTitle: frame.windowTitle)
+          else { throw ScreenTaskFailure.stopped }
           guard RuntimeOwnerIdentity.isAuthorizationCurrent(binding.authorization) else {
             throw ScreenTaskFailure.ownerRevoked
           }
