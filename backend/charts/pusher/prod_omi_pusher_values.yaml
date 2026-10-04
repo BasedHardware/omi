@@ -121,6 +121,8 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
+  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+    value: "true"
   - name: FREE_TIER_LOCAL_PROCESSING
     value: "false"
   - name: FREE_TIER_EMERGENCY_STOP
@@ -156,6 +158,10 @@ env:
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
+    value: "false"
+  - name: AUDIO_TIMELINE_SPANS
+    value: "false"
+  - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "false"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"

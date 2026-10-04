@@ -114,6 +114,8 @@ env:
     value: "true"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
+  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+    value: "true"
   # Keep these aligned with the development GitHub environment variables used
   # by the Cloud Run backend; api.omiapi.com is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -549,6 +551,10 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
+  - name: AUDIO_TIMELINE_SPANS
+    value: "false"
+  - name: LIVE_SPEAKER_SPAN_RESOLUTION
+    value: "false"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

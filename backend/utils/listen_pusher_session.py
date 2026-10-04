@@ -5,7 +5,7 @@ import random
 import struct
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Awaitable, Callable, cast, Deque, Dict, List, Optional, Tuple, TYPE_CHECKING
 
@@ -16,7 +16,14 @@ if TYPE_CHECKING:
 else:
     WebSocketClientProtocol = Any
 
-from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGRADED
+from utils.executors import run_blocking, storage_executor
+from utils.metrics import (
+    OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL,
+    PUSHER_CIRCUIT_BREAKER_REJECTIONS,
+    PUSHER_SESSION_DEGRADED,
+)
+from utils.other.storage import reconcile_audio_chunk_prefix
+from utils.observability.fallback import record_fallback
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
 from utils.pusher_protocol import (
     AUDIO_TIMELINE_PROTOCOL,
@@ -87,6 +94,7 @@ class ListenPusherSessionConfig:
     # Opt this session into audio-timeline v2 (AUDIO_TIMELINE_V2 at the call
     # boundary). The pusher must acknowledge capability before v2 audio is sent.
     audio_timeline_v2: bool = False
+    audio_timeline_spans: bool = False
 
 
 @dataclass
@@ -95,12 +103,27 @@ class AudioRun:
 
     The conversation binding and the projected start of the run's first sample
     are captured at acceptance time and travel with the bytes through replays
-    and reconnects; they are never recomputed from a later arrival.
+    and reconnects; they are never recomputed from a later arrival. A run that
+    has been framed for a first send attempt freezes into an immutable
+    envelope: ``header_timestamp`` pins the exact opcode-101 wire timestamp,
+    the conversation binding is resolved, and ``uncertain`` marks a send that
+    raised after the frame may have been delivered. Only a negotiated
+    timeline socket can prove such an envelope: it is reconciled against
+    committed storage before any resend instead of being recombined with
+    newer audio or retimed. On a legacy socket a failed send keeps main's
+    semantics: the raw runs return to the buffer and are regrouped and retried
+    while the same socket stays installed (``failed_socket``); once a
+    replacement socket is installed they are discarded once and counted, never
+    replayed, because legacy storage cannot prove whether they were committed.
     """
 
     conversation_id: Optional[str]
     start_wall: Optional[float]
     data: bytes
+    header_timestamp: Optional[float] = None
+    uncertain: bool = False
+    failed_socket: Any = field(default=None, repr=False, compare=False)
+    source_runs: Optional[List['AudioRun']] = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -313,7 +336,24 @@ class ListenPusherSession:
             pending_total_size = self.audio_total_size
             self.audio_runs = deque()
             self.audio_total_size = 0
-            sent_runs = 0
+            timeline_active = self.audio_timeline_active
+            # A legacy send that failed on a socket that has since been
+            # replaced cannot be proven committed or uncommitted; main never
+            # replays it (the replacement was unannounced), so it is discarded
+            # once and counted. Same-socket retries keep main's
+            # regroup-and-resend semantics.
+            kept: Deque[AudioRun] = deque()
+            for run in pending_runs:
+                if run.failed_socket is not None and run.failed_socket is not pusher_ws:
+                    OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send').inc(
+                        len(run.data)
+                    )
+                    pending_total_size -= len(run.data)
+                    continue
+                kept.append(run)
+            pending_runs = kept
+            sent_envelopes = 0
+            envelopes: List[AudioRun] = []
             try:
                 effective_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
                 # Send one 101 frame per contiguous same-conversation run.
@@ -326,51 +366,103 @@ class ListenPusherSession:
                 # header timestamp is the run's retained projected start when
                 # the capture timeline supplied one, and the legacy
                 # last-arrival-minus-duration estimate otherwise.
-                group: List[AudioRun] = []
-                group_conversation: Optional[str] = None
-
-                def frame_header_time(runs: List[AudioRun]) -> Optional[float]:
-                    if runs and runs[0].start_wall is not None:
-                        return runs[0].start_wall
-                    duration = pending_total_size / (effective_rate * 2)
-                    return (self.audio_buffer_last_received or self.deps.now()) - duration
+                honor_projection = self.config.audio_timeline_v2 or self.audio_timeline_active
+                duration = pending_total_size / (effective_rate * 2)
+                legacy_header = (self.audio_buffer_last_received or self.deps.now()) - duration
 
                 def runs_are_contiguous(prev: AudioRun, nxt: AudioRun) -> bool:
                     # Legacy runs carry no projection; keep the legacy
                     # grouping for them.
-                    if prev.start_wall is None or nxt.start_wall is None:
+                    if not honor_projection or prev.start_wall is None or nxt.start_wall is None:
                         return True
                     projected_prev_end = prev.start_wall + len(prev.data) / (effective_rate * 2)
                     return abs(nxt.start_wall - projected_prev_end) <= AUDIO_RUN_GAP_TOLERANCE_SECONDS
 
-                async def send_group(runs: List[AudioRun]) -> None:
-                    nonlocal sent_runs
-                    if not runs:
+                group: List[AudioRun] = []
+                group_conversation: Optional[str] = None
+
+                def close_group() -> None:
+                    if not group:
                         return
-                    conversation = runs[0].conversation_id or current_conversation_id
+                    envelope = AudioRun(
+                        conversation_id=group_conversation,
+                        start_wall=group[0].start_wall,
+                        data=b''.join(run.data for run in group),
+                        source_runs=list(group),
+                    )
+                    envelope.header_timestamp = (
+                        envelope.start_wall if honor_projection and envelope.start_wall is not None else legacy_header
+                    )
+                    envelopes.append(envelope)
+                    group.clear()
+
+                for run in pending_runs:
+                    if run.header_timestamp is not None:
+                        close_group()
+                        envelopes.append(run)
+                        continue
+                    run_conversation = run.conversation_id or current_conversation_id
+                    if group and (run_conversation != group_conversation or not runs_are_contiguous(group[-1], run)):
+                        close_group()
+                    group.append(run)
+                    group_conversation = run_conversation
+                close_group()
+
+                for envelope in envelopes:
+                    if envelope.uncertain:
+                        if not timeline_active:
+                            OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL.labels(reason='legacy_uncertain_send').inc(
+                                len(envelope.data)
+                            )
+                            sent_envelopes += 1
+                            continue
+                        if envelope.conversation_id and envelope.header_timestamp is not None:
+                            try:
+                                verified, _committed = await run_blocking(
+                                    storage_executor,
+                                    reconcile_audio_chunk_prefix,
+                                    self.uid,
+                                    envelope.conversation_id,
+                                    envelope.header_timestamp,
+                                    envelope.data,
+                                    effective_rate,
+                                    require_spans=True,
+                                )
+                            except Exception as error:
+                                logger.info(
+                                    f"Uncertain audio envelope reconcile failed, resending whole: {error} {self.uid} {self.session_id}"
+                                )
+                                verified = 0
+                            if verified >= len(envelope.data):
+                                sent_envelopes += 1
+                                continue
+                            if verified > 0:
+                                envelope.data = envelope.data[verified:]
+                                shift = verified / (effective_rate * 2)
+                                envelope.header_timestamp = envelope.header_timestamp + shift
+                                if envelope.start_wall is not None:
+                                    envelope.start_wall += shift
+                    conversation = envelope.conversation_id
                     if conversation and conversation != self.last_synced_conversation_id:
                         header = bytearray()
                         header.extend(struct.pack("I", 103))
                         header.extend(bytes(conversation, "utf-8"))
                         await pusher_ws.send(cast(bytes, header))
                         self.last_synced_conversation_id = conversation
-                    audio_data = b''.join(run.data for run in runs)
                     data = bytearray()
                     data.extend(struct.pack("I", 101))
-                    data.extend(struct.pack("d", frame_header_time(runs)))
-                    data.extend(audio_data)
-                    del audio_data
-                    await pusher_ws.send(cast(bytes, data))
-                    sent_runs += len(runs)
-
-                for run in pending_runs:
-                    run_conversation = run.conversation_id or current_conversation_id
-                    if group and (run_conversation != group_conversation or not runs_are_contiguous(group[-1], run)):
-                        await send_group(group)
-                        group = []
-                    group.append(run)
-                    group_conversation = run_conversation
-                await send_group(group)
+                    data.extend(struct.pack("d", cast(float, envelope.header_timestamp)))
+                    data.extend(envelope.data)
+                    try:
+                        await pusher_ws.send(cast(bytes, data))
+                    except (asyncio.CancelledError, Exception):
+                        if timeline_active:
+                            envelope.uncertain = True
+                        else:
+                            for run in envelope.source_runs or [envelope]:
+                                run.failed_socket = pusher_ws
+                        raise
+                    sent_envelopes += 1
                 if current_conversation_id and current_conversation_id != self.last_synced_conversation_id:
                     # Standalone announcement when no run carried the current
                     # conversation yet (legacy sessions with no buffered audio,
@@ -381,7 +473,14 @@ class ListenPusherSession:
                     await pusher_ws.send(cast(bytes, data))
                     self.last_synced_conversation_id = current_conversation_id
             except (asyncio.CancelledError, Exception) as e:
-                unsent = list(pending_runs)[sent_runs:]
+                unsent: List[AudioRun] = []
+                for envelope in envelopes[sent_envelopes:]:
+                    if not timeline_active and envelope.source_runs is not None:
+                        # Legacy envelopes return as their raw runs so the next
+                        # flush regroups and re-stamps them exactly as main does.
+                        unsent.extend(envelope.source_runs)
+                    else:
+                        unsent.append(envelope)
                 self.audio_runs.extendleft(reversed(unsent))
                 self.audio_total_size += sum(len(run.data) for run in unsent)
                 while self.audio_total_size > self.config.max_audio_buffer_size and self.audio_runs:
@@ -403,7 +502,7 @@ class ListenPusherSession:
     async def pusher_receive(self):
         """Receive and handle messages from pusher, with timeout-based retry for pending requests."""
         while self.deps.is_active():
-            if not self.pending_conversation_requests:
+            if not self.pending_conversation_requests and not self.audio_timeline_suspended:
                 self.pending_request_event.clear()
                 try:
                     await asyncio.wait_for(self.pending_request_event.wait(), timeout=5.0)
@@ -414,13 +513,17 @@ class ListenPusherSession:
                 await self.deps.sleep(0.5)
                 continue
 
+            sock = self.pusher_ws
             try:
-                msg = cast(bytes, await asyncio.wait_for(self.pusher_ws.recv(), timeout=5.0))
+                msg = cast(bytes, await asyncio.wait_for(sock.recv(), timeout=5.0))
                 if not msg or len(msg) < 4:
                     continue
                 header_type = struct.unpack('<I', msg[:4])[0]
 
-                if header_type == 201:
+                if header_type == PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
+                    if self._audio_timeline_ack_check(msg):
+                        await self._resume_audio_timeline(sock)
+                elif header_type == 201:
                     result = json.loads(msg[4:].decode("utf-8"))
                     conversation_id = result.get("conversation_id")
 
@@ -513,8 +616,11 @@ class ListenPusherSession:
             except asyncio.CancelledError:
                 break
             except ConnectionClosed as e:
-                logger.error(f"Pusher receive connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_disconnected()
+                if self.pusher_ws is sock:
+                    logger.error(f"Pusher receive connection closed: {e} {self.uid} {self.session_id}")
+                    self._mark_disconnected()
+                else:
+                    logger.info(f"Pusher receive closed on a replaced socket: {e} {self.uid} {self.session_id}")
             except Exception as e:
                 logger.error(f"Pusher receive error: {e} {self.uid} {self.session_id}")
                 await self.deps.sleep(0.5)
@@ -662,6 +768,33 @@ class ListenPusherSession:
                     logger.error(f"Pusher draining failed: {e} {self.uid} {self.session_id}")
             await self._connect()
 
+    def _audio_timeline_ack_check(self, message: Any) -> Optional[bool]:
+        """Validate one received frame as the audio-timeline acknowledgment.
+
+        Shared by the connect-time wait and the ordinary receive loop: a late
+        ACK arriving on a suspended socket is held to exactly the same wire
+        contract. Returns ``None`` when the frame is not an ACK at all (short,
+        non-bytes, or a different opcode), otherwise whether the payload is a
+        supported ``audio_timeline_ack``.
+        """
+        if not isinstance(message, bytes) or len(message) < 4:
+            return None
+        if struct.unpack('<I', message[:4])[0] != PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
+            return None
+        try:
+            payload = json.loads(message[4:].decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return False
+        if not isinstance(payload, dict):
+            return False
+        if payload.get('type') != 'audio_timeline_ack':
+            return False
+        version = payload.get('version')
+        if isinstance(version, bool) or not isinstance(version, int) or version < AUDIO_TIMELINE_PROTOCOL:
+            logger.warning(f"Pusher audio timeline ack version unsupported: {version} {self.uid} {self.session_id}")
+            return False
+        return True
+
     async def _await_audio_timeline_ack(self) -> bool:
         """Wait for the pusher's v2 acknowledgment on a fresh connection.
 
@@ -680,28 +813,37 @@ class ListenPusherSession:
                 return False
             try:
                 message = await asyncio.wait_for(pusher_ws.recv(), timeout=remaining)
-            except (asyncio.TimeoutError, ConnectionClosed, asyncio.CancelledError):
+            except (asyncio.TimeoutError, ConnectionClosed):
                 return False
             except Exception as e:
                 logger.warning(f"Audio timeline ack read failed: {e} {self.uid} {self.session_id}")
                 return False
-            if not isinstance(message, bytes) or len(message) < 4:
+            check = self._audio_timeline_ack_check(message)
+            if check is None:
                 continue
-            if struct.unpack('<I', message[:4])[0] != PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
-                continue
-            try:
-                payload = json.loads(message[4:].decode('utf-8'))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                return False
-            if not isinstance(payload, dict):
-                return False
-            if payload.get('type') != 'audio_timeline_ack':
-                return False
-            version = payload.get('version')
-            if isinstance(version, bool) or not isinstance(version, int) or version < AUDIO_TIMELINE_PROTOCOL:
-                logger.warning(f"Pusher audio timeline ack version unsupported: {version} {self.uid} {self.session_id}")
-                return False
-            return True
+            return check
+
+    async def _resume_audio_timeline(self, sock: Any) -> None:
+        """Accept a late audio-timeline ACK that arrived on the live socket.
+
+        Only a suspended session that negotiated a timeline on this very
+        socket may resume: an unsolicited ACK on the legacy fallback socket —
+        which never requested the capability — or on a replaced socket is
+        ignored, so it can never promote a connection the pusher did not
+        acknowledge. Resuming runs the ordinary flush, which replays the
+        retained runs verbatim with their pinned identity fields.
+        """
+        if not (
+            sock is self.pusher_ws
+            and self.pusher_connected
+            and (self.config.audio_timeline_v2 or self.config.audio_timeline_spans)
+            and self.audio_timeline_active
+            and self.audio_timeline_suspended
+        ):
+            return
+        self.audio_timeline_suspended = False
+        logger.info(f"Pusher audio timeline ack recovered on live socket; resuming audio {self.uid} {self.session_id}")
+        await self._audio_bytes_flush()
 
     async def _connect(self):
         try:
@@ -711,12 +853,14 @@ class ListenPusherSession:
                 'is_active': self.deps.is_active,
                 'client_kind': self.config.client_kind,
             }
-            if self.config.audio_timeline_v2:
+            wants_timeline = self.config.audio_timeline_v2 or self.config.audio_timeline_spans
+            if wants_timeline:
                 connect_kwargs['audio_timeline'] = AUDIO_TIMELINE_PROTOCOL
             self.pusher_ws = await self.deps.connect_to_pusher(self.uid, pusher_sample_rate, **connect_kwargs)
             if self.pusher_ws is None:
                 return
-            if self.config.audio_timeline_v2:
+            self.last_synced_conversation_id = None
+            if wants_timeline:
                 # Capability gated per socket: an explicit acknowledgment is
                 # required before any v2 audio is committed, and again on
                 # every reconnect of a v2 session.
@@ -732,13 +876,40 @@ class ListenPusherSession:
                     # records as a coverage gap, and never terminate the
                     # recording or silently downgrade to v1 positions.
                     self.audio_timeline_suspended = True
+                    self.pending_request_event.set()
                     logger.warning(
                         f"Pusher lost audio-timeline capability mid-v2-recording; "
                         f"audio withheld as coverage gap {self.uid} {self.session_id}"
                     )
                 else:
+                    uncertain = self.pusher_ws
+                    try:
+                        await uncertain.close()
+                    except Exception as e:
+                        logger.error(
+                            f"Uncertain pusher socket close failed; staying disconnected {e} {self.uid} {self.session_id}"
+                        )
+                        return
+                    self.pusher_ws = None
+                    connect_kwargs.pop('audio_timeline', None)
+                    self.pusher_ws = await self.deps.connect_to_pusher(self.uid, pusher_sample_rate, **connect_kwargs)
+                    if self.pusher_ws is None:
+                        logger.warning(
+                            f"Pusher did not acknowledge audio timeline v2 and replacement connect failed; "
+                            f"audio stays buffered {self.uid} {self.session_id}"
+                        )
+                        return
+                    self.last_synced_conversation_id = None
+                    record_fallback(
+                        component='pusher',
+                        from_mode='audio_timeline',
+                        to_mode='legacy_audio',
+                        reason='other',
+                        outcome='degraded',
+                        log=logger,
+                    )
                     logger.info(
-                        f"Pusher did not acknowledge audio timeline v2; using v1 audio {self.uid} {self.session_id}"
+                        f"Pusher did not acknowledge audio timeline v2; replaced socket with v1 audio {self.uid} {self.session_id}"
                     )
             self.pusher_connected = True
             self.reconnect_state = PusherReconnectState.CONNECTED

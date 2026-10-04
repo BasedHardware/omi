@@ -243,6 +243,16 @@ def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     )
 
 
+def with_audio_timeline_span_env(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the span rollout defaults."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "AUDIO_TIMELINE_SPANS", "value": "false"},\n'
+        '        {"name": "LIVE_SPEAKER_SPAN_RESOLUTION", "value": "false"},',
+    )
+
+
 def with_sync_ledger_fence_mode(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
     return payload.replace(
@@ -368,7 +378,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             )
         )
     )
-    payload = with_screen_frame_egress_env(payload)
+    payload = with_screen_frame_egress_env(with_audio_timeline_span_env(payload))
     # The final-pass shadow is dark by default on the dev finalization worker.
     # Its deployed-state fixture must carry every explicit runtime binding.
     payload = re.sub(
@@ -427,6 +437,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},',
+        payload,
+        flags=re.DOTALL,
+    )
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "SYNC_LINEAGE_S1_REQUIRED", "value": "true"},'
+        r'\n        {"name": "SYNC_WAL_AUDIO_COVERAGE_ENABLED", "value": "true"},'
+        r'\n        {"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},',
         payload,
         flags=re.DOTALL,
     )
@@ -1603,12 +1621,7 @@ def test_full_validation_reports_missing_provider_binding_once():
     assert len(errors) == 1
 
 
-def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
-    validator = load_validator()
-    state_path = tmp_path / 'cloud_run_state.json'
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(
-            '''
+_MISSING_GATEWAY_CLOUD_RUN_STATE = '''
 {
   "services": {
     "backend": {
@@ -1667,8 +1680,14 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
     }
   }
 }
-''',
-        ),
+'''
+
+
+def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
+    validator = load_validator()
+    state_path = tmp_path / 'cloud_run_state.json'
+    state_path.write_text(
+        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE),
         encoding='utf-8',
     )
 
@@ -1676,6 +1695,33 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
 
     assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
     assert errors[0].scope == 'cloud_run/backend'
+
+    state_path.write_text(
+        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
+            '{"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},\n        ', ''
+        ),
+        encoding='utf-8',
+    )
+    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
+    assert {(error.scope, error.message) for error in errors} == {
+        ('cloud_run/backend', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
+        ('cloud_run/backend-sync', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
+        ('cloud_run/backend-integration', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
+        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
+    }
+    state_path.write_text(
+        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
+            '{"name": "SYNC_WAL_AUDIO_COVERAGE_ENABLED", "value": "true"},\n        ', ''
+        ),
+        encoding='utf-8',
+    )
+    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
+    assert {(error.scope, error.message) for error in errors} == {
+        ('cloud_run/backend', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
+        ('cloud_run/backend-sync', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
+        ('cloud_run/backend-integration', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
+        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
+    }
 
 
 def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):

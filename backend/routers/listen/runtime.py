@@ -58,6 +58,7 @@ from utils.observability.transcription import (
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_speaker_suggestion
 from utils.stt.streaming import get_stt_service_for_language
+import utils.stt.replay_delivery as replay_delivery
 from utils.stt.live_failure import terminate_live_stt_backoff
 from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
 from utils.stt.live_metrics import (
@@ -90,6 +91,7 @@ from .contracts import ListenLimits, ListenRequest, ListenSessionState
 from .conversations import LiveConversationController
 from .persistence import ListenPersistence
 from .parity_capture import ListenParityCapture
+from . import receiver as receiver_module
 from .receiver import ListenReceiver
 from .registry import register as register_listen_session
 from .registry import unregister as unregister_listen_session
@@ -858,6 +860,7 @@ class ListenSessionRuntime:
                 # STT — always on internally) AND the AUDIO_TIMELINE_V2
                 # persistence admission AND a pusher capability acknowledgment.
                 audio_timeline_v2=bool(getattr(self.state, 'capture_timeline_v2', False)),
+                audio_timeline_spans=bool(getattr(self.state, 'capture_timeline_spans', False)),
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: self.state.current_conversation_id,
@@ -988,26 +991,75 @@ class ListenSessionRuntime:
             self.send_event(self._ready_event())
             result = await self.task_supervisor.supervise(receive_task=receive_task)
             logger.info('Listen supervisor exited reason=%s', result.reason)
-            if result.reason in {'crash', 'lifetime_done'}:
+            ordinary_close = self._ordinary_client_close(result)
+            if (
+                result.reason in {'crash', 'lifetime_done'}
+                or (
+                    result.reason == 'disconnect'
+                    and self.recovery_enabled
+                    and self.state.close_code not in (1000, 1001)
+                )
+            ) and not ordinary_close:
                 self.state.live_transcription_failed = True
             if receive_task.done() and not receive_task.cancelled():
                 receive_error = receive_task.exception()
                 if receive_error is not None:
                     raise receive_error
+            close_bound: Optional[float] = None
+            if self.recovery_enabled:
+                if self.receiver.shutdown_deadline is None:
+                    self.receiver.shutdown_deadline = (
+                        replay_delivery.clock() + receiver_module.SHUTDOWN_DELIVERY_SECONDS
+                    )
+                close_bound = self.receiver.shutdown_deadline + receiver_module.SHUTDOWN_CLEANUP_SECONDS
             if not receive_task.done():
                 self.state.active = False
-                receive_task.cancel()
-                try:
-                    await receive_task
-                except asyncio.CancelledError:
-                    pass
+                if ordinary_close:
+                    await self._complete_receive(receive_task, deadline=cast(float, close_bound))
+                elif self.recovery_enabled:
+                    receive_task.cancel()
+                    await self._complete_receive(receive_task, deadline=cast(float, close_bound))
+                else:
+                    receive_task.cancel()
+                    try:
+                        await receive_task
+                    except asyncio.CancelledError:
+                        pass
             self.state.shutdown_event.set()
-            await self.task_supervisor.drain_monitored(timeout=self.limits.bg_drain_timeout, cancel=False)
+            if self.recovery_enabled:
+                await self.task_supervisor.drain_monitored(
+                    timeout=self.limits.bg_drain_timeout, cancel=False, deadline=cast(float, close_bound)
+                )
+            else:
+                await self.task_supervisor.drain_monitored(timeout=self.limits.bg_drain_timeout, cancel=False)
         except Exception as error:
             logger.error('Listen WebSocket operation failed type=%s', type(error).__name__)
             self.state.live_transcription_failed = True
         finally:
             await self._teardown()
+
+    def _ordinary_client_close(self, result: Any) -> bool:
+        if not self.recovery_enabled or result.reason != 'lifetime_done':
+            return False
+        if self.state.stt_terminal_failure or self.request.owner_persistence_blocked.is_set():
+            return False
+        if self.state.close_code not in (1000, 1001):
+            return False
+        return (
+            getattr(self.receiver, 'client_closing', False)
+            or self.request.websocket.client_state != WebSocketState.CONNECTED
+        )
+
+    async def _complete_receive(self, receive_task: asyncio.Task[Any], *, deadline: float) -> None:
+        remaining = lambda: max(0.0, deadline - replay_delivery.clock())
+        _, pending = await asyncio.wait({receive_task}, timeout=remaining())
+        if pending:
+            receive_task.cancel()
+            _, _ = await asyncio.wait({receive_task}, timeout=remaining())
+        if receive_task.done() and not receive_task.cancelled():
+            error = receive_task.exception()
+            if error is not None:
+                raise error
 
     async def _teardown(self) -> None:
         try:

@@ -598,6 +598,9 @@ class LiveLegSocket(STTSocket):
             health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
         else:
             circuit.record_serve_failure()
+            health.quarantine(
+                self.service.value, 'selection', circuit.serve_error_bench_seconds, endpoint=self.routing_endpoint
+            )
         return True
 
     def _release_open_gauge(self) -> None:
@@ -658,7 +661,12 @@ class LiveLegSocket(STTSocket):
         if self._transcript_outcome is not None:
             return
         self._transcript_outcome = outcome
-        health.record(self.service.value, self.session.receiver.host.language, outcome)
+        if self.routing_endpoint:
+            health.record(
+                self.service.value, self.session.receiver.host.language, outcome, endpoint=self.routing_endpoint
+            )
+        else:
+            health.record(self.service.value, self.session.receiver.host.language, outcome)
         if self._routing_active:
             if outcome == 'text':
                 self._health_success()

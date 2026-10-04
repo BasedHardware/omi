@@ -21,6 +21,7 @@ from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, reco
 CONVERSATIONS_COLLECTION = 'conversations'
 
 LINEAGE_FIELD_PATHS = (
+    'created_at',
     'started_at',
     'finished_at',
     'source',
@@ -57,6 +58,7 @@ def get_recording_generations(
     started_before: datetime,
     finished_after: datetime,
     limit: int,
+    include_capture_evidence: bool = False,
     firestore_client: Any = None,
 ) -> list[dict[str, Any]]:
     """Newest-first generations that can overlap the upload's segment envelope.
@@ -72,20 +74,34 @@ def get_recording_generations(
     query = (
         query.order_by('started_at', direction=firestore.Query.DESCENDING)
         .order_by('finished_at', direction=firestore.Query.DESCENDING)
-        .select(list(LINEAGE_FIELD_PATHS))
+        .select(list(LINEAGE_FIELD_PATHS) + (['capture_evidence'] if include_capture_evidence else []))
         .limit(limit + 1)
     )
     return _rows(query)
 
 
+def get_recording_id_probe(uid: str, origin_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
+    snapshot = (
+        _collection(uid, firestore_client).document(origin_id).get(field_paths=list(LINEAGE_FIELD_PATHS), timeout=5.0)
+    )
+    data = snapshot.to_dict()
+    record_firestore_read(
+        FirestoreReadFamily.SYNC_RECORDING_LINEAGE, FirestoreReadMode.BOUNDED, 1 if isinstance(data, dict) else 0
+    )
+    if isinstance(data, dict):
+        data['id'] = snapshot.id
+        return data
+    return None
+
+
 def get_origin_generation(
-    uid: str, origin_id: str, *, limit: int, firestore_client: Any = None
+    uid: str, origin_id: str, *, limit: int, include_capture_evidence: bool = False, firestore_client: Any = None
 ) -> list[dict[str, Any]]:
     """Rows bound to the origin recording id itself, for generations created before the origin stamp."""
     query = (
         _collection(uid, firestore_client)
         .where(filter=FieldFilter('external_data.recording_session_id', '==', origin_id))
-        .select(list(LINEAGE_FIELD_PATHS))
+        .select(list(LINEAGE_FIELD_PATHS) + (['capture_evidence'] if include_capture_evidence else []))
         .limit(limit + 1)
     )
     return _rows(query)

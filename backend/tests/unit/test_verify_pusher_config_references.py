@@ -180,6 +180,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
+        "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
         "MENTOR_GATE_DEBOUNCE_ENABLED": "true",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
@@ -192,6 +193,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
+        "LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED": "true",
         "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
         "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
         "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP": "60000",
@@ -205,6 +207,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
+        "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
         "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
         "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED": "true",
