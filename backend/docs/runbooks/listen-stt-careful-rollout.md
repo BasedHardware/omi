@@ -358,9 +358,11 @@ export PROD_CTX=gke_based-hardware_us-central1_prod-omi-gke
 export MON_NS=prod-omi-monitoring
 source ~/.local/bin/gcp-agent-env.sh human
 kprod() { rm -f ~/.kube/gke_gcloud_auth_plugin_cache; kubectl --context "$PROD_CTX" "$@"; }
-source .local/adapter-review.env
-: "${ADAPTER_BEFORE:?missing from .local/adapter-review.env}" "${ADAPTER_REVIEW_DIR:?missing}"
-test -s "$ADAPTER_REVIEW_DIR/restore-apiservices-configmap.yaml"
+# No errexit here (a failed helm rollback must fall through to restore), so every
+# precondition exits explicitly before any cluster operation.
+source .local/adapter-review.env || { echo "HOLD: .local/adapter-review.env missing"; exit 1; }
+[ -n "${ADAPTER_BEFORE:-}" ] && [ -n "${ADAPTER_REVIEW_DIR:-}" ] || { echo "HOLD: rollback state incomplete"; exit 1; }
+test -s "$ADAPTER_REVIEW_DIR/restore-apiservices-configmap.yaml" || { echo "HOLD: restore YAML missing"; exit 1; }
 kprod -n prod-omi-backend delete deployment prod-omi-backend-listen-canary \
   --ignore-not-found --wait=true --timeout=5m
 CANARY_PODS=$(kprod -n prod-omi-backend get pod -l app.kubernetes.io/name=backend-listen,track=canary -o name)
