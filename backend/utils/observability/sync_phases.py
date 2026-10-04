@@ -161,7 +161,7 @@ def export_snapshot() -> None:
             from google.auth.transport.requests import AuthorizedSession
 
             credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/monitoring.write'])
-            _session = AuthorizedSession(credentials)
+            _session = AuthorizedSession(credentials, max_refresh_attempts=0, refresh_timeout=2)
         ended = datetime.now(timezone.utc).isoformat()
         resource = {
             'type': 'generic_task',
