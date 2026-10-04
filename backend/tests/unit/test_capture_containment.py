@@ -632,8 +632,7 @@ def test_overlapping_turns_from_different_speakers_do_not_reject():
         assert cc.measure_capture_containment(rows[order[0]], rows[order[1]]) == canonical
 
 
-def test_slightly_overlapping_split_target_utterance_still_joins():
-    canonical = cc.measure_capture_containment(*complementary_pair())
+def test_overlapping_bundle_slightly_overlapping_split_is_rejected():
     for order in (('pendant', 'laptop'), ('laptop', 'pendant')):
         pendant, laptop = complementary_pair()
         first_user = next(item for item in laptop['transcript_segments'] if item['is_user'])
@@ -645,6 +644,121 @@ def test_slightly_overlapping_split_target_utterance_still_joins():
         ]
         laptop['transcript_segments'].reverse()
         pendant['transcript_segments'].reverse()
+        rows = {'pendant': pendant, 'laptop': laptop}
+        decision = cc.measure_capture_containment(rows[order[0]], rows[order[1]])
+        assert not decision.would_join and decision.reason == 'insufficient_coverage'
+        assert decision.matched_words == 39 and decision.smaller_words == 64
+        assert decision.support_seconds == 36.0 and decision.coverage == 39 / 64
+
+
+def _pair_with_user_track_pieces(pieces_for):
+    pendant, laptop = complementary_pair()
+    rebuilt = []
+    for item in laptop['transcript_segments']:
+        if not item['is_user']:
+            rebuilt.append(item)
+            continue
+        tokens = item['text'].split()
+        rebuilt += [
+            segment(text, start, end=end) for text, start, end in pieces_for(tokens, item['start'], item['end'])
+        ]
+    laptop['transcript_segments'] = rebuilt
+    return pendant, laptop
+
+
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+@pytest.mark.parametrize('unordered', [False, True])
+def test_overlapping_bundle_identical_halves_never_join(mode, unordered):
+    for order in (('pendant', 'laptop'), ('laptop', 'pendant')):
+        pendant, laptop = _pair_with_user_track_pieces(
+            lambda tokens, start, end: (
+                (' '.join(tokens[:9]), start, end),
+                (' '.join(tokens[9:]), start, end),
+            )
+        )
+        if unordered:
+            laptop['transcript_segments'].reverse()
+            pendant['transcript_segments'].reverse()
+        rows = {'pendant': pendant, 'laptop': laptop}
+        shared = measure_shared_speech(pendant['transcript_segments'], laptop['transcript_segments'])
+        assert not shared.confirms()
+        decision = cc.measure_capture_containment(rows[order[0]], rows[order[1]], mode=mode)
+        assert not decision.would_join and decision.reason == 'timing'
+        assert decision.matched_words == 0 and decision.matched_utterances == 0
+        assert decision.smaller_words == 64 and decision.support_seconds == 0.0
+        assert decision.basis == 'full'
+
+
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_overlapping_bundle_slight_overlap_never_joins(mode):
+    for order in (('pendant', 'laptop'), ('laptop', 'pendant')):
+        pendant, laptop = _pair_with_user_track_pieces(
+            lambda tokens, start, end: (
+                (' '.join(tokens[:9]), start, start + 6.25),
+                (' '.join(tokens[9:]), start + 6.0, end),
+            )
+        )
+        rows = {'pendant': pendant, 'laptop': laptop}
+        shared = measure_shared_speech(pendant['transcript_segments'], laptop['transcript_segments'])
+        assert not shared.confirms()
+        decision = cc.measure_capture_containment(rows[order[0]], rows[order[1]], mode=mode)
+        assert not decision.would_join and decision.reason == 'timing'
+        assert decision.matched_words == 0 and decision.matched_utterances == 0
+        assert decision.support_seconds == 0.0 and decision.basis == 'full'
+
+
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_overlapping_bundle_nested_pieces_never_join(mode):
+    for order in (('pendant', 'laptop'), ('laptop', 'pendant')):
+        pendant, laptop = _pair_with_user_track_pieces(
+            lambda tokens, start, end: (
+                (' '.join(tokens[:9]), start, end),
+                (' '.join(tokens[9:]), start + 3.0, start + 9.0),
+            )
+        )
+        rows = {'pendant': pendant, 'laptop': laptop}
+        decision = cc.measure_capture_containment(rows[order[0]], rows[order[1]], mode=mode)
+        assert not decision.would_join and decision.reason == 'timing'
+        assert decision.matched_words == 0 and decision.matched_utterances == 0
+        assert decision.support_seconds == 0.0 and decision.basis == 'full'
+
+
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_overlapping_bundle_three_piece_boundary_never_joins(mode):
+    for order in (('pendant', 'laptop'), ('laptop', 'pendant')):
+        pendant, laptop = _pair_with_user_track_pieces(
+            lambda tokens, start, end: (
+                (' '.join(tokens[:6]), start, start + 4.0),
+                (' '.join(tokens[6:12]), start + 4.0, start + 8.25),
+                (' '.join(tokens[12:]), start + 8.0, end),
+            )
+        )
+        rows = {'pendant': pendant, 'laptop': laptop}
+        decision = cc.measure_capture_containment(rows[order[0]], rows[order[1]], mode=mode)
+        assert not decision.would_join and decision.reason == 'timing'
+        assert decision.matched_words == 0 and decision.matched_utterances == 0
+        assert decision.support_seconds == 0.0 and decision.basis == 'full'
+
+
+@pytest.mark.parametrize('decoy_first', [False, True])
+def test_overlapping_bundle_decoy_alternatives_still_join(decoy_first):
+    canonical = cc.measure_capture_containment(*complementary_pair())
+    for order in (('pendant', 'laptop'), ('laptop', 'pendant')):
+        pendant, laptop = complementary_pair()
+        rebuilt = []
+        decoy_index = 0
+        for item in laptop['transcript_segments']:
+            if not item['is_user']:
+                rebuilt.append(item)
+                continue
+            decoy = segment(
+                ' '.join('d%dw%d' % (decoy_index, word) for word in range(16)),
+                item['start'],
+                end=item['end'],
+            )
+            decoy_index += 1
+            rebuilt += [decoy, item] if decoy_first else [item, decoy]
+        laptop['transcript_segments'] = rebuilt
         rows = {'pendant': pendant, 'laptop': laptop}
         decision = cc.measure_capture_containment(rows[order[0]], rows[order[1]])
         assert decision == canonical

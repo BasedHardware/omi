@@ -567,10 +567,13 @@ containment detector (`utils/conversations/capture_containment.py`) covers that
 complementary case: within the intersection of both wall windows it takes the
 capture with fewer in-window words, aligns each of its `is_user` utterances
 (8+ tokens) to a chronological bundle of one to three contiguous user segments
-on the other side (both ends within 12 seconds), and accepts a pair only when
+on the other side (both ends within 12 seconds, and each member must end no
+later than the next begins), and accepts a pair only when
 a bounded ordered longest-common-subsequence match covers at least 0.8 of the
 utterance tokens and shares at
-least two distinct adjacent bigrams. Only ordered subsequences count as
+least two distinct adjacent bigrams. Overlapping same-track variants remain
+competing candidates that can each be selected on their own; they are simply
+never concatenated into one bundle. Only ordered subsequences count as
 coverage — a fully reversed transcript still fails — while a partial reorder
 keeps whatever ordered subsequence survives; this is not bag-of-words overlap.
 The ordered LCS is optimal rather than the previous greedy difflib alignment,

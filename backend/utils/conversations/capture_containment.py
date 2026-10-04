@@ -347,6 +347,8 @@ def _match_utterances(
                     raise _ContainmentRejected('bounds_bundle_checks')
                 bundle_checks += 1
                 bundle = target_user[i : i + span]
+                if any(left[1] > right[0] for left, right in zip(bundle, bundle[1:])):
+                    continue
                 if abs((bundle[-1][1] - u_end).total_seconds()) > MAX_TIME_SKEW_SECONDS:
                     continue
                 bundle_words = tuple(word for _, _, words in bundle for word in words)

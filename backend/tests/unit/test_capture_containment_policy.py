@@ -810,10 +810,11 @@ def _layout_realistic_rows():
     laptop['transcript_segments'].remove(first_user)
     tokens = first_user['text'].split()
     laptop['transcript_segments'] += [
-        segment(' '.join(tokens[:6]), first_user['start'], end=first_user['start'] + 6.25),
+        segment(' '.join(tokens[:6]), first_user['start'], end=first_user['start'] + 6.0),
         segment(' '.join(tokens[6:]), first_user['start'] + 6.0, end=first_user['end']),
         segment(' '.join('r1w%d' % i for i in range(10)), 103.0, is_user=False, end=123.0, speaker_id=1),
         segment(' '.join('r2w%d' % i for i in range(10)), 113.0, is_user=False, end=133.0, speaker_id=2),
+        segment('unrelated same-track decoy words', 144.0, end=145.0),
     ]
     pendant['transcript_segments'].append(dict(pendant['transcript_segments'][0]))
     laptop['transcript_segments'].reverse()
@@ -910,3 +911,45 @@ def test_union_support_cannot_fabricate_a_join_through_the_seam(seam, monkeypatc
     lines = containment_lines(caplog)
     assert len(lines) == 1
     assert 'would_join=false' in lines[0] and 'reason=too_small' in lines[0]
+
+
+def _overlapping_half_rows(unordered=False):
+    pendant, laptop = complementary_rows()
+    rebuilt = []
+    for item in laptop['transcript_segments']:
+        if not item['is_user']:
+            rebuilt.append(item)
+            continue
+        tokens = item['text'].split()
+        rebuilt += [
+            segment(' '.join(tokens[:9]), item['start'], end=item['end']),
+            segment(' '.join(tokens[9:]), item['start'], end=item['end']),
+        ]
+    laptop['transcript_segments'] = rebuilt
+    if unordered:
+        laptop['transcript_segments'].reverse()
+        pendant['transcript_segments'].reverse()
+    return pendant, laptop
+
+
+@pytest.mark.parametrize('last', ['pendant', 'laptop'])
+@pytest.mark.parametrize('unordered', [False, True])
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_overlapping_bundle_never_joins_through_the_seam(seam, monkeypatch, caplog, mode, unordered, last):
+    monkeypatch.setenv(containment_module.MODE_ENV, mode)
+    pendant, laptop = _overlapping_half_rows(unordered)
+    shared = measure_shared_speech(pendant['transcript_segments'], laptop['transcript_segments'])
+    assert not shared.confirms()
+    seam['store'].rows.update({path('pendant'): pendant, path('laptop'): laptop})
+    before = deepcopy(seam['store'].rows)
+    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
+        policy.link_duplicate_captures(UID, Conversation(**seam['store'].rows[path(last)]))
+    assert all('capture_group' not in r for r in seam['store'].rows.values())
+    assert ('capture_group_joined', 'none') in seam['events']
+    lines = containment_lines(caplog)
+    assert len(lines) == 1
+    assert 'mode=%s' % mode in lines[0]
+    assert 'would_join=false' in lines[0] and 'reason=timing' in lines[0] and 'basis=full' in lines[0]
+    for cid in ('pendant', 'laptop'):
+        assert seam['store'].rows[path(cid)]['transcript_segments'] == before[path(cid)]['transcript_segments']
+        assert seam['store'].rows[path(cid)]['structured'] == before[path(cid)]['structured']
