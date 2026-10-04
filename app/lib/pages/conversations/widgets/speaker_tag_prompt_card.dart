@@ -105,7 +105,9 @@ class _Header extends StatelessWidget {
         if (provider.prompts.length > 1 && !provider.finished)
           Text(
             l10n.speakerTagPromptProgress(
-                math.min(provider.index + 1, provider.prompts.length), provider.prompts.length),
+              math.min(provider.index + 1, provider.prompts.length),
+              provider.prompts.length,
+            ),
             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
           ),
         OmiIconButton(
@@ -207,6 +209,8 @@ class _Question extends StatelessWidget {
       _giveAnswer(context, provider, answer, personId: personId, name: name, displayName: displayName);
     }
 
+    // "No…" / "Someone Else…": the picker also holds That's Me and Not a Person, so the card keeps
+    // three answers.
     Future<void> someoneElse() async {
       final choice = await showSpeakerPicker(
         context,
@@ -215,8 +219,11 @@ class _Question extends StatelessWidget {
         people: people,
         excludePersonId: prompt.suggestedPersonId,
         allowUnknown: prompt.kind != 'owner_check',
+        offerMeAndNotAPerson: prompt.kind != 'owner_check',
       );
       if (choice == null || !context.mounted) return;
+      if (choice.me) return give(SpeakerTagAnswer.me);
+      if (choice.notAPerson) return give(SpeakerTagAnswer.notAPerson);
       if (choice.unknown) return give(SpeakerTagAnswer.someoneElse);
       if (choice.personId != null) {
         return give(SpeakerTagAnswer.person, personId: choice.personId, displayName: choice.displayName);
@@ -225,13 +232,15 @@ class _Question extends StatelessWidget {
     }
 
     final question = switch (prompt.kind) {
-      'confirm_person' when suggestedName != null && suggestedName.isNotEmpty =>
-        l10n.speakerTagPromptIsThisPerson(suggestedName),
+      'confirm_person' when suggestedName != null && suggestedName.isNotEmpty => l10n.speakerTagPromptIsThisPerson(
+          suggestedName,
+        ),
       'identify' || 'confirm_person' => l10n.speakerTagPromptWhoIsThis,
       _ => l10n.speakerTagPromptIsThisYou,
     };
+    final confirmsGuess = prompt.kind == 'confirm_person' && prompt.suggestedPersonId != null;
     final answers = <Widget>[
-      if (prompt.kind == 'confirm_person' && prompt.suggestedPersonId != null)
+      if (confirmsGuess)
         _AnswerChip(
           key: const Key('speaker_tag_prompt_answer_yes'),
           label: l10n.yes,
@@ -256,25 +265,20 @@ class _Question extends StatelessWidget {
           onPressed: enabled ? () => give(SpeakerTagAnswer.notMe) : null,
         )
       else
+        // Yes or No… on a named guess; Someone Else… when Omi only asks who it is.
         _AnswerChip(
           key: const Key('speaker_tag_prompt_answer_someone_else'),
-          label: l10n.speakerTagPromptSomeoneElse,
-          icon: Icons.search,
+          label: confirmsGuess ? l10n.speakerTagPromptNoAction : l10n.speakerTagPromptSomeoneElse,
+          icon: confirmsGuess ? null : Icons.search,
           onPressed: enabled ? someoneElse : null,
         ),
-      if (prompt.kind != 'owner_check')
+      if (prompt.kind == 'owner_check')
         _AnswerChip(
-          key: const Key('speaker_tag_prompt_answer_me'),
-          label: l10n.speakerTagPromptThatsMeAction,
-          icon: Icons.person_outline,
-          onPressed: enabled ? () => give(SpeakerTagAnswer.me) : null,
+          key: const Key('speaker_tag_prompt_answer_not_a_person'),
+          label: l10n.speakerTagPromptNotAPerson,
+          icon: Icons.tv_outlined,
+          onPressed: enabled ? () => give(SpeakerTagAnswer.notAPerson) : null,
         ),
-      _AnswerChip(
-        key: const Key('speaker_tag_prompt_answer_not_a_person'),
-        label: l10n.speakerTagPromptNotAPerson,
-        icon: Icons.tv_outlined,
-        onPressed: enabled ? () => give(SpeakerTagAnswer.notAPerson) : null,
-      ),
       _AnswerChip(
         key: const Key('speaker_tag_prompt_answer_skip'),
         label: l10n.speakerTagPromptNotSureAction,
@@ -282,8 +286,9 @@ class _Question extends StatelessWidget {
       ),
     ];
     final matched = candidates.any((c) => c.matchLevel != null);
+    // A yes/no question needs no footnote explaining Yes; the others say why the answer matters.
     final hint = switch (prompt.kind) {
-      'confirm_person' when suggestedName != null => l10n.speakerTagPromptHintConfirm(suggestedName),
+      'confirm_person' when suggestedName != null => null,
       'owner_check' => l10n.speakerTagPromptHintOwner,
       _ => l10n.speakerTagPromptHintIdentify,
     };
@@ -333,16 +338,20 @@ class _Question extends StatelessWidget {
           const SizedBox(height: OmiSpacing.xs),
           Text(l10n.speakerTagPromptAnswerFailed, style: OmiType.footnote.copyWith(color: OmiColors.danger)),
         ],
-        const SizedBox(height: OmiSpacing.sm),
-        Divider(color: OmiColors.border, height: 1),
-        const SizedBox(height: OmiSpacing.sm),
-        Row(
-          children: [
-            Icon(Icons.arrow_upward, size: 14, color: OmiColors.textSecondary),
-            const SizedBox(width: OmiSpacing.xxs),
-            Expanded(child: Text(hint, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
-          ],
-        ),
+        if (hint != null) ...[
+          const SizedBox(height: OmiSpacing.sm),
+          Divider(color: OmiColors.border, height: 1),
+          const SizedBox(height: OmiSpacing.sm),
+          Row(
+            children: [
+              Icon(Icons.arrow_upward, size: 14, color: OmiColors.textSecondary),
+              const SizedBox(width: OmiSpacing.xxs),
+              Expanded(
+                child: Text(hint, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -403,7 +412,9 @@ class _Clip extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: OmiSpacing.sm),
-              Expanded(child: SizedBox(height: 28, child: _Waveform(wav: wav))),
+              Expanded(
+                child: SizedBox(height: 28, child: _Waveform(wav: wav)),
+              ),
               const SizedBox(width: OmiSpacing.sm),
               Text(OmiDuration.offset(seconds), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ],
@@ -411,12 +422,7 @@ class _Clip extends StatelessWidget {
         ),
         if (prompt.excerpt.isNotEmpty) ...[
           const SizedBox(height: OmiSpacing.xs),
-          Text(
-            '“${prompt.excerpt}”',
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: OmiType.subhead,
-          ),
+          Text('“${prompt.excerpt}”', maxLines: 3, overflow: TextOverflow.ellipsis, style: OmiType.subhead),
         ],
         if (prompt.conversationTitle.isNotEmpty || started != null) ...[
           const SizedBox(height: OmiSpacing.xxs),
@@ -553,15 +559,14 @@ class _CandidateChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(child: Text(candidate.name, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500))),
+              Flexible(
+                child: Text(candidate.name, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
+              ),
               if (candidate.pinned) ...[
                 const SizedBox(width: OmiSpacing.xxs),
                 Icon(Icons.push_pin, size: 12, color: OmiColors.textTertiary),
               ],
-              if (level != null) ...[
-                const SizedBox(width: OmiSpacing.xs),
-                VoiceMatchMeter(level: level),
-              ],
+              if (level != null) ...[const SizedBox(width: OmiSpacing.xs), VoiceMatchMeter(level: level)],
             ],
           ),
         ),
@@ -610,8 +615,10 @@ class _AnswerChip extends StatelessWidget {
                   Flexible(
                     child: Text(
                       label,
-                      style: OmiType.subhead
-                          .copyWith(color: foreground, fontWeight: primary ? FontWeight.w600 : FontWeight.w500),
+                      style: OmiType.subhead.copyWith(
+                        color: foreground,
+                        fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
@@ -687,29 +694,52 @@ class _Answered extends StatelessWidget {
   }
 }
 
-/// What the Someone Else… picker returned: an existing person, a new name, or "someone I don't know".
+/// What the No… / Someone Else… picker returned: an existing person, a new name, "someone I don't
+/// know", the owner ("That's Me") or not a person at all (a TV, a voice assistant).
 class SpeakerPickerChoice {
   const SpeakerPickerChoice.person(String this.personId, this.displayName)
       : name = null,
-        unknown = false;
+        unknown = false,
+        me = false,
+        notAPerson = false;
   const SpeakerPickerChoice.newPerson(String this.name)
       : personId = null,
         displayName = null,
-        unknown = false;
+        unknown = false,
+        me = false,
+        notAPerson = false;
   const SpeakerPickerChoice.unknown()
       : personId = null,
         name = null,
         displayName = null,
-        unknown = true;
+        unknown = true,
+        me = false,
+        notAPerson = false;
+  const SpeakerPickerChoice.me()
+      : personId = null,
+        name = null,
+        displayName = null,
+        unknown = false,
+        me = true,
+        notAPerson = false;
+  const SpeakerPickerChoice.notAPerson()
+      : personId = null,
+        name = null,
+        displayName = null,
+        unknown = false,
+        me = false,
+        notAPerson = true;
 
   final String? personId;
   final String? name;
   final String? displayName;
   final bool unknown;
+  final bool me;
+  final bool notAPerson;
 }
 
-/// "Who Is It?": search, a new person, the closest voices (without the person just ruled out), then
-/// everyone A to Z.
+/// "Who Is It?": search; That's Me and Not a Person when [offerMeAndNotAPerson]; a new person; the
+/// closest voices (without the person just ruled out), then everyone A to Z.
 Future<SpeakerPickerChoice?> showSpeakerPicker(
   BuildContext context, {
   required GeneratedSpeakerTagPrompt prompt,
@@ -717,6 +747,7 @@ Future<SpeakerPickerChoice?> showSpeakerPicker(
   required List<Person> people,
   String? excludePersonId,
   bool allowUnknown = true,
+  bool offerMeAndNotAPerson = false,
 }) {
   return showOmiSheet<SpeakerPickerChoice>(
     context: context,
@@ -725,16 +756,23 @@ Future<SpeakerPickerChoice?> showSpeakerPicker(
       candidates: candidates.where((c) => c.personId != excludePersonId).toList(),
       people: people.where((p) => p.id != excludePersonId && !p.id.startsWith('optimistic-person:')).toList(),
       allowUnknown: allowUnknown,
+      offerMeAndNotAPerson: offerMeAndNotAPerson,
     ),
   );
 }
 
 class _SpeakerPicker extends StatefulWidget {
-  const _SpeakerPicker({required this.candidates, required this.people, required this.allowUnknown});
+  const _SpeakerPicker({
+    required this.candidates,
+    required this.people,
+    required this.allowUnknown,
+    required this.offerMeAndNotAPerson,
+  });
 
   final List<GeneratedSpeakerTagCandidate> candidates;
   final List<Person> people;
   final bool allowUnknown;
+  final bool offerMeAndNotAPerson;
 
   @override
   State<_SpeakerPicker> createState() => _SpeakerPickerState();
@@ -782,6 +820,25 @@ class _SpeakerPickerState extends State<_SpeakerPicker> {
             onCleared: () => setState(() => _query = ''),
           ),
           const SizedBox(height: OmiSpacing.sm),
+          if (widget.offerMeAndNotAPerson && q.isEmpty) ...[
+            OmiSettingsGroup(
+              children: [
+                OmiSettingsRow(
+                  key: const Key('speaker_picker_me'),
+                  leading: const Icon(Icons.person_outline),
+                  title: l10n.speakerTagPromptThatsMeAction,
+                  onTap: () => _pick(const SpeakerPickerChoice.me()),
+                ),
+                OmiSettingsRow(
+                  key: const Key('speaker_picker_not_a_person'),
+                  leading: const Icon(Icons.tv_outlined),
+                  title: l10n.speakerTagPromptNotAPerson,
+                  onTap: () => _pick(const SpeakerPickerChoice.notAPerson()),
+                ),
+              ],
+            ),
+            const SizedBox(height: OmiSpacing.md),
+          ],
           OmiSettingsGroup(
             children: [
               OmiSettingsRow(

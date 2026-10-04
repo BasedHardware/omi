@@ -633,9 +633,6 @@ def _validate_firestore_readiness_workflow_contract(
     if 'firestore_readiness' not in normalized_needs:
         errors.append(ValidationError(scope, 'backend deploy must depend on the isolated Firestore readiness job'))
 
-    expected_path = (
-        '${{ runner.temp }}/firestore-schema-proposal-' '${{ github.run_id }}-${{ github.run_attempt }}.json'
-    )
     is_manual_deploy = Path(workflow_file).name == 'gcp_backend.yml'
     permissions = _as_config_dict(readiness_job.get('permissions')) or {}
     # Both lanes resolve their source from the Release Eligibility run listing,
@@ -652,11 +649,7 @@ def _validate_firestore_readiness_workflow_contract(
     serialized_readiness_job = json.dumps(readiness_job, sort_keys=True)
     if 'secrets.GCP_CREDENTIALS' in serialized_readiness_job:
         errors.append(ValidationError(scope, 'Firestore readiness must not receive backend deployment credentials'))
-    auth_steps = [step for step in parsed_steps if step.get('uses') == 'google-github-actions/auth@v3']
-    if len(auth_steps) != 1 or (_as_config_dict(auth_steps[0].get('with')) or {}).get('credentials_json') != (
-        '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
-    ):
-        errors.append(ValidationError(scope, 'Firestore readiness must use the dedicated read-only credentials'))
+    resolved_workflow_root = workflow_root or ROOT
     checkout_steps = [step for step in parsed_steps if step.get('uses') == 'actions/checkout@v7']
     admitted_readiness_ref = '${{ steps.admitted_source.outputs.admitted_sha }}'
     admission_checkout_name = (
@@ -672,15 +665,63 @@ def _validate_firestore_readiness_workflow_contract(
     admitted_checkout = next(
         (step for step in checkout_steps if step.get('name') == 'Checkout admitted Firestore source'), None
     )
+    control_checkout = next(
+        (step for step in checkout_steps if step.get('name') == 'Checkout immutable Firestore gate controls'),
+        None,
+    )
     admission_with = _as_config_dict((admission_checkout or {}).get('with')) or {}
     admitted_with = _as_config_dict((admitted_checkout or {}).get('with')) or {}
+    control_with = _as_config_dict((control_checkout or {}).get('with')) or {}
     if (
-        len(checkout_steps) != 2
+        len(checkout_steps) != 3
         or admission_with.get('ref') != 'main'
         or admission_with.get('fetch-depth') != 0
         or admitted_with.get('ref') != admitted_readiness_ref
+        or control_with.get('ref') != '${{ github.workflow_sha }}'
+        or control_with.get('path') != '.github/firestore-workflow'
+        or control_with.get('persist-credentials') is not False
+        or control_checkout is None
+        or admitted_checkout is None
+        or parsed_steps.index(control_checkout) < parsed_steps.index(admitted_checkout)
     ):
         errors.append(ValidationError(scope, admission_error))
+    readiness_uses = './.github/firestore-workflow/.github/actions/firestore-readiness'
+    gate_steps = [(index, step) for index, step in enumerate(parsed_steps) if step.get('uses') == readiness_uses]
+    if len(gate_steps) != 1:
+        errors.append(
+            ValidationError(scope, 'Firestore readiness must call exactly one shared firestore-readiness composite')
+        )
+        return errors
+    gate_index, gate_step = gate_steps[0]
+    gate_with = _as_config_dict(gate_step.get('with')) or {}
+    if (
+        gate_with.get('source_sha') != admitted_readiness_ref
+        or gate_with.get('project_id') != '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
+        or gate_with.get('credentials_json') != '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
+        or gate_with.get('database', '(default)') != '(default)'
+        or gate_step.get('if') is not None
+        or gate_step.get('continue-on-error') not in (None, False)
+        or (control_checkout is not None and gate_index < parsed_steps.index(control_checkout))
+    ):
+        errors.append(
+            ValidationError(
+                scope,
+                'Firestore readiness gate must unconditionally bind the admitted source, runtime project, and read-only credentials',
+            )
+        )
+    if not is_manual_deploy and gate_with.get('verify_credential_project') != 'true':
+        errors.append(
+            ValidationError(scope, 'automatic Firestore readiness must verify the read-only credential project')
+        )
+    errors.extend(
+        _validate_firestore_readiness_composite(
+            scope,
+            _load_local_composite_action(
+                './.github/actions/firestore-readiness',
+                workflow_root=resolved_workflow_root,
+            ),
+        )
+    )
     deploy_steps = [_as_config_dict(step) or {} for step in (_as_config_list(deploy_job.get('steps')) or [])]
     deploy_stack_step = next(
         (step for step in deploy_steps if isinstance(step.get('uses'), str) and 'deploy-backend-stack' in step['uses']),
@@ -688,7 +729,6 @@ def _validate_firestore_readiness_workflow_contract(
     )
     deploy_with = _as_config_dict((deploy_stack_step or {}).get('with')) or {}
     admitted_output_ref = '${{ needs.firestore_readiness.outputs.admitted_sha }}'
-    resolved_workflow_root = workflow_root or ROOT
     deploy_backend_stack = _load_local_composite_action(
         './.github/actions/deploy-backend-stack',
         workflow_root=resolved_workflow_root,
@@ -728,6 +768,32 @@ def _validate_firestore_readiness_workflow_contract(
         )
         errors.append(ValidationError(scope, message))
 
+    return errors
+
+
+def _validate_firestore_readiness_composite(
+    scope: str,
+    action: ConfigDict | None,
+) -> list[ValidationError]:
+    """Pin the shared readiness composite to its read-only check and bounded proposal path."""
+    if action is None:
+        return [ValidationError(scope, 'the shared firestore-readiness composite must exist under .github/actions')]
+    errors: list[ValidationError] = []
+    runs = _as_config_dict(action.get('runs')) or {}
+    parsed_steps = [_as_config_dict(step) or {} for step in (_as_config_list(runs.get('steps')) or [])]
+    for step in parsed_steps:
+        run = step.get('run')
+        if isinstance(run, str) and has_direct_firestore_mutation(run):
+            errors.append(ValidationError(scope, 'Firestore readiness composite must stay read-only (--check-only)'))
+    auth_steps = [step for step in parsed_steps if step.get('uses') == 'google-github-actions/auth@v3']
+    if len(auth_steps) != 1 or (_as_config_dict(auth_steps[0].get('with')) or {}).get('credentials_json') != (
+        '${{ inputs.credentials_json }}'
+    ):
+        errors.append(ValidationError(scope, 'Firestore readiness must use the dedicated read-only credentials'))
+    expected_path = (
+        '${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}'
+        '${{ inputs.artifact_suffix }}.json'
+    )
     readiness_steps: list[tuple[int, ConfigDict, Any]] = []
     validation_steps: list[tuple[int, ConfigDict, Any]] = []
     for index, step in enumerate(parsed_steps):
@@ -752,6 +818,8 @@ def _validate_firestore_readiness_workflow_contract(
         errors.append(ValidationError(scope, 'Firestore proposal path must be unique to the workflow run and attempt'))
     if readiness_invocation.option_values('--proposal-output') != ('$FIRESTORE_PROPOSAL_PATH',):
         errors.append(ValidationError(scope, 'Firestore readiness must write only to FIRESTORE_PROPOSAL_PATH'))
+    if readiness_invocation.option_values('--source-root') != ('${FIRESTORE_SOURCE_ROOT}',):
+        errors.append(ValidationError(scope, 'Firestore readiness must verify the admitted source root'))
 
     expected_validation_if = "${{ failure() && steps.firestore_readiness.outcome == 'failure' }}"
     if len(validation_steps) != 1:
@@ -764,7 +832,7 @@ def _validate_firestore_readiness_workflow_contract(
         or validation_step.get('if') != expected_validation_if
         or (_as_config_dict(validation_step.get('env')) or {}).get('FIRESTORE_PROPOSAL_PATH') != expected_path
         or validation_invocation.option_values('--validate-proposal') != ('$FIRESTORE_PROPOSAL_PATH',)
-        or validation_invocation.project_values != ('${{ vars.RUNTIME_GCP_PROJECT_ID }}',)
+        or validation_invocation.project_values != ('${{ inputs.project_id }}',)
     ):
         errors.append(ValidationError(scope, 'proposal validation must bind the failed gate path, target, and outcome'))
 

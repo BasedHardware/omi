@@ -17,30 +17,48 @@ to select the exact phrase bytes.
 """
 
 import asyncio
+import io
+import os
 import struct
+import subprocess
+import sys
 import time
+import types
+import wave
 from collections import Counter
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 from fastapi.websockets import WebSocketDisconnect
+from google.api_core.exceptions import PreconditionFailed
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
 import routers.listen.receiver as receiver_module
 import utils.other.storage as storage_module
+import utils.conversations.speaker_resolution as stage_module
 from database import conversations as conversations_db
+from models.audio_file import AudioFile
+from models.conversation import Conversation
+from models.structured import Structured
+from models.transcript_segment import TranscriptSegment
 from routers.listen import transcripts as transcripts_module
 from routers.listen.contracts import ListenLimits, ListenSessionState
 from routers.listen.receiver import ListenReceiver
 from routers.listen.transcripts import ConversationCache, TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.audio_timeline import coverage_outcome
+from utils.audio_timeline import CaptureTimeline, coverage_outcome
 from utils.audio import AudioRingBuffer
+from utils.conversations.audio_placement import locate
 from utils.listen_pusher_session import ListenPusherSession, ListenPusherSessionConfig, ListenPusherSessionDeps
+import utils.listen_pusher_session as pusher_session_module
+from utils.pusher_protocol import AUDIO_TIMELINE_PROTOCOL
+from utils.metrics import OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL
 from utils.product_telemetry import set_product_telemetry_client_for_tests
 from utils.stt.vad_gate import GatedSTTSocket
 from utils.stt import vad_gate as vad_gate_module
@@ -80,9 +98,10 @@ def _slice(pcm: bytes, start_s: float, end_s: float) -> bytes:
 # In-memory GCS double: blobs carry metadata (the v2 span contract).
 # ---------------------------------------------------------------------------
 class _Writer:
-    def __init__(self, blob):
+    def __init__(self, blob, if_generation_match=None):
         self.blob = blob
         self.buf = bytearray()
+        self.if_generation_match = if_generation_match
 
     def write(self, data):
         self.buf.extend(data)
@@ -91,7 +110,7 @@ class _Writer:
         return self
 
     def __exit__(self, *exc):
-        self.blob._store(bytes(self.buf))
+        self.blob._store(bytes(self.buf), if_generation_match=self.if_generation_match)
 
 
 class FakeBlob:
@@ -100,25 +119,35 @@ class FakeBlob:
         self.name = name
         self._data = None
         self.metadata = None
+        self.generation = None
 
     @property
     def size(self):
         return len(self._data) if self._data is not None else None
 
-    def _store(self, data):
+    def _store(self, data, if_generation_match=None):
+        committed = self.bucket.blobs.get(self.name)
+        committed_generation = committed.generation if committed is not None else 0
+        if if_generation_match is not None and committed_generation != if_generation_match:
+            raise PreconditionFailed(f'generation mismatch for {self.name}')
         self._data = data
+        self.generation = self.bucket.next_generation()
         self.bucket.blobs[self.name] = self
 
     def exists(self):
         return self._data is not None
 
-    def open(self, mode, content_type=None):
+    def open(self, mode, content_type=None, if_generation_match=None):
         assert mode == 'wb'
-        return _Writer(self)
+        return _Writer(self, if_generation_match=if_generation_match)
 
-    def download_as_bytes(self):
+    def download_as_bytes(self, if_generation_match=None, end=None, **kwargs):
         if self._data is None:
             raise FileNotFoundError(self.name)
+        if if_generation_match is not None and self.generation != if_generation_match:
+            raise PreconditionFailed(f'generation mismatch for {self.name}')
+        if end is not None:
+            return self._data[: end + 1]
         return self._data
 
     def delete(self):
@@ -128,11 +157,16 @@ class FakeBlob:
 class FakeBucket:
     def __init__(self):
         self.blobs = {}
+        self._generation = 0
+
+    def next_generation(self):
+        self._generation += 1
+        return self._generation
 
     def blob(self, name):
         return self.blobs.get(name) or FakeBlob(self, name)
 
-    def list_blobs(self, prefix=None):
+    def list_blobs(self, prefix=None, **_kwargs):
         return [self.blobs[name] for name in sorted(self.blobs) if name.startswith(prefix)]
 
 
@@ -309,6 +343,8 @@ def pusher_env(monkeypatch):
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
     monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
+    monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
+    monkeypatch.setattr(pusher, 'run_authorized_person_learning', _async_noop)
 
     def update_conversation(uid, conversation_id, data):
         row = audio_files_by_conversation.setdefault(conversation_id, {'audio_files': []})
@@ -323,10 +359,12 @@ def pusher_env(monkeypatch):
 class _Stack:
     """One hermetic listen session wired to real pusher server tasks."""
 
-    def __init__(self, monkeypatch, *, v2: bool, conversation_id: str):
+    def __init__(self, monkeypatch, *, v2: bool, conversation_id: str, spans: bool = False):
         self.clock = {'wall': T0, 'mono': 0.0}
         self.v2 = v2
+        self.spans = spans
         monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if v2 else 'false')
+        monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true' if spans else 'false')
         # Control the receiver's arrival observations (module-scoped shim).
         self._real_time_module = receiver_module.time
         receiver_module.time = SimpleNamespace(time=lambda: self.clock['wall'], monotonic=lambda: self.clock['mono'])
@@ -387,6 +425,7 @@ class _Stack:
                 max_pending_speaker_sample_requests=10,
                 client_kind='test',
                 audio_timeline_v2=self.v2,
+                audio_timeline_spans=self.spans,
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: current['id'],
@@ -411,10 +450,12 @@ class _Stack:
         except asyncio.TimeoutError:
             return False
 
-    def start_pusher_server(self):
+    def start_pusher_server(self, peer=None):
         self.server_ws = FakeServerWebSocket()
         self.server_task = asyncio.create_task(
-            pusher._websocket_util_trigger(self.server_ws, UID, RATE, 'test', 2 if self.v2 else None)
+            (peer or pusher)._websocket_util_trigger(
+                self.server_ws, UID, RATE, 'test', 2 if (self.v2 or self.spans) else None
+            )
         )
 
     async def stop_pusher_server(self):
@@ -924,3 +965,563 @@ async def test_capability_loss_withholds_audio_as_coverage_gap(monkeypatch, gcs,
         assert audio_frame[12:] == phrase
     finally:
         stack.restore()
+
+
+async def test_spans_only_stores_proven_spans_without_v2_text(monkeypatch, gcs, pusher_env, telemetry):
+    """Spans-only storage: projected 101 starts reach the pusher and the stored
+    object carries a span manifest, while the text path keeps byte-identical
+    legacy provider-native times with only the private capture window attached.
+    """
+    stack = _Stack(monkeypatch, v2=False, spans=True, conversation_id=CONV1)
+    store = StrictFirestore()
+    _seed_conversation(store, CONV1)
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    try:
+        stack.build_session()
+        stack.start_pusher_server()
+        await stack.session.connect()
+        assert stack.session.audio_timeline_active
+        assert stack.receiver.capture_timeline is not None
+        assert stack.receiver.capture_timeline_spans is True
+        assert stack.receiver.capture_timeline_v2 is False
+
+        phrase = _phrase(5, 4.0)
+        piece = int(0.5 * RATE * 2)
+        frames = [_frame(phrase[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(8)]
+        frames.append(_disconnect_frame())
+        await _run_receiver_frames(stack, frames)
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        files = pusher_env.get(CONV1, {}).get('audio_files', [])
+        assert files, 'spans mode must still upload private-cloud audio'
+        spans = files[0]['chunk_spans']
+        assert spans and abs(spans[0]['start'] - T0) < 0.05
+        assert abs(spans[-1]['end'] - (T0 + 4.0)) < 0.05
+
+        stack.provider_callback([_provider_segment(0.0, 4.0, 'spans phrase')])
+        segment = stack.segments_collected[-1]
+        assert segment['start'] == 0.0
+        assert segment['end'] == 4.0
+        assert segment.get('audio_capture_start') is not None or segment.get('_capture_abs_start') is not None
+    finally:
+        stack.restore()
+
+
+def _stored_blobs(gcs):
+    return [blob for bucket in gcs._buckets.values() for blob in bucket.blobs.values() if blob._data is not None]
+
+
+async def test_spans_burst_and_wall_hiatus_split_through_blob_metadata(monkeypatch, gcs, pusher_env, telemetry):
+    """Burst arrival must land on the capture projection (not the arrival
+    stamp), a real wall+monotonic hiatus must split the stored span manifest,
+    and the uploaded object bytes must equal the exact run PCM."""
+    stack = _Stack(monkeypatch, v2=False, spans=True, conversation_id=CONV1)
+    try:
+        stack.build_session()
+        stack.start_pusher_server()
+        await stack.session.connect()
+        assert stack.session.audio_timeline_active
+
+        phrase_a = _phrase(1, 2.0)
+        piece = int(0.5 * RATE * 2)
+        frames = [_frame(phrase_a[i * piece : (i + 1) * piece], 0.005, 0.005) for i in range(4)]
+        frames.append({'_advance': (5.0, 5.0)})
+        phrase_b = _phrase(2, 2.0)
+        frames += [_frame(phrase_b[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(4)]
+        frames.append(_disconnect_frame())
+
+        with_spans_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get()
+        without_spans_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='without_spans')._value.get()
+        await _run_receiver_frames(stack, frames)
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        files = pusher_env.get(CONV1, {}).get('audio_files', [])
+        spans = sorted((s for f in files for s in f['chunk_spans']), key=lambda s: s['start'])
+        assert len(spans) == 2, f'burst run and post-hiatus run must split: {spans}'
+        assert spans[0]['start'] < T0 + 1.0, 'burst must project back to capture position, not the arrival stamp'
+        assert spans[1]['start'] - spans[0]['end'] > 3.0
+
+        blobs = _stored_blobs(gcs)
+        assert len(blobs) == 2
+        assert sorted(b._data for b in blobs) == sorted([phrase_a, phrase_b])
+        assert all(getattr(b, 'metadata') for b in blobs)
+        assert OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get() - with_spans_before == 2
+        assert (
+            OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='without_spans')._value.get() == without_spans_before
+        )
+
+        conversation = {
+            'id': CONV1,
+            'started_at': datetime.fromtimestamp(T0, tz=timezone.utc),
+            'private_cloud_sync_enabled': True,
+            'audio_files': files,
+            'transcript_segments': [],
+        }
+        in_run = {
+            'id': 's0',
+            'start': 0.0,
+            'end': 2.0,
+            'speaker_id_scope': 'conn:0',
+            'audio_capture_start': spans[0]['start'],
+            'audio_capture_end': spans[0]['end'],
+        }
+        placement = locate(conversation, 0.0, 2.0, segments=[in_run], capture_spans=True)
+        assert placement.reason == 'capture_span'
+        assert placement.window == (spans[0]['start'], spans[0]['end'])
+
+        gap_start = spans[0]['end'] + 0.5
+        in_gap = {
+            'id': 's1',
+            'start': 2.0,
+            'end': 4.0,
+            'speaker_id_scope': 'conn:0',
+            'audio_capture_start': gap_start,
+            'audio_capture_end': gap_start + 2.0,
+        }
+        assert locate(conversation, 2.0, 4.0, segments=[in_gap], capture_spans=True).reason == 'untrusted_clock'
+    finally:
+        stack.restore()
+
+
+async def test_spans_wall_only_clock_jump_keeps_projection_contiguous(monkeypatch, gcs, pusher_env, telemetry):
+    """A logical wall step with no real delivery hiatus mints no span split:
+    projection continues on the capture axis and storage sees one run."""
+    stack = _Stack(monkeypatch, v2=False, spans=True, conversation_id=CONV1)
+    try:
+        stack.build_session()
+        stack.start_pusher_server()
+        await stack.session.connect()
+
+        piece = int(0.5 * RATE * 2)
+        run_a = _phrase(1, 2.0)
+        run_b = _phrase(2, 2.0)
+        frames = [_frame(run_a[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(4)]
+        frames.append({'_advance': (3600.0, 0.05)})
+        frames += [_frame(run_b[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(4)]
+        frames.append(_disconnect_frame())
+        await _run_receiver_frames(stack, frames)
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        files = pusher_env.get(CONV1, {}).get('audio_files', [])
+        spans = [s for f in files for s in f['chunk_spans']]
+        assert len(spans) == 1, f'an hour of wall drift must not mint an hour of audio: {spans}'
+        assert spans[0]['end'] - spans[0]['start'] == pytest.approx(4.0, abs=0.1)
+    finally:
+        stack.restore()
+
+
+async def test_spans_callback_rejects_keep_finite_text_without_capture_window(monkeypatch, gcs, pusher_env, telemetry):
+    """Spans-only is legacy clock-only text: finite rejected provider segments
+    are still delivered unchanged and carry no private capture window."""
+    stack = _Stack(monkeypatch, v2=False, spans=True, conversation_id=CONV1)
+    try:
+        phrase = _phrase(1, 4.0)
+        piece = int(0.5 * RATE * 2)
+        frames = [_frame(phrase[i * piece : (i + 1) * piece], 0.5, 0.5) for i in range(8)]
+        frames.append(_disconnect_frame())
+        await _run_receiver_frames(stack, frames)
+        assert stack.provider.accepted_samples >= 4 * RATE
+
+        stack.provider_callback(
+            [
+                _provider_segment(1.0, 1.0, 'point word'),
+                _provider_segment(10.0, 11.0, 'late word'),
+            ]
+        )
+        point, late = stack.segments_collected[-2:]
+        for segment, (start, end, text) in zip((point, late), ((1.0, 1.0, 'point word'), (10.0, 11.0, 'late word'))):
+            assert segment['start'] == start
+            assert segment['end'] == end
+            assert segment['text'] == text
+            assert segment.get('_capture_abs_start') is None
+            assert 'audio_capture_start' not in segment
+            assert segment.get('_capture_window_unavailable') is True
+        assert stack.receiver.capture_timeline_v2 is False
+
+        callbacks2, _modulate2, epoch2 = stack.receiver._build_stt_callbacks()
+        provider2 = FakeProviderSocket()
+        stack.receiver.stt_socket = GatedSTTSocket(provider2, gate=None, send_tracker=epoch2)
+        piece = _phrase(3, 0.5)
+        assert stack.receiver.stt_socket.send(piece, start_sample=4 * RATE)
+        assert stack.receiver.stt_socket.send(piece, start_sample=8 * RATE)
+        rejected_before = epoch2.rejected_segments
+        callbacks2([_provider_segment(0.0, 1.0, 'gap-spanning words')])
+        assert epoch2.rejected_segments == rejected_before + 1
+        bridged = stack.segments_collected[-1]
+        assert bridged['start'] == 0.0
+        assert bridged['end'] == 1.0
+        assert bridged['text'] == 'gap-spanning words'
+        assert bridged.get('_capture_abs_start') is None
+        assert 'audio_capture_start' not in bridged
+        assert bridged.get('_capture_window_unavailable') is True
+        assert stack.receiver.capture_timeline_v2 is False
+    finally:
+        stack.restore()
+
+
+@pytest.mark.parametrize('mode', ['legacy', 'spans'])
+async def test_reconnect_same_conversation_audio_still_persists(monkeypatch, gcs, pusher_env, telemetry, mode):
+    """Actual session -> actual pusher handler -> actual storage: a replacement
+    socket starts with no conversation bound, so audio flushed after a
+    reconnect within the same conversation must be re-announced and stored
+    byte-exact under that conversation, in legacy and spans modes alike."""
+    stack = _Stack(monkeypatch, v2=False, spans=(mode == 'spans'), conversation_id=CONV1)
+    store = StrictFirestore()
+    _seed_conversation(store, CONV1)
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    try:
+        stack.build_session()
+        stack.start_pusher_server()
+        await stack.session.connect()
+        assert stack.session.pusher_connected
+        assert stack.session.audio_timeline_active == (mode == 'spans')
+
+        phrase_a = _phrase(1, 1.0)
+        phrase_b = _phrase(2, 1.0)
+        stack.session.audio_bytes_send(
+            phrase_a, stack.clock['wall'], conversation_id=CONV1, start_wall=stack.clock['wall']
+        )
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        stack.session._mark_disconnected()
+        stack.start_pusher_server()
+        await stack.session.connect()
+        assert stack.session.pusher_connected
+        assert stack.session.audio_timeline_active == (mode == 'spans')
+
+        stack.session.audio_bytes_send(
+            phrase_b,
+            stack.clock['wall'] + 60,
+            conversation_id=CONV1,
+            start_wall=stack.clock['wall'] + 60,
+        )
+        await stack.session._audio_bytes_flush()
+        await stack.stop_pusher_server()
+
+        files = pusher_env.get(CONV1, {}).get('audio_files', [])
+        assert files, 'both flushes must produce audio files bound to the same conversation'
+        chunks = storage_module.list_audio_chunks(UID, CONV1)
+        bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+        stored = b''.join(bucket.blob(chunk['path']).download_as_bytes() for chunk in chunks)
+        assert stored == phrase_a + phrase_b
+    finally:
+        reconnect_task = stack.session.reconnect_task if stack.session is not None else None
+        if reconnect_task is not None and not reconnect_task.done():
+            reconnect_task.cancel()
+        stack.restore()
+
+
+def _conversation_frame(cid):
+    return struct.pack('<I', 103) + cid.encode('utf-8')
+
+
+def _audio_frame(ts, pcm):
+    return struct.pack('<I', 101) + struct.pack('<d', ts) + pcm
+
+
+def _constant_pcm(value: int, seconds: float) -> bytes:
+    return int(value).to_bytes(2, 'little', signed=True) * int(seconds * RATE)
+
+
+class HeldServerWebSocket(FakeServerWebSocket):
+    """Pusher-side socket that drains queued frames then waits for an explicit
+    close or release instead of disconnecting after a short idle window."""
+
+    def __init__(self):
+        super().__init__()
+        self.released = asyncio.Event()
+
+    async def receive_bytes(self):
+        while True:
+            if self.frames:
+                return self.frames.popleft()
+            if self.released.is_set() or self.client_state != WebSocketState.CONNECTED:
+                raise WebSocketDisconnect(1000)
+            await asyncio.sleep(0.005)
+
+
+class _MarkerDiarizer:
+    """Embeds marker PCM as a one-hot voice: value v*1000 maps to voice v-1."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, wav, filename='audio.wav', *, client=None, timeout=None):
+        self.calls += 1
+        with wave.open(io.BytesIO(wav)) as reader:
+            values = np.frombuffer(reader.readframes(reader.getnframes()), dtype=np.int16)
+        voice = int(np.bincount(values[values > 0] // 1000).argmax())
+        return np.eye(8, 64)[voice - 1].reshape(1, -1).astype(np.float32)
+
+
+def _patch_stage_io(monkeypatch, module, store, diarizer, uploads):
+    monkeypatch.setattr(module, 'named_speaker_prompts_allowed', lambda uid: True)
+    monkeypatch.setattr(module, 'speaker_embedding_configured', lambda: True)
+    monkeypatch.setattr(module, 'download_speaker_embedding_cache', lambda uid, cid: store.get(cid))
+    monkeypatch.setattr(
+        module,
+        'upload_speaker_embedding_cache',
+        lambda uid, cid, data: (uploads.append(cid), store.__setitem__(cid, data)),
+    )
+    monkeypatch.setattr(module, 'extract_embedding_from_bytes', diarizer)
+    monkeypatch.setattr(module.conversations_db, 'get_manual_speaker_receipt', lambda uid, cid: {})
+    monkeypatch.setattr(module.users_db, 'get_user_speaker_embedding', lambda uid: None)
+    monkeypatch.setattr(module.users_db, 'get_people', lambda uid: [])
+
+
+ROUND3_RED_SHA = '50a7193d11'
+
+
+def _round3_module(name, relpath):
+    source = subprocess.run(
+        ['git', 'show', f'{ROUND3_RED_SHA}:backend/{relpath}'],
+        cwd=Path(__file__).resolve().parents[2],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    module = types.ModuleType(name)
+    exec(compile(source, relpath, 'exec'), module.__dict__)
+    return module
+
+
+def _round3_old_session(monkeypatch):
+    """OMI_ROUND3_RED=1 pins the session under test to merged HEAD 50a7193d11."""
+    if os.environ.get('OMI_ROUND3_RED') != '1':
+        return None
+    old = _round3_module('round3_old_listen_pusher_session', 'utils/listen_pusher_session.py')
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, 'ListenPusherSession', old.ListenPusherSession)
+    monkeypatch.setattr(module, 'ListenPusherSessionConfig', old.ListenPusherSessionConfig)
+    monkeypatch.setattr(module, 'ListenPusherSessionDeps', old.ListenPusherSessionDeps)
+    return old
+
+
+def _round3_old_stage(monkeypatch):
+    """OMI_ROUND3_RED=1 pins the stage and placement gate to 50a7193d11."""
+    if os.environ.get('OMI_ROUND3_RED') != '1':
+        return None
+    old_stage = _round3_module('round3_old_speaker_resolution', 'utils/conversations/speaker_resolution.py')
+    old_placement = _round3_module('round3_old_audio_placement', 'utils/conversations/audio_placement.py')
+    monkeypatch.setattr(old_stage, 'locate', old_placement.locate)
+    monkeypatch.setattr(old_stage, 'AudioPlacement', old_placement.AudioPlacement)
+    monkeypatch.setattr(stage_module, 'resolve_speakers_for_processing', old_stage.resolve_speakers_for_processing)
+    return old_stage
+
+
+async def test_late_ack_uncertain_socket_replaced_and_stores_legacy_only(monkeypatch, gcs, pusher_env, telemetry):
+    """Actual session -> actual pusher -> actual storage: a timeline-negotiated
+    socket whose ACK never lands in time is unverifiable. The replacement must
+    reconnect without the timeline query and the buffered runs must land as
+    spanless legacy audio, so a falsely trusted crop is impossible."""
+    old_session = _round3_old_session(monkeypatch)
+    monkeypatch.setattr(old_session or pusher_session_module, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.05)
+    stack = _Stack(monkeypatch, v2=False, spans=True, conversation_id=CONV1)
+    store = StrictFirestore()
+    _seed_conversation(store, CONV1)
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    servers = []
+    tasks = []
+    try:
+        stack.build_session()
+
+        class _SlowAckClient(FakePusherClientWebSocket):
+            def __init__(self, server):
+                super().__init__(server)
+                self._slow = True
+
+            async def recv(self):
+                if self._slow:
+                    self._slow = False
+                    await asyncio.sleep(0.5)
+                return await super().recv()
+
+        uncertain_server = HeldServerWebSocket()
+        servers.append(uncertain_server)
+        tasks.append(
+            asyncio.create_task(
+                pusher._websocket_util_trigger(uncertain_server, UID, RATE, 'test', AUDIO_TIMELINE_PROTOCOL)
+            )
+        )
+
+        connect_queries = []
+        first = {'used': False}
+
+        async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', **kwargs):
+            connect_queries.append(kwargs.get('audio_timeline'))
+            if not first['used']:
+                first['used'] = True
+                return _SlowAckClient(uncertain_server)
+            replacement_server = HeldServerWebSocket()
+            servers.append(replacement_server)
+            tasks.append(
+                asyncio.create_task(
+                    pusher._websocket_util_trigger(replacement_server, UID, RATE, 'test', kwargs.get('audio_timeline'))
+                )
+            )
+            return FakePusherClientWebSocket(replacement_server)
+
+        stack.session.deps.connect_to_pusher = connector
+        await stack.session.connect()
+
+        phrase_a = _phrase(1, 1.0)
+        phrase_b = _phrase(2, 1.0)
+        stack.session.audio_bytes_send(phrase_a, received_at=100.5, conversation_id=CONV1, start_wall=100.0)
+        stack.session.audio_bytes_send(phrase_b, received_at=101.5, conversation_id=CONV1, start_wall=101.5)
+        await stack.session._audio_bytes_flush()
+
+        for server in servers:
+            server.released.set()
+        for task in tasks:
+            await asyncio.wait_for(task, timeout=10)
+
+        files = pusher_env.get(CONV1, {}).get('audio_files', [])
+        conversation = {
+            'id': CONV1,
+            'started_at': datetime.fromtimestamp(100.0, tz=timezone.utc),
+            'audio_files': files,
+        }
+        segment = {
+            'id': 's0',
+            'start': 0.0,
+            'end': 1.0,
+            'speaker_id_scope': 'conn:0',
+            'audio_capture_start': 100.0,
+            'audio_capture_end': 101.0,
+        }
+        placement = locate(conversation, 0.0, 1.0, segments=[segment], capture_spans=True)
+        assert placement.window is None and placement.reason == 'untrusted_clock'
+
+        assert files, 'the legacy replacement socket must still upload the buffered audio'
+        assert not any(f.get('chunk_spans') for f in files)
+        chunks = storage_module.list_audio_chunks(UID, CONV1)
+        bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+        stored = b''.join(bucket.blob(chunk['path']).download_as_bytes() for chunk in chunks)
+        assert stored == phrase_a + phrase_b
+
+        assert connect_queries == [AUDIO_TIMELINE_PROTOCOL, None]
+        assert uncertain_server.close_code is not None
+        assert list(uncertain_server.frames) == []
+        assert stack.session.pusher_connected
+        assert not stack.session.audio_timeline_active
+    finally:
+        for server in servers:
+            server.released.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        stack.restore()
+
+
+async def test_overlapping_spans_from_two_sockets_refuse_ambiguous_windows(monkeypatch, gcs, pusher_env, telemetry):
+    """Actual pusher -> actual storage -> actual speaker stage: two independent
+    v2 connections can store overlapping chunk_spans for one conversation.
+    Their bytes stay distinct, but a requested window intersecting the overlap
+    must be refused instead of cropping one source's PCM as another's."""
+    old_stage = _round3_old_stage(monkeypatch)
+    pcm_a = _constant_pcm(1000, 12.0)
+    pcm_b = _constant_pcm(2000, 10.0)
+    for pcm, arrival_wall, arrival_mono in ((pcm_a, 112.0, 12.0), (pcm_b, 113.0, 13.0)):
+        timeline = CaptureTimeline(sample_rate=RATE)
+        first, _, _ = timeline.accept(pcm, arrival_wall, arrival_mono)
+        ws = FakeServerWebSocket()
+        ws.frames.extend([_conversation_frame(CONV1), _audio_frame(timeline.wall(first), pcm)])
+        await pusher._websocket_util_trigger(ws, UID, RATE, 'test', AUDIO_TIMELINE_PROTOCOL)
+
+    chunks = storage_module.list_audio_chunks(UID, CONV1)
+    assert len(chunks) == 2
+    bucket = gcs.bucket(storage_module.private_cloud_sync_bucket)
+    stored = sorted(bucket.blob(chunk['path']).download_as_bytes() for chunk in chunks)
+    assert stored == sorted([pcm_a, pcm_b]), "each socket's PCM must persist byte-exact"
+
+    files = pusher_env[CONV1]['audio_files']
+    spans = sorted((s['start'], s['end']) for f in files for s in f['chunk_spans'])
+    assert spans == [(100.0, 112.0), (103.0, 113.0)], spans
+
+    store = {}
+    uploads = []
+    diarizer = _MarkerDiarizer()
+    _patch_stage_io(monkeypatch, stage_module, store, diarizer, uploads)
+    if old_stage is not None:
+        _patch_stage_io(monkeypatch, old_stage, store, diarizer, uploads)
+    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+    monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
+
+    epoch = datetime.fromtimestamp(0.0, tz=timezone.utc)
+    conversation = Conversation(
+        id=CONV1,
+        created_at=epoch,
+        started_at=epoch,
+        finished_at=epoch,
+        structured=Structured(),
+        transcript_segments=[
+            TranscriptSegment(
+                id='s0',
+                text='first voice',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                speaker_id_scope='conn-a:0',
+                is_user=False,
+                start=4.0,
+                end=7.8,
+                audio_capture_start=104.0,
+                audio_capture_end=107.8,
+            ),
+            TranscriptSegment(
+                id='s1',
+                text='second voice',
+                speaker='SPEAKER_01',
+                speaker_id=1,
+                speaker_id_scope='conn-b:1',
+                is_user=False,
+                start=8.0,
+                end=11.8,
+                audio_capture_start=108.0,
+                audio_capture_end=111.8,
+            ),
+        ],
+        private_cloud_sync_enabled=True,
+    )
+    conversation.audio_files = [AudioFile(**f) for f in files]
+
+    stage_module.resolve_speakers_for_processing(UID, conversation)
+
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert diarizer.calls == 0
+    assert uploads == []
+
+    ambiguous = {
+        'id': 's0',
+        'start': 0.0,
+        'end': 3.8,
+        'speaker_id_scope': 'conn:0',
+        'audio_capture_start': 104.0,
+        'audio_capture_end': 107.8,
+    }
+    conversation_dict = {
+        'id': CONV1,
+        'started_at': epoch,
+        'audio_files': files,
+    }
+    placement = locate(conversation_dict, 0.0, 3.8, segments=[ambiguous], capture_spans=True)
+    assert placement.window is None and placement.reason == 'untrusted_clock'
+
+    disjoint = {
+        'id': 's1',
+        'start': 0.0,
+        'end': 2.5,
+        'speaker_id_scope': 'conn:0',
+        'audio_capture_start': 100.2,
+        'audio_capture_end': 102.7,
+    }
+    placement = locate(conversation_dict, 0.0, 2.5, segments=[disjoint], capture_spans=True)
+    assert placement.reason == 'capture_span'
+    assert placement.window == (100.2, 102.7)

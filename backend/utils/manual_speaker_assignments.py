@@ -4,12 +4,15 @@ The receipt authorizes best-effort teaching; it is not an enrollment job.
 Inference must never create or replace these explicit user decisions.
 """
 
-from dataclasses import dataclass
-from typing import Annotated, Mapping, Optional
+from dataclasses import dataclass, field, replace
+from typing import Annotated, Any, Mapping, Optional
 import uuid
 
 from pydantic import BaseModel, Field, StrictStr
 
+from config.live_capture import capture_window_reason
+from config.audio_timeline import live_capture_window_merge_preservation_enabled
+from database.read_boundary import parse_payload_strict
 from models.speaker_label_provenance import project_source
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
@@ -29,11 +32,19 @@ class LiveTranscriptReplayReceipt(BaseModel):
     )
 
 
+def _receipt_section(receipt: object, key: str) -> Mapping:
+    """A stored receipt is user data: a wrong-typed section must not crash the reader."""
+    if not isinstance(receipt, Mapping):
+        return {}
+    section = receipt.get(key)
+    return section if isinstance(section, Mapping) else {}
+
+
 def manual_owner_reserved(receipt: Mapping) -> bool:
     """An explicit owner decision reserves the owner even without a voiceprint."""
     return any(
         isinstance(entry, dict) and entry.get('is_user') is True
-        for entries in (receipt.get('speakers') or {}, receipt.get('segments') or {})
+        for entries in (_receipt_section(receipt, 'speakers'), _receipt_section(receipt, 'segments'))
         for entry in entries.values()
     )
 
@@ -53,8 +64,8 @@ def teaching_segment_ids(segments: list[dict], resolved: list[str], limit: int =
 
 
 def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
-    speakers = receipt.get('speakers') or {}
-    overrides = receipt.get('segments') or {}
+    speakers = _receipt_section(receipt, 'speakers')
+    overrides = _receipt_section(receipt, 'segments')
     if not speakers and not overrides:
         return segments
     rejected = manual_rejected_speakers(receipt)
@@ -63,6 +74,12 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
         by_segment = overrides.get(segment.get('id'))
         by_speaker = speakers.get(str(segment.get('speaker_id')))
         negative = rejected.get(segment.get('speaker_id'))
+        if not isinstance(by_segment, dict):
+            by_segment = None
+        if not isinstance(by_speaker, dict):
+            by_speaker = None
+        if not isinstance(negative, dict):
+            negative = None
         if (
             by_speaker is not None
             and by_speaker.get('source') == 'carried'
@@ -111,7 +128,7 @@ def manual_rejected_speakers(receipt: Mapping) -> dict:
     (an entry without ``rejection``) covers the same voice.
     """
     decisions: dict = {}
-    for key, entry in (receipt.get('speakers') or {}).items():
+    for key, entry in _receipt_section(receipt, 'speakers').items():
         if not isinstance(entry, dict):
             continue
         try:
@@ -119,7 +136,7 @@ def manual_rejected_speakers(receipt: Mapping) -> dict:
         except (TypeError, ValueError):
             continue
         decisions.setdefault(speaker_id, []).append(entry)
-    for entry in (receipt.get('segments') or {}).values():
+    for entry in _receipt_section(receipt, 'segments').values():
         if isinstance(entry, dict) and isinstance(entry.get('speaker_id'), int):
             decisions.setdefault(entry['speaker_id'], []).append(entry)
     rejected: dict = {}
@@ -157,7 +174,7 @@ def remap_absorbed_receipt(receipt: dict, absorbed_into: dict[str, str]) -> dict
         for sid in path:
             survivors[sid] = survivor_id
 
-    segments = dict(receipt.get('segments') or {})
+    segments = dict(_receipt_section(receipt, 'segments'))
     changed = False
     for absorbed_id, survivor_id in survivors.items():
         entry = segments.pop(absorbed_id, None)
@@ -261,8 +278,8 @@ def manual_assignment(
     if not indices:
         raise LookupError('Segment not found')
     receipt = dict(conversation.get('manual_speaker_assignments') or {})
-    receipt['segments'] = dict(receipt.get('segments') or {})
-    receipt['speakers'] = dict(receipt.get('speakers') or {})
+    receipt['segments'] = dict(_receipt_section(receipt, 'segments'))
+    receipt['speakers'] = dict(_receipt_section(receipt, 'speakers'))
     generation = receipt.get('generation', 0) + 1
     receipt['generation'] = generation
     identity: dict = dict(generation=generation, person_id=person_id, is_user=is_user)
@@ -325,8 +342,8 @@ def acknowledged_teaching(conversation: dict, person_id: str, segment_ids: list[
         return False
     receipt = conversation.get('manual_speaker_assignments') or {}
     current = {segment.get('id'): segment for segment in conversation.get('transcript_segments', [])}
-    speakers = receipt.get('speakers') or {}
-    overrides = receipt.get('segments') or {}
+    speakers = _receipt_section(receipt, 'speakers')
+    overrides = _receipt_section(receipt, 'segments')
     for sid in segment_ids:
         segment = current.get(sid) or {}
         override = overrides.get(sid)
@@ -354,10 +371,24 @@ class LiveTranscriptMerge:
     updated_ids: set[str]
     removed_ids: list[str]
     absorbed_into: dict[str, str]
+    capture_reasons: dict[str, str] = field(default_factory=dict)
+    created_ids: set[str] = field(default_factory=set)
+
+    def with_segments(self, segments: list[dict]) -> 'LiveTranscriptMerge':
+        return replace(self, segments=segments)
+
+
+def replay_receipt_commits(payload: Mapping[str, Any], document_path: str) -> list[list[str]]:
+    return parse_payload_strict(LiveTranscriptReplayReceipt, payload, document_path=document_path).commits
 
 
 def merge_live_segments(
-    persisted: list[dict], fresh: list[dict], receipt: dict, *, absorbed_ids: Optional[list[str]] = None
+    persisted: list[dict],
+    fresh: list[dict],
+    receipt: dict,
+    *,
+    absorbed_ids: Optional[list[str]] = None,
+    capture_reasons: Optional[dict[str, str]] = None,
 ) -> LiveTranscriptMerge:
     """Plan only the mutable tail and fresh batch against the transaction's receipt.
 
@@ -386,10 +417,15 @@ def merge_live_segments(
     # speaker_match_source, and every word lands in its own segment.
     tail = [TranscriptSegment(**segment) for segment in apply_manual_assignments(persisted[-1:], receipt)]
     incoming = [TranscriptSegment(**segment) for segment in apply_manual_assignments(unique_fresh, receipt)]
+    for segment in tail:
+        if segment.audio_capture_start is None or segment.audio_capture_end is None:
+            segment.capture_window_reason = 'inherited_unknown'
+    for segment in incoming:
+        segment.capture_window_reason = capture_window_reason((capture_reasons or {}).get(str(segment.id)))
     # Selected-segment decisions are keyed by ID, so those segments must keep it.
     # Speaker-wide decisions are keyed by speaker: same-speaker merges keep them.
-    covered = set(receipt.get('segments') or {})
-    speakers = receipt.get('speakers') or {}
+    covered = set(_receipt_section(receipt, 'segments'))
+    speakers = _receipt_section(receipt, 'speakers')
     speaker_bound = {
         s.speaker_id for s in [*tail, *incoming] if s.speaker_id is not None and str(s.speaker_id) in speakers
     }
@@ -400,7 +436,11 @@ def merge_live_segments(
     if replayed_commit or len(incoming) > LIVE_TRANSCRIPT_REPLAY_RECEIPT_BATCH_LIMIT:
         covered.update(s.id for s in [*tail, *incoming] if s.id)
     combined = TranscriptSegment.combine_segments(
-        tail, incoming, protected_segment_ids=covered, speaker_bound_ids=speaker_bound
+        tail,
+        incoming,
+        protected_segment_ids=covered,
+        speaker_bound_ids=speaker_bound,
+        preserve_capture_windows=live_capture_window_merge_preservation_enabled(),
     )
     result = persisted[:-1] + [segment.model_dump() for segment in combined.segments]
     result.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))
@@ -409,4 +449,6 @@ def merge_live_segments(
         {s.id for s in combined.joined if s.id},
         combined.removed_ids,
         combined.absorbed_into,
+        {str(s.id): s.capture_window_reason for s in combined.joined if s.id},
+        {str(s.id) for s in combined.segments if s.id and str(s.id) not in prior_ids},
     )

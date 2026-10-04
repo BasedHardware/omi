@@ -501,9 +501,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
-      ],
+      slivers: [SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent()))],
     );
   }
 
@@ -629,7 +627,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
-                              Text(title.toUpperCase(), style: _sectionLabelStyle),
+                              Text(title, style: _sectionLabelStyle),
                               if (orderedItems.isNotEmpty) ...[
                                 const SizedBox(width: 8),
                                 _SectionCount(orderedItems.length),
@@ -640,7 +638,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       else
                         Padding(
                           padding: _sectionHeaderLinePadding,
-                          child: Text(title.toUpperCase(), style: _sectionLabelStyle),
+                          child: Text(title, style: _sectionLabelStyle),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
@@ -720,7 +718,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         size: 16,
                       ),
                       const SizedBox(width: 4),
-                      Text(context.l10n.tasksOverdue.toUpperCase(), style: _sectionLabelStyle),
+                      Text(context.l10n.tasksOverdue, style: _sectionLabelStyle),
                       const SizedBox(width: 8),
                       _SectionCount(orderedItems.length),
                     ],
@@ -1254,10 +1252,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
 /// A section header's label ("TODAY", "OVERDUE").
+// Title Case like OmiSectionHeader (the contract's section header is not all caps), at a label's
+// size so the groups stay quieter than the page title.
 final TextStyle _sectionLabelStyle = OmiType.footnote.copyWith(
   color: OmiColors.textTertiary,
   fontWeight: FontWeight.w600,
-  letterSpacing: 0.8,
 );
 
 /// The count beside a section header, read out as "3 tasks" rather than a bare number.

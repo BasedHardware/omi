@@ -77,8 +77,6 @@ def world(monkeypatch):
     store.rows[('users', UID, 'people', 'p1')] = dict(id='p1', name='Sam', speaker_embedding=[1.0, 0.0])
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(voice_profiles_db, 'get_firestore_client', lambda: store)
-    world_allowed = {'paid': True}
-    monkeypatch.setattr(speaker_labels_router, 'named_speaker_prompts_allowed', lambda uid: world_allowed['paid'])
     monkeypatch.setattr(
         speaker_labels_router,
         'deserialize_conversation',
@@ -94,7 +92,7 @@ def world(monkeypatch):
     app = FastAPI()
     app.include_router(speaker_labels_router.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: UID
-    return SimpleNamespace(store=store, path=path, segments=segments, client=TestClient(app), allowed=world_allowed)
+    return SimpleNamespace(store=store, path=path, segments=segments, client=TestClient(app))
 
 
 def receipt(world):
@@ -177,15 +175,15 @@ def test_not_person_rejects_a_missing_person(world, monkeypatch):
     assert receipt(world) == {}
 
 
-def test_not_person_requires_the_naming_entitlement(world, monkeypatch):
-    world.allowed['paid'] = False
+def test_not_person_is_free_on_every_plan(world, monkeypatch):
+    # Correcting a label in your own transcript is not a paid action; only
+    # automatic naming (prompts, earlier matches) follows the entitlement.
+    monkeypatch.setattr('utils.speaker_permissions.users_db.get_user_valid_subscription', lambda uid, **kwargs: None)
     response = world.client.post(
         f'/v1/conversations/{CONV}/speakers/4/reject', json={'kind': 'not_person', 'person_id': 'p1'}
     )
-    assert response.status_code == 403
-    assert receipt(world) == {}
-    response = world.client.post(f'/v1/conversations/{CONV}/speakers/4/reject', json={'kind': 'not_me'})
     assert response.status_code == 200
+    assert receipt(world) != {}
 
 
 def test_locked_and_deleted_conversations_reject(world):

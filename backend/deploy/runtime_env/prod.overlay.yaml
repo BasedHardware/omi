@@ -4,27 +4,83 @@ compute_project: based-hardware
 data_plane_project: based-hardware
 overlay:
   llm_gateway:
+    env:
+      PROACTIVITY_REDIS_HOST:
+        config_map:
+          name: prod-omi-backend-config
+          key: REDIS_DB_HOST
+      PROACTIVITY_REDIS_PORT:
+        value: '13151'
+        category: service_discovery
+      PROACTIVITY_REDIS_PASSWORD:
+        secret:
+          name: prod-omi-backend-secrets
+          key: REDIS_DB_PASSWORD
+      LLM_GATEWAY_ACCOUNTING_ENABLED:
+        value: 'true'
+        category: rollout
+      OMI_CUSTOMER_DATA_PROJECT:
+        value: based-hardware
+        category: service_discovery
+      POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: telemetry
+      MENTOR_PIPELINE:
+        value: cohort
+        category: rollout
     static_address_name: prod-omi-self-hosted-llm-ip-address
   gke:
     backend-listen:
       env:
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: prod-omi-backend-secrets
+            key: POSTHOG_PROJECT_API_KEY
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
+          value: '13151'
+          category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
+        AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
         LISTEN_RECONNECT_BUDGET_PER_MIN:
           value: '6'
           category: reliability
         # 2026-09-26 incident: with the code-fixed order, a Modulate breaker opening sent
         # new sessions to Deepgram (402 since 09-14) and then streaming Parakeet (no ready
         # frame, 0 connects since 08-26), so they got no transcript. The configured order
-        # The allocated windowed TDT cohort precedes the unchanged vendor order;
-        # otherwise Soniox is second after Modulate. Canary allocation follows the
+        # Prefer healthy Soniox as the static fallback while the cost router is
+        # in shadow; Modulate precedes the retired Deepgram tail. Allocation follows the
         # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29;
         # rolled back to 0% on 2026-10-01 for a first-text latency regression;
-        # back to 5% after the posting-cadence fix #20043; 25% on 2026-10-01).
+        # back to 5% after the posting-cadence fix #20043; 25% on 2026-10-01;
+        # 50% on 2026-10-02 after the batch-pressure quorum fix #20208; 100% of
+        # eligible sessions later that day, with the per-pod session cap raised
+        # 8 -> 16 because listen pods were overflowing at the cap every hour).
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          value: '25'
+          value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
-          value: '8'
+          value: '16'
         PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
           value: '12'
           category: reliability
@@ -37,6 +93,9 @@ overlay:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        STT_FAILOVER_RECOVERY_ENABLED:
+          value: 'false'
+          category: rollout
         STT_ROUTING_MODE:
           value: shadow
         SONIOX_MONTHLY_CEILING_USD:
@@ -155,7 +214,7 @@ overlay:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
-          value: '1'
+          value: '10'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -180,6 +239,35 @@ overlay:
           category: rollout
     pusher:
       env:
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: prod-omi-backend-secrets
+            key: POSTHOG_PROJECT_API_KEY
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
+          value: '13151'
+          category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
+        AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+        MENTOR_GATE_DEBOUNCE_ENABLED:
+          value: 'true'
+          category: rollout
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -235,7 +323,7 @@ overlay:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
-          value: '1'
+          value: '10'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -307,6 +395,15 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
+      OMI_CUSTOMER_DATA_PROJECT:
+        value: based-hardware
+        category: service_discovery
+      POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: telemetry
+      MENTOR_PIPELINE:
+        value: cohort
+        category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         value: 'false'
       FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -314,8 +411,6 @@ overlay:
       FREE_TIER_EMERGENCY_STOP:
         value: 'false'
       MEMORY_BELIEF_MODEL_ENABLED:
-        value: 'false'
-      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
         value: 'false'
       BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
         value: 'false'
@@ -334,6 +429,9 @@ overlay:
           env_var: CLOUD_RUN_VPC_NETWORK
         --subnet:
           env_var: CLOUD_RUN_VPC_SUBNET
+    # Keep Cloud Run secret mounts identical to main. V2 reuses each host's
+    # existing REDIS_DB_* client and POSTHOG_PROJECT_API_KEY / POSTHOG_API_KEY
+    # environment; provider admission leases remain on the GKE gateway.
     services:
       backend:
         # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
@@ -352,6 +450,20 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+          MENTOR_GATE_DEBOUNCE_ENABLED:
+            value: 'true'
+            category: rollout
           # Keyless custom tokens (/v1/auth/token) are signed through IAM signBlob as this account;
           # naming it avoids relying on metadata discovery. Inert while a key credential is mounted.
           FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -473,7 +585,7 @@ overlay:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -507,6 +619,17 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
             category: rollout
@@ -605,7 +728,7 @@ overlay:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -636,6 +759,17 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
@@ -713,7 +847,7 @@ overlay:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '1'
+            value: '10'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -744,6 +878,17 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:

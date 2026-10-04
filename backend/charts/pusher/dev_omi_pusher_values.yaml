@@ -116,6 +116,18 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
+  - name: MENTOR_GATE_DEBOUNCE_ENABLED
+    value: "true"
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
+  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+    value: "true"
+  - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "shadow"
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
@@ -170,6 +182,17 @@ env:
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
+    value: "true"
+  - name: AUDIO_TIMELINE_SPANS
+    value: "false"
+  - name: LIVE_SPEAKER_SPAN_RESOLUTION
+    value: "false"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
+  # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
+  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
     value: "true"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"

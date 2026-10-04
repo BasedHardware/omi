@@ -243,11 +243,47 @@ def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     )
 
 
+def with_audio_timeline_span_env(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the span rollout defaults."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "AUDIO_TIMELINE_SPANS", "value": "false"},\n'
+        '        {"name": "LIVE_SPEAKER_SPAN_RESOLUTION", "value": "false"},\n'
+        '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},\n'
+        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},',
+    )
+
+
+def with_capture_evidence_env(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the S1 capture-evidence admission (dev on)."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "CAPTURE_EVIDENCE_V1_DARK_WRITE", "value": "true"},',
+    )
+
+
+def with_firestore_read_ledger_env(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the per-service Firestore read ledger (#20655)."""
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
+            rf'\1\n        {{"name": "FIRESTORE_READ_LEDGER", "value": "1"}},'
+            rf'\n        {{"name": "FIRESTORE_READ_LEDGER_SERVICE", "value": "{service}"}},',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
 def with_sync_ledger_fence_mode(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "SYNC_ASSIGNMENT_RECOVERY_ENABLED", "value": "true"},\n'
         '        {"name": "SYNC_LEDGER_FENCE_MODE", "value": "legacy"},',
     )
 
@@ -367,7 +403,9 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             )
         )
     )
-    payload = with_screen_frame_egress_env(payload)
+    payload = with_firestore_read_ledger_env(
+        with_screen_frame_egress_env(with_capture_evidence_env(with_audio_timeline_span_env(payload)))
+    )
     # The final-pass shadow is dark by default on the dev finalization worker.
     # Its deployed-state fixture must carry every explicit runtime binding.
     payload = re.sub(
@@ -407,13 +445,40 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES': '4',
     }
     entries = ',\n'.join(
-        '        ' + json.dumps({'name': name, 'value': value}) for name, value in translation_defaults.items()
+        '        ' + json.dumps({'name': name, 'value': value})
+        for name, value in {
+            **translation_defaults,
+            # Debounce is declared on this serving host too.
+            'MENTOR_GATE_DEBOUNCE_ENABLED': 'true',
+        }.items()
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         lambda match: match.group(1) + '\n' + entries + ',',
         payload,
         count=1,
+        flags=re.DOTALL,
+    )
+    # Gateway/secret fixtures must include the task-preservation binding on each
+    # Cloud Run conversation-processing host, leaving their intended error intact.
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},',
+        payload,
+        flags=re.DOTALL,
+    )
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "SYNC_LINEAGE_S1_REQUIRED", "value": "true"},'
+        r'\n        {"name": "SYNC_WAL_AUDIO_COVERAGE_ENABLED", "value": "true"},'
+        r'\n        {"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},',
+        payload,
+        flags=re.DOTALL,
+    )
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "CAPTURE_GROUP_CONTAINMENT_MODE", "value": "shadow"},',
+        payload,
         flags=re.DOTALL,
     )
     return with_backend_integration_events_secret(payload)
@@ -1119,8 +1184,8 @@ def test_manual_firestore_readiness_contract_allows_one_staged_workflow_control_
 def test_firestore_readiness_contract_requires_validation_before_artifact_upload(workflow_name):
     validator = load_validator()
     workflow_path = ROOT.parent / '.github/workflows' / workflow_name
-    workflow = validator._load_yaml(workflow_path)
-    steps = workflow['jobs']['firestore_readiness']['steps']
+    action = validator._load_yaml(ROOT.parent / '.github/actions/firestore-readiness/action.yml')
+    steps = action['runs']['steps']
     upload_index = next(index for index, step in enumerate(steps) if step.get('uses') == 'actions/upload-artifact@v7')
     upload = steps.pop(upload_index)
     validation_index = next(
@@ -1128,7 +1193,7 @@ def test_firestore_readiness_contract_requires_validation_before_artifact_upload
     )
     steps.insert(validation_index, upload)
 
-    errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
+    errors = validator._validate_firestore_readiness_composite(f'cloud_run_workflow/{workflow_path}', action)
 
     assert any('only a successfully validated bounded proposal may be uploaded' in error.message for error in errors)
 
@@ -1138,12 +1203,12 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
     validator = load_validator()
     workflow_path = ROOT.parent / '.github/workflows' / workflow_name
     workflow = validator._load_yaml(workflow_path)
-    auth = next(
+    gate = next(
         step
         for step in workflow['jobs']['firestore_readiness']['steps']
-        if step.get('uses') == 'google-github-actions/auth@v3'
+        if 'firestore-readiness' in str(step.get('uses', ''))
     )
-    auth['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
+    gate['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
 
     errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
 
@@ -1589,12 +1654,7 @@ def test_full_validation_reports_missing_provider_binding_once():
     assert len(errors) == 1
 
 
-def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
-    validator = load_validator()
-    state_path = tmp_path / 'cloud_run_state.json'
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(
-            '''
+_MISSING_GATEWAY_CLOUD_RUN_STATE = '''
 {
   "services": {
     "backend": {
@@ -1602,6 +1662,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
@@ -1621,6 +1682,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1637,6 +1699,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1650,8 +1713,14 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
     }
   }
 }
-''',
-        ),
+'''
+
+
+def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
+    validator = load_validator()
+    state_path = tmp_path / 'cloud_run_state.json'
+    state_path.write_text(
+        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE),
         encoding='utf-8',
     )
 
@@ -1659,6 +1728,33 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
 
     assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
     assert errors[0].scope == 'cloud_run/backend'
+
+    state_path.write_text(
+        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
+            '{"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},\n        ', ''
+        ),
+        encoding='utf-8',
+    )
+    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
+    assert {(error.scope, error.message) for error in errors} == {
+        ('cloud_run/backend', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
+        ('cloud_run/backend-sync', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
+        ('cloud_run/backend-integration', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
+        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
+    }
+    state_path.write_text(
+        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
+            '{"name": "SYNC_WAL_AUDIO_COVERAGE_ENABLED", "value": "true"},\n        ', ''
+        ),
+        encoding='utf-8',
+    )
+    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
+    assert {(error.scope, error.message) for error in errors} == {
+        ('cloud_run/backend', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
+        ('cloud_run/backend-sync', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
+        ('cloud_run/backend-integration', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
+        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
+    }
 
 
 def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
@@ -1885,6 +1981,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -1905,6 +2002,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1921,6 +2019,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1957,6 +2056,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -1976,6 +2076,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1991,6 +2092,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -2290,11 +2392,11 @@ def test_prod_cloud_run_secret_bindings_exclude_stale_optional_secrets():
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     prod_services = manifest['environments']['prod']['cloud_run']['services']
-    stale_secrets = {'SERVICE_ACCOUNT_JSON', 'POSTHOG_PROJECT_API_KEY'}
+    stale_secrets = {'SERVICE_ACCOUNT_JSON', 'POSTHOG_PROJECT_API_KEY', 'PROACTIVITY_REDIS_PASSWORD'}
 
     for service_name, service_config in prod_services.items():
         secret_names = set((service_config.get('secrets') or {}).keys())
-        assert stale_secrets.isdisjoint(secret_names), f'{service_name} still binds stale secrets'
+        assert stale_secrets.isdisjoint(secret_names), f'{service_name} introduces an unnecessary runtime secret mount'
 
 
 def test_memory_maintenance_job_contract_passes_for_repo_manifest():
@@ -3065,7 +3167,7 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
                 percent = env_block.get('CONVERSATION_RELEVANCE_JEV_PERCENT')
                 if scope in _JEV_LIVE_RELEVANCE_HOSTS:
                     assert enabled == {'value': 'true', 'category': 'rollout'}, scope
-                    assert percent == {'value': '1', 'category': 'rollout'}, scope
+                    assert percent == {'value': '10', 'category': 'rollout'}, scope
                 else:
                     assert enabled is None and percent is None, scope
                 assert env_block.get(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV) is None, scope
@@ -3089,7 +3191,7 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
     ):
         entries = parse_env_entries(chart_path.read_text(encoding='utf-8'))
         assert entries[CONVERSATION_RELEVANCE_JEV_ENABLED_ENV].value == 'true', chart_path.name
-        assert entries['CONVERSATION_RELEVANCE_JEV_PERCENT'].value == '1', chart_path.name
+        assert entries['CONVERSATION_RELEVANCE_JEV_PERCENT'].value == '10', chart_path.name
         assert MEMORY_OWNER_JEV_FLIP_ENABLED_ENV not in entries, chart_path.name
 
     dev_config = validator._get_env_config(manifest, 'dev')
@@ -3274,3 +3376,36 @@ def test_jev_uid_allowlist_contract_survives_cyclic_yaml_aliases():
     assert validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic) == []
     cyclic['env'].append({JEV_UID_ALLOWLIST: {'value': ''}})
     assert len(validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic)) >= 1
+
+
+def test_deploy_actions_remove_the_retired_jev_allowlist_env():
+    # gcloud deploy keeps variables it is not told to drop, so a prod service that once declared
+    # the retired allowlist keeps it (even empty) until the deploy lists it for removal. The
+    # backfill worker is cloned from live backend-sync env BEFORE backend-sync is redeployed, so
+    # its clone must drop the variable in prod only: dev still declares the allowlist for
+    # dogfooding and the clone is where the dev backfill service gets it.
+    name = 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'
+    stack = (ROOT.parent / '.github/actions/deploy-backend-stack/action.yml').read_text().splitlines()
+    stack_lines = [line for line in stack if '--remove-env-vars=' in line and 'MEMORY_ENABLED_USERS' in line]
+    assert stack_lines and all(name in line for line in stack_lines)
+    lifecycle = (ROOT.parent / '.github/actions/sync-backfill-lifecycle/action.yml').read_text().splitlines()
+    deploy_removals = [line for line in lifecycle if '--remove-env-vars=' in line and 'MEMORY_ENABLED_USERS' in line]
+    assert deploy_removals and all(name in line for line in deploy_removals)
+    clone_removals = [line for line in lifecycle if line.lstrip().startswith('REMOVE_ENV_VARS:')]
+    assert clone_removals
+    for line in clone_removals:
+        assert f"inputs.project_id == 'based-hardware' && ',{name}'" in line
+        assert line.count(name) == 1
+
+
+@pytest.mark.parametrize('pipeline', ['legacy', 'v2', 'cohort', 'typo'])
+@pytest.mark.parametrize('kind', ['manifest', 'rendered', 'binding'])
+def test_mentor_pipeline_runtime_values(pipeline, kind):
+    from scripts.runtime_env_validation.common import validate_mentor_pipeline
+
+    config = {'MENTOR_PIPELINE': {'value': pipeline}}
+    if kind == 'rendered':
+        config = [{'name': 'MENTOR_PIPELINE', 'value': pipeline}]
+    elif kind == 'binding':
+        config = {'MENTOR_PIPELINE': {'env_var': 'MENTOR_PIPELINE', 'default': pipeline}}
+    assert bool(validate_mentor_pipeline(scope='host', config=config)) == (pipeline == 'typo')

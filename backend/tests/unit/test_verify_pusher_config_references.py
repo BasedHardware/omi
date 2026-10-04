@@ -179,7 +179,11 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
+        "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
+        "CAPTURE_EVIDENCE_V1_DARK_WRITE": "true",
+        "MENTOR_GATE_DEBOUNCE_ENABLED": "true",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
         "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
@@ -189,12 +193,15 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP": "60000",
         "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
+        "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
+        "LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED": "true",
         "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
         "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
         "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP": "60000",
         "CAPTURE_JEV_SHADOW_ENABLED": "true",
         "CAPTURE_JEV_SHADOW_PERCENT": "0",
         "CAPTURE_JEV_SHADOW_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+        "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
         "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED": "true",
         "FREE_TIER_LOCAL_PROCESSING": "true",
         "FREE_TIER_EMERGENCY_STOP": "false",
@@ -202,6 +209,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
+        "LIVE_CAPTURE_WINDOW_RETENTION": "false",
+        "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION": "false",
+        "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
         "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
         "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED": "true",
@@ -238,7 +248,7 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
     assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "2"
     assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
-    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "1"
+    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "10"
     assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
     assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"

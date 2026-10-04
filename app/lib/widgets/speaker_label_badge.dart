@@ -45,8 +45,12 @@ class SpeakerLabelBadge extends StatelessWidget {
       return Semantics(
         label: l10n.speakerLabelText('confirmed', ''),
         child: ExcludeSemantics(
-          child: Icon(Icons.check_circle_outline,
-              key: const Key('speaker_label_confirmed'), size: 14, color: OmiColors.success),
+          child: Icon(
+            Icons.check_circle_outline,
+            key: const Key('speaker_label_confirmed'),
+            size: 14,
+            color: OmiColors.success,
+          ),
         ),
       );
     }
@@ -66,7 +70,8 @@ class SpeakerLabelBadge extends StatelessWidget {
   }
 }
 
-/// Under the first line Omi named by voice: "Sounds like Maya" with Yes and "Not Maya". Either
+/// Under the first line Omi named by voice: two light chips, Yes and "Not Maya", that answer
+/// "Sounds like Maya" (the "Likely" badge beside the name asks it; screen readers hear it). Either
 /// answer applies to every line from that voice.
 class SpeakerLikelyConfirm extends StatelessWidget {
   const SpeakerLikelyConfirm({super.key, required this.name, required this.onYes, required this.onNot});
@@ -78,42 +83,19 @@ class SpeakerLikelyConfirm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Container(
+    return Semantics(
       key: const Key('speaker_likely_confirm'),
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.sm, OmiSpacing.xxs, OmiSpacing.xxs, OmiSpacing.xxs),
-      decoration: BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.mdAll,
-        border: Border.all(color: OmiColors.border),
-      ),
+      container: true,
+      label: l10n.speakerLabelText('soundsLike', name),
       child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
         spacing: OmiSpacing.xs,
         children: [
-          Text(
-            l10n.speakerLabelText('soundsLike', name),
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              OmiButton(
-                key: const Key('speaker_likely_yes'),
-                label: l10n.yes,
-                size: OmiButtonSize.compact,
-                onPressed: onYes,
-              ),
-              const SizedBox(width: OmiSpacing.xs),
-              Flexible(
-                child: OmiButton.secondary(
-                  key: const Key('speaker_likely_not'),
-                  label: l10n.speakerLabelText('notPerson', name),
-                  size: OmiButtonSize.compact,
-                  onPressed: onNot,
-                ),
-              ),
-            ],
+          OmiFilterChip(key: const Key('speaker_likely_yes'), label: l10n.yes, selected: false, onSelected: onYes),
+          OmiFilterChip(
+            key: const Key('speaker_likely_not'),
+            label: l10n.speakerLabelText('notPerson', name),
+            selected: false,
+            onSelected: onNot,
           ),
         ],
       ),

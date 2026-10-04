@@ -128,9 +128,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   /// The app catalog below the connected services (what the Apps tab loaded).
   Future<void> _loadApps() async {
     try {
-      final appProvider = context.read<AppProvider>();
-      if (appProvider.apps.isEmpty) await appProvider.getApps();
-      if (mounted && appProvider.popularApps.isEmpty) await appProvider.getPopularApps();
+      await context.read<AppProvider>().ensureCatalogLoaded();
     } catch (e, s) {
       Logger.handle(e, s, message: 'Error loading the app catalog on Integrations');
     }
@@ -469,21 +467,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                   ),
                   _buildCreateYourOwnAppTile(),
                   _buildAddMcpServerTile(),
-                  Padding(
-                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
-                        const SizedBox(width: OmiSpacing.xs),
-                        Expanded(
-                          child: Text(
-                            context.l10n.integrationsFooter,
-                            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),

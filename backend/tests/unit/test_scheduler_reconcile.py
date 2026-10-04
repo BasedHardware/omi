@@ -292,3 +292,21 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
     central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
     assert '--project "$PROJECT_ID" --check' in central
     assert '--project "$PROJECT_ID" --check --jobs' not in central
+
+
+def test_notifications_cadence_covers_every_local_hour_boundary():
+    manifest = reconcile.load_manifest()
+    job = next(
+        job for job in manifest['environments']['prod']['jobs'] if job['name'] == 'notifications-job-scheduler-trigger'
+    )
+    assert job['schedule'] == '*/15 * * * *'
+    assert job['state'] == 'ENABLED'
+    assert job.get('lifecycle') is None  # Existing managed resource, scoped by the owner workflow.
+    assert job['owner'] == '.github/workflows/gcp_notifications_job.yml'
+    assert job['target']['uri'].endswith('/jobs/notifications-job:run')
+    assert job['retry']['max_retry'] == '0s'
+    # Dedicated least-privilege invoker, never the project default compute account.
+    assert (
+        job['target']['oauth']['service_account']
+        == 'notifications-job-scheduler@based-hardware.iam.gserviceaccount.com'
+    )

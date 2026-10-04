@@ -283,7 +283,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reportMessage => 'Сообщить о сообщении';
 
   @override
-  String get reportMessageConfirm => 'Вы уверены, что хотите пожаловаться на это сообщение?';
+  String get reportMessageConfirm => 'Пожаловаться на это сообщение?';
 
   @override
   String get messageReported => 'Жалоба на сообщение успешно отправлена.';
@@ -295,7 +295,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get clearChat => 'Очистить чат';
 
   @override
-  String get clearChatConfirm => 'Вы уверены, что хотите очистить чат? Это действие нельзя будет отменить.';
+  String get clearChatConfirm => 'Все сообщения в этом чате будут удалены. Это действие нельзя отменить.';
 
   @override
   String get maxFilesLimit => 'Вы можете загрузить только 4 файла одновременно';
@@ -359,10 +359,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get cannotBeUndone => 'Это действие нельзя отменить.';
 
   @override
-  String get allDataErased => 'Все ваши воспоминания и разговоры будут безвозвратно удалены.';
+  String get allDataErased => 'Ваши воспоминания и беседы будут удалены.';
 
   @override
-  String get appsDisconnected => 'Ваши приложения и интеграции будут немедленно отключены.';
+  String get appsDisconnected => 'Ваши приложения и интеграции будут отключены.';
 
   @override
   String get exportBeforeDelete =>
@@ -1041,7 +1041,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Вы уверены, что хотите отключиться от $appName? Вы можете переподключиться в любое время.';
+    return 'Вы можете снова подключить $appName в любое время.';
   }
 
   @override
@@ -1985,14 +1985,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deleteActionItemTitle => 'Удалить задачу';
 
   @override
-  String get deleteActionItemMessage => 'Вы уверены, что хотите удалить эту задачу?';
+  String get deleteActionItemMessage => 'Удалить эту задачу?';
 
   @override
   String get deleteSelectedItemsTitle => 'Удалить выбранные элементы';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Вы уверены, что хотите удалить $count выбранных задач$s?';
+    return 'Удалить выбранные задачи ($count)$s?';
   }
 
   @override
@@ -2061,7 +2061,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get undo => 'Отменить';
 
   @override
-  String get noMemoriesYet => '🧠 Пока нет воспоминаний';
+  String get noMemoriesYet => 'Пока нет воспоминаний';
 
   @override
   String get noAutoMemories => 'Автоматически извлечённых воспоминаний пока нет';
@@ -2073,7 +2073,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get noMemoriesInCategories => 'Нет воспоминаний в этих категориях';
 
   @override
-  String get noMemoriesFound => '🔍 Воспоминания не найдены';
+  String get noMemoriesFound => 'Воспоминания не найдены';
 
   @override
   String get addFirstMemory => 'Добавьте ваше первое воспоминание';
@@ -2082,7 +2082,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get clearMemoryTitle => 'Очистить память Omi';
 
   @override
-  String get clearMemoryMessage => 'Вы уверены, что хотите очистить память Omi? Это действие нельзя отменить.';
+  String get clearMemoryMessage => 'Все ваши воспоминания будут удалены. Это действие нельзя отменить.';
 
   @override
   String get clearMemoryButton => 'Очистить память';
@@ -2228,20 +2228,20 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Удалить задачу';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Вы уверены, что хотите удалить эту задачу?';
+  String get deleteActionItemConfirmMessage => 'Удалить эту задачу?';
 
   @override
   String get appLanguage => 'Язык приложения';
 
   @override
-  String get appInterfaceSectionTitle => 'ИНТЕРФЕЙС ПРИЛОЖЕНИЯ';
+  String get appInterfaceSectionTitle => 'Интерфейс приложения';
 
   @override
-  String get speechTranscriptionSectionTitle => 'РЕЧЬ И ТРАНСКРИПЦИЯ';
+  String get speechTranscriptionSectionTitle => 'Речь и транскрипция';
 
   @override
   String get languageSettingsHelperText =>
-      'Язык приложения изменяет меню и кнопки. Язык речи влияет на то, как транскрибируются ваши записи.';
+      'Язык приложения изменяет меню и кнопки. Основной язык влияет на то, как транскрибируются ваши записи.';
 
   @override
   String get translationNotice => 'Уведомление о переводе';
@@ -2765,7 +2765,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deleteActionItem => 'Удалить задачу';
 
   @override
-  String get deleteActionItemConfirmation => 'Вы уверены, что хотите удалить эту задачу? Это действие нельзя отменить.';
+  String get deleteActionItemConfirmation => 'Удалить эту задачу? Это действие нельзя отменить.';
 
   @override
   String get enterActionItemDescription => 'Введите описание задачи';
@@ -3107,7 +3107,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Сообщение успешно отправлено';
 
   @override
-  String get confirmReportMessage => 'Вы уверены, что хотите сообщить об этом сообщении?';
+  String get confirmReportMessage => 'Пожаловаться на это сообщение?';
 
   @override
   String get selectChatAssistant => 'Выбрать чат-ассистента';
@@ -3122,7 +3122,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get clearChatTitle => 'Очистить чат?';
 
   @override
-  String get confirmClearChat => 'Вы уверены, что хотите очистить чат? Это действие нельзя отменить.';
+  String get confirmClearChat => 'Очистить этот чат? Это действие нельзя отменить.';
 
   @override
   String get copy => 'Копировать';
@@ -3294,7 +3294,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get createMemory => 'Создать память';
 
   @override
-  String get deleteMemoryConfirmation => 'Вы уверены, что хотите удалить эту память? Это действие нельзя отменить.';
+  String get deleteMemoryConfirmation => 'Удалить это воспоминание? Это действие нельзя отменить.';
 
   @override
   String get makePrivate => 'Сделать приватной';
@@ -3331,7 +3331,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Вы уверены, что хотите очистить память Omi? Это действие нельзя отменить, и оно навсегда удалит все $count воспоминаний.';
+    return 'Все воспоминания ($count) будут удалены. Это действие нельзя отменить.';
   }
 
   @override
@@ -3624,8 +3624,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Позвольте Omi автоматически выбрать лучшее приложение';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Вы уверены, что хотите удалить этот разговор? Это действие нельзя отменить.';
+  String get deleteConversationConfirmation => 'Удалить этот разговор? Это действие нельзя отменить.';
 
   @override
   String get conversationDeleted => 'Разговор удален';
@@ -3951,8 +3950,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get updateAppQuestion => 'Обновить приложение?';
 
   @override
-  String get updateAppConfirmation =>
-      'Вы уверены, что хотите обновить приложение? Изменения вступят в силу после проверки нашей командой.';
+  String get updateAppConfirmation => 'Изменения вступят в силу после проверки нашей командой.';
 
   @override
   String get updateApp => 'Обновить приложение';
@@ -4016,8 +4014,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Отменить подписку?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Вы уверены, что хотите отменить подписку? У вас будет доступ до конца текущего расчетного периода.';
+  String get cancelSubscriptionConfirmation => 'У вас будет доступ до конца текущего расчетного периода.';
 
   @override
   String get cancelSubscriptionButton => 'Отменить подписку';
@@ -4203,7 +4200,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Это действие нельзя отменить. Приложения, использующие этот ключ, больше не смогут получить доступ к API.';
+      'Приложения, использующие этот ключ, потеряют доступ к API. Это действие нельзя отменить.';
 
   @override
   String get revoke => 'Отозвать';
@@ -4260,7 +4257,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Вы уверены, что хотите удалить этот $item? Это действие нельзя отменить.';
+    return '$item будет удалено. Это действие нельзя отменить.';
   }
 
   @override
@@ -4268,7 +4265,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Вы уверены, что хотите отозвать ключ \"$keyName\"? Это действие нельзя отменить.';
+    return 'Всё, что использует \"$keyName\", потеряет доступ. Это действие нельзя отменить.';
   }
 
   @override
@@ -4447,7 +4444,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Ваш план останется активным до $date. После этого вы потеряете доступ к безлимитным функциям. Вы уверены?';
+    return 'Ваш план останется активным до $date. После этого вы потеряете доступ к безлимитным функциям.';
   }
 
   @override
@@ -4539,7 +4536,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get askOmiAnything => 'Спросите Omi о чём угодно о своей жизни';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Разблокируйте бесконечную память Omi';
+  String get unlockOmiInfiniteMemory => 'Неограниченные воспоминания';
 
   @override
   String get youreOnAnnualPlan => 'Вы на годовом плане';
@@ -4551,7 +4548,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get unableToLoadPlans => 'Не удалось загрузить планы';
 
   @override
-  String get checkConnectionTryAgain => 'Проверьте подключение и попробуйте снова';
+  String get checkConnectionTryAgain => 'Проверьте подключение и повторите попытку.';
 
   @override
   String get useFreePlan => 'Использовать бесплатный план';
@@ -4733,7 +4730,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Это навсегда удалит все разговоры, импортированные из Limitless. Это действие нельзя отменить.';
+      'Все разговоры, импортированные из Limitless, будут удалены. Это действие нельзя отменить.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4774,7 +4771,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Вы уверены, что хотите удалить образец $name?';
+    return 'Образец голоса $name будет удалён. Это действие нельзя отменить.';
   }
 
   @override
@@ -4782,7 +4779,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Вы уверены, что хотите удалить $name? Это также удалит все связанные образцы речи.';
+    return 'Это удалит образцы голоса $name, и отменить это нельзя. Реплики в прошлых разговорах станут безымянными говорящими.';
   }
 
   @override
@@ -5139,7 +5136,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get finishedConversation => 'Завершить разговор?';
 
   @override
-  String get stopRecordingConfirmation => 'Вы уверены, что хотите остановить запись и подвести итоги разговора сейчас?';
+  String get stopRecordingConfirmation => 'Остановить запись и подвести итоги разговора сейчас?';
 
   @override
   String get conversationEndsManually => 'Разговор завершится только вручную.';
@@ -5984,7 +5981,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 премиум-минут в месяц. Вкладка \"На устройстве\" предлагает неограниченную бесплатную транскрипцию.';
+      '300 премиум-минут в месяц. Выберите «На устройстве» для неограниченной бесплатной транскрипции.';
 
   @override
   String get viewUsage => 'Посмотреть использование';
@@ -6067,7 +6064,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 премиум-минут/месяц. Вкладка На устройстве предлагает неограниченную бесплатную транскрипцию. ';
+      '300 премиум-минут в месяц. Выберите «На устройстве» для неограниченной бесплатной транскрипции. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6122,7 +6119,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Встроенная живая транскрипция Omi оптимизирована для разговоров в реальном времени с автоматическим определением говорящего и диаризацией.';
+      'Живая транскрипция Omi создана для разговоров в реальном времени и отмечает, кто что сказал.';
 
   @override
   String get reset => 'Сбросить';
@@ -6658,8 +6655,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get shareRecording => 'Поделиться записью';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Вы уверены, что хотите безвозвратно удалить эту запись? Это действие нельзя отменить.';
+  String get deleteRecordingConfirmation => 'Это действие нельзя отменить.';
 
   @override
   String get recordingIdLabel => 'ID записи';
@@ -7031,7 +7027,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Вы меняете свой тарифный план Unlimited на $title. Вы уверены, что хотите продолжить?';
+    return 'Вы меняете свой тарифный план Unlimited на $title.';
   }
 
   @override
@@ -8501,7 +8497,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tipAutoSync => 'Записи синхронизируются автоматически';
 
   @override
-  String get storageSection => 'ХРАНИЛИЩЕ';
+  String get storageSection => 'Хранилище';
 
   @override
   String get permissions => 'Разрешения';
@@ -8928,10 +8924,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Необязательно — ваши мысли помогают нам создавать лучший продукт.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Это необратимо';
+  String get deleteFlowConfirmTitle => 'Удалить аккаунт?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'После удаления аккаунта восстановить его невозможно.';
+  String get deleteFlowConfirmSubtitle => 'Это нельзя отменить, даже через поддержку.';
 
   @override
   String get deleteConsequenceSubscription => 'Активная подписка будет отменена.';
@@ -9297,6 +9293,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Загрузка с вашего устройства';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current из $total';
   }
@@ -9378,7 +9384,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Записывайте звук сейчас и расшифровывайте его по запросу, а не в реальном времени. Записи сохраняются на вашем телефоне, после чего вы загружаете их, чтобы создать беседы.';
+      'Записывайте сейчас, расшифровывайте когда захотите. До тех пор аудио остаётся на телефоне.';
 
   @override
   String get transcribeLaterNote =>
@@ -9661,7 +9667,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deleteOnDeviceModel => 'Удалить модель';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Вы уверены, что хотите удалить эту модель?';
+  String get deleteOnDeviceModelConfirm => 'Удалить эту модель?';
 
   @override
   String get onDeviceModelDownloaded => 'Загружено';
@@ -9818,7 +9824,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncStatusTooOld => 'Слишком старая для синхронизации — Omi не может её принять';
 
   @override
-  String get planSheetChooseYourPlan => 'Выберите тариф, чтобы открыть безлимитный Omi.';
+  String get planSheetChooseYourPlan => 'Выберите подходящий вам план.';
 
   @override
   String get availableOnMacMobileWeb => 'Доступно на Mac, мобильном и в вебе';
@@ -10067,24 +10073,23 @@ class AppLocalizationsRu extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
         'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
         'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
@@ -10097,13 +10102,13 @@ class AppLocalizationsRu extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10485,8 +10490,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Забыть устройство?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi перестанет подключаться к этому устройству. Чтобы снова им пользоваться, его нужно будет заново связать.';
+  String get forgetDeviceConfirmMessage => 'Omi перестанет подключаться к этому устройству.';
 
   @override
   String get deviceForgottenMessage => 'Устройство забыто';
@@ -11291,6 +11295,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi переподключится сам';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name и другие';
   }
@@ -11864,19 +11871,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get evidenceNothing => 'Вы ещё не отмечали и не подтверждали этого человека';
 
   @override
-  String get effectCountsALot => 'Сильно влияет';
+  String get effectCountsALot => 'Сильно помогает';
 
   @override
-  String get effectCounts => 'Влияет';
+  String get effectCounts => 'Помогает';
 
   @override
-  String get effectCountsALittle => 'Слегка влияет';
+  String get effectCountsALittle => 'Немного помогает';
 
   @override
-  String get effectBarelyCounts => 'Почти не влияет';
+  String get effectBarelyCounts => 'Почти не помогает';
 
   @override
-  String get effectCountsAgainst => 'Влияет отрицательно';
+  String get effectCountsAgainst => 'Вредит';
 
   @override
   String get effectNeeded => 'Нужно для статуса «Подтверждено»';
@@ -11896,7 +11903,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get confidenceFootnote =>
-      'Уверенность заметно меняют только ваши ответы. Сами по себе автосовпадения почти не влияют.';
+      'Уверенность заметно меняют только ваши ответы. Сами по себе автосовпадения почти не помогают.';
 
   @override
   String get personWhyConfidence => 'Почему?';
@@ -11912,7 +11919,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get pinPersonHonestLine => 'Omi попросит вас подтвердить близкие совпадения, а не будет гадать.';
+  String get pinPersonHonestLine => 'Omi спрашивает, прежде чем сопоставить похожие голоса.';
 
   @override
   String get pinAction => 'Закрепить';
@@ -12149,17 +12156,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Участников: $count',
-      one: '1 участник',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Включите Omi в Командах → Siri. Скажите «$askPhrase» или «$questionPhrase», затем задайте свой вопрос.';
   }
@@ -12183,6 +12179,21 @@ class AppLocalizationsRu extends AppLocalizations {
       'Эта версия Omi больше не поддерживается. Обновите приложение, чтобы продолжить запись и синхронизацию.';
 
   @override
+  String get exportingAllData =>
+      'Экспорт ваших данных… Не закрывайте Omi; для больших аккаунтов это может занять несколько минут.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Участников: $count',
+      one: '1 участник',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get autoRemoveSyncedCopiesTitle => 'Автоудаление синхронизированных копий';
 
   @override
@@ -12200,7 +12211,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String speakerLabelLinesLabeled(int count) {
-    return 'Помечено строк: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Помечено строк: $count',
+      one: 'Помечена 1 строка',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12233,7 +12250,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String speakerLabelEarlierMatches(int count) {
-    return 'Прошлые разговоры с этим голосом: $count';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Есть в прошлых разговорах: $count',
+      one: 'Есть в 1 прошлом разговоре',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -12259,6 +12282,179 @@ class AppLocalizationsRu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration этого голоса';
   }
+
+  @override
+  String get findDeviceNoneTitle => 'Omi не найден';
+
+  @override
+  String get findDeviceNoneMessage => 'Включите его и держите рядом с телефоном.';
+
+  @override
+  String get startupFailedDetails => 'Подробности';
+
+  @override
+  String get couldNotLoadApiKeys => 'Не удалось загрузить ключи API.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Нет…';
+
+  @override
+  String get diagnosticsRightNow => 'Сейчас';
+
+  @override
+  String get diagnosticsLast7Days => 'Последние 7 дней';
+
+  @override
+  String get diagnosticsConnectedFor => 'Подключено';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Переподключается само';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Короткие обрывы, каждый раз возвращается примерно за $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'На этой неделе обрывов не было';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Проблемы с подключением';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Неудачные подключения за последние 24 часа: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Обрывы';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'примерно $count в час';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Самый долгий перерыв';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'С момента сопряжения: обрывов — $drops, неудачных подключений — $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Последние $duration';
+  }
+
+  @override
+  String get chatReplyOffline => 'Не удалось подключиться. Проверьте соединение и попробуйте ещё раз.';
+
+  @override
+  String get chatReplyServerError => 'Что-то пошло не так с нашей стороны. Попробуйте ещё раз.';
+
+  @override
+  String get chatReplyTimeout => 'Ответ занял слишком много времени. Попробуйте ещё раз.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Вы не вошли в аккаунт. Войдите и попробуйте ещё раз.';
+
+  @override
+  String get chatAppsLoadFailed => 'Не удалось загрузить приложения чата. Попробуйте ещё раз.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Голос';
+
+  @override
+  String get assistantVoice => 'Голос ассистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Выбранный голос используется и на мобильном, и на компьютере.';
+
+  @override
+  String get readChatRepliesAloud => 'Озвучивать ответы в чате';
+
+  @override
+  String get readChatRepliesAloudDescription =>
+      'Озвучивает только тогда, когда это разрешено настройкой «Голосовой ответ».';
+
+  @override
+  String get voicePreviewSample => 'Привет, я Omi. Это мой голос.';
+
+  @override
+  String get peopleStatsIncomplete => 'Подсчёты могут быть неполными.';
+
+  @override
+  String get previousDay => 'Предыдущий день';
+
+  @override
+  String get nextDay => 'Следующий день';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Нет задач на $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Повторная обработка разговора…';
+
+  @override
+  String get conversationReprocessed => 'Разговор обновлён';
+
+  @override
+  String get loadingTranscript => 'Загрузка расшифровки…';
+
+  @override
+  String get transcriptLoadFailed => 'Не удалось загрузить расшифровку.';
+
+  @override
+  String get processingConversationProgress => 'Обработка разговора…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Не удалось обработать этот разговор.';
+
+  @override
+  String get waitForReprocessing => 'Дождитесь окончания повторной обработки.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Докладчик';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Голоса не разделены между записями.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'О метках говорящих';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi не смогла различить остальные голоса в записях. Коснитесь метки говорящего, чтобы назвать, кто говорит.';
+
+  @override
+  String get nameSpeakerTitle => 'Назвать говорящего';
+
+  @override
+  String get playbackPreparingAudio => 'Подготовка аудио…';
+
+  @override
+  String get playbackBackToCurrent => 'К текущему';
+
+  @override
+  String get playbackAudioUnavailable => 'Аудио недоступно';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не удалось загрузить аудио';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Проверьте соединение';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Отключить такие';
+
+  @override
+  String get dismiss => 'Скрыть';
 
   @override
   String get showOnLockScreen => 'Показывать на экране блокировки';

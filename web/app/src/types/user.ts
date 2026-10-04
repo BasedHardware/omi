@@ -306,6 +306,8 @@ export const API_KEY_SCOPES = [
   { id: 'memories:write', label: 'Memories', type: 'write' },
   { id: 'action_items:read', label: 'Action Items', type: 'read' },
   { id: 'action_items:write', label: 'Action Items', type: 'write' },
+  { id: 'goals:read', label: 'Goals', type: 'read' },
+  { id: 'goals:write', label: 'Goals', type: 'write' },
 ] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]['id'];

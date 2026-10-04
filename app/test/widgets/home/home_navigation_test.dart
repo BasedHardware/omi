@@ -27,9 +27,7 @@ void main() {
     });
 
     test('preserves reserved characters in an encoded Siri chat draft', () {
-      final link = HomeDeepLink.parse(
-        '/chat?draft=What%20is%20A%26B%20%3D%20C%2BD%20%23100%25%3F%20%F0%9F%98%80',
-      )!;
+      final link = HomeDeepLink.parse('/chat?draft=What%20is%20A%26B%20%3D%20C%2BD%20%23100%25%3F%20%F0%9F%98%80')!;
       expect(link.alias, 'chat');
       expect(link.query['draft'], 'What is A&B = C+D #100%? 😀');
     });
@@ -164,13 +162,14 @@ void main() {
         expect(await pending, isTrue);
         ownerMatches = false;
         expect(
-            await HomeNavigation.openRoute(
-              '/conversation/owner-a',
-              canOpen: () => ownerMatches,
-              timeout: const Duration(milliseconds: 60),
-              pollInterval: const Duration(milliseconds: 10),
-            ),
-            isFalse);
+          await HomeNavigation.openRoute(
+            '/conversation/owner-a',
+            canOpen: () => ownerMatches,
+            timeout: const Duration(milliseconds: 60),
+            pollInterval: const Duration(milliseconds: 10),
+          ),
+          isFalse,
+        );
       });
       expect(_opened, ['/conversation/owner-a']);
     });
@@ -193,32 +192,42 @@ void main() {
     addTearDown(provider.dispose);
     final opened = <String>[];
     final requested = <String>[];
-    await tester.pumpWidget(ChangeNotifierProvider<ActionItemsProvider>.value(
-      value: provider,
-      child: const MaterialApp(home: SizedBox(key: Key('task-link-home'))),
-    ));
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ActionItemsProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: SizedBox(key: Key('task-link-home'))),
+      ),
+    );
     final context = tester.element(find.byKey(const Key('task-link-home')));
 
-    await openHomeDeepLink(context, const HomeDeepLink('task', id: 'task-150'),
-        openSettings: () async {},
-        taskById: (id) async {
-          requested.add(id);
-          return task;
-        },
-        onTaskOpened: (item) => opened.add(item.id));
+    final firstOpened = await openHomeDeepLink(
+      context,
+      const HomeDeepLink('task', id: 'task-150'),
+      openSettings: () async {},
+      taskById: (id) async {
+        requested.add(id);
+        return task;
+      },
+      onTaskOpened: (item) => opened.add(item.id),
+    );
 
+    expect(firstOpened, isTrue);
     expect(requested, ['task-150']);
     expect(opened, ['task-150']);
 
     var ownerMatches = true;
-    await openHomeDeepLink(context, const HomeDeepLink('task', id: 'task-150'),
-        openSettings: () async {},
-        canOpen: () => ownerMatches,
-        taskById: (id) async {
-          ownerMatches = false; // Account switched while the item was loading.
-          return task;
-        },
-        onTaskOpened: (item) => opened.add(item.id));
+    final cancelledOpened = await openHomeDeepLink(
+      context,
+      const HomeDeepLink('task', id: 'task-150'),
+      openSettings: () async {},
+      canOpen: () => ownerMatches,
+      taskById: (id) async {
+        ownerMatches = false; // Account switched while the item was loading.
+        return task;
+      },
+      onTaskOpened: (item) => opened.add(item.id),
+    );
+    expect(cancelledOpened, isFalse);
     expect(opened, ['task-150']);
   });
 
@@ -237,10 +246,12 @@ void main() {
     addTearDown(provider.dispose);
     final requested = <String>[];
     final opened = <String>[];
-    await tester.pumpWidget(ChangeNotifierProvider<MemoriesProvider>.value(
-      value: provider,
-      child: const MaterialApp(home: SizedBox(key: Key('memory-link-home'))),
-    ));
+    await tester.pumpWidget(
+      ChangeNotifierProvider<MemoriesProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: SizedBox(key: Key('memory-link-home'))),
+      ),
+    );
     final context = tester.element(find.byKey(const Key('memory-link-home')));
     await openHomeDeepLink(
       context,
@@ -267,11 +278,14 @@ void main() {
     var unavailable = 0;
     await tester.pumpWidget(const MaterialApp(home: SizedBox(key: Key('stale-task-home'))));
     final context = tester.element(find.byKey(const Key('stale-task-home')));
-    await openHomeDeepLink(context, const HomeDeepLink('task', id: 'cancelled-task'),
-        openSettings: () async {},
-        taskById: (_) async => cancelled,
-        onTaskOpened: (row) => opened.add(row.id),
-        onItemUnavailable: () => unavailable++);
+    await openHomeDeepLink(
+      context,
+      const HomeDeepLink('task', id: 'cancelled-task'),
+      openSettings: () async {},
+      taskById: (_) async => cancelled,
+      onTaskOpened: (row) => opened.add(row.id),
+      onItemUnavailable: () => unavailable++,
+    );
     expect(opened, isEmpty);
     expect(unavailable, 1);
   });
@@ -289,44 +303,55 @@ void main() {
           layer: layer,
         );
     final cursors = <String?>[];
-    final found = await resolveIndexedMemoryById('target',
-        uid: 'owner',
-        ownerIsCurrent: () => true,
-        fetchPage: ({required limit, required offset, cursor}) async {
-          cursors.add(cursor);
-          return cursor == null
-              ? GetMemoriesResult([memory('other')], true, nextCursor: 'second')
-              : GetMemoriesResult([memory('target')], true);
-        });
+    final found = await resolveIndexedMemoryById(
+      'target',
+      uid: 'owner',
+      ownerIsCurrent: () => true,
+      fetchPage: ({required limit, required offset, cursor}) async {
+        cursors.add(cursor);
+        return cursor == null
+            ? GetMemoriesResult([memory('other')], true, nextCursor: 'second')
+            : GetMemoriesResult([memory('target')], true);
+      },
+    );
     expect(cursors, [null, 'second']);
     expect(found?.id, 'target');
 
-    final archived = await resolveIndexedMemoryById('target',
-        uid: 'owner',
-        ownerIsCurrent: () => true,
-        fetchPage: ({required limit, required offset, cursor}) async =>
-            GetMemoriesResult([memory('target', layer: MemoryLayer.archive)], true));
+    final archived = await resolveIndexedMemoryById(
+      'target',
+      uid: 'owner',
+      ownerIsCurrent: () => true,
+      fetchPage: ({required limit, required offset, cursor}) async =>
+          GetMemoriesResult([memory('target', layer: MemoryLayer.archive)], true),
+    );
     expect(archived, isNull);
 
-    final foreign = await resolveIndexedMemoryById('target',
-        uid: 'owner',
-        ownerIsCurrent: () => true,
-        fetchPage: ({required limit, required offset, cursor}) async =>
-            GetMemoriesResult([memory('target', uid: 'other')], true));
+    final foreign = await resolveIndexedMemoryById(
+      'target',
+      uid: 'owner',
+      ownerIsCurrent: () => true,
+      fetchPage: ({required limit, required offset, cursor}) async =>
+          GetMemoriesResult([memory('target', uid: 'other')], true),
+    );
     expect(foreign, isNull);
 
     var stillCurrent = true;
-    final switched = await resolveIndexedMemoryById('target',
-        uid: 'owner',
-        ownerIsCurrent: () => stillCurrent,
-        fetchPage: ({required limit, required offset, cursor}) async {
-          stillCurrent = false;
-          return GetMemoriesResult([memory('target')], true);
-        });
+    final switched = await resolveIndexedMemoryById(
+      'target',
+      uid: 'owner',
+      ownerIsCurrent: () => stillCurrent,
+      fetchPage: ({required limit, required offset, cursor}) async {
+        stillCurrent = false;
+        return GetMemoriesResult([memory('target')], true);
+      },
+    );
     expect(switched, isNull);
   });
 }
 
 final List<String> _opened = [];
 
-Future<void> _record(String route, {bool Function()? canOpen}) async => _opened.add(route);
+Future<bool> _record(String route, {bool Function()? canOpen}) async {
+  _opened.add(route);
+  return true;
+}

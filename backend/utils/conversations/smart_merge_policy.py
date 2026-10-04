@@ -31,6 +31,7 @@ from config.conversation_smart_merge import (
     MIN_GAP_SECONDS,
     MIN_WORDS,
     STRETCH_LINK_SECONDS,
+    smart_merge_flatten_enabled,
 )
 from utils.conversations.smart_merge_state import Fragment
 from utils.conversations.wake_word import find_wake_word_matches
@@ -73,6 +74,10 @@ class SkipReason:
     SEGMENT_CAP = 'segment_cap'
     FRAGMENT_CAP = 'fragment_cap'
     REFRESH_UNAVAILABLE = 'refresh_unavailable'
+    FLATTEN_ANCESTOR_INVALID = 'flatten_ancestor_invalid'
+    FLATTEN_ANCESTOR_USER_MANAGED = 'flatten_ancestor_user_managed'
+    FLATTEN_ANCESTOR_CAP = 'flatten_ancestor_cap'
+    FLATTEN_CONTENT_CHANGED = 'flatten_content_changed'
 
 
 def smart_merge_state(row: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -206,7 +211,7 @@ def new_conversation_skip(
         or row.get('deleted')
         or row.get('discarded')
         or smart_merge_state(row)
-        or row.get('sync_merged_from')
+        or (row.get('sync_merged_from') and not smart_merge_flatten_enabled())
         or not segments
     ):
         return SkipReason.CONVERSATION_NOT_ELIGIBLE
@@ -338,6 +343,7 @@ def absorb_payloads(
             'revision': next_revision,
             'refreshed_revision': refreshed_revision(survivor),
             'fragments': [fragment.as_ledger_entry() for fragment in fragments],
+            'last_merged_at': merged_at,
         }
     )
     state.pop('refresh_lease', None)

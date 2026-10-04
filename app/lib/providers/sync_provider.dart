@@ -603,8 +603,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (risk != null) {
         _captureWedgeMonitor.observeStorageAtRisk(
           engagedAt: risk.engagedAt,
-          evictedCount: risk.evictedCount,
+          blockedCount: risk.blockedCount,
           retainedCount: risk.retainedCount,
+          reason: risk.reason,
         );
       }
     } catch (_) {

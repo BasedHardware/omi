@@ -18,11 +18,18 @@ from config.stt_provider_policy import (
     SONIOX_PROVIDER,
     provider_for_service,
 )
-from routers.listen.receiver import MAX_STT_FAILOVERS, ListenReceiver
+from routers.listen.receiver import ListenReceiver
 from utils.metrics import OMI_LIVE_STT_ACCEPTED_TOTAL
 from utils.observability.transcription import _deployment_environment
+from utils.stt.live_failure import MAX_STT_FAILOVERS
+from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
 from utils.stt.streaming import STTService, get_stt_service_for_language
 from utils.stt.language_policy import LiveLanguageProfile
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 class FakeSocket:
@@ -178,7 +185,7 @@ async def test_control_late_rejection_continues_without_a_window_replay_ring(mon
     receiver.host.request.websocket.close.assert_not_called()
     assert [r.message for r in caplog.records if 'component=stt_live_session' in r.message] == [
         f'omi_fallback_event component=stt_live_session from={primary.value} to={rejected_service.value} '
-        'reason=other outcome=degraded subtype=connection_lost'
+        'reason=connection_lost outcome=degraded'
     ]
 
 
@@ -277,6 +284,7 @@ async def test_multi_channel_sessions_do_not_failover(monkeypatch):
 async def test_failover_is_bounded_so_a_flapping_chain_cannot_loop(monkeypatch):
     receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
     receiver._stt_failed_providers = {f'p{i}' for i in range(MAX_STT_FAILOVERS + 1)}
+    receiver.recovery.attempted_targets = {f't{i}' for i in range(MAX_RECOVERY_TARGETS)}
 
     with patch(
         'routers.listen.receiver.get_stt_service_for_language',
@@ -382,7 +390,7 @@ async def test_connect_then_vendor_close_is_not_recovered(monkeypatch):
             'component': 'stt_live_session',
             'from_mode': MODULATE_PROVIDER,
             'to_mode': 'soniox',
-            'reason': 'quota',
+            'reason': 'connection_lost',
             'outcome': 'exhausted',
         }
     ]
@@ -409,7 +417,7 @@ async def test_connect_then_delayed_vendor_close_is_exhausted_not_recovered(monk
     live = [event for event in events if event.get('component') == 'stt_live_session']
     assert live, events
     assert live[0]['outcome'] == 'exhausted'
-    assert live[0]['reason'] == 'quota'
+    assert live[0]['reason'] == 'connection_lost'  # Source Modulate death, not successor Soniox's quota.
     assert live[0]['to_mode'] == 'soniox'
     assert all(event['outcome'] != 'recovered' for event in events)
 

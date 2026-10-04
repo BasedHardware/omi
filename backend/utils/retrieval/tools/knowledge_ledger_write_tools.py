@@ -57,9 +57,8 @@ _ALLOWED_TRIGGER_CONDITION_FIELDS = frozenset(
     {"match_mode", "entity_aliases", "keywords", "regex", "apps", "windows", "time", "calendar"}
 )
 
-# The paid-work snapshot (utils.memory.jit_trigger_snapshot) only admits a
-# trigger whose ``arguments.wakeup_budget_per_day`` matches this exact policy
-# value; anything else makes the row invisible to the desktop watchlist.
+# Preserve the canonical trigger argument shape for existing knowledge records.
+# The legacy desktop watchlist no longer executes these records.
 _TRIGGER_ARGUMENTS = {"wakeup_budget_per_day": DEFAULT_TRIGGER_RUNTIME_POLICY.planned_notifications_per_trigger_per_day}
 
 
@@ -136,7 +135,7 @@ def build_paid_trigger_condition(description: str, condition: Mapping[str, Any])
     Raises ``ValueError`` (including from pydantic validation) for a
     malformed or disallowed selector. The returned dict is the exact
     canonical JSON shape stored as ``MemoryItem.trigger_condition`` and read
-    back by ``utils.memory.jit_trigger_snapshot.read_authoritative_trigger_snapshot``.
+    by canonical knowledge-ledger readers; the desktop proactivity watcher is retired.
     """
     rejection = _reject_disallowed_trigger_condition_fields(condition)
     if rejection is not None:

@@ -12,6 +12,21 @@ enum OmiBleEnergyPolicy {
         return entry
     }
 
+    /// Backfill the newest battery point's charging flag, but only when that
+    /// point is recent: stamping the state observed now onto a hours-old
+    /// sample would mislabel historical battery data.
+    static let batteryBackfillMaxAgeMs: Int64 = 15 * 60 * 1_000
+
+    static func backfillLatestBatteryCharging(
+        _ history: [[String: Any]], charging: Bool, nowMs: Int64
+    ) -> [[String: Any]]? {
+        guard let latest = history.last, latest["charging"] == nil else { return nil }
+        guard let ts = latest["ts"] as? Int64, nowMs - ts <= batteryBackfillMaxAgeMs else { return nil }
+        var updated = history
+        updated[updated.count - 1]["charging"] = charging
+        return updated
+    }
+
     static func shouldPersistBatteryReading(
         previousLevel: Int?,
         previousTimestampMs: Int64?,
@@ -56,6 +71,13 @@ enum OmiBleFirmwareDiagnostics {
             let value = u32(offset)
             if value != UInt32.max { result[key] = NSNumber(value: value) }
         }
+        if data.count >= 30 {
+            for (key, offset) in [("last_off_charger_mv", 25), ("charge_pin_edges", 27)] {
+                let value = Int(data[offset]) | (Int(data[offset + 1]) << 8)
+                if value != 0xffff { result[key] = NSNumber(value: value) }
+            }
+            if data[29] == 0 || data[29] == 1 { result["soc_frozen"] = NSNumber(value: data[29] == 1) }
+        }
         return result
     }
 }
@@ -73,5 +95,53 @@ enum OmiBleRssiDiagnostics {
 
     static func ageMs(samples: [(ts: Int64, rssi: Int64)], nowMs: Int64) -> Int64 {
         samples.last.map { max(0, nowMs - $0.ts) } ?? -1
+    }
+}
+
+/// Attributes one recovery interval to the event that started it.
+struct OmiBleReconnectDiagnostics {
+    private var pendingTimestampMs: Int64?
+
+    mutating func recordEvent(timestampMs: Int64, eventType: String, isManual: Bool) {
+        if isManual {
+            pendingTimestampMs = nil
+            return
+        }
+        // Failed retry attempts belong to the outstanding loss. A newly lost
+        // physical link starts its own interval instead of inheriting an old one.
+        if eventType == "disconnect" || pendingTimestampMs == nil {
+            pendingTimestampMs = timestampMs
+        }
+    }
+
+    mutating func recovered(atMs: Int64, hadConnection: Bool) -> (eventTimestampMs: Int64, durationMs: Int64)? {
+        guard let timestamp = pendingTimestampMs else { return nil }
+        pendingTimestampMs = nil
+        guard hadConnection else { return nil }
+        return (timestamp, max(0, atMs - timestamp))
+    }
+
+    func retainedHistory<T>(
+        _ history: [T], nowMs: Int64, retentionMs: Int64, limit: Int, timestampOf: (T) -> Int64
+    ) -> [T] {
+        let recent = history.filter { timestampOf($0) >= nowMs - retentionMs }
+        // Keep one unresolved outage through count truncation, while respecting
+        // both age retention and the ring's total entry limit.
+        if limit > 0, let pending = recent.lastIndex(where: { timestampOf($0) == pendingTimestampMs }),
+           pending < recent.count - limit {
+            return [recent[pending]] + recent.suffix(limit - 1)
+        }
+        return Array(recent.suffix(limit))
+    }
+
+    mutating func backfilledHistory<T>(
+        _ history: [T], nowMs: Int64, hadConnection: Bool,
+        timestampOf: (T) -> Int64, withDuration: (T, Int64) -> T
+    ) -> [T]? {
+        guard let recovery = recovered(atMs: nowMs, hadConnection: hadConnection),
+              let index = history.lastIndex(where: { timestampOf($0) == recovery.eventTimestampMs }) else { return nil }
+        var result = history
+        result[index] = withDuration(history[index], recovery.durationMs)
+        return result
     }
 }

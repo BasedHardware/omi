@@ -1,21 +1,18 @@
 import asyncio
 import json
 import os
-import re
 import sys
 import time
 from collections.abc import AsyncIterator, Awaitable, Mapping
 from contextlib import suppress
-from dataclasses import dataclass
+from contextvars import ContextVar
 from typing import Any, TypeVar
-from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from database import redis_db
-from llm_gateway.gateway.accounting import ProviderResponseMetadata, vertex_usage_from_response
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -25,8 +22,21 @@ from utils.http_client import (
     get_desktop_gemini_stream_client,
 )
 from utils.llm import vertex_pt_routing as ptr
+from config.vertex_reservations import State
+from utils.llm.vertex_reservation_state import reservation_state, effective_states
+from utils.llm.vertex_reservation_probe import probe_reservation
+from utils.llm.vertex_reservation_response import ReservationResponseEvidence
+from utils.llm.desktop_reservation_policy import should_refuse, refusal_response
+from utils.llm import vertex_direct_attempt as direct_attempt
 from utils.llm import desktop_gemini_gateway
-from utils.llm.managed_spend_ledger import DESKTOP_PROXY_CALLER, ManagedAttempt, schedule_managed_attempt
+from utils.llm.desktop_gemini_telemetry import (
+    ALLOWED_ACTIONS as _ALLOWED_ACTIONS,
+    ALLOWED_MODELS as _ALLOWED_MODELS,
+    DesktopGeminiProxyRoute,
+    ProxyTelemetry,
+    UpstreamRoute,
+    get_proxy_telemetry,
+)
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
     stub_gemini_proxy_json,
@@ -36,31 +46,17 @@ from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.free_tier_basic_gates import basic_plan_gate_proxy_embed_enabled
+from utils.metrics import SCREEN_TASK_CLIENT_BYPASS_TOTAL
 from utils.managed_compute import Decision, authorize_managed_compute
+from utils.llm.screen_task_admission import enforce_flagged_screen_task_proxy
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import RELEASE_PROBE_UID, is_desktop_trial_paywalled
 
-router = APIRouter()
+router = APIRouter(route_class=DesktopGeminiProxyRoute)
 
-_ALLOWED_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
-_ALLOWED_MODELS = frozenset(
-    {
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
-        'gemini-2.5-pro',
-        'gemini-3.1-flash-lite',
-        'gemini-embedding-001',
-    }
-)
-_VERTEX_MODELS = frozenset(
-    {
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
-        'gemini-2.5-pro',
-        'gemini-3.1-flash-lite',
-        'gemini-embedding-001',
-    }
-)
+_reservation_snapshot: ContextVar[dict[str, State]] = ContextVar('vertex_reservations', default={})
+
+_VERTEX_MODELS = _ALLOWED_MODELS
 # Vertex batch embedding is not wire-compatible with the AI Studio batch method.
 # Keep the provider decision explicit instead of silently trying one API shape on
 # another provider.
@@ -69,9 +65,7 @@ _VERTEX_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedC
 # updating the matching tests and backend/docs/vertex-pt-flash.md is the
 # 2026-08-04 AI Studio double-pay regression.
 VERTEX_PT_MODEL = ptr.PT_MODEL_CURRENT
-# Migration target. A PT order for gemini-3.1-flash-lite provisions in ~10
-# business days; the proxy promotes itself the first time `dedicated` answers
-# on it, with no deploy. See backend/docs/vertex-pt-flash.md.
+# The declared migration target; see backend/docs/vertex-pt-flash.md.
 VERTEX_PT_TARGET_MODEL = ptr.PT_MODEL_TARGET
 # Emergency operator pins. Both beat auto-detection so a bad promotion or a
 # bad overflow target can be corrected without shipping code. The env names
@@ -112,16 +106,6 @@ _MAX_CONTENT_PARTS = desktop_gemini_gateway._MAX_CONTENT_PARTS  # pyright: ignor
 _MAX_INLINE_MEDIA_PARTS = desktop_gemini_gateway._MAX_INLINE_MEDIA_PARTS  # pyright: ignore[reportPrivateUsage]
 _BURST_LIMIT = 30
 _DAILY_HARD_LIMIT = 1500
-_ALLOWED_WORKLOADS = frozenset({'interactive', 'extraction', 'maintenance'})
-_ALLOWED_TRAFFIC_TYPES = frozenset({'PROVISIONED_THROUGHPUT', 'ON_DEMAND'})
-# Provider routes this proxy calls itself. Company-paid traffic that hops the
-# gateway (`llm_gateway`) is already in the ledger under the gateway's own row,
-# so only these direct routes write one here; anything else (stub, unselected)
-# was never a provider attempt.
-_DIRECT_LEDGER_ROUTES = frozenset({'vertex_ai', 'ai_studio', 'ai_studio_byok'})
-# The ledger's provider name for Gemini on every route, matching the gateway's
-# rate cards (`provider: gemini`), so one query covers gateway and direct rows.
-_LEDGER_PROVIDER = 'gemini'
 
 # The deployed Rust proxy originally used a 70/75-second attempt/logical
 # contract. A later blind expansion to 235/240 seconds exactly matches the
@@ -136,22 +120,9 @@ _DISCONNECT_POLL_SECONDS = 0.1
 # 400/800ms, two retries each), so this only floors how soon a replay may start.
 _PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS = 1
 
-_REQUEST_ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,63}$')
-_REVISION_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,126}$')
-_TRACE_PATTERN = re.compile(r'^([0-9a-fA-F]{32})(?:/[^;]+)?(?:;o=[01])?$')
 _vertex_tokens = VertexAccessTokenSupplier()
 
 T = TypeVar('T')
-
-
-@dataclass(frozen=True)
-class UpstreamRoute:
-    url: str
-    headers: dict[str, str]
-    params: dict[str, str]
-    provider: str
-    credential_source: str
-    region: str
 
 
 class RoutingFailure(Exception):
@@ -179,200 +150,6 @@ class _GeminiRateLimitExceeded(HTTPException):
 
 class ClientDisconnected(Exception):
     pass
-
-
-class ProxyTelemetry:
-    def __init__(self, request: Request, *, streaming: bool) -> None:
-        supplied_request_id = request.headers.get('x-omi-request-id') or request.headers.get('x-request-id') or ''
-        self.request_id = supplied_request_id if _REQUEST_ID_PATTERN.fullmatch(supplied_request_id) else str(uuid4())
-        trace_header = request.headers.get('x-cloud-trace-context', '')
-        trace_match = _TRACE_PATTERN.fullmatch(trace_header)
-        self.trace_id = trace_match.group(1).lower() if trace_match else ''
-        self.route = 'stream' if streaming else 'nonstream'
-        self.provider = 'unselected'
-        self.credential_source = 'none'
-        self.region = 'none'
-        self.model = 'unknown'
-        self.action = 'unknown'
-        supplied_workload = request.headers.get('x-omi-workload', '').strip().lower()
-        self.workload_class = supplied_workload if supplied_workload in _ALLOWED_WORKLOADS else 'unknown'
-        self.prompt_token_count: int | None = None
-        self.candidates_token_count: int | None = None
-        self.total_token_count: int | None = None
-        self.cached_content_token_count: int | None = None
-        self.thoughts_token_count: int | None = None
-        self.traffic_type = 'unknown'
-        self.phase = 'validation'
-        self.shape = PayloadShape('unknown', 'unknown', 'unknown')
-        self.started = time.monotonic()
-        self.completed = False
-        # Ledger attribution only. Never written to the log event above. One
-        # invocation per request; one attempt per provider dispatch.
-        self.uid: str | None = None
-        self.payer = 'omi'
-        self.invocation_id = str(uuid4())
-        self.attempts = 0
-        self._pending_attempt: str | None = None
-        self.provider_metadata: ProviderResponseMetadata | None = None
-
-    def set_route(self, route: UpstreamRoute) -> None:
-        self.provider = route.provider
-        self.credential_source = route.credential_source
-        self.region = route.region
-
-    def observe_gemini_response(self, response: Mapping[str, Any]) -> None:
-        """Retain only bounded billing metadata from a Gemini response."""
-        metadata = vertex_usage_from_response(response)
-        if metadata.traffic_type in _ALLOWED_TRAFFIC_TYPES:
-            self.traffic_type = metadata.traffic_type
-        if metadata.usage is None:
-            return
-        # Streaming chunks carry cumulative counts; the latest block wins.
-        self.provider_metadata = metadata
-        usage = metadata.usage
-        self.prompt_token_count = usage.prompt_tokens
-        self.candidates_token_count = usage.output_tokens
-        self.total_token_count = usage.total_tokens
-        self.cached_content_token_count = usage.cached_input_tokens
-        self.thoughts_token_count = usage.reasoning_tokens
-
-    def complete(
-        self,
-        *,
-        outcome: str,
-        status_code: int,
-        retryable: bool,
-        upstream_status: int | None = None,
-        phase: str | None = None,
-    ) -> None:
-        if self.completed:
-            return
-        self.completed = True
-        phase = phase or self.phase
-        event: dict[str, object] = {
-            'severity': 'INFO' if 200 <= status_code < 400 else 'WARNING',
-            'message': 'desktop_gemini_proxy_terminal',
-            'event': 'desktop_gemini_proxy_terminal',
-            'service': 'desktop-backend',
-            'runtime_implementation': 'python',
-            'revision': _safe_revision(os.getenv('K_REVISION')),
-            'release_sha': _safe_revision(os.getenv('OMI_DESKTOP_BACKEND_RELEASE_SHA')),
-            'request_id': self.request_id,
-            'route': self.route,
-            'provider_route': self.provider,
-            'credential_source': self.credential_source,
-            'model': self.model if self.model in _ALLOWED_MODELS else 'unknown',
-            'region': _safe_region(self.region),
-            'action': self.action if self.action in _ALLOWED_ACTIONS else 'unknown',
-            'workload_class': self.workload_class,
-            'traffic_type': self.traffic_type,
-            'attempt': 1,
-            'phase': phase,
-            'outcome': outcome,
-            'status_code': status_code,
-            'upstream_status': upstream_status or 0,
-            'upstream_status_class': _status_class(upstream_status),
-            'retryable': retryable,
-            'payload_size_bucket': self.shape.size_bucket,
-            'content_parts_bucket': self.shape.content_parts_bucket,
-            'inline_media_parts_bucket': self.shape.inline_media_bucket,
-            'elapsed_ms': round((time.monotonic() - self.started) * 1000),
-        }
-        if self.prompt_token_count is not None:
-            event.update(
-                {
-                    'prompt_token_count': self.prompt_token_count,
-                    'candidates_token_count': self.candidates_token_count,
-                    'total_token_count': self.total_token_count,
-                    'cached_content_token_count': self.cached_content_token_count,
-                    'thoughts_token_count': self.thoughts_token_count,
-                }
-            )
-        project = os.getenv('GOOGLE_CLOUD_PROJECT', '').strip()
-        if self.trace_id and project:
-            event['logging.googleapis.com/trace'] = f'projects/{project}/traces/{self.trace_id}'
-        # One exact JSON object is ingested as jsonPayload in Cloud Logging.
-        # The fixed allowlist above intentionally excludes UIDs, prompts, media,
-        # URLs, headers, tokens, raw exceptions, and upstream response bodies.
-        sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
-        sys.stdout.flush()
-        self.record_attempt(*_canonical_outcome(outcome))
-
-    def note_dispatch(self, route: UpstreamRoute) -> None:
-        """A provider request is about to leave for `route`. Only these become ledger rows.
-
-        Anything that fails before a dispatch (validation, credentials, routing)
-        was never a provider attempt and writes nothing.
-        """
-        if route.provider not in _DIRECT_LEDGER_ROUTES:
-            return
-        self.attempts += 1
-        self._pending_attempt = route.provider
-        self.provider_metadata = None
-
-    def record_attempt(self, outcome: str, error_class: str) -> None:
-        """Close the pending provider attempt with one ledger row, best-effort.
-
-        Overflow recovery calls this for each attempt that failed before moving
-        to the next route; `complete()` closes the last one. Gateway-routed and
-        stub traffic never dispatch here (the gateway writes its own row).
-        """
-        route = self._pending_attempt
-        self._pending_attempt = None
-        if route is None or not self.uid:
-            return
-        schedule_managed_attempt(
-            ManagedAttempt(
-                request_id=self.request_id,
-                caller=DESKTOP_PROXY_CALLER,
-                user_uid=self.uid,
-                feature=desktop_gemini_gateway.DESKTOP_GATEWAY_FEATURE,
-                api_surface=f'gemini_{self.action}' if self.action in _ALLOWED_ACTIONS else 'gemini_unknown',
-                payer=self.payer,
-                provider=_LEDGER_PROVIDER,
-                configured_model=self.model,
-                outcome=outcome,
-                error_class=error_class,
-                route_artifact_id=f'{DESKTOP_PROXY_CALLER}.{route}',
-                metadata=self.provider_metadata,
-                invocation_id=self.invocation_id,
-                ordinal=self.attempts,
-                retry_ordinal=self.attempts,
-                fallback_reason='overflow_recovery' if self.attempts > 1 else None,
-            )
-        )
-
-
-def _canonical_outcome(outcome: str) -> tuple[str, str]:
-    """Telemetry outcomes → the ledger's `success | error | cancelled` with the detail as error_class."""
-    if outcome == 'success':
-        return 'success', 'none'
-    if outcome == 'client_cancelled':
-        return 'cancelled', 'client_cancelled'
-    return 'error', outcome
-
-
-def _safe_revision(value: object) -> str:
-    text = str(value or '').strip()
-    return text if _REVISION_PATTERN.fullmatch(text) else 'unknown'
-
-
-def _safe_region(value: object) -> str:
-    # Regional (`us-central1`) and multi-region (`us`, `eu`, `global`) labels
-    # are both legitimate now that 3.x traffic is addressed multi-region, so
-    # the bare form must survive telemetry instead of being logged as 'none'.
-    text = str(value or '').strip().lower()
-    return text if re.fullmatch(r'[a-z]{2,16}(?:-[a-z0-9]{1,16}){0,2}', text) else 'none'
-
-
-def _status_class(status: int | None) -> str:
-    if status is None:
-        return 'none'
-    if status == 429:
-        return '429'
-    if 100 <= status <= 599:
-        return f'{status // 100}xx'
-    return 'unknown'
 
 
 # Gemini body sanitization moved to utils/llm/desktop_gemini_gateway.py; these
@@ -404,14 +181,7 @@ def _use_vertex_ai() -> bool:
     return os.getenv('USE_VERTEX_AI', '').strip().lower() in {'1', 'true', 'yes'}
 
 
-# Observed state of the pending gemini-3.1-flash-lite PT order.
-#
-# The positive observation is latched: a Provisioned Throughput purchase is a
-# long-lived commitment, and expiring it on a TTL would flap the serving model
-# every time overflow stopped re-probing. A vanished order still degrades
-# safely — requests 429 and overflow absorbs them — and the operator override
-# pins the model outright if that is ever not enough.
-_pt_target_ready = False
+# Request-local snapshot of shared reservation evidence; no promotion latch.
 # Learned reachability, per model. A model is entered here only when a real
 # `generateContent` attempt came back "no such publisher model", and the entry
 # expires on the same TTL as capacity so a routing fix or a serving change
@@ -429,12 +199,6 @@ _pt_target_ready = False
 # the TTL, so seeding an observation with 0.0 would mark a model dead for the
 # first _PT_PROBE_TTL_SECONDS of every new instance's life.
 _model_unavailable_at: dict[str, float] = {}
-# None means "never probed", same sentinel rule as above.
-_pt_target_probed_at: float | None = None
-
-
-def _pt_target_is_ready() -> bool:
-    return _pt_target_ready and _model_believed_available(VERTEX_PT_TARGET_MODEL)
 
 
 def _model_believed_available(model: str) -> bool:
@@ -459,7 +223,6 @@ def _learns_reachability() -> bool:
 
 
 def _record_model_unavailable(model: str) -> None:
-    global _pt_target_ready
     if not _learns_reachability():
         return
     if _model_believed_available(model):
@@ -470,9 +233,6 @@ def _record_model_unavailable(model: str) -> None:
             flush=True,
         )
     _model_unavailable_at[model] = time.monotonic()
-    if model == VERTEX_PT_TARGET_MODEL:
-        # A model that cannot be reached cannot be holding prepaid capacity.
-        _pt_target_ready = False
 
 
 def _record_model_available(model: str) -> None:
@@ -481,38 +241,29 @@ def _record_model_available(model: str) -> None:
     _model_unavailable_at.pop(model, None)
 
 
-def _pt_probe_due() -> bool:
-    """Whether the next overflow request should ask for `dedicated` capacity.
-
-    Probing rides an existing overflow request, so detection costs no extra
-    call: overflow only happens when the current reservation is already full,
-    which is exactly when a second order matters.
-    """
-    if _pt_target_ready:
-        return False
-    if _pt_target_probed_at is None:
-        return True
-    return (time.monotonic() - _pt_target_probed_at) >= _PT_PROBE_TTL_SECONDS
+def _reservation_states() -> dict[str, State]:
+    return effective_states(_reservation_snapshot.get(), os.environ)
 
 
-def _record_pt_target_observation(ready: bool) -> None:
-    global _pt_target_ready, _pt_target_probed_at
-    _pt_target_probed_at = time.monotonic()
-    if ready and not _pt_target_ready:
-        _pt_target_ready = True
-        print(
-            f'desktop_proxy pt_promotion model={VERTEX_PT_TARGET_MODEL} '
-            f'reason=dedicated_capacity_observed previous={ptr.PT_MODEL_CURRENT}',
-            file=sys.stderr,
-            flush=True,
-        )
+async def _refresh_reservations() -> dict[str, State]:
+    async def probe(model: str, location: str) -> str:
+        return await probe_reservation(get_desktop_gemini_client(), _vertex_tokens.get_access_token, model, location)
+
+    states = await reservation_state.refresh(probe, apply_overrides=False)
+    _reservation_snapshot.set(states)
+    return states
 
 
-def _provisioned_model() -> str:
-    """The model that currently owns prepaid capacity."""
+async def _observe_dedicated_response(model: str, capacity: str, response: httpx.Response) -> None:
+    if not get_byok_key('gemini') and await reservation_state.record_response(model, capacity, response):
+        _reservation_snapshot.set({**_reservation_snapshot.get(), model: State.ACTIVE})
+
+
+def _protected_models() -> frozenset[str]:
+    """Every model currently protected from degraded fallback traffic."""
     try:
-        return ptr.resolve_pt_model(
-            target_dedicated_ready=_pt_target_is_ready(),
+        return ptr.resolve_pt_models(
+            _reservation_states(),
             override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''),
         )
     except ValueError as exc:
@@ -536,10 +287,11 @@ def _fallback_chain(model: str, *, origin_model: str | None = None) -> tuple[str
     try:
         return ptr.resolve_fallback_chain(
             model=model,
-            pt_model=_provisioned_model(),
+            pt_model='',
+            protected_models=_protected_models(),
             unreachable=_unreachable_models(),
             override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''),
-            origin_model=origin,
+            origin_model=origin or model,
         )
     except ValueError:
         return ()
@@ -561,31 +313,12 @@ def _first_reachable(model: str, *, origin_model: str | None = None) -> str:
 
 
 def _serving_model(model: str) -> str:
-    """Map a requested model onto the model that will actually serve it.
-
-    BYOK is never remapped: the user pays for the model they asked for.
-
-    Two server-paid remaps, both cheaper per token than what they replace:
-      gemini-2.5-pro   -> gemini-3.1-flash-lite  ($10.00 -> $1.50 out)
-      gemini-2.5-flash -> whichever model holds prepaid capacity
-
-    Whatever comes out is then resolved against learned reachability, so a
-    model traffic has proved uncallable is stepped past using its declared
-    chain instead of failing the request.
-
-    Client-pinned gemini-2.5-flash-lite lanes are deliberately untouched:
-    gemini-3.1-flash-lite costs 3.75x more per output token, so promoting those
-    lanes would be a large cost regression, not a saving. Its chain is empty
-    for exactly that reason.
-    """
     if get_byok_key('gemini'):
         return model
-    if model == 'gemini-2.5-pro':
-        intended = VERTEX_PT_TARGET_MODEL
-    elif model == ptr.PT_MODEL_CURRENT:
-        intended = _provisioned_model()
-    else:
-        intended = model
+    try:
+        intended = ptr.desktop_serving_model(model, override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''))
+    except ValueError as exc:
+        raise RoutingFailure(code='routing_invalid_operator_pin', message=str(exc), phase='routing') from exc
     return _first_reachable(intended, origin_model=ptr.lane_overflow_origin(model))
 
 
@@ -704,14 +437,17 @@ async def _upstream(
         # pay-as-you-go. Asking for `dedicated` turns that into a 429 the proxy
         # can route deliberately; everything else is pinned to `shared` so it
         # can never draw down the reservation.
-        capacity = request_type or ptr.request_type_for(model=model, pt_model=_provisioned_model())
+        capacity = request_type or ptr.reservation_capacity(
+            model, _reservation_states(), override=os.getenv(_PT_MODEL_OVERRIDE_ENV, '')
+        )
+        url = direct_attempt.target_url(model, action, capacity, url)
         return UpstreamRoute(
             url,
             {'Authorization': f'Bearer {token}', ptr.REQUEST_TYPE_HEADER: capacity},
             query,
             'vertex_ai',
             'application_default_credentials',
-            _vertex_location(model),
+            url.split('/locations/')[-1].split('/')[0],
         )
     if _vertex_required(model, action):
         # Missing GOOGLE_CLOUD_PROJECT is the 2026-08-04 production bug: Flash
@@ -735,23 +471,21 @@ def _overflow_plan(served_model: str, *, origin_model: str | None = None) -> lis
     Only traffic that was actually routed at the reservation can exhaust it, so
     anything else returns an empty plan and keeps its own error.
 
-    When a probe is due the first attempt asks the migration target for
-    `dedicated` capacity. That single request is the whole auto-detection
-    mechanism: if a gemini-3.1-flash-lite PT order has landed it succeeds and
-    the proxy promotes itself permanently, and if it has not it 429s and the
-    plan falls through to the same on-demand call it would have made anyway.
     """
     if not _overflow_enabled():
         return []
-    pt_model = _provisioned_model()
-    if served_model != pt_model:
+    if (
+        ptr.reservation_capacity(served_model, _reservation_states(), override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''))
+        != 'dedicated'
+    ):
         return []
     try:
         origin = ptr.lane_overflow_origin(served_model) if origin_model is None else origin_model
         ladder = ptr.resolve_overflow_ladder(
-            pt_model=pt_model,
+            pt_model='',
+            protected_models=_protected_models(),
             override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''),
-            origin_model=origin,
+            origin_model=origin or served_model,
         )
     except ValueError:
         return []
@@ -761,14 +495,12 @@ def _overflow_plan(served_model: str, *, origin_model: str | None = None) -> lis
             # Skip a rung traffic has proved unreachable; trying it would spend
             # a round trip to fail on every single overflow request.
             continue
-        if rung == ptr.PT_MODEL_TARGET and _pt_probe_due():
-            plan.append((rung, ptr.REQUEST_TYPE_DEDICATED))
         plan.append((rung, ptr.REQUEST_TYPE_SHARED))
     return plan
 
 
 def _recovery_plan(
-    served_model: str, status: int, message: str, *, origin_model: str | None = None
+    served_model: str, status: int, message: str, *, origin_model: str | None = None, capacity: str = ''
 ) -> list[tuple[str, str]]:
     """Attempts to make after a response this proxy can route around.
 
@@ -784,10 +516,16 @@ def _recovery_plan(
     """
     if get_byok_key('gemini'):
         return []
-    if ptr.is_model_unavailable(status, message):
+    capacity = capacity or ptr.reservation_capacity(
+        served_model, _reservation_states(), override=os.getenv(_PT_MODEL_OVERRIDE_ENV, '')
+    )
+    action = ptr.recovery_action(served_model, capacity, status, message, overflow_enabled=_overflow_enabled())
+    if action == 'shared':
+        return [(served_model, ptr.REQUEST_TYPE_SHARED)]
+    if action == 'unavailable':
         _record_model_unavailable(served_model)
         return [(rung, ptr.REQUEST_TYPE_SHARED) for rung in _fallback_chain(served_model, origin_model=origin_model)]
-    if _overflow_triggered(status, message):
+    if action == 'overflow':
         return _overflow_plan(served_model, origin_model=origin_model)
     return []
 
@@ -1051,16 +789,16 @@ def _stream_error_event(*, code: str, phase: str, telemetry: ProxyTelemetry) -> 
 class _StreamingUsageObserver:
     """Incrementally inspect SSE data fields without retaining response content."""
 
-    # A single SSE event larger than this is not a usage event; stop observing
-    # the response rather than retaining provider content or re-scanning it.
     MAX_EVENT_BYTES = 1024 * 1024
 
     def __init__(self, telemetry: ProxyTelemetry) -> None:
         self.telemetry = telemetry
         self.buffer = bytearray()
         self.disabled = False
+        self.evidence = ReservationResponseEvidence()
 
     def feed(self, chunk: bytes) -> None:
+        self.evidence.feed(chunk)
         if self.disabled:
             return
         self.buffer.extend(chunk)
@@ -1113,12 +851,14 @@ async def _stream_provider(
         await _acquire_provider_slot(semaphore)
         try:
             telemetry.phase = 'connect'
-            telemetry.note_dispatch(attempt_route)
+            telemetry.note_dispatch(
+                attempt_route, reservation_state=reservation_state, reservation_states=_reservation_states()
+            )
             context = client.stream(
                 'POST',
                 attempt_route.url,
                 params=attempt_route.params,
-                content=attempt_body,
+                content=direct_attempt.request_body(attempt_body, attempt_route.url),
                 headers={'Content-Type': 'application/json', **attempt_route.headers},
             )
             upstream = await _cancel_on_disconnect(request, context.__aenter__())
@@ -1130,11 +870,14 @@ async def _stream_provider(
     context: Any | None = None
     upstream: httpx.Response | None = None
     held = False
+    attempt_model, capacity = model, route.headers.get(ptr.REQUEST_TYPE_HEADER, '')
     try:
         # Each entry is one upstream attempt. Overflow attempts are appended
         # only after the reservation actually reports itself full, so the
         # ordinary path opens exactly one stream as before.
-        pending: list[tuple[UpstreamRoute, bytes, str, str]] = [(route, body, model, '')]
+        pending: list[tuple[UpstreamRoute, bytes, str, str]] = [
+            (route, body, model, route.headers.get(ptr.REQUEST_TYPE_HEADER, ''))
+        ]
         while pending:
             attempt_route, attempt_body, attempt_model, capacity = pending.pop(0)
             async with asyncio.timeout(_TOTAL_TIMEOUT_SECONDS):
@@ -1149,18 +892,16 @@ async def _stream_provider(
             # The body carries the difference between 'reservation full' and
             # ordinary rate limiting, and a streamed error body is not read yet.
             await upstream.aread()
-            unavailable = ptr.is_model_unavailable(upstream.status_code, upstream.text)
-            exhausted = _overflow_triggered(upstream.status_code, upstream.text)
-            if capacity == ptr.REQUEST_TYPE_DEDICATED and not unavailable:
-                _record_pt_target_observation(not exhausted)
             # This dispatch is over; record it before recovery routing can fail.
             telemetry.record_attempt('error', _attempt_error_class(upstream.status_code, upstream.text))
-            if not pending and query is not None:
+            pending = []
+            if query is not None:
                 for overflow_model, overflow_capacity in _recovery_plan(
                     attempt_model,
                     upstream.status_code,
                     upstream.text,
                     origin_model=ptr.lane_overflow_origin(model),
+                    capacity=capacity,
                 ):
                     pending.append(
                         (
@@ -1195,10 +936,17 @@ async def _stream_provider(
             usage_observer.feed(chunk)
             yield chunk
         usage_observer.finish()
+        if not get_byok_key('gemini'):
+            await reservation_state.record(
+                attempt_model, capacity, upstream.status_code, usage_observer.evidence.traffic_type()
+            )
         telemetry.complete(outcome='success', status_code=upstream.status_code, retryable=False, phase='body')
     except ClientDisconnected:
         telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
         yield _stream_error_event(code='client_cancelled', phase='client_disconnect', telemetry=telemetry)
+    except RoutingFailure as exc:
+        telemetry.complete(outcome=exc.code, status_code=503, retryable=False, phase=exc.phase)
+        raise
     except httpx.TimeoutException as exc:
         phase = _timeout_phase(exc)
         telemetry.complete(outcome=f'{phase}_timeout', status_code=504, retryable=False, phase=phase)
@@ -1381,6 +1129,10 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
             attempt.fail('provider_error')
         raise
 
+    if response.headers.get('X-Omi-Error-Class') == 'legacy_task_reservation_inactive':
+        attempt.degrade('quota_capped')
+        return response
+
     if isinstance(response, StreamingResponse):
         outcome = _DesktopProactivityStreamOutcome()
         response.body_iterator = attempt.observe_stream(
@@ -1410,7 +1162,8 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
 
 
 async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: str) -> Response:
-    telemetry = ProxyTelemetry(request, streaming=streaming)
+    telemetry = get_proxy_telemetry(request, streaming=streaming)
+    telemetry.identify(path)
     telemetry.uid = uid
     telemetry.payer = 'byok' if get_byok_key('gemini') else 'omi'
     try:
@@ -1440,6 +1193,15 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                 json.dumps(payload, separators=(',', ':')).encode('utf-8'),
                 media_type='application/json',
                 headers=_response_headers(telemetry),
+            )
+        if await should_refuse(
+            model, action, body, request.headers, byok=bool(get_byok_key('gemini')), refresh=_refresh_reservations
+        ):
+            telemetry.provider = 'reservation_policy'
+            telemetry.complete(outcome='reservation_refused', status_code=200, retryable=False, phase='routing')
+            return refusal_response(
+                streaming=streaming or action == 'streamGenerateContent',
+                headers=_response_headers(telemetry, retryable=False),
             )
         telemetry.phase = 'metering'
         path = await _meter_server_request(uid, path, model, action)
@@ -1498,11 +1260,13 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                 await _acquire_provider_slot(semaphore)
                 try:
                     telemetry.phase = 'connect'
-                    telemetry.note_dispatch(attempt_route)
+                    telemetry.note_dispatch(
+                        attempt_route, reservation_state=reservation_state, reservation_states=_reservation_states()
+                    )
                     return await client.post(
                         attempt_route.url,
                         params=attempt_route.params,
-                        content=attempt_body,
+                        content=direct_attempt.request_body(attempt_body, attempt_route.url),
                         headers={'Content-Type': 'application/json', **attempt_route.headers},
                     )
                 finally:
@@ -1511,12 +1275,18 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             response = await _cancel_on_disconnect(request, post(route, body))
             if response.status_code < 400:
                 _record_model_available(model)
+            await _observe_dedicated_response(model, route.headers.get(ptr.REQUEST_TYPE_HEADER, ''), response)
             recovery = _recovery_plan(
-                model, response.status_code, response.text, origin_model=ptr.lane_overflow_origin(model)
+                model,
+                response.status_code,
+                response.text,
+                origin_model=ptr.lane_overflow_origin(model),
+                capacity=route.headers.get(ptr.REQUEST_TYPE_HEADER, ''),
             )
             if recovery:
                 query = dict(request.query_params)
-                for overflow_model, capacity in recovery:
+                while recovery:
+                    overflow_model, capacity = recovery.pop(0)
                     # The attempt that just came back full or unavailable is
                     # its own ledger row before anything else can fail.
                     telemetry.record_attempt('error', _attempt_error_class(response.status_code, response.text))
@@ -1527,17 +1297,19 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                     telemetry.set_route(overflow_route)
                     telemetry.model = overflow_model
                     response = await _cancel_on_disconnect(request, post(overflow_route, body))
-                    probing = capacity == ptr.REQUEST_TYPE_DEDICATED
                     unavailable = ptr.is_model_unavailable(response.status_code, response.text)
-                    exhausted = _overflow_triggered(response.status_code, response.text)
                     if unavailable:
                         _record_model_unavailable(overflow_model)
                     elif response.status_code < 400:
                         _record_model_available(overflow_model)
-                    if probing and not unavailable:
-                        _record_pt_target_observation(not exhausted)
-                    if not exhausted and not unavailable:
-                        break
+                    await _observe_dedicated_response(overflow_model, capacity, response)
+                    recovery = _recovery_plan(
+                        overflow_model,
+                        response.status_code,
+                        response.text,
+                        origin_model=ptr.lane_overflow_origin(model),
+                        capacity=capacity,
+                    )
             telemetry.phase = 'body'
     except HTTPException as exc:
         phase = telemetry.phase if telemetry.phase in {'routing', 'credential'} else 'validation'
@@ -1706,6 +1478,9 @@ async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
 
 @router.post('/v1/proxy/gemini/{path:path}')
 async def gemini_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+    if request.headers.get('X-Omi-Screen-Task-Client-Bypass') == 'true':
+        SCREEN_TASK_CLIENT_BYPASS_TOTAL.inc()
+    enforce_flagged_screen_task_proxy(request.headers)
     await _enforce_managed_plan_gate(uid, path)
     return await _proxy(request, path, False, uid)
 

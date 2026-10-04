@@ -262,34 +262,6 @@ actor SystemCalendarMeetingContextService {
 
   /// Local trigger observations consume an existing calendar grant only. This
   /// path never calls requestAccess and never uploads event content.
-  func authorizedTriggerEvents(
-    around date: Date,
-    maximumCount: Int = maximumTriggerEvents
-  ) async -> [KnowledgeLedgerTriggerCalendarEvent] {
-    guard await provider.authorizationState() == .allowed,
-      maximumCount > 0,
-      maximumCount <= Self.maximumTriggerEvents
-    else { return [] }
-    let interval = Self.queryInterval(overlapping: DateInterval(start: date, end: date))
-    var seen = Set<KnowledgeLedgerTriggerCalendarEvent>()
-    return await provider.events(in: interval)
-      .filter {
-        !$0.isCanceled && !$0.isAllDay && $0.startTime < interval.end
-          && $0.endTime > interval.start && $0.endTime > $0.startTime
-      }
-      .sorted {
-        if $0.startTime == $1.startTime { return $0.calendarEventID < $1.calendarEventID }
-        return $0.startTime < $1.startTime
-      }
-      .compactMap { snapshot in
-        let title = snapshot.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return nil }
-        let event = KnowledgeLedgerTriggerCalendarEvent(title: title, eventType: "meeting")
-        return seen.insert(event).inserted ? event : nil
-      }
-      .prefix(maximumCount)
-      .map { $0 }
-  }
 
   private func sync(interval: DateInterval) async {
     let payloads = Self.payloads(from: await provider.events(in: interval), within: interval)

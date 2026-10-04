@@ -4,8 +4,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from google.auth.credentials import AnonymousCredentials
-from google.cloud.firestore_v1 import Client
 
 from database.firestore_index_registry import FIELD_INDEX_REQUIREMENTS
 from scripts import firestore_index_oracle as oracle
@@ -30,6 +28,7 @@ from tests.support.firestore_serving_query_inventory import (
     serving_function_body_digest,
 )
 from tests.support.firestore_shape_recorder import RecordingFirestore
+from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -54,7 +53,7 @@ def outside_caller_inventory():
 @pytest.fixture(scope='module')
 def outside_contract_artifacts(outside_results):
     manifest = exporter.load_manifest()
-    client = Client(project='shape-contract', credentials=AnonymousCredentials())
+    client = OfflineFirestoreClient(project='shape-contract')
     queries = {
         key: [
             oracle.build_query(oracle.hydrate_shape(shape.to_dict(), client, 'outside-contract'), client)
@@ -101,7 +100,11 @@ def test_operational_profiles_are_explicit_and_exported(outside_results):
     assert (
         outside.DRIVERS['utils.memory.belief_backfill._default_item_reader'].profiles[0].name.startswith('operational-')
     )
-    assert outside.DRIVERS['services.users.data_export._iter_user_subcollection'].profiles[0].name.startswith('export-')
+    assert (
+        outside.DRIVERS['services.users.data_export_iterators.iter_user_subcollection']
+        .profiles[0]
+        .name.startswith('export-')
+    )
     assert (
         outside.DRIVERS['utils.memory.daily_memory_sweep_inventory._seed_registry']
         .profiles[0]
@@ -110,7 +113,7 @@ def test_operational_profiles_are_explicit_and_exported(outside_results):
 
 
 def test_nested_export_records_the_child_query(outside_results):
-    shapes = outside_results['services.users.data_export._iter_user_nested_subcollection'].shapes
+    shapes = outside_results['services.users.data_export_iterators.iter_user_nested_subcollection'].shapes
     assert {shape.collection_group for shape in shapes} >= {
         'goals',
         'workstreams',

@@ -731,6 +731,18 @@ class SharedPreferencesUtil {
 
   int get voiceResponseMode => getInt('voiceResponseMode', defaultValue: 1);
 
+  set readChatRepliesAloud(bool value) {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    saveBool(_userScopedKey('readChatRepliesAloud', ownerUid), value);
+  }
+
+  bool get readChatRepliesAloud {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return false;
+    return getBool(_userScopedKey('readChatRepliesAloud', ownerUid));
+  }
+
   // VAD Gate — server-side voice activity gating to save Deepgram costs (experimental)
   set vadGateEnabled(bool value) => saveBool('vadGateEnabled', value);
 
@@ -1156,6 +1168,10 @@ class SharedPreferencesUtil {
     saveStringList('cachedPeople', people);
   }
 
+  bool get cachedPeopleStatsTruncated => _preferences?.get('cachedPeopleStatsTruncated') == true;
+
+  set cachedPeopleStatsTruncated(bool value) => saveBool('cachedPeopleStatsTruncated', value);
+
   addCachedPerson(Person person) {
     final List<Person> people = cachedPeople;
     people.add(person);
@@ -1270,6 +1286,7 @@ class SharedPreferencesUtil {
     cachedConversations = <ServerConversation>[];
     cachedMessages = <ServerMessage>[];
     cachedPeople = <Person>[];
+    cachedPeopleStatsTruncated = false;
     appsList = <App>[];
     modifiedConversationDetails = null;
     cachedSingleLanguageMode = false;

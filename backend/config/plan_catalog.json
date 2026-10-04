@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 2,
+  "catalog_revision": 4,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -13,27 +13,15 @@
     "desktop": {
       "desktop_free": {
         "full_desktop": false,
-        "cloud_screen_vectors": false,
-        "proactivity_daily": {
-          "proactive_extraction": 150,
-          "proactive_reasoning": 60
-        }
+        "cloud_screen_vectors": false
       },
       "desktop_full": {
         "full_desktop": true,
-        "cloud_screen_vectors": true,
-        "proactivity_daily": {
-          "proactive_extraction": 1000,
-          "proactive_reasoning": 500
-        }
+        "cloud_screen_vectors": true
       },
       "desktop_architect": {
         "full_desktop": true,
-        "cloud_screen_vectors": true,
-        "proactivity_daily": {
-          "proactive_extraction": 2000,
-          "proactive_reasoning": 1000
-        }
+        "cloud_screen_vectors": true
       }
     },
     "fair_use": {
@@ -606,6 +594,18 @@
       "environment": "prod"
     },
     {
+      "price_id": "price_1RrFym1F8wnoWYvwQgIFhRWD",
+      "plan_id": "unlimited",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1RrG6k1F8wnoWYvwORsU26Mr",
+      "plan_id": "unlimited",
+      "interval": "year",
+      "environment": "prod"
+    },
+    {
       "price_id": "price_1TLFXK1F8wnoWYvwG1TaUkZ3",
       "plan_id": "architect",
       "interval": "month",
@@ -709,5 +709,17 @@
       "product_id": "prod_Uu6nrHIKWnnTWL",
       "plan_id": "unlimited_v2"
     }
-  ]
+  ],
+  "proactivity_v2_budget": {
+    "fraction_basis_points": 1000,
+    "days_per_month": 30,
+    "monthly_reference_cents": {
+      "basic": 0,
+      "operator": 4900,
+      "architect": 19900,
+      "unlimited_v2": 2999,
+      "unlimited": 2000,
+      "plus": 2000
+    }
+  }
 }

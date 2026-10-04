@@ -25,6 +25,7 @@ import pytest
 from fastapi import HTTPException
 
 import database.conversations as conversations_db
+import database.conversation_scan as conversation_scan
 import database.users as users_db
 import routers.conversations as conversations_router
 import routers.developer as developer_router
@@ -39,7 +40,6 @@ import utils.imports.limitless as limitless
 import utils.llm.fair_use_classifier as fair_use_classifier
 import utils.llm.goals as llm_goals
 import utils.other.notifications as notifications_utils
-import utils.people_stats as people_stats
 import utils.retrieval.tool_services.conversations as tool_conversations
 import utils.retrieval.tools.conversation_tools as conversation_tools
 import utils.speaker_tag_prompts.service as speaker_tag_service
@@ -226,12 +226,7 @@ def _run_main_count(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> 
 
 def _run_speaker_browse(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, users_db, 'get_person', lambda uid, person_id: {'id': person_id, 'name': 'Speaker'})
-    _stub(
-        monkeypatch,
-        conversations_router,
-        'browse_conversations_by_speaker',
-        lambda fetch, speaker_id, **kwargs: list(fetch(50, 0)),
-    )
+    _stub(monkeypatch, conversations_router, 'run_blocking', _inline_run_blocking)
     for discarded in _DISCARDED:
         for start, end in _DATE_PAIRS:
             request = SearchRequest(
@@ -241,7 +236,12 @@ def _run_speaker_browse(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
                 start_date=start.isoformat() if start else None,
                 end_date=end.isoformat() if end else None,
             )
-            trial(capture, conversations_router.search_conversations_endpoint, request, uid='u1')
+            trial(
+                capture,
+                lambda request=request: asyncio.run(
+                    conversations_router.search_conversations_endpoint(request, uid='u1')
+                ),
+            )
 
 
 def _run_developer_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
@@ -304,9 +304,25 @@ def _run_search_overview(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture
 
 def _run_people_stats(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, users_router, 'get_people', lambda uid: [{'id': 'p1', 'name': 'Person'}])
-    _stub(monkeypatch, people_stats, 'collect_people_stats', lambda fetch: (fetch(50, 0), {})[1])
-    _stub(monkeypatch, people_stats, 'apply_people_stats', lambda people, stats: None)
     trial(capture, users_router.get_all_people, include_speech_samples=False, include_stats=True, uid='u1')
+
+
+def _run_people_stats_recipe(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    trial(capture, conversation_scan.people_stats_scan, 'u1', budget=None)
+
+
+def _run_speaker_browse_recipe(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    for discarded in _DISCARDED:
+        for start, end in _DATE_PAIRS:
+            trial(
+                capture,
+                conversation_scan.speaker_browse_scan,
+                'u1',
+                include_discarded=discarded,
+                start_date=start,
+                end_date=end,
+                budget=None,
+            )
 
 
 def _run_daily_summary_regenerate(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
@@ -331,6 +347,8 @@ def _run_daily_summary_test_route(monkeypatch: pytest.MonkeyPatch, capture: Help
 
 
 def _run_mentor_notification(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    # This witness isolates the conversation query, with an entitled recipient.
+    _stub(monkeypatch, app_integrations, 'mentor_plan_allows_evaluation', lambda uid: True)
     frequency = next(key for key, value in app_integrations.FREQUENCY_TO_BASE_THRESHOLD.items() if value is not None)
     _stub(monkeypatch, app_integrations, 'get_mentor_notification_frequency', lambda uid: frequency)
     _stub(monkeypatch, app_integrations.mem_db, 'get_proactive_noti_sent_at', lambda uid, kind: None)
@@ -517,12 +535,20 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_main_count,
         ),
         CallerWitness(
-            'routers/conversations.py:search_conversations_endpoint:database.conversations.get_conversations_without_photos',
-            'database.conversations.get_conversations_without_photos',
-            'database.conversations.get_conversations_without_photos',
-            ('speaker-search-fallback',),
+            'routers/conversations.py:_browse_speaker_conversations:database.conversation_scan.speaker_browse_scan',
+            'database.conversation_scan.speaker_browse_scan',
+            'database.conversation_scan.speaker_browse_scan',
+            ('speaker-search-fallback-recipe',),
             1,
             _run_speaker_browse,
+        ),
+        CallerWitness(
+            'database/conversation_scan.py:speaker_browse_scan:database.conversation_scan.iter_conversations',
+            'database.conversation_scan.iter_conversations',
+            'database.conversation_scan.iter_conversations',
+            ('speaker-search-fallback',),
+            1,
+            _run_speaker_browse_recipe,
         ),
         CallerWitness(
             'routers/developer.py:get_conversations:database.conversations.get_conversations',
@@ -558,12 +584,20 @@ WITNESSES: dict[str, CallerWitness] = {
             abort=False,
         ),
         CallerWitness(
-            'routers/users.py:get_all_people:database.conversations.get_conversations_without_photos',
-            'database.conversations.get_conversations_without_photos',
-            'database.conversations.get_conversations_without_photos',
-            ('people-stats',),
+            'routers/users.py:get_all_people:database.conversation_scan.people_stats_scan',
+            'database.conversation_scan.people_stats_scan',
+            'routers.users.people_stats_scan',
+            ('people-stats-recipe',),
             1,
             _run_people_stats,
+        ),
+        CallerWitness(
+            'database/conversation_scan.py:people_stats_scan:database.conversation_scan.iter_conversations',
+            'database.conversation_scan.iter_conversations',
+            'database.conversation_scan.iter_conversations',
+            ('people-stats',),
+            1,
+            _run_people_stats_recipe,
         ),
         CallerWitness(
             'routers/users.py:regenerate_daily_summary:database.conversations.get_conversations',

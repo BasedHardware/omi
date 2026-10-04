@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/search.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -60,7 +61,8 @@ class AuditSearchSource extends GlobalSearchSource {
       ));
 
   @override
-  Future<ConversationSearchResult> conversations(String query, {String? speakerId}) async =>
+  Future<ConversationSearchResult> conversations(String query,
+          {String? speakerId, DateTime? startDate, DateTime? endDate}) async =>
       ConversationSearchResult(currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success, items: [
         _conversation('c1', 'Device Connection Troubleshooting', '🔧', _now.subtract(const Duration(hours: 1)),
             snippet: 'It should show the bluetooth connection level'),
@@ -204,13 +206,13 @@ final searchScenarios = <AuditScenario>[
     run: (a) async {
       final people = PeopleProvider(
         setPinned: (_, __) async => true,
-        loadPeople: () async => [
+        loadPeople: () async => PeopleListResponse(people: [
           _auditPerson('p-maya', 'Maya Chen', confidence: 'confirmed', pinned: true, reasons: {'manual_labels': 6}),
           _auditPerson('p-sam', 'Sam Okafor', confidence: 'likely', reasons: {'card_picks': 2}),
           _auditPerson('p-because', 'Because', reasons: {'auto_unconfirmed': 3}),
           _auditPerson('p-american', 'American', reasons: {'auto_corrected': 1}),
           _auditPerson('p-cs', 'Cs'),
-        ],
+        ]),
       );
       await _pumpSearch(a, extraProviders: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
       await a.tap(find.byKey(const ValueKey('search_tile_people')));

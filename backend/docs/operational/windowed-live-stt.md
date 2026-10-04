@@ -11,8 +11,8 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | Environment variable | Code default | Dev listen | Prod listen |
 |---|---|---|---|
 | `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `5` |
-| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `8` |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `100` |
+| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `16` |
 | `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
 | `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `3` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |
@@ -25,16 +25,61 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | `STT_CIRCUIT_HALF_OPEN_PROBES` | `1` | `1` | `1` |
 | `SONIOX_CIRCUIT_FAILURE_THRESHOLD` | `3` | `3` | `3` |
 | `SONIOX_CIRCUIT_COOLDOWN_SECONDS` | `30` | `30` | `30` |
+| `STT_FAILOVER_RECOVERY_ENABLED` | `false` | `false` | `false` |
+
+**Failover-recovery gate.** `STT_FAILOVER_RECOVERY_ENABLED` selects the session
+mode once at listen-session start; the pin survives mid-session environment
+changes, delayed component construction, successor legs, and spawned writer
+tasks, so changing the value only affects new sessions or replacement pods.
+**Off** (the default everywhere, including this merge) runs the pre-recovery
+paths: the 135-second capture cap and legacy reconnect budgets (3 total, 2 per
+minute, 30s cumulative replay), plain `asyncio.Queue` provider send queues
+without writer pacing, the legacy finalize/EOS order, legacy circuit
+rejection semantics (429 records failure/selection bench; account protections
+are unchanged), and the unmanaged `_finishing` latch. The new recovery metrics (`omi_stt_replay_wall_seconds`,
+`omi_stt_replay_audio_seconds_total`, `omi_stt_replay_queue_high_water`,
+`omi_stt_replay_skipped_seconds_total`, `omi_stt_replay_successor_closed_total`,
+`omi_stt_recovery_attempts_total`, `omi_stt_connect_backoff_total`,
+`omi_live_session_terminal_after_text_total`) still register but never emit
+values in this mode; baseline metrics such as `omi_stt_replay_seconds_total`
+and `omi_stt_reconnect_total` are unchanged. **On**, intended only for the
+canary Deployment with `STT_FAILOVER_RECOVERY_ENABLED=true`, the recovery
+state machine applies: `LiveRecoveryController`, the shared 60s
+episode, 150s bounded replacement headroom, paced `AudioSendQueue` replay, and
+release-not-bench 429 probe handling. **Every recovery description in this
+document below applies only to flag-on sessions.**
+
+The production scrape exposes pod names, not the `track=canary` label. Set
+`${canary_pods:regex}` to the escaped exact enabled-canary pod names and
+`${control_pods:regex}` to the escaped exact flag-off control pod names;
+refresh those lists after replacement. These are proposed watches, not executed
+production measurements:
+
+```promql
+sum by (source,successor) (increase(omi_stt_recovery_attempts_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m]))
+sum by (provider) (increase(omi_live_session_terminal_after_text_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m]))
+histogram_quantile(0.95, sum by (le,source,successor) (rate(omi_stt_replay_wall_seconds_bucket{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[5m])))
+sum(increase(omi_stt_recovery_attempts_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${control_pods:regex}"}[15m])) > 0
+```
+
+New recovery counters and histogram observation counts must stay zero on
+flag-off controls. Missing telemetry is not proof of darkness or health; the
+coordinator must verify scrape coverage and actual per-pod flag configuration.
+This merge is inert — it performs no deploy and changes no running session.
 
 The first flag gates all new routing/breaker behavior, including account cooldown,
 last-resort primary admission and Soniox's own circuit configuration. With it off,
 the existing fixed order, fallback breaker behavior, and Modulate-named Soniox
-circuit env lookup remain unchanged. Dev and prod declare the same
-`parakeet-window,modulate-velma-2,soniox,dg-nova-3` order. The first token uses
-windowed TDT only for the allocated UID bucket; everyone else retains the
-Modulate → Soniox → Deepgram order. Streaming RNNT is outside this chain. Dev configuration parity
-is a prerequisite, but a live dev read must confirm the running order before
-any prod rollout.
+circuit env lookup remain unchanged. Production's configured order is
+`parakeet-window,modulate-velma-2,soniox,dg-nova-3`. Soniox-first was tried on
+2026-10-02 and rolled back within the hour: a Parakeet failover replays its
+capture ring into Soniox's bounded send queue, which overflowed (`capacity_full`)
+and ended the session. Dev retains its separately
+configured order; never use dev to mutate health state (it shares production
+Redis). The first token uses windowed TDT only for the allocated UID bucket;
+everyone else retains the configured vendor tail. Streaming RNNT is outside
+this chain. The cost-router evidence and independent on ramp are documented in
+[live STT routing](../runbooks/live-stt-routing.md).
 Runtime env source is `_base.yaml` plus overlays; regenerate the composed manifest.
 With the flag enabled, the deployment validator accepts configured listen orders
 whose tokens are all enabled by the streaming policy. With it off, canonical
@@ -250,8 +295,10 @@ resets it. Once that budget is exhausted, the deadline remains armed. The
 timer also fires during a slow POST or after four consecutive speech-containing
 empty POSTs, whichever comes first. The existing listen death monitor selects
 the next vendor and replays the untranscribed capture from the 90-second ring;
-failover happens at most once per session, and the failed Parakeet leg is
-excluded for the rest of that session. Once text has been emitted, these
+the failed Parakeet leg is excluded for the rest of that session. Session
+recovery is bounded by one target-and-time budget — at most 20 unique targets
+inside the shared 60s episode — for managed and legacy listen alike; PTT
+retains its existing two-failover limit unchanged. Once text has been emitted, these
 startup bounds are disarmed. No sentence anchor or emitted text is changed.
 `omi_stt_window_session_outcome_total` retains
 `outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
@@ -265,6 +312,135 @@ Speech-free capture can still roll off, and the current chunk must fit. The
 `omi_stt_window_replay_safe_trims_total` counter records actual anchor and
 speech-free trims. If pending audio itself exceeds the ring, the leg fails
 with `capacity_full` and replays from the anchor onto the next vendor.
+
+Replay coalesces contiguous capture spans into at most 16 KiB PCM packets and
+paces each adapter at **1x real time**. The adapter declarations in Soniox and
+Modulate and the conservative default for Deepgram/Parakeet share this ceiling.
+[Soniox cadence](https://soniox.com/docs/stt/rt/error-handling#real-time-cadence)
+requires real-time or near-real-time input and warns about prolonged bursts.
+[Modulate streaming docs](https://docs.modulate.ai/api-reference/stt/streaming.md) and
+[Deepgram streaming docs](https://developers.deepgram.com/docs/live-streaming-audio)
+do not establish a numeric accelerated replay ceiling; 1x is our conservative
+choice, not a claimed vendor limit. The owned Parakeet adapter has no documented
+accelerated replay contract, so it also receives the conservative default.
+
+Each replacement target gets a **5s per-target setup budget** (dial plus
+serving check) and a **20s replay prefix wall**, both spent from the session's
+single **60s episode** total rather than restarting per target. Unanswered
+capture exceeding 20s is cut to the newest 20s (135s becomes 20s; 115s skipped),
+with `omi_stt_replay_skipped_seconds_total{source,successor}` recording the loss.
+Emitted capture prefixes remain excluded. This is an intentional bounded-loss
+tradeoff; do not describe it as full-ring transcript preservation. Partial
+replay rejection retains the remaining obligation for the next eligible leg.
+
+Live ingestion does not await the failover lock. A supervisor-owned ordered tail
+holds at most **26s PCM** (832,000 bytes at 16 kHz), behind the replay prefix.
+At 1x live input the lag stays fixed until admitted audio actually pauses;
+silence still forwarded as PCM does not let it catch up. The
+healthy 20ms/packet test bounds delay by 20.532s after setup; allowing the full
+5s setup budget gives **25.532s at 16 kHz** (26.044s at 8 kHz, because a 16KiB
+packet represents 1.024s). This is audio delivery delay, not a vendor transcript
+latency guarantee. A nonresponsive transport is rejected: the replay helper
+admits at most two packets counting queued plus in-flight audio and waits at most 2s for space; prefix wall
+admission also has a 20s deadline. Ordinary live sends retain the 2,000-item
+queue. Setup timeout skips its requested family and continues within that
+attempt budget. Cancelled/unadopted replay legs close both adapter tasks and
+their websocket. An adopted live tail drains before EOS even after client
+departure; cancellation, death, or its bounded drain deadline meters any
+undelivered tail in the skipped-seconds counter.
+
+Recovery lifecycle is owned by one `LiveRecoveryController` per receiver
+(`utils/stt/recovery_state.py`): `serving → provider_died → recovering →
+replaying → recovered`, terminal `exhausted` and `client_leaving`. A provider
+death opens one **60s episode deadline** that covers every dial, replay prefix,
+and first nonempty successor transcript within that episode; a successor dying
+before proof shares it rather than restarting it. Two proofs release the
+deadline to `recovered`: a nonempty transcript from the current candidate, or —
+for an adopted successor that stays silent — the death monitor observing its
+socket still connected **5s after adoption** (`RECOVERY_HEALTHY_CONNECTED_SECONDS`).
+The connected-dwell proof is not transcript settlement: it clears only the
+episode deadline and never settles a pending leg outcome as recovered. A
+successor dying after the episode released opens a **fresh 60s episode**;
+deaths inside one open episode share its remaining budget. A session is
+bounded to **20 fresh episodes** (`MAX_RECOVERY_EPISODES`); opening a 21st
+exhausts rather than dialing. The unique-target ledger (20 targets), dial
+count, and the one transient Soniox re-entry grant are per-session state that
+persists across episodes. Candidate adoption and transcript/health proofs
+bind to the current candidate token, so a late callback from
+a retired predecessor can never release the deadline. Client departure is a
+monotonic latch taken only from explicit owner/session/websocket evidence —
+never raw socket cleanup flags — and a disconnect/reconnect flap cannot
+resurrect a departed receiver.
+
+Each real dial gets `min(5s, remaining episode)` covering both connect and the
+post-upgrade serving check; every target draws from the one 60s episode, so a
+slow target spends shared budget rather than receiving a fresh allowance. Attempt accounting is by unique target
+identity, capped at 20 (16 registry + up to 4 legacy protocols), reserved at
+the real dial seam only: selector calls, circuit refusals, capacity skips, and
+unavailable routes spend nothing. One transient same-provider Soniox re-entry
+is the sole repeat grant. A typed `LiveChainExhausted` latches exhaustion so
+concurrent send/monitor races cannot redial.
+
+Recovery legs opt into per-leg writer pacing at the transport, not just
+admission: the armed slot advances from the previously armed slot, so
+sub-frame timer oversleep is compensated against the accumulated slot instead
+of drifting, while a stall of one frame or longer rebases on the clock and
+discards missed-slot credit (sustained ≤1x, no catch-up burst on a
+stalled-then-resumed transport), with each `ws.send` bounded by `min(2s,
+episode remaining)`. The observable burst
+allowance is bounded queue+in-flight bytes (at most two 16KiB frames); that
+bound never grows. Prefix delivery — replay enqueues plus the frozen transport
+writes they owed — must complete inside the **20s prefix wall**, not just the
+episode, so `REPLAY_WALL` measures actual prefix delivery. Live audio carries
+first-admission birth time through tail→snapshot→successor; a bounded interval
+`BirthLedger` (8192 entries, adjacent coalescing by earliest birth) prunes at
+the retained ring head. Live-audio birth is the first capture acceptance,
+preserved across retry; contiguous silence arriving as PCM does not itself
+allow catch-up. Retained recovery-tail frames have a strict 28s maximum capture
+age: expired cuts are metered, queued writes already past that age reject as
+`capacity_full`, and intervals older than the bound are retired and metered
+once rather than replayed again. Stalls or repeated failures do not promise
+delivery of all audio or transcripts.
+
+Scoped recovery memory bound (recovery PCM only): ring ≤4,800,000B + prefix
+snapshot ≤640,000B + live tail ≤832,000B + replay queue 32,768B + in-flight
+16,384B + window PCM 1,920,000B ≈ **8,241,152B per session**, a
+conservative planning allowance of **125.75 MiB for 16 sessions at 16 kHz**
+(**375.75 MiB at 48 kHz**). This excludes Python object overhead, VAD
+state, POST transients, ordinary 2,000-item queues, and general process RSS —
+it is not a pod memory claim. No recovery state is persisted; nothing survives
+the session.
+
+Metrics use only bounded source/successor families (`parakeet`, `modulate`,
+`soniox`, `deepgram`, `unknown`), preinitialized across all combinations so a
+first post-scrape event is visible to `increase()`/`rate()`:
+`omi_stt_replay_wall_seconds`, `omi_stt_replay_audio_seconds_total`,
+`omi_stt_replay_queue_high_water`, `omi_stt_replay_skipped_seconds_total`,
+`omi_stt_replay_successor_closed_total`, plus
+`omi_stt_recovery_attempts_total{source,successor}` on each real recovery dial
+and `omi_live_session_terminal_after_text_total{provider}` once when a session
+delivered text and still terminated on an STT failure. The wall histogram
+covers the prefix pump including capacity waits and frozen-write drain, not
+setup.
+
+A Soniox `send queue full` can arise on ordinary send, finalize, or EOS when a
+sender stalls, independently of replay. #20350 excludes deaths first observed
+after client departure. An eligible earlier death remains health evidence,
+but an unproven hop settled during owner departure is `degraded`, not
+`exhausted`; genuine active recovery exhaustion still emits `stt_failed`/1011.
+Aggregates alone do not prove which mechanism explains each production event.
+Compare those fallback events with client-terminal counters and content-free
+owner/client-state evidence rather than treating every `to=unavailable` as a
+client termination.
+
+Replacement ring headroom still grows by 15 seconds up to an absolute
+150-second retained-PCM ceiling (4.8 MB at 16 kHz mono s16le); text progress
+reclaims it. The prefix budget now trims that ring before replay. Synthetic
+provider-pair tests exercise the real Soniox/Modulate queues and send loops,
+slow consumers, concurrent live input, client teardown, and router-on with
+Modulate benched. PTT has no replay ring, and its accepted 5 MiB frame can still
+overflow the synchronous 30ms send loop. The PR describes the exact separate
+frame-ownership/paced-delivery follow-up; PTT provider policy stays unchanged.
 The window socket separately retains PCM from its POST anchor. Its VAD speech
 spans are pruned on each POST-anchor advance; rapid speech/silence toggles
 coalesce the closest adjacent spans at the 1,024-entry bound rather than
@@ -356,9 +532,9 @@ as a new utterance onset. Repeated short utterances still cannot defeat the
 per-session POST limit: pacing applies between POST *starts*, and teardown
 skips that delay for the final flush. Admission is released as soon as drain
 starts; the final POST may finish without holding the slot. Cancellation
-releases admission and cancels the outstanding request. Failed windows are not
-replayed to a second provider: the normal offline capture/sync recovery still
-owns that gap, as with existing mid-stream provider deaths.
+releases admission and cancels the outstanding request. Failed live windows replay their un-emitted capture to the next provider as
+described above. Offline capture/sync recovery still owns any gap after the
+finite live chain is exhausted.
 
 Posted contexts overlap by design (held sentence + new audio). Each sample is
 still in at most one *emitted* segment: re-anchoring drops already-emitted
@@ -380,7 +556,10 @@ failover for existing fair-use/usage flushes; periodic metering does not double-
 
 ## Chain and alerts
 
-Each configured provider is attempted once per session, including failed connects.
+Each configured provider is attempted once per session, including failed connects,
+except for one bounded Soniox re-entry after a known transient transport loss
+when its circuit is closed and no untried Deepgram rescue remains. Managed
+rebuild attempts are independently bounded to three, including that re-entry.
 Account failures (Deepgram 401/402/403; typed Soniox account errors) use the longer
 cooldown and a single recovery probe even when other circuits allow N probes.
 `force=True` never bypasses an account-state cooldown. Last-resort never re-dials
@@ -389,8 +568,17 @@ A replacement is recovered only after a nonempty transcript, including TDT. A
 successful empty TDT POST proves breaker health but does not settle failover recovery.
 If every other non-TDT leg is absent/open, one bounded primary probe can bypass a
 non-account bench. The flag-enabled preflight therefore leaves admission to the
-chain. The old path retains its two-failover limit; the managed chain allows three
-hops across four providers.
+chain. Legacy listen shares the same bounded target-and-time controller; PTT
+retains its two-failover limit.
+
+Full local window admission is checked before constructing the window socket,
+including static/shadow serving. Capacity refusals also engage the existing
+five-second target cooldown in shadow. A refused window does not consume a
+remaining non-account rescue provider's attempt. That rescue may relax its
+selection bench while retaining the half-open probe limit and all account
+protections; an occupied probe has a twelve-second bounded wait. Exhaustion
+is latched per receiver, and ring-pressure exhaustion closes through the
+ordinary terminal send path rather than repeating rebuilds per packet.
 
 Metrics: `omi_stt_chain_exhausted_total` increments once per terminal chain;
 `omi_stt_leg_attempts_total{to_mode,outcome}` counts successful and failed actual

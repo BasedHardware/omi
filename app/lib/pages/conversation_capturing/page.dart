@@ -113,7 +113,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     await provider.finishCapture();
     if (!mounted) return;
     switchHomeToConversationsTab(context);
-    Navigator.of(context).pop();
+    // A swipe back during the finish has already popped this route; it only stays mounted while it
+    // animates out, and a pop then would take Home with it and leave the navigator empty.
+    final route = ModalRoute.of(context);
+    if (route != null && route.isCurrent) Navigator.of(context).pop();
   }
 
   /// The live page's state, resolved exactly as the Home capture card resolves it
@@ -152,6 +155,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           key: scaffoldKey,
           backgroundColor: OmiColors.surface0,
           appBar: ConversationStateAppBar(
+            showStatus: effectivelyMuted || provider.pendantCaptureVerified,
             state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
             bufferingFor: provider.customSttBufferingDuration,
             sourceLabel: switch (provider.liveCaptureSource) {
@@ -184,8 +188,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                         ),
                       )
                     : provider.photos.isNotEmpty
-                        ? _buildChronologicalTimeline(provider, transcriptSessionId, transcriptScrollState,
-                            widget.topConversationId ?? provider.topConversationId)
+                        ? _buildChronologicalTimeline(
+                            provider,
+                            transcriptSessionId,
+                            transcriptScrollState,
+                            widget.topConversationId ?? provider.topConversationId,
+                          )
                         : getTranscriptWidget(
                             false,
                             provider.segments,
@@ -456,8 +464,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
-        final saved = await provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds,
-            applyToSpeaker: applyToSpeaker);
+        final saved = await provider.assignSpeakerToConversation(
+          speakerId,
+          personId,
+          personName,
+          segmentIds,
+          applyToSpeaker: applyToSpeaker,
+        );
         if (saved) {
           // The user's own answer now: no longer a label Omi carried over.
           for (final segment in provider.segments) {
@@ -540,14 +553,23 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         if (s.speakerId == segment.speakerId && !s.isUser && s.personId == null) s.id,
     ];
     OmiHaptics.light();
-    final ok = await provider.assignSpeakerToConversation(segment.speakerId, person.id, person.name, ids,
-        applyToSpeaker: true);
+    final ok = await provider.assignSpeakerToConversation(
+      segment.speakerId,
+      person.id,
+      person.name,
+      ids,
+      applyToSpeaker: true,
+    );
     if (!mounted) return;
     ok ? OmiHaptics.success() : OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain);
   }
 
   Widget _buildTranscriptTimelineItem(
-      TranscriptSegment segment, CaptureProvider provider, List<Person> people, SpeakerNames names) {
+    TranscriptSegment segment,
+    CaptureProvider provider,
+    List<Person> people,
+    SpeakerNames names,
+  ) {
     final bool isUser = segment.isUser;
     final name = names.forSegment(segment, person: personById(people, segment.personId));
     Widget avatar() => Semantics(
@@ -575,10 +597,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          if (!isUser) ...[
-            avatar(),
-            const SizedBox(width: 8),
-          ],
+          if (!isUser) ...[avatar(), const SizedBox(width: 8)],
           Flexible(
             child: GestureDetector(
               onTap: () => _editSegmentSpeaker(segment, provider),
@@ -610,10 +629,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
               ),
             ),
           ),
-          if (isUser) ...[
-            const SizedBox(width: 8),
-            avatar(),
-          ],
+          if (isUser) ...[const SizedBox(width: 8), avatar()],
         ],
       ),
     );
@@ -642,6 +658,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     required bool photoChannelActive,
     required bool transcriptionInterrupted,
   }) {
+    if (!provider.pendantCaptureVerified) return '';
     if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
     if (provider.terminalTranscriptionFailure != null) {
       return context.l10n.transcriptionUnavailableRecordingContinues;

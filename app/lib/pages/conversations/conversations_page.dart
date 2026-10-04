@@ -28,7 +28,16 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
+
 import 'package:omi/widgets/home_bottom_bar.dart';
+
+String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTime? end) {
+  final dates = OmiDateFormat.of(context);
+  if (end == null || (start.year == end.year && start.month == end.month && start.day == end.day)) {
+    return dates.date(start);
+  }
+  return '${dates.date(start)} – ${dates.date(end)}';
+}
 
 enum _ConversationListRowKind {
   topSpacer,
@@ -254,6 +263,26 @@ List<_ConversationListRow> _buildConversationListRows({
   }
 
   return rows;
+}
+
+bool _isLockedRow(List<_ConversationListRow> rows, int index) =>
+    index >= 0 &&
+    index < rows.length &&
+    rows[index].kind == _ConversationListRowKind.conversation &&
+    rows[index].conversation!.isLocked;
+
+/// For a locked conversation row in a run of two or more consecutive locked rows (one day): the
+/// whole run when [index] starts it, an empty list when an earlier row already drew it, and null
+/// for any other row, which draws itself.
+List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int index) {
+  if (!_isLockedRow(rows, index)) return null;
+  if (_isLockedRow(rows, index - 1)) return const [];
+  var end = index + 1;
+  while (_isLockedRow(rows, end)) {
+    end++;
+  }
+  if (end - index < 2) return null;
+  return [for (var i = index; i < end; i++) rows[i].conversation!];
 }
 
 /// Home: the live capture row, the Daily Recaps row, then every conversation, newest first, loading
@@ -617,7 +646,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 32.0),
-                      child: EmptyConversationsWidget(isStarredFilterActive: convoProvider.showStarredOnly),
+                      child: EmptyConversationsWidget(
+                        isStarredFilterActive: convoProvider.showStarredOnly,
+                        dateFilterLabel: convoProvider.selectedStartDate == null
+                            ? null
+                            : _conversationDateRangeLabel(
+                                context,
+                                convoProvider.selectedStartDate!,
+                                convoProvider.selectedEndDate,
+                              ),
+                      ),
                     ),
                   ),
                 )
@@ -672,6 +710,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           gap: row.captureGap!,
                         );
                       case _ConversationListRowKind.conversation:
+                        // Consecutive locked rows share one frosted card and one upgrade action;
+                        // the run's first row draws it and the rest of the run draws nothing.
+                        final lockedRun = _lockedRunAt(conversationRows, index);
+                        if (lockedRun != null) {
+                          if (lockedRun.isEmpty) return const SizedBox.shrink();
+                          return LockedConversationRun(
+                            key: ValueKey('locked_run_${row.conversation!.id}'),
+                            conversations: lockedRun,
+                            date: row.date,
+                          );
+                        }
                         return ConversationListItem(
                           key: ValueKey(row.conversation!.id),
                           conversation: row.conversation!,

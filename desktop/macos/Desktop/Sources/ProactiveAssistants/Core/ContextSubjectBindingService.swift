@@ -129,7 +129,7 @@ actor ContextSubjectBindingService {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else { return }
     let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
+    guard let pool else { throw ContextSubjectBindingError.databaseUnavailable }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     let mutationAuthorization = LocalMutationAuthorization {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
@@ -137,7 +137,7 @@ actor ContextSubjectBindingService {
     try await mutationAuthorization.withCommitLease {
       let (_, currentPoolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
       guard currentPoolEpoch == poolEpoch else {
-        throw ContextBucketStoreError.staleFence
+        throw ContextSubjectBindingError.staleFence
       }
       try await pool.write { db in
         try db.execute(
@@ -161,4 +161,10 @@ actor ContextSubjectBindingService {
     }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
   }
+}
+
+/// Subject bindings survive retirement of context buckets.
+enum ContextSubjectBindingError: Error {
+  case databaseUnavailable
+  case staleFence
 }

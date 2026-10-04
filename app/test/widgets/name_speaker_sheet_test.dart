@@ -15,7 +15,6 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/widgets/person_chip.dart';
 
 Person _person(String id, String name) =>
     Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
@@ -67,7 +66,7 @@ Future<void> _pumpSheet(
 }
 
 List<String> _chipNames(WidgetTester tester) =>
-    tester.widgetList<PersonChip>(find.byType(PersonChip)).map((c) => c.personName).toList();
+    tester.widgetList<OmiFilterChip>(find.byType(OmiFilterChip)).map((c) => c.label).toList();
 
 void main() {
   setUp(() async {
@@ -80,7 +79,12 @@ void main() {
       tester,
       people: [_person('maya', 'Maya'), _person('sam', 'Sam')],
       suggestion: SpeakerLabelSuggestionEvent(
-          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg0', suggestedPersonId: 'maya'),
+        speakerId: 0,
+        personId: '',
+        personName: 'Maya',
+        segmentId: 'seg0',
+        suggestedPersonId: 'maya',
+      ),
       onSpeakerAssigned: (_, id, __, ___, ____) async {
         assignments.add(id);
         return false;
@@ -248,6 +252,59 @@ void main() {
     expect(calls.last.whole, isTrue);
   });
 
+  testWidgets('unresolved speakers title reads "Name Speaker" instead of the dense tag number', (tester) async {
+    Future<void> open({required bool unresolvedSpeakers}) async {
+      await tester.pumpWidget(
+        ChangeNotifierProvider(
+          create: (_) => PeopleProvider(),
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => showNameSpeakerSheet(
+                    context,
+                    speakerId: 0,
+                    segmentId: 'only',
+                    segments: [
+                      TranscriptSegment(
+                        id: 'only',
+                        text: 'Only synthetic speech',
+                        speaker: 'SPEAKER_00',
+                        isUser: false,
+                        personId: null,
+                        start: 0,
+                        end: 2,
+                        translations: [],
+                      ),
+                    ],
+                    unresolvedSpeakers: unresolvedSpeakers,
+                    onSpeakerAssigned: (_, __, ___, ____, _____) async => true,
+                  ),
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+    }
+
+    await open(unresolvedSpeakers: true);
+    expect(find.text('Name Speaker'), findsOneWidget);
+    expect(find.text('Tag Speaker 1'), findsNothing);
+    await tester.tap(find.byType(OmiCloseButton));
+    await tester.pumpAndSettle();
+
+    await open(unresolvedSpeakers: false);
+    expect(find.text('Tag Speaker 1'), findsOneWidget);
+    await tester.tap(find.byType(OmiCloseButton));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('live default tags a single in-progress bubble as speaker-wide including later speech', (tester) async {
     final segments = [
       TranscriptSegment(
@@ -359,17 +416,17 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     // "+ Add Person" and "You" are present before searching.
     expect(find.text('Add Person'), findsOneWidget);
-    expect(find.text('Owner (You)'), findsOneWidget);
+    expect(find.text('You'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), 'AL');
     await tester.pumpAndSettle();
-    expect(_chipNames(tester), ['Add Person', 'Owner (You)', 'Alex', 'Alice', 'Alicia']);
+    expect(_chipNames(tester), ['Add Person', 'You', 'Alex', 'Alice', 'Alicia']);
     expect(find.text('Bob'), findsNothing);
 
     // Diacritic-insensitive: "jose" matches "José".
     await tester.enterText(find.byType(TextField), 'jose');
     await tester.pumpAndSettle();
-    expect(_chipNames(tester), ['Add Person', 'Owner (You)', 'José']);
+    expect(_chipNames(tester), ['Add Person', 'You', 'José']);
 
     // Clearing the query restores the full grid.
     await tester.enterText(find.byType(TextField), '');
@@ -401,7 +458,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'Zed');
     await tester.pumpAndSettle();
     // Only "+ Add Person" and "You" remain, plus the inline add row.
-    expect(_chipNames(tester), ['Add Person', 'Owner (You)']);
+    expect(_chipNames(tester), ['Add Person', 'You']);
     final addRow = find.text('Add "Zed" as a new person');
     expect(addRow, findsOneWidget);
 
@@ -448,7 +505,7 @@ void main() {
     );
     // "You" first, then most-recently-used (Bob > Carol), then frequency
     // (Alice has 3 segments but no recency).
-    expect(_chipNames(tester), ['Add Person', 'Owner (You)', 'Bob', 'Carol', 'Alice']);
+    expect(_chipNames(tester), ['Add Person', 'You', 'Bob', 'Carol', 'Alice']);
   });
 
   testWidgets('grid is capped and a "Show all" chip expands it inline', (tester) async {
@@ -480,7 +537,7 @@ void main() {
     // Person 20..26 all match; no cap, no expander while searching.
     expect(_chipNames(tester), [
       'Add Person',
-      'Owner (You)',
+      'You',
       ...List.generate(7, (i) => 'Person ${(20 + i).toString().padLeft(2, '0')}'),
     ]);
     expect(find.text('Show all 26 people'), findsNothing);

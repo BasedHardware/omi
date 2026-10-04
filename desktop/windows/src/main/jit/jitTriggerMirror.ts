@@ -1,11 +1,3 @@
-import {
-  compileTriggerSnapshotRow,
-  type JitCompiledTrigger,
-  type JitTriggerSnapshot,
-  type JitTriggerSnapshotRow
-} from '../../shared/jitTriggerRuntime'
-import { createHash, createHmac, randomBytes } from 'node:crypto'
-
 /**
  * Driver-neutral durable mirror for the Windows JIT lane.
  *
@@ -49,17 +41,6 @@ CREATE TABLE IF NOT EXISTS jit_temporary_frame (
 `
 
 export const JIT_TRIGGER_MIRROR_SCHEMA = `
-CREATE TABLE IF NOT EXISTS jit_trigger_mirror (
-  memory_id TEXT PRIMARY KEY,
-  account_generation INTEGER NOT NULL,
-  item_revision INTEGER NOT NULL,
-  updated_at TEXT NOT NULL,
-  condition_json TEXT NOT NULL,
-  action_type TEXT NOT NULL,
-  action_prompt TEXT NOT NULL,
-  wakeup_budget_per_day INTEGER,
-  snoozed_until TEXT
-);
 CREATE TABLE IF NOT EXISTS jit_fact_mirror (
   memory_id TEXT PRIMARY KEY,
   account_generation INTEGER NOT NULL,
@@ -84,15 +65,6 @@ CREATE TABLE IF NOT EXISTS jit_alias_mirror (
   item_revision INTEGER NOT NULL,
   payload_json TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS jit_snapshot_receipt (
-  owner_id TEXT PRIMARY KEY,
-  account_generation INTEGER NOT NULL,
-  head_commit_id TEXT NOT NULL,
-  commit_sequence INTEGER NOT NULL,
-  snapshot_revision TEXT NOT NULL,
-  trigger_row_count INTEGER NOT NULL,
-  updated_at TEXT NOT NULL
-);
 CREATE TABLE IF NOT EXISTS jit_ledger_snapshot_receipt (
   owner_id TEXT PRIMARY KEY,
   schema_version TEXT NOT NULL DEFAULT 'knowledge_ledger_mirror.v1',
@@ -111,59 +83,7 @@ CREATE TABLE IF NOT EXISTS jit_ledger_snapshot_receipt (
   row_count INTEGER NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS jit_wakeup_receipt (
-  continuity_key TEXT PRIMARY KEY,
-  trigger_id TEXT NOT NULL,
-  lane TEXT NOT NULL,
-  budget_day TEXT NOT NULL,
-  snapshot_revision TEXT NOT NULL,
-  observation_fingerprint TEXT NOT NULL,
-  state TEXT NOT NULL,
-  lease_token TEXT,
-  lease_expires_at INTEGER,
-  updated_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS jit_proactivity_reservation_receipt (
-  event_id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL,
-  account_generation INTEGER NOT NULL,
-  candidate_id TEXT NOT NULL,
-  operation TEXT NOT NULL,
-  request_hash TEXT NOT NULL,
-  server_receipt_json TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
 ${JIT_HOST_SURFACE_SCHEMA}
-CREATE INDEX IF NOT EXISTS idx_jit_wakeup_trigger_day
-  ON jit_wakeup_receipt(trigger_id, budget_day, state);
-CREATE INDEX IF NOT EXISTS idx_jit_wakeup_day
-  ON jit_wakeup_receipt(budget_day, state);
-CREATE TABLE IF NOT EXISTS jit_ambient_context_state (
-  context_id TEXT PRIMARY KEY,
-  semantic_fingerprint TEXT NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS jit_feedback_outbox (
-  event_id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL,
-  account_generation INTEGER NOT NULL,
-  action TEXT NOT NULL,
-  subject_id TEXT NOT NULL,
-  trigger_revision INTEGER,
-  occurred_at INTEGER NOT NULL,
-  snoozed_until TEXT,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  state TEXT NOT NULL DEFAULT 'pending',
-  last_error TEXT,
-  next_attempt_at INTEGER NOT NULL DEFAULT 0,
-  updated_at INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_jit_feedback_pending
-  ON jit_feedback_outbox(state, occurred_at);
-CREATE TABLE IF NOT EXISTS jit_installation_identity (
-  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  installation_id TEXT NOT NULL
-);
 `
 
 export type JitMirrorStatement = {
@@ -175,54 +95,6 @@ export type JitMirrorStatement = {
 export type JitMirrorDb = {
   exec(sql: string): unknown
   prepare(sql: string): JitMirrorStatement
-}
-
-const OPAQUE_ID_PATTERN = /^[a-f0-9]{64}$/
-
-/**
- * Return the one random secret for this local installation. It is intentionally
- * stored without any context dictionary: HMAC-derived retained IDs remain
- * stable for local idempotency but cannot be reconstructed from app/window
- * text, trigger facts, or the machine hostname.
- */
-export function getOrCreateJitInstallationId(
-  db: JitMirrorDb,
-  randomId: () => string = () => randomBytes(32).toString('hex')
-): string {
-  const read = (): string | null => {
-    const row = db
-      .prepare(
-        'SELECT installation_id AS installationId FROM jit_installation_identity WHERE singleton = 1'
-      )
-      .get() as { installationId?: unknown } | undefined
-    return typeof row?.installationId === 'string' && OPAQUE_ID_PATTERN.test(row.installationId)
-      ? row.installationId
-      : null
-  }
-  const existing = read()
-  if (existing) return existing
-  const generated = randomId().toLowerCase()
-  if (!OPAQUE_ID_PATTERN.test(generated)) throw new JitMirrorError('malformed_row')
-  db.prepare(
-    'INSERT OR IGNORE INTO jit_installation_identity (singleton, installation_id) VALUES (1, ?)'
-  ).run(generated)
-  const installed = read()
-  if (!installed) throw new JitMirrorError('database_unavailable')
-  return installed
-}
-
-/** HMAC-SHA256 IDs are opaque on the wire while remaining locally idempotent. */
-export function deriveJitOpaqueId(db: JitMirrorDb, namespace: string, seed: string): string {
-  if (!namespace || !seed) throw new JitMirrorError('malformed_row')
-  return createHmac('sha256', Buffer.from(getOrCreateJitInstallationId(db), 'hex'))
-    .update(`${namespace}\u0000${seed}`, 'utf8')
-    .digest('hex')
-}
-
-/** The backend's 64-hex device field is derived from a random installation ID,
- * never from a hostname or another machine-identifying fact. */
-export function jitInstallationDeviceId(db: JitMirrorDb): string {
-  return createHash('sha256').update(getOrCreateJitInstallationId(db), 'utf8').digest('hex')
 }
 
 export type JitMirrorErrorCode =
@@ -240,14 +112,6 @@ export class JitMirrorError extends Error {
     super(code)
     this.name = 'JitMirrorError'
   }
-}
-
-export type JitMirrorReceipt = {
-  ownerId: string
-  accountGeneration: number
-  commitSequence: number
-  snapshotRevision: string
-  rowCount: number
 }
 
 export type JitLedgerMirrorRow = {
@@ -307,23 +171,6 @@ export type JitLedgerMirrorReceipt = {
   rowCount: number
 }
 
-export type JitWakeupClaim = {
-  continuityKey: string
-  triggerId: string
-  leaseToken: string
-}
-
-export type JitProactivityReservationReceipt = {
-  eventId: string
-  ownerId: string
-  accountGeneration: number
-  candidateId: string
-  operation: string
-  requestHash: string
-  serverReceiptJson: string
-  createdAt: number
-}
-
 export type JitKeyframePin = {
   frameId: number
   ownerId: string
@@ -379,15 +226,6 @@ export function pinJitConversationKeyframe(
 export function isJitConversationKeyframePinned(db: JitMirrorDb, frameId: number): boolean {
   const row = db.prepare('SELECT 1 FROM jit_keyframe_pin WHERE frame_id = ?').get(frameId)
   return Boolean(row)
-}
-
-/** Remove only the permanent pins owned by one deleted conversation. */
-export function listJitConversationKeyframePins(db: JitMirrorDb, conversationId: string): number[] {
-  safeIdentifier(conversationId)
-  const rows = db
-    .prepare('SELECT frame_id AS frameId FROM jit_keyframe_pin WHERE conversation_id = ?')
-    .all(conversationId) as Array<{ frameId: number }>
-  return rows.map((row) => row.frameId)
 }
 
 /** Full pin ownership, including the captured path needed when the base
@@ -544,102 +382,6 @@ export function removeJitConversationKeyframePin(db: JitMirrorDb, frameId: numbe
   return (result.changes ?? 0) === 1
 }
 
-/** Compatibility helper for callers that own the entire delete transaction. */
-export function takeJitConversationKeyframePins(db: JitMirrorDb, conversationId: string): number[] {
-  const frameIds = listJitConversationKeyframePins(db, conversationId)
-  db.prepare('DELETE FROM jit_keyframe_pin WHERE conversation_id = ?').run(conversationId)
-  return frameIds
-}
-
-/** Ambient evidence is temporary until a real conversation is attached. */
-export function markJitTemporaryFrame(
-  db: JitMirrorDb,
-  input: { frameId: number; ownerId: string; expiresAt: number; createdAt?: number }
-): void {
-  if (!Number.isInteger(input.frameId) || input.frameId < 0)
-    throw new JitMirrorError('malformed_row')
-  safeIdentifier(input.ownerId)
-  const createdAt = input.createdAt ?? Date.now()
-  if (
-    !Number.isFinite(createdAt) ||
-    !Number.isFinite(input.expiresAt) ||
-    input.expiresAt < createdAt ||
-    input.expiresAt > createdAt + 7 * 24 * 60 * 60_000
-  )
-    throw new JitMirrorError('malformed_row')
-  db.prepare(
-    `INSERT INTO jit_temporary_frame (frame_id, owner_id, expires_at, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(frame_id) DO UPDATE SET owner_id=excluded.owner_id, expires_at=excluded.expires_at, created_at=excluded.created_at`
-  ).run(input.frameId, input.ownerId, input.expiresAt, createdAt)
-}
-
-export function pruneJitTemporaryFrames(db: JitMirrorDb, now = Date.now()): number {
-  const result = db.prepare('DELETE FROM jit_temporary_frame WHERE expires_at <= ?').run(now)
-  return result.changes ?? 0
-}
-
-/** Durable semantic novelty gate for the ambient lane. Timestamp-only
- * observations are not enough: an unchanged context remains suppressed until
- * its cooldown, while a materially changed fingerprint can be reconsidered. */
-export function claimJitAmbientContext(
-  db: JitMirrorDb,
-  input: { contextId: string; semanticFingerprint: string; now?: number; cooldownMs?: number }
-): boolean {
-  const contextId = safeIdentifier(input.contextId, 256)
-  if (!/^[0-9a-f]{8,128}$/i.test(input.semanticFingerprint))
-    throw new JitMirrorError('malformed_row')
-  const now = input.now ?? Date.now()
-  const cooldownMs = input.cooldownMs ?? 15 * 60_000
-  if (!Number.isFinite(now) || !Number.isFinite(cooldownMs) || cooldownMs < 0)
-    throw new JitMirrorError('malformed_row')
-  return runTransaction(db, () => {
-    const existing = db
-      .prepare(
-        'SELECT semantic_fingerprint AS semanticFingerprint, updated_at AS updatedAt FROM jit_ambient_context_state WHERE context_id = ?'
-      )
-      .get(contextId) as { semanticFingerprint: string; updatedAt: number } | undefined
-    if (
-      existing &&
-      existing.semanticFingerprint === input.semanticFingerprint &&
-      now - existing.updatedAt < cooldownMs
-    )
-      return false
-    db.prepare(
-      `INSERT INTO jit_ambient_context_state (context_id, semantic_fingerprint, updated_at) VALUES (?, ?, ?) ON CONFLICT(context_id) DO UPDATE SET semantic_fingerprint=excluded.semantic_fingerprint, updated_at=excluded.updated_at`
-    ).run(contextId, input.semanticFingerprint, now)
-    return true
-  })
-}
-
-export type JitFeedbackAction =
-  | 'useful'
-  | 'false_positive'
-  | 'snooze'
-  | 'disable'
-  | 'missed_or_late'
-export type JitFeedbackOutboxEntry = {
-  eventId: string
-  ownerId: string
-  accountGeneration: number
-  action: JitFeedbackAction
-  subjectId: string
-  triggerRevision: number | null
-  occurredAt: number
-  snoozedUntil: string | null
-  attempts: number
-  state: 'pending' | 'sending' | 'failed' | 'unsupported' | 'complete'
-  lastError: string | null
-  nextAttemptAt?: number
-}
-
-type SnapshotReceiptRow = {
-  owner_id: string
-  account_generation: number
-  head_commit_id: string
-  commit_sequence: number
-  snapshot_revision: string
-  trigger_row_count: number
-}
-
 type LedgerReceiptRow = {
   owner_id: string
   schema_version: string
@@ -668,11 +410,6 @@ function nowIso(now: number): string {
   return new Date(now).toISOString()
 }
 
-function randomLeaseToken(): string {
-  // The token is only a local compare-and-swap nonce; no secret is persisted.
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 18)}`
-}
-
 function runTransaction<T>(db: JitMirrorDb, fn: () => T): T {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -689,67 +426,8 @@ function runTransaction<T>(db: JitMirrorDb, fn: () => T): T {
   }
 }
 
-function assertSnapshotIdentity(snapshot: JitTriggerSnapshot, ownerId: string): void {
-  if (!snapshot.complete || snapshot.failureReason) throw new JitMirrorError('incomplete')
-  if (
-    snapshot.ownerId !== ownerId ||
-    !snapshot.ownerId ||
-    !snapshot.snapshotRevision ||
-    snapshot.accountGeneration < 0 ||
-    snapshot.commitSequence < 0
-  ) {
-    throw new JitMirrorError('invalid_identity')
-  }
-  if (snapshot.rows.length > 500) throw new JitMirrorError('malformed_row')
-}
-
-function validateRows(rows: JitTriggerSnapshotRow[]): JitCompiledTrigger[] {
-  const seen = new Set<string>()
-  const compiled: JitCompiledTrigger[] = []
-  for (const row of rows) {
-    if (seen.has(row.memoryId)) throw new JitMirrorError('malformed_row')
-    seen.add(row.memoryId)
-    try {
-      compiled.push(compileTriggerSnapshotRow(row))
-    } catch {
-      throw new JitMirrorError('malformed_row')
-    }
-  }
-  return compiled
-}
-
 export function initializeJitTriggerMirror(db: JitMirrorDb): void {
   db.exec(JIT_TRIGGER_MIRROR_SCHEMA)
-  // Existing development profiles may have created the original JIT outbox
-  // before the server feedback contract carried the generation/snooze fence.
-  // These additive columns preserve those rows while making new writes typed.
-  try {
-    db.exec(
-      'ALTER TABLE jit_feedback_outbox ADD COLUMN account_generation INTEGER NOT NULL DEFAULT 0'
-    )
-  } catch {
-    /* already present */
-  }
-  try {
-    db.exec('ALTER TABLE jit_feedback_outbox ADD COLUMN snoozed_until TEXT')
-  } catch {
-    /* already present */
-  }
-  try {
-    db.exec('ALTER TABLE jit_feedback_outbox ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0')
-  } catch {
-    /* already present */
-  }
-  try {
-    db.exec('ALTER TABLE jit_feedback_outbox ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0')
-  } catch {
-    /* already present */
-  }
-  try {
-    db.exec('ALTER TABLE jit_trigger_mirror ADD COLUMN snoozed_until TEXT')
-  } catch {
-    /* already present */
-  }
   try {
     db.exec("ALTER TABLE jit_keyframe_pin ADD COLUMN image_path TEXT NOT NULL DEFAULT ''")
   } catch {
@@ -799,149 +477,6 @@ export function initializeJitTriggerMirrorSafely(db: JitMirrorDb): boolean {
       console.error('[jit] host-facing mirror tables unavailable; Rewind prune may skip', hostError)
     }
     return false
-  }
-}
-
-export function reconcileJitTriggerSnapshot(
-  db: JitMirrorDb,
-  snapshot: JitTriggerSnapshot,
-  ownerId: string,
-  now = Date.now()
-): JitMirrorReceipt {
-  assertSnapshotIdentity(snapshot, ownerId)
-  validateRows(snapshot.rows)
-  const prior = db
-    .prepare(
-      `SELECT owner_id, account_generation, head_commit_id, commit_sequence, snapshot_revision, trigger_row_count FROM jit_snapshot_receipt LIMIT 1`
-    )
-    .get() as SnapshotReceiptRow | undefined
-  if (prior) {
-    if (snapshot.accountGeneration < prior.account_generation)
-      throw new JitMirrorError('stale_generation')
-    if (
-      snapshot.accountGeneration === prior.account_generation &&
-      snapshot.commitSequence < prior.commit_sequence
-    )
-      throw new JitMirrorError('stale_revision')
-    if (
-      snapshot.accountGeneration === prior.account_generation &&
-      snapshot.commitSequence === prior.commit_sequence &&
-      snapshot.snapshotRevision !== prior.snapshot_revision
-    )
-      throw new JitMirrorError('conflicting_revision')
-  }
-  return runTransaction(db, () => {
-    if (
-      prior &&
-      (snapshot.accountGeneration > prior.account_generation || prior.owner_id !== snapshot.ownerId)
-    ) {
-      // A generation/owner transition is not permission to drop local pins:
-      // those rows carry the only durable authority to unlink old-account image
-      // files after a crash or sign-out.  Materialize a retry entry for every
-      // pin, then let the independent cleanup worker retire both rows only after
-      // unlink success (or ENOENT).
-      for (const pin of listAllJitKeyframePinDetails(db)) {
-        enqueueJitKeyframeCleanup(db, pin, now)
-      }
-      db.prepare('DELETE FROM jit_wakeup_receipt').run()
-      db.prepare('DELETE FROM jit_proactivity_reservation_receipt').run()
-      db.prepare('DELETE FROM jit_ambient_context_state').run()
-      db.prepare('DELETE FROM jit_temporary_frame').run()
-      db.prepare('DELETE FROM jit_fact_mirror').run()
-      db.prepare('DELETE FROM jit_history_mirror').run()
-      db.prepare('DELETE FROM jit_playbook_mirror').run()
-      db.prepare('DELETE FROM jit_alias_mirror').run()
-    }
-    for (const row of snapshot.rows) {
-      db.prepare(
-        `INSERT INTO jit_trigger_mirror (memory_id, account_generation, item_revision, updated_at, condition_json, action_type, action_prompt, wakeup_budget_per_day, snoozed_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(memory_id) DO UPDATE SET account_generation=excluded.account_generation, item_revision=excluded.item_revision, updated_at=excluded.updated_at, condition_json=excluded.condition_json, action_type=excluded.action_type, action_prompt=excluded.action_prompt, wakeup_budget_per_day=excluded.wakeup_budget_per_day, snoozed_until=excluded.snoozed_until`
-      ).run(
-        row.memoryId,
-        snapshot.accountGeneration,
-        row.itemRevision,
-        row.updatedAt,
-        row.triggerConditionJson,
-        row.action.type,
-        row.action.prompt,
-        row.wakeupBudgetPerDay,
-        row.snoozedUntil ?? null
-      )
-    }
-    if (snapshot.rows.length === 0) db.prepare('DELETE FROM jit_trigger_mirror').run()
-    else {
-      const placeholders = snapshot.rows.map(() => '?').join(',')
-      db.prepare(`DELETE FROM jit_trigger_mirror WHERE memory_id NOT IN (${placeholders})`).run(
-        ...snapshot.rows.map((row) => row.memoryId)
-      )
-    }
-    db.prepare('DELETE FROM jit_snapshot_receipt WHERE owner_id != ?').run(snapshot.ownerId)
-    db.prepare(
-      `INSERT INTO jit_snapshot_receipt (owner_id, account_generation, head_commit_id, commit_sequence, snapshot_revision, trigger_row_count, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_id) DO UPDATE SET account_generation=excluded.account_generation, head_commit_id=excluded.head_commit_id, commit_sequence=excluded.commit_sequence, snapshot_revision=excluded.snapshot_revision, trigger_row_count=excluded.trigger_row_count, updated_at=excluded.updated_at`
-    ).run(
-      snapshot.ownerId,
-      snapshot.accountGeneration,
-      snapshot.headCommitId,
-      snapshot.commitSequence,
-      snapshot.snapshotRevision,
-      snapshot.rows.length,
-      nowIso(now)
-    )
-    return {
-      ownerId: snapshot.ownerId,
-      accountGeneration: snapshot.accountGeneration,
-      commitSequence: snapshot.commitSequence,
-      snapshotRevision: snapshot.snapshotRevision,
-      rowCount: snapshot.rows.length
-    }
-  })
-}
-
-export function readCompiledJitTriggers(
-  db: JitMirrorDb,
-  receipt: JitMirrorReceipt
-): JitCompiledTrigger[] {
-  const current = db
-    .prepare(
-      'SELECT snapshot_revision, account_generation, commit_sequence FROM jit_snapshot_receipt WHERE owner_id = ?'
-    )
-    .get(receipt.ownerId) as
-    | { snapshot_revision: string; account_generation: number; commit_sequence: number }
-    | undefined
-  if (
-    !current ||
-    current.snapshot_revision !== receipt.snapshotRevision ||
-    current.account_generation !== receipt.accountGeneration ||
-    current.commit_sequence !== receipt.commitSequence
-  )
-    throw new JitMirrorError('stale_revision')
-  const rows = db
-    .prepare(
-      'SELECT memory_id AS memoryId, item_revision AS itemRevision, updated_at AS updatedAt, condition_json AS triggerConditionJson, action_type AS actionType, action_prompt AS actionPrompt, wakeup_budget_per_day AS wakeupBudgetPerDay, snoozed_until AS snoozedUntil FROM jit_trigger_mirror ORDER BY memory_id'
-    )
-    .all() as Array<{
-    memoryId: string
-    itemRevision: number
-    updatedAt: string
-    triggerConditionJson: string
-    actionType: 'agent_prompt'
-    actionPrompt: string
-    wakeupBudgetPerDay: number | null
-    snoozedUntil: string | null
-  }>
-  try {
-    return rows.map((row) =>
-      compileTriggerSnapshotRow({
-        memoryId: row.memoryId,
-        itemRevision: row.itemRevision,
-        updatedAt: row.updatedAt,
-        triggerConditionJson: row.triggerConditionJson,
-        action: { type: row.actionType, prompt: row.actionPrompt },
-        wakeupBudgetPerDay: row.wakeupBudgetPerDay,
-        snoozedUntil: row.snoozedUntil
-      })
-    )
-  } catch {
-    throw new JitMirrorError('malformed_row')
   }
 }
 
@@ -1026,18 +561,6 @@ export function readActiveJitPlaybooks(
     accountGeneration,
     limit
   )
-}
-
-/** Agent-directed history lookup. The host never guesses when this should run. */
-export function queryJitHistory(
-  db: JitMirrorDb,
-  ownerId: string,
-  accountGeneration: number,
-  query: string,
-  limit = 20,
-  options: Omit<JitHistoryQueryOptions, 'limit'> = {}
-): JitMirrorKnowledgeItem[] {
-  return queryJitHistoryPage(db, ownerId, accountGeneration, query, { ...options, limit }).items
 }
 
 /**
@@ -1309,13 +832,7 @@ export function reconcileJitLedgerMirror(
       for (const pin of listAllJitKeyframePinDetails(db)) {
         enqueueJitKeyframeCleanup(db, pin, now)
       }
-      db.prepare('DELETE FROM jit_trigger_mirror').run()
-      db.prepare('DELETE FROM jit_snapshot_receipt').run()
-      db.prepare('DELETE FROM jit_wakeup_receipt').run()
-      db.prepare('DELETE FROM jit_proactivity_reservation_receipt').run()
-      db.prepare('DELETE FROM jit_ambient_context_state').run()
       db.prepare('DELETE FROM jit_temporary_frame').run()
-      db.prepare('DELETE FROM jit_feedback_outbox').run()
     }
     db.prepare('DELETE FROM jit_fact_mirror').run()
     db.prepare('DELETE FROM jit_history_mirror').run()
@@ -1447,224 +964,4 @@ export function readCurrentJitLedgerMirrorReceipt(
     terminalCount: row.terminal_count,
     rowCount: row.row_count
   }
-}
-
-export function claimJitWakeup(
-  db: JitMirrorDb,
-  input: {
-    continuityKey: string
-    triggerId: string
-    lane: 'planned' | 'ambient' | 'ambient_nano'
-    budgetDay: string
-    snapshotRevision: string
-    observationFingerprint: string
-    budget: number | null
-    now?: number
-    globalDailyBudget?: number
-  }
-): JitWakeupClaim | null {
-  const continuityKey = safeIdentifier(input.continuityKey)
-  const triggerId = safeIdentifier(input.triggerId)
-  const now = input.now ?? Date.now()
-  return runTransaction(db, () => {
-    const existing = db
-      .prepare('SELECT state, lease_expires_at FROM jit_wakeup_receipt WHERE continuity_key = ?')
-      .get(continuityKey) as { state: string; lease_expires_at: number | null } | undefined
-    if (existing && existing.state === 'complete') return null
-    if (existing && (existing.lease_expires_at === null || existing.lease_expires_at > now))
-      return null
-    // These rows are local leases and duplicate suppression only.  Daily
-    // trigger, notification, nano, and full-turn budgets belong to the
-    // authenticated reservation authority; applying a local count here would
-    // make a stale client silently disagree with the server policy.
-    const leaseToken = randomLeaseToken()
-    db.prepare(
-      `INSERT INTO jit_wakeup_receipt (continuity_key, trigger_id, lane, budget_day, snapshot_revision, observation_fingerprint, state, lease_token, lease_expires_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'claimed', ?, ?, ?) ON CONFLICT(continuity_key) DO UPDATE SET trigger_id=excluded.trigger_id, lane=excluded.lane, budget_day=excluded.budget_day, snapshot_revision=excluded.snapshot_revision, observation_fingerprint=excluded.observation_fingerprint, state='claimed', lease_token=excluded.lease_token, lease_expires_at=excluded.lease_expires_at, updated_at=excluded.updated_at`
-    ).run(
-      continuityKey,
-      triggerId,
-      input.lane,
-      input.budgetDay,
-      input.snapshotRevision,
-      input.observationFingerprint,
-      leaseToken,
-      now + 5 * 60_000,
-      now
-    )
-    return { continuityKey, triggerId, leaseToken }
-  })
-}
-
-/** Persist the server receipt only as a local idempotency/dedupe aid. It never
- * grants execution authority; callers must have just received the server ack. */
-export function persistJitProactivityReservation(
-  db: JitMirrorDb,
-  receipt: JitProactivityReservationReceipt
-): void {
-  if (!/^[a-f0-9]{64}$/.test(receipt.eventId) || !/^[a-f0-9]{64}$/.test(receipt.candidateId))
-    throw new JitMirrorError('malformed_row')
-  safeIdentifier(receipt.ownerId)
-  if (!Number.isInteger(receipt.accountGeneration) || receipt.accountGeneration < 0)
-    throw new JitMirrorError('invalid_identity')
-  if (!/^[a-f0-9]{64}$/.test(receipt.requestHash)) throw new JitMirrorError('malformed_row')
-  db.prepare(
-    `INSERT INTO jit_proactivity_reservation_receipt (event_id, owner_id, account_generation, candidate_id, operation, request_hash, server_receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_id) DO UPDATE SET owner_id=excluded.owner_id, account_generation=excluded.account_generation, candidate_id=excluded.candidate_id, operation=excluded.operation, request_hash=excluded.request_hash, server_receipt_json=excluded.server_receipt_json, created_at=excluded.created_at`
-  ).run(
-    receipt.eventId,
-    receipt.ownerId,
-    receipt.accountGeneration,
-    receipt.candidateId,
-    receipt.operation,
-    receipt.requestHash,
-    receipt.serverReceiptJson,
-    receipt.createdAt
-  )
-}
-
-export function readJitProactivityReservation(
-  db: JitMirrorDb,
-  eventId: string,
-  ownerId: string
-): JitProactivityReservationReceipt | null {
-  safeIdentifier(eventId)
-  safeIdentifier(ownerId)
-  const row = db
-    .prepare(
-      `SELECT event_id AS eventId, owner_id AS ownerId, account_generation AS accountGeneration, candidate_id AS candidateId, operation, request_hash AS requestHash, server_receipt_json AS serverReceiptJson, created_at AS createdAt FROM jit_proactivity_reservation_receipt WHERE event_id = ? AND owner_id = ?`
-    )
-    .get(eventId, ownerId) as JitProactivityReservationReceipt | undefined
-  return row ?? null
-}
-
-export function beginJitWakeup(db: JitMirrorDb, claim: JitWakeupClaim, now = Date.now()): boolean {
-  const result = db
-    .prepare(
-      `UPDATE jit_wakeup_receipt SET state='executing', updated_at=? WHERE continuity_key=? AND lease_token=? AND state='claimed' AND lease_expires_at>?`
-    )
-    .run(now, claim.continuityKey, claim.leaseToken, now)
-  return (result.changes ?? 0) === 1
-}
-
-export function cancelJitWakeup(db: JitMirrorDb, claim: JitWakeupClaim, now = Date.now()): boolean {
-  const result = db
-    .prepare(
-      `UPDATE jit_wakeup_receipt SET state='complete', updated_at=?, lease_expires_at=NULL WHERE continuity_key=? AND lease_token=? AND state='claimed'`
-    )
-    .run(now, claim.continuityKey, claim.leaseToken)
-  return (result.changes ?? 0) === 1
-}
-
-export function completeJitWakeup(
-  db: JitMirrorDb,
-  claim: JitWakeupClaim,
-  now = Date.now()
-): boolean {
-  const result = db
-    .prepare(
-      `UPDATE jit_wakeup_receipt SET state='complete', updated_at=?, lease_expires_at=NULL WHERE continuity_key=? AND lease_token=? AND state='executing'`
-    )
-    .run(now, claim.continuityKey, claim.leaseToken)
-  return (result.changes ?? 0) === 1
-}
-
-export function enqueueJitFeedback(
-  db: JitMirrorDb,
-  entry: Omit<JitFeedbackOutboxEntry, 'attempts' | 'state' | 'lastError' | 'nextAttemptAt'>
-): void {
-  if (!/^[a-f0-9]{64}$/.test(entry.eventId)) throw new JitMirrorError('malformed_row')
-  safeIdentifier(entry.ownerId)
-  safeIdentifier(entry.subjectId)
-  if (!Number.isInteger(entry.accountGeneration) || entry.accountGeneration < 0)
-    throw new JitMirrorError('invalid_identity')
-  if (entry.action === 'snooze' && !entry.snoozedUntil) throw new JitMirrorError('malformed_row')
-  if (entry.action !== 'snooze' && entry.snoozedUntil) throw new JitMirrorError('malformed_row')
-  db.prepare(
-    `INSERT INTO jit_feedback_outbox (event_id, owner_id, account_generation, action, subject_id, trigger_revision, occurred_at, snoozed_until, attempts, state, last_error, next_attempt_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending', NULL, ?, ?) ON CONFLICT(event_id) DO NOTHING`
-  ).run(
-    entry.eventId,
-    entry.ownerId,
-    entry.accountGeneration,
-    entry.action,
-    entry.subjectId,
-    entry.triggerRevision,
-    entry.occurredAt,
-    entry.snoozedUntil,
-    entry.occurredAt,
-    entry.occurredAt
-  )
-}
-
-export function listPendingJitFeedback(
-  db: JitMirrorDb,
-  limit = 32,
-  now = Date.now()
-): JitFeedbackOutboxEntry[] {
-  // A process crash after marking sending must not strand the event forever.
-  // Recovery is bounded and local; the next drain still requires an explicit
-  // authenticated server receipt before marking complete.
-  db.prepare(
-    `UPDATE jit_feedback_outbox SET state='failed', last_error='stale sending recovered', updated_at=? WHERE state='sending' AND updated_at < ?`
-  ).run(now, now - 5 * 60_000)
-  const rows = db
-    .prepare(
-      `SELECT event_id AS eventId, owner_id AS ownerId, account_generation AS accountGeneration, action, subject_id AS subjectId, trigger_revision AS triggerRevision, occurred_at AS occurredAt, snoozed_until AS snoozedUntil, attempts, state, last_error AS lastError, next_attempt_at AS nextAttemptAt FROM jit_feedback_outbox WHERE state IN ('pending', 'failed') AND next_attempt_at <= ? ORDER BY occurred_at, event_id LIMIT ?`
-    )
-    .all(now, Math.max(1, Math.min(32, Math.trunc(limit)))) as Array<
-    Omit<JitFeedbackOutboxEntry, 'triggerRevision'> & { triggerRevision: number | string | null }
-  >
-  return rows.map((row) => ({
-    ...row,
-    triggerRevision:
-      row.triggerRevision === null || row.triggerRevision === ''
-        ? null
-        : Number.isInteger(Number(row.triggerRevision))
-          ? Number(row.triggerRevision)
-          : null
-  }))
-}
-
-export function markJitFeedbackSending(db: JitMirrorDb, eventId: string, now = Date.now()): void {
-  db.prepare(
-    `UPDATE jit_feedback_outbox SET state='sending', attempts=attempts+1, updated_at=? WHERE event_id=? AND state IN ('pending', 'failed')`
-  ).run(now, eventId)
-}
-
-export function markJitFeedbackResult(
-  db: JitMirrorDb,
-  eventId: string,
-  sent: boolean,
-  error?: string,
-  now = Date.now()
-): void {
-  const row = db
-    .prepare("SELECT attempts FROM jit_feedback_outbox WHERE event_id = ? AND state = 'sending'")
-    .get(eventId) as { attempts: number } | undefined
-  const attempts = row?.attempts ?? 1
-  const nextAttemptAt = sent
-    ? 0
-    : now + Math.min(6 * 60 * 60_000, 30_000 * 2 ** Math.min(Math.max(attempts - 1, 0), 8))
-  db.prepare(
-    `UPDATE jit_feedback_outbox SET state=?, last_error=?, next_attempt_at=?, updated_at=? WHERE event_id=? AND state='sending'`
-  ).run(
-    sent ? 'complete' : 'failed',
-    sent ? null : (error ?? 'feedback delivery failed').slice(0, 240),
-    nextAttemptAt,
-    now,
-    eventId
-  )
-}
-
-/** Terminal local state for a feedback row whose lane has no server contract.
- * It is deliberately not `complete`: the UI must never imply that the server
- * accepted an ambient action that carries no trigger revision. Keeping the row
- * also makes the unsupported decision auditable without retrying forever. */
-export function markJitFeedbackUnsupported(
-  db: JitMirrorDb,
-  eventId: string,
-  reason: string,
-  now = Date.now()
-): void {
-  db.prepare(
-    `UPDATE jit_feedback_outbox SET state='unsupported', last_error=?, next_attempt_at=0, updated_at=? WHERE event_id=? AND state IN ('pending', 'failed', 'sending')`
-  ).run(reason.slice(0, 240), now, eventId)
 }

@@ -6,11 +6,19 @@ import re
 from pathlib import Path
 from typing import Any
 
+from database.conversation_scan import PEOPLE_STATS_FIELD_PATHS
 from tests.support.firestore_query_drivers import CallerProfile, FROZEN_LATER, FROZEN_NOW
 
 TARGETS = frozenset(
-    f'database.conversations.{name}'
-    for name in ('get_conversations', 'get_conversations_count', 'get_conversations_without_photos')
+    {
+        f'database.conversations.{name}'
+        for name in ('get_conversations', 'get_conversations_count', 'get_conversations_without_photos')
+    }
+    | {
+        'database.conversation_scan.iter_conversations',
+        'database.conversation_scan.people_stats_scan',
+        'database.conversation_scan.speaker_browse_scan',
+    }
 )
 
 
@@ -29,6 +37,14 @@ def _profile(name: str, *, photo: bool = False, **domains) -> CallerProfile:
 
 
 _DATES = {'start_date': [None, FROZEN_NOW], 'end_date': [None, FROZEN_LATER]}
+
+
+def _scan_profile(name: str, **domains) -> CallerProfile:
+    """``iter_conversations`` caller domain row — its parameter surface is the
+    scan reader's, not the retired ``get_conversations*`` signature."""
+    return CallerProfile(name, {**domains})
+
+
 _SELECTORS = {'include_discarded': [False, True], 'folder_id': [None, 'folder-1'], 'starred': [None, False, True]}
 _MULTI_STATUS = [['processing', 'completed']]
 _ROUTE_SOURCES = [[], ['omi'], ['friend', 'omi']]
@@ -46,10 +62,37 @@ WITHOUT_PHOTOS_PROFILES = (
     _profile(
         'main-list-default-or-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS
     ),
-    _profile('people-stats'),
-    _profile('speaker-search-fallback', include_discarded=[False, True], **_DATES),
     _profile('prior-meeting-context', start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
     _profile('wrapped-2025', statuses=[['completed']], start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
+)
+
+SCAN_PROFILES = (
+    _scan_profile(
+        'people-stats',
+        include_discarded=[False],
+        start_date=[None],
+        end_date=[None],
+        field_paths=[PEOPLE_STATS_FIELD_PATHS],
+    ),
+    _scan_profile(
+        'speaker-search-fallback',
+        include_discarded=[False, True],
+        start_date=[None, FROZEN_NOW],
+        end_date=[None, FROZEN_LATER],
+        field_paths=[None],
+    ),
+)
+
+# The recipe helpers' own parameter surface: people_stats_scan carries no
+# caller-facing filter dims; speaker_browse_scan forwards only the filter args.
+RECIPE_PROFILES = (
+    _scan_profile('people-stats-recipe'),
+    _scan_profile(
+        'speaker-search-fallback-recipe',
+        include_discarded=[False, True],
+        start_date=[None, FROZEN_NOW],
+        end_date=[None, FROZEN_LATER],
+    ),
 )
 
 PHOTO_PROFILES = (
@@ -129,6 +172,9 @@ PROFILES = {
     'database.conversations.get_conversations': PHOTO_PROFILES,
     'database.conversations.get_conversations_count': COUNT_PROFILES,
     'database.conversations.get_conversations_without_photos': WITHOUT_PHOTOS_PROFILES,
+    'database.conversation_scan.iter_conversations': SCAN_PROFILES,
+    'database.conversation_scan.people_stats_scan': (RECIPE_PROFILES[0],),
+    'database.conversation_scan.speaker_browse_scan': (RECIPE_PROFILES[1],),
 }
 
 

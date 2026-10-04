@@ -39,6 +39,9 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   AuditCaptureProvider(this.live);
   final AuditLive live;
 
+  @override
+  bool get pendantCaptureVerified => true;
+
   bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused;
   bool get _phone => !_pendant && live != AuditLive.idle;
 
@@ -383,7 +386,7 @@ final captureScenarios = <AuditScenario>[
     id: 'home-capture-pendant-live',
     title: 'Pendant recording',
     page: _home,
-    state: 'The pendant streams; 12:04 in',
+    state: 'The pendant streams; the pill shows the latest line, not the session clock',
     run: (a) => _runHome(a, AuditLive.pendant, pendantConnected: true),
   ),
   AuditScenario(

@@ -49,6 +49,7 @@ void main() {
     Brightness brightness = Brightness.light,
     double textScale = 1,
     NavigatorObserver? observer,
+    Widget? body,
   }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -80,9 +81,12 @@ void main() {
             child: child!,
           ),
           home: Scaffold(
-            body: ListView(children: [
-              ConversationListItem(conversation: conversation, date: conversation.createdAt, conversationIdx: 0),
-            ]),
+            body: ListView(
+              children: [
+                body ??
+                    ConversationListItem(conversation: conversation, date: conversation.createdAt, conversationIdx: 0),
+              ],
+            ),
           ),
         ),
       ),
@@ -151,6 +155,78 @@ void main() {
   testWidgets('the upgrade action respects the row selection mode', (tester) async {
     final routes = _Routes();
     await pumpRow(tester, observer: routes);
+    conversations.enterSelectionMode();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('locked_preview_action')));
+    await tester.pump();
+    expect(routes.pushed, hasLength(1));
+    expect(conversations.selectedConversationIds, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('consecutive locked rows share one frosted card and one upgrade action', (tester) async {
+    final routes = _Routes();
+    final run = [
+      for (var i = 0; i < 3; i++)
+        ServerConversation(
+          id: 'locked-$i',
+          createdAt: DateTime.utc(2020, 1, 1, 12 - i),
+          structured: Structured('$_title $i', 'Overview', emoji: '📝'),
+          isLocked: true,
+        ),
+    ];
+    await pumpRow(
+      tester,
+      observer: routes,
+      body: LockedConversationRun(conversations: run, date: run.first.createdAt),
+    );
+
+    expect(find.byType(OmiLockedPreview), findsOneWidget);
+    expect(find.text(_upgrade), findsOneWidget);
+    for (final conversation in run) {
+      expect(
+        find.descendant(of: find.byType(ImageFiltered), matching: find.text(conversation.structured.title)),
+        findsOneWidget,
+      );
+    }
+    await tester.tap(find.byKey(const Key('locked_preview_action')));
+    expect(routes.pushed, hasLength(2));
+    expect(
+      (routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
+      isA<UsagePage>(),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  List<ServerConversation> lockedRun() => [
+        for (var i = 0; i < 2; i++)
+          ServerConversation(
+            id: 'locked-$i',
+            createdAt: DateTime.utc(2020, 1, 1, 12 - i),
+            structured: Structured('$_title $i', 'Overview', emoji: '📝'),
+            isLocked: true,
+          ),
+      ];
+
+  testWidgets('rows in a locked run keep their own long-press menu', (tester) async {
+    final run = lockedRun();
+    await pumpRow(
+      tester,
+      body: LockedConversationRun(conversations: run, date: run.first.createdAt),
+    );
+    await tester.longPress(find.text('$_title 1'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('conversation_action_delete')), findsOneWidget);
+  });
+
+  testWidgets('a locked run upgrade action respects selection mode', (tester) async {
+    final routes = _Routes();
+    final run = lockedRun();
+    await pumpRow(
+      tester,
+      observer: routes,
+      body: LockedConversationRun(conversations: run, date: run.first.createdAt),
+    );
     conversations.enterSelectionMode();
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('locked_preview_action')));
