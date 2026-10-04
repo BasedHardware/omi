@@ -356,13 +356,14 @@ own reviewed recovery and are not covered by these Helm rollbacks.
 set -uo pipefail
 export PROD_CTX=gke_based-hardware_us-central1_prod-omi-gke
 export MON_NS=prod-omi-monitoring
-source ~/.local/bin/gcp-agent-env.sh human
+source ~/.local/bin/gcp-agent-env.sh human || { echo "HOLD: GCP auth setup failed"; exit 1; }
 kprod() { rm -f ~/.kube/gke_gcloud_auth_plugin_cache; kubectl --context "$PROD_CTX" "$@"; }
 # No errexit here (a failed helm rollback must fall through to restore), so every
 # precondition exits explicitly before any cluster operation.
 source .local/adapter-review.env || { echo "HOLD: .local/adapter-review.env missing"; exit 1; }
 [ -n "${ADAPTER_BEFORE:-}" ] && [ -n "${ADAPTER_REVIEW_DIR:-}" ] || { echo "HOLD: rollback state incomplete"; exit 1; }
 test -s "$ADAPTER_REVIEW_DIR/restore-apiservices-configmap.yaml" || { echo "HOLD: restore YAML missing"; exit 1; }
+if [ "${ROLLBACK_STACK:-no}" = yes ] && [ -z "${STACK_BEFORE:-}" ]; then echo "HOLD: set STACK_BEFORE before a stack rollback"; exit 1; fi
 kprod -n prod-omi-backend delete deployment prod-omi-backend-listen-canary \
   --ignore-not-found --wait=true --timeout=5m
 CANARY_PODS=$(kprod -n prod-omi-backend get pod -l app.kubernetes.io/name=backend-listen,track=canary -o name)
@@ -383,7 +384,6 @@ fi
 # Re-run both APIService, listen/Parakeet metric API and HPA post-checks above.
 # Set ROLLBACK_STACK=yes only if the stack also needs rollback.
 if [ "${ROLLBACK_STACK:-no}" = yes ]; then
-  : "${STACK_BEFORE:?set STACK_BEFORE to the known-good stack revision}"
   helm rollback prod-omi-kube-prometheus-stack "$STACK_BEFORE" \
     --namespace "$MON_NS" --kube-context "$PROD_CTX" --wait --timeout 15m
 fi
