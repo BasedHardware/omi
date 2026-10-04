@@ -42,8 +42,11 @@ class OnboardingCard extends StatelessWidget {
           children: [
             Flexible(
               child: SingleChildScrollView(
-                child:
-                    Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: crossAxisAlignment, children: content),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: crossAxisAlignment,
+                  children: content,
+                ),
               ),
             ),
             ...footer,
@@ -67,7 +70,10 @@ class OnboardingStep extends StatelessWidget {
     // them (OnboardingStepLayout), so this only adds a small gap above a full-height card.
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + OmiSpacing.md),
-      child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [Flexible(child: card)]),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [Flexible(child: card)],
+      ),
     );
   }
 }

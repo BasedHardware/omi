@@ -9254,6 +9254,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Downloading from your device';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current of $total';
   }
@@ -11236,6 +11246,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name + others';
   }
@@ -12281,7 +12294,51 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Unable to connect. Check your connection and try again.';
+
+  @override
+  String get chatReplyServerError => 'Something went wrong on our side. Please try again.';
+
+  @override
+  String get chatReplyTimeout => 'The response took too long. Please try again.';
+
+  @override
+  String get chatReplyNotSignedIn => 'You\'re not signed in. Sign in and try again.';
+
+  @override
+  String get chatAppsLoadFailed => 'Couldn\'t load chat apps. Please try again.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voice';
+
+  @override
+  String get assistantVoice => 'Assistant Voice';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Your voice choice is shared across mobile and desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Read chat replies aloud';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Only speaks when Voice response allows it.';
+
+  @override
+  String get voicePreviewSample => 'Hi, I\'m Omi. This is my voice.';
+
+  @override
   String get peopleStatsIncomplete => 'Counts may be incomplete.';
+
+  @override
+  String get previousDay => 'Previous day';
+
+  @override
+  String get nextDay => 'Next day';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'No tasks on $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Reprocessing conversation…';
@@ -12334,4 +12391,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Check Connection';
+
+  @override
+  String get forYou => 'For You';
+
+  @override
+  String get stopThese => 'Stop These';
+
+  @override
+  String get dismiss => 'Dismiss';
 }

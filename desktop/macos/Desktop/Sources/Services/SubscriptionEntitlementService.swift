@@ -247,9 +247,6 @@ enum ManagedPlanGateHTTP {
     if case GeminiClient.GeminiClientError.planGated = error {
       return true
     }
-    if case ProactiveLaneClientError.planGated = error {
-      return true
-    }
     if let mint = error as? RealtimeTokenMintError {
       return isPlanGatedMint(mint)
     }

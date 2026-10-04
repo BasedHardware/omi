@@ -9293,6 +9293,16 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Изтегляне от вашето устройство';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current от $total';
   }
@@ -11287,6 +11297,9 @@ class AppLocalizationsBg extends AppLocalizations {
       'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi ще се свърже отново сам';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
@@ -12338,7 +12351,51 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Неуспешно свързване. Проверете връзката си и опитайте отново.';
+
+  @override
+  String get chatReplyServerError => 'Нещо се обърка от наша страна. Моля, опитайте отново.';
+
+  @override
+  String get chatReplyTimeout => 'Отговорът отне твърде много време. Моля, опитайте отново.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Не сте влезли. Влезте и опитайте отново.';
+
+  @override
+  String get chatAppsLoadFailed => 'Неуспешно зареждане на чат приложенията. Моля, опитайте отново.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Глас';
+
+  @override
+  String get assistantVoice => 'Глас на асистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Избраният от вас глас се споделя между мобилната и десктоп версията.';
+
+  @override
+  String get readChatRepliesAloud => 'Четене на отговорите в чата на глас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Говори само когато „Гласов отговор\" го позволява.';
+
+  @override
+  String get voicePreviewSample => 'Здравей, аз съм Omi. Това е моят глас.';
+
+  @override
   String get peopleStatsIncomplete => 'Бройките може да са непълни.';
+
+  @override
+  String get previousDay => 'Предишен ден';
+
+  @override
+  String get nextDay => 'Следващ ден';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Няма задачи на $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Разговорът се обработва повторно…';
@@ -12391,4 +12448,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Проверете връзката';
+
+  @override
+  String get forYou => 'За вас';
+
+  @override
+  String get stopThese => 'Спри тези';
+
+  @override
+  String get dismiss => 'Скрий';
 }

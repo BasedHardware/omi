@@ -9278,6 +9278,16 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Завантаження з вашого пристрою';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current з $total';
   }
@@ -11269,6 +11279,9 @@ class AppLocalizationsUk extends AppLocalizations {
       'Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi перепідключиться сам';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name та інші';
   }
@@ -12321,7 +12334,51 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Не вдалося під\'єднатися. Перевірте з\'єднання та повторіть спробу.';
+
+  @override
+  String get chatReplyServerError => 'Щось пішло не так з нашого боку. Спробуйте ще раз.';
+
+  @override
+  String get chatReplyTimeout => 'Відповідь забрала забагато часу. Спробуйте ще раз.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Ви не ввійшли. Увійдіть і спробуйте ще раз.';
+
+  @override
+  String get chatAppsLoadFailed => 'Не вдалося завантажити застосунки чату. Спробуйте ще раз.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Голос';
+
+  @override
+  String get assistantVoice => 'Голос асистента';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ваш вибір голосу спільний для мобільної та комп\'ютерної версій.';
+
+  @override
+  String get readChatRepliesAloud => 'Читати відповіді в чаті вголос';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Озвучує лише тоді, коли це дозволяє \"Голосова відповідь\".';
+
+  @override
+  String get voicePreviewSample => 'Привіт, я Omi. Це мій голос.';
+
+  @override
   String get peopleStatsIncomplete => 'Підрахунки можуть бути неповними.';
+
+  @override
+  String get previousDay => 'Попередній день';
+
+  @override
+  String get nextDay => 'Наступний день';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Немає завдань на $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Повторна обробка розмови…';
@@ -12374,4 +12431,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Перевірте з\'єднання';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Вимкнути такі';
+
+  @override
+  String get dismiss => 'Приховати';
 }

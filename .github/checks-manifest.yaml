@@ -488,6 +488,12 @@ checks:
     triggers: ["app/**"]
     lanes: ["local", "ci"]
     reason: "user-facing app changes require a durable mobile fragment on PR and main push"
+  - id: android-emulator-acceptance-contract
+    command: ["python3", "app/scripts/android_startup_smoke_test.py"]
+    triggers: ["app/scripts/android_emulator.py", "app/scripts/android_startup_smoke.py", "app/scripts/android_startup_smoke_test.py", ".github/workflows/mobile-app-checks.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PR #20437 reproduced a native startup crash missed by host tests; offline emulator acceptance must reject crashes, false liveness and unsafe account reuse"
+
   - id: mobile-store-promote-contract
     command: ["python3", "app/scripts/mobile_store_promote_test.py"]
     triggers: ["app/scripts/mobile_store_promote.py", "app/scripts/mobile_store_promote_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
@@ -564,6 +570,16 @@ checks:
     triggers: ["app/lib/**/*.dart"]
     lanes: ["local", "ci"]
     reason: "INV-UI-3: changed app/lib files may not add hand-rolled back glyphs, dialogs, sheets, toasts, clipboard writes, date patterns, UI literals or hardcoded copy (app/docs/ux-contract.md)"
+  - id: mobile-l10n-arb-contract
+    command: ["python3", "app/scripts/l10n.py", "check"]
+    triggers: ["app/lib/l10n/*.arb", "app/scripts/l10n.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "62 simple translations in da/de/fi/hi/id/sk/vi silently dropped an English placeholder (Danish showed 'Estimeret tid' with no ETA); gen-l10n accepts that, so the ARB contract must run on every ARB change, not only when an author remembers scripts/l10n.py check"
+  - id: mobile-l10n-arb-contract-tests
+    command: ["python3", "app/scripts/test_l10n_placeholders.py"]
+    triggers: ["app/scripts/l10n.py", "app/scripts/test_l10n_placeholders.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "The placeholder guard must keep a case proving it rejects a dropped placeholder and exempts plural/select messages"
   - id: rayban-dat-plugin-boundary
     command: ["ruby", "app/ios/test/rayban_dat_plugin_boundary_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Podfile.lock", "app/ios/rayban_dat_plugin_boundary.rb", "app/ios/test/rayban_dat_plugin_boundary_test.rb", ".github/checks-manifest.yaml"]
@@ -801,6 +817,11 @@ checks:
     triggers: ["web/frontend/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
     lanes: ["local", "ci"]
     reason: "web/frontend's node --test suite had no lane, so its guards never ran in CI and a deleted frontend test had to be re-homed into a backend pytest to keep running"
+  - id: web-share-http-tests
+    command: ["bash", "scripts/run-web-share-http-tests.sh"]
+    triggers: ["web/frontend/**", "scripts/run-web-share-http-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-599: public share URLs returned HTML for Markdown and JSON requests and omitted public speaker/time/task facts; synthetic HTTP requests exercise the shared rendering primitives through actual Next routing"
   - id: web-admin-tests
     command: ["bash", "scripts/run-web-admin-tests.sh"]
     triggers: ["web/admin/lib/**", "web/admin/app/api/**", "scripts/run-web-admin-tests.sh", ".github/checks-manifest.yaml"]
@@ -1028,7 +1049,7 @@ checks:
     reason: "store lookup failures and malformed responses must not be treated as empty history or build zero"
   - id: mobile-release-admission
     command: ["python3", ".github/scripts/test_verify_mobile_release_admission.py"]
-    triggers: [".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", ".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/workflows/mobile-app-checks.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    triggers: ["app/scripts/admit_android_source.sh", ".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", ".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/workflows/mobile-app-checks.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "tag admission must consume exact-SHA first-attempt Release Eligibility and the explicit Mobile Release Eligibility aggregate"
   - id: mobile-admission-collector

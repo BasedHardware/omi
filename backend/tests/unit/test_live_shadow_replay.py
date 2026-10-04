@@ -10,8 +10,8 @@ from functools import lru_cache
 import pytest
 
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
-from utils.stt import live_failure, live_chain, live_health, live_router, streaming as st
-from utils.stt.live_cost_health import PREFIX
+from utils.stt import live_cost_health, live_failure, live_chain, live_health, live_router, streaming as st
+from config import live_stt_state
 from utils.stt.live_gate import GateState, begin_trial, transition, gate_rate
 from utils.stt.live_signal import provider_observation
 from utils.stt.live_metrics import COST_STAGE, COST_STATE_KNOWN, COST_EVENTS, COST_SNAPSHOT_AT, COST_ALL_DEGRADED
@@ -202,6 +202,7 @@ def test_rnnt_outcomes_cannot_alias_window_health():
 def test_trial_terminal_remains_a_failover_leg_when_cheaper_healthy_target_exists():
     health = live_chain.health
     health._cost_local[('soniox', 'all')] = GateState(stage=5)
+    health._cost_fresh.update({(t.id, lang): 0.0 for t in DEFAULT_TARGETS for lang in ('all', 'en')})
     uid = next(str(i) for i in range(1000) if not assigned(str(i), 'stt-reentry:soniox', 5))
     tail = []
     chain = live_router.propose(health, ['modulate', 'soniox'], uid, 'en', 'modulate', last_resorts=tail)
@@ -243,7 +244,7 @@ async def test_idle_pods_refresh_global_gauges_and_unknown_is_not_healthy():
     redis = MemoryRedis(clock=lambda: now[0])
     pods = [live_health.FleetHealth(redis_client=redis, clock=lambda: now[0]) for _ in range(2)]
     target = DEFAULT_TARGETS[0]
-    redis.data[f'{PREFIX}:{target.id}:all'] = json.dumps(GateState(stage=5, generation=2).encode())
+    redis.data[live_stt_state.cost_key(target, 'all')] = json.dumps(GateState(stage=5, generation=2).encode())
     for pod in pods:
         assert not pod._cost_interests
         await pod.refresh_cost_once()
@@ -251,7 +252,7 @@ async def test_idle_pods_refresh_global_gauges_and_unknown_is_not_healthy():
         assert COST_STATE_KNOWN.labels(target=target.id)._value.get() == 1
         assert math.isnan(COST_STAGE.labels(target='soniox')._value.get())
     now[0] += 5
-    redis.data[f'{PREFIX}:{target.id}:all'] = json.dumps(GateState(stage=25, generation=3).encode())
+    redis.data[live_stt_state.cost_key(target, 'all')] = json.dumps(GateState(stage=25, generation=3).encode())
     for pod in pods:
         await pod.refresh_cost_once()
         assert pod._cost_cached[(target.id, 'all')].stage == 25
@@ -260,9 +261,10 @@ async def test_idle_pods_refresh_global_gauges_and_unknown_is_not_healthy():
 
 
 @pytest.mark.asyncio
-async def test_initialised_transition_counters_count_global_and_language_cas():
+async def test_initialised_transition_counters_count_global_and_language_cas(monkeypatch):
     target = Target('shadow-test', 'modulate', 0.055)
     pod = live_chain.health
+    monkeypatch.setattr(live_cost_health, 'registry', lambda: (target,))
     pod._init_cost_metrics([target])
     for scope, lang in (('global', 'all'), ('language', 'ja')):
         metric = COST_EVENTS.labels(target=target.id, event='bench', scope=scope)

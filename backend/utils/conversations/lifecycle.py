@@ -11,12 +11,13 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from typing import Any, Mapping
 
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
+from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
@@ -265,6 +266,19 @@ def complete(uid: str, conversation_id: str) -> bool:
         ConversationStatus.merging,
         ConversationStatus.completed,
     )
+
+
+def close_oversized_in_progress_conversation(uid: str, conversation_id: str, *, quiet_for: timedelta) -> str:
+    """Close a live-capture row that can never be finalized because it is at Firestore's 1 MiB ceiling.
+
+    The only lifecycle edge from ``in_progress`` straight to ``completed``, and
+    only for this case: the finalization binding grows the document, so the
+    normal ``in_progress -> processing`` admission is rejected on every attempt
+    and the row would stay invisible while each reconnect retried it. Content is
+    kept as-is; the row becomes a visible conversation without a generated
+    summary. Returns a bounded outcome token (``OversizedInProgressOutcome``).
+    """
+    return oversized_terminal_db.complete_oversized_in_progress_conversation(uid, conversation_id, quiet_for=quiet_for)
 
 
 def rollback_processing_admission(uid: str, conversation_id: str) -> bool:

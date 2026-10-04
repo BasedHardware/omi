@@ -29,7 +29,7 @@ async function fetchSharedNote(id: string): Promise<SharedNote | null> {
   try {
     const response = await fetch(
       sharedApiUrl(envConfig.API_URL, 'v1', 'conversations', id, 'shared'),
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(5000) },
     );
     if (!response.ok) return null;
     return (await response.json()) as SharedNote;
@@ -172,10 +172,8 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       height: HEIGHT,
       fonts: fonts.length ? fonts : undefined,
       headers: {
-        // A note can be made private later; don't let caches keep it for a year.
-        'Cache-Control': note
-          ? 'public, max-age=3600, s-maxage=3600'
-          : 'public, max-age=300, s-maxage=300',
+        // Revoking a share must not leave the title or note bullets in a cache.
+        'Cache-Control': 'private, no-store',
       },
     },
   );

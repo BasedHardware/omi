@@ -332,48 +332,7 @@ extension AgentRuntimeProcess {
     intentsJSON: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> ChatFirstIntentsMaterialization {
-    guard let intentsData = intentsJSON.data(using: .utf8),
-      let intents = try? JSONDecoder().decode([ChatFirstPromptIntent].self, from: intentsData),
-      surface.surfaceKind == "main_chat",
-      controlGeneration >= 0,
-      !intents.isEmpty,
-      intents.count <= 8,
-      intents.allSatisfy({ $0.accountGeneration == controlGeneration && $0.kernelBlocks != nil }),
-      !sessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    else {
-      throw BridgeError.agentError("Invalid chat-first materialization")
-    }
-    let result = try await journalOperation(
-      type: "materialize_chat_first_intents",
-      operation: "materialize_chat_first_intents",
-      clientId: clientId,
-      surface: surface,
-      ownerID: ownerID,
-      payload: [
-        "sessionId": sessionID,
-        "controlGeneration": controlGeneration,
-        "intents": intents.compactMap { intent -> [String: Any]? in
-          guard let blocks = intent.kernelBlocks else { return nil }
-          return [
-            "intentId": intent.intentID,
-            "continuityKey": intent.continuityKey,
-            "source": intent.source.rawValue,
-            "blocks": blocks,
-          ] as [String: Any]
-        },
-      ],
-      authorizationSnapshot: authorizationSnapshot
-    )
-    for turn in result.turns {
-      recordLifecycleJournalMutation(turn)
-    }
-    return ChatFirstIntentsMaterialization(
-      accepted: result.accepted == true,
-      stoppedByTail: result.materializationStoppedByTail,
-      receipts: result.materializationReceipts,
-      rejections: result.materializationRejections,
-      deferrals: result.materializationDeferrals
-    )
+    throw BridgeError.agentError("Automatic Chat entries are no longer supported")
   }
 
   func listChatFirstMaterializationReceipts(

@@ -9273,6 +9273,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncCardDownloadingTitle => 'آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$total میں سے $current';
   }
@@ -11257,6 +11267,9 @@ class AppLocalizationsUr extends AppLocalizations {
       'آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi خود دوبارہ جڑ جائے گا';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name اور دیگر';
   }
@@ -12306,7 +12319,51 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'منسلک نہیں ہو سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔';
+
+  @override
+  String get chatReplyServerError => 'ہماری طرف سے کچھ غلط ہوا۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get chatReplyTimeout => 'جواب میں بہت زیادہ وقت لگا۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get chatReplyNotSignedIn => 'آپ نے سائن ان نہیں کیا۔ سائن ان کریں اور دوبارہ کوشش کریں۔';
+
+  @override
+  String get chatAppsLoadFailed => 'چیٹ ایپس لوڈ نہیں ہو سکیں۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'آواز';
+
+  @override
+  String get assistantVoice => 'اسسٹنٹ کی آواز';
+
+  @override
+  String get voiceSharedAcrossDevices => 'آپ کی منتخب آواز موبائل اور ڈیسک ٹاپ دونوں میں مشترک ہے۔';
+
+  @override
+  String get readChatRepliesAloud => 'چیٹ جوابات بلند آواز میں پڑھیں';
+
+  @override
+  String get readChatRepliesAloudDescription => 'صرف تب بولتا ہے جب وائس رسپانس اجازت دے۔';
+
+  @override
+  String get voicePreviewSample => 'ہیلو، میں Omi ہوں۔ یہ میری آواز ہے۔';
+
+  @override
   String get peopleStatsIncomplete => 'گنتی نامکمل ہو سکتی ہے۔';
+
+  @override
+  String get previousDay => 'پچھلا دن';
+
+  @override
+  String get nextDay => 'اگلا دن';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date کو کوئی کام نہیں';
+  }
 
   @override
   String get reprocessingConversationProgress => 'گفتگو کو دوبارہ پروسیس کیا جا رہا ہے…';
@@ -12359,4 +12416,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'کنکشن چیک کریں';
+
+  @override
+  String get forYou => 'آپ کے لیے';
+
+  @override
+  String get stopThese => 'یہ روکیں';
+
+  @override
+  String get dismiss => 'چھپائیں';
 }

@@ -2,6 +2,49 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.443",
+      "date": "2026-10-04",
+      "changes": [
+        "Removed automatic goal, task, and meeting-note cards from Chat while keeping rich cards in replies"
+      ]
+    },
+    {
+      "version": "0.12.442",
+      "date": "2026-10-04",
+      "changes": [
+        "Clarified which custom keys cover AI features versus transcription and show the current transcription allowance in macOS settings"
+      ]
+    },
+    {
+      "version": "0.12.441",
+      "date": "2026-10-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.440",
+      "date": "2026-10-04",
+      "changes": [
+        "Added relevant follow-up cards with source links and helpfulness feedback",
+        "Removed the legacy screen Advice timer and settings while keeping Focus suggestions and task and memory extraction"
+      ]
+    },
+    {
+      "version": "0.12.439",
+      "date": "2026-10-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.438",
+      "date": "2026-10-03",
+      "changes": [
+        "Assistant voice now uses the shared Gemini voice picker (30 voices) synced with the mobile app — spoken replies and live voice sessions follow your choice."
+      ]
+    },
+    {
       "version": "0.12.437",
       "date": "2026-10-03",
       "changes": [

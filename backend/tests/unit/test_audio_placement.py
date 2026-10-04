@@ -5,6 +5,7 @@ is evidence of coordinates only; every refusal must produce no window.
 """
 
 import math
+import time
 from copy import deepcopy
 from datetime import datetime, timezone
 
@@ -12,8 +13,10 @@ import pytest
 
 from utils.conversations.audio_placement import (
     AudioPlacement,
+    PreparedAudioCoverage,
     locate,
     locate_in_verified_words,
+    prepare_audio_coverage,
     provisional_window,
 )
 from utils.speaker_tag_prompts import clips
@@ -167,6 +170,373 @@ def test_locate_sync_gap_in_coverage_is_untrusted():
 def test_locate_no_contributors_is_untrusted():
     conv = _conv([_seg('a', 50.0, 60.0, scope='sync:1')])
     assert locate(conv, 1.0, 5.0) == AudioPlacement(None, 'untrusted_clock')
+
+
+def _capture_seg(seg_id, start, end, cap_start, cap_end, *, scope='conn:0', **kwargs):
+    segment = _seg(seg_id, start, end, scope=scope, **kwargs)
+    segment['audio_capture_start'] = cap_start
+    segment['audio_capture_end'] = cap_end
+    return segment
+
+
+def _span_files(spans, timestamps=None):
+    return [
+        {
+            'chunk_timestamps': list(timestamps) if timestamps is not None else [s['start'] for s in spans],
+            'chunk_spans': list(spans),
+        }
+    ]
+
+
+CAP = T + 500.0
+
+
+def test_locate_capture_span_trusted_inside_validated_coverage():
+    conv = _conv(
+        [_capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]),
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement((CAP + 1.0, CAP + 5.0), 'capture_span')
+    assert locate(conv, 1.0, 5.0) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_returns_capture_window_not_started_at_projection():
+    conv = _conv(
+        [_capture_seg('a', 10.0, 14.0, CAP + 10.0, CAP + 14.0)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]),
+    )
+    placement = locate(conv, 10.0, 14.0, capture_spans=True)
+    assert placement == AudioPlacement((CAP + 10.0, CAP + 14.0), 'capture_span')
+
+
+@pytest.mark.parametrize('missing', ['audio_capture_start', 'audio_capture_end'])
+def test_locate_capture_span_missing_endpoint_refuses(missing):
+    segment = _capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0)
+    segment[missing] = None
+    conv = _conv([segment], audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]))
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+@pytest.mark.parametrize(
+    'cap_start,cap_end',
+    [
+        (CAP + 5.0, CAP + 1.0),
+        (CAP + 1.0, CAP + 1.0),
+        (math.nan, CAP + 5.0),
+        (CAP + 1.0, math.inf),
+        ('text', CAP + 5.0),
+        (True, CAP + 5.0),
+    ],
+)
+def test_locate_capture_span_malformed_capture_fields_refuse(cap_start, cap_end):
+    conv = _conv(
+        [_capture_seg('a', 1.0, 5.0, cap_start, cap_end)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]),
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_duration_mismatch_refuses():
+    conv = _conv(
+        [_capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 6.0)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]),
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_conflicting_contributor_offsets_refuse():
+    conv = _conv(
+        [
+            _capture_seg('a', 1.0, 3.0, CAP + 1.0, CAP + 3.0),
+            _capture_seg('b', 3.0, 5.0, CAP + 4.0, CAP + 6.0),
+        ],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]),
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_contributors_covering_text_window_accept():
+    conv = _conv(
+        [
+            _capture_seg('a', 1.0, 3.0, CAP + 1.0, CAP + 3.0),
+            _capture_seg('b', 3.0, 5.0, CAP + 3.0, CAP + 5.0),
+        ],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]),
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement((CAP + 1.0, CAP + 5.0), 'capture_span')
+
+
+def test_locate_capture_span_legacy_spanless_manifest_refuses():
+    conv = _conv([_capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0)])
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_mixed_span_and_spanless_manifest_refuses():
+    files = _span_files([{'start': CAP, 'end': CAP + 60}]) + [{'chunk_timestamps': [CAP + 60]}]
+    conv = _conv([_capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0)], audio_files=files)
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_timestamp_span_mismatch_refuses():
+    conv = _conv(
+        [_capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}], timestamps=[CAP, CAP + 30]),
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_uncovered_gap_refuses():
+    files = _span_files(
+        [{'start': CAP, 'end': CAP + 10}, {'start': CAP + 30, 'end': CAP + 60}],
+        timestamps=[CAP, CAP + 30],
+    )
+    conv = _conv([_capture_seg('a', 1.0, 5.0, CAP + 10.5, CAP + 14.5)], audio_files=files)
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+@pytest.mark.parametrize('window', [(CAP - 5.0, CAP + 4.0), (CAP + 55.0, CAP + 65.0)])
+def test_locate_capture_span_outside_coverage_refuses(window):
+    cap_start, cap_end = window
+    start, end = 1.0, 1.0 + (cap_end - cap_start)
+    conv = _conv(
+        [_capture_seg('a', start, end, cap_start, cap_end)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]),
+    )
+    assert locate(conv, start, end, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_unplaced_contributor_refuses():
+    conv = _conv(
+        [_capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0, unplaced=True)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]),
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'unplaced')
+
+
+def test_locate_capture_span_unknown_timeline_marker_still_refuses():
+    conv = _conv(
+        [_capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]),
+        audio_timeline={'version': 9},
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_v2_still_wins_over_capture_fields():
+    conv = _v2_conv(
+        [{'start': T, 'end': T + 60}],
+        segments=[_capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0)],
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement((T + 1.0, T + 5.0), 'v2')
+
+
+def test_locate_capture_span_sync_scope_still_uses_sync_window():
+    segment = _capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0, scope='sync:1')
+    conv = _conv([segment], audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]))
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement((T + 1.0, T + 5.0), 'sync')
+
+
+def test_locate_v2_refuses_window_intersecting_overlapping_spans():
+    conv = _v2_conv([{'start': T + 100, 'end': T + 112}, {'start': T + 103, 'end': T + 113}])
+    assert locate(conv, 104.0, 107.8) == AudioPlacement(None, 'uncovered_audio')
+
+
+def test_locate_v2_refuses_nested_containing_overlap():
+    conv = _v2_conv([{'start': T, 'end': T + 60}, {'start': T + 10, 'end': T + 20}])
+    assert locate(conv, 11.0, 15.0) == AudioPlacement(None, 'uncovered_audio')
+
+
+def test_locate_v2_refuses_identical_duplicate_spans():
+    conv = _v2_conv([{'start': T, 'end': T + 60}, {'start': T, 'end': T + 60}])
+    assert locate(conv, 1.0, 5.0) == AudioPlacement(None, 'uncovered_audio')
+
+
+def test_locate_v2_refuses_more_than_two_overlapping_spans():
+    conv = _v2_conv([{'start': T, 'end': T + 10}, {'start': T + 5, 'end': T + 15}, {'start': T + 12, 'end': T + 30}])
+    assert locate(conv, 13.0, 14.0) == AudioPlacement(None, 'uncovered_audio')
+
+
+def test_locate_v2_touching_half_open_boundaries_still_accept():
+    conv = _v2_conv([{'start': T, 'end': T + 10}, {'start': T + 10, 'end': T + 20}])
+    assert locate(conv, 1.0, 5.0) == AudioPlacement((T + 1.0, T + 5.0), 'v2')
+    assert locate(conv, 11.0, 15.0) == AudioPlacement((T + 11.0, T + 15.0), 'v2')
+
+
+def test_locate_v2_windows_disjoint_from_ambiguity_still_place():
+    conv = _v2_conv([{'start': T, 'end': T + 10}, {'start': T + 5, 'end': T + 15}])
+    assert locate(conv, 1.0, 4.0) == AudioPlacement((T + 1.0, T + 4.0), 'v2')
+    assert locate(conv, 10.5, 13.0) == AudioPlacement((T + 10.5, T + 13.0), 'v2')
+    assert locate(conv, 4.5, 5.5) == AudioPlacement(None, 'uncovered_audio')
+
+
+def test_locate_capture_span_refuses_window_in_span_overlap():
+    conv = _conv(
+        [_capture_seg('a', 1.0, 5.0, CAP + 4.0, CAP + 8.0)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 12}, {'start': CAP + 3, 'end': CAP + 13}]),
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_capture_span_window_disjoint_from_overlap_still_trusted():
+    conv = _conv(
+        [_capture_seg('a', 1.0, 3.5, CAP + 0.5, CAP + 3.0)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 12}, {'start': CAP + 6, 'end': CAP + 13}]),
+    )
+    assert locate(conv, 1.0, 3.5, capture_spans=True) == AudioPlacement((CAP + 0.5, CAP + 3.0), 'capture_span')
+
+
+def test_locate_capture_span_identical_spans_are_ambiguous_not_equivalent():
+    conv = _conv(
+        [_capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0)],
+        audio_files=_span_files([{'start': CAP, 'end': CAP + 60}, {'start': CAP, 'end': CAP + 60}]),
+    )
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_prepare_audio_coverage_validates_and_indexes_once():
+    files = _span_files(
+        [{'start': T + 100, 'end': T + 112}, {'start': T + 103, 'end': T + 113}, {'start': T + 200, 'end': T + 210}]
+    )
+    prepared = prepare_audio_coverage(files)
+    assert prepared.validated
+    assert prepared.coverage == ((T + 100.0, T + 113.0), (T + 200.0, T + 210.0))
+    assert prepared.ambiguity == ((T + 103.0, T + 112.0),)
+    assert prepared.covers(T + 104.0, T + 107.8)
+    assert prepared.ambiguous(T + 104.0, T + 107.8)
+    assert not prepared.ambiguous(T + 113.5, T + 114.0)
+
+
+@pytest.mark.parametrize(
+    'files',
+    [
+        [{'chunk_timestamps': [T], 'chunk_spans': [{'start': T + 5, 'end': T}]}],
+        [{'chunk_timestamps': [T], 'chunk_spans': [{'start': T}]}],
+        [{'chunk_timestamps': [T, T + 1], 'chunk_spans': [{'start': T, 'end': T + 1}]}],
+        [{'chunk_timestamps': 'x', 'chunk_spans': [{'start': T, 'end': T + 1}]}],
+        'not-files',
+        [],
+    ],
+)
+def test_prepare_audio_coverage_invalid_manifest_is_not_validated(files):
+    prepared = prepare_audio_coverage(files)
+    assert not prepared.validated
+    assert prepared.coverage == ()
+    assert prepared.ambiguity == ()
+
+
+def test_prepare_audio_coverage_bounds_never_yield_a_partial_index():
+    files = _span_files(
+        [{'start': T + 100, 'end': T + 112}, {'start': T + 103, 'end': T + 113}, {'start': T + 200, 'end': T + 210}]
+    )
+    assert prepare_audio_coverage(files, max_spans=2) == PreparedAudioCoverage(validated=False)
+    expired = prepare_audio_coverage(files, deadline=time.monotonic() - 1.0)
+    assert expired == PreparedAudioCoverage(validated=False)
+    prepared = prepare_audio_coverage(files, deadline=time.monotonic() + 60.0, max_spans=3)
+    assert prepared.validated
+    assert len(prepared.coverage) == 2
+
+
+def test_prepare_audio_coverage_deadline_expiring_during_sweep_is_unvalidated(monkeypatch):
+    """Every bound validated; the sweep's first union step then hits the
+    deadline — the index must come back unvalidated, not half-built."""
+    files = _span_files(
+        [{'start': T + 100, 'end': T + 112}, {'start': T + 103, 'end': T + 113}, {'start': T + 200, 'end': T + 210}]
+    )
+    ticks = iter(range(100))
+    monkeypatch.setattr(time, 'monotonic', lambda: next(ticks))
+    prepared = prepare_audio_coverage(files, deadline=5.5)
+    assert prepared == PreparedAudioCoverage(validated=False)
+
+    ticks = iter(range(100))
+    prepared = prepare_audio_coverage(files, deadline=60.0)
+    assert prepared.validated
+    assert prepared.ambiguity == ((T + 103.0, T + 112.0),)
+
+
+def test_locate_accepts_a_prepared_coverage_index():
+    files = _span_files([{'start': T + 100, 'end': T + 112}, {'start': T + 103, 'end': T + 113}])
+    prepared = prepare_audio_coverage(files)
+    conv = _v2_conv([{'start': T + 100, 'end': T + 112}, {'start': T + 103, 'end': T + 113}])
+    assert locate(conv, 104.0, 107.8, coverage=prepared) == AudioPlacement(None, 'uncovered_audio')
+    assert locate(conv, 112.5, 113.0, coverage=prepared) == AudioPlacement((T + 112.5, T + 113.0), 'v2')
+
+
+def test_locate_saved_sync_source_is_trusted_like_a_sync_scope():
+    segment = _seg('a', 1.0, 5.0, scope='conversation:c1')
+    segment['audio_source'] = {'type': 'sync', 'start': T + 1.0, 'end': T + 5.0}
+    conv = _conv([segment])
+    assert locate(conv, 1.0, 5.0) == AudioPlacement((T + 1.0, T + 5.0), 'sync')
+
+
+def test_locate_saved_sync_source_survives_rebased_offsets():
+    segment = _seg('a', 301.0, 305.0, scope='legacy-conversation:d1:0')
+    segment['audio_source'] = {'type': 'sync', 'start': T + 301.0, 'end': T + 305.0}
+    conv = _conv([segment])
+    assert locate(conv, 301.0, 305.0) == AudioPlacement((T + 301.0, T + 305.0), 'sync')
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        {'type': 'other', 'start': T + 1.0, 'end': T + 5.0},
+        {'type': 'sync', 'start': T + 2.0, 'end': T + 5.0},
+        {'type': 'sync', 'start': T + 1.0, 'end': T + 6.0},
+        {'type': 'sync', 'start': 'x', 'end': T + 5.0},
+        {'type': 'sync', 'start': T + 5.0, 'end': T + 1.0},
+        {'type': 'sync'},
+        'sync',
+        [{'type': 'sync', 'start': T + 1.0, 'end': T + 5.0}],
+    ],
+)
+def test_locate_saved_sync_source_malformed_or_retimed_refuses(source):
+    segment = _seg('a', 1.0, 5.0, scope='conversation:c1')
+    segment['audio_source'] = source
+    conv = _conv([segment])
+    assert locate(conv, 1.0, 5.0) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_own_scope_without_source_stays_untrusted():
+    conv = _conv([_seg('a', 1.0, 5.0, scope='conversation:c1')])
+    assert locate(conv, 1.0, 5.0) == AudioPlacement(None, 'untrusted_clock')
+
+
+def test_locate_live_capture_fields_alone_are_not_sync_provenance():
+    segment = _capture_seg('a', 1.0, 5.0, CAP + 1.0, CAP + 5.0, scope='conversation:c1')
+    conv = _conv([segment], audio_files=_span_files([{'start': CAP, 'end': CAP + 60}]))
+    assert locate(conv, 1.0, 5.0) == AudioPlacement(None, 'untrusted_clock')
+    assert locate(conv, 1.0, 5.0, capture_spans=True) == AudioPlacement((CAP + 1.0, CAP + 5.0), 'capture_span')
+
+
+def test_locate_saved_sync_source_in_ambiguous_manifest_refuses():
+    segment = _seg('a', 104.0, 110.0, scope='conversation:c1')
+    segment['audio_source'] = {'type': 'sync', 'start': T + 104.0, 'end': T + 110.0}
+    conv = _conv(
+        [segment],
+        audio_files=_span_files([{'start': T + 100, 'end': T + 112}, {'start': T + 103, 'end': T + 113}]),
+    )
+    index = prepare_audio_coverage(conv['audio_files'])
+    assert locate(conv, 104.0, 110.0, coverage=index) == AudioPlacement(None, 'untrusted_clock')
+    assert locate(conv, 104.0, 110.0) == AudioPlacement(None, 'untrusted_clock')
+    disjoint = _seg('b', 4.0, 7.8, scope='conversation:c1')
+    disjoint['audio_source'] = {'type': 'sync', 'start': T + 4.0, 'end': T + 7.8}
+    assert locate(conv, 4.0, 7.8, segments=[disjoint], coverage=index) == AudioPlacement((T + 4.0, T + 7.8), 'sync')
+
+
+def test_locate_mixed_saved_source_and_sync_scope_union_covers():
+    first = _seg('a', 0.0, 6.0, scope='sync:1')
+    second = _seg('b', 6.0, 12.0, scope='conversation:c1')
+    second['audio_source'] = {'type': 'sync', 'start': T + 6.0, 'end': T + 12.0}
+    conv = _conv([first, second])
+    assert locate(conv, 1.0, 11.0) == AudioPlacement((T + 1.0, T + 11.0), 'sync')
+
+
+def test_locate_saved_source_gap_in_coverage_is_untrusted():
+    first = _seg('a', 0.0, 3.0, scope='conversation:c1')
+    first['audio_source'] = {'type': 'sync', 'start': T, 'end': T + 3.0}
+    second = _seg('b', 5.0, 8.0, scope='conversation:c1')
+    second['audio_source'] = {'type': 'sync', 'start': T + 5.0, 'end': T + 8.0}
+    conv = _conv([first, second])
+    assert locate(conv, 1.0, 7.0) == AudioPlacement(None, 'untrusted_clock')
 
 
 def test_locate_explicit_unplaced_contributor_refuses_even_v2():

@@ -9256,6 +9256,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Laster ned fra enheten din';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current av $total';
   }
@@ -11246,6 +11256,9 @@ class AppLocalizationsNo extends AppLocalizations {
       'Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi kobler til igjen av seg selv';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
@@ -12293,7 +12306,51 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Kan ikke koble til. Sjekk tilkoblingen din og prøv igjen.';
+
+  @override
+  String get chatReplyServerError => 'Noe gikk galt på vår side. Prøv igjen.';
+
+  @override
+  String get chatReplyTimeout => 'Svaret tok for lang tid. Prøv igjen.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Du er ikke logget inn. Logg inn og prøv igjen.';
+
+  @override
+  String get chatAppsLoadFailed => 'Kunne ikke laste inn chat-apper. Prøv igjen.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Stemme';
+
+  @override
+  String get assistantVoice => 'Assistentstemme';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Stemmevalget ditt deles på tvers av mobil og desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Les chatsvar høyt';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Snakker bare når Stemmesvar tillater det.';
+
+  @override
+  String get voicePreviewSample => 'Hei, jeg er Omi. Dette er stemmen min.';
+
+  @override
   String get peopleStatsIncomplete => 'Antallene kan være ufullstendige.';
+
+  @override
+  String get previousDay => 'Forrige dag';
+
+  @override
+  String get nextDay => 'Neste dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ingen oppgaver $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Behandler samtalen på nytt…';
@@ -12346,4 +12403,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Sjekk tilkoblingen';
+
+  @override
+  String get forYou => 'For deg';
+
+  @override
+  String get stopThese => 'Stopp disse';
+
+  @override
+  String get dismiss => 'Avvis';
 }

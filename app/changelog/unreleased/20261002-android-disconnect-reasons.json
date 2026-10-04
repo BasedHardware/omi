@@ -1,0 +1,3 @@
+{
+  "change": "Android connection diagnostics show more accurate reasons for disconnects, timeouts, and failed connections. A locally terminated connection also no longer incorrectly reports that the device paired with another phone."
+}

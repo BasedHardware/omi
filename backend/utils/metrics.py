@@ -140,6 +140,11 @@ OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL = Counter(
     'Committed legacy live segment versions by capture-window availability',
     ['outcome', 'reason'],
 )
+OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL = Counter(
+    'omi_live_audio_capture_attribution_total',
+    'Committed legacy live capture windows by cause and population (version or first stored segment ID)',
+    ['population', 'reason'],
+)
 # Keep the established outcome metric stable for existing dashboards. This
 # companion metric exposes a fixed reason vocabulary for every rejected
 # provider interval, including clock-only sessions while the v2 flag is off.
@@ -236,6 +241,22 @@ OMI_AUDIO_TIMELINE_COVERAGE_TOTAL = Counter(
 OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
     'omi_audio_timeline_replay_conflicts_total',
     'v2 audio frames dropped because an already-accepted range holds different bytes',
+)
+
+OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL = Counter(
+    'omi_audio_timeline_chunks_written_total',
+    'Successful audio chunk upload completions, by span metadata presence; an idempotent retry can complete the same object more than once',
+    ['reason'],
+)
+OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL = Counter(
+    'omi_listen_pusher_audio_discarded_bytes_total',
+    'Listen-side pusher audio envelope bytes discarded without resend, by bounded reason',
+    ['reason'],
+)
+OMI_AUDIO_PLACEMENT_TOTAL = Counter(
+    'omi_audio_placement_total',
+    'Audio placement outcomes for embeddable segments, by reason',
+    ['reason'],
 )
 for _mode in ('legacy', 'v2'):
     for _provider in AUDIO_TIMELINE_PROVIDERS:
@@ -1377,6 +1398,12 @@ OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL = Counter(
     'omi_conversation_speaker_resolution_total',
     'Conversation-wide speaker resolution runs by outcome',
     ['outcome'],
+)
+
+OMI_CONVERSATION_SPEAKER_RESOLUTION_REASONS_TOTAL = Counter(
+    'omi_conversation_speaker_resolution_reasons_total',
+    'Conversation-wide speaker resolution runs by outcome and bounded reason',
+    ['outcome', 'reason'],
 )
 
 OMI_CONVERSATION_NOTE_PRESENTATION_TOTAL = Counter(

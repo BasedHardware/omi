@@ -37,5 +37,12 @@ internal object FirmwareDiagnosticsParser {
             .put("mic_overrun_count", known32(13))
             .put("ble_tx_drop_count", known32(17))
             .put("storage_error_count", known32(21))
+            .apply {
+                if (data.size >= 30) {
+                    u16(25).takeUnless { it == 0xffff }?.let { put("last_off_charger_mv", it) }
+                    u16(27).takeUnless { it == 0xffff }?.let { put("charge_pin_edges", it) }
+                    when (u8(29)) { 0 -> put("soc_frozen", false); 1 -> put("soc_frozen", true) }
+                }
+            }
     }
 }

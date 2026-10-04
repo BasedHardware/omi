@@ -25,14 +25,22 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = 'faa5baad5119b596a5256cd1eb552ddf93f00aef37c560f558aabcf7eabc1831'
-CATALOG_REVISION: Final = 3
+CATALOG_SHA256: Final = 'a03f3137f87dbacdeceec6e73ad45823334b0b0b6bcc3d098be067e958877ebb'
+CATALOG_REVISION: Final = 4
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
  'stripe_role': 'price_amount_authority',
  'unknown_caller_policy': 'legacy_contract'}
 OPEN_PLAN_DECISIONS: Final = {}
+PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {'fraction_basis_points': 1000,
+ 'days_per_month': 30,
+ 'monthly_reference_cents': {'basic': 0,
+                             'operator': 4900,
+                             'architect': 19900,
+                             'unlimited_v2': 2999,
+                             'unlimited': 2000,
+                             'plus': 2000}}
 MEASUREMENT_CONTRACTS: Final = {'transcription': {'usage_status': 'complete',
                    'usage_source': 'backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.transcription_seconds',
                    'cost_status': 'missing',
@@ -347,15 +355,9 @@ PRIMARY_BILLING_ENV_VARS: Final[dict[PlanType, dict[str, str]]] = {
     PlanType.plus: {'month': 'STRIPE_PLUS_MONTHLY_PRICE_ID', 'year': 'STRIPE_PLUS_ANNUAL_PRICE_ID'},
     PlanType.unlimited_v2: {'month': 'STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID', 'year': 'STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID'}
 }
-DESKTOP_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'desktop_free': {'full_desktop': False,
-                  'cloud_screen_vectors': False,
-                  'proactivity_daily': {'proactive_extraction': 150, 'proactive_reasoning': 60}},
- 'desktop_full': {'full_desktop': True,
-                  'cloud_screen_vectors': True,
-                  'proactivity_daily': {'proactive_extraction': 1000, 'proactive_reasoning': 500}},
- 'desktop_architect': {'full_desktop': True,
-                       'cloud_screen_vectors': True,
-                       'proactivity_daily': {'proactive_extraction': 2000, 'proactive_reasoning': 1000}}}
+DESKTOP_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'desktop_free': {'full_desktop': False, 'cloud_screen_vectors': False},
+ 'desktop_full': {'full_desktop': True, 'cloud_screen_vectors': True},
+ 'desktop_architect': {'full_desktop': True, 'cloud_screen_vectors': True}}
 FAIR_USE_PROFILE_LIMITS: Final[dict[str, dict[str, Any]]] = {'metered_transcription': {'speech_milliseconds': {'rolling_day': 7200000,
                                                    'rolling_three_days': 28800000,
                                                    'rolling_week': 36000000}},

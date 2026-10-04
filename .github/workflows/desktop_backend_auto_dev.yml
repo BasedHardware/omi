@@ -269,6 +269,8 @@ jobs:
             TTS_PROVIDER=gemini
             GCP_LOCATION=us-central1
             OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
+            FIRESTORE_READ_LEDGER=1
+            FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
             FIREBASE_SIGNER_SERVICE_ACCOUNT=dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
@@ -279,7 +281,6 @@ jobs:
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
             MEMORY_BELIEF_MODEL_ENABLED=true
-            BASIC_PLAN_GATE_PROACTIVITY_ENABLED=true
             FREE_TIER_LOCAL_PROCESSING=true
             FREE_TIER_EMERGENCY_STOP=false
             FREE_TIER_LOCAL_PROCESSING_COHORT=${{ steps.desktop-expected-env.outputs.free_tier_local_processing_cohort }}

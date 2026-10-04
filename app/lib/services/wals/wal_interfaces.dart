@@ -71,6 +71,8 @@ abstract class LocalWalSync implements IWalSync {
   /// admission and pass to [addExternalWal]; do not re-read after an await.
   int get sessionGeneration;
 
+  int get captureEvidenceGeneration;
+
   Future<void> addExternalWal(Wal wal, {required int admittedGeneration});
   Future<List<Wal>> getAllWals();
 
@@ -102,6 +104,12 @@ abstract class LocalWalSync implements IWalSync {
 
   /// Set the snapshot inherited by WALs created for the active session.
   void setSessionGeolocation(Geolocation? geolocation);
+
+  Future<bool> ensureStorageAdmission({required int bytes, required int admittedGeneration});
+
+  Future<bool> hasDurableWal(Wal wal, {required int admittedGeneration});
+
+  void releaseStorageAdmission(int bytes) {}
 }
 
 abstract class SDCardWalSync implements IWalSync {

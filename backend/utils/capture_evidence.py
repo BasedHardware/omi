@@ -15,6 +15,8 @@ import uuid
 from bisect import bisect_right
 from typing import Iterable
 
+from utils.committed_capture import PROOF_KIND, CommittedCaptureMap
+
 MAX_ENVELOPE_BYTES = 4096
 MAX_SOURCE_RUNS = 32
 
@@ -217,13 +219,31 @@ def parse_live_frame(payload: dict, byte_length: int) -> dict | None:
 class SourcePositionMap:
     """Bounded source-frame to decoded-sample runs for one authenticated listen socket."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, committed: bool = False) -> None:
         self.runs: list[dict] = []
         self.incomplete = False
         self.conflicts = 0
         self._unit_digests: dict[tuple, str] = {}
+        self._committed: CommittedCaptureMap | None = CommittedCaptureMap() if committed else None
 
-    def accept(self, claim: dict | None, *, sample_start: int, sample_count: int, rate_hz: int, payload: bytes) -> None:
+    def accept(
+        self,
+        claim: dict | None,
+        *,
+        sample_start: int,
+        sample_count: int,
+        rate_hz: int,
+        payload: bytes,
+        receipt_wall_time: float | None = None,
+    ) -> None:
+        if self._committed is not None:
+            self._committed.accept(
+                claim,
+                sample_start=sample_start,
+                sample_count=sample_count,
+                rate_hz=rate_hz,
+                receipt_wall_time=receipt_wall_time,
+            )
         if claim is None or sample_count <= 0 or rate_hz <= 0:
             self.incomplete = True
             return
@@ -309,6 +329,23 @@ class SourcePositionMap:
             'runs': selected,
         }
         return bounded_envelope(result)
+
+    def remember_transcripts(self, segments: Iterable[dict]) -> None:
+        if self._committed is not None:
+            self._committed.remember_transcripts(segments)
+
+    def committed_snapshot(self, conversation_id: str, segments: Iterable) -> dict | None:
+        if self._committed is None or self.conflicts:
+            return None
+        snapshot = self._committed.committed_snapshot(conversation_id, segments)
+        if snapshot is None:
+            return None
+        result = bounded_envelope(snapshot)
+        return result if result.get('proof') == PROOF_KIND else None
+
+    def acknowledge(self, conversation_id: str, snapshot: dict | None) -> None:
+        if self._committed is not None:
+            self._committed.acknowledge(conversation_id, snapshot)
 
 
 def parse_sync_file_claims(value: str | None, filenames: Iterable[str]) -> dict[str, dict]:

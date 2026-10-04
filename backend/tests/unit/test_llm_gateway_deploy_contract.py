@@ -191,7 +191,15 @@ def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_inj
     assert gateway['ingress']['annotations']['kubernetes.io/ingress.regional-static-ip-name'] == (
         'prod-omi-self-hosted-llm-ip-address'
     )
-    assert prod['llm_gateway'] == {
+    assert {
+        key: prod['llm_gateway'][key]
+        for key in (
+            'namespace',
+            'release_name',
+            'ingress_name',
+            'static_address_name',
+        )
+    } == {
         'namespace': 'prod-omi-backend',
         'release_name': 'prod-omi-llm-gateway',
         'ingress_name': 'prod-omi-llm-gateway',

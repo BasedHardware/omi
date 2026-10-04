@@ -9306,6 +9306,16 @@ class AppLocalizationsTe extends AppLocalizations {
   String get syncCardDownloadingTitle => 'మీ పరికరం నుండి డౌన్‌లోడ్ అవుతోంది';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$totalలో $current';
   }
@@ -11294,6 +11304,9 @@ class AppLocalizationsTe extends AppLocalizations {
       'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name మరియు ఇతరులు';
   }
@@ -12344,7 +12357,51 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'కనెక్ట్ చేయలేకపోయింది. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get chatReplyServerError => 'మా వైపు ఏదో తప్పు జరిగింది. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get chatReplyTimeout => 'సమాధానం చాలా సమయం పట్టింది. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get chatReplyNotSignedIn => 'మీరు సైన్ ఇన్ చేయలేదు. సైన్ ఇన్ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get chatAppsLoadFailed => 'చాట్ యాప్‌లను లోడ్ చేయలేకపోయాం. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'వాయిస్';
+
+  @override
+  String get assistantVoice => 'అసిస్టెంట్ వాయిస్';
+
+  @override
+  String get voiceSharedAcrossDevices => 'మీ వాయిస్ ఎంపిక మొబైల్ మరియు డెస్క్‌టాప్‌లో షేర్ చేయబడుతుంది.';
+
+  @override
+  String get readChatRepliesAloud => 'చాట్ సమాధానాలను గట్టిగా చదవండి';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"వాయిస్ రెస్పాన్స్\" అనుమతించినప్పుడు మాత్రమే మాట్లాడుతుంది.';
+
+  @override
+  String get voicePreviewSample => 'హాయ్, నేను Omiని. ఇది నా వాయిస్.';
+
+  @override
   String get peopleStatsIncomplete => 'లెక్కలు అసంపూర్ణంగా ఉండవచ్చు.';
+
+  @override
+  String get previousDay => 'మునుపటి రోజు';
+
+  @override
+  String get nextDay => 'తదుపరి రోజు';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date నాటికి పనులు లేవు';
+  }
 
   @override
   String get reprocessingConversationProgress => 'సంభాషణను మళ్లీ ప్రాసెస్ చేస్తోంది…';
@@ -12397,4 +12454,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'కనెక్షన్‌ను తనిఖీ చేయండి';
+
+  @override
+  String get forYou => 'మీ కోసం';
+
+  @override
+  String get stopThese => 'వీటిని ఆపండి';
+
+  @override
+  String get dismiss => 'దాచు';
 }

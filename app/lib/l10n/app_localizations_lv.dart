@@ -9281,6 +9281,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Lejupielāde no jūsu ierīces';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current no $total';
   }
@@ -11273,6 +11283,9 @@ class AppLocalizationsLv extends AppLocalizations {
       'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi pats atjaunos savienojumu';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name un citi';
   }
@@ -12321,7 +12334,51 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Nevar izveidot savienojumu. Pārbaudiet savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String get chatReplyServerError => 'Mūsu pusē kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get chatReplyTimeout => 'Atbilde aizņēma pārāk daudz laika. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Jūs neesat pierakstījies. Pierakstieties un mēģiniet vēlreiz.';
+
+  @override
+  String get chatAppsLoadFailed => 'Neizdevās ielādēt tērzēšanas lietotnes. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Balss';
+
+  @override
+  String get assistantVoice => 'Asistenta balss';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Jūsu izvēlētā balss tiek koplietota mobilajā un datora lietotnē.';
+
+  @override
+  String get readChatRepliesAloud => 'Izlasīt tērzēšanas atbildes skaļi';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Runā tikai tad, kad to atļauj \"Balss atbilde\".';
+
+  @override
+  String get voicePreviewSample => 'Sveiki, esmu Omi. Šī ir mana balss.';
+
+  @override
   String get peopleStatsIncomplete => 'Skaitļi var būt nepilnīgi.';
+
+  @override
+  String get previousDay => 'Iepriekšējā diena';
+
+  @override
+  String get nextDay => 'Nākamā diena';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date nav uzdevumu';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Saruna tiek apstrādāta atkārtoti…';
@@ -12374,4 +12431,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Pārbaudiet savienojumu';
+
+  @override
+  String get forYou => 'Jums';
+
+  @override
+  String get stopThese => 'Apturēt šos';
+
+  @override
+  String get dismiss => 'Paslēpt';
 }

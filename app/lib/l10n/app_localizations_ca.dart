@@ -9313,6 +9313,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncCardDownloadingTitle => 'S\'està baixant del teu dispositiu';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current de $total';
   }
@@ -11310,6 +11320,9 @@ class AppLocalizationsCa extends AppLocalizations {
       'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi es tornarà a connectar sol';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name i altres';
   }
@@ -12363,7 +12376,51 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'No s\'ha pogut connectar. Comprova la connexió i torna-ho a provar.';
+
+  @override
+  String get chatReplyServerError => 'Alguna cosa ha fallat per part nostra. Torna-ho a provar.';
+
+  @override
+  String get chatReplyTimeout => 'La resposta ha trigat massa. Torna-ho a provar.';
+
+  @override
+  String get chatReplyNotSignedIn => 'No has iniciat sessió. Inicia sessió i torna-ho a provar.';
+
+  @override
+  String get chatAppsLoadFailed => 'No s\'han pogut carregar les apps de xat. Torna-ho a provar.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Veu';
+
+  @override
+  String get assistantVoice => 'Veu de l\'assistent';
+
+  @override
+  String get voiceSharedAcrossDevices => 'La veu que tries es comparteix entre el mòbil i l\'escriptori.';
+
+  @override
+  String get readChatRepliesAloud => 'Llegeix les respostes del xat en veu alta';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Només parla quan la \"Resposta de veu\" ho permet.';
+
+  @override
+  String get voicePreviewSample => 'Hola, soc l\'Omi. Aquesta és la meva veu.';
+
+  @override
   String get peopleStatsIncomplete => 'Els recomptes poden ser incomplets.';
+
+  @override
+  String get previousDay => 'Dia anterior';
+
+  @override
+  String get nextDay => 'Dia següent';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Cap tasca el $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'S\'està tornant a processar la conversa…';
@@ -12416,4 +12473,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Comprova la connexió';
+
+  @override
+  String get forYou => 'Per a tu';
+
+  @override
+  String get stopThese => 'Atura aquests';
+
+  @override
+  String get dismiss => 'Descarta';
 }

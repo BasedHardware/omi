@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from llm_gateway.gateway.accounting import AccountingContext, AttemptTrace
+from llm_gateway.gateway.proactivity_budget import attempt_scope, context_from_request
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
@@ -67,12 +68,14 @@ async def create_systemone(
             payer='byok' if credentials.mode.value == 'byok' else 'omi',
             fallback_feature=resolved.lane.lane_id,
         )
-        response = await execute_systemone(
-            resolved,
-            credentials,
-            provider_registry,
-            attempt_trace=attempt_trace,
-        )
+        proactivity = context_from_request(request, caller, accounting_context)
+        with attempt_scope(proactivity):
+            response = await execute_systemone(
+                resolved,
+                credentials,
+                provider_registry,
+                attempt_trace=attempt_trace,
+            )
         schedule_attempt_trace(accounting_context, attempt_trace)
         _safe_observe(
             lambda: observe_route_result(

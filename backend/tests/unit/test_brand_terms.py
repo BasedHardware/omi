@@ -7,6 +7,8 @@ from routers.listen.receiver import ListenReceiver, STTService
 from utils.stt import soniox as soniox_module
 from utils.stt.brand_terms import normalize_brand_segments, normalize_brand_terms
 from utils.stt.pre_recorded import _segments_as_objects
+from utils.stt.recovery_state import LiveRecoveryController
+from utils.stt.soniox_idle import SonioxIdleBudget
 
 
 @pytest.mark.parametrize(
@@ -71,6 +73,9 @@ def test_enqueue_normalizes_before_failover_capture_stamp_and_queue(monkeypatch)
     receiver._pending_live_failover = MagicMock(to_mode='soniox', settled=False)
     receiver.speaker_provider_epoch = MagicMock()
     receiver.host.transcripts = MagicMock()
+    receiver.recovery = LiveRecoveryController(receiver.host)
+    receiver.recovery_enabled = True
+    receiver._candidate_token = None
     captured = []
     receiver._capture = lambda _kind, segments: captured.append(segments[0]['text'])
     segments = [{'text': 'OMI is here'}]
@@ -117,11 +122,16 @@ async def test_soniox_context_terms_are_gated_and_sanitized(monkeypatch, flag, e
 @pytest.mark.parametrize('same_provider', [False, True])
 async def test_legacy_receiver_passes_vocabulary_to_soniox(monkeypatch, same_provider):
     receiver = object.__new__(ListenReceiver)
+    receiver.soniox_idle_budget = SonioxIdleBudget()
     receiver.host = MagicMock()
     receiver.host.vocabulary = ['Omi', 'omi.me']
     receiver.host.stt_service = STTService.soniox
     receiver.host.stt_language = 'en'
     receiver.host.language_profile = None
+    receiver.recovery = LiveRecoveryController(receiver.host)
+    receiver.recovery_enabled = True
+    receiver._candidate_token = None
+    receiver.stt_socket = None
     monkeypatch.setattr('routers.listen.receiver.managed_chain_enabled', lambda _host: False)
     process_audio = AsyncMock(return_value=object())
     monkeypatch.setattr('routers.listen.receiver.process_audio_soniox', process_audio)
@@ -135,3 +145,4 @@ async def test_legacy_receiver_passes_vocabulary_to_soniox(monkeypatch, same_pro
     await receiver._create_stt_socket(lambda _segments: None, 16000, same_provider=same_provider)
 
     assert process_audio.await_args.kwargs['keywords'] == ['Omi', 'omi.me']
+    assert process_audio.await_args.kwargs['idle_budget'] is receiver.soniox_idle_budget

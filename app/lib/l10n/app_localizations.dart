@@ -17253,6 +17253,18 @@ abstract class AppLocalizations {
   /// **'Downloading from your device'**
   String get syncCardDownloadingTitle;
 
+  /// Offline Sync status card: overall device-download percent. Not shown on recording rows.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String syncCardDownloadPercent(int percent);
+
+  /// Offline Sync status card: overall device-download percent and speed. Not shown on recording rows.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% · {speed} KB/s'**
+  String syncCardDownloadPercentSpeed(int percent, String speed);
+
   /// Top status card: secondary progress line under the phase title.
   ///
   /// In en, this message translates to:
@@ -20499,6 +20511,12 @@ abstract class AppLocalizations {
   /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
   String get capturePendantDisconnectedDetail;
 
+  /// Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi reconnects on its own'**
+  String get capturePendantDisconnectedShort;
+
   /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
   ///
   /// In en, this message translates to:
@@ -21993,11 +22011,95 @@ abstract class AppLocalizations {
   /// **'Last {duration}'**
   String diagnosticsLastDuration(String duration);
 
+  /// Shown when a chat reply fails because the device has no connectivity
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to connect. Check your connection and try again.'**
+  String get chatReplyOffline;
+
+  /// Shown when a chat reply fails with a server error
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong on our side. Please try again.'**
+  String get chatReplyServerError;
+
+  /// Shown when a chat reply times out
+  ///
+  /// In en, this message translates to:
+  /// **'The response took too long. Please try again.'**
+  String get chatReplyTimeout;
+
+  /// Shown when a chat reply fails because the user is not signed in
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re not signed in. Sign in and try again.'**
+  String get chatReplyNotSignedIn;
+
+  /// Shown in the chat apps drawer when loading installed chat apps fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load chat apps. Please try again.'**
+  String get chatAppsLoadFailed;
+
+  /// Settings section title for assistant voice
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get assistantVoiceSettingsTitle;
+
+  /// Row label for the assistant voice picker
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant Voice'**
+  String get assistantVoice;
+
+  /// Support line under the assistant voice picker
+  ///
+  /// In en, this message translates to:
+  /// **'Your voice choice is shared across mobile and desktop.'**
+  String get voiceSharedAcrossDevices;
+
+  /// Toggle label for reading chat replies aloud
+  ///
+  /// In en, this message translates to:
+  /// **'Read chat replies aloud'**
+  String get readChatRepliesAloud;
+
+  /// Toggle helper text explaining replies are only spoken when Voice response mode allows it
+  ///
+  /// In en, this message translates to:
+  /// **'Only speaks when Voice response allows it.'**
+  String get readChatRepliesAloudDescription;
+
+  /// Sample text synthesized when previewing an assistant voice
+  ///
+  /// In en, this message translates to:
+  /// **'Hi, I\'m Omi. This is my voice.'**
+  String get voicePreviewSample;
+
   /// No description provided for @peopleStatsIncomplete.
   ///
   /// In en, this message translates to:
   /// **'Counts may be incomplete.'**
   String get peopleStatsIncomplete;
+
+  /// Day page navigation: go to the day before
+  ///
+  /// In en, this message translates to:
+  /// **'Previous day'**
+  String get previousDay;
+
+  /// Day page navigation: go to the day after
+  ///
+  /// In en, this message translates to:
+  /// **'Next day'**
+  String get nextDay;
+
+  /// Empty state on the single-day tasks page
+  ///
+  /// In en, this message translates to:
+  /// **'No tasks on {date}'**
+  String noTasksOnDate(Object date);
 
   /// Shown with a progress bar while the open conversation is reprocessed.
   ///
@@ -22100,6 +22202,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check Connection'**
   String get playbackAudioNetworkFailed;
+
+  /// Home proactivity feed section title
+  ///
+  /// In en, this message translates to:
+  /// **'For You'**
+  String get forYou;
+
+  /// Disable the producer of a For You card
+  ///
+  /// In en, this message translates to:
+  /// **'Stop These'**
+  String get stopThese;
+
+  /// Hide a For You card
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get dismiss;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -23,6 +23,7 @@ from database import conversations as conversations_db
 from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 from tests.unit.test_conversation_smart_merge import T0, UID, World
+from tests.unit.test_sync_lineage_dedupe_replay import prove
 from utils import metrics
 from utils.conversations import smart_merge
 from utils.conversations.smart_merge_policy import absorb_payloads, fragment_of, user_managed
@@ -796,9 +797,10 @@ def test_smart_merge_then_sync_absorb_flattens_new_donor_ancestry(world):
     ids = _segment_ids(world, 'p')
     assert len(ids) == len(set(ids))
     segment_count = len(ids)
+    prove(incoming, world.raw('p'))
     result2, _, survivors = _assign(world, incoming, target_id='n')
-    assert result2['id'] == 'p' and not survivors
-    assert len(_segment_ids(world, 'p')) == segment_count
+    assert result2['id'] == 'p' and len(survivors) == len(incoming['transcript_segments'])
+    assert len(_segment_ids(world, 'p')) == segment_count + len(survivors)
     assert _visible(world) == ['p']
 
 

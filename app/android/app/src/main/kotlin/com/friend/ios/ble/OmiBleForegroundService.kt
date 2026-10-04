@@ -58,8 +58,16 @@ class OmiBleForegroundService : Service() {
         private const val KEY_FAIL_TO_CONNECT_COUNT = "fail_to_connect_count"
         private const val MAX_DISCONNECT_HISTORY = 500
         private const val DISCONNECT_RETENTION_MS = 7L * 24 * 3600 * 1000
-        private const val DIAGNOSTICS_SERVICE = "19b10040-e8f2-537e-4f6c-d104768a1214"
-        private const val DIAGNOSTICS_CHAR = "19b10041-e8f2-537e-4f6c-d104768a1214"
+        // 15-minute reads over the worst-case catch-up window: 4/hour * 24 * 8.
+        // maybeEmit can roll up yesterday - 6, whose start is nearly eight days
+        // old when the app runs late in the current day, so the ring must cover
+        // the seven prior days plus the current partial day.
+        private const val FIRMWARE_DIAGNOSTICS_LIMIT = 768
+        // appendJsonRing prunes entries older than this before applying the cap,
+        // so the firmware ring needs the same worst-case window as the cap; the
+        // disconnect history keeps the plain seven-day retention.
+        private const val FIRMWARE_DIAGNOSTICS_RETENTION_MS = 8L * 24 * 3600 * 1000
+        private const val BATTERY_LEVEL_CHAR = "00002a19-0000-1000-8000-00805f9b34fb"
         private const val AUDIO_CHAR = "19b10001-e8f2-537e-4f6c-d104768a1214"
 
         @Volatile
@@ -147,11 +155,10 @@ class OmiBleForegroundService : Service() {
          *  callback reports CONNECTED. Used to distinguish fail-to-connect from
          *  an established link dropping. Independent of hasEverConnected which
          *  tracks the full device lifetime. */
-        var currentAttemptEstablished: Boolean = false,
-        /** Timestamp of the last persisted unexpected disconnect event, used to
-         *  backfill time-to-reconnect on the next successful connect. */
-        var pendingReconnectMarkerTs: Long? = null
-    )
+        var currentAttemptEstablished: Boolean = false
+    ) {
+        internal val reconnectDiagnostics = BleReconnectDiagnostics()
+    }
 
     private val managedDevices = ConcurrentHashMap<String, ManagedDevice>()
     private val handler = Handler(Looper.getMainLooper())
@@ -177,8 +184,8 @@ class OmiBleForegroundService : Service() {
             Log.i(TAG, "onGattConnected: $addr")
             if (managed.hasEverConnected) {
                 incrementReconnectionCount(addr)
-                backfillTimeToReconnect(addr, managed)
             }
+            backfillTimeToReconnect(addr, managed)
             managed.retryCount = 0
             managed.hasEverConnected = true
             managed.currentAttemptEstablished = true
@@ -187,6 +194,12 @@ class OmiBleForegroundService : Service() {
             managed.connectionStartTime = System.currentTimeMillis()
             bleManager.lastRssi.remove(addr)
             bleManager.rssiHistory.remove(addr)
+            // The charging flag comes only from firmware diagnostics reads, and
+            // the state may have changed while disconnected. Clear it so new
+            // battery points stay unknown (counted conservatively as drain by
+            // the rollup) until the next read re-stamps the actual state; a
+            // retained stale charging=true would exclude real drain intervals
+            // and the backfill cannot correct an explicit flag.
             bleManager.chargingState.remove(addr)
             audioCounters[addr] = BleAudioPacketCounter()
             getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE).let { prefs ->
@@ -216,20 +229,7 @@ class OmiBleForegroundService : Service() {
             if (services.isEmpty()) {
                 Log.w(TAG, "No services discovered for $addr")
             }
-            val hasDiagnostics = services.any { it.uuid.equals(DIAGNOSTICS_SERVICE, ignoreCase = true) &&
-                it.characteristicUuids.any { characteristic -> characteristic.equals(DIAGNOSTICS_CHAR, ignoreCase = true) }
-            }
-            val readDiagnostics = {
-                if (hasDiagnostics) bleManager.readCharacteristic(addr, DIAGNOSTICS_SERVICE, DIAGNOSTICS_CHAR) { result ->
-                    result.getOrNull()?.let { value ->
-                        FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())?.let { parsed ->
-                            if (!parsed.isNull("charging")) bleManager.chargingState[addr] = parsed.getBoolean("charging")
-                            appendJsonRing("firmware_$addr", parsed, 20, DISCONNECT_RETENTION_MS)
-                            logBle(addr, "firmware_diagnostics_read", "v${parsed.optInt("version")}")
-                        }
-                    }
-                }
-            }
+            val readDiagnostics = { readFirmwareDiagnosticsIfDue(addr) }
 
             if (managed.requiresBond) {
                 bleManager.requestBond(addr) { result ->
@@ -252,6 +252,22 @@ class OmiBleForegroundService : Service() {
     }
 
     // ── Post-discovery pipeline ──
+
+    private fun readFirmwareDiagnosticsIfDue(address: String) {
+        bleManager.readFirmwareDiagnosticsIfDue(address) { result ->
+            try {
+                result.getOrNull()?.let { value ->
+                    FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())?.let { parsed ->
+                        if (!parsed.isNull("charging")) bleManager.recordChargingState(address, parsed.getBoolean("charging"))
+                        appendJsonRing("firmware_$address", parsed, FIRMWARE_DIAGNOSTICS_LIMIT, FIRMWARE_DIAGNOSTICS_RETENTION_MS)
+                        logBle(address, "firmware_diagnostics_read", "v${parsed.optInt("version")}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not record firmware diagnostics: ${e.message}")
+            }
+        }
+    }
 
     private fun requestMtuThenNotifyReady(address: String, services: List<BleService>, afterReady: () -> Unit = {}) {
         val addr = address.uppercase()
@@ -558,14 +574,8 @@ class OmiBleForegroundService : Service() {
 
         val cccdTimeout = status == OmiBleManager.CCCD_TIMEOUT_STATUS
         val retrying = handleRetryLogic(addr, status)
-        val error = when {
-            cccdTimeout && !retrying -> "cccd_timeout_exhausted"
-            cccdTimeout -> "cccd_timeout"
-            status == 137 -> "pairing_lost"
-            status == 22 -> "paired_to_another_phone"
-            status != 0 -> "gatt_status_$status"
-            else -> null
-        }
+        val error = BleDisconnectReason.connectionErrorFromStatus(status, retrying)
+
 
         val managed = managedDevices[addr]
         if (managed != null && !managed.hasEverConnected && status != -1) {
@@ -779,6 +789,9 @@ class OmiBleForegroundService : Service() {
                 value: ByteArray
             ) {
                 if (characteristicUuid.equals(AUDIO_CHAR, ignoreCase = true)) recordAudioPacket(address, value)
+                if (characteristicUuid.equals(BATTERY_LEVEL_CHAR, ignoreCase = true) && value.isNotEmpty()) {
+                    readFirmwareDiagnosticsIfDue(address)
+                }
                 // Batch mode and background streaming are mutually exclusive (gated by
                 // their respective prefs); calling all sinks is safe — each self-gates.
                 batchAudioWriter.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
@@ -885,17 +898,6 @@ class OmiBleForegroundService : Service() {
 
     // ── Diagnostics persistence ──
 
-    private fun hciStatusDescription(status: Int): String = when (status) {
-        0 -> "clean_disconnect"
-        8 -> "connection_timeout"
-        19 -> "remote_device_terminated"
-        22 -> "paired_to_another_phone"
-        34 -> "link_key_mismatch"
-        62 -> "connection_failed_instant_passed"
-        -1 -> "app_closed"
-        OmiBleManager.CCCD_TIMEOUT_STATUS -> "cccd_ack_timeout"
-        else -> "gatt_error_$status"
-    }
 
     private fun historyKey(address: String) = "${KEY_DISCONNECT_HISTORY}_${address.uppercase()}"
     private fun reconnectKey(address: String) = "${KEY_RECONNECT_COUNT}_${address.uppercase()}"
@@ -976,7 +978,7 @@ class OmiBleForegroundService : Service() {
 
         val event = JSONObject().apply {
             put("timestamp", now)
-            put("reason", if (isManual) "manual" else hciStatusDescription(status))
+            put("reason", if (isManual) "manual" else BleDisconnectReason.fromStatus(status))
             put("reasonCode", status)
             put("isManual", isManual)
             put("eventType", eventType)
@@ -990,25 +992,16 @@ class OmiBleForegroundService : Service() {
             put("rssiTrend", trend)
         }
         history.put(event)
-
-        for (i in history.length() - 1 downTo 0) {
-            if ((history.optJSONObject(i)?.optLong("timestamp", 0L) ?: 0L) < now - DISCONNECT_RETENTION_MS) {
-                history.remove(i)
-            }
-        }
-
-        // Keep only the last MAX_DISCONNECT_HISTORY entries
-        while (history.length() > MAX_DISCONNECT_HISTORY) {
-            history.remove(0)
-        }
-
-        prefs.edit().putString(key, history.toString()).apply()
+        val recovery = managed?.reconnectDiagnostics ?: BleReconnectDiagnostics()
+        recovery.record(now, eventType, isManual)
+        val retained = recovery.retainedHistory(
+            (0 until history.length()).mapNotNull { history.optJSONObject(it) },
+            now, DISCONNECT_RETENTION_MS, MAX_DISCONNECT_HISTORY,
+        ) { it.optLong("timestamp", 0L) }
+        prefs.edit().putString(key, JSONArray(retained).toString()).apply()
         logBle(addr, eventType, event.optString("reason"))
 
-        // Remember the event timestamp so the next successful connect can backfill
-        // the time-to-reconnect latency on this record.
         if (!isManual && managed != null) {
-            managed.pendingReconnectMarkerTs = now
             if (eventType == "disconnect") pendingAudioRecovery[addr] = now
         }
     }
@@ -1039,24 +1032,17 @@ class OmiBleForegroundService : Service() {
     }
 
     private fun backfillTimeToReconnect(address: String, managed: ManagedDevice) {
-        val markerTs = managed.pendingReconnectMarkerTs ?: return
-        managed.pendingReconnectMarkerTs = null
-
         val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
         val key = historyKey(address)
         val historyJson = prefs.getString(key, "[]") ?: "[]"
-        val history = try { JSONArray(historyJson) } catch (_: Exception) { return }
-
-        val now = System.currentTimeMillis()
-        // Walk backwards; history is small (≤ MAX_DISCONNECT_HISTORY).
-        for (i in history.length() - 1 downTo 0) {
-            val obj = history.getJSONObject(i)
-            if (obj.optLong("timestamp", 0L) == markerTs) {
-                obj.put("timeToReconnectMs", (now - markerTs).coerceAtLeast(0L))
-                prefs.edit().putString(key, history.toString()).apply()
-                return
-            }
-        }
+        val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
+        val updated = managed.reconnectDiagnostics.backfilledHistory(
+            (0 until history.length()).mapNotNull { history.optJSONObject(it) },
+            System.currentTimeMillis(), managed.hasEverConnected,
+            timestampOf = { it.optLong("timestamp", 0L) },
+            withDuration = { event, duration -> event.put("timeToReconnectMs", duration) },
+        ) ?: return
+        prefs.edit().putString(key, JSONArray(updated).toString()).apply()
     }
 
     private fun incrementReconnectionCount(address: String) {

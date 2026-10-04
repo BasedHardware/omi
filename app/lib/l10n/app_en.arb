@@ -10972,6 +10972,27 @@
     "@syncCardDownloadingTitle": {
         "description": "Top status card: phase title when downloading recordings from the Omi device over BLE/Wi-Fi"
     },
+    "syncCardDownloadPercent": "{percent}%",
+    "@syncCardDownloadPercent": {
+        "description": "Offline Sync status card: overall device-download percent. Not shown on recording rows.",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "@syncCardDownloadPercentSpeed": {
+        "description": "Offline Sync status card: overall device-download percent and speed. Not shown on recording rows.",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "speed": {
+                "type": "String"
+            }
+        }
+    },
     "syncCardProgressOf": "{current} of {total}",
     "@syncCardProgressOf": {
         "description": "Top status card: secondary progress line under the phase title.",
@@ -13365,6 +13386,10 @@
     "@capturePendantDisconnectedDetail": {
         "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
     },
+    "capturePendantDisconnectedShort": "Omi reconnects on its own",
+    "@capturePendantDisconnectedShort": {
+        "description": "Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation."
+    },
     "participantsSummaryUncounted": "{name} + others",
     "@participantsSummaryUncounted": {
         "description": "Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'",
@@ -14676,7 +14701,66 @@
             }
         }
     },
+    "chatReplyOffline": "Unable to connect. Check your connection and try again.",
+    "@chatReplyOffline": {
+        "description": "Shown when a chat reply fails because the device has no connectivity"
+    },
+    "chatReplyServerError": "Something went wrong on our side. Please try again.",
+    "@chatReplyServerError": {
+        "description": "Shown when a chat reply fails with a server error"
+    },
+    "chatReplyTimeout": "The response took too long. Please try again.",
+    "@chatReplyTimeout": {
+        "description": "Shown when a chat reply times out"
+    },
+    "chatReplyNotSignedIn": "You're not signed in. Sign in and try again.",
+    "@chatReplyNotSignedIn": {
+        "description": "Shown when a chat reply fails because the user is not signed in"
+    },
+    "chatAppsLoadFailed": "Couldn't load chat apps. Please try again.",
+    "@chatAppsLoadFailed": {
+        "description": "Shown in the chat apps drawer when loading installed chat apps fails"
+    },
+    "assistantVoiceSettingsTitle": "Voice",
+    "@assistantVoiceSettingsTitle": {
+        "description": "Settings section title for assistant voice"
+    },
+    "assistantVoice": "Assistant Voice",
+    "@assistantVoice": {
+        "description": "Row label for the assistant voice picker"
+    },
+    "voiceSharedAcrossDevices": "Your voice choice is shared across mobile and desktop.",
+    "@voiceSharedAcrossDevices": {
+        "description": "Support line under the assistant voice picker"
+    },
+    "readChatRepliesAloud": "Read chat replies aloud",
+    "@readChatRepliesAloud": {
+        "description": "Toggle label for reading chat replies aloud"
+    },
+    "readChatRepliesAloudDescription": "Only speaks when Voice response allows it.",
+    "@readChatRepliesAloudDescription": {
+        "description": "Toggle helper text explaining replies are only spoken when Voice response mode allows it"
+    },
+    "voicePreviewSample": "Hi, I'm Omi. This is my voice.",
+    "@voicePreviewSample": {
+        "description": "Sample text synthesized when previewing an assistant voice"
+    },
     "peopleStatsIncomplete": "Counts may be incomplete.",
+    "previousDay": "Previous day",
+    "@previousDay": {
+        "description": "Day page navigation: go to the day before"
+    },
+    "nextDay": "Next day",
+    "@nextDay": {
+        "description": "Day page navigation: go to the day after"
+    },
+    "noTasksOnDate": "No tasks on {date}",
+    "@noTasksOnDate": {
+        "description": "Empty state on the single-day tasks page",
+        "placeholders": {
+            "date": {}
+        }
+    },
     "reprocessingConversationProgress": "Reprocessing conversation…",
     "@reprocessingConversationProgress": {
         "description": "Shown with a progress bar while the open conversation is reprocessed."
@@ -14744,5 +14828,17 @@
     "playbackAudioNetworkFailed": "Check Connection",
     "@playbackAudioNetworkFailed": {
         "description": "Inline label when fetching the audio URLs fails on transport"
+    },
+    "forYou": "For You",
+    "@forYou": {
+        "description": "Home proactivity feed section title"
+    },
+    "stopThese": "Stop These",
+    "@stopThese": {
+        "description": "Disable the producer of a For You card"
+    },
+    "dismiss": "Dismiss",
+    "@dismiss": {
+        "description": "Hide a For You card"
     }
 }

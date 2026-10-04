@@ -579,18 +579,6 @@ _driver(
     ),
 )
 _driver(
-    'utils.memory.jit_trigger_snapshot.read_authoritative_trigger_snapshot',
-    base={'uid': UID},
-    patchers=(
-        _stub(
-            'utils.memory.jit_trigger_snapshot.read_memory_v3_trusted_account_generation',
-            SimpleNamespace(
-                account_generation=1, head_commit_id='head-1', commit_sequence=1, require_account_generation=lambda: 1
-            ),
-        ),
-    ),
-)
-_driver(
     'utils.memory.non_active_route_audit._fetch_non_active_route_docs',
     base={'uid': UID},
     domains={'run_id': [None, 'run-1']},

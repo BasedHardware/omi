@@ -29,6 +29,7 @@ prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
 from routers import (
+    proactivity,
     chat,
     firmware,
     static_map,
@@ -42,6 +43,7 @@ from routers import (
     people,
     agents,
     users,
+    support,
     trends,
     sync,
     apps,
@@ -109,6 +111,7 @@ from routers import (
     memory_product,
     task_recommendations,
     conversation_finalization,
+    commitment_followup,
     public_shared_conversation_chat,
     screen_frames,
     jit_ledger_snapshot,
@@ -209,6 +212,7 @@ app.add_middleware(
     ],
 )
 
+app.include_router(proactivity.router)
 app.include_router(transcribe.router)
 app.include_router(static_map.router)
 app.include_router(omni_relay.router)
@@ -242,6 +246,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(support.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
@@ -250,6 +255,7 @@ app.include_router(mobile_feedback.router)
 app.include_router(device_diagnostics.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
+app.include_router(commitment_followup.router)
 app.include_router(trends.router)
 
 app.include_router(other.router)

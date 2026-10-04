@@ -86,7 +86,8 @@ def private_cloud_session(monkeypatch):
     uploaded: list[str] = []
     fallbacks: list[dict] = []
 
-    def upload(chunks, uid, conversation_id, protection_level):
+    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate):
+        assert sample_rate == SAMPLE_RATE
         uploaded.append(conversation_id)
 
     monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)

@@ -19,6 +19,7 @@ import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/siri_integration.dart';
+import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -28,7 +29,11 @@ final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
     return AuthUserSnapshot(
-        uid: user.uid, email: user.email, displayName: user.displayName, isAnonymous: user.isAnonymous);
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      isAnonymous: user.isAnonymous,
+    );
   }
 
   @override
@@ -333,6 +338,7 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    await ProactivityRuntime.outbox.bindOwner(null);
     await _prepareSiriBestEffort();
     _invalidateRefreshes();
     _clearCachedIdentityAndAuth();
@@ -342,6 +348,7 @@ class AuthService {
   /// Credential collision and provider switching preserve their existing
   /// non-Siri cache behavior, while fencing native Siri before Firebase exits.
   Future<void> signOutForAccountSwitch() async {
+    await ProactivityRuntime.outbox.bindOwner(null);
     await _prepareSiriBestEffort();
     handleAuthUserChanged(null);
     await _tokenGateway.signOut();
@@ -427,26 +434,28 @@ class AuthService {
     if (_localDevRecoveryInFlight) return;
     _localDevRecoveryInFlight = true;
 
-    unawaited(Future<void>.delayed(Duration.zero, () async {
-      try {
-        Logger.debug('local-dev: refresh failed, re-minting a session out of band');
-        final credential = await signInWithLocalDevToken();
-        final user = credential?.user;
-        if (user == null) return;
-        // Unforced: sign-in just populated a fresh token, so read the cached one
-        // rather than re-entering the forced-refresh path that just failed.
-        final token = await user.getIdToken();
-        if (token == null || token.isEmpty) return;
-        SharedPreferencesUtil().authToken = token;
-        _sessionExpired = false;
-        markAuthenticatedUser(user.uid);
-        Logger.debug('local-dev: session re-minted; the next request will use it');
-      } catch (e) {
-        Logger.debug('local-dev: re-mint failed: $e');
-      } finally {
-        _localDevRecoveryInFlight = false;
-      }
-    }));
+    unawaited(
+      Future<void>.delayed(Duration.zero, () async {
+        try {
+          Logger.debug('local-dev: refresh failed, re-minting a session out of band');
+          final credential = await signInWithLocalDevToken();
+          final user = credential?.user;
+          if (user == null) return;
+          // Unforced: sign-in just populated a fresh token, so read the cached one
+          // rather than re-entering the forced-refresh path that just failed.
+          final token = await user.getIdToken();
+          if (token == null || token.isEmpty) return;
+          SharedPreferencesUtil().authToken = token;
+          _sessionExpired = false;
+          markAuthenticatedUser(user.uid);
+          Logger.debug('local-dev: session re-minted; the next request will use it');
+        } catch (e) {
+          Logger.debug('local-dev: re-mint failed: $e');
+        } finally {
+          _localDevRecoveryInFlight = false;
+        }
+      }),
+    );
   }
 
   Future<AuthTokenResult> refreshIdToken() {
@@ -783,11 +792,7 @@ class AuthService {
     // session after the UI has already reported failure.
     try {
       await http
-          .get(Uri(
-            scheme: 'http',
-            host: Env.firebaseAuthEmulatorHost,
-            port: Env.firebaseAuthEmulatorPort,
-          ))
+          .get(Uri(scheme: 'http', host: Env.firebaseAuthEmulatorHost, port: Env.firebaseAuthEmulatorPort))
           .timeout(const Duration(seconds: 8));
     } catch (_) {
       throw StateError(

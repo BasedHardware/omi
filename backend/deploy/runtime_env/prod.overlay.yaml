@@ -4,10 +4,61 @@ compute_project: based-hardware
 data_plane_project: based-hardware
 overlay:
   llm_gateway:
+    env:
+      PROACTIVITY_REDIS_HOST:
+        config_map:
+          name: prod-omi-backend-config
+          key: REDIS_DB_HOST
+      PROACTIVITY_REDIS_PORT:
+        value: '13151'
+        category: service_discovery
+      PROACTIVITY_REDIS_PASSWORD:
+        secret:
+          name: prod-omi-backend-secrets
+          key: REDIS_DB_PASSWORD
+      LLM_GATEWAY_ACCOUNTING_ENABLED:
+        value: 'true'
+        category: rollout
+      OMI_CUSTOMER_DATA_PROJECT:
+        value: based-hardware
+        category: service_discovery
+      POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: telemetry
+      MENTOR_PIPELINE:
+        value: cohort
+        category: rollout
     static_address_name: prod-omi-self-hosted-llm-ip-address
   gke:
     backend-listen:
       env:
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: prod-omi-backend-secrets
+            key: POSTHOG_PROJECT_API_KEY
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
+          value: '13151'
+          category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
+        AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
           category: rollout
@@ -43,6 +94,9 @@ overlay:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        STT_FAILOVER_RECOVERY_ENABLED:
+          value: 'false'
+          category: rollout
         STT_ROUTING_MODE:
           value: shadow
         SONIOX_MONTHLY_CEILING_USD:
@@ -186,6 +240,33 @@ overlay:
           category: rollout
     pusher:
       env:
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: prod-omi-backend-secrets
+            key: POSTHOG_PROJECT_API_KEY
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
+          value: '13151'
+          category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
+        AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
+        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
           category: rollout
@@ -316,6 +397,15 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
+      OMI_CUSTOMER_DATA_PROJECT:
+        value: based-hardware
+        category: service_discovery
+      POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: telemetry
+      MENTOR_PIPELINE:
+        value: cohort
+        category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         value: 'false'
       FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -323,8 +413,6 @@ overlay:
       FREE_TIER_EMERGENCY_STOP:
         value: 'false'
       MEMORY_BELIEF_MODEL_ENABLED:
-        value: 'false'
-      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
         value: 'false'
       BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
         value: 'false'
@@ -343,6 +431,9 @@ overlay:
           env_var: CLOUD_RUN_VPC_NETWORK
         --subnet:
           env_var: CLOUD_RUN_VPC_SUBNET
+    # Keep Cloud Run secret mounts identical to main. V2 reuses each host's
+    # existing REDIS_DB_* client and POSTHOG_PROJECT_API_KEY / POSTHOG_API_KEY
+    # environment; provider admission leases remain on the GKE gateway.
     services:
       backend:
         # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
@@ -361,6 +452,18 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -519,6 +622,18 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
             category: rollout
@@ -648,6 +763,18 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
@@ -756,6 +883,18 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:

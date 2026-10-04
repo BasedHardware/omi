@@ -9302,6 +9302,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Se descarcă de pe dispozitivul tău';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current din $total';
   }
@@ -11298,6 +11308,9 @@ class AppLocalizationsRo extends AppLocalizations {
       'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi se va reconecta singur';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name și alții';
   }
@@ -12348,7 +12361,51 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Nu se poate conecta. Verifică-ți conexiunea și încearcă din nou.';
+
+  @override
+  String get chatReplyServerError => 'Ceva a mers prost de partea noastră. Încearcă din nou.';
+
+  @override
+  String get chatReplyTimeout => 'Răspunsul a durat prea mult. Încearcă din nou.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Nu ești conectat. Conectează-te și încearcă din nou.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nu s-au putut încărca aplicațiile de chat. Încearcă din nou.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voce';
+
+  @override
+  String get assistantVoice => 'Vocea asistentului';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vocea aleasă este partajată între mobil și desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Citește răspunsurile din chat cu voce tare';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Vorbește doar când \"Răspuns vocal\" permite.';
+
+  @override
+  String get voicePreviewSample => 'Bună, sunt Omi. Aceasta este vocea mea.';
+
+  @override
   String get peopleStatsIncomplete => 'Numărătorile pot fi incomplete.';
+
+  @override
+  String get previousDay => 'Ziua precedentă';
+
+  @override
+  String get nextDay => 'Ziua următoare';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nicio sarcină pe $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Se reprocesează conversația…';
@@ -12401,4 +12458,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Verificați conexiunea';
+
+  @override
+  String get forYou => 'Pentru tine';
+
+  @override
+  String get stopThese => 'Oprește acestea';
+
+  @override
+  String get dismiss => 'Ascunde';
 }

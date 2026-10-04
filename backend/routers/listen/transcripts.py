@@ -13,8 +13,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from fastapi.websockets import WebSocketDisconnect
 
-from config.capture_evidence import capture_evidence_dark_write_enabled
+from config.capture_evidence import capture_evidence_dark_write_enabled, listen_committed_capture_coverage_enabled
 from config.translation import resolve_ondemand_config
+from config.live_capture import capture_window_reason
 from utils.capture_evidence import unknown_envelope
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 
@@ -38,7 +39,11 @@ from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
 from utils.audio_timeline import UNPLACED_SEGMENT_OFFSET
 from utils.conversations.factory import deserialize_conversation
-from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL, OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL
+from utils.metrics import (
+    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
+    OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL,
+    OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL,
+)
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
@@ -414,32 +419,35 @@ class TranscriptProcessor:
             process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
             self._apply_speaker_identity_statuses(targets)
             fresh = [segment.model_dump() for segment in segments]
+            source_map = self.host.state.source_position_map if capture_evidence_dark_write_enabled() else None
+            capture_evidence = None
+            if capture_evidence_dark_write_enabled():
+                if source_map is not None:
+                    if listen_committed_capture_coverage_enabled():
+                        capture_evidence = source_map.committed_snapshot(conversation.id, segments) or unknown_envelope(
+                            'missing_source_position', origin='live'
+                        )
+                    else:
+                        capture_evidence = source_map.snapshot(
+                            (start, end)
+                            for start, end, owner in (self.host.state.conversation_sample_ranges or ())
+                            if owner == conversation.id
+                        )
+                else:
+                    capture_evidence = unknown_envelope(
+                        'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
+                        origin='live',
+                    )
             written = await self.host.persistence.call(
                 conversations_db.update_conversation_segments,
                 self.host.request.uid,
                 conversation.id,
                 [segment.model_dump() for segment in targets],
                 live_segments=fresh,
+                live_capture_reasons={str(s.id): s.capture_window_reason for s in segments},
                 started_at=started_at,
                 audio_timeline=audio_timeline,
-                **(
-                    {
-                        'capture_evidence': (
-                            self.host.state.source_position_map.snapshot(
-                                (start, end)
-                                for start, end, owner in (self.host.state.conversation_sample_ranges or ())
-                                if owner == conversation.id
-                            )
-                            if self.host.state.source_position_map is not None
-                            else unknown_envelope(
-                                'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
-                                origin='live',
-                            )
-                        )
-                    }
-                    if capture_evidence_dark_write_enabled()
-                    else {}
-                ),
+                **({'capture_evidence': capture_evidence} if capture_evidence_dark_write_enabled() else {}),
                 data_protection_level=self.cache.protection_level,
                 invalidate_client_processing=False,
             )
@@ -471,6 +479,12 @@ class TranscriptProcessor:
                     OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL.labels(
                         outcome='persisted' if known else 'unavailable', reason=reason
                     ).inc()
+                    attribution = 'known_window' if known else capture_window_reason(written.capture_reasons.get(sid))
+                    OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='version', reason=attribution).inc()
+                    if sid in written.created_ids:
+                        OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='segment', reason=attribution).inc()
+            if source_map is not None:
+                source_map.acknowledge(conversation.id, capture_evidence)
             conversation.transcript_segments = list(by_id.values())
             updated = [s for sid, s in by_id.items() if sid in written.updated_ids or speaker_dirty]
             removed = written.removed_ids
@@ -753,11 +767,33 @@ class TranscriptProcessor:
         for photo in photos or []:
             self.photo_buffer.append(photo)
 
+    def _stt_drain_pending(self) -> bool:
+        receiver = getattr(self.host, 'receiver', None)
+        if getattr(receiver, 'recovery', None) is None:
+            return False
+        drain = getattr(receiver, 'stt_drain_complete', None)
+        return drain is not None and not drain.is_set()
+
     async def process_loop(self) -> None:
         diarized_speaker_ids_by_conversation: Dict[str, set[int]] = {}
-        while self.host.state.active or self.segment_buffer or self.photo_buffer or self._v2_legacy_fallback:
+        while (
+            self.host.state.active
+            or self.segment_buffer
+            or self.photo_buffer
+            or self._v2_legacy_fallback
+            or self._stt_drain_pending()
+        ):
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer or self._v2_legacy_fallback):
-                break
+                if not self._stt_drain_pending():
+                    break
+                receiver = getattr(self.host, 'receiver', None)
+                drain = getattr(receiver, 'stt_drain_complete', None)
+                if drain is not None:
+                    try:
+                        await asyncio.wait_for(drain.wait(), 0.5)
+                    except asyncio.TimeoutError:
+                        pass
+                continue
             # One eligible fallback attempt per tick. A failing owner backs
             # off independently and cannot prevent normal transcript/photo
             # draining or eligible fallback items behind it from progressing.
@@ -891,7 +927,13 @@ class TranscriptProcessor:
                     self.speaker_id_allocator.assign(raw)
                     raw['start'] += offset
                     raw['end'] += offset
+                    attribution = raw.pop('_capture_window_reason', None)
+                    if getattr(self.host, 'use_custom_stt', False):
+                        attribution = 'custom_stt'
+                    elif getattr(self.host, 'is_multi_channel', False):
+                        attribution = 'multi_channel'
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
+                    segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
@@ -1141,7 +1183,13 @@ class TranscriptProcessor:
                         # V2 capture spans begin at >=0, so this offset cannot
                         # resolve to audio even when the marker is invisible.
                         raw['start'] = raw['end'] = UNPLACED_SEGMENT_OFFSET
+                    attribution = raw.pop('_capture_window_reason', None)
+                    if getattr(self.host, 'use_custom_stt', False):
+                        attribution = 'custom_stt'
+                    elif getattr(self.host, 'is_multi_channel', False):
+                        attribution = 'multi_channel'
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
+                    segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
