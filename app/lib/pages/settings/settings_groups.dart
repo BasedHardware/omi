@@ -20,6 +20,7 @@ import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 /// The Settings group pages. The Settings sheet shows Account, the five groups here, Integrations

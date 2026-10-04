@@ -179,12 +179,14 @@ struct NativeSurfaceView: View {
                 Menu {
                     ForEach(row.options) { option in
                         Button(option.title) { Task { await state.send(row.id, value: option.id) } }
+                            .buttonStyle(.automatic)
                     }
                 } label: {
                     actionLabel(row, compact: compact)
                         .frame(minWidth: compact ? 44 : 0, minHeight: 44)
                         .contentShape(Rectangle())
                 }
+                .menuStyle(.button)
             case "toggle":
                 Toggle(isOn: Binding(get: { row.value?.bool ?? false }, set: { value in
                     Task { await state.send(row.id, value: value) }

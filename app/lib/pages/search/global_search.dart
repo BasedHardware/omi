@@ -651,7 +651,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
             ? _openScope(_scope!)
             : browsing
                 ? _loadOverview()
-                : _run(_query.text.trim()),
+                : _run(),
         toolbar: [
           NativeRow('search_close', _scope == null ? l10n.close : l10n.back, symbol: 'chevron.left', action: (_) {
             if (_scope == null) {
