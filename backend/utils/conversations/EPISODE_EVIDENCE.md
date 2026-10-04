@@ -46,8 +46,11 @@ and actor with each claim so ephemeral pack IDs remain auditable after persisten
 and projected recap; one targeted retry is allowed, shared with provenance repair.
 After that retry, accept the structurally valid retry (otherwise the initial note),
 reject empty retries, drop invalid claim entries and emit bounded violation-class
-fallback telemetry. Visible-field edits invalidate affected claims in the same
-write; fresh regeneration replaces earlier annotations, including when flag off.
+fallback telemetry. On response serialization, the backend Conversation model
+keeps only claims whose target resolves and whose exact text remains in that
+field. The same pure filter runs after locked-content render projections.
+Edits and deleted sections therefore drop stale annotations on read, through
+every existing write path, with no database changes or additional reads.
 Coverage gaps and residual vacuity never fail processing. Episode IDs are stripped
 from visible prose without converting them to transcript citations.
 Existing presentation repair remains a separate bounded guard.
