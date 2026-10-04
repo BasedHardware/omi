@@ -60,7 +60,7 @@ class MeetingContextPack:
         )
 
 
-def _truncate(value: str, limit: int) -> str:
+def truncate_context_text(value: str, limit: int) -> str:
     value = value.strip()
     if len(value) <= limit:
         return value
@@ -80,7 +80,7 @@ def _render_part(lines: Iterable[str], cap: int) -> str:
             remaining = cap - used - 1
             if remaining < 2:
                 break
-            line = _truncate(line, remaining)
+            line = truncate_context_text(line, remaining)
         rendered.append(line)
         used += len(line) + 1
     return '\n'.join(rendered)
@@ -126,7 +126,7 @@ def render_meeting_context_pack(pack: Optional[MeetingContextPack]) -> str:
     if moments:
         parts.append(f'SCREEN MOMENTS (approved screenshots from this call)\n{moments}')
     if pack.screen_text:
-        parts.append(f'SCREEN ACTIVITY\n{_truncate(pack.screen_text, MAX_SCREEN_CHARACTERS)}')
+        parts.append(f'SCREEN ACTIVITY\n{truncate_context_text(pack.screen_text, MAX_SCREEN_CHARACTERS)}')
     rendered = '\n\n'.join(parts)
     if len(rendered) > MAX_CONTEXT_PACK_CHARACTERS:
         rendered = rendered[: MAX_CONTEXT_PACK_CHARACTERS - 1].rstrip() + '…'

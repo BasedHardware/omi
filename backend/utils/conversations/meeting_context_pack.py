@@ -28,7 +28,7 @@ from utils.conversations.meeting_context_render import (
     MeetingContextPack,
     PersonFact,
     PriorMeetingNote,
-    _truncate,
+    truncate_context_text,
     MAX_SCREEN_CHARACTERS,
 )
 from utils.conversations.screen_text_digest import digest_screen_rows
@@ -226,10 +226,10 @@ def _conversation_gist(conversation_data: Mapping[str, Any]) -> str:
             if isinstance(section, Mapping):
                 body = section.get('body_markdown')
                 if isinstance(body, str) and body.strip():
-                    return _truncate(body, MAX_PRIOR_GIST_CHARACTERS)
+                    return truncate_context_text(body, MAX_PRIOR_GIST_CHARACTERS)
     overview = structured.get('overview')
     if isinstance(overview, str) and overview.strip():
-        return _truncate(overview, MAX_PRIOR_GIST_CHARACTERS)
+        return truncate_context_text(overview, MAX_PRIOR_GIST_CHARACTERS)
     return ''
 
 
@@ -384,7 +384,7 @@ def _gather_people_facts(roster: MeetingRoster, people: Sequence[Mapping[str, An
                 name=name.strip(),
                 relationship=relationship.strip() if isinstance(relationship, str) and relationship.strip() else None,
                 notes=(
-                    _truncate(notes_value.strip(), 200)
+                    truncate_context_text(notes_value.strip(), 200)
                     if isinstance(notes_value, str) and notes_value.strip()
                     else None
                 ),
