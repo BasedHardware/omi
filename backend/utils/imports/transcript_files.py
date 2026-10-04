@@ -29,7 +29,7 @@ from zoneinfo import ZoneInfo
 import database.conversations as conversations_db
 import database.import_jobs as import_jobs_db
 import database.users as users_db
-from database.auth import get_user_name
+from database.auth import get_user_full_name
 from database.document_ids import document_id_from_seed
 from models.conversation import Conversation
 from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
@@ -541,6 +541,23 @@ def _next_starts(cues: Sequence[TranscriptCue]) -> List[Optional[float]]:
     return following
 
 
+def _name_key(name: str) -> str:
+    """How speaker labels, the owner's name and People names compare: case and spacing aside."""
+    return ' '.join(name.split()).casefold()
+
+
+def _owner_keys(owner_name: Optional[str]) -> frozenset[str]:
+    """The labels that name the owner: the whole name, or the first name alone.
+
+    A first name with another surname is someone else: with "Jane Doe" known, "Jane
+    Smith" is not the owner. When only one word of the name is known, a longer label
+    ("Jane Doe") cannot be told apart from another person with that first name, so
+    only the word itself matches.
+    """
+    full = _name_key(owner_name or '')
+    return frozenset({full, full.split(' ')[0]}) if full else frozenset()
+
+
 def segments_from_cues(
     cues: Sequence[TranscriptCue],
     *,
@@ -549,25 +566,26 @@ def segments_from_cues(
 ) -> List[TranscriptSegment]:
     """Number speakers by first appearance and bind the owner and known people by name.
 
-    ``people`` maps casefolded person names to person IDs. Timed cues are put in
+    ``owner_name`` is the owner's whole name when known (``get_user_full_name``).
+    ``people`` maps name keys (``_name_key``) to person IDs. Timed cues are put in
     time order. Missing end times close at the next turn; untimed cues get ordered,
     estimated times.
     """
     cues = _in_time_order(cues)
-    owner = owner_name.casefold().strip() if owner_name else None
+    owner_keys = _owner_keys(owner_name)
     speaker_ids: Dict[Optional[str], int] = {}
     segments: List[TranscriptSegment] = []
     next_starts = _next_starts(cues)
     cursor = 0.0
     for cue, following in zip(cues, next_starts):
-        key = cue.speaker.casefold() if cue.speaker else None
+        key = _name_key(cue.speaker) if cue.speaker else None
         speaker_id = speaker_ids.setdefault(key, len(speaker_ids))
         start = cue.start if cue.start is not None else cursor
         start = max(start, segments[-1].start if segments else 0.0)
         end = cue.end
         if end is None or end <= start:
             end = following if following is not None and following > start else start + _estimated_seconds(cue.text)
-        is_user = bool(owner and key == owner)
+        is_user = key in owner_keys
         segments.append(
             TranscriptSegment(
                 text=cue.text,
@@ -601,7 +619,7 @@ def _overview(segments: Sequence[TranscriptSegment], max_chars: int = 500) -> st
 
 
 def load_people_names(uid: str) -> Dict[str, str]:
-    """Casefolded person name -> person ID, so named speakers bind to known people."""
+    """Person name key (``_name_key``) -> person ID, so named speakers bind to known people."""
     try:
         people = users_db.get_people(uid)
     except Exception as exc:
@@ -611,7 +629,7 @@ def load_people_names(uid: str) -> Dict[str, str]:
     for person in people:
         name, person_id = (person.get('name') or '').strip(), person.get('id')
         if name and person_id:
-            names.setdefault(name.casefold(), person_id)
+            names.setdefault(_name_key(name), person_id)
     return names
 
 
@@ -1009,7 +1027,7 @@ async def process_transcript_import(
             logger.info('transcript import job %s was cancelled before it started', job_id)
             return
         source = TRANSCRIPT_ORIGINS.get(origin, ConversationSource.unknown)
-        owner_name = await run_blocking(db_executor, get_user_name, uid, use_default=False)
+        owner_name = await run_blocking(db_executor, get_user_full_name, uid)
         people = await run_blocking(db_executor, load_people_names, uid)
         created = skipped = processed = 0
         errors: List[str] = []

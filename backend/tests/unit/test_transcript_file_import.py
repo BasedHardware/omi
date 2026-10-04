@@ -24,6 +24,7 @@ from zipfile import ZIP_BZIP2, ZIP_DEFLATED, ZIP_LZMA, ZIP_STORED, ZipFile
 
 import pytest
 
+import database.auth as auth_db
 import database.conversations as conversations_db
 from models.conversation_enums import ConversationSource
 from models.import_job import ImportJobStatus, ImportSourceType
@@ -569,6 +570,32 @@ def test_segments_number_speakers_and_match_owner_and_people():
     assert [(s.start, s.end) for s in segments] == [(1.0, 4.5), (5.0, 9.0), (9.5, 12.0), (12.0, 13.0)]
 
 
+@pytest.mark.parametrize(
+    ('owner_name', 'label', 'is_owner'),
+    [
+        pytest.param('Jane Doe', 'Jane Doe', True, id='full-name'),
+        pytest.param('Jane  Doe ', 'jane doe', True, id='case-and-spacing'),
+        pytest.param('Jane Doe', 'Jane   Doe', True, id='label-spacing'),
+        pytest.param('Jane Doe', 'Jane', True, id='first-name-alone'),
+        pytest.param('Jane Doe', 'Jane Smith', False, id='another-surname'),
+        pytest.param('Jane Doe', 'Doe', False, id='surname-alone'),
+        # Only one word is known: "Jane Doe" and "Jane Smith" cannot be told apart.
+        pytest.param('Jane', 'Jane', True, id='first-name-only-known'),
+        pytest.param('Jane', 'Jane Doe', False, id='full-label-first-name-only-known'),
+        pytest.param(None, 'Jane', False, id='owner-unknown'),
+    ],
+)
+def test_the_owner_is_the_whole_name_or_the_first_name_alone(owner_name, label, is_owner):
+    cues = [tf.TranscriptCue(text='Hello.', speaker=label), tf.TranscriptCue(text='Hi.', speaker='Sam')]
+
+    segments = tf.segments_from_cues(cues, owner_name=owner_name, people={'jane smith': 'person-jane-smith'})
+
+    assert segments[0].is_user is is_owner
+    assert segments[1].is_user is False
+    if label == 'Jane Smith':
+        assert segments[0].person_id == 'person-jane-smith'
+
+
 def test_untimed_cues_get_ordered_estimated_times():
     segments = tf.segments_from_cues(tf.parse_text_transcript(PARAGRAPHS_TXT), owner_name=None, people={})
 
@@ -644,6 +671,18 @@ def test_conversation_id_is_deterministic_per_user_and_content():
 # --------------------------------------------------------------------------- job
 
 
+def _firebase_user(display_name):
+    return SimpleNamespace(
+        uid=UID,
+        email=None,
+        email_verified=False,
+        phone_number=None,
+        display_name=display_name,
+        photo_url=None,
+        disabled=False,
+    )
+
+
 class _Store:
     def __init__(self):
         self.docs = {}
@@ -684,7 +723,9 @@ def job(monkeypatch):
     monkeypatch.setattr(tf.import_jobs_db, 'update_import_job', update)
     monkeypatch.setattr(tf.import_jobs_db, 'update_import_job_unless_cancelled', update_unless_cancelled)
     monkeypatch.setattr(tf.import_jobs_db, 'get_import_job', get)
-    monkeypatch.setattr(tf, 'get_user_name', lambda *_a, **_k: 'Jane Doe')
+    # The owner is resolved by the real identity lookup, from a Firebase display name.
+    monkeypatch.setattr(auth_db, '_firebase_get_user', lambda uid: _firebase_user('Jane Doe'))
+    monkeypatch.setattr(auth_db, 'cache_user_name', lambda *_a, **_k: None)
     monkeypatch.setattr(tf, 'load_people_names', lambda _uid: {'sam': 'person-sam'})
 
     def dispatch(intent):
@@ -761,6 +802,20 @@ def test_zip_import_creates_completed_light_conversations(tmp_path, job):
     assert conversation['transcript_segments'][1]['person_id'] == 'person-sam'
     assert job.notifications[-1].data['type'] == 'import_complete'
     assert not upload.exists(), 'the uploaded file is removed after processing'
+
+
+def test_the_owner_is_found_by_full_name_and_another_jane_is_not_the_owner(tmp_path, job):
+    """The owner's profile name is "Jane Doe"; "Jane" alone would also match "Jane Smith"."""
+    srt = (
+        '1\n00:00:01,000 --> 00:00:02,000\nJane Doe: Hello.\n\n'
+        '2\n00:00:02,000 --> 00:00:03,000\nJane Smith: Hi.\n\n'
+        '3\n00:00:03,000 --> 00:00:04,000\nJane Doe: Bye.\n'
+    )
+
+    _run(tmp_path, 'call.srt', srt.encode('utf-8'))
+
+    (conversation,) = job.store.docs.values()
+    assert [s['is_user'] for s in conversation['transcript_segments']] == [True, False, True]
 
 
 def test_reimport_skips_conversations_already_imported(tmp_path, job):
@@ -959,11 +1014,11 @@ def test_a_deleted_job_is_treated_as_cancelled(tmp_path, job):
 def test_cancel_while_processing_is_never_overwritten_by_a_final_status(tmp_path, job, monkeypatch, files):
     monkeypatch.setattr(tf, 'MAX_TRANSCRIPT_FILES', 2)
 
-    def name_then_cancel(*_args, **_kwargs):
+    def name_then_cancel(uid):
         job.cancel()
-        return 'Jane Doe'
+        return _firebase_user('Jane Doe')
 
-    monkeypatch.setattr(tf, 'get_user_name', name_then_cancel)
+    monkeypatch.setattr(auth_db, '_firebase_get_user', name_then_cancel)
 
     _run(tmp_path, 'export.zip', _zip(files))
 
