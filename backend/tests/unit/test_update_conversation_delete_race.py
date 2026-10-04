@@ -84,7 +84,9 @@ class _RaceDocumentRef:
     def collection(self, name: str) -> '_CollectionRef':
         return _CollectionRef(self._store, self._path + (name,))
 
-    def get(self):
+    def get(self, transaction=None):
+        if transaction is not None:
+            assert not transaction.written, 'transaction reads must precede writes'
         documents = self._store.documents
         if self._path not in documents:
             return SimpleNamespace(exists=False, to_dict=lambda: None)
@@ -126,10 +128,22 @@ class _RaceFirestore:
     def collection(self, name: str) -> '_CollectionRef':
         return _CollectionRef(self, (name,))
 
+    def transaction(self):
+        return _RaceTransaction()
+
+
+class _RaceTransaction:
+    written = False
+
+    def update(self, ref, fields):
+        self.written = True
+        ref.update(fields)
+
 
 def _fake_store(monkeypatch, **conversation) -> _RaceFirestore:
     store = _RaceFirestore({CONVERSATION_PATH: dict(conversation)})
     monkeypatch.setattr(conversations_db, 'db', store)
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
     return store
 
 

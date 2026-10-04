@@ -176,6 +176,7 @@ from utils.llm.conversation_processing import (
     validate_structured_source_segment_ids,
 )
 from utils.conversations.episode_evidence import capture_evidence
+from utils.conversations.note_claim_mutations import invalidate_note_claims
 from utils.conversations.notes_task_context import fetch_dedup_candidates_for_query as _fetch_dedup_candidates_for_query
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
@@ -751,11 +752,10 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
 ) -> Conversation:
     if relevance_discarded is False and not structured.title.strip():
-        # A kept conversation must never become an empty-title row merely
-        # because structure generation returned a partial object. Use the same
-        # deterministic, model-free title as the minimum-processing path. An
-        # explicit relevance discard keeps its empty title: that remains the
-        # durable discard verdict and is hidden by default at the list boundary.
+        # Kept captures need a deterministic title after partial generation.
+        # Explicit discards keep their empty title as the durable verdict,
+        # hidden by default at the list boundary.
+        invalidate_note_claims(structured, ('/title',))
         structured.title = deterministic_minimum_title(
             conversation,
             tz_name_provider=lambda: notification_db.get_user_time_zone(uid),

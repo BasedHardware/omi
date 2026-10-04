@@ -245,3 +245,46 @@ def test_duplicate_app_id_is_rejected_by_summary_endpoint_without_mutation(monke
     )
     assert response.status_code == 409
     assert ref.update_calls == []
+
+
+def _claims():
+    return [
+        {
+            'target': target,
+            'text': 'Synthetic original prose',
+            'evidence_ids': ['speech:s1'],
+            'provenance': 'said',
+            'private': False,
+        }
+        for target in ('/title', '/overview', '/sections/0/body_markdown', '/action_items/0/description')
+    ]
+
+
+def test_summary_edit_invalidates_only_changed_claims_atomically(monkeypatch):
+    claims = _claims()
+    ref = _install_db(monkeypatch, {'structured': {'note_claims': claims}})
+    assert conversations_db.update_conversation_summary(UID, CONVERSATION_ID, None, 'Edited') == 'ok'
+    assert ref.get_transactions == [conversations_db.db.tx]
+    assert len(ref.update_calls) == 1
+    assert ref.update_calls[0]['structured.note_claims'] == [claims[0], claims[3]]
+
+
+def test_title_edit_invalidates_title_claims_in_same_transaction(monkeypatch):
+    claims = _claims()
+    ref = _install_db(monkeypatch, {'structured': {'note_claims': claims}})
+    conversations_db.update_conversation_title(UID, CONVERSATION_ID, 'Edited')
+    assert ref.get_transactions == [conversations_db.db.tx]
+    assert ref.update_calls == [
+        {'structured.title': 'Edited', 'user_title': 'Edited', 'structured.note_claims': claims[1:]}
+    ]
+
+
+def test_generic_section_edit_invalidates_section_claims_in_same_transaction(monkeypatch):
+    claims = _claims()
+    ref = _install_db(monkeypatch, {'structured': {'note_claims': claims}, 'data_protection_level': 'standard'})
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_args: None)
+    assert conversations_db.update_conversation(UID, CONVERSATION_ID, {'structured.sections': []})
+    assert ref.get_transactions == [conversations_db.db.tx]
+    assert ref.update_calls == [
+        {'structured.sections': [], 'structured.note_claims': [claims[0], claims[1], claims[3]]}
+    ]

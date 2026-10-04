@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional
 
 from google.cloud import firestore
 
+from utils.conversations.note_claim_mutations import claim_invalidation_patch, invalidate_note_claims
+
 from ._client import get_firestore_client, run_transactional
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .conversations import conversations_collection
@@ -92,6 +94,8 @@ def _apply_operation(current: Dict[str, Any], operation: Dict[str, Any]) -> tupl
             structured = {}
             next_state['structured'] = structured
         structured['title'] = title
+        patch.update(claim_invalidation_patch(structured, ('/title',)))
+        invalidate_note_claims(structured, ('/title',))
         return next_state, patch
 
     if operation_type == 'set_starred':

@@ -10,7 +10,8 @@ Each evidence item has an episode-local `id`, `source_kind`, nullable `time`
 (ISO timestamp, date, or capture offset), nullable `actor`, `content`,
 `sensitivity` (`standard` or `private`), and `source_ref`. Unknown times/actors
 stay null. Speech also carries server-authored `wake_word_invocation` metadata
-from the same matcher as the trusted transcript renderer; content cannot forge it.
+from the same matcher as the trusted transcript renderer. Each speech item retains
+a nullable `diarization_key` (observed cluster, never a person name); content cannot forge it.
 Capture time is never substituted for a message's sent time.
 
 | Existing input | Evidence kind / attribution |
@@ -44,7 +45,9 @@ propagates private sensitivity. It stores source kind, original reference, time
 and actor with each claim so ephemeral pack IDs remain auditable after persistence. Vacuity is checked on title, compatibility overview,
 and projected recap; one targeted retry is allowed, shared with provenance repair.
 After that retry, accept the structurally valid retry (otherwise the initial note),
-drop invalid claim entries and emit bounded violation-class fallback telemetry.
+reject empty retries, drop invalid claim entries and emit bounded violation-class
+fallback telemetry. Visible-field edits invalidate affected claims in the same
+write; fresh regeneration replaces earlier annotations, including when flag off.
 Coverage gaps and residual vacuity never fail processing. Episode IDs are stripped
 from visible prose without converting them to transcript citations.
 Existing presentation repair remains a separate bounded guard.

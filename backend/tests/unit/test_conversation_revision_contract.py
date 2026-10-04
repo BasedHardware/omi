@@ -321,6 +321,7 @@ def test_processing_transaction_reloads_user_fields_when_firestore_retries(monke
 def test_title_mutation_records_a_durable_override(monkeypatch):
     ref = _ConversationRef(_Snapshot({'id': 'conversation-1'}))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
 
     conversations_db.update_conversation_title('user-1', 'conversation-1', 'Renamed')
 
@@ -502,3 +503,25 @@ def test_processing_upsert_still_fills_stub_null_when_user_never_touched_folder(
 
     written, _ = ref.set_calls[0]
     assert written['folder_id'] == 'ai-assigned-folder'
+
+
+def test_title_transaction_retry_preserves_the_latest_unrelated_claims(monkeypatch):
+    title = {'target': '/title', 'text': 'Generated'}
+    old = {'target': '/overview', 'text': 'Old overview'}
+    new = {'target': '/overview', 'text': 'New concurrent overview'}
+    ref = _ConversationRef(_Snapshot({'structured': {'note_claims': [title, old]}}))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_args: None)
+
+    def retry_once(function):
+        def run(tx):
+            function(tx)  # Simulate a discarded attempt, then read a newer snapshot.
+            ref.snapshot = _Snapshot({'structured': {'note_claims': [title, new]}})
+            return function(tx)
+
+        return run
+
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', retry_once)
+    conversations_db.update_conversation_title('user-1', 'conversation-1', 'Edited')
+    assert ref.update_calls[0]['structured.note_claims'] == [old]
+    assert ref.update_calls[1]['structured.note_claims'] == [new]
