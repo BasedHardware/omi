@@ -6,30 +6,32 @@ GeneratedProactivityFeedItem feedItem({
   String id = 'item-1',
   String producer = 'future_producer',
   String feedback = 'none',
-}) => GeneratedProactivityFeedItem(
-  id: id,
-  producer: producer,
-  title: 'Revisit Your Commitment',
-  body: 'Your saved task is ready to revisit.',
-  createdAt: '2026-10-03T09:00:00Z',
-  acted: false,
-  dismissed: false,
-  feedback: feedback,
-  target: const GeneratedProactivityTarget(kind: 'action_item', id: 'task-1'),
-);
+}) =>
+    GeneratedProactivityFeedItem(
+      id: id,
+      producer: producer,
+      title: 'Revisit Your Commitment',
+      body: 'Your saved task is ready to revisit.',
+      createdAt: '2026-10-03T09:00:00Z',
+      acted: false,
+      dismissed: false,
+      feedback: feedback,
+      target: const GeneratedProactivityTarget(kind: 'action_item', id: 'task-1'),
+    );
 
 GeneratedProactivityFeedResponse feedResponse({
   bool enabled = true,
   List<GeneratedProactivityFeedItem> items = const [],
   bool hasMore = false,
   String nextCursor = '',
-}) => GeneratedProactivityFeedResponse(
-  enabled: enabled,
-  items: items,
-  hasMore: hasMore,
-  nextCursor: nextCursor,
-  serverTime: '2026-10-03T09:01:00Z',
-);
+}) =>
+    GeneratedProactivityFeedResponse(
+      enabled: enabled,
+      items: items,
+      hasMore: hasMore,
+      nextCursor: nextCursor,
+      serverTime: '2026-10-03T09:01:00Z',
+    );
 
 const outcomeSuccess = ApiSuccess(
   GeneratedProactivityOutcomeResponse(itemId: 'item-1', recorded: true, negative: false, acted24h: false),

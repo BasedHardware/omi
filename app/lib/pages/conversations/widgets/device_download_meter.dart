@@ -37,13 +37,13 @@ class DeviceDownloadMeter extends StatelessWidget {
     final readout = !showReadout
         ? null
         : !known
-        ? null
-        : hasSpeed
-        ? context.l10n.syncCardDownloadPercentSpeed(
-            percent,
-            speed < 10 ? speed.toStringAsFixed(1) : speed.toStringAsFixed(0),
-          )
-        : context.l10n.syncCardDownloadPercent(percent);
+            ? null
+            : hasSpeed
+                ? context.l10n.syncCardDownloadPercentSpeed(
+                    percent,
+                    speed < 10 ? speed.toStringAsFixed(1) : speed.toStringAsFixed(0),
+                  )
+                : context.l10n.syncCardDownloadPercent(percent);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -60,7 +60,10 @@ class DeviceDownloadMeter extends StatelessWidget {
         ),
         if (readout != null) ...[
           const SizedBox(height: 8),
-          Text(readout, style: OmiType.footnote.copyWith(color: Colors.grey.shade500)),
+          Text(
+            readout,
+            style: OmiType.footnote.copyWith(color: Colors.grey.shade500),
+          ),
         ],
       ],
     );

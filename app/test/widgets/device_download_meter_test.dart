@@ -109,7 +109,9 @@ void main() {
   });
 
   testWidgets('a waiting row does not invent a percent', (tester) async {
-    await tester.pumpWidget(_app(const DeviceDownloadMeter(fraction: 0.38, speedKBps: 24, showReadout: false)));
+    await tester.pumpWidget(
+      _app(const DeviceDownloadMeter(fraction: 0.38, speedKBps: 24, showReadout: false)),
+    );
     await tester.pump();
     expect(find.textContaining('%'), findsNothing);
     expect(find.textContaining('KB/s'), findsNothing);

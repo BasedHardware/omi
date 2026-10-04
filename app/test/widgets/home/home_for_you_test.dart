@@ -50,34 +50,29 @@ void main() {
     final h = OutcomeHarness();
     addTearDown(h.outbox.dispose);
     await h.bind();
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildOmiTheme(),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
+    await tester.pumpWidget(MaterialApp(
+      theme: buildOmiTheme(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
           body: SingleChildScrollView(
-            child: HomeDailyRecaps(
-              outbox: h.outbox,
-              load: () async => (
-                items: [
-                  DailySummary(
-                    id: 'recap',
-                    date: '2026-10-03',
-                    createdAt: DateTime.utc(2026, 10, 3),
-                    headline: 'Synthetic recap',
-                    overview: 'Fixture',
-                    stats: DayStats(totalConversations: 1, actionItemsCount: 1),
-                  ),
-                ],
-                ok: true,
-              ),
-              loadFeed: (_) async => ApiSuccess(feedResponse(items: [feedItem()])),
-            ),
-          ),
+              child: HomeDailyRecaps(
+        outbox: h.outbox,
+        load: () async => (
+          items: [
+            DailySummary(
+                id: 'recap',
+                date: '2026-10-03',
+                createdAt: DateTime.utc(2026, 10, 3),
+                headline: 'Synthetic recap',
+                overview: 'Fixture',
+                stats: DayStats(totalConversations: 1, actionItemsCount: 1))
+          ],
+          ok: true
         ),
-      ),
-    );
+        loadFeed: (_) async => ApiSuccess(feedResponse(items: [feedItem()])),
+      ))),
+    ));
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(find.text('For You')).dx, tester.getTopLeft(find.text('Daily Recaps')).dx);
   });
