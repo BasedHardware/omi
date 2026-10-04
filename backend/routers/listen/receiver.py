@@ -768,7 +768,13 @@ class ListenReceiver(ReplayFilterMixin):
                 and (pending is None or provider is None or provider == pending.to_mode),
                 candidate=speaker_epoch if speaker_epoch is not None else self._candidate_token,
             )
-        self._capture('capture_inbound_stt', segments)
+        # Accepted-send proof belongs only to live transport. Diagnostic cassettes
+        # serialize raw dictionaries (including dataclasses), so omit it from their
+        # copy while retaining the original for transcript merging.
+        self._capture(
+            'capture_inbound_stt',
+            [{key: value for key, value in segment.items() if key != '_capture_merge_proof'} for segment in segments],
+        )
         (speaker_epoch or self.speaker_provider_epoch).stamp(segments, provider or self._serving_provider())
         self.host.transcripts.enqueue(segments)
 
