@@ -36,7 +36,16 @@ def test_flags_truthy_parser(monkeypatch):
     assert live_speaker_span_resolution_enabled() is False
 
 
-def test_composed_declarations_pin_both_flags_off():
+# Rollout step 2 (2026-10-04): span-bearing storage is on for prod listen and
+# pusher only; the resolution consumer stays off everywhere.
+SPANS_ON_SCOPES = {'prod/gke/backend-listen', 'prod/gke/pusher'}
+
+
+def _expected(flag, scope):
+    return 'true' if flag == 'AUDIO_TIMELINE_SPANS' and scope in SPANS_ON_SCOPES else 'false'
+
+
+def test_composed_declarations_pin_rollout_state():
     composed = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
 
     def _env_maps(environment):
@@ -51,7 +60,15 @@ def test_composed_declarations_pin_both_flags_off():
             for flag in FLAGS:
                 entry = env_map.get(flag)
                 assert entry is not None, f'{scope} must declare {flag}'
-                assert (entry.get('value') or '').strip().lower() == 'false', f'{scope} must pin {flag} false'
+                expected = _expected(flag, scope)
+                assert (entry.get('value') or '').strip().lower() == expected, f'{scope} must pin {flag} {expected}'
+            if scope in SPANS_ON_SCOPES:
+                # Spans must never ride on the v2 text translation that dropped
+                # rejected segments in the 2026-09-26 flip.
+                v2 = env_map.get('AUDIO_TIMELINE_V2')
+                assert (
+                    v2 is None or (v2.get('value') or '').strip().lower() == 'false'
+                ), f'{scope} must keep AUDIO_TIMELINE_V2 false while spans are on'
         for name, job in composed['environments'][environment]['cloud_run'].get('jobs', {}).items():
             for flag in FLAGS:
                 entry = job['env'].get(flag)
@@ -59,3 +76,23 @@ def test_composed_declarations_pin_both_flags_off():
                     assert (
                         entry.get('value') or ''
                     ).strip().lower() == 'false', f'{environment}/cloud_run_jobs/{name} must pin {flag} false'
+
+
+def test_prod_helm_values_keep_v2_off_where_spans_are_on():
+    for chart, values in (
+        ('backend-listen', 'prod_omi_backend_listen_values.yaml'),
+        ('pusher', 'prod_omi_pusher_values.yaml'),
+    ):
+        text = (BACKEND / 'charts' / chart / values).read_text(encoding='utf-8')
+        env = {}
+        name = None
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith('- name:'):
+                name = stripped.split(':', 1)[1].strip()
+            elif stripped.startswith('value:') and name:
+                env[name] = stripped.split(':', 1)[1].strip().strip('"\'').lower()
+                name = None
+        assert env.get('AUDIO_TIMELINE_SPANS') == 'true', f'{chart} prod must enable spans'
+        assert env.get('LIVE_SPEAKER_SPAN_RESOLUTION') == 'false', f'{chart} prod must keep the consumer off'
+        assert env.get('AUDIO_TIMELINE_V2') == 'false', f'{chart} prod must keep AUDIO_TIMELINE_V2 false'
