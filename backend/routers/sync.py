@@ -2065,16 +2065,10 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
             logger.info('event=sync_transcription_job outcome=skipped reason=account_cutover lane=%s', sync_lane)
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
-        try:
-            if sync_lane == SyncLane.BACKFILL.value:
-                staged = await run_blocking(storage_executor, _download_staged_files, blob_paths, bounded_backfill=True)
-            else:
-                staged = await run_blocking(storage_executor, _download_staged_files, blob_paths)
-        except BackfillInputLimitExceeded:
-            # Legacy accepted audio must not become a terminal invalid-input job.
-            # Preserve its blobs and claims; restoring 8 GiB alone does not remove
-            # this guard, so operators must use the previous serving revision.
-            return JSONResponse(status_code=503, content={'status': 'backfill_input_limit'})
+        if sync_lane == SyncLane.BACKFILL.value:
+            staged = await run_blocking(storage_executor, _download_staged_files, blob_paths, bounded_backfill=True)
+        else:
+            staged = await run_blocking(storage_executor, _download_staged_files, blob_paths)
         if not staged:
             # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
             await _finalize_sync_job_failure(
@@ -2118,7 +2112,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
                 audio_end_seconds=audio_end_seconds,
             )
         except BackfillStoragePressure:
-            return JSONResponse(status_code=503, content={'status': 'backfill_storage_pressure'})
+            raise
         except SyncConversationPersistenceFenced:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job
             await finalize_sync_job_superseded(
@@ -2275,6 +2269,30 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         if sync_lane == SyncLane.BACKFILL.value:
             await run_blocking(db_executor, release_backfill_slot, uid, job_id)
         return JSONResponse(status_code=200, content={'status': 'done'})
+    except (BackfillInputLimitExceeded, BackfillStoragePressure) as error:
+        # Defer capacity pressure without a terminal invalid-input result. Reset
+        # processing so the stale detector cannot fail it during task backoff.
+        if ledger_fence_active:
+            mutation = await run_blocking(
+                db_executor,
+                fenced_mark_job_queued_for_retry,
+                job_id,
+                lock_token,
+                task_retry_count + 1,
+                'sync_resource_limit',
+            )
+            queued = mutation.applied
+        else:
+            queued = await run_blocking(
+                db_executor, mark_job_queued_for_retry, job_id, task_retry_count + 1, 'sync_resource_limit'
+            )
+        if not queued:
+            release_lock = False
+            return JSONResponse(status_code=409, content={'status': 'locked'})
+        status = (
+            'backfill_input_limit' if isinstance(error, BackfillInputLimitExceeded) else 'backfill_storage_pressure'
+        )
+        return JSONResponse(status_code=503, content={'status': status})
     except SyncJobRunLeaseLost as error:
         latest_job = await run_blocking(db_executor, get_sync_job, job_id)
         if latest_job and latest_job.get('status') in TERMINAL_STATUSES:

@@ -3375,6 +3375,9 @@ async def test_backfill_limit_or_tmpfs_pressure_preserves_legacy_audio_and_claim
         module._finalize_sync_job_failure.assert_not_awaited()
         module.release_sync_content_claim_after_job_retired.assert_not_called()
         module.release_job_run_lock.assert_called_once()
+        module.fenced_mark_job_queued_for_retry.assert_called_once_with(
+            'job-1', '1:lock-token', 101, 'sync_resource_limit'
+        )
         if not pressure:
             module._run_full_pipeline_background_async.assert_not_awaited()
     finally:

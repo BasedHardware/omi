@@ -586,7 +586,7 @@ def download_syncing_temporal_file(file_path: str, *, max_bytes: int | None = No
         if max_bytes is None:
             blob.download_to_filename(file_path)
         else:
-            from utils.sync.input_limits import BackfillInputLimitExceeded
+            from utils.sync.input_limits import BackfillInputLimitExceeded, raise_sync_storage_pressure
 
             # Metadata rejects obviously large legacy blobs without downloading;
             # the streaming bound also protects against a changed generation.
@@ -601,9 +601,10 @@ def download_syncing_temporal_file(file_path: str, *, max_bytes: int | None = No
                         if written > max_bytes:
                             raise BackfillInputLimitExceeded('backfill staged bytes exceeded')
                         target.write(chunk)
-            except Exception:
+            except Exception as error:
                 if os.path.exists(file_path):
                     os.remove(file_path)
+                raise_sync_storage_pressure(error)
                 raise
         return True
     except BlobNotFound:
