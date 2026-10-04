@@ -1556,7 +1556,7 @@ class SafeModulateSocket(STTSocket):
         pass
 
     def _has_pending_partial(self) -> bool:
-        return bool(self._pending_utterances) if self._protocol_guard else bool(self._prev_partial_text)
+        return bool(self._prev_partial_text) or (self._protocol_guard and bool(self._pending_utterances))
 
     def finish(self) -> None:
         with self._lock:
@@ -1670,13 +1670,8 @@ class SafeModulateSocket(STTSocket):
                 msg_type = msg.get('type', '')
                 if msg_type == 'error':
                     err = msg.get('error', msg.get('message', 'unknown error'))
-                    typed = modulate_death_reason(err, protocol_guard=self._protocol_guard)
-                    close_reason = 'provider_invalid_request' if self._protocol_guard and typed == 'other' else typed
-                    record_stt_stream_close(provider=STTService.modulate.value, reason=close_reason)
-                    if self._protocol_guard:
-                        # Terminal evidence must survive a tail callback failure.
-                        self._mark_dead(f'modulate error: {err}', typed_reason=typed)
-                        self._done_event.set()
+                    typed = modulate_death_reason(err)
+                    record_stt_stream_close(provider=STTService.modulate.value, reason=typed)
                     if typed in {MODULATE_DEATH_SERVE_ERROR, PROVIDER_BUDGET_EXHAUSTED}:
                         # The provider accepted the stream and then failed to
                         # serve it: a provider fault, and the outage signal an
@@ -1704,8 +1699,6 @@ class SafeModulateSocket(STTSocket):
                 elif msg_type == 'done':
                     self._observe_served()
                     logger.info('Modulate streaming done: duration_ms=%s', msg.get('duration_ms'))
-                    if self._protocol_guard:
-                        self._done_event.set()
                     if self._has_pending_partial():
                         self._flush_partial()
                     self._done_event.set()
@@ -1730,7 +1723,8 @@ class SafeModulateSocket(STTSocket):
             self._mark_dead(f'ws recv error: {e}')
 
     def _handle_partial_utterance(self, msg: Dict[str, Any]) -> None:
-        if self._protocol_guard:
+        identifier = msg.get('utterance_uuid')
+        if self._protocol_guard and isinstance(identifier, str) and identifier:
             self._pending_utterances.observe(msg)
             return
         # Modulate sends cumulative partial_utterance messages during streaming
@@ -1758,9 +1752,10 @@ class SafeModulateSocket(STTSocket):
         if self._protocol_guard:
             for segment in self._pending_utterances.flush(self._preseconds):
                 self._stream_transcript([segment])
-            return
         text = self._prev_partial_text
-        start_ms = self._prev_partial_start_ms
+        start_ms: Any = self._prev_partial_start_ms
+        if self._protocol_guard and start_ms is None:
+            start_ms = 0
         self._prev_partial_text = ''
         self._prev_partial_word_count = 0
         if not text:
@@ -1794,9 +1789,8 @@ class SafeModulateSocket(STTSocket):
             return
 
         self._observe_served()
-        if not self._protocol_guard:
-            self._prev_partial_text = ''
-            self._prev_partial_word_count = 0
+        self._prev_partial_text = ''
+        self._prev_partial_word_count = 0
 
         start_ms = msg.get('start_ms', 0)
         duration_ms = msg.get('duration_ms', 0)

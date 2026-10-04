@@ -1,29 +1,19 @@
-"""Bounded pending previews for Modulate's nullable, interleaved utterances."""
+"""UUID-correlated pending previews for Modulate utterances."""
 
 from __future__ import annotations
 
-import logging
-import re
 from typing import Any, Final, Optional
 
-from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED, PROVIDER_RATE_LIMITED
-
-logger = logging.getLogger(__name__)
-MAX_PENDING_UTTERANCES = 64
+from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
 
 
 def _key(message: dict[str, Any]) -> str:
     identifier = message.get('utterance_uuid')
-    # The documented partial shape has no UUID: keep one anonymous preview.
     return identifier if isinstance(identifier, str) and identifier else ''
 
 
 def _timestamp(value: Any) -> int | None:
     return value if type(value) is int and value >= 0 else None
-
-
-def _normalized_text(value: Any) -> str:
-    return ' '.join(re.findall(r'\w+', value.casefold())) if isinstance(value, str) else ''
 
 
 MODULATE_DEATH_SERVE_ERROR: Final = 'modulate_serve_error'
@@ -46,7 +36,7 @@ _MODULATE_SERVER_FAULT_MARKERS: Final = (
 )
 
 
-def modulate_death_reason(err: Any, *, protocol_guard: bool = False) -> Optional[str]:
+def modulate_death_reason(err: Any) -> Optional[str]:
     """Bound a Velma in-stream error frame to a typed death reason.
 
     Returns ``PROVIDER_BUDGET_EXHAUSTED`` for quota/monthly-cap text,
@@ -60,21 +50,6 @@ def modulate_death_reason(err: Any, *, protocol_guard: bool = False) -> Optional
         return None
     if any(marker in normalized for marker in _MODULATE_BUDGET_MARKERS):
         return PROVIDER_BUDGET_EXHAUSTED
-    if protocol_guard:
-        if 'insufficient credits' in normalized:
-            return PROVIDER_BUDGET_EXHAUSTED
-        if 'concurrent request limit' in normalized:
-            return PROVIDER_RATE_LIMITED
-        if any(
-            marker in normalized
-            for marker in (
-                'invalid api key',
-                'missing api_key',
-                'request is not permitted',
-                'does not have access to this model',
-            )
-        ):
-            return PROVIDER_AUTH_REJECTED
     if any(marker in normalized for marker in _MODULATE_SERVER_FAULT_MARKERS):
         return MODULATE_DEATH_SERVE_ERROR
     if any(marker in normalized for marker in ('invalid audio', 'unsupported audio', 'invalid wav', 'invalid input')):
@@ -83,7 +58,7 @@ def modulate_death_reason(err: Any, *, protocol_guard: bool = False) -> Optional
 
 
 class ModulatePendingUtterances:
-    """Finals retire their UUID and covered anonymous text; never invent time."""
+    """Track UUID-bearing previews; only a matching final retires them."""
 
     def __init__(self) -> None:
         self._pending: dict[str, dict[str, Any]] = {}
@@ -93,15 +68,16 @@ class ModulatePendingUtterances:
 
     def observe(self, message: dict[str, Any]) -> None:
         key = _key(message)
+        if not key:
+            return
         previous = self._pending.get(key, {})
         start = _timestamp(message.get('start_ms'))
         # A UUID proves that a nullable update belongs to the same utterance.
-        # The documented UUID-less partial cannot prove that association.
-        if start is None and key:
+        if start is None:
             start = previous.get('start_ms')
         speaker = message.get('speaker')
         if type(speaker) is not int or speaker < 1:
-            speaker = previous.get('speaker') if key else None
+            speaker = previous.get('speaker')
         text = message.get('text')
         if not isinstance(text, str):
             return
@@ -109,34 +85,20 @@ class ModulatePendingUtterances:
             # Every preview supersedes its predecessor, including retractions.
             self._pending.pop(key, None)
             return
-        if key not in self._pending and len(self._pending) >= MAX_PENDING_UTTERANCES:
-            # These are previews only; final utterances still pass through.
-            self._pending.pop(next(iter(self._pending)))
-            logger.warning('Modulate pending preview capacity reached')
         self._pending[key] = {'text': text.strip(), 'start_ms': start, 'speaker': speaker}
 
     def finalized(self, message: dict[str, Any]) -> None:
         key = _key(message)
         if key:
             self._pending.pop(key, None)
-        preview = self._pending.get('')
-        if preview is None:
-            return
-        # A UUID-less start has no duration, so overlap cannot prove coverage.
-        # Keep uncertain previews, preferring a duplicate to lost pending text.
-        preview_text = _normalized_text(preview['text'])
-        final_text = _normalized_text(message.get('text'))
-        if preview_text and f' {preview_text} ' in f' {final_text} ':
-            self._pending.pop('', None)
 
     def flush(self, preseconds: int = 0) -> list[dict[str, Any]]:
         pending, self._pending = self._pending, {}
         segments: list[dict[str, Any]] = []
         for preview in pending.values():
-            start_ms = preview['start_ms']
-            if start_ms is None:
-                logger.warning('Modulate terminal preview has no timestamp; retaining finalized text only')
-                continue
+            # Match the legacy missing-timestamp default when no UUID update
+            # supplied a usable timestamp. This is a tail persistence anchor.
+            start_ms = preview['start_ms'] if preview['start_ms'] is not None else 0
             start = start_ms / 1000.0
             if preseconds and start < preseconds:
                 continue

@@ -1,18 +1,16 @@
 """Replay the vendor's documented nullable/interleaved terminal protocol.
 
-Guards both vendor cause preservation and exactly-once pending tail emission;
-the flag-off oracle pins the original adapter behavior for rollback.
+UUID-less previews retain the legacy single-preview behavior; the nullable
+timing fix and UUID correlation are enabled only behind the rollback flag.
 """
 
 import asyncio
 import json
-from unittest.mock import patch
 
 import pytest
 
 from utils.stt import streaming
-from utils.stt.modulate_protocol import MAX_PENDING_UTTERANCES, ModulatePendingUtterances, modulate_death_reason
-from utils.stt.stream_close import bounded_stream_close_reason
+from utils.stt.modulate_protocol import ModulatePendingUtterances
 
 
 class Frames:
@@ -91,10 +89,15 @@ async def receive(messages, callback, monkeypatch, *, enabled=True):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('enabled', [False, True])
 @pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
-async def test_documented_uuidless_preview_is_not_reemitted_after_final(monkeypatch, enabled, terminal):
+@pytest.mark.parametrize('start', [None, 100, 3000])
+@pytest.mark.parametrize('text', ['Another utterance', 'Hello, how are', '  HELLO, how\nare! '])
+async def test_any_nonempty_final_clears_uuidless_preview_like_legacy(monkeypatch, enabled, terminal, start, text):
     emitted = []
     socket = await receive(
-        [documented_partial(), documented_final(), terminal], emitted.extend, monkeypatch, enabled=enabled
+        [documented_partial(text=text, start_ms=start), documented_final(), terminal],
+        emitted.extend,
+        monkeypatch,
+        enabled=enabled,
     )
     assert emitted == [
         {
@@ -109,236 +112,182 @@ async def test_documented_uuidless_preview_is_not_reemitted_after_final(monkeypa
     ]
     assert socket.typed_death_reason == ('modulate_serve_error' if terminal['type'] == 'error' else None)
     assert socket._done_event.is_set()
-    socket._flush_partial()
-    assert len(emitted) == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
-@pytest.mark.parametrize('start', [100, 3000])
-async def test_interleaved_uuidless_preview_survives_an_unrelated_final(monkeypatch, terminal, start):
-    emitted = []
-    socket = await receive(
-        [
-            documented_partial(),
-            documented_partial(text='Another utterance', start_ms=start, speaker=2),
-            documented_final(),
-            terminal,
-        ],
-        emitted.extend,
-        monkeypatch,
-    )
-    # Even a start inside the final's span cannot prove coverage: the
-    # documented preview has no duration and may extend beyond that final.
-    assert [(segment['text'], segment['start']) for segment in emitted] == [
-        ('Hello, how are you today?', 0.0),
-        ('Another utterance', start / 1000.0),
-    ]
-    assert not socket._has_pending_partial()
-    socket._flush_partial()
-    assert len(emitted) == 2
-
-
-@pytest.mark.parametrize('start', [None, 100, 3000])
-@pytest.mark.parametrize('identifier', [None, 'final-a'])
-@pytest.mark.parametrize('preview_text', ['Another utterance', 'Hello, how were you?', 'he', '!!!'])
-def test_uncovered_anonymous_preview_remains_pending(start, identifier, preview_text):
-    pending = ModulatePendingUtterances()
-    preview = documented_partial(text=preview_text, start_ms=start)['partial_utterance']
-    pending.observe(preview)
-    pending.finalized(documented_final(utterance_uuid=identifier)['utterance'])
-    assert pending
-    # Supplying a known timestamp later lets terminal flush demonstrate that
-    # even the null-timed pending text was retained by the unrelated final.
-    pending.observe({**preview, 'start_ms': 3000})
-    assert [segment['text'] for segment in pending.flush()] == [preview_text]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
-@pytest.mark.parametrize('start', [None, 0])
-@pytest.mark.parametrize(
-    ('preview_text', 'final_text'),
-    [
-        ('Hello, how are', 'Hello, how are you today?'),
-        ('  HELLO,  how\nare! ', 'Hello how are'),
-        ('how are', 'Hello, how are you today?'),
-    ],
-)
-async def test_anonymous_preview_retires_only_when_final_contains_normalized_text(
-    monkeypatch, terminal, start, preview_text, final_text
-):
-    emitted = []
-    socket = await receive(
-        [documented_partial(text=preview_text, start_ms=start), documented_final(text=final_text), terminal],
-        emitted.extend,
-        monkeypatch,
-    )
-    assert [segment['text'] for segment in emitted] == [final_text]
     assert not socket._has_pending_partial()
     socket._flush_partial()
     assert len(emitted) == 1
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', [False, True])
 @pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
-async def test_uuidless_final_retirement_preserves_identified_and_later_previews(monkeypatch, terminal):
+@pytest.mark.parametrize('identifier', [None, '', 123])
+async def test_anonymous_revisions_empty_updates_and_speaker_follow_legacy(monkeypatch, enabled, terminal, identifier):
     emitted = []
     socket = await receive(
         [
-            documented_partial(),
-            partial('b', 'Identified tail', 3000, 2),
-            documented_final(),
-            documented_partial(text='Later anonymous tail', start_ms=4000, speaker=3),
+            documented_partial(text='Original preview', start_ms=100, speaker=2),
+            documented_partial(utterance_uuid=identifier, text='  Latest  preview  ', start_ms=3000, speaker=3),
+            documented_partial(text='  ', start_ms=4000),
+            documented_final(text=''),
             terminal,
         ],
         emitted.extend,
         monkeypatch,
+        enabled=enabled,
     )
-    assert [(segment['text'], segment['speaker'], segment['start']) for segment in emitted] == [
-        ('Hello, how are you today?', 'SPEAKER_00', 0.0),
-        ('Identified tail', 'SPEAKER_01', 3.0),
-        ('Later anonymous tail', 'SPEAKER_02', 4.0),
+    assert emitted == [
+        {
+            'speaker': 'SPEAKER_00',
+            'start': 3.0,
+            'end': 3.001,
+            'text': 'Latest  preview',
+            'is_user': False,
+            'person_id': None,
+        }
     ]
+    assert not socket._has_pending_partial()
     socket._flush_partial()
-    assert len(emitted) == 3
+    assert len(emitted) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
+@pytest.mark.parametrize('identified', [False, True])
+async def test_nullable_terminal_timing_uses_zero_only_with_guard(monkeypatch, enabled, terminal, identified):
+    emitted = []
+    message = partial('a', 'Bonjour') if identified else documented_partial(text='Bonjour', start_ms=None)
+    socket = await receive([message, terminal], emitted.extend, monkeypatch, enabled=enabled)
+    if enabled:
+        assert emitted == [
+            {
+                'speaker': 'SPEAKER_00',
+                'start': 0.0,
+                'end': 0.001,
+                'text': 'Bonjour',
+                'is_user': False,
+                'person_id': None,
+            }
+        ]
+        assert socket.is_connection_dead is (terminal['type'] == 'error')
+        assert socket.typed_death_reason == ('modulate_serve_error' if terminal['type'] == 'error' else None)
+        assert socket._done_event.is_set()
+    else:
+        # Rollback preserves even the original nullable-timing failure.
+        assert emitted == []
+        assert socket.is_connection_dead
+        assert socket.typed_death_reason is None
+        assert not socket._done_event.is_set()
+    assert not socket._has_pending_partial()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
-async def test_documented_uuidless_null_timing_does_not_inherit_an_unproven_anchor(monkeypatch, terminal):
+async def test_uuidless_null_update_keeps_legacy_default_without_inheriting_prior_time(monkeypatch, terminal):
     emitted = []
     socket = await receive(
-        [documented_partial(), documented_partial(text='Hello, how are you', start_ms=None, speaker=None), terminal],
+        [documented_partial(start_ms=3000), documented_partial(text='Tail', start_ms=None, speaker=2), terminal],
         emitted.extend,
         monkeypatch,
     )
-    assert emitted == []
+    assert [(s['text'], s['speaker'], s['start'], s['end']) for s in emitted] == [('Tail', 'SPEAKER_00', 0.0, 0.001)]
     assert socket._done_event.is_set()
-    assert socket.typed_death_reason == ('modulate_serve_error' if terminal['type'] == 'error' else None)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('enabled', [False, True])
-async def test_nullable_preview_cannot_erase_a_terminal_vendor_fault(monkeypatch, enabled):
-    emitted = []
-    socket = await receive(
-        [partial('a', 'Bonjour'), {'type': 'error', 'error': 'Internal server error'}],
-        emitted.extend,
-        monkeypatch,
-        enabled=enabled,
-    )
-    assert socket.is_connection_dead
-    assert socket.typed_death_reason == ('modulate_serve_error' if enabled else None)
-    assert socket._done_event.is_set() is enabled
-    assert emitted == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('enabled', [False, True])
-async def test_normal_done_after_nullable_preview_is_not_a_provider_death(monkeypatch, enabled):
-    socket = await receive(
-        [partial('a', 'Bonjour'), {'type': 'done', 'duration_ms': 1000}],
-        lambda segments: None,
-        monkeypatch,
-        enabled=enabled,
-    )
-    assert socket.is_connection_dead is (not enabled)
-    assert socket._done_event.is_set() is enabled
-
-
-@pytest.mark.asyncio
-async def test_interleaved_final_only_retires_its_own_preview(monkeypatch):
+@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
+async def test_matching_uuid_final_only_retires_its_identified_preview(monkeypatch, terminal):
     emitted = []
     socket = await receive(
         [
             partial('a', 'Bonjour', 100, 1),
             partial('b', 'Guten', 200, 2),
             partial('b', 'Guten Tag', None, None),
+            documented_partial(text='Anonymous tail', start_ms=3000),
             documented_final(utterance_uuid='a', text='Bonjour.', start_ms=100, duration_ms=80, language='fr'),
-            {'type': 'done', 'duration_ms': 1000},
+            terminal,
         ],
         emitted.extend,
         monkeypatch,
     )
-    assert [(segment['text'], segment['speaker'], segment['start']) for segment in emitted] == [
+    assert [(s['text'], s['speaker'], s['start']) for s in emitted] == [
         ('Bonjour.', 'SPEAKER_00', 0.1),
         ('Guten Tag', 'SPEAKER_01', 0.2),
     ]
-    assert not socket.is_connection_dead
+    assert not socket._has_pending_partial()
     socket._flush_partial()
     assert len(emitted) == 2
 
 
 @pytest.mark.asyncio
-async def test_tail_callback_exception_preserves_terminal_error_and_completion(monkeypatch):
-    def failed_callback(segments):
-        raise RuntimeError('local consumer failed')
-
-    socket = await receive(
-        [partial('a', 'Bonjour', 100, 1), {'type': 'error', 'error': 'Internal server error'}],
-        failed_callback,
+@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
+async def test_uuidless_final_does_not_retire_identified_previews(monkeypatch, terminal):
+    emitted = []
+    await receive(
+        [partial('a', 'Same text', 100, 2), documented_final(utterance_uuid=None, text='Same text'), terminal],
+        emitted.extend,
         monkeypatch,
     )
-    assert socket.typed_death_reason == 'modulate_serve_error'
-    assert socket._done_event.is_set()
+    assert [(s['text'], s['speaker'], s['start']) for s in emitted] == [
+        ('Same text', 'SPEAKER_00', 0.0),
+        ('Same text', 'SPEAKER_01', 0.1),
+    ]
 
 
-@pytest.mark.parametrize(
-    ('message', 'reason'),
-    [
-        ('Insufficient credits.', 'provider_budget_exhausted'),
-        (
-            'Concurrent request limit reached. Please retry after your in-flight requests complete.',
-            'provider_rate_limited',
-        ),
-        ('Invalid API key.', 'provider_auth_rejected'),
-        ('The request is not permitted.', 'provider_auth_rejected'),
-        ('API key does not have access to this model.', 'provider_auth_rejected'),
-    ],
-)
 @pytest.mark.asyncio
-async def test_documented_account_and_concurrency_refusals_keep_their_class(monkeypatch, message, reason):
-    socket = await receive([{'type': 'error', 'error': message}], lambda segments: None, monkeypatch)
-    assert socket.typed_death_reason == reason
-    assert modulate_death_reason(message) is None  # flag-off rollback
+@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
+async def test_anonymous_tail_is_not_evicted_by_identified_previews(monkeypatch, terminal):
+    emitted = []
+    await receive(
+        [documented_partial(text='Anonymous tail', start_ms=3000, speaker=3)]
+        + [partial(str(i), f'Tail {i}', 100 + i, 2) for i in range(65)]
+        + [terminal],
+        emitted.extend,
+        monkeypatch,
+    )
+    assert len(emitted) == 66
+    assert [s['text'] for s in emitted] == [f'Tail {i}' for i in range(65)] + ['Anonymous tail']
+    assert emitted[-1]['speaker'] == 'SPEAKER_00'
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('enabled', [False, True])
-async def test_invalid_audio_is_not_counted_as_a_vendor_connection_loss(monkeypatch, enabled):
-    with patch.object(streaming, 'record_stt_stream_close') as record:
-        socket = await receive(
-            [{'type': 'error', 'error': 'Invalid input audio'}], lambda segments: None, monkeypatch, enabled=enabled
-        )
-    assert socket.typed_death_reason == 'other'
-    recorded = record.call_args.kwargs['reason']
-    assert bounded_stream_close_reason(recorded) == ('provider_invalid_request' if enabled else 'connection_lost')
+async def test_flag_off_interleaving_preserves_single_legacy_preview(monkeypatch, enabled):
+    emitted = []
+    await receive(
+        [
+            partial('a', 'Bonjour', 100, 1),
+            partial('b', 'Guten Tag', 200, 2),
+            documented_final(utterance_uuid='a', text='Bonjour.', start_ms=100),
+            TERMINALS[0],
+        ],
+        emitted.extend,
+        monkeypatch,
+        enabled=enabled,
+    )
+    assert [s['text'] for s in emitted] == (['Bonjour.', 'Guten Tag'] if enabled else ['Bonjour.'])
 
 
-def test_empty_preview_retracts_pending_text_and_invalid_timing_never_invents_an_anchor():
+def test_helper_ignores_anonymous_previews_and_finals():
+    pending = ModulatePendingUtterances()
+    pending.observe(documented_partial()['partial_utterance'])
+    assert not pending
+    pending.observe(partial('a', 'Hola', 100)['partial_utterance'])
+    pending.finalized(documented_final(utterance_uuid=None, text='Hola')['utterance'])
+    assert [s['text'] for s in pending.flush()] == ['Hola']
+
+
+def test_empty_identified_preview_retracts_only_its_uuid():
     pending = ModulatePendingUtterances()
     pending.observe(partial('a', 'Hola', 100)['partial_utterance'])
+    pending.observe(partial('b', 'Bonjour', 200)['partial_utterance'])
     pending.observe(partial('a', '', None)['partial_utterance'])
-    pending.observe(partial('b', 'Bonjour', -1)['partial_utterance'])
-    pending.observe(documented_partial(text='Guten Tag', start_ms=None)['partial_utterance'])
-    assert pending.flush() == []
+    assert [s['text'] for s in pending.flush()] == ['Bonjour']
     assert not pending
-
-
-def test_preview_cache_is_bounded_and_finals_do_not_need_a_cached_preview():
-    pending = ModulatePendingUtterances()
-    for index in range(MAX_PENDING_UTTERANCES + 1):
-        pending.observe(partial(str(index), str(index), index, 2)['partial_utterance'])
-    pending.finalized(documented_final(utterance_uuid='0')['utterance'])
-    segments = pending.flush()
-    assert len(segments) == MAX_PENDING_UTTERANCES
-    assert segments[0]['text'] == '1'
-    assert all(segment['speaker'] == 'SPEAKER_01' for segment in segments)
 
 
 def test_preroll_is_filtered_per_utterance_and_tails_keep_capture_order():
     pending = ModulatePendingUtterances()
-    for name, start in [('new', 2100), ('preroll', 500), ('old', 2000)]:
+    for name, start in [('new', 2100), ('preroll', 500), ('untimed', None), ('old', 2000)]:
         pending.observe(partial(name, name, start)['partial_utterance'])
-    assert [segment['text'] for segment in pending.flush(preseconds=1)] == ['old', 'new']
+    assert [s['text'] for s in pending.flush(preseconds=1)] == ['old', 'new']
