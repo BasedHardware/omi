@@ -12403,4 +12403,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'کنکشن چیک کریں';
+
+  @override
+  String get forYou => 'آپ کے لیے';
+
+  @override
+  String get stopThese => 'یہ روکیں';
+
+  @override
+  String get dismiss => 'چھپائیں';
 }

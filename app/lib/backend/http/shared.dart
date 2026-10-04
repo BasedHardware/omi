@@ -481,10 +481,17 @@ Future<http.Response> sendUncaughtApiCall({
   int? retries,
   bool signOutOn401 = true,
   ApiExecutionSeams? execution,
+  bool Function()? canSend,
   void Function(AuthTokenResult refresh)? onAuthRefresh,
 }) async {
+  void ensureCurrentOwner() {
+    if (canSend != null && !canSend()) throw AuthTokenUnavailableException(const AuthTokenMissingUser());
+  }
+
+  ensureCurrentOwner();
   if (execution != null) {
     var builtHeaders = await execution.headers(ApiRequest(url: url, method: method, headers: headers, body: body));
+    ensureCurrentOwner();
     var response = await execution.transport(ApiRequest(url: url, method: method, headers: builtHeaders, body: body));
     if (response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -495,6 +502,7 @@ Future<http.Response> sendUncaughtApiCall({
         onAuthRefresh: onAuthRefresh,
         replay: () async {
           builtHeaders = await execution.headers(ApiRequest(url: url, method: method, headers: headers, body: body));
+          ensureCurrentOwner();
           return execution.transport(ApiRequest(url: url, method: method, headers: builtHeaders, body: body));
         },
       );
@@ -515,7 +523,10 @@ Future<http.Response> sendUncaughtApiCall({
   final effectiveRetries = retries ?? 1;
 
   http.Response response = await HttpPoolManager.instance.send(
-    () => _buildRequest(url, builtHeaders, body, method),
+    () {
+      ensureCurrentOwner();
+      return _buildRequest(url, builtHeaders, body, method);
+    },
     timeout: effectiveTimeout,
     retries: effectiveRetries,
   );
@@ -535,7 +546,10 @@ Future<http.Response> sendUncaughtApiCall({
           method: method,
         );
         return HttpPoolManager.instance.send(
-          () => _buildRequest(url, builtHeaders, body, method),
+          () {
+            ensureCurrentOwner();
+            return _buildRequest(url, builtHeaders, body, method);
+          },
           timeout: effectiveTimeout,
           retries: 0,
         );

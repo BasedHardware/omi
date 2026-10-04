@@ -12426,4 +12426,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Controleer verbinding';
+
+  @override
+  String get forYou => 'Voor jou';
+
+  @override
+  String get stopThese => 'Deze stoppen';
+
+  @override
+  String get dismiss => 'Verbergen';
 }

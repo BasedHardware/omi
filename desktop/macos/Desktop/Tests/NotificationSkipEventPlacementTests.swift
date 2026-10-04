@@ -6,8 +6,7 @@ import XCTest
 ///
 /// The first version of this event sat inside `deliverNotification`, which an
 /// unauthorized notification never reaches: `sendNotification` returns at its
-/// authorization guard first, and the context-director engines abort on a
-/// non-`.queued` preflight. It compiled, its payload test passed, and it
+/// authorization guard before `deliverNotification`. It compiled, its payload test passed, and it
 /// emitted nothing for the population it was written to measure.
 ///
 /// A behavioural test would be better, but `sendNotification` reads
@@ -23,6 +22,16 @@ final class NotificationSkipEventPlacementTests: XCTestCase {
       .appendingPathComponent("Sources")
       .appendingPathComponent("ProactiveAssistants/Services/NotificationService.swift")
     // omi-test-quality: source-inspection -- static contract: pins which functions report an unauthorized drop
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func notificationPermissionPolicySource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent("AppState/AppState+Permissions.swift")
+    // omi-test-quality: source-inspection -- static contract: pins that authorization and visible alert style remain distinct notification states
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -58,16 +67,6 @@ final class NotificationSkipEventPlacementTests: XCTestCase {
       "sendNotification returns before deliverNotification when unauthorized, so the drop must be reported here")
   }
 
-  /// The context-director preflight is the real drop for that path: both
-  /// engines abort unless it returns `.queued`, so anything reported after it
-  /// is never reached.
-  func testContextDirectorPreflightReportsItsOwnUnauthorizedDrop() throws {
-    let body = try functionBody("contextDirectorPresentationPreflight", in: notificationServiceSource())
-    XCTAssertTrue(
-      body.contains(Self.reporter),
-      "the engines bail on a non-.queued preflight, so an unauthorized drop must be reported inside it")
-  }
-
   /// The regression itself: `deliverNotification` runs only *after* every
   /// authorization gate has passed, so an unauthorized drop can never be
   /// observed from there.
@@ -82,13 +81,21 @@ final class NotificationSkipEventPlacementTests: XCTestCase {
   /// check — an alert style of `.none` is the user's own choice, and a
   /// permission that was never granted is not.
   func testPreflightSeparatesAuthorizationFromAlertStyle() throws {
-    let body = try functionBody("contextDirectorPresentationPreflight", in: notificationServiceSource())
+    let sendNotification = try functionBody("sendNotification", in: notificationServiceSource())
+    XCTAssertTrue(
+      sendNotification.contains("NotificationPermissionPolicy.isGranted"),
+      "the shared NotificationService boundary must check authorization before delivery")
+    XCTAssertFalse(
+      sendNotification.contains("hasVisibleAlertSurface"),
+      "a muted alert style is not an authorization denial")
+
+    let alertPolicy = try functionBody("hasVisibleAlertSurface", in: notificationPermissionPolicySource())
     let authorizationGate = try XCTUnwrap(
-      body.range(of: "NotificationPermissionPolicy.isGranted"),
-      "the preflight must check authorization on its own")
+      alertPolicy.range(of: "isGranted(status)"),
+      "visible-surface policy must use the independent authorization decision")
     let alertSurfaceGate = try XCTUnwrap(
-      body.range(of: "hasVisibleAlertSurface"),
-      "the preflight must still check the alert surface")
+      alertPolicy.range(of: "alertStyle != .none"),
+      "visible-surface policy must separately account for the user's alert style")
     XCTAssertTrue(
       authorizationGate.lowerBound < alertSurfaceGate.lowerBound,
       "authorization is checked first so a never-granted permission is not reported as a muted alert style")

@@ -11389,5 +11389,8 @@
     "playbackBackToCurrent": "موجودہ پر واپس جائیں",
     "playbackAudioUnavailable": "آڈیو دستیاب نہیں",
     "playbackAudioLoadFailed": "آڈیو لوڈ نہیں ہو سکا",
-    "playbackAudioNetworkFailed": "کنکشن چیک کریں"
+    "playbackAudioNetworkFailed": "کنکشن چیک کریں",
+    "forYou": "آپ کے لیے",
+    "stopThese": "یہ روکیں",
+    "dismiss": "چھپائیں"
 }

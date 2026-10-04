@@ -105,11 +105,10 @@ user-deletion tombstone as rollback state.
 
 ## Paid-work enforcement
 
-`POST /v1/desktop/proactivity/completions` resolves the decision before quota
-reservation or provider selection. It then bypasses the cache and refreshes
-the exposure flag immediately before constructing or calling the model
-provider. A late disable releases the quota reservation and makes no model
-call.
+The legacy desktop completion and JIT proactivity reservation/feedback routes are
+retired without paid work. See [the retirement contract](proactivity-v2-retirement.md).
+The rollout-decision authority and its canonical-memory, knowledge-tool,
+first-open and frame-tool consumers remain active and unchanged.
 
 The implementation is dark by default. It does not create or enable PostHog
 flags or cohorts, deploy a service, or enroll a user. The desktop backend's

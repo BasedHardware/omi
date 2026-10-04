@@ -12412,4 +12412,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Patikrinkite ryšį';
+
+  @override
+  String get forYou => 'Jums';
+
+  @override
+  String get stopThese => 'Sustabdyti šiuos';
+
+  @override
+  String get dismiss => 'Slėpti';
 }

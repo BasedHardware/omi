@@ -22,6 +22,7 @@ APP_NOTIFICATION_RATE_LIMIT_POLICY = 'integration-notification'
 
 
 class NotificationKind(str, Enum):
+    PROACTIVITY_V2 = 'proactivity_v2'
     APP_INTEGRATION = 'app_integration'
     CAPTURE_RECOVERY = 'capture_recovery'
     IMPORT_JOB = 'import_job'

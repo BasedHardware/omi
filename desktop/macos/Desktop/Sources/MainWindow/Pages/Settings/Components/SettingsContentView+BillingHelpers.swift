@@ -571,11 +571,6 @@ extension SettingsContentView {
       of: taskExtractionInterval, in: extractionIntervalOptions)
   }
 
-  var insightIntervalSliderIndex: Int {
-    SettingsControlMetrics.nearestLadderIndex(
-      of: insightExtractionInterval, in: extractionIntervalOptions)
-  }
-
   var memoryIntervalSliderIndex: Int {
     SettingsControlMetrics.nearestLadderIndex(
       of: memoryExtractionInterval, in: extractionIntervalOptions)

@@ -331,8 +331,6 @@ overlay:
         value: 'false'
       MEMORY_BELIEF_MODEL_ENABLED:
         value: 'false'
-      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
-        value: 'false'
       BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
         value: 'false'
       MEMORY_BELIEF_AUTOMATION_PAUSED:

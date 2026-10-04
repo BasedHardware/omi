@@ -408,7 +408,10 @@ def _matcher_host(receipt, emitted):
     async def _call(fn, *args):
         if fn.__name__ == 'get_manual_speaker_receipt':
             return receipt
-        return fn(*args)
+        if fn.__name__ == 'get_person':
+            assert args == (UID, 'p1')
+            return {'id': 'p1', 'name': 'Rei'}
+        raise AssertionError(f'Unexpected matcher persistence call: {fn.__name__}')
 
     return SimpleNamespace(
         request=SimpleNamespace(uid=UID, sample_rate=16000),
@@ -455,7 +458,9 @@ def test_matcher_does_not_emit_an_automatic_alternative_for_a_carried_person(mon
     monkeypatch.setattr(listen_speakers, 'extract_embedding_from_bytes', lambda *a, **k: np.array([[1.0, 0.0]]))
     _match(matcher)
     assert emitted == []
-    assert matcher.speaker_to_person == {}
+    # The carried manual identity wins even without its embedding; the other
+    # person's matching vector must not replace it or emit an alternative.
+    assert matcher.speaker_to_person == {0: ('p1', 'Rei')}
 
 
 def test_matcher_binds_a_known_carried_person_without_emitting(monkeypatch):

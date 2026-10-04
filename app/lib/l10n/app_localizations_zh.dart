@@ -12179,4 +12179,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => '请检查网络连接';
+
+  @override
+  String get forYou => '为你推荐';
+
+  @override
+  String get stopThese => '停止此类推荐';
+
+  @override
+  String get dismiss => '忽略';
 }
