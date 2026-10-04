@@ -70,11 +70,25 @@ def format_feature(item: Dict[str, Any]) -> Dict[str, Any]:
     geometry = {"type": "Point", "coordinates": coords} if coords else None
 
     structured = item.get("structured") or {}
-    title = clean_text(item.get("title") or structured.get("title") or "Untitled Conversation")
+    title = clean_text(structured.get("title") or item.get("title") or "Untitled Conversation")
     overview = clean_text(structured.get("overview") or item.get("summary") or "")
+    category = clean_text(structured.get("category") or item.get("category") or "")
 
     # Transcript snippet (up to 300 chars)
-    transcript = clean_text(item.get("transcript") or "")
+    segments = item.get("transcript_segments")
+    if isinstance(segments, list) and segments:
+        text_parts = []
+        for seg in segments:
+            if isinstance(seg, dict):
+                t = clean_text(seg.get("text"))
+                if t:
+                    text_parts.append(t)
+            elif isinstance(seg, str) and seg.strip():
+                text_parts.append(clean_text(seg))
+        transcript = " ".join(text_parts)
+    else:
+        transcript = clean_text(item.get("transcript") or "")
+
     snippet = transcript[:300] + ("..." if len(transcript) > 300 else "")
 
     geo = item.get("geolocation") or item.get("location") or {}
@@ -84,7 +98,7 @@ def format_feature(item: Dict[str, Any]) -> Dict[str, Any]:
     props = {
         "id": item.get("id"),
         "title": title,
-        "category": clean_text(item.get("category")),
+        "category": category,
         "started_at": item.get("started_at") or item.get("created_at"),
         "finished_at": item.get("finished_at") or item.get("ended_at"),
         "duration_seconds": item.get("duration_seconds") or item.get("duration"),
@@ -146,10 +160,10 @@ def export_geojson(
     features = []
 
     for item in conversations:
-        if category_filter:
-            item_cat = clean_text(item.get("category")).lower()
-            if item_cat != category_filter.lower():
-                continue
+        structured = item.get("structured") or {}
+        item_cat = clean_text(structured.get("category") or item.get("category") or "").lower()
+        if category_filter and item_cat != category_filter.lower():
+            continue
 
         feat = format_feature(item)
         if require_coords and feat["geometry"] is None:

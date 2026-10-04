@@ -20,15 +20,15 @@ You need Python 3.10+ and an authenticated `omi-cli` for the initial export.
 
 ## 1. Export conversations from Omi
 
-Export your conversation history into JSON:
+Export your conversation history into JSON (note that `--json` is a global flag before the verb):
 
 ```bash
-# Export recent conversations
-omi conversation list --limit 100 --json > conversations.json
+# Export conversations
+omi --json conversation list --limit 100 --offset 0 > conversations.json
 
 # Or export across multiple pages
-omi conversation list --limit 100 --offset 0 --json > page1.json
-omi conversation list --limit 100 --offset 100 --json > page2.json
+omi --json conversation list --limit 100 --offset 0 > page1.json
+omi --json conversation list --limit 100 --offset 100 > page2.json
 ```
 
 ---
@@ -62,18 +62,18 @@ python conversations_to_geojson.py page1.json page2.json -o life_map_all.geojson
 
 | Option | Default | Description |
 | :--- | :--- | :--- |
-| `-o, --output` | `conversations.geojson` | Destination GeoJSON file path |
-| `--require-coords` | `False` | Only include conversations with valid GPS coordinates |
-| `--filter-category`| `None` | Filter by category (e.g. `work`, `personal`, `travel`) |
-| `--force` | `False` | Overwrite existing output file if it exists |
+| `-o, --output` | `conversations.geojson` | Path to save the resulting GeoJSON file |
+| `--require-coords` | `False` | Only output features with valid GPS coordinates |
+| `--filter-category`| `None` | Filter conversations by category (e.g. `work`, `travel`) |
+| `--force` | `False` | Overwrite the output file if it already exists |
 
 ---
 
-## 4. Visualizing on Maps
+## 4. Visualizing your Map
 
-1. **Quick Preview**: Drag and drop your `.geojson` file into [geojson.io](https://geojson.io/).
-2. **Interactive 3D Maps**: Upload to [Kepler.gl](https://kepler.gl/demo) to see timeline playback of where your conversations occurred.
-3. **Felt / Mapbox**: Import as a vector layer for custom styling and sharing.
+1. **geojson.io**: Open [geojson.io](https://geojson.io/) and drag-and-drop `life_map.geojson` directly onto the map.
+2. **Kepler.gl**: Go to [kepler.gl/demo](https://kepler.gl/demo) and upload your file for interactive geospatial analytics and 3D point clustering.
+3. **QGIS**: Open QGIS, choose `Layer -> Add Layer -> Add Vector Layer...` and select `life_map.geojson`.
 
 ---
 
@@ -82,5 +82,5 @@ python conversations_to_geojson.py page1.json page2.json -o life_map_all.geojson
 Run the test suite:
 
 ```bash
-python test_conversations_to_geojson.py
+python -m pytest tests/test_conversations_to_geojson.py
 ```
