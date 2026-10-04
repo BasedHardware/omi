@@ -358,7 +358,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert '--max=18' in action
     assert '--concurrency=3' in action
     assert '--cpu=2' in action
-    assert '--memory=8Gi' in action
+    assert '--memory=4Gi' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     # backend-sync is instance-billed and ran pinned at its old max of 25 in the
     # evening peak; the cap is owned by code so a deploy cannot drift it back.
