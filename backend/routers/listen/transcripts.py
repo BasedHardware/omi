@@ -757,11 +757,33 @@ class TranscriptProcessor:
         for photo in photos or []:
             self.photo_buffer.append(photo)
 
+    def _stt_drain_pending(self) -> bool:
+        receiver = getattr(self.host, 'receiver', None)
+        if getattr(receiver, 'recovery', None) is None:
+            return False
+        drain = getattr(receiver, 'stt_drain_complete', None)
+        return drain is not None and not drain.is_set()
+
     async def process_loop(self) -> None:
         diarized_speaker_ids_by_conversation: Dict[str, set[int]] = {}
-        while self.host.state.active or self.segment_buffer or self.photo_buffer or self._v2_legacy_fallback:
+        while (
+            self.host.state.active
+            or self.segment_buffer
+            or self.photo_buffer
+            or self._v2_legacy_fallback
+            or self._stt_drain_pending()
+        ):
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer or self._v2_legacy_fallback):
-                break
+                if not self._stt_drain_pending():
+                    break
+                receiver = getattr(self.host, 'receiver', None)
+                drain = getattr(receiver, 'stt_drain_complete', None)
+                if drain is not None:
+                    try:
+                        await asyncio.wait_for(drain.wait(), 0.5)
+                    except asyncio.TimeoutError:
+                        pass
+                continue
             # One eligible fallback attempt per tick. A failing owner backs
             # off independently and cannot prevent normal transcript/photo
             # draining or eligible fallback items behind it from progressing.

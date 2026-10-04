@@ -768,12 +768,12 @@ final class TaskContextualResurfacingTests: XCTestCase {
       "a preflight that never paints must not consume the user's frequency window")
 
     service.recordProactiveNotificationPresentedForTesting(
-      assistantId: "context-director", authorizationSnapshot: snapshot, now: baseDate)
+      assistantId: "insight", authorizationSnapshot: snapshot, now: baseDate)
     XCTAssertFalse(
       service.proactiveNotificationEligibleForTesting(
         assistantId: "insight", authorizationSnapshot: snapshot,
         now: baseDate.addingTimeInterval(1)),
-      "a visible director notification must advance the shared global frequency clock")
+      "a visible insight notification must advance the shared global frequency clock")
   }
 
   @MainActor
