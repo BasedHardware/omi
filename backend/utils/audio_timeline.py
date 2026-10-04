@@ -531,6 +531,7 @@ class ProviderEpochTranslator:
         self._project_times = project_times
         self.provider_label = 'unknown'
         self.send_path = 'unknown'
+        self.last_send_provider_start = 0
         self._last_accepted_wall_end: Optional[float] = None
         # The elapsed Soniox axis is unverified. Shadow computes it without
         # changing the compact map used for placement or owner resolution.
@@ -577,12 +578,16 @@ class ProviderEpochTranslator:
         return self._project_times
 
     def note_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
+        first_span = True
         for capture_start, length in spans:
             if length <= 0:
                 continue
             start = self.send_map.last_provider_sample or 0
             if self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'on':
                 start = self._note_elapsed_span(capture_start, length)
+            if first_span:
+                self.last_send_provider_start = start
+                first_span = False
             self.send_map.add_accepted(start, capture_start, length)
             end = start + length
             owner = self._owner_at_send(capture_start, length) if self._owner_at_send is not None else None

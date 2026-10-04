@@ -45,6 +45,8 @@ class IdleSonioxSocket(STTSocket):
         self._close_task: asyncio.Task[Any] | None = None
         self._reopen_task: asyncio.Task[bool] | None = None
         self._pending = bytearray()
+        self._resumed_audio = b''
+        self._resume_offset: float | None = None
         self._admitted_samples = 0
         self._metrics = soniox_idle_metrics()
         self._writer_pacing: tuple[Any, ...] | None = None
@@ -57,15 +59,15 @@ class IdleSonioxSocket(STTSocket):
 
     @property
     def is_connection_dead(self) -> bool:
-        return self._dead or (self._idle_since is None and self._transport.is_connection_dead)
+        return self._dead or self._transport.is_connection_dead
 
     @property
     def death_reason(self) -> str | None:
-        return self._reason or (self._transport.death_reason if self._idle_since is None else None)
+        return self._reason or self._transport.death_reason
 
     @property
     def typed_death_reason(self) -> str | None:
-        return self._reason or (self._transport.typed_death_reason if self._idle_since is None else None)
+        return self._reason or self._transport.typed_death_reason
 
     def observe_vad(self, output: Any, mode: str) -> None:
         if mode != 'active' or self._finishing or self.is_connection_dead:
@@ -134,7 +136,8 @@ class IdleSonioxSocket(STTSocket):
         if self._finishing:
             return False
         self._account_avoided()
-        offset = self._admitted_samples / self._rate
+        offset = self._resume_offset if self._resume_offset is not None else self._admitted_samples / self._rate
+        self._resume_offset = None
 
         self._socket_epoch += 1
         callback = self._socket_callback(offset, self._socket_epoch)
@@ -156,6 +159,7 @@ class IdleSonioxSocket(STTSocket):
             if not accepted:
                 self._pending.extend(data)
             if accepted:
+                self._resumed_audio = data
                 self._metrics.reopens.inc()
                 record_stt_provider_connect(provider='soniox', outcome=CONNECT_SUCCESS)
             return accepted
@@ -188,9 +192,18 @@ class IdleSonioxSocket(STTSocket):
         return callback
 
     def take_unsent_audio(self) -> bytes:
-        data = bytes(self._pending)
+        data = bytes(self._pending) or self._resumed_audio
         self._pending.clear()
+        self._resumed_audio = b''
         return data
+
+    def set_resume_provider_offset(self, sample: int) -> None:
+        if self._idle_since is not None and self._pending:
+            self._resume_offset = sample / self._rate
+
+    def commit_send(self) -> None:
+        # Release only after the serving boundary has checked the death latch.
+        self._resumed_audio = b''
 
     def _account_avoided(self) -> None:
         if self._idle_closed_at is not None:
@@ -242,3 +255,23 @@ class IdleSonioxSocket(STTSocket):
             await asyncio.wait(tasks, timeout=max(0.0, deadline - time.monotonic()))
         await abort_replay_socket(self._transport, timeout=max(0.0, deadline - time.monotonic()))
         self._closed = True
+
+
+def unaccepted_onset(data: bytes, spans: Any, tracker: Any) -> tuple[bytes, tuple[tuple[int, int], ...]]:
+    """Exclude only capture prefixes proven accepted by a successor's replay."""
+    if tracker is None or not spans:
+        return data, tuple(spans)
+    ledger = tracker.send_map
+    boundary = ledger.last_capture_sample or 0
+    pieces = []
+    remaining = []
+    offset = 0
+    for start, length in spans:
+        cut = min(length, max(0, boundary - start))
+        if ledger.accepted_samples_in_capture_range(start, start + cut) != cut:
+            cut = 0
+        if cut < length:
+            pieces.append(data[(offset + cut) * 2 : (offset + length) * 2])
+            remaining.append((start + cut, length - cut))
+        offset += length
+    return b''.join(pieces), tuple(remaining)

@@ -919,6 +919,9 @@ class LiveLegSocket(STTSocket):
         return getattr(self.raw, 'idle_close_enabled', False) is True
 
     async def complete_send(self) -> bool:
+        offset = getattr(self.raw, 'set_resume_provider_offset', None)
+        if self._send_tracker is not None and callable(offset):
+            offset(self._send_tracker.last_send_provider_start)
         complete = getattr(self.raw, 'complete_send', None)
         completed = (
             await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else not self.is_connection_dead
@@ -927,7 +930,18 @@ class LiveLegSocket(STTSocket):
             self.leg_outcome.claim(self.typed_death_reason or 'connection_lost', connect=True)
         return completed
 
+    def commit_send(self) -> None:
+        commit = getattr(self.raw, 'commit_send', None)
+        if callable(commit):
+            commit()
+
     def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        from utils.stt.soniox_idle import unaccepted_onset
+
+        data, spans = unaccepted_onset(data, spans, self._send_tracker)
+        if not data:
+            return True
+        self._idle_send_spans = spans
         accepted = self.raw.send(data)
         if accepted and self._send_tracker is not None and spans:
             self._send_tracker.note_accepted_spans(spans)

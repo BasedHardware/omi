@@ -653,20 +653,23 @@ async def send_live_stt_audio(
         completed = await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else True
     except Exception:
         completed = False
-    if not completed:
+    if not completed or live_stt_socket_is_dead(stt_socket):
         take = getattr(stt_socket, 'take_unsent_packet', None)
         if receiver is not None and callable(take):
             packet = take()
             if packet is not None:
                 receiver._idle_onset_retry = packet
-        await _recoverable_failure(live_stt_terminal_reason(stt_socket, 'connection_lost'))
+        await _recoverable_failure(
+            live_stt_terminal_reason(stt_socket, 'connection_lost') if not completed else 'send_failed'
+        )
         return False
 
     # Safe socket wrappers report send failures through the death latch instead
     # of raising so every provider must be checked after the send as well.
-    if live_stt_socket_is_dead(stt_socket):
-        await _recoverable_failure('send_failed')
-        return False
+    if getattr(stt_socket, 'idle_close_enabled', False) is True:
+        commit = getattr(stt_socket, 'commit_send', None)
+        if callable(commit):
+            commit()
 
     if receiver is not None and retry is not None:
         receiver._idle_onset_retry = None

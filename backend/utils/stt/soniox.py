@@ -228,7 +228,7 @@ class SafeSonioxSocket(STTSocket):
 
     def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
         with self._lock:
-            if self._planned_close:
+            if self._planned_close and reason.startswith(('ws send closed:', 'ws recv closed:')):
                 return
             if not self._dead:
                 self._death_reason = reason
@@ -435,10 +435,8 @@ class SafeSonioxSocket(STTSocket):
                         and str(msg.get('error_code')) == '400'
                         and 'no audio received' in str(msg.get('error_message') or '').lower()
                     ):
-                        record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason='soniox_no_audio_teardown')
-                        self._done_event.set()
-                        break
-                    if self._planned_close:
+                        if not self._planned_close:
+                            record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason='soniox_no_audio_teardown')
                         self._done_event.set()
                         break
                     record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason=typed)

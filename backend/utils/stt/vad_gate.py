@@ -862,12 +862,26 @@ class GatedSTTSocket(STTSocket):
         return getattr(self._conn, 'idle_close_enabled', False) is True
 
     async def complete_send(self) -> bool:
+        offset = getattr(self._conn, 'set_resume_provider_offset', None)
+        if self._send_tracker is not None and callable(offset):
+            offset(self._send_tracker.last_send_provider_start)
         complete = getattr(self._conn, 'complete_send', None)
         return (
             await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else not self.is_connection_dead
         )
 
+    def commit_send(self) -> None:
+        commit = getattr(self._conn, 'commit_send', None)
+        if callable(commit):
+            commit()
+
     def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        from utils.stt.soniox_idle import unaccepted_onset
+
+        data, spans = unaccepted_onset(data, spans, self._send_tracker)
+        if not data:
+            return True
+        self._idle_send_spans = spans
         accepted = self._conn.send(data)
         if accepted and self._send_tracker is not None and spans:
             self._send_tracker.note_accepted_spans(spans)

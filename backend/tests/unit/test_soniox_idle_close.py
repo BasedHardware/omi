@@ -332,3 +332,198 @@ def test_replay_tail_pump_completes_idle_reopen(monkeypatch):
         await idle.drain_and_close()
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    'code,error,expected',
+    [
+        (402, 'organization_balance_exhausted', 'provider_budget_exhausted'),
+        (401, 'unauthorized', 'provider_auth_rejected'),
+    ],
+)
+def test_planned_close_preserves_real_provider_rejection(monkeypatch, code, error, expected):
+    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
+
+    async def run():
+        socket, idle, _, peers, _, tick = build(monkeypatch)
+        peers[0].frames.put_nowait({'error_code': code, 'error_type': error})
+        idle._transport._planned_close = True
+        idle._idle_since = tick[0]
+        await settle()
+        assert socket.is_connection_dead
+        assert socket.typed_death_reason == expected
+        await idle.drain_and_close()
+        await idle._transport.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_planned_no_audio_teardown_emits_no_failure_metric(monkeypatch):
+    async def run():
+        socket, idle, _, peers, _, _ = build(monkeypatch)
+        raw = idle._transport
+        raw._planned_close = True
+        raw.finish()
+        monkeypatch.setattr(soniox, 'record_stt_stream_close', lambda **kw: pytest.fail('planned close evidence'))
+        peers[0].frames.put_nowait({'error_code': 400, 'error_message': 'No audio received'})
+        await settle()
+        assert not socket.is_connection_dead
+        await raw.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_immediately_dead_reopen_retains_onset_for_failover(monkeypatch):
+    async def run():
+        socket, idle, gate, _, _, tick = build(monkeypatch)
+        socket.send(b'\x00\x00' * 1600, wall_time=100, start_sample=0)
+        tick[0] += 3
+        socket.send(b'\x00\x00' * 1600, wall_time=103, start_sample=48000)
+        await idle._close_task
+        prefix = b''.join(data for data, _ in gate._pre_roll)
+        complete = socket.complete_send
+
+        async def complete_then_die():
+            assert await complete()
+            idle._transport._mark_dead('ws recv error: reset', typed_reason='connection_lost')
+            idle._transport._done_event.set()
+            idle._transport._send_task.cancel()
+            return True
+
+        socket.complete_send = complete_then_die
+
+        class Receiver:
+            async def failover(self):
+                return True
+
+        owner = Receiver()
+        onset = b'\x01\x00' * 1600
+        state = SimpleNamespace(active=True, stt_terminal_failure=False)
+        assert not await send_live_stt_audio(
+            None,
+            state,
+            stt_socket=socket,
+            audio=onset,
+            start_sample=49600,
+            provider='soniox',
+            platform='desktop',
+            attempt_failover=owner.failover,
+        )
+        assert owner._idle_onset_retry[0] == prefix + onset
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_admitted_onset_stays_behind_existing_replay_tail(monkeypatch):
+    async def run():
+        delivered = []
+        connection = SimpleNamespace(
+            is_connection_dead=False,
+            send=lambda data, **kw: delivered.append(('prior', data, kw)) or True,
+            send_admitted_audio=lambda data, spans: delivered.append(('onset', data, spans)) or True,
+        )
+        host = SimpleNamespace(
+            spawn=lambda coro, **kw: asyncio.create_task(coro),
+            state=SimpleNamespace(active=True, stt_terminal_failure=False),
+        )
+        pacer = replay_delivery.ReplayPacer(16000, 'soniox', connection)
+        # Pacing is tested elsewhere: keep this queue-order regression CPU-only.
+        monkeypatch.setattr(replay_delivery, '_next_audio_slot', lambda *a: 0)
+        tail = replay_delivery.ReplayTailSocket(
+            connection, pacer, deque([replay_delivery.TailPacket(0, b'old!', replay_delivery.clock())]), host
+        )
+        assert tail.send_admitted_audio(b'nextword', ((20, 2), (40, 2)))
+        assert delivered == []
+        tail.start_tail()
+        await tail._task
+        assert [(kind, data) for kind, data, _ in delivered] == [
+            ('prior', b'old!'),
+            ('onset', b'next'),
+            ('onset', b'word'),
+        ]
+        assert [item[2] for item in delivered[1:]] == [((20, 2),), ((40, 2),)]
+
+    asyncio.run(run())
+
+
+def test_replayed_preroll_is_not_delivered_twice(monkeypatch):
+    from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+
+    tracker = ProviderEpochTranslator(CaptureTimeline(16000), 16000)
+    tracker.note_accepted(20, 2)
+    data, spans = soniox_idle.unaccepted_onset(b'pre!word', ((20, 2), (40, 2)), tracker)
+    assert data == b'word'
+    assert spans == ((40, 2),)
+
+
+@pytest.mark.parametrize('elapsed', ['off', 'on', 'shadow'])
+def test_capture_and_wall_continuity_with_socket_reset(monkeypatch, elapsed):
+    from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+
+    monkeypatch.setenv('SONIOX_ELAPSED_AXIS', elapsed)
+
+    async def run():
+        socket, idle, gate, _, seen, tick = build(monkeypatch)
+        timeline = CaptureTimeline(16000)
+        tracker = ProviderEpochTranslator(timeline, 16000)
+        tracker.provider_label = 'soniox'
+        socket._send_tracker = tracker
+        idle._callback = lambda segments: seen.extend(tracker.translate(segments))
+        speech = b'\x01\x00' * 1600
+        silence = b'\x00\x00' * 1600
+        for i in range(42):
+            data = speech if i in (0, 41) else silence
+            start, _, _ = timeline.accept(data, 100 + (i + 1) / 10, 100 + (i + 1) / 10)
+            tick[0] = 100 + i / 10
+            assert socket.send(data, wall_time=tick[0], start_sample=start)
+            if i == 0:
+                idle._transport._handle_tokens([{'text': 'first ', 'is_final': True, 'start_ms': 0, 'end_ms': 100}])
+            if idle._close_task is not None:
+                await idle._close_task
+        assert await socket.complete_send()
+        idle._transport._handle_tokens([{'text': 'next ', 'is_final': True, 'start_ms': 100, 'end_ms': 200}])
+        assert len(seen) == 2
+        assert seen[1]['start'] >= seen[0]['end']
+        assert seen[1]['start'] > 3
+        assert seen[1]['_capture_start_sample'] >= 39 * 1600
+        assert seen[1]['_capture_end_sample'] <= 42 * 1600
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'on'])
+def test_routed_idle_close_keeps_cost_evidence_and_circuits_unchanged(monkeypatch, mode):
+    from config.live_stt_registry import Target
+
+    monkeypatch.setenv('STT_ROUTING_MODE', mode)
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+
+    async def run():
+        _, idle, gate, _, _, tick = build(monkeypatch)
+        host = SimpleNamespace(
+            language='en', request=SimpleNamespace(uid='idle-unit'), state=SimpleNamespace(active=True)
+        )
+        owner = SimpleNamespace(host=host, recovery=None, _telemetry_platform=lambda: 'desktop')
+        session = live_session.LiveChainSession(owner)
+        target = Target('soniox-idle-test', 'soniox', 0.12)
+        token = live_session.connecting_target.set(target)
+        try:
+            leg = live_session.LiveLegSocket(idle, gate, session, STTService.soniox, 16000, False, False)
+        finally:
+            live_session.connecting_target.reset(token)
+        for method in ('record', 'record_session', 'quarantine', 'quarantine_target'):
+            monkeypatch.setattr(live_session.health, method, lambda *a, **kw: pytest.fail('idle router evidence'))
+        monkeypatch.setattr(live_session, 'target_circuit', lambda *a: pytest.fail('idle circuit lookup'))
+        leg.send(b'\x00\x00' * 1600, start_sample=0)
+        tick[0] += 3
+        leg.send(b'\x00\x00' * 1600, start_sample=48000)
+        await idle._close_task
+        assert not leg.is_connection_dead
+        assert not leg.leg_outcome.claimed
+        assert not leg._target_death_recorded
+        assert leg._routing_target_entry == target
+        await leg.drain_and_close()
+
+    asyncio.run(run())

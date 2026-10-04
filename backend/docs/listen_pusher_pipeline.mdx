@@ -2931,10 +2931,16 @@ onset chunk. The serving send boundary holds that packet until the old receive
 loop has finished, opens the same captured endpoint/config, then admits those
 bytes once in that order. Dial time adds transcript onset latency; capture keeps
 its original positions. Provider timestamps restart at zero on the new socket;
-its callback adds the cumulative admitted sample duration before the existing
-WallTimeMapper / capture send ledger projects wall and capture positions. A
+its callback rebases onto the next accepted provider position in the existing
+capture send ledger (including the elapsed-axis mode), or cumulative admitted
+audio when that ledger is absent. WallTimeMapper / the capture ledger then
+projects wall and capture positions. A socket epoch also resets local speaker
+IDs so a restarted provider ID cannot impersonate an earlier speaker. A
 failed dial enters the ordinary failover boundary; its retained admitted onset
-packet bypasses re-scoring on the replacement, so the VAD pre-roll survives.
+packet bypasses re-scoring on the replacement and queues behind any recovery
+tail. Only capture spans already proven admitted by replay are removed, so
+pre-roll survives without duplicate delivery. Account/config rejections remain
+real failures even if they arrive during the planned drain.
 Shutdown while closed never opens a socket just to finalize the session.
 
 The `omi_soniox_idle_*` close/reopen/failure counters, reopen latency histogram
