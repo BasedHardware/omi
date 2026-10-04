@@ -62,7 +62,7 @@ def text(value):
     """Store loosely typed API fields as text; anything non-null is coerced, not rejected."""
     if value is None:
         return None
-    if isinstance(value, dict):
+    if isinstance(value, (dict, list)):
         value = json.dumps(value, ensure_ascii=False)
     elif not isinstance(value, str):
         value = str(value)
