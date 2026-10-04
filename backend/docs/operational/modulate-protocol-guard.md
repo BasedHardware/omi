@@ -17,10 +17,12 @@ it turned successful completion into a generic socket death.
 The guard retains at most 64 pending previews, correlates updates/finals by
 UUID when present, and retains the last known timestamp/speaker only when that
 UUID proves the association. UUID-less partials supersede a single anonymous
-preview. Every final retires that anonymous preview, even if its time/text
-differs, to prevent terminal emission of already-finalized text. An interleaved
-final can therefore discard an unfinished UUID-less preview; selective
-retirement requires an identity the documented partial shape does not supply.
+preview. A final retires that anonymous preview only when its text contains the
+preview's full text after case, punctuation and whitespace normalization, with
+word boundaries preserved. Unrelated or revised text keeps the preview,
+preferring an occasional duplicate over lost pending speech. A partial's start
+alone cannot prove time-span coverage because the documented shape has no
+duration.
 Null-timed UUID-less updates do not inherit an unproven timestamp.
 Empty previews retract prior text. Finals pass through even when their preview
 was evicted. At termination, timed previews emit once in

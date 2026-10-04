@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Final, Optional
 
 from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED, PROVIDER_RATE_LIMITED
@@ -19,6 +20,10 @@ def _key(message: dict[str, Any]) -> str:
 
 def _timestamp(value: Any) -> int | None:
     return value if type(value) is int and value >= 0 else None
+
+
+def _normalized_text(value: Any) -> str:
+    return ' '.join(re.findall(r'\w+', value.casefold())) if isinstance(value, str) else ''
 
 
 MODULATE_DEATH_SERVE_ERROR: Final = 'modulate_serve_error'
@@ -78,7 +83,7 @@ def modulate_death_reason(err: Any, *, protocol_guard: bool = False) -> Optional
 
 
 class ModulatePendingUtterances:
-    """Finals retire their UUID and any anonymous preview; never invent time."""
+    """Finals retire their UUID and covered anonymous text; never invent time."""
 
     def __init__(self) -> None:
         self._pending: dict[str, dict[str, Any]] = {}
@@ -111,11 +116,18 @@ class ModulatePendingUtterances:
         self._pending[key] = {'text': text.strip(), 'start_ms': start, 'speaker': speaker}
 
     def finalized(self, message: dict[str, Any]) -> None:
-        self._pending.pop(_key(message), None)
-        # A final supersedes preceding partials, but without a preview UUID
-        # even time/text cannot prove which utterance it belongs to. Retire
-        # the anonymous slot on every final to prevent a terminal duplicate.
-        self._pending.pop('', None)
+        key = _key(message)
+        if key:
+            self._pending.pop(key, None)
+        preview = self._pending.get('')
+        if preview is None:
+            return
+        # A UUID-less start has no duration, so overlap cannot prove coverage.
+        # Keep uncertain previews, preferring a duplicate to lost pending text.
+        preview_text = _normalized_text(preview['text'])
+        final_text = _normalized_text(message.get('text'))
+        if preview_text and f' {preview_text} ' in f' {final_text} ':
+            self._pending.pop('', None)
 
     def flush(self, preseconds: int = 0) -> list[dict[str, Any]]:
         pending, self._pending = self._pending, {}

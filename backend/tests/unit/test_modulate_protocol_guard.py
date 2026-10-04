@@ -36,10 +36,8 @@ class Frames:
 
 
 def partial(identifier, text, start=None, speaker=None):
-    return {
-        'type': 'partial_utterance',
-        'partial_utterance': {'utterance_uuid': identifier, 'text': text, 'start_ms': start, 'speaker': speaker},
-    }
+    # Full UUID-bearing Partial Utterance Result shape in the same docs.
+    return documented_partial(utterance_uuid=identifier, text=text, start_ms=start, speaker=speaker)
 
 
 def documented_partial(**updates):
@@ -117,8 +115,8 @@ async def test_documented_uuidless_preview_is_not_reemitted_after_final(monkeypa
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
-@pytest.mark.parametrize('start', [None, 3000])
-async def test_interleaved_uuidless_preview_is_retired_by_any_final(monkeypatch, terminal, start):
+@pytest.mark.parametrize('start', [100, 3000])
+async def test_interleaved_uuidless_preview_survives_an_unrelated_final(monkeypatch, terminal, start):
     emitted = []
     socket = await receive(
         [
@@ -130,10 +128,56 @@ async def test_interleaved_uuidless_preview_is_retired_by_any_final(monkeypatch,
         emitted.extend,
         monkeypatch,
     )
-    # No UUID proves which preview the final replaces. Drop the anonymous
-    # slot even when its text/time differ, rather than persist a possible echo.
-    assert [segment['text'] for segment in emitted] == ['Hello, how are you today?']
+    # Even a start inside the final's span cannot prove coverage: the
+    # documented preview has no duration and may extend beyond that final.
+    assert [(segment['text'], segment['start']) for segment in emitted] == [
+        ('Hello, how are you today?', 0.0),
+        ('Another utterance', start / 1000.0),
+    ]
     assert not socket._has_pending_partial()
+    socket._flush_partial()
+    assert len(emitted) == 2
+
+
+@pytest.mark.parametrize('start', [None, 100, 3000])
+@pytest.mark.parametrize('identifier', [None, 'final-a'])
+@pytest.mark.parametrize('preview_text', ['Another utterance', 'Hello, how were you?', 'he', '!!!'])
+def test_uncovered_anonymous_preview_remains_pending(start, identifier, preview_text):
+    pending = ModulatePendingUtterances()
+    preview = documented_partial(text=preview_text, start_ms=start)['partial_utterance']
+    pending.observe(preview)
+    pending.finalized(documented_final(utterance_uuid=identifier)['utterance'])
+    assert pending
+    # Supplying a known timestamp later lets terminal flush demonstrate that
+    # even the null-timed pending text was retained by the unrelated final.
+    pending.observe({**preview, 'start_ms': 3000})
+    assert [segment['text'] for segment in pending.flush()] == [preview_text]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
+@pytest.mark.parametrize('start', [None, 0])
+@pytest.mark.parametrize(
+    ('preview_text', 'final_text'),
+    [
+        ('Hello, how are', 'Hello, how are you today?'),
+        ('  HELLO,  how\nare! ', 'Hello how are'),
+        ('how are', 'Hello, how are you today?'),
+    ],
+)
+async def test_anonymous_preview_retires_only_when_final_contains_normalized_text(
+    monkeypatch, terminal, start, preview_text, final_text
+):
+    emitted = []
+    socket = await receive(
+        [documented_partial(text=preview_text, start_ms=start), documented_final(text=final_text), terminal],
+        emitted.extend,
+        monkeypatch,
+    )
+    assert [segment['text'] for segment in emitted] == [final_text]
+    assert not socket._has_pending_partial()
+    socket._flush_partial()
+    assert len(emitted) == 1
 
 
 @pytest.mark.asyncio
@@ -211,16 +255,7 @@ async def test_interleaved_final_only_retires_its_own_preview(monkeypatch):
             partial('a', 'Bonjour', 100, 1),
             partial('b', 'Guten', 200, 2),
             partial('b', 'Guten Tag', None, None),
-            {
-                'type': 'utterance',
-                'utterance': {
-                    'utterance_uuid': 'a',
-                    'text': 'Bonjour.',
-                    'start_ms': 100,
-                    'duration_ms': 80,
-                    'speaker': 1,
-                },
-            },
+            documented_final(utterance_uuid='a', text='Bonjour.', start_ms=100, duration_ms=80, language='fr'),
             {'type': 'done', 'duration_ms': 1000},
         ],
         emitted.extend,
@@ -283,10 +318,10 @@ async def test_invalid_audio_is_not_counted_as_a_vendor_connection_loss(monkeypa
 
 def test_empty_preview_retracts_pending_text_and_invalid_timing_never_invents_an_anchor():
     pending = ModulatePendingUtterances()
-    pending.observe({'utterance_uuid': 'a', 'text': 'Hola', 'start_ms': 100})
-    pending.observe({'utterance_uuid': 'a', 'text': '', 'start_ms': None})
-    pending.observe({'utterance_uuid': 'b', 'text': 'Bonjour', 'start_ms': -1})
-    pending.observe({'text': 'Guten Tag', 'start_ms': None})
+    pending.observe(partial('a', 'Hola', 100)['partial_utterance'])
+    pending.observe(partial('a', '', None)['partial_utterance'])
+    pending.observe(partial('b', 'Bonjour', -1)['partial_utterance'])
+    pending.observe(documented_partial(text='Guten Tag', start_ms=None)['partial_utterance'])
     assert pending.flush() == []
     assert not pending
 
@@ -294,8 +329,8 @@ def test_empty_preview_retracts_pending_text_and_invalid_timing_never_invents_an
 def test_preview_cache_is_bounded_and_finals_do_not_need_a_cached_preview():
     pending = ModulatePendingUtterances()
     for index in range(MAX_PENDING_UTTERANCES + 1):
-        pending.observe({'utterance_uuid': str(index), 'text': str(index), 'start_ms': index, 'speaker': 2})
-    pending.finalized({'utterance_uuid': '0'})
+        pending.observe(partial(str(index), str(index), index, 2)['partial_utterance'])
+    pending.finalized(documented_final(utterance_uuid='0')['utterance'])
     segments = pending.flush()
     assert len(segments) == MAX_PENDING_UTTERANCES
     assert segments[0]['text'] == '1'
@@ -305,5 +340,5 @@ def test_preview_cache_is_bounded_and_finals_do_not_need_a_cached_preview():
 def test_preroll_is_filtered_per_utterance_and_tails_keep_capture_order():
     pending = ModulatePendingUtterances()
     for name, start in [('new', 2100), ('preroll', 500), ('old', 2000)]:
-        pending.observe({'utterance_uuid': name, 'text': name, 'start_ms': start})
+        pending.observe(partial(name, name, start)['partial_utterance'])
     assert [segment['text'] for segment in pending.flush(preseconds=1)] == ['old', 'new']
