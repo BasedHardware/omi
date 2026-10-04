@@ -290,6 +290,15 @@ class ReplayPacer:
         finally:
             if token is not None:
                 audio_send_deadline.reset(token)
+        complete = (
+            getattr(socket, 'complete_send', None) if getattr(socket, 'idle_close_enabled', False) is True else None
+        )
+        if accepted is True and callable(complete):
+            if packet_deadline is not None:
+                async with asyncio.timeout(max(0.0, packet_deadline - clock())):
+                    accepted = await cast(Callable[[], Awaitable[bool]], complete)()
+            else:
+                accepted = await cast(Callable[[], Awaitable[bool]], complete)()
         self.next_send = _next_audio_slot(self.next_send, len(data) / (2 * self.sample_rate * self.rate), clock())
         await sleep(0)
         return accepted is True and not socket.is_connection_dead
@@ -326,6 +335,10 @@ async def abort_replay_socket(socket: Any, timeout: float = 2.0) -> None:
     except Exception as error:
         logger.warning('replay abort release failed: %s', type(error).__name__)
     raw = raw_transport(socket)
+    abort = getattr(raw, 'abort_transport', None)
+    if callable(abort):
+        await cast(Callable[[float], Awaitable[None]], abort)(max(0.0, deadline - clock()))
+        return
     if hasattr(raw, '_closed'):
         raw._closed = True
     tasks = [

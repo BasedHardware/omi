@@ -2,6 +2,7 @@
 
 from prometheus_client import Counter, Gauge, Histogram
 from typing import NamedTuple
+import threading
 
 from config.live_stt_recovery import recovery_enabled
 
@@ -258,21 +259,25 @@ class SonioxIdleMetrics(NamedTuple):
 
 
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
+_soniox_idle_lock = threading.Lock()
 
 
 def soniox_idle_metrics() -> SonioxIdleMetrics:
     """Register only when an enabled Soniox socket is constructed; no off series."""
     global _soniox_idle_metrics
-    if _soniox_idle_metrics is None:
-        _soniox_idle_metrics = SonioxIdleMetrics(
-            Counter('omi_soniox_idle_closes_total', 'Planned paid transport closes'),
-            Counter('omi_soniox_idle_reopens_total', 'Speech-triggered paid transport dials'),
-            Histogram(
-                'omi_soniox_idle_reopen_seconds',
-                'Onset to replacement audio admission',
-                buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
-            ),
-            Counter('omi_soniox_idle_reopen_failures_total', 'Failed speech-triggered transport dials'),
-            Counter('omi_soniox_idle_connected_seconds_avoided_total', 'Estimated wall seconds with transport closed'),
-        )
+    with _soniox_idle_lock:
+        if _soniox_idle_metrics is None:
+            _soniox_idle_metrics = SonioxIdleMetrics(
+                Counter('omi_soniox_idle_closes_total', 'Planned paid transport closes'),
+                Counter('omi_soniox_idle_reopens_total', 'Speech-triggered paid transport dials'),
+                Histogram(
+                    'omi_soniox_idle_reopen_seconds',
+                    'Onset to replacement audio admission',
+                    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+                ),
+                Counter('omi_soniox_idle_reopen_failures_total', 'Failed speech-triggered transport dials'),
+                Counter(
+                    'omi_soniox_idle_connected_seconds_avoided_total', 'Estimated wall seconds with transport closed'
+                ),
+            )
     return _soniox_idle_metrics

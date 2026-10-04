@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Awaitable, Callable, Protocol, cast
 
 from starlette.websockets import WebSocketState
 
@@ -646,8 +646,14 @@ async def send_live_stt_audio(
         await _recoverable_failure('send_failed')
         return False
 
-    complete = getattr(stt_socket, 'complete_send', None)
-    if callable(complete) and not await complete():
+    complete = (
+        getattr(stt_socket, 'complete_send', None) if getattr(stt_socket, 'idle_close_enabled', False) is True else None
+    )
+    try:
+        completed = await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else True
+    except Exception:
+        completed = False
+    if not completed:
         take = getattr(stt_socket, 'take_unsent_packet', None)
         if receiver is not None and callable(take):
             packet = take()

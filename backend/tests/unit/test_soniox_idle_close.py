@@ -2,13 +2,15 @@
 
 import asyncio
 import json
+from collections import deque
 from types import SimpleNamespace
 
 import pytest
 from prometheus_client import CollectorRegistry, generate_latest
 
 from config.soniox_idle import idle_close_seconds
-from utils.stt import soniox, soniox_idle, vad_gate, live_metrics
+from utils.stt import soniox, soniox_idle, vad_gate, live_metrics, live_session, replay_delivery
+from utils.stt.streaming import STTService
 from utils.stt.soniox import SafeSonioxSocket
 from utils.stt.soniox_idle import IdleSonioxSocket
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate
@@ -189,3 +191,144 @@ def test_off_returns_original_adapter_and_no_idle_series(monkeypatch):
 
     asyncio.run(run())
     assert b'omi_soniox_idle' not in generate_latest(registry)
+
+
+def test_shutdown_during_dial_cancels_and_reaps_owned_task(monkeypatch):
+    async def run():
+        socket, idle, _, peers, _, tick = build(monkeypatch)
+        socket.send(b'\x00\x00' * 1600, wall_time=100)
+        tick[0] += 3
+        socket.send(b'\x00\x00' * 1600, wall_time=103)
+        await idle._close_task
+        entered = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def connect(callback):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        idle._connect = connect
+        assert socket.send(b'\x01\x00' * 1600, wall_time=104)
+        completion = asyncio.create_task(socket.complete_send())
+        await entered.wait()
+        await idle.drain_and_close()
+        await asyncio.gather(completion, return_exceptions=True)
+        assert cancelled.is_set()
+        assert len(peers) == 1
+        assert idle._reopen_task.done()
+        assert not [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+
+    asyncio.run(run())
+
+
+def test_failed_dial_preserves_preroll_through_actual_buffer_retry(monkeypatch):
+    async def run():
+        socket, idle, gate, _, _, tick = build(monkeypatch, fail=True)
+        silence = b'\x00\x00' * 1600
+        socket.send(silence, wall_time=100, start_sample=0)
+        tick[0] += 3
+        socket.send(silence, wall_time=103, start_sample=48000)
+        await idle._close_task
+        prefix = b''.join(data for data, _ in gate._pre_roll)
+        delivered = []
+        replacement = SimpleNamespace(
+            is_connection_dead=False,
+            send_admitted_audio=lambda data, spans: delivered.append((data, spans)) or True,
+        )
+
+        class Receiver:
+            stt_socket = socket
+
+            async def failover(self):
+                self.stt_socket = replacement
+                return True
+
+        owner = Receiver()
+        state = SimpleNamespace(active=True, stt_terminal_failure=False)
+        onset = b'\x01\x00' * 1600
+        assert not await send_live_stt_audio(
+            None,
+            state,
+            stt_socket=owner.stt_socket,
+            audio=onset,
+            start_sample=49600,
+            provider='soniox',
+            platform='desktop',
+            attempt_failover=owner.failover,
+        )
+        assert await send_live_stt_audio(
+            None,
+            state,
+            stt_socket=owner.stt_socket,
+            audio=onset,
+            start_sample=49600,
+            provider='soniox',
+            platform='desktop',
+            attempt_failover=owner.failover,
+        )
+        assert delivered[0][0] == prefix + onset
+        assert len(delivered) == 1
+        assert owner._idle_onset_retry is None
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('recovery', ['false', 'true'])
+def test_managed_idle_close_does_not_claim_health_or_breaker(monkeypatch, recovery):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', recovery)
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
+
+    async def run():
+        socket, idle, gate, _, _, tick = build(monkeypatch)
+        host = SimpleNamespace(
+            language='en', request=SimpleNamespace(uid='idle-unit'), state=SimpleNamespace(active=True)
+        )
+        owner = SimpleNamespace(host=host, recovery=None, _telemetry_platform=lambda: 'desktop')
+        session = live_session.LiveChainSession(owner)
+        leg = live_session.LiveLegSocket(idle, gate, session, STTService.soniox, 16000, False, False)
+        for method in ('record', 'quarantine', 'quarantine_target'):
+            monkeypatch.setattr(live_session.health, method, lambda *a, **kw: pytest.fail('idle health side effect'))
+        leg.send(b'\x00\x00' * 1600, start_sample=0)
+        tick[0] += 3
+        leg.send(b'\x00\x00' * 1600, start_sample=48000)
+        await idle._close_task
+        assert not leg.is_connection_dead
+        assert not leg.leg_outcome.claimed
+        assert not leg.leg_outcome.death_observed
+        assert not leg._target_death_recorded
+        assert not leg._open_gauge_released
+        await leg.drain_and_close()
+        assert not leg.leg_outcome.claimed
+
+    asyncio.run(run())
+
+
+def test_replay_tail_pump_completes_idle_reopen(monkeypatch):
+    async def run():
+        socket, idle, _, peers, _, tick = build(monkeypatch)
+        socket.send(b'\x00\x00' * 1600, wall_time=100)
+        tick[0] += 3
+        socket.send(b'\x00\x00' * 1600, wall_time=103)
+        await idle._close_task
+        host = SimpleNamespace(
+            spawn=lambda coro, **kw: asyncio.create_task(coro),
+            state=SimpleNamespace(active=True, stt_terminal_failure=False),
+        )
+        tail = replay_delivery.ReplayTailSocket(
+            socket, replay_delivery.ReplayPacer(16000, 'soniox', socket), deque(), host, source='soniox'
+        )
+        onset = b'\x01\x00' * 1600
+        assert tail.send(onset, start_sample=48000)
+        tail.start_tail()
+        await tail._task
+        await settle()
+        assert len(peers) == 2
+        assert b''.join(x for x in peers[1].sent if isinstance(x, bytes)).endswith(onset)
+        assert not tail.is_connection_dead
+        await idle.drain_and_close()
+
+    asyncio.run(run())

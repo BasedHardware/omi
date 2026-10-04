@@ -16,11 +16,15 @@ from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
 from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.live_metrics import soniox_idle_metrics
+from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
+from utils.stt.live_reason import normalize_live_stt_reason
 
 IDLE_DRAIN_SECONDS = 2.0
 
 
 class IdleSonioxSocket(STTSocket):
+    idle_close_enabled = True
+
     def __init__(
         self, transport: Any, connect: Callable[..., Awaitable[Any]], callback: Any, rate: int, seconds: float
     ):
@@ -33,15 +37,20 @@ class IdleSonioxSocket(STTSocket):
         self._finishing = False
         self._closed = False
         self._dead = False
+        self.idle_reopen_failed = False
         self._reason: str | None = None
         self._silent_since: float | None = None
         self._idle_since: float | None = None
         self._idle_closed_at: float | None = None
         self._close_task: asyncio.Task[Any] | None = None
+        self._reopen_task: asyncio.Task[bool] | None = None
         self._pending = bytearray()
         self._admitted_samples = 0
         self._metrics = soniox_idle_metrics()
         self._writer_pacing: tuple[Any, ...] | None = None
+        self._socket_epoch = 0
+        self._last_end = 0.0
+        transport._stream_transcript = self._socket_callback(0.0, 0)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._transport, name)
@@ -82,16 +91,19 @@ class IdleSonioxSocket(STTSocket):
             if not done:
                 task.cancel()
                 await abort_replay_socket(transport, timeout=0.5)
-                await asyncio.gather(task, return_exceptions=True)
+                task.cancel()
+                await asyncio.wait({task}, timeout=0.25)
         finally:
             if not task.done():
                 task.cancel()
                 await abort_replay_socket(transport, timeout=0.5)
+            if task.done() and not task.cancelled():
+                task.exception()
             # Avoided time starts only after the transport is actually closed.
             self._idle_closed_at = time.monotonic()
             self._metrics.closes.inc()
 
-    def send(self, data: bytes) -> bool:
+    def send(self, data: bytes, start_sample: int | None = None) -> bool:
         if self._finishing or self.is_connection_dead:
             return False
         if self._idle_since is not None:
@@ -110,6 +122,11 @@ class IdleSonioxSocket(STTSocket):
     async def complete_send(self) -> bool:
         if not self._pending:
             return not self.is_connection_dead
+        if self._reopen_task is None or self._reopen_task.done():
+            self._reopen_task = create_named_task(self._resume(), name='soniox_idle_reopen')
+        return await self._reopen_task
+
+    async def _resume(self) -> bool:
         started = time.monotonic()
         if self._close_task is not None:
             await self._close_task
@@ -119,16 +136,9 @@ class IdleSonioxSocket(STTSocket):
         self._account_avoided()
         offset = self._admitted_samples / self._rate
 
-        def callback(segments: list[dict[str, Any]]) -> None:
-            for segment in segments:
-                segment['start'] += offset
-                segment['end'] += offset
-                ranges = segment.get('_provider_word_ranges')
-                if ranges:
-                    segment['_provider_word_ranges'] = [(a + offset, b + offset) for a, b in ranges]
-            self._callback(segments)
+        self._socket_epoch += 1
+        callback = self._socket_callback(offset, self._socket_epoch)
 
-        self._metrics.reopens.inc()
         try:
             self._transport = await self._connect(callback)
             if self._writer_pacing is not None:
@@ -145,16 +155,37 @@ class IdleSonioxSocket(STTSocket):
             accepted = self.send(data)
             if not accepted:
                 self._pending.extend(data)
+            if accepted:
+                self._metrics.reopens.inc()
+                record_stt_provider_connect(provider='soniox', outcome=CONNECT_SUCCESS)
             return accepted
         except asyncio.CancelledError:
+            await abort_replay_socket(self._transport)
             raise
         except Exception as error:
             self._metrics.failures.inc()
             self._dead = True
-            self._reason = getattr(error, 'reason', 'connection_lost')
+            self._reason = normalize_live_stt_reason(getattr(error, 'reason', None), default='connection_lost')
+            self.idle_reopen_failed = True
+            record_stt_provider_connect(provider='soniox', outcome=CONNECT_FAILURE, reason=self._reason)
             return False
         finally:
             self._metrics.latency.observe(time.monotonic() - started)
+
+    def _socket_callback(self, offset: float, epoch: int) -> Any:
+        def callback(segments: list[dict[str, Any]]) -> None:
+            segments.sort(key=lambda segment: segment['start'])
+            for segment in segments:
+                segment['start'] = max(self._last_end, segment['start'] + offset)
+                segment['end'] = max(segment['start'], segment['end'] + offset)
+                self._last_end = segment['end']
+                segment['_provider_socket_epoch'] = epoch
+                ranges = segment.get('_provider_word_ranges')
+                if ranges:
+                    segment['_provider_word_ranges'] = [(a + offset, b + offset) for a, b in ranges]
+            self._callback(segments)
+
+        return callback
 
     def take_unsent_audio(self) -> bytes:
         data = bytes(self._pending)
@@ -183,16 +214,31 @@ class IdleSonioxSocket(STTSocket):
         if self._finishing:
             return
         self._finishing = True
+        if self._reopen_task is not None and not self._reopen_task.done():
+            self._reopen_task.cancel()
         self._account_avoided()
         if self._idle_since is None:
             self._transport.finish()
 
     async def drain_and_close(self) -> None:
         self.finish()
+        if self._reopen_task is not None:
+            await asyncio.gather(self._reopen_task, return_exceptions=True)
         if self._close_task is not None:
             await self._close_task
             self._close_task = None
         elif self._idle_since is None:
             await self._transport.drain_and_close()
         self._account_avoided()
+        self._closed = True
+
+    async def abort_transport(self, timeout: float) -> None:
+        self.finish()
+        deadline = time.monotonic() + max(0.0, timeout)
+        tasks = [task for task in (self._close_task, self._reopen_task) if task is not None]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.wait(tasks, timeout=max(0.0, deadline - time.monotonic()))
+        await abort_replay_socket(self._transport, timeout=max(0.0, deadline - time.monotonic()))
         self._closed = True

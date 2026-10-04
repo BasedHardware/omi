@@ -823,7 +823,7 @@ class GatedSTTSocket(STTSocket):
                 self._send_tracker.note_accepted(start_sample, len(data) // 2)
             return accepted
         observe = getattr(self._conn, 'observe_vad', None)
-        if callable(observe):
+        if getattr(self._conn, 'idle_close_enabled', False) is True and callable(observe):
             observe(gate_out, self._gate.mode)
         if self._raw_file:
             self._raw_file.write(data)
@@ -857,9 +857,15 @@ class GatedSTTSocket(STTSocket):
                 return False
         return accepted
 
+    @property
+    def idle_close_enabled(self) -> bool:
+        return getattr(self._conn, 'idle_close_enabled', False) is True
+
     async def complete_send(self) -> bool:
         complete = getattr(self._conn, 'complete_send', None)
-        return await complete() if callable(complete) else not self.is_connection_dead
+        return (
+            await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else not self.is_connection_dead
+        )
 
     def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
         accepted = self._conn.send(data)
@@ -873,7 +879,7 @@ class GatedSTTSocket(STTSocket):
 
     def take_unsent_audio(self) -> bytes:
         take = getattr(self._conn, 'take_unsent_audio', None)
-        return take() if callable(take) else b''
+        return cast(Callable[[], bytes], take)() if callable(take) else b''
 
     def finalize(self) -> None:
         """Flush pending transcript."""
