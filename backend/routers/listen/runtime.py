@@ -992,14 +992,7 @@ class ListenSessionRuntime:
             result = await self.task_supervisor.supervise(receive_task=receive_task)
             logger.info('Listen supervisor exited reason=%s', result.reason)
             ordinary_close = self._ordinary_client_close(result)
-            if (
-                result.reason in {'crash', 'lifetime_done'}
-                or (
-                    result.reason == 'disconnect'
-                    and self.recovery_enabled
-                    and self.state.close_code not in (1000, 1001)
-                )
-            ) and not ordinary_close:
+            if self._supervisor_failed_transcription(result, ordinary_close=ordinary_close):
                 self.state.live_transcription_failed = True
             if receive_task.done() and not receive_task.cancelled():
                 receive_error = receive_task.exception()
@@ -1037,6 +1030,25 @@ class ListenSessionRuntime:
             self.state.live_transcription_failed = True
         finally:
             await self._teardown()
+
+    def _supervisor_failed_transcription(self, result: Any, *, ordinary_close: bool) -> bool:
+        # ASGI 1006 is a departed client, not evidence of a provider failure.
+        # A heartbeat may finish first after that same departure. Keep drain
+        # policy separate from outcome classification: abnormal peers cannot
+        # receive the graceful tail, but their attempts still match control.
+        if (
+            self.recovery_enabled
+            and result.reason in {'disconnect', 'lifetime_done'}
+            and self.receiver.client_closing
+            and not self.state.stt_terminal_failure
+            and self.state.close_code != 1011
+            and not self.request.owner_persistence_blocked.is_set()
+        ):
+            return False
+        return not ordinary_close and (
+            result.reason in {'crash', 'lifetime_done'}
+            or (result.reason == 'disconnect' and self.recovery_enabled and self.state.close_code == 1011)
+        )
 
     def _ordinary_client_close(self, result: Any) -> bool:
         if not self.recovery_enabled or result.reason != 'lifetime_done':

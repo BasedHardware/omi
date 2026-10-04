@@ -11,7 +11,7 @@ import uuid
 
 from utils.manual_speaker_assignments import acknowledged_teaching
 from collections import OrderedDict, deque
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, cast
 
 from config import audio_timeline as audio_flags
 from config.translation import resolve_ondemand_config
@@ -1811,6 +1811,19 @@ class ListenReceiver(ReplayFilterMixin):
                 # cursor and those samples simply have no provider mapping.
                 self._stt_buffer_start_sample = None
                 return
+            socket = self.stt_socket
+            if socket is not None and not isinstance(socket, ReplayTailSocket) and not socket_is_finishing(socket):
+                # Buffered client reads can be immediately runnable. Give the
+                # paid writer bounded queue headroom before its synchronous
+                # enqueue, just as replay does; a healthy leg must not die
+                # merely because its sender never got an event-loop turn.
+                wait_capacity = getattr(socket, 'wait_send_capacity', None)
+                if callable(wait_capacity):
+                    await cast(Callable[[], Awaitable[bool]], wait_capacity)()
+                    if not self.delivery_active():
+                        return
+                    if socket is not self.stt_socket:
+                        continue
             outbound_audio = bytes(buffer)
             outbound_start_sample = self._stt_buffer_start_sample
             window_ring = self._window_ring()
