@@ -345,7 +345,7 @@ def _run(uid: str, decision: str, first_id: str, second_id: str, deadline: float
             containment_mode = capture_group_containment_mode()
             if containment_mode != 'off':
                 try:
-                    containment = measure_capture_containment(first, second)
+                    containment = measure_capture_containment(first, second, mode=containment_mode)
                     record_capture_containment(containment, mode=containment_mode, phase='jev', jev_p=score)
                 except Exception:
                     logger.warning('capture_group_containment detector failed')

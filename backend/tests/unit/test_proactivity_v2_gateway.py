@@ -25,6 +25,29 @@ from tests.unit.test_proactivity_v2_budget import NOW, Redis, claim, store
 from utils import proactivity
 
 
+@pytest.mark.asyncio
+async def test_admission_flag_unavailable_logs_sdk_type_and_status(monkeypatch, caplog):
+    from collections import OrderedDict
+    from unittest.mock import Mock
+
+    from posthog.request import APIError
+
+    flags = proactivity.proactivity_flags
+    monkeypatch.setattr(flags, '_flag_cache', OrderedDict())
+    monkeypatch.setattr(flags, '_next_warning_at', 0.0)
+    client = Mock()
+    client.get_feature_variants.side_effect = APIError(503, 'PRIVATE_RESPONSE_AND_KEY')
+    monkeypatch.setattr(flags, 'flag_client', lambda: client)
+    with caplog.at_level('INFO'):
+        for _ in range(2):
+            with pytest.raises(ProactivityDenied, match='flag_unavailable'):
+                await proactivity.ensure_admitted('PRIVATE_UID', 'conversation_mentor_v2')
+    client.get_feature_variants.assert_called_once_with('PRIVATE_UID')
+    assert 'error_type=APIError http_status=503' in caplog.text
+    assert 'result=denied reason=flag_unavailable' in caplog.text
+    assert 'PRIVATE' not in caplog.text
+
+
 def context(item, step='phrase'):
     call_id = str(uuid4())
     accounting = AccountingContext.create(

@@ -9293,6 +9293,16 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Изтегляне от вашето устройство';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current от $total';
   }
@@ -11285,6 +11295,9 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi ще се свърже отново сам';
 
   @override
   String participantsSummaryUncounted(String name) {
