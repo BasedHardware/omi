@@ -846,6 +846,8 @@ class PendantRingCustody {
       // A checkpoint queued during these waits reaches the I/O queue only after
       // its predecessor's save, so both queues are re-checked after the store.
       await _store.flush();
+      // A mark step chained during these waits may not have queued its persist yet,
+      // so an unchanged save queue alone does not prove every chain has drained.
       if (identical(saves, _saveQueue) && _sameFutures(marks, _markTasks())) return;
     }
   }

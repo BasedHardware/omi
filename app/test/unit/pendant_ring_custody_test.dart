@@ -484,6 +484,9 @@ void main() {
 
     test('marks spaced one record apart stay provable across a u16 counter wrap', () async {
       await custody.beginConnection('dev', 1, info());
+      // Ending the session drops its thousands of lazily queued mark persists, so teardown's
+      // flush does not write them one by one (even when an expectation below fails).
+      addTearDown(() => custody.endConnection('dev', 1));
       custody.setLivePersistEnabled('dev', 1, true);
       var frame = 0;
       for (var r = 1; r <= 3300; r++) {
@@ -500,8 +503,6 @@ void main() {
         const CustodyWalRef(fileName: 'w.bin', bytes: 1, frames: 1, liveRingId: 42),
       );
       expect(await custody.isDurableLiveRecord('dev', 42, 3200), isTrue);
-      // End the session: its thousands of lazily queued mark persists are then dropped, not flushed one by one.
-      custody.endConnection('dev', 1);
     });
 
     test('a first mark delayed beyond a full wrap is unprovable — fail closed, keep both', () async {
@@ -521,8 +522,6 @@ void main() {
       );
       expect(await custody.isDurableLiveRecord('dev', 42, 1), isFalse);
       expect(await custody.validatedAdvanceTarget('dev', 1, 42), isNull);
-      // End the session: its thousands of lazily queued mark persists are then dropped, not flushed one by one.
-      custody.endConnection('dev', 1);
     });
 
     test('a large record gap after a valid anchor cannot be proven by a u16 lookalike index delta', () async {
