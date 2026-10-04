@@ -2176,7 +2176,7 @@ environments:
             value: 'true'
             category: rollout
           LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'false'
+            value: 'true'
             category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
@@ -2663,7 +2663,7 @@ environments:
             value: 'true'
             category: rollout
           LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'false'
+            value: 'true'
             category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
@@ -2974,7 +2974,7 @@ environments:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'false'
+              value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -3306,7 +3306,7 @@ environments:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'false'
+              value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -3573,7 +3573,7 @@ environments:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'false'
+              value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
@@ -3814,7 +3814,7 @@ environments:
               value: 'false'
               category: rollout
             LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'false'
+              value: 'true'
               category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
