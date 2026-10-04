@@ -43,6 +43,7 @@ from routers import (
     people,
     agents,
     users,
+    support,
     trends,
     sync,
     apps,
@@ -245,6 +246,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(support.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
