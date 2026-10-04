@@ -12403,4 +12403,24 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dismiss => 'Hylkää';
+
+  @override
+  String get thisWeek => 'Tämä viikko';
+
+  @override
+  String get busiestDay => 'Kiireisin päivä';
+
+  @override
+  String get timeRecorded => 'Tallennettu aika';
+
+  @override
+  String get peopleYouTalkedToMost => 'Ihmiset, joiden kanssa puhuit eniten';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Edellinen: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Tältä jaksolta ei ole vielä tallenteita';
 }

@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Patikrinkite ryšį",
     "forYou": "Jums",
     "stopThese": "Sustabdyti šiuos",
-    "dismiss": "Slėpti"
+    "dismiss": "Slėpti",
+    "thisWeek": "Ši savaitė",
+    "busiestDay": "Užimčiausia diena",
+    "timeRecorded": "Įrašytas laikas",
+    "peopleYouTalkedToMost": "Žmonės, su kuriais kalbėjote daugiausia",
+    "recapPrevious": "Ankstesnis: {value}",
+    "noRecapForPeriod": "Šiuo laikotarpiu dar nieko neįrašyta"
 }

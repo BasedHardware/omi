@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Tarkista yhteys",
     "forYou": "Sinulle",
     "stopThese": "Lopeta nämä",
-    "dismiss": "Hylkää"
+    "dismiss": "Hylkää",
+    "thisWeek": "Tämä viikko",
+    "busiestDay": "Kiireisin päivä",
+    "timeRecorded": "Tallennettu aika",
+    "peopleYouTalkedToMost": "Ihmiset, joiden kanssa puhuit eniten",
+    "recapPrevious": "Edellinen: {value}",
+    "noRecapForPeriod": "Tältä jaksolta ei ole vielä tallenteita"
 }

@@ -3870,5 +3870,11 @@
     "playbackAudioNetworkFailed": "Проверьте соединение",
     "forYou": "Для вас",
     "stopThese": "Отключить такие",
-    "dismiss": "Скрыть"
+    "dismiss": "Скрыть",
+    "thisWeek": "Эта неделя",
+    "busiestDay": "Самый насыщенный день",
+    "timeRecorded": "Записанное время",
+    "peopleYouTalkedToMost": "С кем вы говорили больше всего",
+    "recapPrevious": "Ранее: {value}",
+    "noRecapForPeriod": "За этот период пока ничего не записано"
 }

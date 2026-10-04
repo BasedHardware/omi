@@ -12459,4 +12459,24 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get dismiss => 'Сокриј';
+
+  @override
+  String get thisWeek => 'Оваа недела';
+
+  @override
+  String get busiestDay => 'Најзафатен ден';
+
+  @override
+  String get timeRecorded => 'Снимено време';
+
+  @override
+  String get peopleYouTalkedToMost => 'Луѓе со кои најмногу разговаравте';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Претходно: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Сè уште ништо не е снимено во овој период';
 }

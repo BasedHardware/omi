@@ -12395,4 +12395,24 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get dismiss => 'Skryť';
+
+  @override
+  String get thisWeek => 'Tento týždeň';
+
+  @override
+  String get busiestDay => 'Najrušnejší deň';
+
+  @override
+  String get timeRecorded => 'Nahraný čas';
+
+  @override
+  String get peopleYouTalkedToMost => 'Ľudia, s ktorými ste sa rozprávali najviac';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Predchádzajúce: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'V tomto období zatiaľ nič nenahrané';
 }

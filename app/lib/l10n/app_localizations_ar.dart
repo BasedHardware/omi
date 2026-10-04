@@ -12328,4 +12328,24 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get dismiss => 'تجاهل';
+
+  @override
+  String get thisWeek => 'هذا الأسبوع';
+
+  @override
+  String get busiestDay => 'اليوم الأكثر انشغالًا';
+
+  @override
+  String get timeRecorded => 'مدة التسجيل';
+
+  @override
+  String get peopleYouTalkedToMost => 'الأشخاص الذين تحدثت معهم أكثر';
+
+  @override
+  String recapPrevious(String value) {
+    return 'السابق: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'لم يُسجَّل شيء في هذه الفترة بعد';
 }

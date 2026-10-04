@@ -3870,5 +3870,11 @@
     "playbackAudioNetworkFailed": "Periksa Koneksi",
     "forYou": "Untuk Anda",
     "stopThese": "Hentikan Ini",
-    "dismiss": "Tutup"
+    "dismiss": "Tutup",
+    "thisWeek": "Minggu ini",
+    "busiestDay": "Hari tersibuk",
+    "timeRecorded": "Waktu terekam",
+    "peopleYouTalkedToMost": "Orang yang paling sering Anda ajak bicara",
+    "recapPrevious": "Sebelumnya: {value}",
+    "noRecapForPeriod": "Belum ada yang terekam pada periode ini"
 }

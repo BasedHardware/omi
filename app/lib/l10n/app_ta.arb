@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்",
     "forYou": "உங்களுக்காக",
     "stopThese": "இவற்றை நிறுத்து",
-    "dismiss": "மறை"
+    "dismiss": "மறை",
+    "thisWeek": "இந்த வாரம்",
+    "busiestDay": "மிகவும் பரபரப்பான நாள்",
+    "timeRecorded": "பதிவு செய்த நேரம்",
+    "peopleYouTalkedToMost": "நீங்கள் அதிகம் பேசியவர்கள்",
+    "recapPrevious": "முந்தையது: {value}",
+    "noRecapForPeriod": "இந்தக் காலத்தில் இன்னும் எதுவும் பதிவு செய்யப்படவில்லை"
 }

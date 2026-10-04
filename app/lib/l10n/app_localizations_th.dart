@@ -12333,4 +12333,24 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dismiss => 'ปิด';
+
+  @override
+  String get thisWeek => 'สัปดาห์นี้';
+
+  @override
+  String get busiestDay => 'วันที่ยุ่งที่สุด';
+
+  @override
+  String get timeRecorded => 'เวลาที่บันทึก';
+
+  @override
+  String get peopleYouTalkedToMost => 'คนที่คุณคุยด้วยมากที่สุด';
+
+  @override
+  String recapPrevious(String value) {
+    return 'ก่อนหน้า: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'ยังไม่มีการบันทึกในช่วงนี้';
 }

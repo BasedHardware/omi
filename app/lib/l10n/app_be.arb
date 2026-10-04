@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "Праверце злучэнне",
     "forYou": "Для вас",
     "stopThese": "Спыніць гэта",
-    "dismiss": "Схаваць"
+    "dismiss": "Схаваць",
+    "thisWeek": "Гэты тыдзень",
+    "busiestDay": "Самы насычаны дзень",
+    "timeRecorded": "Запісаны час",
+    "peopleYouTalkedToMost": "З кім вы размаўлялі найбольш",
+    "recapPrevious": "Папярэдні: {value}",
+    "noRecapForPeriod": "За гэты перыяд пакуль нічога не запісана"
 }

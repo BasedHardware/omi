@@ -3870,5 +3870,11 @@
     "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin",
     "forYou": "Sizin İçin",
     "stopThese": "Bunları Durdur",
-    "dismiss": "Gizle"
+    "dismiss": "Gizle",
+    "thisWeek": "Bu hafta",
+    "busiestDay": "En yoğun gün",
+    "timeRecorded": "Kaydedilen süre",
+    "peopleYouTalkedToMost": "En çok konuştuğun kişiler",
+    "recapPrevious": "Önceki: {value}",
+    "noRecapForPeriod": "Bu dönemde henüz kayıt yok"
 }

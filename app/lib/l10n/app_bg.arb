@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Проверете връзката",
     "forYou": "За вас",
     "stopThese": "Спри тези",
-    "dismiss": "Скрий"
+    "dismiss": "Скрий",
+    "thisWeek": "Тази седмица",
+    "busiestDay": "Най-натоварен ден",
+    "timeRecorded": "Записано време",
+    "peopleYouTalkedToMost": "Хората, с които говорихте най-много",
+    "recapPrevious": "Предишен: {value}",
+    "noRecapForPeriod": "Все още няма записи за този период"
 }

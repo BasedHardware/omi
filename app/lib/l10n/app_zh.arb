@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "请检查网络连接",
     "forYou": "为你推荐",
     "stopThese": "停止此类推荐",
-    "dismiss": "忽略"
+    "dismiss": "忽略",
+    "thisWeek": "本周",
+    "busiestDay": "最忙碌的一天",
+    "timeRecorded": "录制时长",
+    "peopleYouTalkedToMost": "与你交谈最多的人",
+    "recapPrevious": "上一期：{value}",
+    "noRecapForPeriod": "此期间还没有任何录音"
 }

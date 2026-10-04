@@ -12411,4 +12411,24 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dismiss => 'Gizle';
+
+  @override
+  String get thisWeek => 'Bu hafta';
+
+  @override
+  String get busiestDay => 'En yoğun gün';
+
+  @override
+  String get timeRecorded => 'Kaydedilen süre';
+
+  @override
+  String get peopleYouTalkedToMost => 'En çok konuştuğun kişiler';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Önceki: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Bu dönemde henüz kayıt yok';
 }

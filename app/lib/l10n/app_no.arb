@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Sjekk tilkoblingen",
     "forYou": "For deg",
     "stopThese": "Stopp disse",
-    "dismiss": "Avvis"
+    "dismiss": "Avvis",
+    "thisWeek": "Denne uken",
+    "busiestDay": "Travleste dag",
+    "timeRecorded": "Tid tatt opp",
+    "peopleYouTalkedToMost": "Dem du snakket mest med",
+    "recapPrevious": "Forrige: {value}",
+    "noRecapForPeriod": "Ingenting tatt opp i denne perioden ennå"
 }

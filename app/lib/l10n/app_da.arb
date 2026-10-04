@@ -3877,5 +3877,11 @@
     "playbackAudioNetworkFailed": "Tjek forbindelsen",
     "forYou": "Til dig",
     "stopThese": "Stop disse",
-    "dismiss": "Afvis"
+    "dismiss": "Afvis",
+    "thisWeek": "Denne uge",
+    "busiestDay": "Travleste dag",
+    "timeRecorded": "Optaget tid",
+    "peopleYouTalkedToMost": "Dem, du talte mest med",
+    "recapPrevious": "Forrige: {value}",
+    "noRecapForPeriod": "Intet optaget i denne periode endnu"
 }

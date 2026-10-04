@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Semak Sambungan",
     "forYou": "Untuk Anda",
     "stopThese": "Hentikan Ini",
-    "dismiss": "Tutup"
+    "dismiss": "Tutup",
+    "thisWeek": "Minggu ini",
+    "busiestDay": "Hari paling sibuk",
+    "timeRecorded": "Masa dirakam",
+    "peopleYouTalkedToMost": "Orang yang paling kerap anda bercakap",
+    "recapPrevious": "Sebelumnya: {value}",
+    "noRecapForPeriod": "Belum ada rakaman dalam tempoh ini"
 }

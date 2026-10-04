@@ -12430,4 +12430,24 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dismiss => 'Tutup';
+
+  @override
+  String get thisWeek => 'Minggu ini';
+
+  @override
+  String get busiestDay => 'Hari paling sibuk';
+
+  @override
+  String get timeRecorded => 'Masa dirakam';
+
+  @override
+  String get peopleYouTalkedToMost => 'Orang yang paling kerap anda bercakap';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Sebelumnya: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Belum ada rakaman dalam tempoh ini';
 }

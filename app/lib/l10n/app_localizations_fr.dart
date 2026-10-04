@@ -12501,4 +12501,24 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dismiss => 'Masquer';
+
+  @override
+  String get thisWeek => 'Cette semaine';
+
+  @override
+  String get busiestDay => 'Journée la plus chargée';
+
+  @override
+  String get timeRecorded => 'Temps enregistré';
+
+  @override
+  String get peopleYouTalkedToMost => 'Personnes avec qui vous avez le plus parlé';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Précédent : $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Rien n\'a encore été enregistré sur cette période';
 }

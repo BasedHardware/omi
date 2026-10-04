@@ -12382,4 +12382,24 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get dismiss => 'हटाएँ';
+
+  @override
+  String get thisWeek => 'इस सप्ताह';
+
+  @override
+  String get busiestDay => 'सबसे व्यस्त दिन';
+
+  @override
+  String get timeRecorded => 'रिकॉर्ड किया गया समय';
+
+  @override
+  String get peopleYouTalkedToMost => 'जिनसे आपने सबसे ज़्यादा बात की';
+
+  @override
+  String recapPrevious(String value) {
+    return 'पिछला: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'इस अवधि में अभी तक कुछ रिकॉर्ड नहीं हुआ';
 }

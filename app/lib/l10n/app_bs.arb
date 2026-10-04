@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "Provjerite vezu",
     "forYou": "Za vas",
     "stopThese": "Zaustavi ovo",
-    "dismiss": "Sakrij"
+    "dismiss": "Sakrij",
+    "thisWeek": "Ova sedmica",
+    "busiestDay": "Najprometniji dan",
+    "timeRecorded": "Snimljeno vrijeme",
+    "peopleYouTalkedToMost": "Osobe s kojima ste najviše razgovarali",
+    "recapPrevious": "Prethodno: {value}",
+    "noRecapForPeriod": "U ovom periodu još ništa nije snimljeno"
 }

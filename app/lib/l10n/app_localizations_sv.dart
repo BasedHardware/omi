@@ -12404,4 +12404,24 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get dismiss => 'Avvisa';
+
+  @override
+  String get thisWeek => 'Den här veckan';
+
+  @override
+  String get busiestDay => 'Mest intensiva dagen';
+
+  @override
+  String get timeRecorded => 'Inspelad tid';
+
+  @override
+  String get peopleYouTalkedToMost => 'Personer du pratade mest med';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Föregående: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Inget inspelat under den här perioden än';
 }

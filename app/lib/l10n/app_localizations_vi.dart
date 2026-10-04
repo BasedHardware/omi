@@ -12394,4 +12394,24 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dismiss => 'Ẩn';
+
+  @override
+  String get thisWeek => 'Tuần này';
+
+  @override
+  String get busiestDay => 'Ngày bận rộn nhất';
+
+  @override
+  String get timeRecorded => 'Thời gian ghi âm';
+
+  @override
+  String get peopleYouTalkedToMost => 'Những người bạn trò chuyện nhiều nhất';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Trước đó: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Chưa có gì được ghi âm trong khoảng thời gian này';
 }

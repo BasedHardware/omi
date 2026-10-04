@@ -12188,4 +12188,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dismiss => '忽略';
+
+  @override
+  String get thisWeek => '本周';
+
+  @override
+  String get busiestDay => '最忙碌的一天';
+
+  @override
+  String get timeRecorded => '录制时长';
+
+  @override
+  String get peopleYouTalkedToMost => '与你交谈最多的人';
+
+  @override
+  String recapPrevious(String value) {
+    return '上一期：$value';
+  }
+
+  @override
+  String get noRecapForPeriod => '此期间还没有任何录音';
 }

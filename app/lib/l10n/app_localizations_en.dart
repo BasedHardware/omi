@@ -12387,4 +12387,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dismiss => 'Dismiss';
+
+  @override
+  String get thisWeek => 'This Week';
+
+  @override
+  String get busiestDay => 'Busiest day';
+
+  @override
+  String get timeRecorded => 'Time recorded';
+
+  @override
+  String get peopleYouTalkedToMost => 'People you talked to most';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Previous: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Nothing recorded in this period yet';
 }

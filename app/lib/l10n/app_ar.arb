@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "تحقق من الاتصال",
     "forYou": "من أجلك",
     "stopThese": "إيقاف هذه",
-    "dismiss": "تجاهل"
+    "dismiss": "تجاهل",
+    "thisWeek": "هذا الأسبوع",
+    "busiestDay": "اليوم الأكثر انشغالًا",
+    "timeRecorded": "مدة التسجيل",
+    "peopleYouTalkedToMost": "الأشخاص الذين تحدثت معهم أكثر",
+    "recapPrevious": "السابق: {value}",
+    "noRecapForPeriod": "لم يُسجَّل شيء في هذه الفترة بعد"
 }

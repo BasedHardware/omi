@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Kontrollige ühendust",
     "forYou": "Sulle",
     "stopThese": "Peata need",
-    "dismiss": "Peida"
+    "dismiss": "Peida",
+    "thisWeek": "See nädal",
+    "busiestDay": "Kõige tihedam päev",
+    "timeRecorded": "Salvestatud aeg",
+    "peopleYouTalkedToMost": "Inimesed, kellega rääkisid kõige rohkem",
+    "recapPrevious": "Eelmine: {value}",
+    "noRecapForPeriod": "Selles perioodis pole veel midagi salvestatud"
 }

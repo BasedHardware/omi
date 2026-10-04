@@ -22202,6 +22202,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dismiss'**
   String get dismiss;
+
+  /// Filter chip for the current week's recap
+  ///
+  /// In en, this message translates to:
+  /// **'This Week'**
+  String get thisWeek;
+
+  /// Recap row: the day with the most recorded time
+  ///
+  /// In en, this message translates to:
+  /// **'Busiest day'**
+  String get busiestDay;
+
+  /// Recap row: total conversation time in the period
+  ///
+  /// In en, this message translates to:
+  /// **'Time recorded'**
+  String get timeRecorded;
+
+  /// Recap section header listing people by talk time
+  ///
+  /// In en, this message translates to:
+  /// **'People you talked to most'**
+  String get peopleYouTalkedToMost;
+
+  /// Recap trend: the same figure for the previous week or month
+  ///
+  /// In en, this message translates to:
+  /// **'Previous: {value}'**
+  String recapPrevious(String value);
+
+  /// Empty state when a week or month has no recorded conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing recorded in this period yet'**
+  String get noRecapForPeriod;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

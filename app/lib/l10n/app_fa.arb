@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "اتصال را بررسی کنید",
     "forYou": "برای شما",
     "stopThese": "توقف این موارد",
-    "dismiss": "رد کردن"
+    "dismiss": "رد کردن",
+    "thisWeek": "این هفته",
+    "busiestDay": "پرمشغله‌ترین روز",
+    "timeRecorded": "زمان ضبط‌شده",
+    "peopleYouTalkedToMost": "کسانی که بیشتر با آن‌ها صحبت کردید",
+    "recapPrevious": "قبلی: {value}",
+    "noRecapForPeriod": "هنوز در این بازه چیزی ضبط نشده است"
 }

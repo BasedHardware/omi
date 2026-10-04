@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "সংযোগ পরীক্ষা করুন",
     "forYou": "আপনার জন্য",
     "stopThese": "এগুলো বন্ধ করুন",
-    "dismiss": "সরিয়ে দিন"
+    "dismiss": "সরিয়ে দিন",
+    "thisWeek": "এই সপ্তাহ",
+    "busiestDay": "সবচেয়ে ব্যস্ত দিন",
+    "timeRecorded": "রেকর্ড করা সময়",
+    "peopleYouTalkedToMost": "যাদের সঙ্গে সবচেয়ে বেশি কথা বলেছেন",
+    "recapPrevious": "আগের: {value}",
+    "noRecapForPeriod": "এই সময়ে এখনো কিছু রেকর্ড হয়নি"
 }

@@ -12209,4 +12209,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dismiss => '非表示';
+
+  @override
+  String get thisWeek => '今週';
+
+  @override
+  String get busiestDay => '最も忙しかった日';
+
+  @override
+  String get timeRecorded => '録音時間';
+
+  @override
+  String get peopleYouTalkedToMost => 'よく話した人';
+
+  @override
+  String recapPrevious(String value) {
+    return '前回: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'この期間の記録はまだありません';
 }

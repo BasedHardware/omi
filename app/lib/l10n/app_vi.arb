@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Kiểm tra kết nối",
     "forYou": "Dành Cho Bạn",
     "stopThese": "Dừng Loại Này",
-    "dismiss": "Ẩn"
+    "dismiss": "Ẩn",
+    "thisWeek": "Tuần này",
+    "busiestDay": "Ngày bận rộn nhất",
+    "timeRecorded": "Thời gian ghi âm",
+    "peopleYouTalkedToMost": "Những người bạn trò chuyện nhiều nhất",
+    "recapPrevious": "Trước đó: {value}",
+    "noRecapForPeriod": "Chưa có gì được ghi âm trong khoảng thời gian này"
 }

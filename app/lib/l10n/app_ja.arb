@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "接続を確認してください",
     "forYou": "あなたへのおすすめ",
     "stopThese": "この種類を停止",
-    "dismiss": "非表示"
+    "dismiss": "非表示",
+    "thisWeek": "今週",
+    "busiestDay": "最も忙しかった日",
+    "timeRecorded": "録音時間",
+    "peopleYouTalkedToMost": "よく話した人",
+    "recapPrevious": "前回: {value}",
+    "noRecapForPeriod": "この期間の記録はまだありません"
 }

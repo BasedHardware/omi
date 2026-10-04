@@ -12406,4 +12406,24 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get dismiss => 'लपवा';
+
+  @override
+  String get thisWeek => 'हा आठवडा';
+
+  @override
+  String get busiestDay => 'सर्वात व्यस्त दिवस';
+
+  @override
+  String get timeRecorded => 'रेकॉर्ड केलेला वेळ';
+
+  @override
+  String get peopleYouTalkedToMost => 'ज्यांच्याशी तुम्ही सर्वाधिक बोललात';
+
+  @override
+  String recapPrevious(String value) {
+    return 'मागील: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'या कालावधीत अद्याप काहीही रेकॉर्ड झालेले नाही';
 }

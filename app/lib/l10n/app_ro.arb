@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Verificați conexiunea",
     "forYou": "Pentru tine",
     "stopThese": "Oprește acestea",
-    "dismiss": "Ascunde"
+    "dismiss": "Ascunde",
+    "thisWeek": "Săptămâna aceasta",
+    "busiestDay": "Cea mai aglomerată zi",
+    "timeRecorded": "Timp înregistrat",
+    "peopleYouTalkedToMost": "Persoanele cu care ai vorbit cel mai mult",
+    "recapPrevious": "Anterior: {value}",
+    "noRecapForPeriod": "Încă nu s-a înregistrat nimic în această perioadă"
 }

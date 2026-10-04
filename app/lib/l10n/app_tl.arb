@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "Suriin ang Koneksyon",
     "forYou": "Para Sa Iyo",
     "stopThese": "Itigil Ang Mga Ito",
-    "dismiss": "Isara"
+    "dismiss": "Isara",
+    "thisWeek": "Ngayong linggo",
+    "busiestDay": "Pinakaabalang araw",
+    "timeRecorded": "Oras na na-record",
+    "peopleYouTalkedToMost": "Mga taong pinakamadalas mong kausap",
+    "recapPrevious": "Nakaraan: {value}",
+    "noRecapForPeriod": "Wala pang na-record sa panahong ito"
 }

@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Pārbaudiet savienojumu",
     "forYou": "Jums",
     "stopThese": "Apturēt šos",
-    "dismiss": "Paslēpt"
+    "dismiss": "Paslēpt",
+    "thisWeek": "Šī nedēļa",
+    "busiestDay": "Aizņemtākā diena",
+    "timeRecorded": "Ierakstītais laiks",
+    "peopleYouTalkedToMost": "Cilvēki, ar kuriem runājāt visvairāk",
+    "recapPrevious": "Iepriekšējais: {value}",
+    "noRecapForPeriod": "Šajā periodā vēl nekas nav ierakstīts"
 }

@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "కనెక్షన్‌ను తనిఖీ చేయండి",
     "forYou": "మీ కోసం",
     "stopThese": "వీటిని ఆపండి",
-    "dismiss": "దాచు"
+    "dismiss": "దాచు",
+    "thisWeek": "ఈ వారం",
+    "busiestDay": "అత్యంత బిజీగా ఉన్న రోజు",
+    "timeRecorded": "రికార్డ్ చేసిన సమయం",
+    "peopleYouTalkedToMost": "మీరు ఎక్కువగా మాట్లాడిన వ్యక్తులు",
+    "recapPrevious": "మునుపటి: {value}",
+    "noRecapForPeriod": "ఈ వ్యవధిలో ఇంకా ఏమీ రికార్డ్ కాలేదు"
 }

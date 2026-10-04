@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Controleer verbinding",
     "forYou": "Voor jou",
     "stopThese": "Deze stoppen",
-    "dismiss": "Verbergen"
+    "dismiss": "Verbergen",
+    "thisWeek": "Deze week",
+    "busiestDay": "Drukste dag",
+    "timeRecorded": "Opgenomen tijd",
+    "peopleYouTalkedToMost": "Met wie je het meest sprak",
+    "recapPrevious": "Vorige: {value}",
+    "noRecapForPeriod": "Nog niets opgenomen in deze periode"
 }

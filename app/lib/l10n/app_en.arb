@@ -14815,5 +14815,35 @@
     "dismiss": "Dismiss",
     "@dismiss": {
         "description": "Hide a For You card"
+    },
+    "thisWeek": "This Week",
+    "@thisWeek": {
+        "description": "Filter chip for the current week's recap"
+    },
+    "busiestDay": "Busiest day",
+    "@busiestDay": {
+        "description": "Recap row: the day with the most recorded time"
+    },
+    "timeRecorded": "Time recorded",
+    "@timeRecorded": {
+        "description": "Recap row: total conversation time in the period"
+    },
+    "peopleYouTalkedToMost": "People you talked to most",
+    "@peopleYouTalkedToMost": {
+        "description": "Recap section header listing people by talk time"
+    },
+    "recapPrevious": "Previous: {value}",
+    "@recapPrevious": {
+        "description": "Recap trend: the same figure for the previous week or month",
+        "placeholders": {
+            "value": {
+                "type": "String",
+                "example": "9"
+            }
+        }
+    },
+    "noRecapForPeriod": "Nothing recorded in this period yet",
+    "@noRecapForPeriod": {
+        "description": "Empty state when a week or month has no recorded conversations"
     }
 }

@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "연결 확인",
     "forYou": "나를 위한 추천",
     "stopThese": "이 유형 중지",
-    "dismiss": "닫기"
+    "dismiss": "닫기",
+    "thisWeek": "이번 주",
+    "busiestDay": "가장 바빴던 날",
+    "timeRecorded": "녹음 시간",
+    "peopleYouTalkedToMost": "가장 많이 대화한 사람",
+    "recapPrevious": "이전: {value}",
+    "noRecapForPeriod": "이 기간에 아직 녹음된 내용이 없습니다"
 }

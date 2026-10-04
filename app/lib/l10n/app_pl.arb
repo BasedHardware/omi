@@ -3870,5 +3870,11 @@
     "playbackAudioNetworkFailed": "Sprawdź połączenie",
     "forYou": "Dla Ciebie",
     "stopThese": "Zatrzymaj te",
-    "dismiss": "Ukryj"
+    "dismiss": "Ukryj",
+    "thisWeek": "Ten tydzień",
+    "busiestDay": "Najbardziej pracowity dzień",
+    "timeRecorded": "Nagrany czas",
+    "peopleYouTalkedToMost": "Osoby, z którymi rozmawiałeś najwięcej",
+    "recapPrevious": "Poprzednio: {value}",
+    "noRecapForPeriod": "W tym okresie nic jeszcze nie nagrano"
 }

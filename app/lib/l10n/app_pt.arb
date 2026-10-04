@@ -3870,5 +3870,11 @@
     "playbackAudioNetworkFailed": "Verifique a ligação",
     "forYou": "Para você",
     "stopThese": "Parar estes",
-    "dismiss": "Dispensar"
+    "dismiss": "Dispensar",
+    "thisWeek": "Esta semana",
+    "busiestDay": "Dia mais movimentado",
+    "timeRecorded": "Tempo gravado",
+    "peopleYouTalkedToMost": "Pessoas com quem você mais conversou",
+    "recapPrevious": "Anterior: {value}",
+    "noRecapForPeriod": "Nada gravado neste período ainda"
 }

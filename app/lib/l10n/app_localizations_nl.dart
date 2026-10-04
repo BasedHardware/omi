@@ -12435,4 +12435,24 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dismiss => 'Verbergen';
+
+  @override
+  String get thisWeek => 'Deze week';
+
+  @override
+  String get busiestDay => 'Drukste dag';
+
+  @override
+  String get timeRecorded => 'Opgenomen tijd';
+
+  @override
+  String get peopleYouTalkedToMost => 'Met wie je het meest sprak';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Vorige: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Nog niets opgenomen in deze periode';
 }

@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "कनेक्शन तपासा",
     "forYou": "तुमच्यासाठी",
     "stopThese": "हे थांबवा",
-    "dismiss": "लपवा"
+    "dismiss": "लपवा",
+    "thisWeek": "हा आठवडा",
+    "busiestDay": "सर्वात व्यस्त दिवस",
+    "timeRecorded": "रेकॉर्ड केलेला वेळ",
+    "peopleYouTalkedToMost": "ज्यांच्याशी तुम्ही सर्वाधिक बोललात",
+    "recapPrevious": "मागील: {value}",
+    "noRecapForPeriod": "या कालावधीत अद्याप काहीही रेकॉर्ड झालेले नाही"
 }

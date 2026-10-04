@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ",
     "forYou": "ನಿಮಗಾಗಿ",
     "stopThese": "ಇವುಗಳನ್ನು ನಿಲ್ಲಿಸಿ",
-    "dismiss": "ಮರೆಮಾಡಿ"
+    "dismiss": "ಮರೆಮಾಡಿ",
+    "thisWeek": "ಈ ವಾರ",
+    "busiestDay": "ಅತ್ಯಂತ ಬಿಡುವಿಲ್ಲದ ದಿನ",
+    "timeRecorded": "ದಾಖಲಾದ ಸಮಯ",
+    "peopleYouTalkedToMost": "ನೀವು ಹೆಚ್ಚು ಮಾತನಾಡಿದ ಜನರು",
+    "recapPrevious": "ಹಿಂದಿನದು: {value}",
+    "noRecapForPeriod": "ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ದಾಖಲಾಗಿಲ್ಲ"
 }

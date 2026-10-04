@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "Проверете ја врската",
     "forYou": "За вас",
     "stopThese": "Запри ги овие",
-    "dismiss": "Сокриј"
+    "dismiss": "Сокриј",
+    "thisWeek": "Оваа недела",
+    "busiestDay": "Најзафатен ден",
+    "timeRecorded": "Снимено време",
+    "peopleYouTalkedToMost": "Луѓе со кои најмногу разговаравте",
+    "recapPrevious": "Претходно: {value}",
+    "noRecapForPeriod": "Сè уште ништо не е снимено во овој период"
 }

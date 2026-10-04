@@ -12411,4 +12411,24 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get dismiss => 'Сакриј';
+
+  @override
+  String get thisWeek => 'Ова недеља';
+
+  @override
+  String get busiestDay => 'Најзаузетији дан';
+
+  @override
+  String get timeRecorded => 'Снимљено време';
+
+  @override
+  String get peopleYouTalkedToMost => 'Особе са којима сте највише разговарали';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Претходно: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'У овом периоду још ништа није снимљено';
 }

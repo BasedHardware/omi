@@ -12421,4 +12421,24 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get dismiss => 'Slėpti';
+
+  @override
+  String get thisWeek => 'Ši savaitė';
+
+  @override
+  String get busiestDay => 'Užimčiausia diena';
+
+  @override
+  String get timeRecorded => 'Įrašytas laikas';
+
+  @override
+  String get peopleYouTalkedToMost => 'Žmonės, su kuriais kalbėjote daugiausia';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Ankstesnis: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Šiuo laikotarpiu dar nieko neįrašyta';
 }

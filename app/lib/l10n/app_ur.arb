@@ -11392,5 +11392,11 @@
     "playbackAudioNetworkFailed": "کنکشن چیک کریں",
     "forYou": "آپ کے لیے",
     "stopThese": "یہ روکیں",
-    "dismiss": "چھپائیں"
+    "dismiss": "چھپائیں",
+    "thisWeek": "اس ہفتے",
+    "busiestDay": "سب سے مصروف دن",
+    "timeRecorded": "ریکارڈ شدہ وقت",
+    "peopleYouTalkedToMost": "جن سے آپ نے سب سے زیادہ بات کی",
+    "recapPrevious": "پچھلا: {value}",
+    "noRecapForPeriod": "اس مدت میں ابھی تک کچھ ریکارڈ نہیں ہوا"
 }

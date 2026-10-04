@@ -12454,4 +12454,24 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dismiss => 'Ascunde';
+
+  @override
+  String get thisWeek => 'Săptămâna aceasta';
+
+  @override
+  String get busiestDay => 'Cea mai aglomerată zi';
+
+  @override
+  String get timeRecorded => 'Timp înregistrat';
+
+  @override
+  String get peopleYouTalkedToMost => 'Persoanele cu care ai vorbit cel mai mult';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Anterior: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Încă nu s-a înregistrat nimic în această perioadă';
 }

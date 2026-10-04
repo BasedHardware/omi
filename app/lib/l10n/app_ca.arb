@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Comprova la connexió",
     "forYou": "Per a tu",
     "stopThese": "Atura aquests",
-    "dismiss": "Descarta"
+    "dismiss": "Descarta",
+    "thisWeek": "Aquesta setmana",
+    "busiestDay": "Dia més atrafegat",
+    "timeRecorded": "Temps enregistrat",
+    "peopleYouTalkedToMost": "Persones amb qui més has parlat",
+    "recapPrevious": "Anterior: {value}",
+    "noRecapForPeriod": "Encara no s'ha enregistrat res en aquest període"
 }

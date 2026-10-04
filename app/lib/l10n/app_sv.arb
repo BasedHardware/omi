@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Kontrollera anslutningen",
     "forYou": "För dig",
     "stopThese": "Stoppa dessa",
-    "dismiss": "Avvisa"
+    "dismiss": "Avvisa",
+    "thisWeek": "Den här veckan",
+    "busiestDay": "Mest intensiva dagen",
+    "timeRecorded": "Inspelad tid",
+    "peopleYouTalkedToMost": "Personer du pratade mest med",
+    "recapPrevious": "Föregående: {value}",
+    "noRecapForPeriod": "Inget inspelat under den här perioden än"
 }

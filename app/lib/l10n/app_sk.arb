@@ -3835,5 +3835,11 @@
     "playbackAudioNetworkFailed": "Skontrolujte pripojenie",
     "forYou": "Pre vás",
     "stopThese": "Zastaviť tieto",
-    "dismiss": "Skryť"
+    "dismiss": "Skryť",
+    "thisWeek": "Tento týždeň",
+    "busiestDay": "Najrušnejší deň",
+    "timeRecorded": "Nahraný čas",
+    "peopleYouTalkedToMost": "Ľudia, s ktorými ste sa rozprávali najviac",
+    "recapPrevious": "Predchádzajúce: {value}",
+    "noRecapForPeriod": "V tomto období zatiaľ nič nenahrané"
 }
