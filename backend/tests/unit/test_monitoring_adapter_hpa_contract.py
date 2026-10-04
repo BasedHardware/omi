@@ -108,6 +108,13 @@ def test_diff_accepts_reconciled_live_and_rule_reordering():
     assert compare(rendered, live, deployment, apiservices)[1] == []
 
 
+def test_rollback_manifest_must_preserve_exact_live_rules():
+    rendered, live, deployment, apiservices = _comparison_inputs()
+    assert compare(rendered, live, deployment, apiservices, allow_canary_filter=False)[1]
+    rendered[0]['data']['config.yaml'] = live['data']['config.yaml']
+    assert compare(rendered, live, deployment, apiservices, allow_canary_filter=False)[1] == []
+
+
 @pytest.mark.parametrize('drift', ['missing-rule', 'extra-rule', 'query', 'args', 'apiservice'])
 def test_diff_rejects_unreviewed_changes(drift):
     rendered, live, deployment, apiservices = _comparison_inputs()

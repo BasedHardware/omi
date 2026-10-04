@@ -207,8 +207,13 @@ The `prod-operator` agent tier currently has no GKE write permission. Helm
 history reads release secrets, which `ro-prod` cannot list; the authorized
 coordinator must inspect history and capture the **deployed**, known-good
 revision immediately before the upgrade (do not assume the latest row is
-healthy). Confirm the adapter chart is still 4.14.2; if it changed, HOLD and
-repeat the pinned render review.
+healthy). Fetch that revision's stored manifest and compare it with the live
+captures using `--require-live-config`. Live-only edits may be absent from
+Helm history: the rollback manifest must preserve all 18 rules, Deployment
+arguments and both APIService specs. **If this fails, HOLD the upgrade** until
+the coordinator establishes a reviewed rollback baseline; `--atomic` would
+otherwise restore an incomplete Helm revision on failure. Confirm the adapter
+chart is still 4.14.2; if it changed, repeat the pinned render review.
 
 ```bash
 # Coordinator identity with Helm release-secret reads and approved GKE writes.
@@ -216,6 +221,14 @@ helm --kube-context "$PROD_CTX" -n "$MON_NS" history prod-omi-kube-prometheus-st
 helm --kube-context "$PROD_CTX" -n "$MON_NS" history prod-omi-prometheus-adapter
 export STACK_BEFORE=<deployed-stack-revision>
 export ADAPTER_BEFORE=<deployed-adapter-revision>
+helm --kube-context "$PROD_CTX" -n "$MON_NS" get manifest prod-omi-prometheus-adapter \
+  --revision "$ADAPTER_BEFORE" > "$ADAPTER_REVIEW_DIR/rollback.yaml"
+backend/.venv/bin/python backend/scripts/diff_prod_adapter.py --require-live-config \
+  --rendered "$ADAPTER_REVIEW_DIR/rollback.yaml" \
+  --configmap "$ADAPTER_REVIEW_DIR/configmap.yaml" \
+  --deployment "$ADAPTER_REVIEW_DIR/deployment.yaml" \
+  --apiservices "$ADAPTER_REVIEW_DIR/apiservices.yaml"
+# Proceed only if the rollback comparison passes and the object diff is approved.
 gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=prod
 # Find the exact main run, then gh run watch RUN_ID --exit-status; proceed only on success.
 helm upgrade prod-omi-prometheus-adapter prometheus-community/prometheus-adapter \

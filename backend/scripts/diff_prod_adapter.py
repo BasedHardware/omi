@@ -60,14 +60,15 @@ def diff(label, before, after):
     )
 
 
-def compare(rendered, configmap, deployment, apiservices):
+def compare(rendered, configmap, deployment, apiservices, allow_canary_filter=True):
     config = yaml.safe_load(next(obj for obj in rendered if obj['kind'] == 'ConfigMap')['data']['config.yaml'])
     live = yaml.safe_load(configmap['data']['config.yaml'])
     actual = normalized_config(config)
     reports = [diff('config.yaml', normalized_config(live), actual)]
     errors = []
-    if expected_config(live) != actual:
-        errors.append('Rules differ beyond the reviewed listen canary filter')
+    expected = expected_config(live) if allow_canary_filter else normalized_config(live)
+    if expected != actual:
+        errors.append('Rules differ from the reviewed expectation')
 
     rendered_deployment = next(obj for obj in rendered if obj['kind'] == 'Deployment')
     live_args = deployment['spec']['template']['spec']['containers'][0]['args']
@@ -88,6 +89,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('rendered', 'configmap', 'deployment', 'apiservices'):
         parser.add_argument(f'--{name}', required=True, type=Path)
+    parser.add_argument(
+        '--require-live-config', action='store_true', help='require exact live rules for rollback review'
+    )
     args = parser.parse_args()
     rendered = [obj for obj in yaml.safe_load_all(args.rendered.read_text()) if obj]
     reports, errors = compare(
@@ -95,13 +99,14 @@ def main():
         yaml.safe_load(args.configmap.read_text()),
         yaml.safe_load(args.deployment.read_text()),
         yaml.safe_load(args.apiservices.read_text()),
+        allow_canary_filter=not args.require_live_config,
     )
     for report in reports:
         print(report, end='')
     for error in errors:
         print(f'DRIFT: {error}')
     if not errors:
-        print('PASS: only the reviewed canary filter differs; Deployment args and APIService specs match.')
+        print('PASS: rules match the reviewed expectation; Deployment args and APIService specs match.')
     return bool(errors)
 
 
