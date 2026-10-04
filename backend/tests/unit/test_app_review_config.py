@@ -51,13 +51,9 @@ class TestAppReviewConfig(unittest.TestCase):
             should_hide_subscription_ui("google_reviewer_android", "android", "1.5.0", firestore_client=mock_client)
         )
         # iOS reviewer matches
-        self.assertTrue(
-            should_hide_subscription_ui("apple_reviewer_1", "ios", "1.5.0", firestore_client=mock_client)
-        )
+        self.assertTrue(should_hide_subscription_ui("apple_reviewer_1", "ios", "1.5.0", firestore_client=mock_client))
         # Normal user does not match reviewer
-        self.assertFalse(
-            should_hide_subscription_ui("normal_user", "android", "1.5.0", firestore_client=mock_client)
-        )
+        self.assertFalse(should_hide_subscription_ui("normal_user", "android", "1.5.0", firestore_client=mock_client))
 
     def test_hidden_version_matches(self):
         mock_client = MagicMock()
@@ -70,26 +66,20 @@ class TestAppReviewConfig(unittest.TestCase):
         mock_client.collection.return_value.document.return_value.get.return_value = mock_doc
 
         # Exact semantic version matches
-        self.assertTrue(
-            should_hide_subscription_ui("user1", "android", "1.0.531", firestore_client=mock_client)
-        )
+        self.assertTrue(should_hide_subscription_ui("user1", "android", "1.0.531", firestore_client=mock_client))
         # Build variant of hidden version matches
-        self.assertTrue(
-            should_hide_subscription_ui("user1", "android", "1.0.531+607", firestore_client=mock_client)
-        )
+        self.assertTrue(should_hide_subscription_ui("user1", "android", "1.0.531+607", firestore_client=mock_client))
         # Different version does not match
-        self.assertFalse(
-            should_hide_subscription_ui("user1", "android", "1.0.532", firestore_client=mock_client)
-        )
+        self.assertFalse(should_hide_subscription_ui("user1", "android", "1.0.532", firestore_client=mock_client))
 
     def test_firestore_failure_fails_open_gracefully(self):
         mock_client = MagicMock()
-        mock_client.collection.return_value.document.return_value.get.side_effect = RuntimeError("Firestore unavailable")
+        mock_client.collection.return_value.document.return_value.get.side_effect = RuntimeError(
+            "Firestore unavailable"
+        )
 
         # Must not raise an exception; must return False safely
-        self.assertFalse(
-            should_hide_subscription_ui("user1", "android", "1.0.0", firestore_client=mock_client)
-        )
+        self.assertFalse(should_hide_subscription_ui("user1", "android", "1.0.0", firestore_client=mock_client))
 
     def test_cache_invalidation(self):
         mock_client = MagicMock()
