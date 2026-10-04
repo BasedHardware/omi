@@ -2499,8 +2499,11 @@ or the first refusal reason.
 
 With the consumer ON, embedding clips concatenate only already verified,
 generation-pinned decoded adjacent chunks from that invocation's cache. The
-middle 15 seconds remain the maximum clip; missing extents refuse without padding
-or interpolation. Live, sync and v2 placements share this assembly after inventory
+middle 15 seconds remain the maximum clip. Only a leading or trailing missing edge
+of at most the existing 1 ms coverage tolerance may be trimmed to verified PCM,
+and the resulting clip must still contain at least one second of audio. Internal
+gaps always refuse; no padding or interpolation is allowed. Live, sync and v2
+placements share this assembly after inventory
 admission; consumer OFF retains the legacy single-midpoint-chunk clip policy.
 Existing embedding/cache formats, keys and download/time/embedding caps stay intact.
 

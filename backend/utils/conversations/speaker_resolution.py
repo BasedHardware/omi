@@ -217,7 +217,8 @@ class EmbeddingDiagnostics:
 def _verified_clip(session: AudioChunkReadSession, start: float, end: float) -> Tuple[Optional[bytes], str]:
     """Assemble at most 15s from the invocation's generation-pinned decoded cache.
 
-    No downloads, padding, or interpolation: a missing extent refuses the clip.
+    No downloads, padding, or interpolation. Only a tolerance-sized leading or
+    trailing edge may be trimmed; an internal missing extent refuses the clip.
     Inventory/decoded coverage validation has already admitted this session.
     """
     if end - start > MAX_CLIP_SECONDS:
@@ -235,9 +236,11 @@ def _verified_clip(session: AudioChunkReadSession, start: float, end: float) -> 
         chunk_end = chunk_start + len(pcm) / (SAMPLE_RATE * 2)
         if chunk_end <= position or chunk_start >= end:
             continue
-        # Only floating-point wall-axis roundoff is allowed (well below one sample).
+        # Between pieces, allow only wall-axis roundoff (well below one sample).
         if chunk_start > position + 1e-6:
-            return None, 'chunk_boundary' if pieces else 'no_clip'
+            if pieces or chunk_start - position > COVERAGE_TOLERANCE_SECONDS:
+                return None, 'chunk_boundary' if pieces else 'no_clip'
+            position = chunk_start
         stop = min(end, chunk_end)
         first_sample = round((position - chunk_start) * SAMPLE_RATE)
         last_sample = round((stop - chunk_start) * SAMPLE_RATE)
@@ -246,12 +249,9 @@ def _verified_clip(session: AudioChunkReadSession, start: float, end: float) -> 
         if position >= end - 1e-6:
             clip = b''.join(pieces)
             return (clip, 'none') if len(clip) >= MIN_EMBED_SECONDS * SAMPLE_RATE * 2 else (None, 'clip_too_short')
-    if (
-        pieces
-        and end - position <= COVERAGE_TOLERANCE_SECONDS
-        and sum(map(len, pieces)) < MIN_EMBED_SECONDS * SAMPLE_RATE * 2
-    ):
-        return None, 'clip_too_short'
+    if pieces and end - position <= COVERAGE_TOLERANCE_SECONDS:
+        clip = b''.join(pieces)
+        return (clip, 'none') if len(clip) >= MIN_EMBED_SECONDS * SAMPLE_RATE * 2 else (None, 'clip_too_short')
     return None, 'chunk_boundary' if pieces else 'no_clip'
 
 
