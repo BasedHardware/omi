@@ -201,6 +201,25 @@ def test_people_scan_failure_still_serves_the_recap_and_records_the_fallback(dep
     assert [r for r in caplog.records if r.name == recaps_mod.logger.name] == []
 
 
+def test_a_failed_daily_recap_read_fails_the_request(deps, monkeypatch):
+    # The daily recaps are the recap: without them every total would read zero,
+    # so the failure reaches the app as an error it offers Try Again on.
+    _, calls = deps
+    fallbacks = []
+
+    def broken_summaries(uid, **_kwargs):
+        raise RuntimeError('firestore unavailable')
+
+    monkeypatch.setattr(recaps_mod.daily_summaries_db, 'get_daily_summaries', broken_summaries)
+    monkeypatch.setattr(recaps_mod, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    with pytest.raises(RuntimeError, match='firestore unavailable'):
+        _get('week', '2026-10-01')
+
+    assert fallbacks == []
+    assert 'action_items' not in calls and 'people_scan' not in calls
+
+
 def test_the_earliest_supported_anchor_is_served(deps):
     recap = _get('month', '2000-01-01')
 
