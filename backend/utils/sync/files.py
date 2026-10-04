@@ -12,6 +12,7 @@ from models.conversation_enums import ConversationSource
 from utils.log_sanitizer import sanitize
 from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import playback as sync_playback
+from utils.sync.input_limits import raise_sync_storage_pressure, sync_pcm_format
 
 try:
     from opuslib import Decoder
@@ -104,6 +105,7 @@ def decode_opus_file_to_wav(
             os.remove(wav_file_path)
         return False
     except Exception as e:
+        raise_sync_storage_pressure(e)
         logger.error(f"Error during decode: {e}")
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
@@ -219,6 +221,7 @@ def decode_pcm_file_to_wav(
         pcm_data.clear()
         return True
     except Exception as e:
+        raise_sync_storage_pressure(e)
         logger.error('PCM decode failed exception_type=%s', type(e).__name__)
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
@@ -273,11 +276,9 @@ def decode_files_to_wav(files_path: List[str], decoded_frames: Optional[dict[str
                 logger.error(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
 
         if _is_pcm_codec(filename):
-            sample_rate_match = re.search(r'_pcm(?:8|16)_(\d+)_', filename)
-            sample_rate = (
-                int(sample_rate_match.group(1)) if sample_rate_match else (16000 if '_pcm16_' in filename else 8000)
-            )
-            sample_width = 1 if '_pcm8_' in filename else 2
+            pcm_format = sync_pcm_format(filename)
+            assert pcm_format is not None
+            sample_rate, sample_width = pcm_format
             success = decode_pcm_file_to_wav(
                 path,
                 wav_path,

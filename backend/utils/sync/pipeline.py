@@ -143,6 +143,14 @@ from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.input_limits import (
+    MAX_BACKFILL_FILES,
+    MAX_BACKFILL_RAW_BYTES,
+    validate_backfill_paths,
+    BackfillInputLimitExceeded,
+    BackfillStoragePressure,
+    raise_sync_storage_pressure,
+)
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
@@ -999,7 +1007,11 @@ def retrieve_vad_segments(
             segment_timestamp = start_timestamp + segment['start']
             segment_path = f'{path_dir}/{segment_timestamp}.wav'
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
-            segment_aseg.export(segment_path, format='wav')
+            try:
+                segment_aseg.export(segment_path, format='wav')
+            except OSError as error:
+                raise_sync_storage_pressure(error)
+                raise
             segmented_paths.add(segment_path)
             if segment_source_maps is not None:
                 # Pydub's millisecond slice starts at this original WAV sample.
@@ -2044,6 +2056,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 # expires rather than racing a destructive cleanup against it.
                 preserve_retry_material = True
                 raise
+            except BackfillStoragePressure:
+                raise
             except HTTPException as e:
                 await _finalize_sync_job_failure(
                     job_id=job_id,
@@ -2203,6 +2217,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
 
+            if 'BackfillStoragePressure' in vad_errors:
+                raise BackfillStoragePressure('sync temporary storage full')
             if vad_errors:
                 await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
                 segmented_paths = set()
@@ -3013,9 +3029,24 @@ async def _delete_staged_blobs_async(blob_paths: list):
     await run_blocking(storage_executor, _delete_staged_blobs, blob_paths)
 
 
-def _download_staged_files(blob_paths: list) -> bool:
-    """Download staged blobs back to their local paths. False if any is gone."""
-    for p in blob_paths:
-        if not download_syncing_temporal_file(p):
-            return False
-    return True
+def _download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) -> bool:
+    """Bound backfill downloads and expansion before any decode allocation."""
+    if bounded_backfill and len(blob_paths) > MAX_BACKFILL_FILES:
+        raise BackfillInputLimitExceeded('backfill staged file count exceeded')
+    remaining = MAX_BACKFILL_RAW_BYTES
+    try:
+        for p in blob_paths:
+            if bounded_backfill:
+                found = download_syncing_temporal_file(p, max_bytes=remaining)
+                if found:
+                    remaining -= os.path.getsize(p)
+            else:
+                found = download_syncing_temporal_file(p)
+            if not found:
+                return False
+        if bounded_backfill:
+            validate_backfill_paths(blob_paths)
+        return True
+    except BackfillInputLimitExceeded:
+        _cleanup_files(blob_paths)
+        raise

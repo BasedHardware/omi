@@ -3324,3 +3324,67 @@ async def test_backfill_requires_isolated_dispatch(dispatch_enabled, byok):
 
 if __name__ == '__main__':
     sys.exit(pytest.main([__file__, '-v']))
+
+
+@pytest.mark.asyncio
+async def test_oversized_backfill_upload_is_rejected_before_staging_or_custody_transfer():
+    from starlette.datastructures import UploadFile
+    from utils.sync.input_limits import MAX_BACKFILL_FILES
+
+    module, saved_modules, jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.classify_sync_lane = MagicMock(return_value=types.SimpleNamespace(lane=module.SyncLane.BACKFILL))
+    try:
+        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        with pytest.raises(module.HTTPException) as error:
+            await module.sync_local_files_v2(files=uploads, uid='test-uid')
+        assert error.value.status_code == 413
+        module._retrieve_file_paths_v2.assert_not_called()
+        jobs.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+        assert all(upload.file.tell() == 0 for upload in uploads)
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pressure', [False, True])
+async def test_backfill_limit_or_tmpfs_pressure_preserves_legacy_audio_and_claims(pressure):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=module.BackfillStoragePressure('synthetic') if pressure else RuntimeError('must not run'),
+        latest_job={'job_id': 'job-1', 'status': 'queued', 'lane': 'backfill'},
+    )
+    payload = await request.json()
+    payload['lane'] = 'backfill'
+    request.json = AsyncMock(return_value=payload)
+    module.uid_sequencer.foreign_delivery = MagicMock(return_value=False)
+    if not pressure:
+        module._download_staged_files.side_effect = module.BackfillInputLimitExceeded('synthetic')
+    try:
+        response = await module.run_sync_job(request, task_retry_count=100)
+        assert response.status_code == 503
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.release_sync_content_claim_after_job_retired.assert_not_called()
+        module.release_job_run_lock.assert_called_once()
+        module.fenced_mark_job_queued_for_retry.assert_called_once_with(
+            'job-1', '1:lock-token', 101, 'sync_resource_limit'
+        )
+        if not pressure:
+            module._run_full_pipeline_background_async.assert_not_awaited()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original

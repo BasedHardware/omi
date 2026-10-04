@@ -107,6 +107,7 @@ from utils.subscription import (
     resolve_transcription_allowance,
 )
 from utils.sync import playback as sync_playback
+from utils.sync.input_limits import BackfillInputLimitExceeded, BackfillStoragePressure, validate_backfill_uploads
 from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import parse_sync_file_claims
 from utils.sync.files import (
@@ -514,6 +515,8 @@ async def sync_local_files(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
     )
+    if lane_decision.lane is SyncLane.BACKFILL:
+        await run_blocking(sync_executor, validate_backfill_uploads, files)
     logger.info(
         'sync_lane_admission uid=%s device_hash=%s platform=%s app_version=%s lane=%s trust=%s age_seconds=%s reason=%s',
         uid,
@@ -955,6 +958,8 @@ async def sync_local_files_v2(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
     )
+    if lane_decision.lane is SyncLane.BACKFILL:
+        await run_blocking(sync_executor, validate_backfill_uploads, files)
     logger.info(
         'sync_lane_admission uid=%s device_hash=%s platform=%s app_version=%s lane=%s trust=%s age_seconds=%s reason=%s',
         uid,
@@ -2060,7 +2065,11 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
             logger.info('event=sync_transcription_job outcome=skipped reason=account_cutover lane=%s', sync_lane)
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
-        if not await run_blocking(storage_executor, _download_staged_files, blob_paths):
+        if sync_lane == SyncLane.BACKFILL.value:
+            staged = await run_blocking(storage_executor, _download_staged_files, blob_paths, bounded_backfill=True)
+        else:
+            staged = await run_blocking(storage_executor, _download_staged_files, blob_paths)
+        if not staged:
             # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
             await _finalize_sync_job_failure(
                 job_id=job_id,
@@ -2102,6 +2111,8 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
                 audio_start_seconds=audio_start_seconds,
                 audio_end_seconds=audio_end_seconds,
             )
+        except BackfillStoragePressure:
+            raise
         except SyncConversationPersistenceFenced:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job
             await finalize_sync_job_superseded(
@@ -2258,6 +2269,30 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         if sync_lane == SyncLane.BACKFILL.value:
             await run_blocking(db_executor, release_backfill_slot, uid, job_id)
         return JSONResponse(status_code=200, content={'status': 'done'})
+    except (BackfillInputLimitExceeded, BackfillStoragePressure) as error:
+        # Defer capacity pressure without a terminal invalid-input result. Reset
+        # processing so the stale detector cannot fail it during task backoff.
+        if ledger_fence_active:
+            mutation = await run_blocking(
+                db_executor,
+                fenced_mark_job_queued_for_retry,
+                job_id,
+                lock_token,
+                task_retry_count + 1,
+                'sync_resource_limit',
+            )
+            queued = mutation.applied
+        else:
+            queued = await run_blocking(
+                db_executor, mark_job_queued_for_retry, job_id, task_retry_count + 1, 'sync_resource_limit'
+            )
+        if not queued:
+            release_lock = False
+            return JSONResponse(status_code=409, content={'status': 'locked'})
+        status = (
+            'backfill_input_limit' if isinstance(error, BackfillInputLimitExceeded) else 'backfill_storage_pressure'
+        )
+        return JSONResponse(status_code=503, content={'status': status})
     except SyncJobRunLeaseLost as error:
         latest_job = await run_blocking(db_executor, get_sync_job, job_id)
         if latest_job and latest_job.get('status') in TERMINAL_STATUSES:
