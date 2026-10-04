@@ -444,7 +444,7 @@ class TranscriptProcessor:
                 conversation.id,
                 [segment.model_dump() for segment in targets],
                 live_segments=fresh,
-                live_capture_reasons={str(s.id): s._audio_capture_reason for s in segments},
+                live_capture_reasons={str(s.id): s.capture_window_reason for s in segments},
                 started_at=started_at,
                 audio_timeline=audio_timeline,
                 **({'capture_evidence': capture_evidence} if capture_evidence_dark_write_enabled() else {}),
@@ -933,7 +933,7 @@ class TranscriptProcessor:
                     elif getattr(self.host, 'is_multi_channel', False):
                         attribution = 'multi_channel'
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
-                    segment._audio_capture_reason = capture_window_reason(attribution)
+                    segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
@@ -1189,7 +1189,7 @@ class TranscriptProcessor:
                     elif getattr(self.host, 'is_multi_channel', False):
                         attribution = 'multi_channel'
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
-                    segment._audio_capture_reason = capture_window_reason(attribution)
+                    segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id

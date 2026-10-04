@@ -127,6 +127,14 @@ class TranscriptSegment(BaseModel):
     # Transaction-local attribution, never serialized or persisted.
     _audio_capture_reason: str = PrivateAttr(default='missing_window')
 
+    @property
+    def capture_window_reason(self) -> str:
+        return self._audio_capture_reason
+
+    @capture_window_reason.setter
+    def capture_window_reason(self, reason: str) -> None:
+        self._audio_capture_reason = reason
+
     @model_serializer(mode='wrap')
     def _serialize_internal_evidence(self, handler, info):
         # A wrap serializer also runs when a parent conversation is dumped. Leave
@@ -229,7 +237,7 @@ class TranscriptSegment(BaseModel):
         else:
             if self._audio_capture_reason == 'inherited_unknown' or other._audio_capture_reason == 'inherited_unknown':
                 self._audio_capture_reason = 'inherited_unknown'
-            elif any(value is None for value in (a_start, a_end, b_start, b_end)):
+            elif a_start is None or a_end is None or b_start is None or b_end is None:
                 self._audio_capture_reason = 'merge_unknown_side'
             elif (
                 not all(math.isfinite(v) for v in (a_start, a_end, b_start, b_end))

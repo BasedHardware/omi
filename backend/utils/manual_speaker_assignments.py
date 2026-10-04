@@ -4,13 +4,14 @@ The receipt authorizes best-effort teaching; it is not an enrollment job.
 Inference must never create or replace these explicit user decisions.
 """
 
-from dataclasses import dataclass, field
-from typing import Annotated, Mapping, Optional
+from dataclasses import dataclass, field, replace
+from typing import Annotated, Any, Mapping, Optional
 import uuid
 
 from pydantic import BaseModel, Field, StrictStr
 
 from config.live_capture import capture_window_reason
+from database.read_boundary import parse_payload_strict
 from models.speaker_label_provenance import project_source
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
@@ -372,6 +373,13 @@ class LiveTranscriptMerge:
     capture_reasons: dict[str, str] = field(default_factory=dict)
     created_ids: set[str] = field(default_factory=set)
 
+    def with_segments(self, segments: list[dict]) -> 'LiveTranscriptMerge':
+        return replace(self, segments=segments)
+
+
+def replay_receipt_commits(payload: Mapping[str, Any], document_path: str) -> list[list[str]]:
+    return parse_payload_strict(LiveTranscriptReplayReceipt, payload, document_path=document_path).commits
+
 
 def merge_live_segments(
     persisted: list[dict],
@@ -410,9 +418,9 @@ def merge_live_segments(
     incoming = [TranscriptSegment(**segment) for segment in apply_manual_assignments(unique_fresh, receipt)]
     for segment in tail:
         if segment.audio_capture_start is None or segment.audio_capture_end is None:
-            segment._audio_capture_reason = 'inherited_unknown'
+            segment.capture_window_reason = 'inherited_unknown'
     for segment in incoming:
-        segment._audio_capture_reason = capture_window_reason((capture_reasons or {}).get(str(segment.id)))
+        segment.capture_window_reason = capture_window_reason((capture_reasons or {}).get(str(segment.id)))
     # Selected-segment decisions are keyed by ID, so those segments must keep it.
     # Speaker-wide decisions are keyed by speaker: same-speaker merges keep them.
     covered = set(_receipt_section(receipt, 'segments'))
@@ -436,6 +444,6 @@ def merge_live_segments(
         {s.id for s in combined.joined if s.id},
         combined.removed_ids,
         combined.absorbed_into,
-        {str(s.id): s._audio_capture_reason for s in combined.joined if s.id},
+        {str(s.id): s.capture_window_reason for s in combined.joined if s.id},
         {str(s.id) for s in combined.segments if s.id and str(s.id) not in prior_ids},
     )

@@ -88,12 +88,12 @@ async def test_transaction_counts_first_stored_id_once_and_versions_separately(w
     processor = _processor(world)
     current = SimpleNamespace(id='c', transcript_segments=[])
     fresh = segment('a', 'hello')
-    fresh._audio_capture_reason = 'translator_outside_accepted_sends'
-    first = count('segment', fresh._audio_capture_reason)
-    versions = count('version', fresh._audio_capture_reason)
+    fresh.capture_window_reason = 'translator_outside_accepted_sends'
+    first = count('segment', fresh.capture_window_reason)
+    versions = count('version', fresh.capture_window_reason)
     await processor._update_live_conversation(current, [fresh], [], datetime.now(timezone.utc), None)
-    assert count('segment', fresh._audio_capture_reason) == first + 1
-    assert count('version', fresh._audio_capture_reason) == versions + 1
+    assert count('segment', fresh.capture_window_reason) == first + 1
+    assert count('version', fresh.capture_window_reason) == versions + 1
     inherited = count('version', 'inherited_unknown')
     await processor._update_live_conversation(
         current, [segment('b', 'world', start=1, end=2)], [], datetime.now(timezone.utc), None

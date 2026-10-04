@@ -318,6 +318,10 @@ class SendMap:
     def span_count(self) -> int:
         return len(self._spans)
 
+    def is_evicted_provider_sample(self, sample: float) -> bool:
+        """Whether a nonnegative point belonged to the now-evicted map prefix."""
+        return bool(self.evicted_spans and self._spans and 0 <= sample < self._spans[0][0])
+
     @property
     def last_capture_sample(self) -> Optional[int]:
         """Last accepted capture boundary, for text-only fallback placement."""
@@ -799,9 +803,9 @@ class ProviderEpochTranslator:
     def _reject(self, segment: Dict, reason: str) -> None:
         # Transient metadata only; the legacy refusal metric and text stay unchanged.
         attribution = 'anchor_compacted' if reason == 'evicted_interval' else 'translator_' + reason
-        if reason == 'outside_accepted_sends' and self.send_map.evicted_spans and self.send_map._spans:
+        if reason == 'outside_accepted_sends':
             try:
-                if 0 <= float(segment['start']) * self.provider_sample_rate < self.send_map._spans[0][0]:
+                if self.send_map.is_evicted_provider_sample(float(segment['start']) * self.provider_sample_rate):
                     attribution = 'send_map_evicted'
             except (TypeError, ValueError, KeyError):
                 pass
