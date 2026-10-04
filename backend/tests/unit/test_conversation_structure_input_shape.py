@@ -230,3 +230,43 @@ def test_restored_blank_capture_keeps_deterministic_title_without_a_model_call(s
     )
     assert restored.discarded is False
     assert restored.structured.title.startswith('Recording · ')
+
+
+@pytest.mark.parametrize('episode_enabled', [False, True])
+def test_screen_evidence_can_retain_empty_episode_only_under_new_flag(stack, processing, monkeypatch, episode_enabled):
+    from utils.conversations.episode_evidence import EvidenceItem
+
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    conversation = stack.models.CreateConversation(
+        started_at=now, finished_at=now, source='desktop', transcript_segments=[], photos=[]
+    )
+    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
+    monkeypatch.setattr(processing, '_meeting_notes_episode_evidence_enabled', lambda: episode_enabled)
+    monkeypatch.setattr(processing, '_meeting_notes_screen_text_context_enabled', lambda: True)
+    monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', lambda *a: ('', '', {}))
+    monkeypatch.setattr(processing, 'decide_relevance', lambda **k: SimpleNamespace(discard=True, reason='empty'))
+    gathered = []
+
+    def inputs(*args, **kwargs):
+        gathered.append(kwargs)
+        kwargs['evidence_items'].append(
+            EvidenceItem(
+                id='screen_frame:f1', source_kind='screen_frame', content='Empty call screen', sensitivity='private'
+            )
+        )
+        return None, None, True, ()
+
+    monkeypatch.setattr(processing, 'rich_notes_inputs', inputs)
+    notes = Mock(return_value=stack.structured.Structured(title='Observed empty call'))
+    monkeypatch.setattr(processing, 'get_conversation_notes', notes)
+    result, discarded = processing._get_structured('synthetic-uid', 'en', conversation)
+    assert discarded is not episode_enabled
+    assert bool(gathered) is episode_enabled
+    if episode_enabled:
+        notes.assert_called_once()
+        assert {item.source_kind for item in notes.call_args.kwargs['episode_evidence']} == {
+            'device_state',
+            'screen_frame',
+        }
+    else:
+        notes.assert_not_called()

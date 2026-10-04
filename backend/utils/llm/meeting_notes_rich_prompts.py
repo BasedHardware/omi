@@ -123,7 +123,7 @@ def rich_volatile_instructions(
     return text
 
 
-def screen_frames_message(frames: Sequence[NotesFrameImage]) -> dict[str, Any]:
+def screen_frames_message(frames: Sequence[NotesFrameImage], *, episode_mode: bool = False) -> dict[str, Any]:
     """The approved call screenshots as one user message: a caption line, then image parts.
 
     Every frame must reach the provider as an ``image_url`` part; a gateway or
@@ -140,7 +140,10 @@ def screen_frames_message(frames: Sequence[NotesFrameImage]) -> dict[str, Any]:
             ),
         }
     ]
-    content.extend({'type': 'image_url', 'image_url': {'url': frame.data_url}} for frame in frames)
+    for frame in frames:
+        if episode_mode:
+            content.append({'type': 'text', 'text': f'Evidence screen_frame:{frame.frame_id} at {frame.offset_label}'})
+        content.append({'type': 'image_url', 'image_url': {'url': frame.data_url}})
     # A role/content dict: LangChain chat models accept it as a user message, and
     # this module stays free of client imports.
     return {'role': 'user', 'content': content}

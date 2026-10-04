@@ -34,7 +34,6 @@ import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 import database.screen_activity as screen_activity_db
 from database.vector_db import (
-    find_similar_action_items,
     upsert_action_item_vectors_batch,
     delete_action_item_vectors_batch,
 )
@@ -176,6 +175,8 @@ from utils.llm.conversation_processing import (
     get_conversation_notes,
     validate_structured_source_segment_ids,
 )
+from utils.conversations.episode_evidence import capture_evidence
+from utils.conversations.notes_task_context import fetch_dedup_candidates_for_query as _fetch_dedup_candidates_for_query
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.llm.conversation_folder import assign_conversation_to_folder
@@ -240,6 +241,7 @@ from utils.conversations.meeting_context import (
 )
 from utils.conversations.meeting_notes_wiring import (
     meeting_notes_rich_context_enabled as _meeting_notes_rich_context_enabled,
+    meeting_notes_episode_evidence_enabled as _meeting_notes_episode_evidence_enabled,
     meeting_notes_screen_text_context_enabled as _meeting_notes_screen_text_context_enabled,
     rich_notes_inputs,
     rich_roster_inputs,
@@ -360,54 +362,6 @@ def _stored_meeting_lookup_enabled() -> bool:
     return _flag_enabled('CONVERSATION_STORED_MEETING_CONTEXT_ENABLED', default=True)
 
 
-def _dedup_excluded_conversation_ids(conversation: Any) -> set:
-    """The conversation's own id plus any merge-source ids. Items from these
-    conversations must never be dedup candidates: on reprocess/merge they are
-    this conversation's previous items — the LLM would suppress re-extracting
-    them, and the save step then deletes them, silently losing the tasks."""
-    excluded = {getattr(conversation, 'id', None)}
-    external_data = getattr(conversation, 'external_data', None) or {}
-    merge_metadata = external_data.get('merge_metadata') or {}
-    excluded.update(merge_metadata.get('source_conversation_ids') or [])
-    excluded.discard(None)
-    return excluded
-
-
-def _fetch_dedup_candidates_for_query(uid: str, query: str, conversation: Any = None) -> List[Dict[str, Any]]:
-    if not query.strip():
-        return []
-
-    excluded_conversation_ids = _dedup_excluded_conversation_ids(conversation) if conversation else set()
-
-    try:
-        similar = find_similar_action_items(uid, query, threshold=0.6, limit=10)
-        if not similar:
-            return []
-
-        items = action_items_db.get_action_items_by_ids(uid, [s['action_item_id'] for s in similar])
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
-        eligible: List[Dict[str, Any]] = []
-        for item in items:
-            if item.get('completed', False):
-                continue
-            if item.get('conversation_id') in excluded_conversation_ids:
-                continue
-            last_active = item.get('updated_at') or item.get('created_at')
-            if last_active is None or last_active < cutoff:
-                continue
-            eligible.append(item)
-
-        logger.info(
-            f'dedup_candidates uid={uid} similar={len(similar)} '
-            f'eligible={len(eligible)} top_score={similar[0]["score"]}'
-        )
-        return eligible
-    except Exception as e:
-        logger.exception(f'_fetch_dedup_candidates failed uid={uid}: {e}')
-        return []
-
-
 def _fetch_dedup_candidates(uid: str, structured: Structured, conversation: Any = None) -> List[Dict[str, Any]]:
     """Fetch recently active open tasks related to a generated overview."""
     if not structured or not structured.overview:
@@ -488,7 +442,9 @@ def _get_structured(
                 if _conversation_notes_v2_enabled():
                     roster: Optional[MeetingRoster] = None
                     meeting_context_block: Optional[str] = None
-                    if _meeting_notes_rich_context_enabled():
+                    episode_enabled = _meeting_notes_episode_evidence_enabled()
+                    episode_items = capture_evidence(conversation, transcript=ext_conv.text) if episode_enabled else []
+                    if _meeting_notes_rich_context_enabled() or episode_enabled:
                         roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
                             uid,
                             conversation,
@@ -496,6 +452,7 @@ def _get_structured(
                             tz_str,
                             include_background=True,
                             include_screen_text=_meeting_notes_screen_text_context_enabled(),
+                            **({'evidence_items': episode_items} if episode_enabled else {}),
                         )
                     prefix = build_conversation_prompt_prefix(
                         conversation_id=prompt_conversation_id,
@@ -518,6 +475,9 @@ def _get_structured(
                             meeting_context=meeting_context_block,
                             rich_context_enabled=roster is not None,
                             roster=roster,
+                            **(
+                                {'episode_evidence': episode_items, 'screen_frames': _frames} if episode_enabled else {}
+                            ),
                         )
                     validate_structured_source_segment_ids(structured, ())
                     return structured, False
@@ -584,6 +544,28 @@ def _get_structured(
         segments = main_conv.transcript_segments or []
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
 
+        episode_enabled = _conversation_notes_v2_enabled() and _meeting_notes_episode_evidence_enabled()
+        episode_items = []
+        roster, meeting_context_block, desktop_capture, screen_frames = None, None, False, ()
+        if episode_enabled:
+            roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
+                uid,
+                main_conv,
+                calendar_context,
+                tz_str,
+                include_background=True,
+                include_screen_text=_meeting_notes_screen_text_context_enabled(),
+                evidence_items=episode_items,
+            )
+            episode_items[:0] = capture_evidence(
+                main_conv,
+                transcript=action_items_transcript,
+                speaker_map=speaker_map,
+                roster=roster,
+                desktop_capture=desktop_capture,
+            )
+        episode_observed = any(item.source_kind in {'screen_frame', 'screen_ocr'} for item in episode_items)
+
         def model_discards(on_error: Callable[[Exception], None], neighbor: Optional[Neighbor]) -> bool:
             with track_usage(uid, Features.CONVERSATION_DISCARD):
                 return should_discard_conversation(
@@ -619,7 +601,7 @@ def _get_structured(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
             )
-            if ordinary.discard and ordinary.decided_by == 'rule':
+            if ordinary.discard and ordinary.decided_by == 'rule' and not episode_observed:
                 logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
                 if relevance_observer is not None:
                     relevance_observer(
@@ -657,6 +639,8 @@ def _get_structured(
             arm=arm,
             record_arm=relevance_experiment_active(),
         )
+        if decision.discard and episode_observed:
+            decision = RelevanceDecision('keep', 'rule', 'episode_evidence', trigger)
         submit_relevance_shadow(
             uid=uid,
             conversation_id=prompt_conversation_id,
@@ -685,10 +669,7 @@ def _get_structured(
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
         if _conversation_notes_v2_enabled():
-            roster: Optional[MeetingRoster] = None
-            meeting_context_block: Optional[str] = None
-            desktop_capture, screen_frames = False, ()
-            if _meeting_notes_rich_context_enabled():
+            if _meeting_notes_rich_context_enabled() and not episode_enabled:
                 roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
                     uid,
                     main_conv,
@@ -724,6 +705,7 @@ def _get_structured(
                     rich_context_enabled=roster is not None,
                     roster=roster,
                     screen_frames=screen_frames,
+                    **({'episode_evidence': episode_items} if episode_enabled else {}),
                 )
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False

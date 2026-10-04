@@ -17,7 +17,7 @@ def is_vacuous_note(note: Any) -> bool:
     title, overview = value('title') or '', value('overview') or ''
     sections = value('sections') or []
     recap = '\n'.join(
-        section.get('body_markdown', '') if isinstance(section, Mapping) else section.body_markdown
+        section.get('body_markdown', '') if isinstance(section, Mapping) else getattr(section, 'body_markdown', '')
         for section in sections
     )
     return not (overview.strip() or recap.strip()) or any(

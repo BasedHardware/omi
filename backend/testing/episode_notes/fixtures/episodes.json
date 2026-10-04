@@ -218,7 +218,7 @@
       "split": "dev",
       "evidence": {
         "started_at": "2026-01-12T10:00:00Z",
-        "finished_at": "2026-01-12T10:30:00Z",
+        "finished_at": "2026-01-12T10:01:10Z",
         "transcript_segments": [
           {
             "id": "transcript_segments-1",
@@ -316,8 +316,8 @@
       "stratum": "missed_connection",
       "split": "dev",
       "evidence": {
-        "started_at": "2026-01-12T10:00:00Z",
-        "finished_at": "2026-01-12T10:30:00Z",
+        "started_at": "2026-01-12T10:14:00Z",
+        "finished_at": "2026-01-12T10:16:00Z",
         "transcript_segments": [
           {
             "id": "transcript_segments-1",
@@ -647,7 +647,7 @@
       "split": "held_out",
       "evidence": {
         "started_at": "2026-01-12T10:00:00Z",
-        "finished_at": "2026-01-12T10:30:00Z",
+        "finished_at": "2026-01-12T10:50:00Z",
         "transcript_segments": [
           {
             "id": "transcript_segments-1",

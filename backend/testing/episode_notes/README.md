@@ -14,6 +14,10 @@ needs a new held-out cohort. Mechanical unit checks of schema/split integrity
 are allowed; do not use their content to customize prompt rules.
 
 Three calls per episode: candidate, independent all-evidence reference, judge.
+The candidate uses the production episode static/volatile helpers and extraction
+schema, with UTC dates and synthetic text evidence; image pixels and production
+repair retries are not exercised by the eval call. Production retries have separate
+fake-model unit coverage.
 Neither generation call gets expectations. The judge sees evidence, reference,
 candidate and expected properties; it must challenge the reference too.
 Unsupported or wrong-provenance claims are hard faithfulness failures regardless

@@ -14,6 +14,7 @@ import os
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from models.calendar_context import CalendarMeetingContext
+from utils.conversations.episode_evidence import EvidenceItem, context_pack_evidence, meeting_evidence
 from utils.conversations.meeting_context_pack import (
     gather_meeting_context_pack,
     load_people_documents,
@@ -47,6 +48,10 @@ def _flag_enabled(name: str, *, default: bool = False) -> bool:
 
 def meeting_notes_rich_context_enabled() -> bool:
     return _flag_enabled('MEETING_NOTES_RICH_CONTEXT_ENABLED')
+
+
+def meeting_notes_episode_evidence_enabled() -> bool:
+    return _flag_enabled('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED')
 
 
 def meeting_notes_screen_text_context_enabled() -> bool:
@@ -132,6 +137,7 @@ def _rich_meeting_context_block(
     *,
     include_screen_text: bool,
     screen_moments: Tuple[str, ...] = (),
+    evidence_items: Optional[List[EvidenceItem]] = None,
 ) -> Optional[str]:
     """Render the BACKGROUND CONTEXT block for the notes prompt; None when the
     pack comes back empty. Called only at the notes call site — memory and app
@@ -145,7 +151,10 @@ def _rich_meeting_context_block(
             include_screen_text=include_screen_text,
             timezone_name=tz_str,
             screen_moments=screen_moments,
+            **({'preserve_screen_rows': True} if evidence_items is not None else {}),
         )
+        if evidence_items is not None:
+            evidence_items.extend(context_pack_evidence(pack))
         return render_meeting_context_pack(pack) if pack else None
     except Exception as exc:  # noqa: BLE001 - background is best effort
         logger.warning('rich meeting context build failed uid=%s: %s', uid, type(exc).__name__)
@@ -175,9 +184,12 @@ def rich_notes_inputs(
     *,
     include_background: bool,
     include_screen_text: bool,
+    evidence_items: Optional[List[EvidenceItem]] = None,
 ) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...]]:
     """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, and frame images for notes."""
     roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(uid, conversation, calendar_context)
+    if evidence_items is not None:
+        evidence_items.extend(meeting_evidence(roster, calendar_context, evidence))
     if roster is None or not include_background:
         return roster, None, desktop_capture, ()
     started_at = frame_evidence_started_at(conversation)
@@ -189,6 +201,7 @@ def rich_notes_inputs(
         tz_str,
         include_screen_text=include_screen_text,
         screen_moments=screen_moment_lines(evidence, started_at) if include_screen_text else (),
+        **({'evidence_items': evidence_items} if evidence_items is not None else {}),
     )
     images: Tuple[NotesFrameImage, ...] = ()
     if meeting_notes_screen_frames_context_enabled():

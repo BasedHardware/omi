@@ -58,6 +58,8 @@ class PriorMeetingNote:
     date_label: str
     gist: str
     open_items: tuple[str, ...] = ()
+    source_id: Optional[str] = None
+    started_at: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +78,7 @@ class MeetingContextPack:
     memories: tuple[str, ...] = ()
     screen_text: str = ''
     screen_moments: tuple[str, ...] = ()
+    screen_rows: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def empty(self) -> bool:
@@ -86,6 +89,7 @@ class MeetingContextPack:
             or self.memories
             or self.screen_text
             or self.screen_moments
+            or self.screen_rows
         )
 
 
@@ -451,6 +455,8 @@ def _gather_prior_meetings(
                 date_label=_local_date_label(sort_key, timezone_name),
                 gist=_conversation_gist(record),
                 open_items=open_items,
+                source_id=record_id if isinstance(record_id, str) else None,
+                started_at=_as_utc(record.get('started_at')) or _as_utc(record.get('created_at')),
             )
         )
     return tuple(notes)
@@ -557,22 +563,27 @@ def _gather_memories(uid: str, roster: MeetingRoster) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def _gather_screen_text(uid: str, conversation: Any) -> str:
+def _gather_screen_rows(uid: str, conversation: Any) -> tuple[Mapping[str, Any], ...]:
     started_at = getattr(conversation, 'started_at', None)
     finished_at = getattr(conversation, 'finished_at', None)
     if not isinstance(started_at, datetime) or not isinstance(finished_at, datetime):
-        return ''
+        return ()
     try:
         rows: Any = screen_activity_db.get_screen_activity(
             uid, start_date=started_at, end_date=finished_at, limit=MAX_SCREEN_ROWS
         )
     except Exception as exc:  # noqa: BLE001 - best effort
         _log_source_failure('screen_activity', uid, exc)
-        return ''
+        return ()
     if not rows:
-        return ''
+        return ()
     ordered = sorted((row for row in rows if isinstance(row, Mapping)), key=lambda row: str(row.get('timestamp') or ''))
-    return digest_screen_rows(ordered, MAX_SCREEN_CHARACTERS)
+    # Preserve observations within the same bounded query; the typed adapter caps rows.
+    return tuple(ordered)
+
+
+def _gather_screen_text(uid: str, conversation: Any) -> str:
+    return digest_screen_rows(_gather_screen_rows(uid, conversation), MAX_SCREEN_CHARACTERS)
 
 
 def gather_meeting_context_pack(
@@ -584,6 +595,7 @@ def gather_meeting_context_pack(
     include_screen_text: bool = False,
     timezone_name: Optional[str] = None,
     screen_moments: Sequence[str] = (),
+    preserve_screen_rows: bool = False,
 ) -> Optional[MeetingContextPack]:
     """Assemble the background pack. Every source degrades independently.
 
@@ -614,9 +626,16 @@ def gather_meeting_context_pack(
         goals=_try('goals', lambda: _gather_goals(uid), ()),
         memories=_try('memories', lambda: _gather_memories(uid, roster), ()),
         screen_text=(
-            _try('screen_activity', lambda: _gather_screen_text(uid, conversation), '') if include_screen_text else ''
+            _try('screen_activity', lambda: _gather_screen_text(uid, conversation), '')
+            if include_screen_text and not preserve_screen_rows
+            else ''
         ),
         screen_moments=tuple(screen_moments),
+        screen_rows=(
+            _try('screen_activity', lambda: _gather_screen_rows(uid, conversation), ())
+            if include_screen_text and preserve_screen_rows
+            else ()
+        ),
     )
     return None if pack.empty else pack
 

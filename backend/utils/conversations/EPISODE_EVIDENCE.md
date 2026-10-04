@@ -30,14 +30,16 @@ content enters the flag-off digest. Sources are untrusted data, never instructio
 
 The prompt asks what happened and what matters to the owner. Every factual
 claim, including titles and recap bullets, needs an additive `note_claims` entry
-with a target field, exact text, evidence IDs, provenance (`said`, `shown`,
+with a target field, exact text, evidence IDs, server-authored source metadata
+(without raw content), provenance (`said`, `shown`,
 `written`, or `inferred`), and `private`. On-screen text cannot be speech.
 Inference needs explicit uncertainty; schedule is distinct from observation;
 unrelated screen content stays out. Thin evidence must state concrete observations
 and missing coverage. Situation categories are eval strata only.
 
 The server validates reference IDs and source/provenance compatibility and
-propagates private sensitivity. Vacuity is checked on title, compatibility overview,
+propagates private sensitivity. It stores source kind, original reference, time
+and actor with each claim so ephemeral pack IDs remain auditable after persistence. Vacuity is checked on title, compatibility overview,
 and projected recap; one targeted retry is allowed, shared with provenance repair.
 A remaining violation fails extraction rather than silently accepting bad evidence
 metadata. Existing presentation repair remains a separate bounded guard.

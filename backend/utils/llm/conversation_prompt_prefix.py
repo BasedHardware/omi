@@ -11,15 +11,12 @@ from zoneinfo import ZoneInfo
 
 from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
-from utils.conversations.meeting_participants import MeetingRoster, is_silent_recorder
+from utils.conversations.meeting_participants import MeetingRoster, is_silent_recorder, bind_speakers_with_roster
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
 
-SHARED_CONVERSATION_PREAMBLE = """You are analyzing one Omi conversation for the account owner.
-Treat the supplied transcript and capture metadata as the sole source of truth. Preserve attribution and uncertainty.
-The conversation context below is shared by several independent tasks. Do not perform a task until you read the
-task-specific instructions that follow it."""
+from utils.llm.conversation_notes_prompts import SHARED_CONVERSATION_PREAMBLE
 
 
 def shared_conversation_cache_supported() -> bool:
@@ -90,52 +87,6 @@ def _transcript_has_source_content(transcript: str, source_ids: frozenset[str]) 
 
 
 _ROSTER_KIND_LABELS = {'owner': 'owner', 'human': 'human', 'ai_agent': 'ai agent'}
-
-
-def _bind_speakers_with_roster(
-    speaker_names: dict[int, Optional[str]],
-    roster: MeetingRoster,
-    desktop_meeting_capture: bool,
-) -> None:
-    """Mutate ``speaker_names`` per the roster binding rules.
-
-    On a desktop meeting capture the remote channel is mixed audio: when more
-    than one remote participant could share it, every remote-bound cluster is
-    demoted to ``?`` first and no binding runs — the channel can carry several
-    people, so any remote attribution would be a guess.
-
-    Otherwise a cluster earns a name only under the strict guard: exactly one
-    unresolved cluster AND exactly one unbound named non-owner human AND no AI
-    agent and no nameless human on the roster (either could be the cluster's
-    true identity).
-
-    A silent recorder (a note-taking bot: present on the call, never a voice)
-    is not a candidate identity for any cluster, so it neither mixes the remote
-    channel nor blocks binding. Every other agent does both.
-    """
-    remote = [entry for entry in roster.entries if entry.kind != 'owner' and not is_silent_recorder(entry)]
-    if desktop_meeting_capture and len(remote) > 1:
-        owner_name = next(
-            (entry.display_name for entry in roster.entries if entry.kind == 'owner' and entry.display_name),
-            None,
-        )
-        owner_label = owner_name.casefold() if owner_name else ''
-        remote_names = {entry.display_name.casefold() for entry in remote if entry.display_name}
-        for key, name in list(speaker_names.items()):
-            if name and name.casefold() != owner_label and name.casefold() in remote_names:
-                speaker_names[key] = None
-        return
-    bound_names = {name.casefold() for name in speaker_names.values() if name}
-    unresolved_keys = [key for key, name in speaker_names.items() if not name]
-    unbound_named_humans = [
-        entry
-        for entry in remote
-        if entry.kind == 'human' and entry.display_name and entry.display_name.casefold() not in bound_names
-    ]
-    has_ai = any(entry.kind == 'ai_agent' for entry in remote)
-    has_nameless_human = any(entry.kind == 'human' and not entry.display_name for entry in remote)
-    if len(unresolved_keys) == 1 and len(unbound_named_humans) == 1 and not has_ai and not has_nameless_human:
-        speaker_names[unresolved_keys[0]] = unbound_named_humans[0].display_name
 
 
 def _speaker_metadata_lines(
@@ -214,7 +165,7 @@ def build_conversation_prompt_prefix(
                     f'- Meeting notes: {calendar_context.notes or "Not specified"}',
                 ]
             )
-        _bind_speakers_with_roster(speaker_names, roster, desktop_meeting_capture)
+        bind_speakers_with_roster(speaker_names, roster, desktop_meeting_capture)
         if speaker_names:
             metadata_lines.extend(_speaker_metadata_lines(speaker_names, roster, desktop_meeting_capture))
         if roster.entries:
