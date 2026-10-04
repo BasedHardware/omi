@@ -596,8 +596,17 @@ def job(monkeypatch):
         reads.append(dict(state))
         return None if deleted else dict(state)
 
+    def update_unless_cancelled(job_id, fields):
+        """The Firestore transaction's read-check-write, atomic here as there."""
+        reads.append(dict(state))
+        if deleted or state.get('status') == ImportJobStatus.cancelled.value:
+            return False
+        tf.import_jobs_db.update_import_job(job_id, fields)
+        return True
+
     monkeypatch.setattr(tf.lifecycle_service, 'persist_imported_conversation', store.persist)
     monkeypatch.setattr(tf.import_jobs_db, 'update_import_job', update)
+    monkeypatch.setattr(tf.import_jobs_db, 'update_import_job_unless_cancelled', update_unless_cancelled)
     monkeypatch.setattr(tf.import_jobs_db, 'get_import_job', get)
     monkeypatch.setattr(tf, 'get_user_name', lambda *_a, **_k: 'Jane Doe')
     monkeypatch.setattr(tf, 'load_people_names', lambda _uid: {'sam': 'person-sam'})
@@ -794,7 +803,7 @@ def _numbered_srts(count: int) -> dict:
 
 
 def test_cancelled_job_stops_creating_conversations(tmp_path, job, monkeypatch):
-    """A cancel is read at each progress update (every 10 files), like the Limitless importer."""
+    """A cancel is read before every file, so the import stops before the next one."""
     created_before_cancel = []
     original = job.store.persist
 
@@ -807,18 +816,36 @@ def test_cancelled_job_stops_creating_conversations(tmp_path, job, monkeypatch):
 
     _run(tmp_path, 'export.zip', _zip(_numbered_srts(25)))
 
-    assert len(created_before_cancel) == 10
+    assert len(created_before_cancel) == 1
     assert job.final_status_writes() == []
     assert job.state['status'] == ImportJobStatus.cancelled.value
+    assert job.notifications == []
 
 
-def test_cancel_is_read_per_progress_update_not_per_file(tmp_path, job):
-    _run(tmp_path, 'export.zip', _zip(_numbered_srts(25)))
+def test_every_status_write_is_conditional_on_the_job_not_being_cancelled(tmp_path, job, monkeypatch):
+    """The cancel route writes the job directly, so a read-then-write could overwrite it."""
+    inside, bare = [False], []
+    update, conditional = tf.import_jobs_db.update_import_job, tf.import_jobs_db.update_import_job_unless_cancelled
 
-    # Before the processing write, before the first file, after files 10 and 20, before the final write.
-    assert len(job.reads) == 5
+    def guarded(job_id, fields):
+        inside[0] = True
+        try:
+            return conditional(job_id, fields)
+        finally:
+            inside[0] = False
+
+    def watched(job_id, fields):
+        if not inside[0]:
+            bare.append(fields)
+        update(job_id, fields)
+
+    monkeypatch.setattr(tf.import_jobs_db, 'update_import_job', watched)
+    monkeypatch.setattr(tf.import_jobs_db, 'update_import_job_unless_cancelled', guarded)
+
+    _run(tmp_path, 'export.zip', _zip(_numbered_srts(12)))
+
     assert job.final()['status'] == ImportJobStatus.completed.value
-    assert len(job.store.docs) == 25
+    assert bare == []
 
 
 def test_job_cancelled_before_it_starts_never_becomes_processing(tmp_path, job):
@@ -1024,6 +1051,49 @@ def test_a_shutdown_during_the_final_write_never_overwrites_it(tmp_path, job, mo
     assert [write['status'] for write in job.final_status_writes()] == [final_status]
     assert job.final()['status'] == final_status
     assert all(tf.INTERRUPTED_ERROR not in str(n) for n in job.notifications)
+
+
+class _FakeTransaction:
+    def __init__(self):
+        self.updates = []
+
+    def update(self, ref, fields):
+        self.updates.append((ref, fields))
+
+
+class _FakeJobRef:
+    def __init__(self, doc):
+        self.doc = doc
+        self.read_in = []
+
+    def get(self, transaction=None):
+        self.read_in.append(transaction)
+        return SimpleNamespace(exists=self.doc is not None, to_dict=lambda: self.doc)
+
+
+@pytest.mark.parametrize(
+    ('doc', 'applied'),
+    [
+        pytest.param({'status': 'processing'}, True, id='running'),
+        pytest.param({'status': 'cancelled'}, False, id='cancelled'),
+        pytest.param(None, False, id='deleted'),
+    ],
+)
+def test_the_conditional_job_update_reads_and_writes_in_one_transaction(monkeypatch, doc, applied):
+    import database.import_jobs as import_jobs
+
+    ref, transaction = _FakeJobRef(doc), _FakeTransaction()
+    client = SimpleNamespace(
+        collection=lambda name: SimpleNamespace(document=lambda job_id: ref), transaction=lambda: transaction
+    )
+    monkeypatch.setattr(import_jobs, 'db', client)
+    monkeypatch.setattr(import_jobs.firestore, 'transactional', lambda fn: fn)
+
+    result = import_jobs.update_import_job_unless_cancelled('job-1', {'status': 'completed'})
+
+    assert result is applied
+    assert ref.read_in == [transaction], 'the status is read inside the transaction'
+    assert transaction.updates == ([(ref, {'status': 'completed'})] if applied else [])
 
 
 def test_job_uses_its_own_source_type(monkeypatch):

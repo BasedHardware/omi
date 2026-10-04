@@ -878,10 +878,11 @@ def create_transcript_import_job(uid: str) -> ImportJob:
 
 
 def _job_cancelled(job_id: str) -> bool:
-    """Whether the user cancelled the job; a cancel is final.
+    """Whether the user cancelled (or deleted) the job; a cancel is final.
 
-    The cancel route writes the job document directly and there is no conditional
-    update, so the worker reads the status before each status write it makes.
+    Read before each file. Every status write the worker makes is also conditional
+    on it (``update_import_job_unless_cancelled``), so a cancel that lands between
+    this read and a write is never overwritten.
     """
     current = import_jobs_db.get_import_job(job_id)
     # A deleted job has no one waiting on it: stop quietly, as for a cancel.
@@ -909,17 +910,14 @@ def _notify(uid: str, job_id: str, title: str, body: str, data: Dict[str, str]) 
 
 
 def _fail(uid: str, job_id: str, message: str) -> None:
-    if _job_cancelled(job_id):
+    failed = {
+        'status': ImportJobStatus.failed.value,
+        'error': message,
+        'completed_at': datetime.now(timezone.utc).isoformat(),
+    }
+    if not import_jobs_db.update_import_job_unless_cancelled(job_id, failed):
         logger.info('transcript import job %s was cancelled; not recording its failure', job_id)
         return
-    import_jobs_db.update_import_job(
-        job_id,
-        {
-            'status': ImportJobStatus.failed.value,
-            'error': message,
-            'completed_at': datetime.now(timezone.utc).isoformat(),
-        },
-    )
     _notify(uid, job_id, 'Transcript Import Failed', message, {'type': 'import_failed', 'job_id': job_id})
 
 
@@ -989,15 +987,10 @@ async def process_transcript_import(
     # leaves its thread running, and must not race it with an "interrupted" failure.
     settling = False
     try:
-        if await run_blocking(db_executor, _job_cancelled, job_id):
+        started = {'status': ImportJobStatus.processing.value, 'started_at': datetime.now(timezone.utc).isoformat()}
+        if not await run_blocking(db_executor, import_jobs_db.update_import_job_unless_cancelled, job_id, started):
             logger.info('transcript import job %s was cancelled before it started', job_id)
             return
-        await run_blocking(
-            db_executor,
-            import_jobs_db.update_import_job,
-            job_id,
-            {'status': ImportJobStatus.processing.value, 'started_at': datetime.now(timezone.utc).isoformat()},
-        )
         source = TRANSCRIPT_ORIGINS.get(origin, ConversationSource.unknown)
         owner_name = await run_blocking(db_executor, get_user_name, uid, use_default=False)
         people = await run_blocking(db_executor, load_people_names, uid)
@@ -1005,17 +998,21 @@ async def process_transcript_import(
         errors: List[str] = []
         upload = await run_blocking(storage_executor, _open_upload, upload_path, original_filename, tz)
         total = len(upload.entries)
-        await run_blocking(db_executor, import_jobs_db.update_import_job, job_id, {'total_files': total})
+        if not await run_blocking(
+            db_executor, import_jobs_db.update_import_job_unless_cancelled, job_id, {'total_files': total}
+        ):
+            logger.info('transcript import job %s was cancelled before its first file', job_id)
+            return
         if total == 0:
             settling = True
             await run_blocking(
                 db_executor, _fail, uid, job_id, 'No transcript files (.srt, .vtt or .txt) were found in the upload.'
             )
             return
-        if await run_blocking(db_executor, _job_cancelled, job_id):
-            logger.info('transcript import job %s was cancelled before its first file', job_id)
-            return
         for entry in upload.entries:
+            if await run_blocking(db_executor, _job_cancelled, job_id):
+                logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
+                return
             try:
                 if await run_blocking(
                     storage_executor,
@@ -1039,18 +1036,14 @@ async def process_transcript_import(
                 errors.append(UNEXPECTED_ERROR)
             processed += 1
             if processed % 10 == 0 or processed == total:
-                await run_blocking(
-                    db_executor,
-                    import_jobs_db.update_import_job,
-                    job_id,
-                    {
-                        'processed_files': processed,
-                        'conversations_created': created,
-                        'conversations_skipped': skipped,
-                    },
-                )
-                # One cancel read per progress write, as in the Limitless importer.
-                if processed != total and await run_blocking(db_executor, _job_cancelled, job_id):
+                progress = {
+                    'processed_files': processed,
+                    'conversations_created': created,
+                    'conversations_skipped': skipped,
+                }
+                if not await run_blocking(
+                    db_executor, import_jobs_db.update_import_job_unless_cancelled, job_id, progress
+                ):
                     logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
                     return
         if errors and created == 0 and skipped == 0:
@@ -1059,22 +1052,17 @@ async def process_transcript_import(
                 db_executor, _fail, uid, job_id, f'None of the {total} file(s) could be imported ({errors[0]}).'
             )
             return
-        if await run_blocking(db_executor, _job_cancelled, job_id):
+        settling = True
+        completed = {
+            'status': ImportJobStatus.completed.value,
+            'completed_at': datetime.now(timezone.utc).isoformat(),
+            'error': f'{len(errors)} file(s) could not be imported' if errors else None,
+            'conversations_created': created,
+            'conversations_skipped': skipped,
+        }
+        if not await run_blocking(db_executor, import_jobs_db.update_import_job_unless_cancelled, job_id, completed):
             logger.info('transcript import job %s was cancelled; not recording its completion', job_id)
             return
-        settling = True
-        await run_blocking(
-            db_executor,
-            import_jobs_db.update_import_job,
-            job_id,
-            {
-                'status': ImportJobStatus.completed.value,
-                'completed_at': datetime.now(timezone.utc).isoformat(),
-                'error': f'{len(errors)} file(s) could not be imported' if errors else None,
-                'conversations_created': created,
-                'conversations_skipped': skipped,
-            },
-        )
         body = f'Imported {created} conversation(s) from your transcripts.'
         if skipped:
             body += f' {skipped} were already imported.'

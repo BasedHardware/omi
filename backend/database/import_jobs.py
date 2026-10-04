@@ -1,8 +1,12 @@
 from typing import Any, Dict, List, Optional, cast
 
+from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from ._client import db
+from ._client import db, run_transactional
+
+# ImportJobStatus.cancelled; the database layer does not import the API models.
+_CANCELLED = 'cancelled'
 
 
 def create_import_job(job_data: Dict[str, Any]) -> str:
@@ -17,6 +21,26 @@ def update_import_job(job_id: str, updates: Dict[str, Any]) -> None:
     """Update an existing import job."""
     job_ref = db.collection('import_jobs').document(job_id)
     job_ref.update(updates)
+
+
+def update_import_job_unless_cancelled(job_id: str, updates: Dict[str, Any]) -> bool:
+    """Apply ``updates`` unless the job was cancelled or deleted; whether they were applied.
+
+    The status is read and the update written in one transaction, so a cancel the
+    user makes while a worker writes cannot be overwritten by it.
+    """
+    job_ref = db.collection('import_jobs').document(job_id)
+
+    @firestore.transactional
+    def apply(transaction: Any) -> bool:
+        snapshot = job_ref.get(transaction=transaction)
+        current: object = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        if not isinstance(current, dict) or current.get('status') == _CANCELLED:
+            return False
+        transaction.update(job_ref, updates)
+        return True
+
+    return bool(run_transactional(db, apply))
 
 
 def get_import_job(job_id: str) -> Optional[Dict[str, Any]]:
