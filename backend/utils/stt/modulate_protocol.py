@@ -114,7 +114,7 @@ class ModulatePendingUtterances:
 
     def flush(self, preseconds: int = 0) -> list[dict[str, Any]]:
         pending, self._pending = self._pending, {}
-        segments = []
+        segments: list[dict[str, Any]] = []
         for preview in pending.values():
             start_ms = preview['start_ms']
             if start_ms is None:
