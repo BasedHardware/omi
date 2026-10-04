@@ -11,9 +11,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from config.proactivity_v2 import ProactivityDenied, daily_cap, active_plan, producer_for, utc_now
 from database import proactivity as ledger
+from database import proactivity_redis, redis_db
 from utils import proactivity_flags
 from models.proactivity import ProactivityFeedItem, ProactivityTarget
-from utils.encryption import decrypt, encrypt
 from utils.executors import db_executor, run_blocking
 from utils.notification_dispatch import NotificationIntent, NotificationKind, dispatch_notification_async
 from utils.observability.fallback import record_fallback
@@ -91,6 +91,10 @@ async def publish_item(
     target: ProactivityTarget,
     source_guard: dict[str, Any] | None = None,
 ) -> None:
+    # Content encryption belongs to backend publish/feed hosts. Admission at
+    # the gateway must not require their encryption secret.
+    from utils.encryption import encrypt
+
     uid = item['uid']
     await ensure_admitted(uid, item['producer'])
     if target.kind != item['source_kind'] or target.id != item['source_id']:
@@ -170,6 +174,8 @@ async def close_item(*, item: dict[str, Any], state: str, reason: str = '') -> N
 
 
 def decode_feed_item(uid: str, item: dict[str, Any]) -> ProactivityFeedItem:
+    from utils.encryption import decrypt
+
     content = json.loads(decrypt(item['content'], uid))
     events = item['outcomes']
     feedback = 'thumbs_down' if 'thumbs_down' in events else 'thumbs_up' if 'thumbs_up' in events else 'none'
@@ -210,10 +216,8 @@ def push_payload(item: dict[str, Any]) -> dict[str, str]:
 
 
 def _publish_listen_wakeup(uid: str, payload: dict[str, str]) -> None:
-    from database import redis_db
-
     try:
-        redis_db.r.publish(redis_db.PROACTIVE_MESSAGE_CHANNEL, json.dumps(dict(payload, uid=uid)))
+        proactivity_redis.get_client().publish(redis_db.PROACTIVE_MESSAGE_CHANNEL, json.dumps(dict(payload, uid=uid)))
     except Exception:
         # Feed polling and FCM remain available; a wakeup is never exposure.
         record_fallback(

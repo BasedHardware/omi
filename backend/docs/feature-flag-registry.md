@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-03 -->
+<!-- feature-flag-registry as-of: 2026-10-02 -->
 
 # Feature-flag authority registry
 
@@ -104,7 +104,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-03.
+None as of 2026-10-02.
 
 ## Flags
 
@@ -146,7 +146,7 @@ and an explicit empty literal renders as `''`.
 | `ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENABLED` | Measure, in the action_item_identity log line only, how many reprocess-unmatched prior tasks pair one-to-one with a new task by stored transcript segment ids; never changes what is written or delivered (default on) | backend | env | open | — | — | — | — | pending | 2026-10-31 | dazheng |
 | `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` | Keep a task's id and export marker when a conversation reprocess re-extracts the same task, so it is not sent to the user's cloud task app again; Apple Reminders excluded (default on) | backend | env | open | — | — | — | — | graduate | 2026-10-31 | dazheng |
 | `ACTION_ITEM_REFRESH_PRESERVE_ENABLED` | Preserve existing tasks and transfer smart-merge donor tasks on SMART_MERGE and SYNC_UPDATE; append exact-unmatched tasks (default on) | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | graduate | 2026-11-01 | dazheng |
-| `AUDIO_TIMELINE_SPANS` | Persist projected span-bearing live audio through the existing pusher capability without enabling v2 transcript translation; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-02 | dazheng |
+| `AUDIO_TIMELINE_SPANS` | Persist projected span-bearing live audio through the existing pusher capability without enabling v2 transcript translation; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-02 | dazheng |
 | `BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED` | Gate basic-plan eager extraction | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `BASIC_PLAN_GATE_PROXY_EMBED_ENABLED` | Gate basic-plan embedding proxy | backend | env | closed | declared | true | false | — | graduate | 2026-10-23 | dazheng |
 | `CAPTURE_EVIDENCE_V1_DARK_WRITE` | Piggyback bounded capture evidence metadata on existing writes | backend, mobile, macos | env | closed | — | — | — | — | pending | 2026-10-27 | dazheng |
@@ -296,7 +296,7 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_CANONICAL_MAINTENANCE_FLEX` | Select gateway Flex lane for memory maintenance | backend | env | closed | true | true | true | — | keep | — | unowned |
 | `MEMORY_IMPORT_BODY_STORAGE_MODE` | Select memory import body storage mode | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `MEMORY_TYPESENSE_READINESS_REQUIRED` | Require Typesense projection readiness for memory reads | backend | env | closed | — | — | — | — | keep | — | unowned |
-| `MENTOR_PIPELINE` | Exclusive legacy/v2 or per-user cohort mentor dispatch; cohort flag errors use legacy; default legacy, invalid denies | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `MENTOR_PIPELINE` | Exclusive legacy/v2 or per-user cohort mentor dispatch; cohort flag errors use legacy; default legacy, invalid denies | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | — | dazheng |
 | `OMI_BACKGROUND_FLEX_CAPABLE` | Allow background gateway Flex work | backend | env | closed | true | true | true | — | keep | — | unowned |
 | `OMI_LLM_CHAT_AGENT_ROUTE` | Select managed chat-agent gateway route | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_LLM_GATEWAY_FEATURE_MODE` | Select LLM gateway versus direct serving | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
@@ -354,7 +354,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
 - `MENTOR_GATE_PROMPT_CACHE_ENABLED` — Cache mentor gate prompts (fail: closed)
-- `MENTOR_PIPELINE` — Exclusive legacy/v2 or per-user cohort mentor dispatch; cohort flag errors use legacy; default legacy, invalid denies (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: closed)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
 - `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` — Select gateway output-budget experiments (fail: closed)

@@ -16,7 +16,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from config.proactivity_v2 import ProactivityDenied, Producer, active_plan, daily_cap, producer_for, utc_now
 from database._client import get_customer_firestore_client
-from database import redis_db
+from database import proactivity_redis
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 logger = logging.getLogger(__name__)
@@ -610,7 +610,7 @@ def claim_push(*, uid: str, item_id: str, firestore_client: Any = None, now: dat
     reset = int((now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=3)).timestamp())
     script = "local n=tonumber(redis.call('GET',KEYS[1]) or '0'); if n>=9 then return 0 end; redis.call('INCR',KEYS[1]); redis.call('EXPIREAT',KEYS[1],ARGV[1]); return 1"
     try:
-        if not redis_db.r.eval(script, 1, key, reset):
+        if not proactivity_redis.get_client().eval(script, 1, key, reset):
             raise ProactivityDenied('push_limit')
     except ProactivityDenied:
         raise

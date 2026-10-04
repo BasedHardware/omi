@@ -459,6 +459,199 @@ async def test_departure_mid_connected_prefix_adopts_and_drains(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_post_close_adoption_inherits_drain_and_delivers_tail(monkeypatch):
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: Client())
+    ws = ClientSocket()
+    rt = make_runtime(ws, monkeypatch)
+    persisted: list[str] = []
+    order: list = []
+    stub_transcript_persistence(rt, persisted, monkeypatch, order)
+    actual = rt.receiver
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda action, segments: action(segments))
+    monkeypatch.setattr(actual, '_capture', lambda *a, **k: None)
+    raws: list = []
+    dials: list = []
+    wire_providers(monkeypatch, rt, raws, dials)
+    box: dict = {}
+    watch_supervise(rt, box)
+    rt.conversations.process_conversation = AsyncMock(
+        side_effect=lambda *_a, **_k: order.append(('finalize', 'conv-1')) or True
+    )
+    labels = dict(source='parakeet', successor='soniox')
+    skipped_before = REPLAY_SKIPPED.labels(**labels)._value.get()
+    prefix_hold = asyncio.Event()
+    real_replay_chunks = receiver_module.replay_chunks
+
+    async def held_replay(*args, **kwargs):
+        await prefix_hold.wait()
+        return await real_replay_chunks(*args, **kwargs)
+
+    monkeypatch.setattr(receiver_module, 'replay_chunks', held_replay)
+    start_tail_calls: list = []
+    real_start_tail = ReplayTailSocket.start_tail
+
+    def start_tail_spy(self, **kwargs):
+        start_tail_calls.append(
+            {
+                'host_active': self.host.state.active,
+                'tail_bytes': self._tail_bytes,
+                'deadline': actual.shutdown_deadline,
+                'draining_before': self._draining,
+            }
+        )
+        result = real_start_tail(self, **kwargs)
+        start_tail_calls[-1]['draining_after'] = self._draining
+        return result
+
+    monkeypatch.setattr(ReplayTailSocket, 'start_tail', start_tail_spy)
+    run_task = asyncio.create_task(rt.run())
+    try:
+        await until(lambda: actual.stt_socket is not None)
+        frames = [marker(n, 2) for n in range(3)]
+        for frame in frames:
+            ws.feed_audio(frame)
+        ring_bytes = lambda: sum(len(data) for _, data in (actual._window_ring() or []).snapshot())
+        await until(lambda: ring_bytes() >= sum(len(frame) for frame in frames))
+        actual.stt_socket.raw.fail('first_text_deadline')
+        await until(lambda: actual._replay_delivery is not None)
+        soniox = raws[-1]
+        tail = [marker(7, 2), marker(8, 2)]
+        for packet in tail:
+            ws.feed_audio(packet)
+        delivery = actual._replay_delivery
+        await until(lambda: delivery._tail_bytes >= sum(len(packet) for packet in tail))
+        emitted = {'last': False}
+
+        def on_send():
+            if not emitted['last'] and soniox._ws.sent and soniox._ws.sent[-1] == '':
+                emitted['last'] = True
+                soniox._stream_transcript(
+                    [{'text': 'LAST', 'start': 0.0, 'end': 0.5, 'speaker': 'speaker_0', 'is_user': False}]
+                )
+
+        soniox._ws.on_send = on_send
+        assert len(dials) == 1
+        ws.disconnect()
+        await until(lambda: actual.client_closing and not rt.state.active)
+        deadline = actual.shutdown_deadline
+        assert deadline is not None
+        prefix_hold.set()
+        await asyncio.wait_for(run_task, timeout=20)
+        assert start_tail_calls
+        adoption = start_tail_calls[-1]
+        assert adoption['host_active'] is False
+        assert adoption['tail_bytes'] >= sum(len(packet) for packet in tail)
+        assert adoption['deadline'] == deadline == actual.shutdown_deadline
+        assert adoption['draining_before'] is False
+        assert adoption['draining_after'] is True
+        assert soniox._ws.pcm == b''.join(frames) + b''.join(tail)
+        assert soniox._ws.sent[-1] == ''
+        assert emitted['last']
+        assert soniox._ws.closed and soniox._send_task.done() and soniox._recv_task.done()
+        assert 'LAST' in persisted
+        assert order.index(('persist', 'LAST')) < order.index(('finalize', 'conv-1'))
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == 0
+        assert box['result'].reason == 'lifetime_done'
+        assert rt.state.live_transcription_failed is False
+        assert rt.state.stt_terminal_failure is False
+        assert len(dials) == 1
+    finally:
+        prefix_hold.set()
+        run_task.cancel()
+        await asyncio.gather(run_task, return_exceptions=True)
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_post_close_adoption_deadline_bounds_held_wire_and_meters_once(monkeypatch):
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: Client())
+    monkeypatch.setattr(receiver_module, 'SHUTDOWN_DELIVERY_SECONDS', 0.6, raising=False)
+    monkeypatch.setattr(receiver_module, 'SHUTDOWN_CLEANUP_SECONDS', 0.05, raising=False)
+    monkeypatch.setattr(replay_delivery_module, 'SHUTDOWN_CLEANUP_SECONDS', 0.05, raising=False)
+    ws = ClientSocket()
+    rt = make_runtime(ws, monkeypatch)
+    stub_transcript_persistence(rt, [], monkeypatch)
+    actual = rt.receiver
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda action, segments: action(segments))
+    monkeypatch.setattr(actual, '_capture', lambda *a, **k: None)
+    raws: list = []
+    dials: list = []
+    wire_providers(monkeypatch, rt, raws, dials)
+    labels = dict(source='parakeet', successor='soniox')
+    skipped_before = REPLAY_SKIPPED.labels(**labels)._value.get()
+    prefix_hold = asyncio.Event()
+    real_replay_chunks = receiver_module.replay_chunks
+
+    async def held_replay(*args, **kwargs):
+        await prefix_hold.wait()
+        return await real_replay_chunks(*args, **kwargs)
+
+    monkeypatch.setattr(receiver_module, 'replay_chunks', held_replay)
+    monkeypatch.setattr(Transport, 'abort', lambda self: setattr(self, 'closed', True), raising=False)
+    prefix_bytes = sum(len(marker(n, 2)) for n in range(3))
+    tail_hold = asyncio.Event()
+    tail_write_attempted = asyncio.Event()
+    run_task = asyncio.create_task(rt.run())
+    try:
+        await until(lambda: actual.stt_socket is not None)
+        frames = [marker(n, 2) for n in range(3)]
+        for frame in frames:
+            ws.feed_audio(frame)
+        ring_bytes = lambda: sum(len(data) for _, data in (actual._window_ring() or []).snapshot())
+        await until(lambda: ring_bytes() >= sum(len(frame) for frame in frames))
+        actual.stt_socket.raw.fail('first_text_deadline')
+        await until(lambda: actual._replay_delivery is not None)
+        soniox = raws[-1]
+        tail = marker(7, 2)
+        ws.feed_audio(tail)
+        delivery = actual._replay_delivery
+        await until(lambda: delivery._tail_bytes >= len(tail))
+        real_send = soniox._ws.send
+
+        async def held_tail_send(data):
+            if isinstance(data, bytes) and soniox._ws.byte_count >= prefix_bytes:
+                tail_write_attempted.set()
+                await tail_hold.wait()
+            return await real_send(data)
+
+        monkeypatch.setattr(soniox._ws, 'send', held_tail_send)
+        assert len(dials) == 1
+        began = time.monotonic()
+        ws.disconnect()
+        await until(lambda: actual.client_closing and not rt.state.active)
+        deadline = actual.shutdown_deadline
+        assert deadline is not None
+        prefix_hold.set()
+        await asyncio.wait_for(run_task, timeout=10)
+        elapsed = time.monotonic() - began
+        assert elapsed < 1.5
+        assert tail_write_attempted.is_set()
+        assert replay_delivery_module.clock() >= deadline
+        assert actual.shutdown_deadline == deadline
+        assert soniox._ws.byte_count == prefix_bytes
+        skipped = REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before
+        assert skipped == pytest.approx(len(tail) / (2 * 16000))
+        assert len(dials) == 1
+        assert rt.receiver.stt_drain_complete.is_set()
+        assert soniox._ws.closed
+        assert soniox._send_task.done() and soniox._recv_task.done()
+        orphans = [
+            task
+            for task in asyncio.all_tasks()
+            if task is not asyncio.current_task() and not task.done() and 'stt_' in (task.get_name() or '')
+        ]
+        assert not orphans
+    finally:
+        prefix_hold.set()
+        tail_hold.set()
+        run_task.cancel()
+        await asyncio.gather(run_task, return_exceptions=True)
+        await stop(raws)
+
+
+@pytest.mark.asyncio
 async def test_terminal_state_and_deletion_do_not_wait_for_receive(monkeypatch):
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
     monkeypatch.setattr(window, 'get_stt_client', lambda: Client())

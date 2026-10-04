@@ -889,7 +889,9 @@ frame or longer discards missed-slot credit instead of bursting. A longer unansw
 is cut to its newest 20 seconds with a bounded skipped-seconds metric; this
 explicit cut is not an emitted-text safe trim. Live ingestion continues into a
 bounded 26-second ordered PCM tail, which drains before EOS on departure;
-undelivered teardown cuts are metered. On recovery-armed sessions an ordinary
+undelivered teardown cuts are metered. A replacement adopted while the
+client is closing inherits the drain before its tail pump starts, still
+inside the original shutdown deadline. On recovery-armed sessions an ordinary
 client disconnect owns one absolute shutdown deadline: the receiver keeps
 already-connected prefix and tail delivery, queued wire writes, EOS, and final
 provider callbacks inside a 28-second delivery budget, then allows up to 2
