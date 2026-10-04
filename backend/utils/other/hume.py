@@ -98,7 +98,7 @@ class HumeJobModelPredictionResponseModel:
 
     @classmethod
     def from_multi_dict(
-        cls, prediction_model: str, data: Dict[str, Any]
+        cls, prediction_model: str, data: Any
     ) -> List["HumeJobModelPredictionResponseModel"]:
         model: List[HumeJobModelPredictionResponseModel] = []
         if not isinstance(data, dict):
@@ -113,7 +113,7 @@ class HumeJobModelPredictionResponseModel:
         for prediction in raw_predictions:
             # A failed or partial Hume job can omit the requested model, grouped_predictions, or the
             # inner predictions list; guard the nested lookups so one malformed prediction yields no
-            # emotions instead of an AttributeError/KeyError that 500s the whole callback.
+            # emotions instead of an AttributeError that 500s the whole callback.
             if not isinstance(prediction, dict):
                 continue
             models = prediction.get('models')
@@ -152,7 +152,7 @@ class HumeJobCallbackModel:
         self.predictions = predictions if predictions is not None else []
 
     @classmethod
-    def from_dict(cls, prediction_model: str, data: Dict[str, Any]) -> "HumeJobCallbackModel":
+    def from_dict(cls, prediction_model: str, data: Any) -> "HumeJobCallbackModel":
         if not isinstance(data, dict):
             return cls(None, None, [])
 
