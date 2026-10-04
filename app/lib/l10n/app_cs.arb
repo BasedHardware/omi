@@ -3840,5 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Soubory přepisů",
-    "importTranscriptFilesDescription": "Vyberte přepisy SRT, VTT nebo TXT, nebo jejich ZIP"
+    "importTranscriptFilesDescription": "Vyberte přepisy SRT, VTT nebo TXT, nebo jejich ZIP",
+    "importTooManyAttempts": "Právě probíhá příliš mnoho importů. Zkuste to později.",
+    "importFileTooLarge": "Tento soubor je příliš velký na import."
 }

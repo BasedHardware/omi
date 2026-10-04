@@ -12401,4 +12401,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'SRT, VTT या TXT ट्रांसक्रिप्ट, या उनकी ZIP फ़ाइल चुनें';
+
+  @override
+  String get importTooManyAttempts => 'अभी बहुत अधिक आयात हो रहे हैं। बाद में फिर से प्रयास करें।';
+
+  @override
+  String get importFileTooLarge => 'यह फ़ाइल आयात करने के लिए बहुत बड़ी है।';
 }

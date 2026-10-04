@@ -3840,5 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Tệp bản chép lời",
-    "importTranscriptFilesDescription": "Chọn bản chép lời SRT, VTT hoặc TXT, hoặc tệp ZIP chứa chúng"
+    "importTranscriptFilesDescription": "Chọn bản chép lời SRT, VTT hoặc TXT, hoặc tệp ZIP chứa chúng",
+    "importTooManyAttempts": "Hiện có quá nhiều lượt nhập dữ liệu. Vui lòng thử lại sau.",
+    "importFileTooLarge": "Tệp này quá lớn để nhập dữ liệu."
 }

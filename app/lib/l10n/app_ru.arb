@@ -3875,5 +3875,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Файлы расшифровок",
-    "importTranscriptFilesDescription": "Выберите расшифровки SRT, VTT или TXT либо ZIP-архив с ними"
+    "importTranscriptFilesDescription": "Выберите расшифровки SRT, VTT или TXT либо ZIP-архив с ними",
+    "importTooManyAttempts": "Сейчас слишком много импортов. Повторите попытку позже.",
+    "importFileTooLarge": "Этот файл слишком большой для импорта."
 }

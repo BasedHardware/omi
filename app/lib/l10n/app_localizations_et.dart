@@ -12412,4 +12412,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP';
+
+  @override
+  String get importTooManyAttempts => 'Praegu on liiga palju importimisi. Proovi hiljem uuesti.';
+
+  @override
+  String get importFileTooLarge => 'See fail on importimiseks liiga suur.';
 }

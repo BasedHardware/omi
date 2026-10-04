@@ -3840,5 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "ไฟล์ถอดเสียง",
-    "importTranscriptFilesDescription": "เลือกไฟล์ถอดเสียง SRT, VTT หรือ TXT หรือไฟล์ ZIP ที่รวมไว้"
+    "importTranscriptFilesDescription": "เลือกไฟล์ถอดเสียง SRT, VTT หรือ TXT หรือไฟล์ ZIP ที่รวมไว้",
+    "importTooManyAttempts": "มีการนำเข้ามากเกินไปในขณะนี้ โปรดลองอีกครั้งในภายหลัง",
+    "importFileTooLarge": "ไฟล์นี้ใหญ่เกินไปที่จะนำเข้า"
 }

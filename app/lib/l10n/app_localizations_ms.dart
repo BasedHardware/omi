@@ -12449,4 +12449,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'Pilih transkrip SRT, VTT atau TXT, atau ZIP yang mengandunginya';
+
+  @override
+  String get importTooManyAttempts => 'Terlalu banyak import sekarang. Cuba lagi kemudian.';
+
+  @override
+  String get importFileTooLarge => 'Fail ini terlalu besar untuk diimport.';
 }

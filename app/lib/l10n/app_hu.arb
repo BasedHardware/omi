@@ -3936,5 +3936,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Átiratfájlok",
-    "importTranscriptFilesDescription": "Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt"
+    "importTranscriptFilesDescription": "Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt",
+    "importTooManyAttempts": "Jelenleg túl sok az importálás. Próbálja újra később.",
+    "importFileTooLarge": "Ez a fájl túl nagy az importáláshoz."
 }

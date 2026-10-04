@@ -12467,4 +12467,10 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get importTranscriptFilesDescription =>
       'Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt';
+
+  @override
+  String get importTooManyAttempts => 'Jelenleg túl sok az importálás. Próbálja újra később.';
+
+  @override
+  String get importFileTooLarge => 'Ez a fájl túl nagy az importáláshoz.';
 }

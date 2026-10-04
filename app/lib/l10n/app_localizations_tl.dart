@@ -12519,4 +12519,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito';
+
+  @override
+  String get importTooManyAttempts => 'Masyadong maraming pag-import ngayon. Subukan ulit mamaya.';
+
+  @override
+  String get importFileTooLarge => 'Masyadong malaki ang file na ito para i-import.';
 }

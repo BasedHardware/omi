@@ -12448,4 +12448,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'Izberite prepise SRT, VTT ali TXT ali datoteko ZIP z njimi';
+
+  @override
+  String get importTooManyAttempts => 'Trenutno je preveč uvozov. Poskusite znova pozneje.';
+
+  @override
+  String get importFileTooLarge => 'Ta datoteka je prevelika za uvoz.';
 }

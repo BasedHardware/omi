@@ -12418,4 +12418,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'SRT, VTT বা TXT ট্রান্সক্রিপ্ট, বা সেগুলোর একটি ZIP নির্বাচন করুন';
+
+  @override
+  String get importTooManyAttempts => 'এই মুহূর্তে অনেক বেশি আমদানি চলছে। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get importFileTooLarge => 'এই ফাইলটি আমদানি করার জন্য অনেক বড়।';
 }

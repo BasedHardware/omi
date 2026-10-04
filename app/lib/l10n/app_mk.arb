@@ -11397,5 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Датотеки со транскрипти",
-    "importTranscriptFilesDescription": "Изберете SRT, VTT или TXT транскрипти или ZIP со нив"
+    "importTranscriptFilesDescription": "Изберете SRT, VTT или TXT транскрипти или ZIP со нив",
+    "importTooManyAttempts": "Моментално има премногу увезувања. Обидете се повторно подоцна.",
+    "importFileTooLarge": "Оваа датотека е преголема за увезување."
 }

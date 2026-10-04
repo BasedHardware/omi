@@ -12461,4 +12461,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'Выберите расшифровки SRT, VTT или TXT либо ZIP-архив с ними';
+
+  @override
+  String get importTooManyAttempts => 'Сейчас слишком много импортов. Повторите попытку позже.';
+
+  @override
+  String get importFileTooLarge => 'Этот файл слишком большой для импорта.';
 }

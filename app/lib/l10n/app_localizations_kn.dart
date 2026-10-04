@@ -12455,4 +12455,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'SRT, VTT ಅಥವಾ TXT ಪ್ರತಿಲೇಖನಗಳನ್ನು ಅಥವಾ ಅವುಗಳ ZIP ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ';
+
+  @override
+  String get importTooManyAttempts => 'ಈಗ ತುಂಬಾ ಹೆಚ್ಚು ಆಮದುಗಳು ನಡೆಯುತ್ತಿವೆ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get importFileTooLarge => 'ಈ ಫೈಲ್ ಆಮದು ಮಾಡಲು ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ.';
 }

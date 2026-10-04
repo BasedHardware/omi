@@ -12431,4 +12431,10 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get importTranscriptFilesDescription =>
       'Pilih transkrip SRT, VTT, atau TXT, atau ZIP yang berisi transkrip tersebut';
+
+  @override
+  String get importTooManyAttempts => 'Terlalu banyak impor saat ini. Coba lagi nanti.';
+
+  @override
+  String get importFileTooLarge => 'File ini terlalu besar untuk diimpor.';
 }

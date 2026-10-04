@@ -11397,5 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "படியெடுப்பு கோப்புகள்",
-    "importTranscriptFilesDescription": "SRT, VTT அல்லது TXT படியெடுப்புகளை அல்லது அவற்றின் ZIP கோப்பைத் தேர்ந்தெடுக்கவும்"
+    "importTranscriptFilesDescription": "SRT, VTT அல்லது TXT படியெடுப்புகளை அல்லது அவற்றின் ZIP கோப்பைத் தேர்ந்தெடுக்கவும்",
+    "importTooManyAttempts": "இப்போது அதிகமான இறக்குமதிகள் நடைபெறுகின்றன. பின்னர் மீண்டும் முயலுங்கள்.",
+    "importFileTooLarge": "இந்தக் கோப்பு இறக்குமதி செய்ய மிகவும் பெரியது."
 }

@@ -7,11 +7,14 @@ tests pin the parsers, speaker and people mapping, deterministic idempotent IDs,
 upload limits, and the job lifecycle.
 """
 
+import asyncio
 import codecs
+import inspect
 import io
 import struct
 import time
 import zipfile
+import zlib
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -405,6 +408,7 @@ def job(monkeypatch):
     state = {'status': ImportJobStatus.pending.value}
     notifications: list = []
     reads: list = []
+    deleted: list = []
 
     def update(job_id, fields):
         updates.append(fields)
@@ -412,7 +416,7 @@ def job(monkeypatch):
 
     def get(job_id):
         reads.append(dict(state))
-        return dict(state)
+        return None if deleted else dict(state)
 
     monkeypatch.setattr(tf.lifecycle_service, 'persist_imported_conversation', store.persist)
     monkeypatch.setattr(tf.import_jobs_db, 'update_import_job', update)
@@ -425,19 +429,23 @@ def job(monkeypatch):
         return NotificationDispatchOutcome(NotificationDispatchStatus.DISPATCHED, delivered=1)
 
     monkeypatch.setattr(tf, 'dispatch_notification', dispatch)
-    return SimpleJob(store, updates, state, notifications, reads)
+    return SimpleJob(store, updates, state, notifications, reads, deleted)
 
 
 class SimpleJob:
-    def __init__(self, store, updates, state, notifications, reads):
+    def __init__(self, store, updates, state, notifications, reads, deleted):
         self.store = store
         self.updates = updates
         self.state = state
         self.notifications = notifications
         self.reads = reads
+        self._deleted = deleted
 
     def cancel(self):
         self.state['status'] = ImportJobStatus.cancelled.value
+
+    def delete(self):
+        self._deleted.append(True)
 
     def final_status_writes(self):
         final = (ImportJobStatus.completed.value, ImportJobStatus.failed.value)
@@ -458,7 +466,7 @@ def _zip(files: dict, compression: int = ZIP_DEFLATED) -> bytes:
 def _run(tmp_path, name: str, data: bytes, **kwargs):
     path = tmp_path / name
     path.write_bytes(data)
-    tf.process_transcript_import('job-1', UID, str(path), original_filename=name, **kwargs)
+    asyncio.run(tf.process_transcript_import('job-1', UID, str(path), original_filename=name, **kwargs))
     return path
 
 
@@ -535,14 +543,54 @@ def test_oversized_member_is_reported_and_others_still_import(tmp_path, job, mon
     assert final['error'] == '1 file(s) could not be imported'
 
 
-def test_archive_over_member_or_size_budget_is_rejected_before_reading(tmp_path, job, monkeypatch):
+def _spy_on_member_reads(monkeypatch) -> list:
+    reads: list = []
+    monkeypatch.setattr(tf, '_read_member', lambda archive, info: reads.append(info.filename) or b'')
+    return reads
+
+
+def test_archive_over_the_file_count_is_rejected_before_reading(tmp_path, job, monkeypatch):
     monkeypatch.setattr(tf, 'MAX_TRANSCRIPT_FILES', 2)
+    reads = _spy_on_member_reads(monkeypatch)
+
     _run(tmp_path, 'export.zip', _zip({'a.srt': SRT, 'b.srt': SRT, 'c.srt': SRT}))
 
     final = job.final()
     assert final['status'] == ImportJobStatus.failed.value
     assert 'at most 2 transcript files' in final['error']
+    assert reads == []
     assert job.store.docs == {}
+
+
+def test_archive_over_the_total_size_budget_is_rejected_before_reading(tmp_path, job, monkeypatch):
+    monkeypatch.setattr(tf, 'MAX_ARCHIVE_TRANSCRIPT_BYTES', 2 * len(SRT.encode('utf-8')) - 1)
+    reads = _spy_on_member_reads(monkeypatch)
+
+    _run(tmp_path, 'export.zip', _zip({'a.srt': SRT, 'b.srt': SRT}))
+
+    final = job.final()
+    assert final['status'] == ImportJobStatus.failed.value
+    assert final['error'] == 'The transcripts in this archive are too large to import at once.'
+    assert reads == []
+    assert job.store.docs == {}
+
+
+def _declare_member_size(archive: bytes, size: int) -> bytes:
+    raw = bytearray(archive)
+    struct.pack_into('<L', raw, raw.rfind(b'PK\x01\x02') + 24, size)
+    return bytes(raw)
+
+
+@pytest.mark.parametrize(('declared', 'accepted'), [(50 * 1024 * 1024, True), (50 * 1024 * 1024 + 1, False)])
+def test_an_import_holds_at_most_50_mib_of_transcripts(tmp_path, job, monkeypatch, declared, accepted):
+    """About 1 s of parsing per MiB: 50 MiB keeps one import's work to minutes, not tens of minutes."""
+    reads = _spy_on_member_reads(monkeypatch)
+
+    _run(tmp_path, 'export.zip', _declare_member_size(_zip({'a.srt': SRT}), declared))
+
+    assert (reads == ['a.srt']) is accepted
+    if not accepted:
+        assert job.final()['error'] == 'The transcripts in this archive are too large to import at once.'
 
 
 @pytest.mark.parametrize('compression', [ZIP_BZIP2, ZIP_LZMA], ids=['bzip2', 'lzma'])
@@ -607,6 +655,17 @@ def test_job_cancelled_before_it_starts_never_becomes_processing(tmp_path, job):
     assert not upload.exists(), 'a cancelled upload is still cleaned up'
 
 
+def test_a_deleted_job_is_treated_as_cancelled(tmp_path, job):
+    job.delete()
+
+    upload = _run(tmp_path, 'export.zip', _zip({'a.srt': SRT, 'b.txt': INLINE_TXT}))
+
+    assert job.updates == []
+    assert job.store.docs == {}
+    assert job.notifications == []
+    assert not upload.exists()
+
+
 @pytest.mark.parametrize(
     'files',
     [
@@ -652,6 +711,66 @@ def test_cancel_observed_before_the_final_write_leaves_the_job_cancelled(tmp_pat
     assert job.state['status'] == ImportJobStatus.cancelled.value
     assert job.final_status_writes() == []
     assert job.notifications == []
+
+
+def test_the_worker_holds_a_pool_slot_per_step_never_for_the_whole_import(tmp_path, job, monkeypatch):
+    """backend/AGENTS.md: never hold a pool slot for more than 60 s. The import is an async
+    coordinator; each file is its own short blocking step on the storage pool."""
+    steps = []
+    run_blocking = tf.run_blocking
+
+    async def recording_run_blocking(executor, fn, *args, **kwargs):
+        steps.append((executor, fn))
+        return await run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(tf, 'run_blocking', recording_run_blocking)
+
+    _run(tmp_path, 'export.zip', _zip(_numbered_srts(12)))
+
+    assert inspect.iscoroutinefunction(tf.process_transcript_import)
+    assert [executor for executor, fn in steps if fn is tf._import_file] == [tf.storage_executor] * 12
+    assert (tf.storage_executor, tf._open_upload) in steps
+    job_writes = [executor for executor, fn in steps if fn in (tf._job_cancelled, tf.import_jobs_db.update_import_job)]
+    assert len(job_writes) >= 4 and set(job_writes) == {tf.db_executor}
+    assert job.final()['status'] == ImportJobStatus.completed.value
+    assert len(job.store.docs) == 12
+
+
+@pytest.mark.parametrize('at', ['the open', 'a file'])
+def test_an_import_cancelled_at_shutdown_is_failed_not_left_processing(tmp_path, job, monkeypatch, at):
+    """Shutdown cancels tracked background tasks (drain_background_tasks)."""
+    run_blocking = tf.run_blocking
+    interrupted = tf._open_upload if at == 'the open' else tf._import_file
+
+    async def cancelled_at_step(executor, fn, *args, **kwargs):
+        if fn is interrupted:
+            raise asyncio.CancelledError
+        return await run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(tf, 'run_blocking', cancelled_at_step)
+
+    with pytest.raises(asyncio.CancelledError):
+        _run(tmp_path, 'export.zip', _zip({'a.srt': SRT}))
+
+    assert job.final()['status'] == ImportJobStatus.failed.value
+    assert job.final()['error'] == tf.INTERRUPTED_ERROR
+    assert not (tmp_path / 'export.zip').exists()
+
+
+def test_a_shutdown_after_the_import_completed_keeps_it_completed(tmp_path, job, monkeypatch):
+    run_blocking = tf.run_blocking
+
+    async def cancelled_at_notify(executor, fn, *args, **kwargs):
+        if fn is tf._notify:
+            raise asyncio.CancelledError
+        return await run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(tf, 'run_blocking', cancelled_at_notify)
+
+    with pytest.raises(asyncio.CancelledError):
+        _run(tmp_path, 'export.zip', _zip({'a.srt': SRT}))
+
+    assert job.final()['status'] == ImportJobStatus.completed.value
 
 
 def test_job_uses_its_own_source_type(monkeypatch):
@@ -818,6 +937,11 @@ def _directory_entries(count: int) -> bytes:
         pytest.param(_directory_entries(25_000) + _end_of_directory(25_000, 50 * 25_000), id='many-real-entries'),
         pytest.param(_end_of_directory(30_000, 0), id='many-declared-entries'),
         pytest.param(_end_of_directory(10, 9 * 1024 * 1024), id='oversized-directory'),
+        pytest.param(
+            # zipfile reads entries until the directory bytes run out, whatever the count says.
+            _directory_entries(42_000) + _end_of_directory(1, 51 * 42_000),
+            id='count-lies-about-a-2MiB-directory',
+        ),
         pytest.param(_zip64_end_of_directory(100_000, 0), id='zip64-many-entries'),
         pytest.param(_zip64_end_of_directory(10, 2**40), id='zip64-oversized-directory'),
     ],
@@ -832,6 +956,146 @@ def test_archive_with_an_oversized_directory_is_rejected_before_it_is_opened(tmp
     final = job.final()
     assert final['status'] == ImportJobStatus.failed.value
     assert final['error'] == 'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
+    assert opened == []
+
+
+_LOCAL_HEADER = struct.Struct('<4s5H3L2H')
+_CENTRAL_HEADER = struct.Struct('<4s6H3L5H2L')
+_ZIP64_RECORD = struct.Struct('<4sQ2H2L4Q')
+
+
+def _handmade_zip(
+    members: dict,
+    *,
+    filler: int = 0,
+    zip64: bool = False,
+    extensible: bytes = b'',
+    classic: tuple = (),
+    comment: bytes = b'',
+    prefix: bytes = b'',
+) -> bytes:
+    """A stored ZIP built byte by byte, so its end records can say what a test needs.
+
+    ``filler`` adds directory entries for a non-transcript file; ``classic`` overrides
+    the (entries, directory bytes) written to the classic end record; ``prefix`` is
+    prepended without adjusting any offset (as a self-extractor stub is).
+    """
+    out = bytearray()
+    directory = bytearray()
+    for name, text in members.items():
+        data, raw_name, offset = text.encode('utf-8'), name.encode(), len(out)
+        crc = zlib.crc32(data)
+        out += _LOCAL_HEADER.pack(b'PK\x03\x04', 20, 0, 0, 0, 0, crc, len(data), len(data), len(raw_name), 0)
+        out += raw_name + data
+        directory += _CENTRAL_HEADER.pack(
+            b'PK\x01\x02', 20, 20, 0, 0, 0, 0, crc, len(data), len(data), len(raw_name), 0, 0, 0, 0, 0, offset
+        )
+        directory += raw_name
+    directory += (_CENTRAL_HEADER.pack(b'PK\x01\x02', 20, 20, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0) + b'x') * filler
+    entries, start = len(members) + filler, len(out)
+    out += directory
+    if zip64:
+        record_at = len(out)
+        size = _ZIP64_RECORD.size - 12 + len(extensible)
+        out += _ZIP64_RECORD.pack(b'PK\x06\x06', size, 45, 45, 0, 0, entries, entries, len(directory), start)
+        out += extensible
+        out += struct.pack('<4sLQL', b'PK\x06\x07', 0, record_at, 1)
+    count, size = classic or (entries, len(directory))
+    out += struct.pack('<4s4H2LH', b'PK\x05\x06', 0, 0, count, count, size, start, len(comment)) + comment
+    return prefix + bytes(out)
+
+
+def _decoy_zip64_record() -> bytes:
+    """zip64 extensible data ending in a record that claims a one-entry directory."""
+    return b'\0' * 144 + _ZIP64_RECORD.pack(b'PK\x06\x06', 44, 45, 45, 0, 0, 1, 1, 51, 0)
+
+
+def test_a_decoy_zip64_record_cannot_hide_a_large_directory(tmp_path, job, monkeypatch):
+    """zipfile reads the zip64 record the locator points at; a decoy just before the
+    locator must not be the only one checked."""
+    opened = []
+    monkeypatch.setattr(tf, 'ZipFile', lambda *args, **kwargs: opened.append(args))
+    archive = _handmade_zip(
+        {'a.srt': SRT}, filler=25_000, zip64=True, extensible=_decoy_zip64_record(), classic=(1, 51)
+    )
+
+    _run(tmp_path, 'export.zip', archive)
+
+    assert job.final()['error'] == 'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
+    assert opened == []
+
+
+def test_the_zip64_record_before_the_locator_is_checked_too(tmp_path, job, monkeypatch):
+    """With prepended data the locator's offset misses, and zipfile falls back to the
+    record just before the locator (older CPython reads only that one)."""
+    opened = []
+    monkeypatch.setattr(tf, 'ZipFile', lambda *args, **kwargs: opened.append(args))
+    archive = _handmade_zip({'a.srt': SRT}, filler=25_000, zip64=True, classic=(1, 51), prefix=b'MZ' + b'\0' * 4096)
+
+    _run(tmp_path, 'export.zip', archive)
+
+    assert job.final()['error'] == 'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
+    assert opened == []
+
+
+def test_a_transcript_is_read_with_a_bounded_request():
+    """The cap bounds memory only if no more than one byte past it is ever requested."""
+    requested = []
+
+    class Handle(io.BytesIO):
+        def read(self, size=-1):
+            requested.append(size)
+            return super().read(size)
+
+    data = tf._read_limited(lambda: Handle(b'x' * 10))
+
+    assert data == b'x' * 10
+    assert requested == [tf.MAX_TRANSCRIPT_FILE_BYTES + 1]
+
+
+@pytest.mark.parametrize(
+    'extensible', [pytest.param(b'\0' * 200, id='extensible-data'), pytest.param(b'', id='no-extensible-data')]
+)
+def test_zip64_archive_with_extensible_data_imports(tmp_path, job, extensible):
+    """Writers that need zip64 put 0xFFFF markers in the classic record; the zip64 values count."""
+    archive = _handmade_zip({'a.srt': SRT}, zip64=True, extensible=extensible, classic=(0xFFFF, 0xFFFFFFFF))
+
+    _run(tmp_path, 'export.zip', archive)
+
+    assert job.final()['status'] == ImportJobStatus.completed.value
+    assert len(job.store.docs) == 1
+
+
+def test_the_last_end_record_in_the_tail_is_the_one_checked(tmp_path, job, monkeypatch):
+    """Like zipfile, the last end-of-directory signature wins, even inside the comment."""
+    opened = []
+    monkeypatch.setattr(tf, 'ZipFile', lambda *args, **kwargs: opened.append(args))
+    later_record = struct.pack('<4s4H2LH', b'PK\x05\x06', 0, 0, 60_000, 60_000, 99_000_000, 0, 0)
+
+    # Bytes after it keep zipfile off its no-comment fast path, so the search decides.
+    _run(tmp_path, 'export.zip', _handmade_zip({'a.srt': SRT}, comment=b'xx' + later_record + b'yy'))
+
+    assert job.final()['error'] == 'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
+    assert opened == []
+
+
+def test_an_end_signature_without_a_whole_record_after_it_is_not_a_zip(tmp_path, job):
+    """zipfile gives up when the last signature has no complete record behind it, and so do we."""
+    _run(tmp_path, 'export.zip', _handmade_zip({'a.srt': SRT}, comment=b'PK\x05\x06' + b'z' * 10))
+
+    assert job.final()['error'] == 'The upload is not a valid ZIP archive.'
+
+
+def test_a_zip_without_a_comment_is_read_from_its_final_22_bytes(tmp_path, job, monkeypatch):
+    """zipfile's no-comment fast path: the signature bytes inside the final record's own
+    directory-size field are not a later record."""
+    opened = []
+    monkeypatch.setattr(tf, 'ZipFile', lambda *args, **kwargs: opened.append(args))
+    signature_as_size = struct.unpack('<L', b'PK\x05\x06')[0]
+
+    _run(tmp_path, 'export.zip', _handmade_zip({'a.srt': SRT}, classic=(1, signature_as_size)))
+
+    assert job.final()['error'] == 'This ZIP lists too many files to import. Split it into smaller ZIPs and try again.'
     assert opened == []
 
 

@@ -11397,5 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Datoteke prepisov",
-    "importTranscriptFilesDescription": "Izberite prepise SRT, VTT ali TXT ali datoteko ZIP z njimi"
+    "importTranscriptFilesDescription": "Izberite prepise SRT, VTT ali TXT ali datoteko ZIP z njimi",
+    "importTooManyAttempts": "Trenutno je preveč uvozov. Poskusite znova pozneje.",
+    "importFileTooLarge": "Ta datoteka je prevelika za uvoz."
 }

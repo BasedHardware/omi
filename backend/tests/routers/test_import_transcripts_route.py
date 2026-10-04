@@ -5,6 +5,7 @@ run in the background worker (tests/unit/test_transcript_file_import.py).
 """
 
 import asyncio
+import inspect
 import io
 import os
 import threading
@@ -46,6 +47,10 @@ class _Worker:
     def __call__(self, *args, **kwargs):
         self.args, self.kwargs = args, kwargs
         self.called.set()
+        return self._run()
+
+    async def _run(self) -> None:
+        return None
 
     def wait(self):
         assert self.called.wait(timeout=5), 'the import was never queued'
@@ -217,14 +222,13 @@ def test_failed_job_error_never_names_an_exception_class(staged):
 def test_job_is_failed_when_the_worker_cannot_be_queued(staged, monkeypatch):
     """A job that never reaches the worker must not sit in pending forever."""
     _, worker, tmp_path = staged
-    queue = imports_mod.storage_executor.submit
+    unstarted = []
 
-    def submit(fn, *args, **kwargs):
-        if fn is worker:
-            raise RuntimeError('cannot schedule new futures after shutdown')
-        return queue(fn, *args, **kwargs)
+    def refuse(coro, *, name):
+        unstarted.append(coro)
+        raise RuntimeError('no running event loop')
 
-    monkeypatch.setattr(imports_mod.storage_executor, 'submit', submit)
+    monkeypatch.setattr(imports_mod, 'start_background_task', refuse)
 
     with patch.object(imports_mod.import_jobs_db, 'update_import_job') as update, pytest.raises(HTTPException) as error:
         _call(_upload('call.srt'))
@@ -233,6 +237,21 @@ def test_job_is_failed_when_the_worker_cannot_be_queued(staged, monkeypatch):
     assert update.call_args.args[0] == 'job-9'
     assert update.call_args.args[1]['status'] == ImportJobStatus.failed.value
     assert os.listdir(tmp_path) == [], 'the staged upload is removed'
+    assert unstarted[0].cr_frame is None, 'the unstarted worker coroutine is closed'
+
+
+def test_the_import_runs_as_a_tracked_background_task_not_a_pool_task(staged, monkeypatch):
+    """A pool task would hold one thread for the whole import (backend/AGENTS.md: never over 60 s)."""
+    _, worker, _ = staged
+    started = []
+    monkeypatch.setattr(imports_mod, 'start_background_task', lambda coro, *, name: started.append((coro, name)))
+
+    _call(_upload('call.srt'))
+
+    ((coro, name),) = started
+    assert inspect.iscoroutine(coro)
+    assert name == 'transcript_import:job-9'
+    coro.close()
 
 
 def _client(monkeypatch, enforce) -> TestClient:

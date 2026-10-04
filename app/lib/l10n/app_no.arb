@@ -3840,5 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Transkripsjonsfiler",
-    "importTranscriptFilesDescription": "Velg SRT-, VTT- eller TXT-transkripsjoner, eller en ZIP med dem"
+    "importTranscriptFilesDescription": "Velg SRT-, VTT- eller TXT-transkripsjoner, eller en ZIP med dem",
+    "importTooManyAttempts": "For mange importer akkurat nå. Prøv igjen senere.",
+    "importFileTooLarge": "Denne filen er for stor til å importeres."
 }

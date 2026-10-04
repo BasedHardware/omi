@@ -11,6 +11,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:omi/backend/http/api/imports.dart';
 import 'package:omi/backend/http/api/users.dart' show getUsageDeviceTimeZone;
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -24,6 +25,20 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 /// [createdAt] is a server timestamp and parses as UTC; it is projected to local time first so the
 /// row lands on the reader's day.
 String importJobTimestampLabel(OmiDateFormat dates, DateTime createdAt) => dates.timestamp(createdAt.toLocal());
+
+/// What to tell the user when an import could not start. Rate limits and size limits
+/// get localized copy; another refusal shows the server's own reason (such as an
+/// unsupported file type); server errors keep the generic copy.
+String importStartFailureMessage(AppLocalizations l10n, ImportStartResult result) {
+  final status = result.statusCode;
+  final detail = result.errorDetail;
+  if (status == 429) return l10n.importTooManyAttempts;
+  // A file over the upload limit is refused before it is sent; a proxy in front of
+  // the backend can still answer 413 for a smaller one.
+  if (result.tooLarge || status == 413) return l10n.importFileTooLarge;
+  if (status != null && status >= 400 && status < 500 && detail != null) return detail;
+  return l10n.failedToStartImport;
+}
 
 /// The icon an import-history row shows for a job's importer, or null for the
 /// Limitless logo (Limitless jobs, including those from before sources were reported).
@@ -199,10 +214,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         if (mounted) OmiFeedback.confirm(context, context.l10n.importStarted);
       } else {
         if (mounted) {
-          // The server's own reason (wrong file type, rate limit) says more than the generic copy.
           OmiFeedback.error(
             context,
-            started.errorDetail ?? context.l10n.failedToStartImport,
+            importStartFailureMessage(context.l10n, started),
             actionLabel: context.l10n.tryAgain,
             onAction: retry,
           );

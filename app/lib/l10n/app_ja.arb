@@ -3840,5 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "文字起こしファイル",
-    "importTranscriptFilesDescription": "SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください"
+    "importTranscriptFilesDescription": "SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください",
+    "importTooManyAttempts": "現在インポートが多すぎます。しばらくしてからもう一度お試しください。",
+    "importFileTooLarge": "このファイルはインポートするには大きすぎます。"
 }

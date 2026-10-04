@@ -3875,5 +3875,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Transkript dosyaları",
-    "importTranscriptFilesDescription": "SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin"
+    "importTranscriptFilesDescription": "SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin",
+    "importTooManyAttempts": "Şu anda çok fazla içe aktarma var. Daha sonra tekrar deneyin.",
+    "importFileTooLarge": "Bu dosya içe aktarmak için çok büyük."
 }

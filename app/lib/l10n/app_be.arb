@@ -11397,5 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Файлы стэнаграм",
-    "importTranscriptFilesDescription": "Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі"
+    "importTranscriptFilesDescription": "Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі",
+    "importTooManyAttempts": "Зараз занадта шмат імпартаванняў. Паспрабуйце пазней.",
+    "importFileTooLarge": "Гэты файл занадта вялікі для імпарту."
 }

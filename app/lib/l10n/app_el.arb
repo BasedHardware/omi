@@ -3840,5 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Αρχεία απομαγνητοφωνήσεων",
-    "importTranscriptFilesDescription": "Επιλέξτε απομαγνητοφωνήσεις SRT, VTT ή TXT ή ένα ZIP που τις περιέχει"
+    "importTranscriptFilesDescription": "Επιλέξτε απομαγνητοφωνήσεις SRT, VTT ή TXT ή ένα ZIP που τις περιέχει",
+    "importTooManyAttempts": "Πάρα πολλές εισαγωγές αυτή τη στιγμή. Δοκιμάστε ξανά αργότερα.",
+    "importFileTooLarge": "Αυτό το αρχείο είναι πολύ μεγάλο για εισαγωγή."
 }

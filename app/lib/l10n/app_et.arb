@@ -3840,5 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Transkriptsioonifailid",
-    "importTranscriptFilesDescription": "Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP"
+    "importTranscriptFilesDescription": "Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP",
+    "importTooManyAttempts": "Praegu on liiga palju importimisi. Proovi hiljem uuesti.",
+    "importFileTooLarge": "See fail on importimiseks liiga suur."
 }

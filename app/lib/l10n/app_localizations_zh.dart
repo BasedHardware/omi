@@ -12207,4 +12207,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => '选择 SRT、VTT 或 TXT 转录文件，或包含它们的 ZIP 文件';
+
+  @override
+  String get importTooManyAttempts => '当前导入次数过多，请稍后再试。';
+
+  @override
+  String get importFileTooLarge => '此文件过大，无法导入。';
 }

@@ -8,7 +8,7 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from utils.executors import db_executor, storage_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, storage_executor, run_blocking, start_background_task, submit_with_context
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -158,18 +158,21 @@ async def import_transcript_files(
         await run_blocking(db_executor, _abandon_transcript_import, job.id, upload_path, 'Failed to save uploaded file')
         raise HTTPException(status_code=500, detail="Failed to save uploaded file")
 
+    # An async coordinator, not a pool task: it borrows a thread per step (one file,
+    # one job write) instead of holding a slot for the whole import.
+    worker = process_transcript_import(
+        job.id,
+        uid,
+        upload_path,
+        original_filename=filename,
+        language_code=language,
+        tz=tz,
+        origin=origin,
+    )
     try:
-        storage_executor.submit(
-            process_transcript_import,
-            job.id,
-            uid,
-            upload_path,
-            original_filename=filename,
-            language_code=language,
-            tz=tz,
-            origin=origin,
-        )
+        start_background_task(worker, name=f'transcript_import:{job.id}')
     except Exception as e:
+        worker.close()
         logger.error('transcript import could not be queued job_id=%s error_class=%s', job.id, type(e).__name__)
         await run_blocking(
             db_executor,

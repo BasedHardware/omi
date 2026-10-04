@@ -11397,5 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "فایل‌های رونوشت",
-    "importTranscriptFilesDescription": "رونوشت‌های SRT، VTT یا TXT یا یک فایل ZIP از آن‌ها را انتخاب کنید"
+    "importTranscriptFilesDescription": "رونوشت‌های SRT، VTT یا TXT یا یک فایل ZIP از آن‌ها را انتخاب کنید",
+    "importTooManyAttempts": "در حال حاضر تعداد وارد کردن‌ها بیش از حد است. بعداً دوباره تلاش کنید.",
+    "importFileTooLarge": "این فایل برای وارد کردن بیش از حد بزرگ است."
 }

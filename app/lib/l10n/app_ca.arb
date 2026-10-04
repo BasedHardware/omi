@@ -3840,5 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "Fitxers de transcripció",
-    "importTranscriptFilesDescription": "Selecciona transcripcions SRT, VTT o TXT, o un ZIP que les contingui"
+    "importTranscriptFilesDescription": "Selecciona transcripcions SRT, VTT o TXT, o un ZIP que les contingui",
+    "importTooManyAttempts": "Hi ha massa importacions ara mateix. Torna-ho a provar més tard.",
+    "importFileTooLarge": "Aquest fitxer és massa gran per importar-lo."
 }

@@ -3840,5 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "ملفات النصوص",
-    "importTranscriptFilesDescription": "اختر نصوصًا بصيغة SRT أو VTT أو TXT، أو ملف ZIP يضمها"
+    "importTranscriptFilesDescription": "اختر نصوصًا بصيغة SRT أو VTT أو TXT، أو ملف ZIP يضمها",
+    "importTooManyAttempts": "عدد كبير جدًا من عمليات الاستيراد حاليًا. حاول مرة أخرى لاحقًا.",
+    "importFileTooLarge": "هذا الملف كبير جدًا بحيث لا يمكن استيراده."
 }

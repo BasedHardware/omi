@@ -12347,4 +12347,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'اختر نصوصًا بصيغة SRT أو VTT أو TXT، أو ملف ZIP يضمها';
+
+  @override
+  String get importTooManyAttempts => 'عدد كبير جدًا من عمليات الاستيراد حاليًا. حاول مرة أخرى لاحقًا.';
+
+  @override
+  String get importFileTooLarge => 'هذا الملف كبير جدًا بحيث لا يمكن استيراده.';
 }

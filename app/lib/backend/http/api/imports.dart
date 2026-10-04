@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/backend/http/error_detail.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/imports_integrations_wire.g.dart' as wire;
-import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -141,25 +141,30 @@ String transcriptImportUrl(String baseUrl, {required String language, String? ti
   ).toString();
 }
 
-/// The outcome of starting an import: the job to poll, or the server's reason for
-/// refusing it (its `detail`), when it gave one.
+/// The largest upload the import routes accept (`IMPORT_MAX_PART_SIZE` in
+/// backend/utils/multipart.py). A larger file is refused before it is sent.
+const transcriptImportMaxUploadBytes = 100 * 1024 * 1024;
+
+/// The outcome of starting an import: the job to poll, or why it was refused: the
+/// file was too large to send, or the server's status code and plain-text `detail`.
 class ImportStartResult {
-  const ImportStartResult.started(ImportJobResponse this.job) : errorDetail = null;
-  const ImportStartResult.failed({this.errorDetail}) : job = null;
+  const ImportStartResult.started(ImportJobResponse this.job)
+      : statusCode = null,
+        errorDetail = null,
+        tooLarge = false;
+  const ImportStartResult.failed({this.statusCode, this.errorDetail})
+      : job = null,
+        tooLarge = false;
+  const ImportStartResult.tooLarge()
+      : job = null,
+        statusCode = null,
+        errorDetail = null,
+        tooLarge = true;
 
   final ImportJobResponse? job;
+  final int? statusCode;
   final String? errorDetail;
-}
-
-/// The plain-text `detail` of a refused import upload (wrong file type, rate limit,
-/// server busy), or null when the body carries none.
-String? importStartErrorDetail(String body) {
-  try {
-    final detail = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).detail;
-    return detail is String && detail.trim().isNotEmpty ? detail.trim() : null;
-  } catch (_) {
-    return null;
-  }
+  final bool tooLarge;
 }
 
 /// Start importing SRT, VTT or TXT transcripts (or a ZIP of them) exported from
@@ -169,8 +174,10 @@ Future<ImportStartResult> startTranscriptImport(
   String language = 'en',
   String? timeZone,
   String origin = 'other',
+  int maxUploadBytes = transcriptImportMaxUploadBytes,
 }) async {
   try {
+    if (await file.length() > maxUploadBytes) return const ImportStartResult.tooLarge();
     final response = await makeMultipartApiCall(
       url: transcriptImportUrl(Env.apiBaseUrl ?? '', language: language, timeZone: timeZone, origin: origin),
       files: [file],
@@ -181,7 +188,7 @@ Future<ImportStartResult> startTranscriptImport(
       return ImportStartResult.started(ImportJobResponse.fromGenerated(data));
     }
     Logger.debug('Failed to start transcript import. Status: ${response.statusCode}');
-    return ImportStartResult.failed(errorDetail: importStartErrorDetail(response.body));
+    return ImportStartResult.failed(statusCode: response.statusCode, errorDetail: errorDetailMessage(response.body));
   } catch (e) {
     Logger.debug('Error starting transcript import: $e');
     return const ImportStartResult.failed();

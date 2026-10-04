@@ -11397,5 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "importTranscriptFiles": "ٹرانسکرپٹ فائلیں",
-    "importTranscriptFilesDescription": "SRT، VTT یا TXT ٹرانسکرپٹس، یا ان کی ZIP فائل منتخب کریں"
+    "importTranscriptFilesDescription": "SRT، VTT یا TXT ٹرانسکرپٹس، یا ان کی ZIP فائل منتخب کریں",
+    "importTooManyAttempts": "اس وقت بہت زیادہ درآمدات جاری ہیں۔ بعد میں دوبارہ کوشش کریں۔",
+    "importFileTooLarge": "یہ فائل درآمد کرنے کے لیے بہت بڑی ہے۔"
 }

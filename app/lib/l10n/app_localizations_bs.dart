@@ -12447,4 +12447,10 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima';
+
+  @override
+  String get importTooManyAttempts => 'Trenutno ima previše uvoza. Pokušajte ponovo kasnije.';
+
+  @override
+  String get importFileTooLarge => 'Ova datoteka je prevelika za uvoz.';
 }

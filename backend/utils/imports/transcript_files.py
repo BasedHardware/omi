@@ -9,6 +9,7 @@ and idempotent (a file's content decides its conversation ID).
 
 from __future__ import annotations
 
+import asyncio
 import codecs
 import hashlib
 import html
@@ -18,11 +19,10 @@ import re
 import struct
 import uuid
 import zlib
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
-from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile, ZipInfo, is_zipfile
 from zoneinfo import ZoneInfo
 
@@ -38,6 +38,7 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.projection_payload import omit_null_processing_state
+from utils.executors import db_executor, run_blocking, storage_executor
 from utils.notification_dispatch import (
     NotificationDispatchStatus,
     NotificationIntent,
@@ -51,7 +52,8 @@ TRANSCRIPT_EXTENSIONS = ('.srt', '.vtt', '.txt')
 UPLOAD_EXTENSIONS = ('.zip', *TRANSCRIPT_EXTENSIONS)
 TRANSCRIPT_ORIGINS = {'plaud': ConversationSource.plaud, 'other': ConversationSource.unknown}
 MAX_TRANSCRIPT_FILES = 1000
-MAX_ARCHIVE_TRANSCRIPT_BYTES = 200 * 1024 * 1024
+# Hostile text costs about 1 s of parsing per MiB; this keeps one import to minutes.
+MAX_ARCHIVE_TRANSCRIPT_BYTES = 50 * 1024 * 1024
 # Each file becomes one conversation document, which Firestore caps at 1 MiB. The
 # transcript is stored as zlib(json), and 'enhanced' protection then stores that as
 # hex -> AES -> base64 (about 2.67x), so 350 KB of zlib output is about 935 KB stored.
@@ -61,7 +63,9 @@ MAX_COMPRESSED_TRANSCRIPT_BYTES = 350_000
 # Opening a ZIP loads its whole central directory before any member limit applies,
 # so the size the end record declares is checked first.
 MAX_ZIP_DIRECTORY_ENTRIES = 20_000
-MAX_ZIP_DIRECTORY_BYTES = 8 * 1024 * 1024
+# zipfile reads entries until the directory's declared bytes run out, whatever count
+# it declares, so the byte cap is what bounds the work; 2 MiB is thousands of entries.
+MAX_ZIP_DIRECTORY_BYTES = 2 * 1024 * 1024
 # Deflate honors the per-read output cap; bzip2 and LZMA members decompress a
 # whole input block regardless, so a tiny member can expand past every limit.
 READABLE_ZIP_COMPRESSION = (ZIP_STORED, ZIP_DEFLATED)
@@ -89,6 +93,8 @@ TRANSCRIPT_TOO_LONG = 'transcript too long'
 FILE_DAMAGED = 'file is damaged'
 NOT_SAVED = 'could not be saved'
 UNEXPECTED_ERROR = 'unexpected error'
+# Files already imported are skipped as duplicates on the retry this asks for.
+INTERRUPTED_ERROR = 'The import was interrupted. Please try again.'
 
 
 class TranscriptFileSkipped(Exception):
@@ -603,35 +609,66 @@ _ZIP64_LOCATOR = struct.Struct('<4sLQL')
 _ZIP64_END_OF_DIRECTORY = struct.Struct('<4sQ2H2L4Q')
 
 
-def _declared_zip_directory(path: str) -> Optional[tuple[int, int]]:
-    """(entries, central-directory bytes) an archive's end records declare, or None without one.
+_END_OF_DIRECTORY_SIGNATURE = b'PK\x05\x06'
+_ZIP64_LOCATOR_SIGNATURE = b'PK\x06\x07'
+_ZIP64_END_OF_DIRECTORY_SIGNATURE = b'PK\x06\x06'
 
-    Mirrors how ``zipfile`` finds them: the last end-of-directory signature in the
-    final 64 KiB plus the record, and a zip64 record directly before its locator,
-    whose values replace the classic ones when present.
+
+def _end_of_directory_at(tail: bytes) -> Optional[int]:
+    """Where in the file's tail ``zipfile`` takes the classic end record from, or None.
+
+    The final 22 bytes when they hold a record with no comment; otherwise the last
+    signature, which must have a whole record behind it.
     """
+    record_size = _END_OF_DIRECTORY.size
+    if tail[-record_size:].startswith(_END_OF_DIRECTORY_SIGNATURE) and tail.endswith(b'\0\0'):
+        return len(tail) - record_size
+    index = tail.rfind(_END_OF_DIRECTORY_SIGNATURE)
+    return index if 0 <= index <= len(tail) - record_size else None
+
+
+def _declared_zip_directory(path: str) -> Optional[tuple[int, int]]:
+    """The largest (entries, central-directory bytes) the end records zipfile reads could declare.
+
+    CPython versions differ in which zip64 record they read: the one the locator
+    points at, or the one just before the locator. Both are read, and each field
+    takes the largest value of the classic record and every zip64 record found; the
+    classic 0xFFFF / 0xFFFFFFFF markers only count when no zip64 record exists.
+    """
+    zip64_records: List[tuple[Any, ...]] = []
     with open(path, 'rb') as handle:
         size = handle.seek(0, os.SEEK_END)
-        tail_start = max(0, size - (_END_OF_DIRECTORY.size + 0xFFFF))
+        tail_start = max(0, size - _END_OF_DIRECTORY.size - 0xFFFF)
         handle.seek(tail_start)
         tail = handle.read()
-        # The whole 22-byte record must fit after the signature.
-        index = tail.rfind(b'PK\x05\x06', 0, len(tail) - _END_OF_DIRECTORY.size + 4)
-        if index < 0:
+        index = _end_of_directory_at(tail)
+        if index is None:
             return None
-        fields = _END_OF_DIRECTORY.unpack_from(tail, index)
-        declared = (int(fields[4]), int(fields[5]))
+        classic = _END_OF_DIRECTORY.unpack_from(tail, index)
         locator_at = tail_start + index - _ZIP64_LOCATOR.size
-        record_at = locator_at - _ZIP64_END_OF_DIRECTORY.size
-        if record_at < 0:
-            return declared
-        handle.seek(record_at)
-        record = handle.read(_ZIP64_END_OF_DIRECTORY.size + _ZIP64_LOCATOR.size)
-    locator = _ZIP64_LOCATOR.unpack_from(record, _ZIP64_END_OF_DIRECTORY.size)
-    zip64 = _ZIP64_END_OF_DIRECTORY.unpack_from(record)
-    if locator[0] != b'PK\x06\x07' or zip64[0] != b'PK\x06\x06':
-        return declared
-    return int(zip64[7]), int(zip64[8])
+        if locator_at >= 0:
+            handle.seek(locator_at)
+            locator = handle.read(_ZIP64_LOCATOR.size)
+            if locator.startswith(_ZIP64_LOCATOR_SIGNATURE):
+                pointed_at = int(_ZIP64_LOCATOR.unpack(locator)[2])
+                for record_at in {pointed_at, locator_at - _ZIP64_END_OF_DIRECTORY.size}:
+                    if record_at < 0:
+                        continue
+                    handle.seek(record_at)
+                    record = handle.read(_ZIP64_END_OF_DIRECTORY.size)
+                    if len(record) == _ZIP64_END_OF_DIRECTORY.size and record.startswith(
+                        _ZIP64_END_OF_DIRECTORY_SIGNATURE
+                    ):
+                        zip64_records.append(_ZIP64_END_OF_DIRECTORY.unpack(record))
+    entries = [int(classic[3]), int(classic[4])]
+    directory_bytes = [int(classic[5])]
+    if zip64_records:
+        entries = [count for count in entries if count != 0xFFFF]
+        directory_bytes = [count for count in directory_bytes if count != 0xFFFFFFFF]
+        for record in zip64_records:
+            entries += [int(record[6]), int(record[7])]
+            directory_bytes.append(int(record[8]))
+    return max(entries), max(directory_bytes)
 
 
 def _is_transcript_member(info: ZipInfo) -> bool:
@@ -644,8 +681,18 @@ def _is_transcript_member(info: ZipInfo) -> bool:
     )
 
 
-@contextmanager
-def _upload_entries(upload_path: str, original_filename: str, tz: Optional[str]) -> Iterator[List[_Entry]]:
+@dataclass(frozen=True)
+class _Upload:
+    entries: List[_Entry]
+    archive: Optional[ZipFile] = None
+
+
+def _open_upload(upload_path: str, original_filename: str, tz: Optional[str]) -> _Upload:
+    """The upload's transcript files, after every archive-wide limit is checked.
+
+    One bounded blocking step: it reads the end records and a capped central
+    directory, never a member's data.
+    """
     if PurePosixPath(original_filename).suffix.lower() == '.zip' or is_zipfile(upload_path):
         declared = _declared_zip_directory(upload_path)
         if declared and (declared[0] > MAX_ZIP_DIRECTORY_ENTRIES or declared[1] > MAX_ZIP_DIRECTORY_BYTES):
@@ -656,47 +703,68 @@ def _upload_entries(upload_path: str, original_filename: str, tz: Optional[str])
             archive = ZipFile(upload_path)
         except BadZipFile as exc:
             raise TranscriptImportError('The upload is not a valid ZIP archive.') from exc
-        with archive:
-            members = [info for info in archive.infolist() if _is_transcript_member(info)]
-            if len(members) > MAX_TRANSCRIPT_FILES:
-                raise TranscriptImportError(
-                    f'An import can contain at most {MAX_TRANSCRIPT_FILES} transcript files; '
-                    f'this archive has {len(members)}.'
-                )
-            if sum(info.file_size for info in members) > MAX_ARCHIVE_TRANSCRIPT_BYTES:
-                raise TranscriptImportError('The transcripts in this archive are too large to import at once.')
-            if any(info.flag_bits & 0x1 for info in members):
-                raise TranscriptImportError("Password-protected ZIP files aren't supported.")
-            if any(info.compress_type not in READABLE_ZIP_COMPRESSION for info in members):
-                raise TranscriptImportError(
-                    'This archive uses an unsupported compression method. '
-                    'Re-create the ZIP with standard compression and try again.'
-                )
-            zone = _zone(tz)
-            entries = []
-            for info in members:
-                try:
-                    archived_at = datetime(*info.date_time, tzinfo=zone).astimezone(timezone.utc)
-                except ValueError:
-                    archived_at = None
-                entries.append(
-                    _Entry(
-                        name=info.filename,
-                        read=lambda info=info: _read_member(archive, info),
-                        archived_at=archived_at,
-                    )
-                )
-            yield entries
-        return
+        try:
+            return _Upload(entries=_archive_entries(archive, tz), archive=archive)
+        except BaseException:
+            archive.close()
+            raise
     if PurePosixPath(original_filename).suffix.lower() not in TRANSCRIPT_EXTENSIONS:
         raise TranscriptImportError('Upload a .zip, .srt, .vtt or .txt file.')
-    yield [
-        _Entry(
-            name=original_filename,
-            read=lambda: _read_limited(lambda: open(upload_path, 'rb')),
-            archived_at=None,
+    return _Upload(
+        entries=[
+            _Entry(
+                name=original_filename,
+                read=lambda: _read_limited(lambda: open(upload_path, 'rb')),
+                archived_at=None,
+            )
+        ]
+    )
+
+
+def _archive_entries(archive: ZipFile, tz: Optional[str]) -> List[_Entry]:
+    members = [info for info in archive.infolist() if _is_transcript_member(info)]
+    if len(members) > MAX_TRANSCRIPT_FILES:
+        raise TranscriptImportError(
+            f'An import can contain at most {MAX_TRANSCRIPT_FILES} transcript files; '
+            f'this archive has {len(members)}.'
         )
-    ]
+    if sum(info.file_size for info in members) > MAX_ARCHIVE_TRANSCRIPT_BYTES:
+        raise TranscriptImportError('The transcripts in this archive are too large to import at once.')
+    if any(info.flag_bits & 0x1 for info in members):
+        raise TranscriptImportError("Password-protected ZIP files aren't supported.")
+    if any(info.compress_type not in READABLE_ZIP_COMPRESSION for info in members):
+        raise TranscriptImportError(
+            'This archive uses an unsupported compression method. '
+            'Re-create the ZIP with standard compression and try again.'
+        )
+    zone = _zone(tz)
+    entries: List[_Entry] = []
+    for info in members:
+        try:
+            archived_at = datetime(*info.date_time, tzinfo=zone).astimezone(timezone.utc)
+        except ValueError:
+            archived_at = None
+        entries.append(
+            _Entry(
+                name=info.filename,
+                read=lambda info=info: _read_member(archive, info),
+                archived_at=archived_at,
+            )
+        )
+    return entries
+
+
+def _release_upload(job_id: str, upload_path: str, upload: Optional[_Upload]) -> None:
+    """Close the archive and delete the staged upload; the worker's last step, whatever happened."""
+    try:
+        if upload is not None and upload.archive is not None:
+            upload.archive.close()
+    finally:
+        try:
+            if os.path.exists(upload_path):
+                os.remove(upload_path)
+        except OSError as exc:
+            logger.error('transcript import upload cleanup failed job_id=%s error_class=%s', job_id, type(exc).__name__)
 
 
 # --------------------------------------------------------------------------- job
@@ -720,7 +788,8 @@ def _job_cancelled(job_id: str) -> bool:
     update, so the worker reads the status before each status write it makes.
     """
     current = import_jobs_db.get_import_job(job_id)
-    return bool(current and current.get('status') == ImportJobStatus.cancelled.value)
+    # A deleted job has no one waiting on it: stop quietly, as for a cancel.
+    return current is None or current.get('status') == ImportJobStatus.cancelled.value
 
 
 def _notify(uid: str, job_id: str, title: str, body: str, data: Dict[str, str]) -> None:
@@ -803,7 +872,7 @@ def _import_file(
         raise TranscriptFileSkipped(NOT_SAVED) from exc
 
 
-def process_transcript_import(
+async def process_transcript_import(
     job_id: str,
     uid: str,
     upload_path: str,
@@ -813,70 +882,89 @@ def process_transcript_import(
     tz: Optional[str] = 'UTC',
     origin: str = 'other',
 ) -> None:
-    """Background worker: turn every transcript in the upload into a conversation."""
+    """Background coordinator: turn every transcript in the upload into a conversation.
+
+    Runs as an async task. Each blocking step (a job read or write, opening the
+    archive, importing one file) borrows a pool thread only for that step, so no
+    slot is held for the whole import (backend/AGENTS.md, lane 2).
+    """
+    upload: Optional[_Upload] = None
+    completed = False
     try:
-        if _job_cancelled(job_id):
+        if await run_blocking(db_executor, _job_cancelled, job_id):
             logger.info('transcript import job %s was cancelled before it started', job_id)
             return
-        import_jobs_db.update_import_job(
+        await run_blocking(
+            db_executor,
+            import_jobs_db.update_import_job,
             job_id,
             {'status': ImportJobStatus.processing.value, 'started_at': datetime.now(timezone.utc).isoformat()},
         )
         source = TRANSCRIPT_ORIGINS.get(origin, ConversationSource.unknown)
-        owner_name = get_user_name(uid, use_default=False)
-        people = load_people_names(uid)
+        owner_name = await run_blocking(db_executor, get_user_name, uid, use_default=False)
+        people = await run_blocking(db_executor, load_people_names, uid)
         created = skipped = processed = 0
         errors: List[str] = []
-        with _upload_entries(upload_path, original_filename, tz) as entries:
-            total = len(entries)
-            import_jobs_db.update_import_job(job_id, {'total_files': total})
-            if total == 0:
-                _fail(uid, job_id, 'No transcript files (.srt, .vtt or .txt) were found in the upload.')
-                return
-            if _job_cancelled(job_id):
-                logger.info('transcript import job %s was cancelled before its first file', job_id)
-                return
-            for entry in entries:
-                try:
-                    if _import_file(
-                        job_id,
-                        uid,
-                        entry,
-                        tz=tz,
-                        source=source,
-                        language_code=language_code,
-                        owner_name=owner_name,
-                        people=people,
-                    ):
-                        created += 1
-                    else:
-                        skipped += 1
-                except TranscriptFileSkipped as skip:
-                    errors.append(skip.reason)
-                except Exception as exc:
-                    logger.warning('transcript import file failed job_id=%s error_class=%s', job_id, type(exc).__name__)
-                    errors.append(UNEXPECTED_ERROR)
-                processed += 1
-                if processed % 10 == 0 or processed == total:
-                    import_jobs_db.update_import_job(
-                        job_id,
-                        {
-                            'processed_files': processed,
-                            'conversations_created': created,
-                            'conversations_skipped': skipped,
-                        },
-                    )
-                    # One cancel read per progress write, as in the Limitless importer.
-                    if processed != total and _job_cancelled(job_id):
-                        logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
-                        return
-        if errors and created == 0 and skipped == 0:
-            _fail(uid, job_id, f'None of the {total} file(s) could be imported ({errors[0]}).')
+        upload = await run_blocking(storage_executor, _open_upload, upload_path, original_filename, tz)
+        total = len(upload.entries)
+        await run_blocking(db_executor, import_jobs_db.update_import_job, job_id, {'total_files': total})
+        if total == 0:
+            await run_blocking(
+                db_executor, _fail, uid, job_id, 'No transcript files (.srt, .vtt or .txt) were found in the upload.'
+            )
             return
-        if _job_cancelled(job_id):
+        if await run_blocking(db_executor, _job_cancelled, job_id):
+            logger.info('transcript import job %s was cancelled before its first file', job_id)
+            return
+        for entry in upload.entries:
+            try:
+                if await run_blocking(
+                    storage_executor,
+                    _import_file,
+                    job_id,
+                    uid,
+                    entry,
+                    tz=tz,
+                    source=source,
+                    language_code=language_code,
+                    owner_name=owner_name,
+                    people=people,
+                ):
+                    created += 1
+                else:
+                    skipped += 1
+            except TranscriptFileSkipped as skip:
+                errors.append(skip.reason)
+            except Exception as exc:
+                logger.warning('transcript import file failed job_id=%s error_class=%s', job_id, type(exc).__name__)
+                errors.append(UNEXPECTED_ERROR)
+            processed += 1
+            if processed % 10 == 0 or processed == total:
+                await run_blocking(
+                    db_executor,
+                    import_jobs_db.update_import_job,
+                    job_id,
+                    {
+                        'processed_files': processed,
+                        'conversations_created': created,
+                        'conversations_skipped': skipped,
+                    },
+                )
+                # One cancel read per progress write, as in the Limitless importer.
+                if processed != total and await run_blocking(db_executor, _job_cancelled, job_id):
+                    logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
+                    return
+        if errors and created == 0 and skipped == 0:
+            await run_blocking(
+                db_executor, _fail, uid, job_id, f'None of the {total} file(s) could be imported ({errors[0]}).'
+            )
+            return
+        if await run_blocking(db_executor, _job_cancelled, job_id):
             logger.info('transcript import job %s was cancelled; not recording its completion', job_id)
             return
-        import_jobs_db.update_import_job(
+        await run_blocking(
+            db_executor,
+            import_jobs_db.update_import_job,
             job_id,
             {
                 'status': ImportJobStatus.completed.value,
@@ -886,12 +974,15 @@ def process_transcript_import(
                 'conversations_skipped': skipped,
             },
         )
+        completed = True
         body = f'Imported {created} conversation(s) from your transcripts.'
         if skipped:
             body += f' {skipped} were already imported.'
         if errors:
             body += f' {len(errors)} file(s) could not be imported.'
-        _notify(
+        await run_blocking(
+            db_executor,
+            _notify,
             uid,
             job_id,
             'Transcript Import Complete',
@@ -903,14 +994,18 @@ def process_transcript_import(
                 'conversations_skipped': str(skipped),
             },
         )
+    except asyncio.CancelledError:
+        # Shutdown cancels tracked background tasks (drain_background_tasks): record the
+        # interruption rather than leave the job processing with no worker behind it.
+        if not completed:
+            await run_blocking(db_executor, _fail, uid, job_id, INTERRUPTED_ERROR)
+        raise
     except TranscriptImportError as exc:
-        _fail(uid, job_id, str(exc))
+        await run_blocking(db_executor, _fail, uid, job_id, str(exc))
     except Exception as exc:
         logger.error('transcript import job failed job_id=%s error_class=%s', job_id, type(exc).__name__)
-        _fail(uid, job_id, 'There was an error importing your transcripts. Please try again.')
+        await run_blocking(
+            db_executor, _fail, uid, job_id, 'There was an error importing your transcripts. Please try again.'
+        )
     finally:
-        try:
-            if os.path.exists(upload_path):
-                os.remove(upload_path)
-        except OSError as exc:
-            logger.error('transcript import upload cleanup failed job_id=%s error_class=%s', job_id, type(exc).__name__)
+        await run_blocking(storage_executor, _release_upload, job_id, upload_path, upload)

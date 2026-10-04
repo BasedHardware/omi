@@ -12488,4 +12488,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'Selecciona transcripcions SRT, VTT o TXT, o un ZIP que les contingui';
+
+  @override
+  String get importTooManyAttempts => 'Hi ha massa importacions ara mateix. Torna-ho a provar més tard.';
+
+  @override
+  String get importFileTooLarge => 'Aquest fitxer és massa gran per importar-lo.';
 }

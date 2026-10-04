@@ -12418,4 +12418,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get importTranscriptFilesDescription => 'Velg SRT-, VTT- eller TXT-transkripsjoner, eller en ZIP med dem';
+
+  @override
+  String get importTooManyAttempts => 'For mange importer akkurat nå. Prøv igjen senere.';
+
+  @override
+  String get importFileTooLarge => 'Denne filen er for stor til å importeres.';
 }

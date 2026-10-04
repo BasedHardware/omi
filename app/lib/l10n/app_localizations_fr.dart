@@ -12521,4 +12521,10 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get importTranscriptFilesDescription =>
       'Sélectionnez des transcriptions SRT, VTT ou TXT, ou un ZIP les contenant';
+
+  @override
+  String get importTooManyAttempts => 'Trop d\'importations en ce moment. Réessayez plus tard.';
+
+  @override
+  String get importFileTooLarge => 'Ce fichier est trop volumineux pour être importé.';
 }
