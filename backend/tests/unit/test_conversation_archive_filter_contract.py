@@ -242,6 +242,7 @@ def conversations_db():
         "utils.manual_speaker_assignments",
         os.path.join(str(_BACKEND), "utils", "manual_speaker_assignments.py"),
     )
+    fakes["models.note_claims"] = load_module_fresh("models.note_claims", str(_BACKEND / "models" / "note_claims.py"))
     fakes["models.client_processing"] = client_processing_real
     fakes["utils.conversations.transcript_hash"] = transcript_hash_real
     fakes["utils.conversations.fragment_visibility"] = fragment_visibility_real
