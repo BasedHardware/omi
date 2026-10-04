@@ -12104,7 +12104,51 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => '接続できません。接続を確認してもう一度お試しください。';
+
+  @override
+  String get chatReplyServerError => 'こちら側で問題が発生しました。もう一度お試しください。';
+
+  @override
+  String get chatReplyTimeout => '応答に時間がかかりすぎました。もう一度お試しください。';
+
+  @override
+  String get chatReplyNotSignedIn => 'サインインしていません。サインインして、もう一度お試しください。';
+
+  @override
+  String get chatAppsLoadFailed => 'チャットアプリを読み込めませんでした。もう一度お試しください。';
+
+  @override
+  String get assistantVoiceSettingsTitle => '音声';
+
+  @override
+  String get assistantVoice => 'アシスタントの音声';
+
+  @override
+  String get voiceSharedAcrossDevices => '選択した音声はモバイルとデスクトップで共有されます。';
+
+  @override
+  String get readChatRepliesAloud => 'チャットの返信を読み上げる';
+
+  @override
+  String get readChatRepliesAloudDescription => '「音声応答」が許可する場合にのみ読み上げます。';
+
+  @override
+  String get voicePreviewSample => 'こんにちは、Omiです。これが私の声です。';
+
+  @override
   String get peopleStatsIncomplete => '集計が不完全な場合があります。';
+
+  @override
+  String get previousDay => '前の日';
+
+  @override
+  String get nextDay => '次の日';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$dateのタスクはありません';
+  }
 
   @override
   String get reprocessingConversationProgress => '会話を再処理しています…';
@@ -12156,4 +12200,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => '接続を確認してください';
+
+  @override
+  String get forYou => 'あなたへのおすすめ';
+
+  @override
+  String get stopThese => 'この種類を停止';
+
+  @override
+  String get dismiss => '非表示';
 }

@@ -77,14 +77,18 @@ void main() {
       final action = AnnouncementAction.parse('navigate:/memories');
       expect(action, isA<AnnouncementRoute>());
       expect((action! as AnnouncementRoute).route, '/memories');
-      expect((AnnouncementAction.parse('navigate:settings/data-privacy')! as AnnouncementRoute).route,
-          '/settings/data-privacy');
+      expect(
+        (AnnouncementAction.parse('navigate:settings/data-privacy')! as AnnouncementRoute).route,
+        '/settings/data-privacy',
+      );
       expect((AnnouncementAction.parse('/apps/abc')! as AnnouncementRoute).route, '/apps/abc');
     });
 
     test('url: and bare web links open externally; anything else is ignored', () {
-      expect((AnnouncementAction.parse('url:https://omi.me/blog')! as AnnouncementUrl).uri.toString(),
-          'https://omi.me/blog');
+      expect(
+        (AnnouncementAction.parse('url:https://omi.me/blog')! as AnnouncementUrl).uri.toString(),
+        'https://omi.me/blog',
+      );
       expect((AnnouncementAction.parse('https://omi.me')! as AnnouncementUrl).uri.host, 'omi.me');
       expect(AnnouncementAction.parse('navigate:'), isNull);
       expect(AnnouncementAction.parse('memories'), isNull);

@@ -167,6 +167,32 @@ void main() {
       );
     });
 
+    test('hides for monthly users on the selected monthly price, shows for its annual price', () {
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'unlimited_v2',
+          currentTierId: 'unlimited_v2',
+          selectedPriceIsCurrent: true,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'unlimited_v2',
+          currentTierId: 'unlimited_v2',
+        ),
+        isTrue,
+      );
+    });
+
     test('shows for annual Plus selecting Unlimited — do not restore !isOnAnnualPlan', () {
       expect(
         shouldShowPlanContinueButton(

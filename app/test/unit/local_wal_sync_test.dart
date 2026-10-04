@@ -68,20 +68,26 @@ void main() {
 
     test('capture root and ordinal survive WAL serialization', () async {
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
-      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])), captureRoot: 'root-a');
-      sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])), captureRoot: 'root-a');
+      sync.onFrameCaptured(
+        WalFrame(payload: [1], syncKey: FrameSyncKey([1])),
+        captureRoot: 'root-a',
+      );
+      sync.onFrameCaptured(
+        WalFrame(payload: [2], syncKey: FrameSyncKey([2])),
+        captureRoot: 'root-a',
+      );
       await sync.finalizeCurrentSession();
 
       final stored = Wal.fromJson(sync.testWals.single.toJson());
       expect(stored.captureRoot, 'root-a');
       expect(stored.sourceFrameStart, 0);
       expect(stored.sourceClockEpoch, 0);
-      expect(
-        Wal(timerStart: 0, codec: BleAudioCodec.opus, seconds: 0).toJson().containsKey('capture_root'),
-        false,
-      );
+      expect(Wal(timerStart: 0, codec: BleAudioCodec.opus, seconds: 0).toJson().containsKey('capture_root'), false);
       expect(stored.totalFrames, 2);
-      sync.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([3])), captureRoot: 'root-b');
+      sync.onFrameCaptured(
+        WalFrame(payload: [3], syncKey: FrameSyncKey([3])),
+        captureRoot: 'root-b',
+      );
       expect(sync.testFrames.single.sourceFramePosition, 0);
       expect(sync.testFrames.single.sourceClockEpoch, 0);
     });
@@ -89,19 +95,31 @@ void main() {
     test('socket and WAL receive the same allocated unit after reload', () async {
       const root = '12345678-1234-4234-8234-123456789abc';
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
-      final first = sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])), captureRoot: root);
-      final second = sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])), captureRoot: root);
+      final first = sync.onFrameCaptured(
+        WalFrame(payload: [1], syncKey: FrameSyncKey([1])),
+        captureRoot: root,
+      );
+      final second = sync.onFrameCaptured(
+        WalFrame(payload: [2], syncKey: FrameSyncKey([2])),
+        captureRoot: root,
+      );
       expect((first.sourceFramePosition, second.sourceFramePosition), (0, 1));
       await sync.finalizeCurrentSession();
       final persisted = Wal.fromJson(sync.testWals.single.toJson());
       expect(persisted.sourceFrameStart, first.sourceFramePosition);
 
       final restored = LocalWalSyncImpl(listener)..testWals = [persisted];
-      final next = restored.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([3])), captureRoot: root);
+      final next = restored.onFrameCaptured(
+        WalFrame(payload: [3], syncKey: FrameSyncKey([3])),
+        captureRoot: root,
+      );
       expect(next.sourceFramePosition, 2);
       expect(next.sourceClockEpoch, persisted.sourceClockEpoch);
       await restored.onAudioCodecChanged(BleAudioCodec.pcm16);
-      final changed = restored.onFrameCaptured(WalFrame(payload: [4], syncKey: FrameSyncKey([4])), captureRoot: root);
+      final changed = restored.onFrameCaptured(
+        WalFrame(payload: [4], syncKey: FrameSyncKey([4])),
+        captureRoot: root,
+      );
       expect(changed.sourceClockEpoch, greaterThan(next.sourceClockEpoch!));
       expect(changed.sourceFramePosition, 0);
     });
@@ -478,50 +496,32 @@ void main() {
       expect(sync.testWals, hasLength(maxRetainedCaptureWalCount + 3));
       expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount + 3);
       // Over the count threshold is a warning only: with disk to spare, new audio is still admitted.
-      expect(
-        await sync.ensureStorageAdmission(bytes: 1024, admittedGeneration: sync.sessionGeneration),
-        isTrue,
-      );
+      expect(await sync.ensureStorageAdmission(bytes: 1024, admittedGeneration: sync.sessionGeneration), isTrue);
       expect(sync.retentionRisk?.reason, 'count_cap');
     });
 
     test('admission refuses when free space would breach the 512MiB reserve', () async {
       const reserve = minFreeDiskReserveBytes;
-      final low = LocalWalSyncImpl(
-        listener,
-        freeDiskBytes: () async => reserve + 512,
-      );
-      expect(
-        await low.ensureStorageAdmission(bytes: 1024, admittedGeneration: low.sessionGeneration),
-        isFalse,
-      );
+      final low = LocalWalSyncImpl(listener, freeDiskBytes: () async => reserve + 512);
+      expect(await low.ensureStorageAdmission(bytes: 1024, admittedGeneration: low.sessionGeneration), isFalse);
       expect(low.retentionRisk?.reason, 'disk_reserve');
-      final ok = LocalWalSyncImpl(
-        listener,
-        freeDiskBytes: () async => reserve + 4096,
-      );
-      expect(
-        await ok.ensureStorageAdmission(bytes: 1024, admittedGeneration: ok.sessionGeneration),
-        isTrue,
-      );
+      final ok = LocalWalSyncImpl(listener, freeDiskBytes: () async => reserve + 4096);
+      expect(await ok.ensureStorageAdmission(bytes: 1024, admittedGeneration: ok.sessionGeneration), isTrue);
     });
 
     test('admission fails closed when free space cannot be proven', () async {
-      final unknown = LocalWalSyncImpl(
-        listener,
-        freeDiskBytes: () async => null,
-      );
-      expect(
-        await unknown.ensureStorageAdmission(bytes: 16, admittedGeneration: unknown.sessionGeneration),
-        isFalse,
-      );
+      final unknown = LocalWalSyncImpl(listener, freeDiskBytes: () async => null);
+      expect(await unknown.ensureStorageAdmission(bytes: 16, admittedGeneration: unknown.sessionGeneration), isFalse);
       expect(unknown.retentionRisk?.reason, 'disk_space_unknown');
     });
   });
 
   group('synced-copy auto-remove (expired synced retention)', () {
-    Wal syncedCopy(
-            {required int syncedAt, WalStatus status = WalStatus.synced, WalStorage storage = WalStorage.disk}) =>
+    Wal syncedCopy({
+      required int syncedAt,
+      WalStatus status = WalStatus.synced,
+      WalStorage storage = WalStorage.disk,
+    }) =>
         Wal(
           timerStart: syncedAt - 1000,
           codec: BleAudioCodec.opus,
@@ -1004,15 +1004,17 @@ void main() {
     SyncUploadGate succeedingGate({List<List<String>>? attempted, UploadFilesResult Function()? outcome}) =>
         SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader: (files,
-              {onUploadProgress,
-              conversationId,
-              captureEvidence,
-              recordingSessionId,
-              audioStartSeconds,
-              audioEndSeconds,
-              claimLiveCapture = false,
-              geolocation}) async {
+          uploader: (
+            files, {
+            onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation,
+          }) async {
             attempted?.add(files.map((f) => f.path.split(Platform.pathSeparator).last).toList());
             return outcome?.call() ??
                 UploadFilesResult.done(
@@ -1071,8 +1073,11 @@ void main() {
         expect(wal.status, WalStatus.miss);
         expect(wal.keptForTranscriptRecovery, isTrue);
       }
-      expect(persisted.firstWhere((wal) => wal.id == spoken.id).status, WalStatus.synced,
-          reason: 'the durable index records the synced-retention transition');
+      expect(
+        persisted.firstWhere((wal) => wal.id == spoken.id).status,
+        WalStatus.synced,
+        reason: 'the durable index records the synced-retention transition',
+      );
     });
 
     test('a covered WAL joins synced retention: status, fresh syncedAt, file kept', () async {
@@ -1123,20 +1128,26 @@ void main() {
       const name = 'transport_synced_gap.bin';
       File('${directory.path}/$name').writeAsBytesSync([1, 2, 3]);
       final attempted = <List<String>>[];
-      final local = build(now: now, uploadGate: succeedingGate(attempted: attempted));
+      final local = build(
+        now: now,
+        uploadGate: succeedingGate(attempted: attempted),
+      );
       final transportSynced = stamped(470, status: WalStatus.synced, filePath: name);
       local.testWals = [transportSynced];
 
       await local.confirmSessionTranscription(500, 'c1', transcriptSpans: [(501, 531)]);
 
-      expect(transportSynced.status, WalStatus.miss,
-          reason: 'a synced status from socket sends alone would status-skip the repair upload');
+      expect(
+        transportSynced.status,
+        WalStatus.miss,
+        reason: 'a synced status from socket sends alone would status-skip the repair upload',
+      );
       expect(transportSynced.syncedAt, 0);
       expect(transportSynced.keptForTranscriptRecovery, isTrue);
 
       await local.syncAll();
       expect(attempted, [
-        [name]
+        [name],
       ]);
       expect(transportSynced.status, WalStatus.synced);
       expect(transportSynced.syncedAt, 1000);
@@ -1261,7 +1272,7 @@ void main() {
       expect(
           attempted,
           [
-            [name]
+            [name],
           ],
           reason: 'the failed-closed copy uploads on the next pass');
       expect(covered.status, WalStatus.synced);
@@ -1277,8 +1288,12 @@ void main() {
       local.testWals = [oldestPending, ...retainedCovered];
 
       // The saved transcript covers the 724 newer copies; the oldest gap stays pending.
-      final outcome =
-          await local.confirmSessionTranscription(1, 'c1', transcriptSpans: [(50, 1000)], conversationStartSeconds: 1);
+      final outcome = await local.confirmSessionTranscription(
+        1,
+        'c1',
+        transcriptSpans: [(50, 1000)],
+        conversationStartSeconds: 1,
+      );
       expect(outcome.kept, 1);
       expect(retainedCovered.every((wal) => wal.status == WalStatus.synced && wal.syncedAt > 0), isTrue);
 
@@ -1332,8 +1347,11 @@ void main() {
 
       await local.deleteAllSyncedWals();
 
-      expect(local.testWals, contains(wal),
-          reason: 'a directory where the file should be is not proof the copy is gone');
+      expect(
+        local.testWals,
+        contains(wal),
+        reason: 'a directory where the file should be is not proof the copy is gone',
+      );
       expect(persisted, contains(wal));
     });
 
@@ -1368,8 +1386,11 @@ void main() {
 
       await local.deleteWal(covered);
 
-      expect(File('${directory.path}/$name').existsSync(), isTrue,
-          reason: 'the sibling WAL still references the physical file');
+      expect(
+        File('${directory.path}/$name').existsSync(),
+        isTrue,
+        reason: 'the sibling WAL still references the physical file',
+      );
       expect(local.testWals, isNot(contains(covered)));
       expect(local.testWals, contains(sibling));
       expect(saves, 1);
@@ -1386,8 +1407,11 @@ void main() {
 
       await local.deleteWal(detached);
 
-      expect(local.testWals, containsAll([a, b]),
-          reason: 'two tracked records share the id: deleting either is unproven');
+      expect(
+        local.testWals,
+        containsAll([a, b]),
+        reason: 'two tracked records share the id: deleting either is unproven',
+      );
       expect(File('${directory.path}/$name').existsSync(), isTrue);
     });
 
@@ -1510,8 +1534,11 @@ void main() {
 
       await local.deleteAllSyncedWals();
 
-      expect(local.testWals, contains(successor),
-          reason: 'the captured record is no longer tracked — nothing may be removed in its name');
+      expect(
+        local.testWals,
+        contains(successor),
+        reason: 'the captured record is no longer tracked — nothing may be removed in its name',
+      );
       expect(File('${directory.path}/$name').existsSync(), isTrue);
     });
 
@@ -1523,8 +1550,12 @@ void main() {
       SharedPreferencesUtil().autoRemoveSyncedCopies = true;
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final local = build();
-      final expired =
-          stamped(100, filePath: nameA, status: WalStatus.synced, syncedAt: now - 31 * Duration.secondsPerDay);
+      final expired = stamped(
+        100,
+        filePath: nameA,
+        status: WalStatus.synced,
+        syncedAt: now - 31 * Duration.secondsPerDay,
+      );
       final fresh = stamped(100, filePath: nameB, status: WalStatus.synced, syncedAt: now);
       expect(expired.id, fresh.id);
       local.testWals = [expired, fresh];
@@ -1622,8 +1653,10 @@ void main() {
       final telemetry = <Map<String, Object?>>[];
       const name = 'recovery_queued.bin';
       File('${directory.path}/$name').writeAsBytesSync([1, 2, 3]);
-      final local =
-          build(telemetry: telemetry, uploadGate: succeedingGate(outcome: () => UploadFilesResult.queued('job-1')));
+      final local = build(
+        telemetry: telemetry,
+        uploadGate: succeedingGate(outcome: () => UploadFilesResult.queued('job-1')),
+      );
       final wal = stamped(100, filePath: name);
       local.testWals = [wal];
 
@@ -1645,12 +1678,14 @@ void main() {
       late LocalWalSyncImpl local;
       local = build(
         telemetry: telemetry,
-        uploadGate: succeedingGate(outcome: () {
-          local.clearUserData();
-          return UploadFilesResult.done(
-            SyncLocalFilesResponse(newConversationIds: ['c1'], updatedConversationIds: []),
-          );
-        }),
+        uploadGate: succeedingGate(
+          outcome: () {
+            local.clearUserData();
+            return UploadFilesResult.done(
+              SyncLocalFilesResponse(newConversationIds: ['c1'], updatedConversationIds: []),
+            );
+          },
+        ),
       );
       final wal = stamped(100, filePath: name);
       wal.ownerUid = 'owner';
@@ -1669,17 +1704,11 @@ void main() {
       final telemetry = <Map<String, Object?>>[];
       const name = 'persist_fail.bin';
       File('${directory.path}/$name').writeAsBytesSync([1, 2, 3]);
-      final local = build(
-        telemetry: telemetry,
-        persist: (wals) async => throw StateError('synthetic save failure'),
-      );
+      final local = build(telemetry: telemetry, persist: (wals) async => throw StateError('synthetic save failure'));
       final wal = stamped(100, filePath: name);
       local.testWals = [wal];
 
-      await expectLater(
-        local.confirmSessionTranscription(100, 'c1'),
-        throwsA(isA<StateError>()),
-      );
+      await expectLater(local.confirmSessionTranscription(100, 'c1'), throwsA(isA<StateError>()));
 
       expect(telemetry, isEmpty);
       expect(wal.keptForTranscriptRecovery, isTrue);
@@ -1705,10 +1734,7 @@ void main() {
       expect(tail.status, WalStatus.miss);
       final uploadEvents = telemetry.where((event) => event['phase'] == 'upload').toList();
       expect(uploadEvents, isEmpty);
-      expect(
-        telemetry.every((event) => (event['kept_uploaded_seconds'] as double) == 0),
-        isTrue,
-      );
+      expect(telemetry.every((event) => (event['kept_uploaded_seconds'] as double) == 0), isTrue);
     });
 
     test('the single-WAL upload path clears the marker on acceptance too', () async {
@@ -1778,10 +1804,7 @@ void main() {
     });
 
     test('unordered, overlapping and adjacent spans that fully cover do', () {
-      expect(
-        walCoveredByTranscript(wal(100, 60), [(150, 165), (118, 152), (100, 120)], 100),
-        isTrue,
-      );
+      expect(walCoveredByTranscript(wal(100, 60), [(150, 165), (118, 152), (100, 120)], 100), isTrue);
       expect(walCoveredByTranscript(wal(100, 60), [(100, 130), (130, 160)], 100), isTrue);
       expect(
         walCoveredByTranscript(wal(100, 60), [(140, 170), (90, 140)], 100),
@@ -1799,31 +1822,58 @@ void main() {
     });
 
     test('a thirty-second interior pause is tolerated, thirty-one is not', () {
-      expect(walCoveredByTranscript(wal(100, 100), [(100, 120), (150, 200)], 100), isTrue,
-          reason: 'a 30 s silence between utterances is a pause, not a hole');
-      expect(walCoveredByTranscript(wal(100, 100), [(100, 120), (151, 200)], 100), isFalse,
-          reason: 'a 31 s interior hole is longer than the pause tolerance');
-      expect(walCoveredByTranscript(wal(100, 60), [(100, 158), (159, 160)], 100), isTrue,
-          reason: 'a one-second hole near the edge is an interior pause, not uncovered audio');
-      expect(walCoveredByTranscript(wal(100, 60), [(100, 158)], 100), isTrue,
-          reason: 'a two-second uncovered tail is outer-edge tolerance, not a hole');
-      expect(walCoveredByTranscript(wal(100, 60), [(101, 102), (103, 160)], 100), isTrue,
-          reason: 'a one-second head and a one-second interior pause both fall inside the tolerance');
+      expect(
+        walCoveredByTranscript(wal(100, 100), [(100, 120), (150, 200)], 100),
+        isTrue,
+        reason: 'a 30 s silence between utterances is a pause, not a hole',
+      );
+      expect(
+        walCoveredByTranscript(wal(100, 100), [(100, 120), (151, 200)], 100),
+        isFalse,
+        reason: 'a 31 s interior hole is longer than the pause tolerance',
+      );
+      expect(
+        walCoveredByTranscript(wal(100, 60), [(100, 158), (159, 160)], 100),
+        isTrue,
+        reason: 'a one-second hole near the edge is an interior pause, not uncovered audio',
+      );
+      expect(
+        walCoveredByTranscript(wal(100, 60), [(100, 158)], 100),
+        isTrue,
+        reason: 'a two-second uncovered tail is outer-edge tolerance, not a hole',
+      );
+      expect(
+        walCoveredByTranscript(wal(100, 60), [(101, 102), (103, 160)], 100),
+        isTrue,
+        reason: 'a one-second head and a one-second interior pause both fall inside the tolerance',
+      );
     });
 
     test('no actual overlap fails even on a short WAL', () {
       expect(walCoveredByTranscript(wal(200, 10), [(100, 150)], 100), isFalse);
-      expect(walCoveredByTranscript(wal(200, 1), [(198, 199)], 100), isFalse,
-          reason: 'a one-second WAL with zero overlap cannot be tolerated into coverage');
-      expect(walCoveredByTranscript(wal(200, 1), [(201, 205)], 100), isFalse,
-          reason: 'a span beginning at the WAL end is no evidence either');
+      expect(
+        walCoveredByTranscript(wal(200, 1), [(198, 199)], 100),
+        isFalse,
+        reason: 'a one-second WAL with zero overlap cannot be tolerated into coverage',
+      );
+      expect(
+        walCoveredByTranscript(wal(200, 1), [(201, 205)], 100),
+        isFalse,
+        reason: 'a span beginning at the WAL end is no evidence either',
+      );
     });
 
     test('a short utterance covers when both edges fall inside the tolerance', () {
-      expect(walCoveredByTranscript(wal(100, 60), [(130, 131)], 100), isTrue,
-          reason: 'a 30 s head and a 29 s tail around one utterance are both tolerable');
-      expect(walCoveredByTranscript(wal(100, 60), [(120, 128)], 100), isFalse,
-          reason: 'the same utterance ending 32 s early leaves an intolerable tail');
+      expect(
+        walCoveredByTranscript(wal(100, 60), [(130, 131)], 100),
+        isTrue,
+        reason: 'a 30 s head and a 29 s tail around one utterance are both tolerable',
+      );
+      expect(
+        walCoveredByTranscript(wal(100, 60), [(120, 128)], 100),
+        isFalse,
+        reason: 'the same utterance ending 32 s early leaves an intolerable tail',
+      );
     });
 
     test('a head or tail longer than the tolerance fails', () {
@@ -1834,10 +1884,18 @@ void main() {
     test('two minutes of conversation with natural pauses and long silences are covered', () {
       expect(
         walCoveredByTranscript(
-          wal(100, 120),
-          [(102, 110), (112, 116), (121, 133), (135, 141), (149, 154), (172, 184), (187, 189), (214, 220)],
-          100,
-        ),
+            wal(100, 120),
+            [
+              (102, 110),
+              (112, 116),
+              (121, 133),
+              (135, 141),
+              (149, 154),
+              (172, 184),
+              (187, 189),
+              (214, 220),
+            ],
+            100),
         isTrue,
       );
     });
@@ -1881,13 +1939,7 @@ void main() {
     });
 
     test('skips non-finite ends and non-positive arrivals instead of trusting them', () {
-      expect(
-        transcriptStartOnDevice(
-          [('a', double.nan), ('b', 20), ('c', 30)],
-          {'a': 2000, 'b': 1022, 'c': 0},
-        ),
-        1002,
-      );
+      expect(transcriptStartOnDevice([('a', double.nan), ('b', 20), ('c', 30)], {'a': 2000, 'b': 1022, 'c': 0}), 1002);
       expect(transcriptStartOnDevice([('a', 10)], {'a': 0}), isNull);
       expect(transcriptStartOnDevice([('a', double.infinity)], {'a': 1022}), isNull);
     });
@@ -1941,10 +1993,7 @@ void main() {
     await local.walReady;
 
     for (var i = 0; i < 2500; i++) {
-      local.onFrameCaptured(WalFrame(
-        payload: [0xAA, i & 0xFF],
-        syncKey: FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF, 0]),
-      ));
+      local.onFrameCaptured(WalFrame(payload: [0xAA, i & 0xFF], syncKey: FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF, 0])));
     }
     await local.stop();
 

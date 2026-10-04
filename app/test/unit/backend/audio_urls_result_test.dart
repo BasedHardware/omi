@@ -50,10 +50,7 @@ void main() {
     });
 
     test('a 200 with an undecodable body is a decode failure', () async {
-      final result = await getConversationAudioSignedUrls(
-        'conv-1',
-        send: (_) async => http.Response('not json', 200),
-      );
+      final result = await getConversationAudioSignedUrls('conv-1', send: (_) async => http.Response('not json', 200));
       expect((result as ApiFailure<AudioUrlsResponse>).problem.kind, ApiProblemKind.decode);
     });
   });

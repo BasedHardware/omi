@@ -12325,7 +12325,51 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Не ўдалося падключыцца. Праверце злучэнне і паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatReplyServerError => 'Нешта пайшло не так на нашым баку. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatReplyTimeout => 'Адказ заняў занадта шмат часу. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Вы не ўвайшлі. Увайдзіце і паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatAppsLoadFailed => 'Не ўдалося загрузіць праграмы чата. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Голас';
+
+  @override
+  String get assistantVoice => 'Голас памочніка';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Выбраны вамі голас выкарыстоўваецца на мабільнай прыладзе і на камп\'ютары.';
+
+  @override
+  String get readChatRepliesAloud => 'Чытаць адказы ў чаце ўголас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Агучвае толькі тады, калі гэта дазваляе «Галасавы адказ».';
+
+  @override
+  String get voicePreviewSample => 'Прывітанне, я Omi. Гэта мой голас.';
+
+  @override
   String get peopleStatsIncomplete => 'Колькасць можа быць няпоўнай.';
+
+  @override
+  String get previousDay => 'Папярэдні дзень';
+
+  @override
+  String get nextDay => 'Наступны дзень';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Няма задач на $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Паўторная апрацоўка размовы…';
@@ -12378,4 +12422,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Праверце злучэнне';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Спыніць гэта';
+
+  @override
+  String get dismiss => 'Схаваць';
 }

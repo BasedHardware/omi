@@ -14,6 +14,12 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -22,6 +28,12 @@ environments:
             category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
+            category: rollout
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
             category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
@@ -137,6 +149,9 @@ environments:
             value: 'true'
             category: rollout
           STT_RESILIENT_RECONNECT:
+            value: 'false'
+            category: rollout
+          STT_FAILOVER_RECOVERY_ENABLED:
             value: 'false'
             category: rollout
           STT_ROUTING_MODE:
@@ -453,12 +468,24 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -760,9 +787,6 @@ environments:
         MEMORY_BELIEF_MODEL_ENABLED:
           category: rollout
           value: 'true'
-        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
-          category: rollout
-          value: 'true'
         BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
           category: rollout
           value: 'true'
@@ -841,13 +865,28 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
               value: 'true'
               category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
@@ -891,6 +930,9 @@ environments:
               category: rollout
             TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
               value: '4'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
@@ -1135,13 +1177,31 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
@@ -1391,13 +1451,31 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
@@ -1600,13 +1678,31 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
@@ -2044,6 +2140,30 @@ environments:
       namespace: prod-omi-backend
       release_name: prod-omi-llm-gateway
       ingress_name: prod-omi-llm-gateway
+      env:
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
+          value: '13151'
+          category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
+          category: service_discovery
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
       static_address_name: prod-omi-self-hosted-llm-ip-address
     gcp_project: based-hardware
     gke:
@@ -2052,6 +2172,12 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'true'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2060,6 +2186,12 @@ environments:
             category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
+            category: rollout
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
             category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
@@ -2173,6 +2305,9 @@ environments:
             value: 'true'
             category: rollout
           STT_RESILIENT_RECONNECT:
+            value: 'false'
+            category: rollout
+          STT_FAILOVER_RECOVERY_ENABLED:
             value: 'false'
             category: rollout
           STT_ROUTING_MODE:
@@ -2391,6 +2526,23 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          PROACTIVITY_REDIS_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: REDIS_DB_HOST
+          PROACTIVITY_REDIS_PORT:
+            value: '13151'
+            category: service_discovery
+          PROACTIVITY_REDIS_PASSWORD:
+            secret:
+              name: prod-omi-backend-secrets
+              key: REDIS_DB_PASSWORD
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -2507,12 +2659,24 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'true'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -2557,6 +2721,27 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          POSTHOG_PROJECT_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: POSTHOG_PROJECT_API_KEY
+          PROACTIVITY_REDIS_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: REDIS_DB_HOST
+          PROACTIVITY_REDIS_PORT:
+            value: '13151'
+            category: service_discovery
+          PROACTIVITY_REDIS_PASSWORD:
+            secret:
+              name: prod-omi-backend-secrets
+              key: REDIS_DB_PASSWORD
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -2690,9 +2875,6 @@ environments:
         MEMORY_BELIEF_MODEL_ENABLED:
           category: rollout
           value: 'false'
-        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
-          category: rollout
-          value: 'false'
         BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
           category: rollout
           value: 'false'
@@ -2713,6 +2895,15 @@ environments:
           category: telemetry
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
+          category: rollout
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
+          category: service_discovery
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
           category: rollout
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
@@ -2779,13 +2970,28 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
               value: 'true'
               category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
@@ -2829,6 +3035,9 @@ environments:
               category: rollout
             TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
               value: '4'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
+              value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
@@ -2935,7 +3144,7 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
+              value: https://us.posthog.com
               category: telemetry
             GCP_LOCATION:
               value: us-central1
@@ -2958,6 +3167,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            MENTOR_PIPELINE:
+              value: cohort
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -3090,13 +3302,31 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
@@ -3175,7 +3405,7 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
+              value: https://us.posthog.com
               category: telemetry
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
@@ -3227,6 +3457,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            MENTOR_PIPELINE:
+              value: cohort
+              category: rollout
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
               value: 'true'
               category: rollout
@@ -3336,13 +3569,31 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
@@ -3424,7 +3675,7 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
+              value: https://us.posthog.com
               category: telemetry
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
@@ -3452,6 +3703,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            MENTOR_PIPELINE:
+              value: cohort
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -3556,13 +3810,31 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_LINEAGE_S1_REQUIRED:
+              value: 'true'
+              category: rollout
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
               value: 'true'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
@@ -3629,7 +3901,7 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
+              value: https://us.posthog.com
               category: telemetry
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
@@ -3643,6 +3915,9 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
+            MENTOR_PIPELINE:
+              value: cohort
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             ACCOUNT_DELETION_DISPATCH_MODE:

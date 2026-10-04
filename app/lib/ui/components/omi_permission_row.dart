@@ -169,7 +169,8 @@ class OmiPermissionRow extends StatelessWidget {
                   child: Row(
                     children: [
                       Expanded(
-                          child: Text(title, style: OmiType.headline.copyWith(fontSize: OmiType.callout.fontSize))),
+                        child: Text(title, style: OmiType.headline.copyWith(fontSize: OmiType.callout.fontSize)),
+                      ),
                       const SizedBox(width: OmiSpacing.sm),
                       trailing,
                     ],

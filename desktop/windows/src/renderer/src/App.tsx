@@ -81,6 +81,17 @@ function AppShellInner(): React.JSX.Element {
     })
   }, [navigate])
 
+  useEffect(() => {
+    if (IS_SECONDARY_WINDOW) return
+    return window.omi.onProactivityNavigate?.((target) => {
+      if (!target.id) return
+      if (target.kind === 'conversation')
+        navigate(`/conversations/${encodeURIComponent(target.id)}`)
+      if (target.kind === 'action_item')
+        navigate(`/tasks?proactivity_task=${encodeURIComponent(target.id)}`)
+    })
+  }, [navigate])
+
   // Honor the one-shot destination requested when onboarding completes. The
   // shell mounts at /home after the
   // onboarding gate redirects; we consume the pending route here and jump to it.

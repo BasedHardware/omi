@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, STTServingSurface, parakeet_supports_language
+from config.live_stt_replay import ReplayLimits, parse_replay_limits
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class Target:
     features: tuple[str, ...] = ('streaming',)
     endpoint: str | None = None
     capacity_env: str | None = None
+    replay: ReplayLimits | None = None
 
     def capable(self, language: str | None, features: frozenset[str] = frozenset({'streaming'})) -> bool:
         lang = (language or 'multi').lower().split('-', 1)[0]
@@ -34,7 +36,9 @@ class Target:
         return self.family == 'soniox'
 
     def ramp(self) -> float:
-        return percent('PARAKEET_WINDOW_ALLOCATION_PERCENT', 0) if self.id == 'parakeet-window' else self.ramp_percent
+        if self.id == 'parakeet-window':
+            return min(self.ramp_percent, percent('PARAKEET_WINDOW_ALLOCATION_PERCENT', 0))
+        return self.ramp_percent
 
     def at_capacity(self) -> bool:
         return bool(self.capacity_env and os.getenv(self.capacity_env, 'false').lower() == 'true')
@@ -103,6 +107,8 @@ def registry() -> tuple[Target, ...]:
             capacity = entry.get('capacity_env')
             if capacity is not None and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,127}', capacity):
                 raise ValueError('invalid live STT capacity environment name')
+            if 'replay' in entry:
+                entry['replay'] = parse_replay_limits(entry['replay'])
             try:
                 parsed.append(Target(**entry))
             except TypeError as error:

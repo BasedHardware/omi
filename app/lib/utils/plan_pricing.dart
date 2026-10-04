@@ -83,8 +83,9 @@ bool shouldShowPlanContinueButton({
   String? selectedTierId,
   String? currentTierId,
   bool currentGrantsDesktop = false,
+  bool selectedPriceIsCurrent = false,
 }) {
-  if (!plansLoaded || isCancelled || hasScheduledUpgrade) return false;
+  if (!plansLoaded || isCancelled || hasScheduledUpgrade || selectedPriceIsCurrent) return false;
   if (currentGrantsDesktop && selectedTierId != null && currentTierId != null && selectedTierId != currentTierId) {
     return false;
   }

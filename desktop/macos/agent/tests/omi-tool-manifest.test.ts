@@ -175,7 +175,7 @@ describe("omi tool manifest", () => {
     expect(tools[0]?.name).toBe("get_work_context");
     expect(workContext?.description).toContain("Call get_work_context before semantic_search or execute_sql");
     expect(executeSql?.description).toContain("call get_work_context first");
-    expect(executeSql?.description).toContain("context_visits(handlesJson)");
+    expect(executeSql?.description).not.toContain("context_visits");
     expect(executeSql?.description).toContain("Raw ocrText columns are refused");
     expect(semanticSearch?.description).toContain("after get_work_context cannot identify");
   });

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
@@ -16,11 +17,16 @@ from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_metrics import MANAGED_LEGS_OPEN
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_rollout import window_allocation, window_language_supported
+from utils.stt import replay_delivery
+from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from config.live_stt_replay import ReplayLimits
+from config.live_stt_recovery import session_recovery_enabled
+from utils.stt.recovery_state import current_recovery
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.speaker_identity import SpeakerProviderEpoch
@@ -48,6 +54,7 @@ WINDOW_VAD_CONTINUE_THRESHOLD = 0.65
 class LiveChainSession:
     def __init__(self, receiver: Any) -> None:
         self.receiver = receiver
+        self.recovery_enabled = session_recovery_enabled(receiver)
         if not hasattr(receiver, '_stt_failed_targets'):
             receiver._stt_failed_targets = set()
         self.audio_seconds = 0.0
@@ -72,6 +79,7 @@ class LiveChainSession:
         self, sample_rate: int, epoch: Any = None, *, same_provider: bool = False, replay_start_sample: int = 0
     ) -> STTSocket:
         host = self.receiver.host
+        constructed: list[LiveLegSocket] = []
         language = host.stt_language
         uid = host.request.uid
         models = [m.strip() for m in st.stt_service_models]
@@ -298,6 +306,7 @@ class LiveChainSession:
                     # An empty snapshot still carries the obligation to retain
                     # future speech until this replacement emits text.
                     leg.enable_window_replay_tracking()
+                constructed.append(leg)
                 return leg
             except BaseException:
                 if raw is not None:
@@ -324,35 +333,60 @@ class LiveChainSession:
                 raise st.ParakeetConnectionError('config_incomplete')
 
             primary = unavailable
-        if same_provider:
-            if primary_missing:
-                raise st.ParakeetConnectionError('config_incomplete')
-            try:
-                target = self._routing_target_entry if routing_on(uid) else None
-            except ValueError:
-                target = None
-            token = connecting_target.set(target)
-            try:
-                socket, actual = await primary(), host.stt_service
-                record_managed_leg_handoff(socket)
-            finally:
-                connecting_target.reset(token)
-        else:
-            socket, actual = await st.connect_stt_socket_with_fallback(
-                primary_service=host.stt_service,
-                connect_primary=primary,
-                connect_parakeet=callbacks[st.STTService.parakeet],
-                connect_soniox=callbacks[st.STTService.soniox],
-                connect_modulate=callbacks[st.STTService.modulate],
-                connect_deepgram=callbacks[st.STTService.deepgram],
-                failed=self.receiver._stt_failed_providers,
-                use_config=True,
-                routing_uid=uid,
-                routing_language=host.language,
-                routing_languages=tuple(getattr(host.language_profile, 'expected', ())),
-                routing_models=engine_models,
-                failed_targets=self.receiver._stt_failed_targets,
-            )
+        try:
+            if same_provider:
+                if primary_missing:
+                    raise st.ParakeetConnectionError('config_incomplete')
+                try:
+                    target = self._routing_target_entry if routing_on(uid) else None
+                except ValueError:
+                    target = None
+                recovery = current_recovery.get()
+                if recovery is not None:
+                    if target is not None:
+                        identity = target.id
+                    elif host.stt_service.value == 'parakeet':
+                        identity = engine_models.get('parakeet') or 'parakeet'
+                    else:
+                        identity = DEFAULT_IDS.get(host.stt_service.value) or host.stt_service.value
+                    if not recovery.reserve(identity, host.stt_service.value):
+                        raise st.ParakeetConnectionError('config_incomplete')
+                token = connecting_target.set(target)
+                try:
+                    dial_budget = recovery.dial_budget() if recovery is not None else None
+                    if dial_budget is not None:
+                        async with asyncio.timeout(dial_budget):
+                            socket, actual = await primary(), host.stt_service
+                    else:
+                        socket, actual = await primary(), host.stt_service
+                    record_managed_leg_handoff(socket)
+                finally:
+                    connecting_target.reset(token)
+            else:
+                socket, actual = await st.connect_stt_socket_with_fallback(
+                    primary_service=host.stt_service,
+                    connect_primary=primary,
+                    connect_parakeet=callbacks[st.STTService.parakeet],
+                    connect_soniox=callbacks[st.STTService.soniox],
+                    connect_modulate=callbacks[st.STTService.modulate],
+                    connect_deepgram=callbacks[st.STTService.deepgram],
+                    failed=self.receiver._stt_failed_providers,
+                    use_config=True,
+                    routing_uid=uid,
+                    routing_language=host.language,
+                    routing_languages=tuple(getattr(host.language_profile, 'expected', ())),
+                    routing_models=engine_models,
+                    failed_targets=self.receiver._stt_failed_targets,
+                )
+        except asyncio.CancelledError:
+            # A setup timeout/disconnect can arrive after a raw socket opens
+            # but before the connector hands it back to the receiver.
+            if self.recovery_enabled:
+                for candidate in constructed:
+                    candidate.retire_for_replay()
+                    candidate.mark_owner_teardown()
+                    await abort_replay_socket(candidate)
+            raise
         host.stt_service = actual
         self._routing_target_entry = getattr(socket, '_routing_target_entry', None)
         host.stt_model = {
@@ -426,6 +460,8 @@ class LiveLegSocket(STTSocket):
             client_has_left=self._client_has_left,
             text_seen=lambda: self._cost_text_seen,
         )
+        self.recovery_enabled = session_recovery_enabled(session.receiver)
+        self.leg_outcome.recovery_enabled = self.recovery_enabled
         self._cost_text_seen = False
         self._target_death_recorded = False
         self._closing_for_health = False
@@ -562,6 +598,9 @@ class LiveLegSocket(STTSocket):
             health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
         else:
             circuit.record_serve_failure()
+            health.quarantine(
+                self.service.value, 'selection', circuit.serve_error_bench_seconds, endpoint=self.routing_endpoint
+            )
         return True
 
     def _release_open_gauge(self) -> None:
@@ -622,7 +661,12 @@ class LiveLegSocket(STTSocket):
         if self._transcript_outcome is not None:
             return
         self._transcript_outcome = outcome
-        health.record(self.service.value, self.session.receiver.host.language, outcome)
+        if self.routing_endpoint:
+            health.record(
+                self.service.value, self.session.receiver.host.language, outcome, endpoint=self.routing_endpoint
+            )
+        else:
+            health.record(self.service.value, self.session.receiver.host.language, outcome)
         if self._routing_active:
             if outcome == 'text':
                 self._health_success()
@@ -807,6 +851,38 @@ class LiveLegSocket(STTSocket):
             )
         return True
 
+    @property
+    def replay_limits(self) -> Any:
+        """Typed endpoint limits: the selected target's declaration first."""
+        target = self._routing_target_entry
+        declared = getattr(target, 'replay', None) if target is not None else None
+        if isinstance(declared, ReplayLimits):
+            return declared
+        declared = getattr(self.raw, 'replay_limits', None)
+        if isinstance(declared, ReplayLimits):
+            return declared
+        return ReplayLimits(max_frame_bytes=replay_delivery.REPLAY_PACKET_BYTES)
+
+    def _leg_recovery_enabled(self) -> bool:
+        pinned = getattr(getattr(self, 'leg_outcome', None), 'recovery_enabled', None)
+        if isinstance(pinned, bool):
+            return pinned
+        enabled = getattr(self, 'recovery_enabled', None)
+        if isinstance(enabled, bool):
+            return enabled
+        return session_recovery_enabled(getattr(self, 'session', None))
+
+    async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        if not self._leg_recovery_enabled():
+            return not self.is_connection_dead
+        wait = getattr(self.raw, 'wait_send_capacity', None)
+        if not callable(wait):
+            return not self.is_connection_dead
+        try:
+            return await cast(Callable[..., Awaitable[bool]], wait)(limit=limit, timeout=timeout)
+        except TypeError:
+            return await cast(Callable[[], Awaitable[bool]], wait)()
+
     def replay_send(self, data: bytes, start_sample: int) -> bool:
         ring = getattr(self.session.receiver, '_window_ring', None)
         # Source admission and capture retention already decided this replay
@@ -851,6 +927,9 @@ class LiveLegSocket(STTSocket):
             self._release_open_gauge()
 
     def _client_has_left(self) -> bool:
+        controller = getattr(self.session.receiver, 'recovery', None)
+        if controller is not None:
+            return controller.client_has_left()
         host = self.session.receiver.host
         state = getattr(host, 'state', None)
         if getattr(state, 'active', None) is False:
@@ -873,7 +952,10 @@ class LiveLegSocket(STTSocket):
         # at the first claim, even if the 1s monitor lost the race.
         if not self.leg_outcome.claimed and self.is_connection_dead:
             self._latch_failure()
-            settle_terminal_socket(self, self.service.value, self.normalized_death_reason)
+            if self._leg_recovery_enabled():
+                settle_terminal_socket(self, self.service.value, self.normalized_death_reason, departing=True)
+            else:
+                settle_terminal_socket(self, self.service.value, self.normalized_death_reason)
         self.leg_outcome.owner_closing = True
 
     def finish(self) -> None:

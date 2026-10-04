@@ -193,7 +193,7 @@ def _mock_lifecycle_conversation(monkeypatch, *, status: str = 'in_progress'):
 
 
 def test_enqueue_uses_only_opaque_job_routing_fields():
-    with patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+    with patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
         cloud_tasks.enqueue_listen_finalization_job('9ee6f9ce-d6dc-4b5d-bf13-f80eb4fabd36', 7)
 
     queue, url, task_id, payload = enqueue.call_args.args

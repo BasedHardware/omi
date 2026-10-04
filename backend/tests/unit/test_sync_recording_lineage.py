@@ -171,6 +171,69 @@ def texts(store, cid):
     return [segment['text'] for segment in store.rows[('users', 'u', 'conversations', cid)]['transcript_segments']]
 
 
+PROOF_ROOT = 'a1b2c3d4-1111-4222-8333-444455556666'
+PROOF_FRAMES = 500000
+PROOF_SPF = 160
+
+
+def prove(chunk, store, row_id):
+    """Pair sync_vad receipts for the chunk with live runs on its target row.
+
+    The new dedupe drops only with independent source-frame capture proof, so
+    replays that intentionally exercise suppression furnish the paired evidence
+    explicitly; unproven wording is kept as legitimate repetition.
+    """
+    for i, segment in enumerate(chunk['transcript_segments']):
+        segment.setdefault('id', f"{chunk['id']}-seg-{i}")
+    chunk['capture_evidence'] = {
+        'version': 1,
+        'capability': 'source_position',
+        'coverage': 'mapped',
+        'origin': 'sync_vad',
+        'receipts': [
+            {
+                'segment_id': segment['id'],
+                'capture_root': PROOF_ROOT,
+                'clock_epoch': 7,
+                'channel': 'mono',
+                'source_start_frame': i * 1000,
+                'source_start_offset': 0,
+                'source_end_frame': i * 1000 + 999,
+                'source_end_offset': 0,
+                'rate_hz': 16000,
+                'producer_revision': 'sync_vad_stt_v1',
+            }
+            for i, segment in enumerate(chunk['transcript_segments'])
+        ],
+    }
+    store.rows[('users', 'u', 'conversations', row_id)]['capture_evidence'] = {
+        'version': 1,
+        'capability': 'source_position',
+        'coverage': 'mapped',
+        'origin': 'live',
+        'conflicts': 0,
+        'runs': [
+            {
+                'capture_root': PROOF_ROOT,
+                'clock_epoch': 7,
+                'rate_hz': 16000,
+                'channel': 'mono',
+                'source_frame_start': 0,
+                'source_frame_end': PROOF_FRAMES,
+                'decoded_sample_start': 0,
+                'decoded_sample_end': PROOF_FRAMES * PROOF_SPF,
+                'samples_per_frame': PROOF_SPF,
+            }
+        ],
+    }
+
+
+def replay_proven(store, chunks, targets):
+    for chunk in chunks:
+        prove(chunk, store, targets[chunk['id']])
+    return replay(store, chunks, targets)
+
+
 # --- Synthetic replay -------------------------------------------------------
 
 
@@ -199,16 +262,28 @@ def test_unstamped_batch_is_split_across_the_generations_that_own_its_audio():
     assert {row['id'] for row in conversations(store)} == before
 
 
-def test_replay_has_no_repeated_speech_when_live_and_sync_wording_match():
+def test_receipt_only_replay_appends_wording_matched_speech_to_live_rows():
     store = seeded_store()
-    for chunks, stamp in ((upload_stamped_for_l(), gen_id(L)), (upload_straddling_next_two(), None)):
-        replay(store, chunks, plan(store, chunks, stamp=stamp).targets)
-    for k in (L, L + 1, L + 2):
-        assert len(texts(store, gen_id(k))) == len(set(texts(store, gen_id(k))))
+    before = {row['id'] for row in conversations(store)}
+    stamped, unstamped = upload_stamped_for_l(), upload_straddling_next_two()
+    for chunks, stamp in ((stamped, gen_id(L)), (unstamped, None)):
+        targets = plan(store, chunks, stamp=stamp).targets
+        replay_proven(store, chunks, targets)
+    assert {row['id'] for row in conversations(store)} == before
+    expected = {
+        gen_id(L): [live_text(L, i) for i in range(4)] + [c['transcript_segments'][0]['text'] for c in stamped],
+        gen_id(L + 1): [live_text(L + 1, i) for i in range(4)]
+        + [c['transcript_segments'][0]['text'] for c in unstamped[:2]],
+        gen_id(L + 2): [live_text(L + 2, i) for i in range(4)]
+        + [c['transcript_segments'][0]['text'] for c in unstamped[2:]],
+    }
+    for cid, want in expected.items():
+        assert sorted(texts(store, cid)) == sorted(want)
 
 
-def test_residual_differently_worded_overlap_still_repeats_on_the_live_row():
+def test_residual_differently_worded_overlap_still_repeats_on_the_live_row(monkeypatch):
     """Known residual: off the exact live timestamps, dedupe needs identical normalized text."""
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'off')
     store = seeded_store()
     s = gen_start(L) + 1  # one second of phone clock skew
     chunks = [
@@ -225,9 +300,29 @@ def test_residual_differently_worded_overlap_still_repeats_on_the_live_row():
     assert deduplicated_transcribed_speech_seconds(row['transcript_segments']) == 34  # originally 32; skew adds 2
 
 
-def test_retry_binds_the_same_rows_and_appends_nothing_new():
+def test_receipt_only_retry_binds_the_same_rows_and_reappends_its_speech():
     store = seeded_store()
     uploads = ((upload_stamped_for_l(), gen_id(L)), (upload_straddling_next_two(), None))
+    first = [plan(store, chunks, stamp=stamp).targets for chunks, stamp in uploads]
+    for (chunks, _), targets in zip(uploads, first):
+        replay_proven(store, chunks, targets)
+    before = {row['id'] for row in conversations(store)}
+    again = [plan(store, chunks, stamp=stamp).targets for chunks, stamp in uploads]
+    assert again == first
+    for (chunks, _), targets in zip(uploads, again):
+        for chunk, (_, created, survivors) in zip(chunks, replay_proven(store, chunks, targets)):
+            assert not created and [s['text'] for s in survivors] == [s['text'] for s in chunk['transcript_segments']]
+    assert {row['id'] for row in conversations(store)} == before
+
+
+def test_exact_sync_scoped_retry_binds_the_same_rows_and_appends_nothing_new():
+    store = seeded_store()
+    uploads = ((upload_stamped_for_l(), gen_id(L)), (upload_straddling_next_two(), None))
+    for chunks, _ in uploads:
+        for chunk in chunks:
+            for i, segment in enumerate(chunk['transcript_segments']):
+                segment['id'] = f"{chunk['id']}-seg-{i}"
+                segment['speaker_id_scope'] = f"sync:{chunk['id']}"
     first = [plan(store, chunks, stamp=stamp).targets for chunks, stamp in uploads]
     for (chunks, _), targets in zip(uploads, first):
         replay(store, chunks, targets)
@@ -351,7 +446,8 @@ def test_adjacent_generations_inside_the_edge_allowance_are_ambiguous():
     result = select_segment_targets(
         rows, ORIGIN, spans([chunk]), stamped_target=None, source='omi', client_device_id='pendant', is_locked=False
     )
-    assert result.targets == {chunk['id']: None} and result.reason == 'interval_miss'
+    assert result.targets == {chunk['id']: None}
+    assert result.binding_reasons == {chunk['id']: 'ambiguous_pending'} and result.reason == 'ambiguous_overlap'
 
 
 def test_trailing_allowance_does_not_exceed_sixty_seconds():
@@ -369,14 +465,33 @@ def test_trailing_allowance_does_not_exceed_sixty_seconds():
     assert result.targets == {chunk['id']: None}
 
 
-def test_overlapping_generations_never_pick_one():
-    """A row whose interval grew over its successor (e.g. an earlier stamp append) is ambiguous."""
+def test_overlapping_generations_bind_the_stamped_row_or_stay_pending():
+    """A row whose interval grew over its successor (e.g. an earlier stamp append) overlaps it."""
     rows = [generation(1, finished_at=at(gen_start(2) + DURATION)), generation(2)]
     chunk = sync_chunk(gen_start(2) + 61, gen_start(2) + 69, live_text(2, 1))
-    result = select_segment_targets(
-        rows, ORIGIN, spans([chunk]), stamped_target='STAMP', source='omi', client_device_id='pendant', is_locked=False
+    stamped = select_segment_targets(
+        rows,
+        ORIGIN,
+        spans([chunk]),
+        stamped_target=gen_id(2),
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
     )
-    assert result.targets == {chunk['id']: 'STAMP'} and result.reason == 'interval_miss'
+    assert stamped.targets == {chunk['id']: gen_id(2)} and stamped.counts['bound'] == 1
+    for stamp in (None, 'STAMP'):
+        pending = select_segment_targets(
+            rows,
+            ORIGIN,
+            spans([chunk]),
+            stamped_target=stamp,
+            source='omi',
+            client_device_id='pendant',
+            is_locked=False,
+        )
+        assert pending.targets == {chunk['id']: None}
+        assert pending.binding_reasons == {chunk['id']: 'ambiguous_pending'}
+        assert pending.reason == 'ambiguous_overlap' and pending.outcome == 'interval_miss'
 
 
 @pytest.mark.parametrize(
@@ -517,13 +632,22 @@ class _LineageDb:
         ]
         return deepcopy(matching[: limit + 1])
 
+    def get_recording_id_probe(self, uid, origin_id, *, firestore_client=None):
+        self.calls.append('probe')
+        if 'probe' in self.failing:
+            raise TimeoutError('probe deadline')
+        for row in self.rows:
+            if row.get('id') == origin_id:
+                return deepcopy(row)
+        return None
+
 
 @pytest.fixture
 def lineage_db(monkeypatch):
     from database import sync_recording_lineage
 
     fake = _LineageDb([generation(k) for k in range(GENERATIONS)])
-    for name in ('get_recording_generations', 'get_origin_generation'):
+    for name in ('get_recording_generations', 'get_origin_generation', 'get_recording_id_probe'):
         monkeypatch.setattr(sync_recording_lineage, name, getattr(fake, name))
     return fake
 
@@ -561,7 +685,19 @@ def test_old_stamp_extended_into_a_later_generation_is_not_hidden_by_the_limit(l
     chunk = upload_straddling_next_two()[0]
     # The origin row and LIVE-12 both contain the segment. The original
     # newest-eight query hides the extended origin and falsely overrides STAMP.
-    assert resolve([chunk], stamp='STAMP') == {chunk['id']: 'STAMP'}
+    reasons = {}
+    targets = resolve_segment_targets(
+        'u',
+        ORIGIN,
+        spans([chunk]),
+        stamped_target='STAMP',
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+        binding_reasons=reasons,
+    )
+    assert targets == {chunk['id']: None}
+    assert reasons == {chunk['id']: 'ambiguous_pending'}
 
 
 def test_unread_smart_survivor_can_overlap_without_a_donor_in_the_window(lineage_db):
@@ -570,7 +706,19 @@ def test_unread_smart_survivor_can_overlap_without_a_donor_in_the_window(lineage
     # Donors need not be recent: the survivor can also have a late stamped
     # append while unrelated newer generations of the same recording exist.
     chunk = upload_straddling_next_two()[0]
-    assert resolve([chunk]) == {chunk['id']: None}
+    reasons = {}
+    targets = resolve_segment_targets(
+        'u',
+        ORIGIN,
+        spans([chunk]),
+        stamped_target=None,
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+        binding_reasons=reasons,
+    )
+    assert targets == {chunk['id']: None}
+    assert reasons == {chunk['id']: 'ambiguous_pending'}
 
 
 @pytest.mark.parametrize('duration', [0, -1, float('nan'), float('inf')])
@@ -626,6 +774,121 @@ def test_planning_error_fails_open_and_never_raises(lineage_db, monkeypatch):
     monkeypatch.setattr(recording_lineage, 'select_segment_targets', boom)
     chunks = upload_straddling_next_two()
     assert set(resolve(chunks, stamp='STAMP').values()) == {'STAMP'}
+
+
+def _drive_plan(monkeypatch, resolve):
+    calls = []
+
+    def fake(uid, origin_id, spans, **kwargs):
+        calls.append(dict(spans))
+        reasons = kwargs.get('binding_reasons')
+        if reasons is not None:
+            reasons.update(resolve(len(calls), spans))
+        return {key: ('LIVE-12' if token in ('bound', 'stamp_overridden') else None) for key, token in reasons.items()}
+
+    monkeypatch.setattr(recording_lineage, 'resolve_segment_targets', fake)
+    reasons = {'stale': 'token'}
+    targets = recording_lineage.plan_segment_targets(
+        ['/tmp/seg.wav'],
+        lambda _path: gen_start(L + 1) + 61,
+        lambda _path: 8.0,
+        'u',
+        ORIGIN,
+        'STAMP',
+        'omi',
+        'pendant',
+        False,
+        'job',
+        reasons,
+    )
+    return calls, targets, reasons
+
+
+def test_plan_reresolves_pending_segments_within_three_attempts(monkeypatch):
+    calls, targets, reasons = _drive_plan(
+        monkeypatch, lambda attempt, spans: {key: 'ambiguous_pending' if attempt < 3 else 'bound' for key in spans}
+    )
+    assert len(calls) == 3
+    assert targets == {'/tmp/seg.wav': 'LIVE-12'}
+    assert reasons == {'/tmp/seg.wav': 'bound'}
+
+
+def test_plan_keeps_the_pending_token_after_three_attempts(monkeypatch):
+    calls, targets, reasons = _drive_plan(
+        monkeypatch, lambda _attempt, spans: {key: 'ambiguous_pending' for key in spans}
+    )
+    assert len(calls) == 3
+    assert targets == {'/tmp/seg.wav': None}
+    assert reasons == {'/tmp/seg.wav': 'ambiguous_pending'}
+
+
+@pytest.mark.parametrize('later', ['lookup_failed', 'stamp_fallback', 'unbound', 'no_rows'])
+def test_plan_pending_once_stays_pending_through_a_later_ordinary_miss(monkeypatch, later):
+    calls, targets, reasons = _drive_plan(
+        monkeypatch, lambda attempt, spans: {key: 'ambiguous_pending' if attempt == 1 else later for key in spans}
+    )
+    assert len(calls) == 2
+    assert targets == {'/tmp/seg.wav': None}
+    assert reasons == {'/tmp/seg.wav': 'ambiguous_pending'}
+
+
+def test_plan_pending_clears_only_when_a_later_pass_binds(monkeypatch):
+    calls, targets, reasons = _drive_plan(
+        monkeypatch, lambda attempt, spans: {key: 'ambiguous_pending' if attempt == 1 else 'bound' for key in spans}
+    )
+    assert len(calls) == 2
+    assert targets == {'/tmp/seg.wav': 'LIVE-12'}
+    assert reasons == {'/tmp/seg.wav': 'bound'}
+
+
+def test_plan_resolves_once_when_no_segment_is_pending(monkeypatch):
+    calls, targets, reasons = _drive_plan(monkeypatch, lambda _attempt, spans: {key: 'bound' for key in spans})
+    assert len(calls) == 1 and targets == {'/tmp/seg.wav': 'LIVE-12'}
+    assert reasons == {'/tmp/seg.wav': 'bound'}
+
+
+def test_safe_overlap_off_never_enters_the_pending_recheck(monkeypatch, lineage_db):
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'off')
+    loaded = []
+    real = recording_lineage._load_lineage
+
+    def counting(*args, **kwargs):
+        loaded.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(recording_lineage, '_load_lineage', counting)
+    old = lineage_db.rows[0]
+    old['finished_at'] = at(gen_start(L + 1) + DURATION)
+    chunk = upload_straddling_next_two()[0]
+    targets = recording_lineage.plan_segment_targets(
+        ['/tmp/seg.wav'],
+        lambda _path: chunk['started_at'].timestamp(),
+        lambda _path: (chunk['finished_at'] - chunk['started_at']).total_seconds(),
+        'u',
+        ORIGIN,
+        'STAMP',
+        'omi',
+        'pendant',
+        False,
+        'job',
+        {},
+    )
+    assert targets == {'/tmp/seg.wav': 'STAMP'}
+    assert len(loaded) == 1
+
+
+def test_resolver_excludes_unadmitted_cohorts_from_safe_overlap(monkeypatch, lineage_db):
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'other-uid')
+    seen = []
+    real = recording_lineage.select_segment_targets
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get('safe_overlap'))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(recording_lineage, 'select_segment_targets', spy)
+    resolve(upload_straddling_next_two())
+    assert seen == [False]
 
 
 @pytest.mark.parametrize('flag', ['', 'off'])
@@ -760,12 +1023,19 @@ def coordinator():
         sync_v2_harness.TestAsyncCoordinatorBehavioral._cleanup(stubs['saved_modules'])
 
 
-def _drive(module, stubs, chunks, monkeypatch, *, stamp):
+def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
     pipeline = stubs['pipeline']
     paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
-    pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
+    wav_path = '/tmp/job-lineage/w.wav'
+
+    def decode(raw_paths, decoded_frames=None):
+        if decoded_frames is not None:
+            decoded_frames[wav_path] = [16000]
+        return [wav_path]
+
+    pipeline.decode_files_to_wav = MagicMock(side_effect=decode)
     pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors: segmented.update(paths)
+    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors, **_kwargs: segmented.update(paths)
     pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
     pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
     pipeline.users_db = MagicMock()
@@ -780,14 +1050,14 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp):
         return True
 
     pipeline.process_segment = capture
-    if hasattr(pipeline, 'resolve_segment_targets'):
+    if hasattr(pipeline, 'plan_segment_targets'):
         # Also supports replaying the coordinator against origin/main's
         # pipeline, which has no lineage call. Its observed targets must still
         # satisfy the assertion below; absence is not the failure criterion.
         monkeypatch.setattr(
-            sys.modules[pipeline.resolve_segment_targets.__module__],
+            sys.modules[pipeline.plan_segment_targets.__module__],
             '_load_lineage',
-            lambda *_args: ([generation(k) for k in range(GENERATIONS)], None, False),
+            lambda *_args, **_kwargs: ([generation(k) for k in range(GENERATIONS)], None, False),
         )
     candidates = [generation(0)]
     monkeypatch.setattr(
@@ -795,12 +1065,20 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp):
         '_candidate_rows',
         lambda *_args, **_kwargs: candidates,
     )
+    if s1_claims:
+        mapping = {'claim': next(iter(s1_claims.values())), 'offsets': [0, 16000], 'incomplete': False}
+
+        async def observed_maps(_uid, _source, _lock, _device, _session, _claims, wav_paths, _frames, **_kwargs):
+            return wav_paths, {path: dict(mapping) for path in wav_paths}, False
+
+        monkeypatch.setattr(pipeline, 'apply_sync_wal_audio_coverage', observed_maps)
     return captured, SimpleNamespace(
         target_conversation_id=stamp,
         client_device_id='pendant',
         recording_session_id=ORIGIN,
         audio_start_seconds=chunks[0]['started_at'].timestamp() - 8,
         audio_end_seconds=chunks[-1]['finished_at'].timestamp(),
+        capture_evidence_claims=s1_claims,
     )
 
 
@@ -809,6 +1087,7 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp):
 async def test_coordinator_forwards_each_segment_its_generation(coordinator, monkeypatch, flag):
     module, stubs = coordinator
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
+    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
     await module._run_full_pipeline_background_async(
@@ -821,13 +1100,14 @@ async def test_coordinator_forwards_each_segment_its_generation(coordinator, mon
 @pytest.mark.asyncio
 async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(coordinator, monkeypatch, caplog):
     module, stubs = coordinator
+    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp='STAMP')
 
     def failed(*_args, **_kwargs):
         raise RuntimeError('synthetic planner failure')
 
-    monkeypatch.setattr(stubs['pipeline'], 'resolve_segment_targets', failed)
+    monkeypatch.setattr(stubs['pipeline'], 'plan_segment_targets', failed)
     metrics = MagicMock()
     lineage_module = sys.modules[stubs['pipeline'].fallback_segment_targets.__module__]
     monkeypatch.setattr(lineage_module, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)
@@ -846,6 +1126,7 @@ async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(
 async def test_retry_after_append_before_enrichment_reprocesses_the_landed_row(coordinator, monkeypatch, flag):
     module, stubs = coordinator
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
+    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
     chunks = upload_straddling_next_two()[:1]
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
     pipeline = stubs['pipeline']

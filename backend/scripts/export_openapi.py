@@ -52,6 +52,7 @@ INTEGRATION_PUBLIC_PATHS = (
     '/v2/integrations/{app_id}/tasks',
 )
 APP_CLIENT_PREFIXES = (
+    '/v1/proactivity',
     '/memory/search',
     '/v1/account/cutover',
     '/v1/action-items',
@@ -93,6 +94,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/sync',
     '/v1/task-integrations',
     '/v1/task-intelligence',
+    '/v1/tts',
     '/v1/users',
     '/v1/wrapped',
     '/v1/work-intents',

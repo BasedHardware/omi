@@ -167,7 +167,8 @@ class TestProactiveMessageDispatcher:
         return session
 
     @pytest.mark.asyncio
-    async def test_dispatcher_forwards_to_registered_sessions(self):
+    @pytest.mark.parametrize('v2', [False, True])
+    async def test_dispatcher_forwards_to_registered_sessions(self, v2):
         from routers.listen.registry import register, proactive_message_dispatcher
 
         s1 = self._make_session("uid-target")
@@ -182,6 +183,16 @@ class TestProactiveMessageDispatcher:
             "message": "Hey there",
             "conversation_id": "conv-42",
         }
+
+        if v2:
+            payload = dict(
+                uid="uid-target",
+                notification_type="proactivity_v2",
+                item_id="item-1",
+                target_kind="conversation",
+                target_id="conv-42",
+                navigate_to="/chat/mentor",
+            )
 
         mock_pubsub = AsyncMock()
         mock_pubsub.subscribe = AsyncMock()
@@ -208,6 +219,11 @@ class TestProactiveMessageDispatcher:
         s2.send_event.assert_not_called()
 
         delivered_event = s1.send_event.call_args[0][0]
+        if v2:
+            assert delivered_event.to_json() == dict(
+                type="proactivity_v2", item_id="item-1", target_kind="conversation", target_id="conv-42"
+            )
+            return
         assert delivered_event.event_type == "proactive_message"
         assert delivered_event.app_id == "mentor"
         assert delivered_event.title == "Omi"

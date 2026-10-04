@@ -1,5 +1,7 @@
 # Ground Truth: Insight Assistant — Mac two-phase depth vs Windows current engine
 
+> Historical audit: Insight was retired on 2026-10-03. Focus remains supported; the Insight inventory below describes the removed implementation. See `backend/docs/proactivity-v2-retirement.md`.
+
 Sources: Mac `Desktop/Sources/ProactiveAssistants/Assistants/Insight/{InsightAssistant,InsightStorage,InsightAssistantSettings}.swift`, `Desktop/Sources/APIClient.swift`; Windows `src/renderer/src/lib/{insightEngine,insightActivity,insightPrompt,insightGate}.ts`, `src/main/insight/{state,notification,toastWindow}.ts`, `src/main/ipc/{insight,db}.ts`, `src/renderer/src/components/insight/InsightToast.tsx`; backend `routers/memories.py`.
 
 ## Mac: two-phase extraction flow (`InsightAssistant.runAdviceExtraction`)

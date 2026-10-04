@@ -174,6 +174,7 @@ class UploadAttempt {
   final int totalBytes;
   final String? conversationId;
   final bool claimLiveCapture;
+  final String? captureEvidence;
 
   UploadAttempt({
     required this.at,
@@ -181,6 +182,7 @@ class UploadAttempt {
     required this.totalBytes,
     required this.conversationId,
     required this.claimLiveCapture,
+    required this.captureEvidence,
   });
 }
 
@@ -211,15 +213,17 @@ class ScriptedUploads {
   SyncUploadGate buildGate() {
     return SyncUploadGate(
       limiter: SyncRateLimiter.instance,
-      uploader: (files,
-          {onUploadProgress,
-          conversationId,
-          captureEvidence,
-          recordingSessionId,
-          audioStartSeconds,
-          audioEndSeconds,
-          claimLiveCapture = false,
-          geolocation}) async {
+      uploader: (
+        files, {
+        onUploadProgress,
+        conversationId,
+        captureEvidence,
+        recordingSessionId,
+        audioStartSeconds,
+        audioEndSeconds,
+        claimLiveCapture = false,
+        geolocation,
+      }) async {
         attempts.add(
           UploadAttempt(
             at: clock.now(),
@@ -227,6 +231,7 @@ class ScriptedUploads {
             totalBytes: files.fold(0, (sum, f) => sum + f.lengthSync()),
             conversationId: conversationId,
             claimLiveCapture: claimLiveCapture,
+            captureEvidence: captureEvidence,
           ),
         );
         if (failAll) {

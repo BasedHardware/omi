@@ -43,6 +43,8 @@ enum DefaultsKey: String {
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
+  /// Retained goal/reminder preference; keep the historical persisted key after Advice retirement.
+  case goalReminderNotificationsEnabled = "adviceNotificationsEnabled"
   /// Opt-out (defaults to on): the post-meeting summary share notification —
   /// the persistent notch card offering "Copy link" / "Send to <participant>".
   case meetingSummaryNotificationsEnabled = "meetingSummaryNotificationsEnabled"
@@ -194,6 +196,12 @@ struct ScopedDefaultsKey {
   static func chatQuotaBannerDismissals(ownerHash: String) -> Self {
     Self(rawValue: "chat_quota_banner_dismissals.v1.\(ownerHash)")
   }
+
+  static func assistantVoiceID(ownerID: String) -> Self {
+    Self(rawValue: "assistantVoiceID.\(ownerID)")
+  }
+
+  static let legacyShortcutSelectedVoiceID = Self(rawValue: "shortcut_selectedVoiceID")
 
   static func tasksFullSyncCompleted(ownerID: String) -> Self {
     Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")

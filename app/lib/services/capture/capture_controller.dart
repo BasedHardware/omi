@@ -116,9 +116,23 @@ class CaptureController extends ChangeNotifier
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
   String? _sourceCaptureRoot;
+  LocalWalSync? _captureEvidenceSync;
+  int? _captureEvidenceGeneration;
+  String? _captureEvidenceUid;
 
   String? get _captureEvidenceRoot {
     if (!const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE')) return null;
+    final LocalWalSync sync = _wal.getSyncs().phone;
+    final generation = sync.captureEvidenceGeneration;
+    final uid = _preferences.uid;
+    if (!identical(sync, _captureEvidenceSync) ||
+        generation != _captureEvidenceGeneration ||
+        uid != _captureEvidenceUid) {
+      _sourceCaptureRoot = null;
+      _captureEvidenceSync = sync;
+      _captureEvidenceGeneration = generation;
+      _captureEvidenceUid = uid;
+    }
     return _sourceCaptureRoot ??= const Uuid().v4();
   }
 
@@ -1746,9 +1760,7 @@ class CaptureController extends ChangeNotifier
         // Cut off any in-flight voice playback from a prior reply so the
         // new recording starts clean.
         if (OmiVoicePlaybackService.instance.isSpeaking) {
-          OmiVoicePlaybackService.instance.interrupt(
-            source: VoiceReplyPlaybackInterruptSource.newVoiceQuery,
-          );
+          OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.newVoiceQuery);
         }
         _lastVoiceCommandAutoSubmitAt = null;
         _voiceCommandSession = _now();
@@ -2280,6 +2292,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void clearUserData() {
+    _sourceCaptureRoot = null;
     segments = [];
     photos = [];
     hasTranscripts = false;
@@ -3248,7 +3261,8 @@ class CaptureController extends ChangeNotifier
           _pendingAutoSyncConversationId = null;
           _pendingAutoSyncNeedsRepair = false;
           Logger.debug(
-              'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)');
+            'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)',
+          );
           unawaited(_confirmSessionWalsRetained(sessionStart, convId, failClosedReason: 'missing_conversation_event'));
         }
       });
@@ -3462,13 +3476,11 @@ class CaptureController extends ChangeNotifier
         // segments arrived; without any, use the server's start, or this session's when the row has
         // none.
         final startedAt = conversation.startedAt;
-        final anchor = transcriptStartOnDevice(
-              [for (final segment in valid) (segment.id, segment.end)],
-              segmentArrivals,
-            ) ??
-            (startedAt != null
-                ? startedAt.millisecondsSinceEpoch ~/ 1000
-                : (sessionStartSeconds > 0 ? sessionStartSeconds : null));
+        final anchor =
+            transcriptStartOnDevice([for (final segment in valid) (segment.id, segment.end)], segmentArrivals) ??
+                (startedAt != null
+                    ? startedAt.millisecondsSinceEpoch ~/ 1000
+                    : (sessionStartSeconds > 0 ? sessionStartSeconds : null));
         if (anchor == null || anchor <= 0) {
           failClosedReason = 'anchor_unavailable';
         } else {
