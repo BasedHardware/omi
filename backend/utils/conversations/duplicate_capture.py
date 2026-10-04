@@ -176,7 +176,7 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
             containment = None
             if containment_mode != 'off':
                 try:
-                    containment = measure_capture_containment(own_row or {}, other_row or {})
+                    containment = measure_capture_containment(own_row or {}, other_row or {}, mode=containment_mode)
                     record_capture_containment(containment, mode=containment_mode, phase='rule')
                 except Exception:
                     logger.warning('capture_group_containment detector failed')
@@ -184,7 +184,12 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
                     containment = None
             if shared.confirms():
                 evidence = shared.evidence()
-            elif containment_mode == 'on' and containment is not None and containment.would_join:
+            elif (
+                containment_mode == 'on'
+                and containment is not None
+                and containment.would_join
+                and containment.basis == 'full'
+            ):
                 evidence = containment.evidence()
             else:
                 record_product_event('capture_group_joined', outcome='none')

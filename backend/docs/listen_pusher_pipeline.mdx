@@ -578,9 +578,10 @@ so it can resolve some ambiguous token alignments more optimally; every
 threshold remains shadow-mode and uncalibrated. A join additionally requires 40+ matched
 words, 20+ distinct matched tokens, 3+ distinct matched utterances, 45+ seconds
 of union duration of matched utterance intervals (not wall-span gaps), and
-matched coverage of at least 0.8 of the smaller side — matched words divided by
-all in-window smaller-side words when the matcher inspects every eligible
-utterance, and extrapolated from the strided sample described below otherwise.
+matched coverage of at least 0.8 of the smaller side — always exact matched
+words divided by all in-window smaller-side words for the full population that
+authorizes a join; only the shadow path extrapolates from the strided sample
+described below.
 Every threshold
 is a deliberately conservative heuristic, not calibrated on real account data.
 All inputs are
@@ -610,12 +611,12 @@ and 262,144 summed LCS cells — bound discovery and all alignments together, so
 even candidates that never qualify cannot rescan the target; any projected
 overflow returns its specific bound label (`bounds_bundle_checks`,
 `bounds_matcher_calls`, `bounds_tokens`, `bounds_cells`) with no partial
-evidence. When the smaller side carries more than 32 eligible utterances, the
-matcher inspects only a deterministic sample of at most 32 unique utterances
-strided evenly by cumulative eligible word mass — quantile positions over the
-running word total, including both endpoints, never a first-N prefix; repeated
-quantile hits on one utterance retain their multiplicity as its coverage
-weight — and extrapolates coverage as
+evidence. In `shadow` mode only, when the smaller side carries more than 32
+eligible utterances, the matcher inspects a deterministic sample of at most 32
+unique utterances strided evenly by cumulative eligible word mass — quantile
+positions over the running word total, including both endpoints, never a
+first-N prefix; repeated quantile hits on one utterance retain their
+multiplicity as its coverage weight — and extrapolates coverage as
 (sum of weight × per-utterance matched fraction / sum of weights) ×
 (eligible/total in-window words); rejected matches contribute zero. When the
 matcher inspects every eligible utterance, each weight equals the utterance's
@@ -627,10 +628,14 @@ count actual matched words in the sampled utterances only. Total work stays O(N 
 sorting and index lookups plus at most 4,096×384 candidate-word construction
 and the fixed alignment budgets. Modes: `off` runs nothing
 new, `shadow` computes and logs the fixed content-free line
-`event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=…`
+`event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=… basis=…`
 (labels and numbers only — never transcript, identifiers, or errors), and `on`
 authorizes the same `join_capture_group` writer with the detector's numeric
-evidence and the existing expected windows and transcript fingerprints. The
+evidence and the existing expected windows and transcript fingerprints — but
+only on a full-population decision: `on` never samples, so the matcher sees
+every eligible utterance (the unchanged pair-wide budgets can still abstain),
+the `basis` log label records `full` versus `sampled`, and the join condition
+requires `basis=full` so a sampled estimate can never authorize membership. The
 symmetric shared-speech path, its evidence, and its events are unchanged, and a
 detector fault cannot inhibit it. The mode is declared `shadow` on all six
 processing hosts — Cloud Run `backend`, `backend-sync`, `backend-sync-backfill`,

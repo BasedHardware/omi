@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 MODE_ENV = 'CAPTURE_GROUP_CONTAINMENT_MODE'
 _MODES = ('off', 'shadow', 'on')
 _PHASES = ('rule', 'jev')
+_BASES = ('full', 'sampled')
 _REASONS = (
     'contained',
     'no_user_speech',
@@ -93,6 +94,7 @@ class CaptureContainment:
     distinct_words: int = 0
     support_seconds: float = 0.0
     coverage: float = 0.0
+    basis: str = 'full'
 
     def evidence(self) -> dict:
         """Numeric-only record; never carries transcript text or identifiers."""
@@ -119,17 +121,20 @@ def record_capture_containment(
     safe_mode = mode if mode in _MODES else 'off'
     safe_phase = phase if phase in _PHASES else 'rule'
     reason = decision.reason if decision.reason in _REASONS else 'ineligible'
+    basis = getattr(decision, 'basis', 'full')
+    basis = basis if basis in _BASES else 'full'
     score = 'unavailable'
     if isinstance(jev_p, (int, float)) and not isinstance(jev_p, bool):
         if math.isfinite(jev_p) and 0 <= jev_p <= 1:
             score = f'{round(float(jev_p), 6):f}'
     logger.info(
-        'event=capture_group_containment mode=%s phase=%s would_join=%s reason=%s jev_p=%s',
+        'event=capture_group_containment mode=%s phase=%s would_join=%s reason=%s jev_p=%s basis=%s',
         safe_mode,
         safe_phase,
         'true' if decision.would_join else 'false',
         reason,
         score,
+        basis,
     )
 
 
@@ -350,15 +355,15 @@ def _sample_utterances(
     return [(*eligible[index], hits[index]) for index in sorted(hits)]
 
 
-def measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
+def measure_capture_containment(first: Any, second: Any, *, mode: str = 'on') -> CaptureContainment:
     """Decide whether the smaller capture's user speech is contained in the other."""
     try:
-        return _measure_capture_containment(first, second)
+        return _measure_capture_containment(first, second, mode=mode)
     except _ContainmentRejected as exc:
         return CaptureContainment(would_join=False, reason=exc.reason)
 
 
-def _measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
+def _measure_capture_containment(first: Any, second: Any, *, mode: str) -> CaptureContainment:
     row_a, row_b = _window(first), _window(second)
     if row_a is None or row_b is None or row_a[2] == row_b[2]:
         return CaptureContainment(would_join=False, reason='ineligible')
@@ -382,12 +387,23 @@ def _measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
         return CaptureContainment(would_join=False, reason='too_small', smaller_words=smaller_words)
     eligible = [(s, e, w) for s, e, w in small_user if len(w) >= MIN_UTTERANCE_WORDS]
     eligible_words = sum(len(words) for _, _, words in eligible)
-    sample = _sample_utterances(eligible)
+    if mode == 'shadow' and len(eligible) > MAX_SMALLER_UTTERANCES:
+        sample = _sample_utterances(eligible)
+        basis = 'sampled'
+    else:
+        sample = [(s, e, w, len(w)) for s, e, w in eligible]
+        basis = 'full'
     sample_weight = sum(weight for _, _, _, weight in sample)
-    matched_words, matched_tokens, matched_utterances, support_seconds, matched_weight = _match_utterances(
-        sample, large_user
-    )
-    coverage = (matched_weight / sample_weight) * (eligible_words / smaller_words) if sample_weight else 0.0
+    try:
+        matched_words, matched_tokens, matched_utterances, support_seconds, matched_weight = _match_utterances(
+            sample, large_user
+        )
+    except _ContainmentRejected as exc:
+        return CaptureContainment(would_join=False, reason=exc.reason, basis=basis)
+    if basis == 'full':
+        coverage = matched_words / smaller_words
+    else:
+        coverage = (matched_weight / sample_weight) * (eligible_words / smaller_words) if sample_weight else 0.0
     decision = CaptureContainment(
         would_join=(
             matched_words >= MIN_MATCHED_WORDS
@@ -403,6 +419,7 @@ def _measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
         distinct_words=len(matched_tokens),
         support_seconds=support_seconds,
         coverage=coverage,
+        basis=basis,
     )
     if decision.would_join:
         return decision
@@ -421,4 +438,5 @@ def _measure_capture_containment(first: Any, second: Any) -> CaptureContainment:
         distinct_words=len(matched_tokens),
         support_seconds=support_seconds,
         coverage=coverage,
+        basis=basis,
     )

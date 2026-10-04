@@ -324,10 +324,12 @@ def test_log_line_is_fixed_format_and_content_free(caplog):
         )
     lines = [r.message for r in caplog.records]
     assert lines[0] == (
-        'event=capture_group_containment mode=shadow phase=jev would_join=true ' 'reason=contained jev_p=0.750000'
+        'event=capture_group_containment mode=shadow phase=jev would_join=true '
+        'reason=contained jev_p=0.750000 basis=full'
     )
     assert lines[1] == (
-        'event=capture_group_containment mode=off phase=rule would_join=false ' 'reason=timing jev_p=unavailable'
+        'event=capture_group_containment mode=off phase=rule would_join=false '
+        'reason=timing jev_p=unavailable basis=full'
     )
 
 
@@ -336,8 +338,20 @@ def test_log_labels_and_score_are_clamped(caplog):
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
         cc.record_capture_containment(decision, mode='bogus', phase='bogus', jev_p=1.5)
     assert caplog.records[0].message == (
-        'event=capture_group_containment mode=off phase=rule would_join=false ' 'reason=ineligible jev_p=unavailable'
+        'event=capture_group_containment mode=off phase=rule would_join=false '
+        'reason=ineligible jev_p=unavailable basis=full'
     )
+
+
+@pytest.mark.parametrize('basis', ['full', 'sampled', 'PRIVATE-SENTINEL', 42])
+def test_log_basis_is_allowlisted_and_clamped(caplog, basis):
+    decision = cc.CaptureContainment(False, 'timing')
+    object.__setattr__(decision, 'basis', basis)
+    with caplog.at_level(logging.INFO, logger=cc.logger.name):
+        cc.record_capture_containment(decision, mode='shadow')
+    expected = basis if basis in ('full', 'sampled') else 'full'
+    assert caplog.records[0].message.endswith('jev_p=unavailable basis=%s' % expected)
+    assert 'PRIVATE-SENTINEL' not in caplog.records[0].message
 
 
 NATURAL_UTTERANCES = [
@@ -631,7 +645,35 @@ def test_whole_pair_under_call_budget_joins(monkeypatch):
     calls = []
     monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
     decision = cc.measure_capture_containment(pendant, laptop)
-    assert decision.would_join and len(calls) == cc.MAX_SMALLER_UTTERANCES == 32
+    assert decision.would_join and len(calls) == cc.MAX_MATCHER_CALLS == 128
+
+
+def test_full_population_matches_every_eligible_utterance(monkeypatch):
+    pendant, laptop = _budget_rows(64)
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    for first, second in ((pendant, laptop), (laptop, pendant)):
+        calls.clear()
+        decision = cc.measure_capture_containment(first, second)
+        assert decision.would_join and decision.basis == 'full' and decision.coverage == 1
+        assert len(calls) == 64
+
+
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_full_population_over_call_budget_abstains_without_partial_evidence(monkeypatch, mode):
+    pendant, laptop = _budget_rows(129)
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    for first, second in ((pendant, laptop), (laptop, pendant)):
+        calls.clear()
+        decision = cc.measure_capture_containment(first, second, mode=mode)
+        if mode == 'shadow':
+            assert decision.would_join and decision.basis == 'sampled' and len(calls) == 32
+            continue
+        assert not decision.would_join and decision.reason == 'bounds_matcher_calls' and decision.basis == 'full'
+        assert len(calls) == cc.MAX_MATCHER_CALLS == 128
+        assert decision.matched_words == 0 and decision.matched_utterances == 0
+        assert decision.distinct_words == 0 and decision.support_seconds == 0.0 and decision.coverage == 0.0
 
 
 @pytest.mark.parametrize('cap', ['tokens', 'cells'])
@@ -778,9 +820,9 @@ def test_two_hour_meeting_pair_stays_within_original_budgets(monkeypatch):
     for first, second in ((pendant, desktop), (desktop, pendant)):
         matched_inputs.clear()
         start = time.process_time()
-        decision = cc.measure_capture_containment(first, second)
+        decision = cc.measure_capture_containment(first, second, mode='shadow')
         elapsed = time.process_time() - start
-        assert decision.would_join and decision.reason == 'contained'
+        assert decision.would_join and decision.reason == 'contained' and decision.basis == 'sampled'
         assert decision.coverage >= cc.MIN_COVERAGE and decision.support_seconds >= cc.MIN_SUPPORT_SECONDS
         assert elapsed < 0.30, elapsed
         assert 0 < len(matched_inputs) <= cc.MAX_MATCHER_CALLS
@@ -789,10 +831,23 @@ def test_two_hour_meeting_pair_stays_within_original_budgets(monkeypatch):
         assert len({u_words for u_words, _, _ in matched_inputs}) <= 32
 
 
+def test_full_population_two_hour_pair_abstains_on_matcher_budget(monkeypatch):
+    pendant, desktop = long_pair.long_complementary_pair()
+    calls = []
+    monkeypatch.setattr(cc, '_ordered_match', _counting_matcher(calls))
+    for first, second in ((pendant, desktop), (desktop, pendant)):
+        calls.clear()
+        start = time.process_time()
+        decision = cc.measure_capture_containment(first, second, mode='on')
+        elapsed = time.process_time() - start
+        assert not decision.would_join and decision.reason == 'bounds_matcher_calls' and decision.basis == 'full'
+        assert len(calls) == cc.MAX_MATCHER_CALLS == 128 and elapsed < 0.30
+
+
 def test_two_hour_unrelated_pendant_never_joins():
     pendant, desktop = long_pair.long_unrelated_pair()
     for first, second in ((pendant, desktop), (desktop, pendant)):
-        decision = cc.measure_capture_containment(first, second)
+        decision = cc.measure_capture_containment(first, second, mode='shadow')
         assert not decision.would_join and decision.reason in ('timing', 'insufficient_coverage')
 
 
@@ -854,14 +909,14 @@ def test_utterance_sample_weights_equal_words_when_unsampled():
 def test_length_skewed_pair_cannot_confirm_under_word_mass_sampling():
     pendant, desktop = long_pair.length_skewed_pair()
     for first, second in ((pendant, desktop), (desktop, pendant)):
-        decision = cc.measure_capture_containment(first, second)
+        decision = cc.measure_capture_containment(first, second, mode='shadow')
         assert not decision.would_join and decision.coverage < cc.MIN_COVERAGE
 
 
 def test_collapsed_quantile_hits_retain_weight_in_coverage():
     pendant, desktop = long_pair.quantile_collapse_pair()
     for first, second in ((pendant, desktop), (desktop, pendant)):
-        decision = cc.measure_capture_containment(first, second)
+        decision = cc.measure_capture_containment(first, second, mode='shadow')
         assert not decision.would_join
         assert decision.coverage == pytest.approx(22 / 32) and decision.coverage < cc.MIN_COVERAGE
     eligible = [(T0, T0, tuple(seg['text'].split())) for seg in pendant['transcript_segments']]
@@ -880,7 +935,8 @@ def test_filler_between_every_target_token_still_rejects():
     assert not decision.would_join and decision.reason == 'timing' and decision.matched_words == 0
 
 
-def test_only_matching_prefix_of_a_long_capture_cannot_confirm():
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_only_matching_prefix_of_a_long_capture_cannot_confirm(mode):
     times = [40.0 + 20.0 * index for index in range(64)]
     pendant_texts = [' '.join('a%02dw%d' % (index, word) for word in range(16)) for index in range(64)]
     laptop_texts = [
@@ -889,12 +945,14 @@ def test_only_matching_prefix_of_a_long_capture_cannot_confirm():
     ]
     pendant = row('pendant', 'omi', 0, 1400, [segment(text, t, end=t + 8.0) for text, t in zip(pendant_texts, times)])
     laptop = row('laptop', 'desktop', 0, 1400, [segment(text, t, end=t + 8.0) for text, t in zip(laptop_texts, times)])
-    decision = cc.measure_capture_containment(pendant, laptop)
+    decision = cc.measure_capture_containment(pendant, laptop, mode=mode)
     assert not decision.would_join and decision.reason == 'insufficient_coverage'
+    assert decision.basis == ('sampled' if mode == 'shadow' else 'full')
     assert 0 < decision.matched_utterances <= 32
 
 
-def test_sampled_match_cannot_erase_majority_non_user_speech():
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_sampled_match_cannot_erase_majority_non_user_speech(mode):
     user_times = [40.0 + 12.0 * index for index in range(40)]
     pendant_texts = [' '.join('c%02dw%d' % (index, word) for word in range(16)) for index in range(40)]
     non_user = [
@@ -921,7 +979,7 @@ def test_sampled_match_cannot_erase_majority_non_user_speech():
         [segment(transcript_variant(text), t, end=t + 8.0) for text, t in zip(pendant_texts, user_times)]
         + [dict(item) for item in non_user],
     )
-    decision = cc.measure_capture_containment(pendant, laptop)
+    decision = cc.measure_capture_containment(pendant, laptop, mode=mode)
     assert not decision.would_join and decision.reason == 'insufficient_coverage'
     assert decision.smaller_words == 2640
 
@@ -933,3 +991,31 @@ def test_every_fixed_reason_survives_the_log_allowlist(caplog, reason):
     assert len(caplog.records) == 1
     assert 'reason=%s jev_p=unavailable' % reason in caplog.records[0].message
     assert 'reason=bounds ' not in caplog.records[0].message
+
+
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_favorable_subset_is_rejected_only_by_the_full_population(mode):
+    pendant, desktop = long_pair.favorable_subset_pair()
+    assert not measure_shared_speech(pendant['transcript_segments'], desktop['transcript_segments']).confirms()
+    for first, second in ((pendant, desktop), (desktop, pendant)):
+        decision = cc.measure_capture_containment(first, second, mode=mode)
+        if mode == 'shadow':
+            assert decision.would_join and decision.basis == 'sampled'
+            assert decision.coverage == pytest.approx(0.8125)
+            continue
+        assert not decision.would_join and decision.reason == 'insufficient_coverage' and decision.basis == 'full'
+        assert decision.matched_words == 32 * 13 and decision.smaller_words == 64 * 16
+        assert decision.coverage == 0.40625
+        default = cc.measure_capture_containment(first, second)
+        assert default == decision
+
+
+@pytest.mark.parametrize('mode', ['on', 'shadow'])
+def test_favorable_subset_budget_abstention_reports_its_basis(monkeypatch, mode):
+    monkeypatch.setattr(cc, 'MAX_MATCHER_CALLS', 2)
+    pendant, desktop = long_pair.favorable_subset_pair()
+    for first, second in ((pendant, desktop), (desktop, pendant)):
+        decision = cc.measure_capture_containment(first, second, mode=mode)
+        assert not decision.would_join and decision.reason == 'bounds_matcher_calls'
+        assert decision.basis == ('sampled' if mode == 'shadow' else 'full')
+        assert decision.matched_words == 0 and decision.coverage == 0.0

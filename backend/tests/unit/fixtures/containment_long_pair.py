@@ -176,3 +176,34 @@ def quantile_collapse_pair():
     pendant = row('pendant', 'omi', 0.0, COLLAPSE_SECONDS, pendant_segments)
     desktop = row('desktop', 'desktop', 0.0, COLLAPSE_SECONDS, desktop_segments)
     return pendant, desktop
+
+
+FAVORABLE_UTTERANCES = 64
+FAVORABLE_WORDS = 16
+FAVORABLE_SAMPLE_INDICES = {((i * (64 * 16 - 1) // 31) // 16) for i in range(32)}
+
+
+def favorable_subset_pair():
+    assert len(FAVORABLE_SAMPLE_INDICES) == 32
+    assert all(index < FAVORABLE_UTTERANCES for index in FAVORABLE_SAMPLE_INDICES)
+    pendant_segments = []
+    desktop_segments = []
+    matched = set()
+    for index in range(FAVORABLE_UTTERANCES):
+        start = 40.0 + 30.0 * index
+        words = ['fav%02dw%d' % (index, word) for word in range(FAVORABLE_WORDS)]
+        pendant_segments.append(segment(' '.join(words), start, end=start + 8.0))
+        if index in FAVORABLE_SAMPLE_INDICES:
+            target = list(words)
+            target[4], target[8], target[12] = 'zzzfive', 'zzznine', 'zzzthirteen'
+            target.insert(7, 'hum')
+            target.insert(2, 'uh')
+            matched.add(index)
+        else:
+            target = ['other%02dw%d' % (index, word) for word in range(FAVORABLE_WORDS + 1)]
+        desktop_segments.append(segment(' '.join(target), start, end=start + 8.0))
+    assert matched == FAVORABLE_SAMPLE_INDICES
+    assert len(set(range(FAVORABLE_UTTERANCES)) - matched) == 32
+    pendant = row('pendant', 'omi', 0.0, 2000.0, pendant_segments)
+    desktop = row('desktop', 'desktop', 0.0, 2000.0, desktop_segments)
+    return pendant, desktop
