@@ -48,7 +48,7 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.socket import STTSocket
-from utils.stt.modulate_protocol import ModulatePendingUtterances
+from utils.stt.modulate_protocol import MODULATE_DEATH_SERVE_ERROR, ModulatePendingUtterances, modulate_death_reason
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
@@ -1379,62 +1379,6 @@ def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int
         wf.setframerate(sample_rate)
         wf.writeframes(b'')
     return buf.getvalue()
-
-
-MODULATE_DEATH_SERVE_ERROR: Final = 'modulate_serve_error'
-
-# Velma's in-stream error frames are free text, so the fault boundary is
-# matched on normalized text. Budget/quota is never transient and is the
-# same class as Soniox monthly-budget / Deepgram HTTP 402. 5xx wording is a
-# provider serve fault. Everything else — invalid audio we sent, rate limits
-# — is either our fault or this session's, and must not bench the provider.
-_MODULATE_BUDGET_MARKERS: Final = (
-    'monthly usage limit',
-    'usage limit reached',
-    'quota exceeded',
-)
-_MODULATE_SERVER_FAULT_MARKERS: Final = (
-    'internal server error',
-    'internal error',
-    'unable to complete the request',
-    'server error',
-)
-
-
-def modulate_death_reason(err: Any, *, protocol_guard: bool = False) -> Optional[str]:
-    """Bound a Velma in-stream error frame to a typed death reason.
-
-    Returns ``PROVIDER_BUDGET_EXHAUSTED`` for quota/monthly-cap text,
-    ``MODULATE_DEATH_SERVE_ERROR`` when the text says the provider failed to
-    serve the stream it accepted, else ``None`` (untyped — the raw text stays
-    on the death latch for logs). New provider wordings degrade to untyped
-    rather than growing a new bounded token per message.
-    """
-    normalized = str(err or '').strip().lower().rstrip('.')
-    if not normalized:
-        return None
-    if any(marker in normalized for marker in _MODULATE_BUDGET_MARKERS):
-        return PROVIDER_BUDGET_EXHAUSTED
-    if protocol_guard:
-        if 'insufficient credits' in normalized:
-            return PROVIDER_BUDGET_EXHAUSTED
-        if 'concurrent request limit' in normalized:
-            return PROVIDER_RATE_LIMITED
-        if any(
-            marker in normalized
-            for marker in (
-                'invalid api key',
-                'missing api_key',
-                'request is not permitted',
-                'does not have access to this model',
-            )
-        ):
-            return PROVIDER_AUTH_REJECTED
-    if any(marker in normalized for marker in _MODULATE_SERVER_FAULT_MARKERS):
-        return MODULATE_DEATH_SERVE_ERROR
-    if any(marker in normalized for marker in ('invalid audio', 'unsupported audio', 'invalid wav', 'invalid input')):
-        return 'other'  # Our audio/request shape, never provider availability.
-    return None
 
 
 class SafeModulateSocket(STTSocket):

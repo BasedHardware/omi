@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from utils.stt import streaming
-from utils.stt.modulate_protocol import MAX_PENDING_UTTERANCES, ModulatePendingUtterances
+from utils.stt.modulate_protocol import MAX_PENDING_UTTERANCES, ModulatePendingUtterances, modulate_death_reason
 from utils.stt.stream_close import bounded_stream_close_reason
 
 
@@ -145,7 +145,7 @@ async def test_tail_callback_exception_preserves_terminal_error_and_completion(m
 async def test_documented_account_and_concurrency_refusals_keep_their_class(monkeypatch, message, reason):
     socket = await receive([{'type': 'error', 'error': message}], lambda segments: None, monkeypatch)
     assert socket.typed_death_reason == reason
-    assert streaming.modulate_death_reason(message) is None  # flag-off rollback
+    assert modulate_death_reason(message) is None  # flag-off rollback
 
 
 @pytest.mark.asyncio

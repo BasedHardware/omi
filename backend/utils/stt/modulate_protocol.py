@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Final, Optional
+
+from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED, PROVIDER_RATE_LIMITED
 
 logger = logging.getLogger(__name__)
 MAX_PENDING_UTTERANCES = 64
@@ -16,6 +18,62 @@ def _key(message: dict[str, Any]) -> str:
 
 def _timestamp(value: Any) -> int | None:
     return value if type(value) is int and value >= 0 else None
+
+
+MODULATE_DEATH_SERVE_ERROR: Final = 'modulate_serve_error'
+
+# Velma's in-stream error frames are free text, so the fault boundary is
+# matched on normalized text. Budget/quota is never transient and is the
+# same class as Soniox monthly-budget / Deepgram HTTP 402. 5xx wording is a
+# provider serve fault. Everything else — invalid audio we sent, rate limits
+# — is either our fault or this session's, and must not bench the provider.
+_MODULATE_BUDGET_MARKERS: Final = (
+    'monthly usage limit',
+    'usage limit reached',
+    'quota exceeded',
+)
+_MODULATE_SERVER_FAULT_MARKERS: Final = (
+    'internal server error',
+    'internal error',
+    'unable to complete the request',
+    'server error',
+)
+
+
+def modulate_death_reason(err: Any, *, protocol_guard: bool = False) -> Optional[str]:
+    """Bound a Velma in-stream error frame to a typed death reason.
+
+    Returns ``PROVIDER_BUDGET_EXHAUSTED`` for quota/monthly-cap text,
+    ``MODULATE_DEATH_SERVE_ERROR`` when the text says the provider failed to
+    serve the stream it accepted, else ``None`` (untyped — the raw text stays
+    on the death latch for logs). New provider wordings degrade to untyped
+    rather than growing a new bounded token per message.
+    """
+    normalized = str(err or '').strip().lower().rstrip('.')
+    if not normalized:
+        return None
+    if any(marker in normalized for marker in _MODULATE_BUDGET_MARKERS):
+        return PROVIDER_BUDGET_EXHAUSTED
+    if protocol_guard:
+        if 'insufficient credits' in normalized:
+            return PROVIDER_BUDGET_EXHAUSTED
+        if 'concurrent request limit' in normalized:
+            return PROVIDER_RATE_LIMITED
+        if any(
+            marker in normalized
+            for marker in (
+                'invalid api key',
+                'missing api_key',
+                'request is not permitted',
+                'does not have access to this model',
+            )
+        ):
+            return PROVIDER_AUTH_REJECTED
+    if any(marker in normalized for marker in _MODULATE_SERVER_FAULT_MARKERS):
+        return MODULATE_DEATH_SERVE_ERROR
+    if any(marker in normalized for marker in ('invalid audio', 'unsupported audio', 'invalid wav', 'invalid input')):
+        return 'other'  # Our audio/request shape, never provider availability.
+    return None
 
 
 class ModulatePendingUtterances:

@@ -62,12 +62,11 @@ from utils.stt.live_failure import (
 from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
+from utils.stt.modulate_protocol import MODULATE_DEATH_SERVE_ERROR, modulate_death_reason
 from utils.stt.streaming import (
-    MODULATE_DEATH_SERVE_ERROR,
     STTService,
     SafeModulateSocket,
     connect_stt_socket_with_fallback,
-    modulate_death_reason,
 )
 from utils.stt.vad_gate import GatedSTTSocket
 
