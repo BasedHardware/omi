@@ -1353,6 +1353,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
             BUCKET_SCREEN_FRAMES:
               value: based-hardware-dev-screen-frames
               category: storage_retention
@@ -1613,6 +1619,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -3533,6 +3545,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
@@ -3786,6 +3804,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
             MENTOR_PIPELINE:
               value: cohort
               category: rollout

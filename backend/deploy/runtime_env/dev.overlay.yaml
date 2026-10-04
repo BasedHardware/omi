@@ -579,6 +579,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
+          SYNC_PHASE_METRICS_PROJECT: {value: based-hardware-dev, category: telemetry}
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
@@ -719,6 +721,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
+          SYNC_PHASE_METRICS_PROJECT: {value: based-hardware-dev, category: telemetry}
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
