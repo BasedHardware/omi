@@ -2497,6 +2497,25 @@ and
 each stage outcome down by `legacy|capture_span|sync|v2|mixed|cached|none`
 or the first refusal reason.
 
+With the consumer ON, embedding clips concatenate only already verified,
+generation-pinned decoded adjacent chunks from that invocation's cache. The
+middle 15 seconds remain the maximum clip; missing extents refuse without padding
+or interpolation. Live, sync and v2 placements share this assembly after inventory
+admission; consumer OFF retains the legacy single-midpoint-chunk clip policy.
+Existing embedding/cache formats, keys and download/time/embedding caps stay intact.
+
+For `outcome="no_embeddings"`, `reason` is exactly one of `all_short`, `no_eligible`,
+`chunk_boundary`, `clip_too_short`, `embed_failed`, `budget`, `max_embeddings`,
+`invalid_vector`, `missing_vector`, or `no_clip`. Primary precedence is no eligible
+IDs/speakers, all short eligible speech, invalid vectors, budget/cap, embedding
+failures, chunk boundary, short clip, missing keyed vector, then no clip. The existing
+one-per-run anonymous log includes `reason`, `stop`, `embeddable`, `pending`,
+`cache_hits`, `new_embeddings`, `valid_vectors`, `clip_skips`, `embed_failures`, and
+numeric eligible/short/speech/ID/speaker/attempt/vector/stale counts for mixed causes.
+No transcript, path, cache key, provider error body or user identifier is logged.
+Reason labels measure processing outcomes, not unique conversations or voice accuracy.
+Invalid cached vectors are counted but retain the existing cache policy.
+
 Rollback is safe in both directions. Turning the consumer flag back off after
 a resolution has written `capture-span:` cache keys does not silently re-embed
 those segments at legacy coordinates: on decode, any key with that prefix
