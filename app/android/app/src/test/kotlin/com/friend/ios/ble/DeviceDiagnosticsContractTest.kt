@@ -4,6 +4,49 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DeviceDiagnosticsContractTest {
+    @Test fun `CCCD timeout retains retry and exhausted recovery reasons`() {
+        val status = OmiBleManager.CCCD_TIMEOUT_STATUS
+        assertEquals("cccd_timeout", BleDisconnectReason.connectionErrorFromStatus(status, true))
+        assertEquals("cccd_timeout_exhausted", BleDisconnectReason.connectionErrorFromStatus(status, false))
+        assertEquals("cccd_ack_timeout", BleDisconnectReason.fromStatus(status))
+        assertEquals("gatt_status_22", BleDisconnectReason.connectionErrorFromStatus(0x16, false))
+    }
+
+    @Test fun `local host termination during readiness keeps its status without a pairing claim`() {
+        assertEquals("gatt_status_22", BleDisconnectReason.connectionErrorFromStatus(0x16))
+    }
+
+    @Test fun `connection errors preserve bond loss clean disconnect and generic statuses`() {
+        assertEquals("pairing_lost", BleDisconnectReason.connectionErrorFromStatus(137))
+        assertNull(BleDisconnectReason.connectionErrorFromStatus(0))
+        for (status in listOf(-1, 8, 19, 34, 62, 133)) {
+            assertEquals("gatt_status_$status", BleDisconnectReason.connectionErrorFromStatus(status))
+        }
+    }
+
+    @Test fun `local host termination does not claim another phone paired`() {
+        // HCI 0x16 reports local termination, not the reason the host requested it.
+        assertEquals("gatt_error_22", BleDisconnectReason.fromStatus(0x16))
+    }
+
+    @Test fun `link layer response timeout is classified as a timeout`() {
+        assertEquals("connection_timeout", BleDisconnectReason.fromStatus(0x22))
+    }
+
+    @Test fun `connection establishment failure is not an instant passed error`() {
+        // HCI Instant Passed is 0x28, not the failed-establishment status 0x3e.
+        assertEquals("gatt_error_62", BleDisconnectReason.fromStatus(0x3e))
+        assertEquals("gatt_error_40", BleDisconnectReason.fromStatus(0x28))
+    }
+
+    @Test fun `adjacent HCI statuses retain their existing reason vocabulary`() {
+        val expected = mapOf(
+            0 to "clean_disconnect", 8 to "connection_timeout", 19 to "remote_device_terminated",
+            -1 to "app_closed", 133 to "gatt_error_133",
+        )
+        for ((status, reason) in expected) assertEquals(reason, BleDisconnectReason.fromStatus(status))
+    }
+
     @Test fun `firmware decoder rejects short and version zero and accepts append fields`() {
         assertNull(FirmwareDiagnosticsParser.parse(ByteArray(24), 1))
         assertNull(FirmwareDiagnosticsParser.parse(ByteArray(25), 1))
