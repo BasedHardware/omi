@@ -18,14 +18,13 @@ from utils.conversations.mcp_transcript_search import (
     ChatTranscriptSearch,
     chat_transcript_coverage_note,
     chat_transcript_excerpts,
-    merge_summary_and_transcript_ids,
+    merge_chat_conversation_ids,
     search_chat_transcript_chunks,
 )
 from utils.conversations.render import conversations_to_string
 from utils.conversations.search import (
     conversation_matches_date_range,
     keyword_search_conversation_ids,
-    merge_conversation_search_ids,
     parse_exact_conversation_reference,
 )
 from utils.retrieval.safety import safe_isoformat
@@ -260,9 +259,8 @@ def search_conversations_text(
                 index_available=index_available,
                 search_transcript_chunks=vector_db.search_transcript_chunks,
             )
-            summary_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
-            conversation_ids = merge_summary_and_transcript_ids(
-                transcript_search.conversation_ids, summary_ids, limit * 2
+            conversation_ids = merge_chat_conversation_ids(
+                keyword_ids, transcript_search.conversation_ids, vector_ids, limit
             )
 
         if not conversation_ids:
@@ -273,14 +271,14 @@ def search_conversations_text(
                 date_info = " after the specified start date"
             elif ends_at:
                 date_info = " before the specified end date"
-            return f"No conversations found matching '{query}'{date_info}. " + chat_transcript_coverage_note(
-                transcript_search.searched
+            return f"No conversations found matching '{query}'{date_info}." + (
+                ' ' + chat_transcript_coverage_note(transcript_search.searched) if not exact_conversation_id else ''
             )
 
         conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
         if not conversations_data:
-            return f"No conversations found matching '{query}'. " + chat_transcript_coverage_note(
-                transcript_search.searched
+            return f"No conversations found matching '{query}'." + (
+                ' ' + chat_transcript_coverage_note(transcript_search.searched) if not exact_conversation_id else ''
             )
 
         # Filter locked
@@ -290,13 +288,9 @@ def search_conversations_text(
         # Search indexes can contain stale date metadata; the hydrated document is authoritative.
         conversations_data = [c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)]
         if not conversations_data:
-            return f"No conversations found matching '{query}'. " + chat_transcript_coverage_note(
-                transcript_search.searched
+            return f"No conversations found matching '{query}'." + (
+                ' ' + chat_transcript_coverage_note(transcript_search.searched) if not exact_conversation_id else ''
             )
-
-        transcript_excerpts = (
-            chat_transcript_excerpts(conversations_data, transcript_search) if include_transcript else {}
-        )
 
         # Load people
         people: List[Person] = []
@@ -332,6 +326,15 @@ def search_conversations_text(
             except Exception as e:
                 logger.error("Error parsing conversation search result: %s", type(e).__name__)
                 continue
+
+        rendered_ids = {conversation.id for conversation in conversations}
+        transcript_excerpts = (
+            chat_transcript_excerpts(
+                [row for row in conversations_data if row.get('id') in rendered_ids], transcript_search
+            )
+            if include_transcript
+            else {}
+        )
 
         for conversation in conversations[:128]:
             _append_conversation_source(source_sink, conversation, excerpt=transcript_excerpts.get(conversation.id))

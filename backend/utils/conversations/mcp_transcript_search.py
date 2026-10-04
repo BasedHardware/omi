@@ -50,6 +50,20 @@ class ChatTranscriptSearch:
         )
 
 
+def merge_chat_conversation_ids(
+    keyword_ids: Sequence[str], transcript_ids: Sequence[str], vector_ids: Sequence[str], limit: int
+) -> List[str]:
+    """Preserve exact keyword rank while reserving space for transcript and summary evidence."""
+    limit = max(1, min(limit, 20))
+    cap = limit * 2
+    merged = list(dict.fromkeys(keyword_ids))[:limit]
+    vector_reserve = min(len(vector_ids), max(1, (limit + 1) // 2))
+    transcript_budget = min(limit, max(0, cap - len(merged) - vector_reserve))
+    merged = merge_summary_and_transcript_ids(merged, transcript_ids[:transcript_budget], cap)
+    merged = merge_summary_and_transcript_ids(merged, vector_ids, cap)
+    return merge_summary_and_transcript_ids(merged, transcript_ids[transcript_budget:], cap)
+
+
 def search_chat_transcript_chunks(
     uid: str,
     query: str,

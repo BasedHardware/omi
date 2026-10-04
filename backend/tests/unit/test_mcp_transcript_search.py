@@ -9,6 +9,7 @@ from utils.conversations.mcp_transcript_search import (
     build_transcript_match_snippets,
     chat_transcript_coverage_note,
     chat_transcript_excerpts,
+    merge_chat_conversation_ids,
     merge_summary_and_transcript_ids,
     resolve_mcp_conversation_search_ids,
     search_chat_transcript_chunks,
@@ -74,7 +75,7 @@ def test_chat_excerpt_is_rebuilt_from_accessible_conversation_only():
 
 
 def test_chat_chunk_search_failure_does_not_claim_transcript_coverage():
-    with patch('utils.conversations.mcp_transcript_search.record_fallback'):
+    with patch('utils.conversations.mcp_transcript_search.record_fallback') as fallback:
         result = search_chat_transcript_chunks(
             'u1',
             'invoice',
@@ -87,6 +88,27 @@ def test_chat_chunk_search_failure_does_not_claim_transcript_coverage():
         )
     assert result == ChatTranscriptSearch([], False)
     assert 'cannot establish' in chat_transcript_coverage_note(result.searched)
+    fallback.assert_called_once()
+
+
+def test_chat_merge_preserves_keyword_rank_and_reserves_both_vector_sources():
+    assert merge_chat_conversation_ids(
+        ['exact-1', 'exact-2', 'exact-3', 'exact-4', 'exact-5'],
+        [f'transcript-{index}' for index in range(30)],
+        [f'summary-{index}' for index in range(5)],
+        limit=5,
+    ) == [
+        'exact-1',
+        'exact-2',
+        'exact-3',
+        'exact-4',
+        'exact-5',
+        'transcript-0',
+        'transcript-1',
+        'summary-0',
+        'summary-1',
+        'summary-2',
+    ]
 
 
 def test_snippet_finds_transcript_phrase_summary_would_miss():

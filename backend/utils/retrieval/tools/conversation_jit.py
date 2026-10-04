@@ -324,6 +324,7 @@ def format_jit_results(
     max_transcript_snippets: int = 3,
     evidence_references: Optional[List[Dict[str, Any]]] = None,
     conversations_collected: Optional[List[Dict[str, Any]]] = None,
+    coverage_note: Optional[str] = None,
 ) -> str:
     """Render only whole records whose text and reference can be admitted together."""
     bounded_conversations = list(conversations_data)[:MAX_JIT_CONVERSATIONS]
@@ -347,9 +348,9 @@ def format_jit_results(
             rejected_or_duplicate = True
             continue
         candidates.append((data, card, existing_card_index))
+    blocks: List[str] = [coverage_note] if coverage_note else []
     if not candidates:
-        return JIT_TRUNCATION_MARKER if bounded_conversations else ""
-    blocks: List[str] = []
+        return "\n\n".join(blocks + ([JIT_TRUNCATION_MARKER] if bounded_conversations else []))
     admitted: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
     first_card_index = len(conversations_collected) + 1 if conversations_collected is not None else 1
     new_card_count = 0
@@ -458,6 +459,7 @@ def format_active_jit_conversations(
     configurable: Dict[str, Any],
     query: Optional[str] = None,
     max_transcript_segments: int = 0,
+    coverage_note: Optional[str] = None,
 ) -> str:
     """Render the opt-in card/evidence contract and populate the shared evidence sink."""
     hydrate, window_segments = _jit_transcript_options(max_transcript_segments)
@@ -475,4 +477,5 @@ def format_active_jit_conversations(
         max_transcript_snippets=min(window_segments, MAX_JIT_TRANSCRIPT_SNIPPETS) if hydrate else 0,
         evidence_references=evidence_references,
         conversations_collected=conversations_collected,
+        coverage_note=coverage_note,
     )

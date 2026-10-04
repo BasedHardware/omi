@@ -20,14 +20,13 @@ from utils.conversations.mcp_transcript_search import (
     ChatTranscriptSearch,
     chat_transcript_coverage_note,
     chat_transcript_excerpts,
-    merge_summary_and_transcript_ids,
+    merge_chat_conversation_ids,
     search_chat_transcript_chunks,
 )
 from utils.conversations.render import conversation_to_citation_card, conversations_to_string
 from utils.conversations.search import (
     conversation_matches_date_range,
     keyword_search_conversation_ids,
-    merge_conversation_search_ids,
     parse_exact_conversation_reference,
 )
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
@@ -634,9 +633,8 @@ def search_conversations_tool(
                 index_available=index_available,
                 search_transcript_chunks=vector_db.search_transcript_chunks,
             )
-            summary_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
-            conversation_ids = merge_summary_and_transcript_ids(
-                transcript_search.conversation_ids, summary_ids, limit * 2
+            conversation_ids = merge_chat_conversation_ids(
+                keyword_ids, transcript_search.conversation_ids, vector_ids, limit
             )
 
         if jit_enabled:
@@ -697,11 +695,12 @@ def search_conversations_tool(
                 configurable=cast(Dict[str, Any], configurable),
                 query=None if exact_conversation_id else query,
                 max_transcript_segments=max_transcript_segments if include_transcript else 0,
+                coverage_note=(
+                    chat_transcript_coverage_note(False)
+                    if not exact_conversation_id and not scoped_id and not transcript_search.searched
+                    else None
+                ),
             )
-
-        transcript_excerpts = (
-            chat_transcript_excerpts(conversations_data, transcript_search) if include_transcript else {}
-        )
 
         # Only load people if transcripts will be included
         people: List[Person] = []
@@ -742,6 +741,15 @@ def search_conversations_tool(
                 continue
 
         logger.info(f"🔍 search_conversations_tool - Converted {len(conversations)} conversation objects")
+
+        rendered_ids = {conversation.id for conversation in conversations}
+        transcript_excerpts = (
+            chat_transcript_excerpts(
+                [row for row in conversations_data if row.get('id') in rendered_ids], transcript_search
+            )
+            if include_transcript
+            else {}
+        )
 
         # Store conversations in config for citation tracking (allowlisted cards)
         conversations_collected = configurable.get('conversations_collected', [])
