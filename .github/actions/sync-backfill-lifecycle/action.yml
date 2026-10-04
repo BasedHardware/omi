@@ -156,7 +156,7 @@ runs:
           --min-instances=3
           --max-instances=18
           --max=18
-          --concurrency=3
+          --concurrency=6
           --cpu=2
           --memory=4Gi
           --add-volume=mount-path=/app/syncing,type=in-memory,size-limit=1Gi
@@ -196,6 +196,8 @@ runs:
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
       run: |
+        # The first concurrency=6 step retains 40 concurrent dispatches / 10 per second
+        # to isolate instance packing from higher downstream load.
         # Dispatch concurrency must not exceed the worker's capacity:
         # --max-instances x --concurrency (service-level --max above; the
         # service cap wins when it is lower).
