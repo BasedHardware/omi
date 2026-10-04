@@ -59,7 +59,7 @@ class DeviceDownloadMeter extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             readout,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w400),
+            style: OmiType.footnote.copyWith(color: Colors.grey.shade500),
           ),
         ],
       ],
