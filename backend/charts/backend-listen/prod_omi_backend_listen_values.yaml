@@ -101,6 +101,8 @@ env:
     value: "true"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
+  - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "shadow"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE

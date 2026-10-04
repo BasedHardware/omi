@@ -124,6 +124,8 @@ env:
     value: "true"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
+  - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "shadow"
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH

@@ -528,6 +528,35 @@ all three of these, each overridable:
 - at least 15 shared trigrams (`CROSS_DEVICE_GROUP_MIN_SHARED_TRIGRAMS`);
 - containment of at least 0.25 (`CROSS_DEVICE_GROUP_MIN_CONTAINMENT`).
 
+**Complementary containment (`CAPTURE_GROUP_CONTAINMENT_MODE`, default `shadow`).**
+Sparse ASR substitutions and interleaved turns can break enough exact trigrams
+to reject a complementary pair. The
+containment detector (`utils/conversations/capture_containment.py`) covers that
+complementary case: within the intersection of both wall windows it takes the
+capture with fewer in-window words, aligns each of its `is_user` utterances
+(8+ tokens) to a chronological bundle of one to three contiguous user segments
+on the other side (both ends within 12 seconds), and accepts a pair only when
+difflib matching blocks cover at least 0.8 of the utterance tokens and share at
+least two distinct adjacent bigrams. A join additionally requires 40+ matched
+words, 20+ distinct matched tokens, 3+ distinct matched utterances, 45+ seconds
+of matched support, and matched/total coverage of at least 0.8. Every threshold
+is a deliberately conservative heuristic, not calibrated on real account data.
+All inputs are
+bounded (segments, characters, words, candidate bundles) and every bound fails
+closed as `bounds`; missing or non-`is_user` attribution, malformed timing, and
+speech outside the shared window are never evidence. Modes: `off` runs nothing
+new, `shadow` computes and logs the fixed content-free line
+`event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=…`
+(labels and numbers only — never transcript, identifiers, or errors), and `on`
+authorizes the same `join_capture_group` writer with the detector's numeric
+evidence and the existing expected windows and transcript fingerprints. The
+symmetric shared-speech path, its evidence, and its events are unchanged, and a
+detector fault cannot inhibit it. The mode is declared `shadow` on all six
+processing hosts — Cloud Run `backend`, `backend-sync`, `backend-sync-backfill`,
+`backend-integration`, and GKE `backend-listen` and `pusher`. A successful Jev
+same-scene shadow also logs a companion `phase=jev` line carrying the existing
+score for per-flow comparison; it changes nothing in the Jev record.
+
 The default-off `CAPTURE_JEV_SHADOW_ENABLED` experiment also submits up to six
 overlapping pairs, including same-source and below-threshold pairs, to a bounded
 background Jev worker after finalization. It records the shipped group outcome

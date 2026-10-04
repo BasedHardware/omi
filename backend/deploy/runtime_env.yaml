@@ -26,6 +26,9 @@ environments:
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -468,6 +471,9 @@ environments:
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -856,6 +862,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1159,6 +1168,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1424,6 +1436,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1642,6 +1657,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -2109,6 +2127,9 @@ environments:
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -2567,6 +2588,9 @@ environments:
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -2839,6 +2863,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3159,6 +3186,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3414,6 +3444,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3643,6 +3676,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
