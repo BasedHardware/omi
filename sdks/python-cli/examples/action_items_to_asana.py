@@ -1,3 +1,20 @@
+#!/usr/bin/env python3
+"""
+Convert Omi action-item list JSON export to Asana-compatible CSV format.
+
+Usage:
+    python action_items_to_asana.py action_items.json [action_items2.json ...] -o asana.csv
+
+Options:
+    -o, --output FILE         Output path for the CSV file (default: action_items_asana.csv)
+    --tz-offset OFFSET        Timezone offset for local due dates, e.g. +09:00 or -05:00 (default: +00:00)
+    --section SECTION         Default section/column for open tasks (default: "To Do")
+    --filter-status STATUS    Filter tasks by status: 'open' or 'completed' (default: all)
+    --force                   Overwrite output file if it already exists
+
+Zero external dependencies (pure Python standard library).
+"""
+
 import csv
 import io
 import json
@@ -14,6 +31,17 @@ def clean_text(value):
     if not isinstance(value, str):
         value = str(value)
     return " ".join(value.split())
+
+
+def spreadsheet_text(value):
+    """Avoid treating common formula prefixes as formulas on spreadsheet import."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
+        return "'" + value
+    return value
 
 
 def parse_time(value):
@@ -68,6 +96,7 @@ def format_asana_row(raw, offset=timedelta(0), default_section="To Do", extra_ta
     name = clean_text(raw.get("description") or raw.get("title") or "Untitled Task")
     if not name:
         name = "Untitled Task"
+    name = spreadsheet_text(name)
 
     # Completed status: TRUE or FALSE
     is_completed = bool(raw.get("completed"))
@@ -97,9 +126,12 @@ def format_asana_row(raw, offset=timedelta(0), default_section="To Do", extra_ta
 
     created_dt = parse_time(raw.get("created_at"))
     if created_dt:
-        desc_lines.append(f"Captured: {(created_dt + offset).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        if offset == timedelta(0):
+            desc_lines.append(f"Captured: {created_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        else:
+            desc_lines.append(f"Captured: {(created_dt + offset).strftime('%Y-%m-%d %H:%M:%S')}")
 
-    full_description = "\n".join(desc_lines)
+    full_description = spreadsheet_text("\n".join(desc_lines))
 
     # Tags
     tags = ["omi"]
@@ -139,9 +171,9 @@ def export_asana_csv(items, offset=timedelta(0), default_section="To Do", status
     written_count = 0
     for item in items:
         is_completed = bool(item.get("completed"))
-        if status_filter == "completed" and not is_completed:
+        if status_filter in ("completed", "done") and not is_completed:
             continue
-        if status_filter == "open" and is_completed:
+        if status_filter in ("open", "todo", "pending") and is_completed:
             continue
 
         row = format_asana_row(item, offset=offset, default_section=default_section)

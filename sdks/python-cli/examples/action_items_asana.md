@@ -15,15 +15,15 @@ You need Python 3.10+ and an authenticated `omi-cli` for the initial export.
 
 ## 1. Export action items from Omi
 
-Export your action items into JSON:
+Export your action items into JSON (note that `--json` is a global flag before the verb):
 
 ```bash
 # Export all action items
-omi action-item list --limit 100 --json > action_items.json
+omi --json action-item list --limit 100 > action_items.json
 
 # Or export multiple pages
-omi action-item list --limit 100 --offset 0 --json > page1.json
-omi action-item list --limit 100 --offset 100 --json > page2.json
+omi --json action-item list --limit 100 --offset 0 > page1.json
+omi --json action-item list --limit 100 --offset 100 > page2.json
 ```
 
 ---
@@ -39,7 +39,7 @@ python action_items_to_asana.py action_items.json -o asana_tasks.csv
 # With custom timezone offset and default section
 python action_items_to_asana.py action_items.json \
   -o asana_tasks.csv \
-  --tz-offset "+07:00" \
+  --tz-offset "+09:00" \
   --section "Incoming Tasks"
 
 # Only export open (uncompleted) tasks
@@ -58,20 +58,20 @@ python action_items_to_asana.py page1.json page2.json -o asana_all.csv
 | Option | Default | Description |
 | :--- | :--- | :--- |
 | `-o, --output` | `action_items_asana.csv` | Destination CSV file path |
-| `--tz-offset` | `+00:00` | Local UTC offset format `+HH:MM` or `-HH:MM` |
-| `--section` | `"To Do"` | Asana section name for open tasks |
-| `--filter-status` | `None` | Filter by `open` or `completed` tasks |
-| `--force` | `False` | Overwrite existing output file if it exists |
+| `--tz-offset` | `+00:00` | Timezone offset for local due dates (`+HH:MM` or `-HH:MM`) |
+| `--section` | `To Do` | Default Asana section for open tasks |
+| `--filter-status` | `None` | Filter tasks: `open` or `completed` |
+| `--force` | `False` | Overwrite destination file if it already exists |
 
 ---
 
 ## 4. Importing into Asana
 
 1. Open your project in Asana.
-2. Click the project dropdown arrow next to the project name -> select **Import** -> **CSV**.
-3. Choose your exported `asana_tasks.csv`.
-4. Asana automatically recognizes standard columns (`Name`, `Description`, `Due Date`, `Section/Column`, `Priority`, `Completed`, `Tags`).
-5. Click **Go to project** to view your imported tasks in Board, List, or Timeline view.
+2. Click the project dropdown arrow next to the project title.
+3. Select **Import** -> **CSV**.
+4. Upload your generated `asana_tasks.csv`.
+5. Verify column mappings (Name, Due Date, Section/Column, Priority, Assignee/Tags) and click **Import**.
 
 ---
 
@@ -80,5 +80,5 @@ python action_items_to_asana.py page1.json page2.json -o asana_all.csv
 Run the test suite:
 
 ```bash
-python test_action_items_to_asana.py
+python -m pytest tests/test_action_items_to_asana.py
 ```

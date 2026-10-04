@@ -1,12 +1,21 @@
+from __future__ import annotations
+
 import csv
+import importlib.util
 import json
 import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-sys.path.insert(0, str(Path(__file__).parent))
-import action_items_to_asana as a2a
+# Load action_items_to_asana example script dynamically
+script_path = Path(__file__).resolve().parent.parent / "examples" / "action_items_to_asana.py"
+if not script_path.exists():
+    script_path = Path(__file__).resolve().parent / "action_items_to_asana.py"
+
+spec = importlib.util.spec_from_file_location("action_items_to_asana", script_path)
+a2a = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(a2a)
 
 
 class TestActionItemsToAsana(unittest.TestCase):
@@ -15,7 +24,7 @@ class TestActionItemsToAsana(unittest.TestCase):
         self.sample_items = [
             {
                 "id": "act-001",
-                "description": "Prepare quarterly financial slides",
+                "description": "=SUM(1, 2) Prepare quarterly financial slides",
                 "completed": False,
                 "due_at": "2026-10-01T17:00:00Z",
                 "priority": "High",
@@ -52,14 +61,16 @@ class TestActionItemsToAsana(unittest.TestCase):
             expected_headers = {"Name", "Description", "Due Date", "Section/Column", "Priority", "Completed", "Tags"}
             self.assertEqual(set(reader[0].keys()), expected_headers)
 
-            # Check task 1 (Open)
+            # Check task 1 (Open with formula prefix neutralized)
             task1 = next(r for r in reader if "slides" in r["Name"])
+            self.assertEqual(task1["Name"], "'=SUM(1, 2) Prepare quarterly financial slides")
             self.assertEqual(task1["Completed"], "FALSE")
             self.assertEqual(task1["Section/Column"], "To Do")
             self.assertEqual(task1["Priority"], "High")
             self.assertEqual(task1["Due Date"], "2026-10-01")
             self.assertIn("omi", task1["Tags"])
             self.assertIn("finance", task1["Tags"])
+            self.assertIn("Captured: 2026-09-28 10:00:00 UTC", task1["Description"])
 
             # Check task 2 (Completed)
             task2 = next(r for r in reader if "partner" in r["Name"])
@@ -105,6 +116,15 @@ class TestActionItemsToAsana(unittest.TestCase):
             ret = a2a.main([str(input_file), "-o", str(output_file), "--tz-offset", "+09:00"])
             self.assertEqual(ret, 0)
             self.assertTrue(output_file.exists())
+
+            content = output_file.read_bytes().decode("utf-8-sig")
+            reader = list(csv.DictReader(content.splitlines()))
+            task1 = next(r for r in reader if "slides" in r["Name"])
+            # 2026-10-01T17:00:00Z + 9h rolls over to 2026-10-02 02:00:00 local time
+            self.assertEqual(task1["Due Date"], "2026-10-02")
+            # Shifted time is local, so it must not append 'UTC'
+            self.assertIn("Captured: 2026-09-28 19:00:00", task1["Description"])
+            self.assertNotIn("UTC", task1["Description"])
 
     def test_path_traversal(self):
         ret = a2a.main(["dummy.json", "-o", "../malicious.csv"])
