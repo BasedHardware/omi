@@ -35,6 +35,19 @@ static char write_buffer[MAX_PATH_LENGTH];
  * same retained block must overwrite a partial write, never append it twice.
  */
 static off_t pending_write_offset = -1;
+static struct fs_file_t recording_file;
+static bool recording_file_open;
+K_MUTEX_DEFINE(recording_file_mutex);
+
+static int close_recording_writer(void)
+{
+    if (!recording_file_open) {
+        return 0;
+    }
+    int result = fs_close(&recording_file);
+    recording_file_open = false;
+    return result;
+}
 
 uint32_t file_num_array[2];
 
@@ -168,7 +181,7 @@ int move_read_pointer(uint8_t num)
     return 0;
 }
 
-int move_write_pointer(uint8_t num)
+static int move_write_pointer_locked(uint8_t num)
 {
     char *write_ptr = generate_new_audio_header(num);
     snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, write_ptr);
@@ -180,6 +193,17 @@ int move_write_pointer(uint8_t num)
         return -1;
     }
     return 0;
+}
+
+int move_write_pointer(uint8_t num)
+{
+    k_mutex_lock(&recording_file_mutex, K_FOREVER);
+    int result = close_recording_writer();
+    if (result == 0) {
+        result = move_write_pointer_locked(num);
+    }
+    k_mutex_unlock(&recording_file_mutex);
+    return result;
 }
 
 int create_file(const char *file_path)
@@ -217,30 +241,32 @@ int read_audio_data(uint8_t *buf, int amount, int offset)
     return rc;
 }
 
-int write_to_file(uint8_t *data, uint32_t length)
+static int write_to_file_locked(uint8_t *data, uint32_t length)
 {
-    struct fs_file_t file;
-    fs_file_t_init(&file);
-    int result = fs_open(&file, write_buffer, FS_O_WRITE);
-    if (result < 0) {
-        return result;
+    int result = 0;
+    if (!recording_file_open) {
+        fs_file_t_init(&recording_file);
+        result = fs_open(&recording_file, write_buffer, FS_O_WRITE);
+        if (result < 0) {
+            return result;
+        }
+        recording_file_open = true;
+        if (pending_write_offset < 0) {
+            result = fs_seek(&recording_file, 0, FS_SEEK_END);
+        }
     }
-
-    if (pending_write_offset < 0) {
-        result = fs_seek(&file, 0, FS_SEEK_END);
-        if (result == 0) {
-            pending_write_offset = fs_tell(&file);
-            if (pending_write_offset < 0) {
-                result = (int) pending_write_offset;
-            }
+    if (result == 0 && pending_write_offset < 0) {
+        pending_write_offset = fs_tell(&recording_file);
+        if (pending_write_offset < 0) {
+            result = (int) pending_write_offset;
         }
     }
     if (result == 0) {
-        result = fs_seek(&file, pending_write_offset, FS_SEEK_SET);
+        result = fs_seek(&recording_file, pending_write_offset, FS_SEEK_SET);
     }
     uint32_t written = 0;
     while (result == 0 && written < length) {
-        int count = fs_write(&file, data + written, length - written);
+        int count = fs_write(&recording_file, data + written, length - written);
         if (count <= 0) {
             result = count < 0 ? count : -ENOSPC;
         } else {
@@ -248,17 +274,24 @@ int write_to_file(uint8_t *data, uint32_t length)
         }
     }
     if (result == 0) {
-        result = fs_sync(&file);
-    }
-    int close_result = fs_close(&file);
-    if (result == 0) {
-        result = close_result;
+        result = fs_sync(&recording_file);
     }
     if (result < 0) {
+        /* Reopen after failure, retaining the original retry position. */
+        close_recording_writer();
         return result;
     }
+    /* Keep the synced writer and its cluster position between appends. */
     pending_write_offset = -1;
     return (int) length;
+}
+
+int write_to_file(uint8_t *data, uint32_t length)
+{
+    k_mutex_lock(&recording_file_mutex, K_FOREVER);
+    int result = write_to_file_locked(data, length);
+    k_mutex_unlock(&recording_file_mutex);
+    return result;
 }
 
 int initialize_audio_file(uint8_t num)
@@ -320,7 +353,7 @@ int get_file_contents(struct fs_dir_t *zdp, struct fs_dirent *entry)
     return count;
 }
 // we should clear instead of delete since we lose fifo structure
-int clear_audio_file(uint8_t num)
+static int clear_audio_file_locked(uint8_t num)
 {
     char *clear_header = generate_new_audio_header(num);
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, clear_header);
@@ -344,7 +377,18 @@ int clear_audio_file(uint8_t num)
     return 0;
 }
 
-int delete_audio_file(uint8_t num)
+int clear_audio_file(uint8_t num)
+{
+    k_mutex_lock(&recording_file_mutex, K_FOREVER);
+    int result = close_recording_writer();
+    if (result == 0) {
+        result = clear_audio_file_locked(num);
+    }
+    k_mutex_unlock(&recording_file_mutex);
+    return result;
+}
+
+static int delete_audio_file_locked(uint8_t num)
 {
     char *ptr = generate_new_audio_header(num);
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
@@ -356,6 +400,17 @@ int delete_audio_file(uint8_t num)
     }
 
     return 0;
+}
+
+int delete_audio_file(uint8_t num)
+{
+    k_mutex_lock(&recording_file_mutex, K_FOREVER);
+    int result = close_recording_writer();
+    if (result == 0) {
+        result = delete_audio_file_locked(num);
+    }
+    k_mutex_unlock(&recording_file_mutex);
+    return result;
 }
 // the nuclear option.
 int clear_audio_directory()
@@ -446,7 +501,7 @@ int get_offset()
     return offset_ptr[0];
 }
 
-void sd_off()
+static void sd_off_locked(void)
 {
     // Suspend SPI peripheral to save power
     const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi2));
@@ -460,6 +515,17 @@ void sd_off()
     gpio_pin_set_dt(&sd_en_gpio_pin, 0);
 
     sd_enabled = false;
+}
+
+void sd_off(void)
+{
+    k_mutex_lock(&recording_file_mutex, K_FOREVER);
+    int result = close_recording_writer();
+    if (result < 0) {
+        LOG_ERR("Closing SD writer before power off failed: %d", result);
+    }
+    sd_off_locked();
+    k_mutex_unlock(&recording_file_mutex);
 }
 
 void sd_on()

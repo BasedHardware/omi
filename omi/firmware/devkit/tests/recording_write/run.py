@@ -28,7 +28,13 @@ def function(filename, name):
 with tempfile.TemporaryDirectory(prefix="devkit-recording-") as tmp:
     directory = Path(tmp)
     (directory / "production.inc").write_text("\n".join([
+        function("sdcard.c", "close_recording_writer"),
+        function("sdcard.c", "write_to_file_locked"),
         function("sdcard.c", "write_to_file"),
+        function("sdcard.c", "clear_audio_file"),
+        function("sdcard.c", "move_write_pointer"),
+        function("sdcard.c", "delete_audio_file"),
+        function("sdcard.c", "sd_off"),
         function("sdcard.c", "initialize_audio_file"),
         function("transport.c", "write_to_storage"),
     ]))
