@@ -205,6 +205,8 @@ and an explicit empty literal renders as `''`.
 | `STT_LEARNED_LANGUAGE_PROFILE` | Use a bounded per-user spoken-language history for live STT routing and Soniox hints | backend | env | closed | false | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | backend |
 | `STT_MULTI_LANGUAGE_HINTS` | Send primary and English hints to Soniox in non-English multilingual live sessions | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
 | `STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT` | Prefer Soniox for allocated non-English multilingual live sessions | backend | env | closed | 0 | 100 (backend-listen (chart), gke/backend-listen) | 100 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
+| `STT_NO_TEXT_RESCUE_ENABLED` | Default-off bounded paid rescue and cheap failback for silent window episodes; requires recovery enabled | backend | env | closed | — | — | — | — | pending | 2026-11-04 | backend |
+| `STT_PAID_SPILLOVER_BUDGET_ENABLED` | Default-off fleet budget for paid router promotions after Parakeet capacity refusal; denial restores static order | backend | env | closed | — | — | — | — | pending | 2026-11-04 | backend |
 | `STT_RESILIENT_RECONNECT` | Replay bounded live audio on eligible Soniox reconnects | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | backend |
 | `STT_ROUTING_MODE` | Off shadow or cost-ordered health-gated live STT routing | backend | env | closed | off | shadow (backend-listen (chart), gke/backend-listen) | shadow (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | dazheng |
 | `STT_ROUTING_ON_PERCENT` | Sticky UID percentage admitted to the cost router; zero keeps static routing | backend | env | closed | 0 | 0 (backend-listen (chart), gke/backend-listen) | 0 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-31 | dazheng |
@@ -317,7 +319,11 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_TASK_JEV_THRESHOLD` | Screen gate threshold, default 0.5 | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `SCREEN_TASK_MIN_MACOS_BUILD` | Minimum identified macOS build admitted to the screen-task gate, admission, and flagged extraction; default 12435; invalid values use the default | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `SONIOX_ESTIMATED_USD_PER_HOUR` | Metered-audio fallback price for Soniox runway | backend | env | closed | 0.07537 | 0.07537 (backend-listen (chart), gke/backend-listen) | 0.07537 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
+| `STT_NO_TEXT_RESCUE_SECONDS` | Maximum paid wall and admitted audio seconds per no-text rescue; default 60 bounded 5-120 | backend | env | closed | — | — | — | — | pending | — | backend |
 | `STT_NO_TEXT_SECONDS` | Deadline from VAD-confirmed speech to first provider text | backend | env | closed | 30 | 30 (backend-listen (chart), gke/backend-listen) | 30 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
+| `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` | Deepgram fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions | backend | env | closed | — | — | — | — | keep | — | backend |
+| `STT_PAID_SPILLOVER_MODULATE_PER_MINUTE` | Modulate fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions | backend | env | closed | — | — | — | — | keep | — | backend |
+| `STT_PAID_SPILLOVER_SONIOX_PER_MINUTE` | Soniox fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions | backend | env | closed | — | — | — | — | keep | — | backend |
 | `STT_ROUTING_DISRUPTION_GATE` | Maximum acceptable speech-session disruption rate | backend | env | closed | 0.08 | 0.08 (backend-listen (chart), gke/backend-listen) | 0.08 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
 | `STT_ROUTING_REDIS_TIMEOUT_SECONDS` | Maximum Redis wait for live routing health state | backend | env | closed | 0.075 | 0.075 (backend-listen (chart), gke/backend-listen) | 0.075 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
 | `STT_ROUTING_TARGETS_JSON` | Declarative live STT targets with cost capability endpoint and ramp | backend | env | closed | '' | '' (backend-listen (chart), gke/backend-listen) | '' (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
@@ -376,6 +382,12 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SELFHEAL_MODE` — Conversation self-heal sweeper mode: off/detect-only/nudge/heal (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
 - `SONIOX_IDLE_CLOSE_SECONDS` — Close paid Soniox transports after continuous active-VAD silence; unset or zero off; suggested canary 45 seconds (fail: closed)
+- `STT_NO_TEXT_RESCUE_ENABLED` — Default-off bounded paid rescue and cheap failback for silent window episodes; requires recovery enabled (fail: closed)
+- `STT_NO_TEXT_RESCUE_SECONDS` — Maximum paid wall and admitted audio seconds per no-text rescue; default 60 bounded 5-120 (fail: closed)
+- `STT_PAID_SPILLOVER_BUDGET_ENABLED` — Default-off fleet budget for paid router promotions after Parakeet capacity refusal; denial restores static order (fail: closed)
+- `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` — Deepgram fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
+- `STT_PAID_SPILLOVER_MODULATE_PER_MINUTE` — Modulate fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
+- `STT_PAID_SPILLOVER_SONIOX_PER_MINUTE` — Soniox fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
 - `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)

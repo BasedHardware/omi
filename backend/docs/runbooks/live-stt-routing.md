@@ -380,3 +380,70 @@ more than 1,000 matching keys and uses short Redis socket deadlines. It does
 not reset process-local circuits; those recover on their existing cooldown,
 or after an operator controlled listen restart. Never point the script at a
 different environment to clear a production alert.
+
+
+## Router-on readiness controls (default off)
+
+`STT_PAID_SPILLOVER_BUDGET_ENABLED=false` preserves existing selection. When
+true, router-on sessions encountering Parakeet capacity refusal must obtain a
+fleet admission before promoting a paid route. Redis TIME and one atomic Lua
+operation enforce a fixed UTC-minute budget across pods; aliases/endpoints on
+the same provider account share the budget. Defaults are 30 promotions each
+for `STT_PAID_SPILLOVER_SONIOX_PER_MINUTE`,
+`STT_PAID_SPILLOVER_MODULATE_PER_MINUTE`, and
+`STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` (range 0–10000). Zero refuses
+promotions. Redis faults or budget denial restore the configured order and
+emit `omi_stt_paid_spillover_admissions_total{provider,outcome}` with outcomes
+`admitted`, `denied`, `unavailable`. This limits additional router promotions;
+the static chain may still require a paid dial. A minute boundary can admit
+two adjacent budgets in a short interval. Qualify paid concurrency, retry and
+billing headroom independently before enabling router traffic.
+
+`STT_NO_TEXT_RESCUE_ENABLED=false` preserves existing first-text handling.
+Enabling it also requires `STT_FAILOVER_RECOVERY_ENABLED=true`; the choice and
+`STT_NO_TEXT_RESCUE_SECONDS` are pinned when the managed session is created.
+The default 60-second lease (range 5–120) bounds both paid wall time and paid
+admitted audio, including replay and successor switches, for one ambiguous
+no-text interval per listen session. A successor transcript records proof but
+does not renew the lease. At expiry or audio-budget refusal, the owner tries
+windowed Parakeet once, retaining unanswered capture and applying the normal
+replay/epoch fences. This policy retirement never benches the paid provider.
+If cheap permission/capacity is unavailable, recovery terminates explicitly;
+it cannot quietly extend the paid lease. Returned cheap decoding suppresses
+further first-text/empty-streak rescues for the session. Normal transport
+failures still use the configured recovery path. Empty output does not establish
+that audio is noise. Before a lease is spent, the gated window deadline rearms
+after emitted text so later speech without progress can also trigger rescue.
+
+`omi_stt_no_text_rescue_audio_seconds_total{provider}` measures admitted paid
+rescue audio; `omi_stt_no_text_rescue_total{outcome}` counts starts and completed
+intervals, distinguishing `successor_text` from `unproven`. Starts from sessions
+that leave before lease completion remain censored; these metrics are not an
+invoice or a transcript-quality score. For a synthetic one-hour Soniox
+remainder, the declared $0.0754/audio-hour rate implies $0.0754 without a
+lease versus at most $0.001257 for 60 paid audio seconds, followed by cheap
+processing. Billing increments and costs of genuine later transport failures
+are separate. Existing production counters do not join deadline causes to
+successor duration; do not claim historical savings from them.
+
+The monitoring chart's `alerts/live-stt.json` and combined `alert-rules.json`
+contain independent terminal-after-text, mid-session terminal, paid-capacity,
+combined overflow/batch-pressure, POST-latency, replay-continuity, lifecycle,
+persistence, snapshot and stage-readiness rules. Any-text headline success
+remains its existing limited SLI. Deploy and test notification delivery through
+the monitoring release process before rollout; committing rules does not make
+them live. Lifecycle/replay rules document their configured-chain/recovery
+prerequisites. Never pool lifecycle counters across instances or targets.
+
+Local limiter qualification (disposable Redis, no cloud data):
+
+```bash
+printf '%s\n' tests/integration/test_paid_spillover_redis.py > .local/redis-tests.txt
+OMI_OWNED_PID_FILE="$PWD/.local/owned-pids.txt" \
+BACKEND_PYTEST_MARK_EXPR=integration \
+BACKEND_UNIT_TEST_FILE_LIST="$PWD/.local/redis-tests.txt" bash backend/test.sh
+```
+
+Run from the repository root with `.local/` already created. The integration
+test records its Redis PID and terminates only that owned process. Fast router
+and receiver regressions remain in the normal hermetic unit suite.

@@ -1505,7 +1505,9 @@ async def test_off_mode_refresh_reads_account_state_only(monkeypatch):
 def _fake_leg_socket(*, endpoint=None, target=None, family='modulate', uid='synthetic', language='en'):
     raw = SimpleNamespace(is_connection_dead=False, routing_endpoint=endpoint)
     receiver = SimpleNamespace(host=SimpleNamespace(language=language, request=SimpleNamespace(uid=uid)))
-    session = SimpleNamespace(receiver=receiver)
+    from utils.stt.no_text_rescue import NoTextRescue
+
+    session = SimpleNamespace(receiver=receiver, no_text_rescue=NoTextRescue(recovery_enabled=False))
     token = live_router.connecting_target.set(target)
     try:
         return live_session.LiveLegSocket(raw, None, session, st.STTService(family), 16000, False, False)
@@ -1920,7 +1922,8 @@ def test_target_circuit_full_mixed_bench_keeps_family_default_unaffected(monkeyp
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('recovery', [False, True])
-async def test_saturated_target_circuits_deny_new_target_but_dial_deepgram_tail(monkeypatch, isolated, recovery):
+@pytest.mark.parametrize('static_fails', [False, True])
+async def test_saturated_target_circuits_keep_static_chain(monkeypatch, isolated, recovery, static_fails):
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
@@ -1946,6 +1949,8 @@ async def test_saturated_target_circuits_deny_new_target_but_dial_deepgram_tail(
 
     async def modulate_connect():
         dialed.append('modulate')
+        if static_fails:
+            raise ConnectionError('synthetic static failure')
         return SimpleNamespace(is_connection_dead=False)
 
     async def deepgram_connect():
@@ -1961,8 +1966,8 @@ async def test_saturated_target_circuits_deny_new_target_but_dial_deepgram_tail(
         routing_uid='synthetic',
         routing_language='en',
     )
-    assert service == st.STTService.deepgram
-    assert dialed == ['deepgram']
+    assert service == (st.STTService.deepgram if static_fails else st.STTService.modulate)
+    assert dialed == (['modulate', 'deepgram'] if static_fails else ['modulate'])
     assert len(live_router._target_circuits) == 64
 
 
