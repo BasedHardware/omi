@@ -11,56 +11,6 @@ FIXTURE = (
     Path(__file__).parents[2] / "testing" / "jit_processing" / "fixtures" / "jit_architecture_quality_cost_v1.json"
 )
 V2_FIXTURE = FIXTURE.with_name("jit_architecture_quality_cost_v2.json")
-NANO_PROMPT_BUILDER_SOURCE = (
-    Path(__file__).parents[3]
-    / "desktop"
-    / "macos"
-    / "Desktop"
-    / "Sources"
-    / "ProactiveAssistants"
-    / "Core"
-    / "JITProactivityDelivery.swift"
-)
-NANO_RUNTIME_SOURCE = (
-    Path(__file__).parents[3]
-    / "desktop"
-    / "macos"
-    / "Desktop"
-    / "Sources"
-    / "ProactiveAssistants"
-    / "Core"
-    / "JITProactivityRuntime.swift"
-)
-
-
-def _production_nano_prompt_prefix() -> str:
-    """Materialize the literal prefix from the production Swift source.
-
-    The interpolation line is intentionally excluded; this verifies the byte
-    boundary before each fixture's bounded evidence without duplicating the
-    production prompt in a Python constant.
-    """
-
-    builder_source = (
-        NANO_PROMPT_BUILDER_SOURCE.read_text(encoding="utf-8") if NANO_PROMPT_BUILDER_SOURCE.exists() else ""
-    )
-    if "static func nanoTriagePrompt" in builder_source:
-        source = builder_source
-        operation = source.index("static func nanoTriagePrompt")
-        start = source.index('"""', operation) + len('"""')
-        end = source.index('"""', start)
-    else:
-        source = NANO_RUNTIME_SOURCE.read_text(encoding="utf-8")
-        operation = source.index("operation: ModelQoS.Proactivity.extractionOperation")
-        start = source.index('prompt: """', operation) + len('prompt: """')
-        end = source.index('""",', start)
-    lines = source[start:end].splitlines()
-    # The first line is the newline after the opening delimiter.  Stop at the
-    # evidence interpolation so later source-owned temporal sections do not
-    # change this fixture's deliberately prefix-only contract.
-    evidence_line = next(index for index, line in enumerate(lines) if "\\(context.boundedEvidence)" in line)
-    indentation = len(lines[1]) - len(lines[1].lstrip())
-    return "\n".join(line[indentation:] for line in lines[1:evidence_line]) + "\n"
 
 
 def test_frozen_corpus_has_identical_evidence_and_stable_prompt_hashes() -> None:
@@ -108,7 +58,7 @@ def test_frozen_corpus_pins_safety_caps_and_adjudication_cases() -> None:
     assert by_id["dst_local_deadline"]["evidence"]["timezone"] == "America/New_York"
 
 
-def test_v2_replays_real_prompt_builders_without_provider_calls() -> None:
+def test_v2_preserves_frozen_prompt_replay_without_provider_calls() -> None:
     fixture = json.loads(V2_FIXTURE.read_text(encoding="utf-8"))
 
     assert fixture["schema_version"] == "jit_architecture_quality_cost.v2"
@@ -142,7 +92,12 @@ def test_v2_replays_real_prompt_builders_without_provider_calls() -> None:
         assert configured["OMI_LLM_CHAT_AGENT_ROUTE"] == "gateway"
         assert configured["OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION"] == "false"
 
-    prefix = _production_nano_prompt_prefix()
+    # The production nano runtime was retired with proactivity v2. Keep this
+    # historical corpus self-contained: its empty-evidence case freezes the
+    # original prompt prefix, whose checksum remains pinned below.
+    empty_case = next(case for case in fixture["cases"] if case["case_id"] == "empty_context_silence")
+    assert empty_case["prompt_inputs"]["jit_projection"]["bounded_evidence"] == ""
+    prefix = empty_case["prompts"]["jit"]["materialized_nano_prompt"]
     assert hashlib.sha256(prefix.encode("utf-8")).hexdigest() == (
         fixture["prompt_contract"]["nano_materialization"]["source_prompt_prefix_sha256"]
     )

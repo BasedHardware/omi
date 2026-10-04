@@ -12492,4 +12492,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Vérifiez la connexion';
+
+  @override
+  String get forYou => 'Pour vous';
+
+  @override
+  String get stopThese => 'Ne plus recevoir ceci';
+
+  @override
+  String get dismiss => 'Masquer';
 }

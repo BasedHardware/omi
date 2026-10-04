@@ -113,7 +113,7 @@ entrypoints do that before they read:
 | Process | Entrypoint | Covered because |
 |---|---|---|
 | backend, backend-listen, backend-sync, backend-sync-backfill | `backend/main.py` | imports `routers`, which import `database` |
-| llm_gateway | `backend/llm_gateway/main.py` | `openai_compatible` imports `llm_gateway/gateway/jit_budget.py`, which imports `database._client` |
+| llm_gateway | `backend/llm_gateway/main.py` | Legacy JIT proactivity reservation reads retired; the gateway still records provider accounting through its retained accounting boundary |
 | desktop-backend | `backend/desktop_backend.py` | imports `routers` |
 | pusher | `backend/pusher/main.py` | imports `routers.pusher`, which imports `database.users` |
 | memory-maintenance-job | `backend/modal/memory_maintenance_job.py` | maintenance cron imports `database._client` |

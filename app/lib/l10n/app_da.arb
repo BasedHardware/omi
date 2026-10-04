@@ -3874,5 +3874,8 @@
     "playbackBackToCurrent": "Tilbage til aktuel",
     "playbackAudioUnavailable": "Lyd ikke tilgængelig",
     "playbackAudioLoadFailed": "Lyden kunne ikke indlæses",
-    "playbackAudioNetworkFailed": "Tjek forbindelsen"
+    "playbackAudioNetworkFailed": "Tjek forbindelsen",
+    "forYou": "Til dig",
+    "stopThese": "Stop disse",
+    "dismiss": "Afvis"
 }

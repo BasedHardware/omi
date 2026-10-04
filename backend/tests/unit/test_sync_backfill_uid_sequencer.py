@@ -371,7 +371,7 @@ def test_cutover_wake_uses_existing_sync_queue_and_oidc_route(monkeypatch):
     calls = []
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync')
-    monkeypatch.setattr(cloud_tasks, '_enqueue_named_task', lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', lambda *args, **kwargs: calls.append((args, kwargs)))
     cloud_tasks.enqueue_sync_uid_wake('private-uid', 'hash123', 12345)
     args, kwargs = calls[0]
     assert args[:3] == ('sync', 'https://backend-sync.example/v2/sync-backfill-sequencer/wake', 'sbu-hash123-12345')
@@ -387,8 +387,6 @@ def test_named_wake_task_is_scheduled_for_cutover_deadline(monkeypatch):
     monkeypatch.setenv('SYNC_TASKS_PROJECT', 'p')
     monkeypatch.setenv('SYNC_TASKS_LOCATION', 'l')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.test')
-    cloud_tasks._enqueue_named_task(
-        'sync', 'https://backend-sync.example/wake', 'wake', {'uid': 'u'}, schedule_at=12345
-    )
+    cloud_tasks.enqueue_named_task('sync', 'https://backend-sync.example/wake', 'wake', {'uid': 'u'}, schedule_at=12345)
     task = fake.create_task.call_args.kwargs['task']
     assert task.schedule_time.timestamp() == 12345

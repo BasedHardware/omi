@@ -3832,5 +3832,8 @@
     "playbackBackToCurrent": "Πίσω στο τρέχον",
     "playbackAudioUnavailable": "Ο ήχος δεν είναι διαθέσιμος",
     "playbackAudioLoadFailed": "Δεν ήταν δυνατή η φόρτωση του ήχου",
-    "playbackAudioNetworkFailed": "Ελέγξτε τη σύνδεση"
+    "playbackAudioNetworkFailed": "Ελέγξτε τη σύνδεση",
+    "forYou": "Για εσάς",
+    "stopThese": "Διακοπή αυτών",
+    "dismiss": "Απόρριψη"
 }

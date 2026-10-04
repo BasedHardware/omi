@@ -12426,4 +12426,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Comprueba la conexión';
+
+  @override
+  String get forYou => 'Para ti';
+
+  @override
+  String get stopThese => 'Dejar de recibir esto';
+
+  @override
+  String get dismiss => 'Descartar';
 }

@@ -3867,5 +3867,8 @@
     "playbackBackToCurrent": "Wróć do bieżącego",
     "playbackAudioUnavailable": "Dźwięk niedostępny",
     "playbackAudioLoadFailed": "Nie udało się wczytać dźwięku",
-    "playbackAudioNetworkFailed": "Sprawdź połączenie"
+    "playbackAudioNetworkFailed": "Sprawdź połączenie",
+    "forYou": "Dla Ciebie",
+    "stopThese": "Zatrzymaj te",
+    "dismiss": "Ukryj"
 }

@@ -36,7 +36,9 @@ class Target:
         return self.family == 'soniox'
 
     def ramp(self) -> float:
-        return percent('PARAKEET_WINDOW_ALLOCATION_PERCENT', 0) if self.id == 'parakeet-window' else self.ramp_percent
+        if self.id == 'parakeet-window':
+            return min(self.ramp_percent, percent('PARAKEET_WINDOW_ALLOCATION_PERCENT', 0))
+        return self.ramp_percent
 
     def at_capacity(self) -> bool:
         return bool(self.capacity_env and os.getenv(self.capacity_env, 'false').lower() == 'true')

@@ -843,24 +843,6 @@ struct TaskSettingsResponse: Codable {
   }
 }
 
-struct InsightSettingsResponse: Codable {
-  var enabled: Bool?
-  var analysisPrompt: String?
-  var extractionInterval: Double?
-  var minConfidence: Double?
-  var notificationsEnabled: Bool?
-  var excludedApps: [String]?
-
-  enum CodingKeys: String, CodingKey {
-    case enabled
-    case analysisPrompt = "analysis_prompt"
-    case extractionInterval = "extraction_interval"
-    case minConfidence = "min_confidence"
-    case notificationsEnabled = "notifications_enabled"
-    case excludedApps = "excluded_apps"
-  }
-}
-
 struct MemorySettingsResponse: Codable {
   var enabled: Bool?
   var analysisPrompt: String?
@@ -944,7 +926,6 @@ enum AssistantSettingsJSONValue: Codable, Equatable {
 struct AssistantSettingsResponse: Codable {
   var shared: SharedAssistantSettingsResponse?
   var task: TaskSettingsResponse?
-  var insight: InsightSettingsResponse?
   var memory: MemorySettingsResponse?
   var floatingBar: FloatingBarSettingsResponse?
   var updateChannel: String?
@@ -952,7 +933,6 @@ struct AssistantSettingsResponse: Codable {
 
   enum CodingKeys: String, CodingKey, CaseIterable {
     case shared, task
-    case insight = "advice"
     case memory
     case floatingBar = "floating_bar"
     case updateChannel = "update_channel"
@@ -961,7 +941,6 @@ struct AssistantSettingsResponse: Codable {
   init(
     shared: SharedAssistantSettingsResponse? = nil,
     task: TaskSettingsResponse? = nil,
-    insight: InsightSettingsResponse? = nil,
     memory: MemorySettingsResponse? = nil,
     floatingBar: FloatingBarSettingsResponse? = nil,
     updateChannel: String? = nil,
@@ -969,7 +948,6 @@ struct AssistantSettingsResponse: Codable {
   ) {
     self.shared = shared
     self.task = task
-    self.insight = insight
     self.memory = memory
     self.floatingBar = floatingBar
     self.updateChannel = updateChannel
@@ -980,7 +958,6 @@ struct AssistantSettingsResponse: Codable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     shared = Self.decodeLossy(SharedAssistantSettingsResponse.self, from: container, forKey: .shared)
     task = Self.decodeLossy(TaskSettingsResponse.self, from: container, forKey: .task)
-    insight = Self.decodeLossy(InsightSettingsResponse.self, from: container, forKey: .insight)
     memory = Self.decodeLossy(MemorySettingsResponse.self, from: container, forKey: .memory)
     floatingBar = Self.decodeLossy(
       FloatingBarSettingsResponse.self, from: container, forKey: .floatingBar)
@@ -1000,7 +977,6 @@ struct AssistantSettingsResponse: Codable {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encodeIfPresent(shared, forKey: .shared)
     try container.encodeIfPresent(task, forKey: .task)
-    try container.encodeIfPresent(insight, forKey: .insight)
     try container.encodeIfPresent(memory, forKey: .memory)
     try container.encodeIfPresent(floatingBar, forKey: .floatingBar)
     try container.encodeIfPresent(updateChannel, forKey: .updateChannel)

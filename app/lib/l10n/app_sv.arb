@@ -3832,5 +3832,8 @@
     "playbackBackToCurrent": "Tillbaka till aktuell",
     "playbackAudioUnavailable": "Ljudet är inte tillgängligt",
     "playbackAudioLoadFailed": "Ljudet kunde inte laddas",
-    "playbackAudioNetworkFailed": "Kontrollera anslutningen"
+    "playbackAudioNetworkFailed": "Kontrollera anslutningen",
+    "forYou": "För dig",
+    "stopThese": "Stoppa dessa",
+    "dismiss": "Avvisa"
 }

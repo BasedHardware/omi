@@ -14,6 +14,12 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -25,6 +31,9 @@ environments:
             category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
             category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
@@ -459,6 +468,12 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -467,6 +482,9 @@ environments:
             category: ops_kill
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
             category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
@@ -769,9 +787,6 @@ environments:
         MEMORY_BELIEF_MODEL_ENABLED:
           category: rollout
           value: 'true'
-        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
-          category: rollout
-          value: 'true'
         BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
           category: rollout
           value: 'true'
@@ -850,12 +865,21 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1153,12 +1177,21 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1418,12 +1451,21 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -1636,12 +1678,21 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -2097,6 +2148,12 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2108,6 +2165,9 @@ environments:
             category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
             category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
@@ -2558,6 +2618,12 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          AUDIO_TIMELINE_SPANS:
+            value: 'false'
+            category: rollout
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2566,6 +2632,9 @@ environments:
             category: ops_kill
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
+            category: rollout
+          CAPTURE_GROUP_CONTAINMENT_MODE:
+            value: shadow
             category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
@@ -2744,9 +2813,6 @@ environments:
         MEMORY_BELIEF_MODEL_ENABLED:
           category: rollout
           value: 'false'
-        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
-          category: rollout
-          value: 'false'
         BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
           category: rollout
           value: 'false'
@@ -2833,12 +2899,21 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3153,12 +3228,21 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3408,12 +3492,21 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout
@@ -3637,12 +3730,21 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_TIMELINE_SPANS:
+              value: 'false'
+              category: rollout
+            LIVE_SPEAKER_SPAN_RESOLUTION:
+              value: 'false'
+              category: rollout
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE:
+              value: shadow
+              category: rollout
             SYNC_ASSIGNMENT_RECOVERY_ENABLED:
               value: 'true'
               category: rollout

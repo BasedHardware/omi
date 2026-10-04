@@ -3832,5 +3832,8 @@
     "playbackBackToCurrent": "Tilbake til gjeldende",
     "playbackAudioUnavailable": "Lyd ikke tilgjengelig",
     "playbackAudioLoadFailed": "Kunne ikke laste lyden",
-    "playbackAudioNetworkFailed": "Sjekk tilkoblingen"
+    "playbackAudioNetworkFailed": "Sjekk tilkoblingen",
+    "forYou": "For deg",
+    "stopThese": "Stopp disse",
+    "dismiss": "Avvis"
 }

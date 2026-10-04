@@ -422,9 +422,6 @@ class LiveNotesMonitor: ObservableObject {
     if case GeminiClient.GeminiClientError.planGated = error {
       return true
     }
-    if case ProactiveLaneClientError.planGated = error {
-      return true
-    }
     return false
   }
 
