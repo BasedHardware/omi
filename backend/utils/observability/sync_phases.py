@@ -1,5 +1,8 @@
 """Aggregate sync-attempt timing; context follows the existing executor dispatch."""
 
+from __future__ import annotations
+
+from typing import Any, Awaitable, Callable, Iterator, ParamSpec, TypeVar
 from contextvars import ContextVar
 from contextlib import contextmanager
 from functools import wraps
@@ -28,38 +31,40 @@ CALLS = Histogram(
 )
 
 _logger = logging.getLogger(__name__)
-_attempt = ContextVar('sync_metrics_attempt', default=None)
+P = ParamSpec('P')
+R = TypeVar('R')
+_attempt: ContextVar[_Attempt | None] = ContextVar('sync_metrics_attempt', default=None)
 
 
 class _Attempt:
-    def __init__(self, lane):
+    def __init__(self, lane: str):
         self.lane = lane if lane in ('fresh', 'backfill') else 'unknown'
-        self.counts = dict.fromkeys(PHASES, 0)
+        self.counts: dict[str, int] = dict.fromkeys(PHASES, 0)
         self.lock = threading.Lock()
         self.closed = False
 
-    def record(self, phase, elapsed):
+    def record(self, phase: str, elapsed: float) -> None:
         with self.lock:
             if self.closed:
                 return
             self.counts[phase] += 1
             DURATION.labels(self.lane, phase).observe(elapsed)
 
-    def finish(self):
+    def finish(self) -> None:
         with self.lock:
             self.closed = True
             for phase, count in self.counts.items():
                 CALLS.labels(self.lane, phase).observe(count)
 
 
-def sync_phase(phase):
+def sync_phase(phase: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Time a leaf operation only within a sync attempt; never inspect its data."""
     if phase not in PHASES:
         raise ValueError('unknown sync metrics phase')
 
-    def decorate(fn):
+    def decorate(fn: Callable[P, R]) -> Callable[P, R]:
         @wraps(fn)
-        def observed(*args, **kwargs):
+        def observed(*args: P.args, **kwargs: P.kwargs) -> R:
             attempt = _attempt.get()
             if attempt is None:
                 return fn(*args, **kwargs)
@@ -74,12 +79,12 @@ def sync_phase(phase):
     return decorate
 
 
-def sync_attempt(fn):
+def sync_attempt(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
     """Emit calls once on success, failure or cancellation, then reset context."""
     signature = inspect.signature(fn)
 
     @wraps(fn)
-    async def observed(*args, **kwargs):
+    async def observed(*args: P.args, **kwargs: P.kwargs) -> R:
         if _attempt.get() is not None:
             return await fn(*args, **kwargs)
         bound = signature.bind(*args, **kwargs)
@@ -107,8 +112,8 @@ _last_export = 0.0
 _session = None
 
 
-def _distribution(metric, lane, phase):
-    samples = metric.collect()[0].samples
+def _distribution(metric: Histogram, lane: str, phase: str) -> dict[str, Any] | None:
+    samples = next(iter(metric.collect())).samples
     labels = {'lane': lane, 'phase': phase}
     buckets = sorted(
         (float(s.labels['le']), s.value)
@@ -132,7 +137,7 @@ def _distribution(metric, lane, phase):
     }
 
 
-def export_snapshot():
+def export_snapshot() -> None:
     """Best-effort cumulative distributions, at most once/five minutes per instance.
 
     Runtime ADC needs monitoring.timeSeries.create. Only fixed metric labels and
@@ -207,13 +212,13 @@ def export_snapshot():
         _export_lock.release()
 
 
-def observe_sync_call(phase, fn, *args, **kwargs):
+def observe_sync_call(phase: str, fn: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
     """Instrument the actual outbound operation, including each retry/fallback."""
     return sync_phase(phase)(fn)(*args, **kwargs)
 
 
 @contextmanager
-def sync_phase_timer(phase):
+def sync_phase_timer(phase: str) -> Iterator[None]:
     if phase not in PHASES:
         raise ValueError('unknown sync metrics phase')
     attempt = _attempt.get()
@@ -225,7 +230,7 @@ def sync_phase_timer(phase):
             attempt.record(phase, time.monotonic() - started)
 
 
-def set_sync_metrics_lane(lane):
+def set_sync_metrics_lane(lane: str) -> None:
     attempt = _attempt.get()
     if attempt is not None:
         attempt.lane = lane if lane in ('fresh', 'backfill') else 'unknown'

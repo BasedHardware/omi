@@ -65,6 +65,8 @@ At 8 GiB, estimated **$330–970/month** assumes 25–50% less active instance t
 | Conversation processing lease heartbeat | `backend/utils/conversations/lifecycle.py:347` | Context-managed thread stops/joins at guard exit; safe only if its owning work is request-bound. |
 | Awaited sync segment thread-pool work | `backend/utils/sync/pipeline.py:2660` | Normal gather awaits work, but executor work can continue after cancellation/timeout; verify bounded I/O and durable retry/fencing on the final SHA. |
 
+Exact producer callsites with enclosing functions: [static inventory](sync-request-lifetime-inventory.md).
+
 The audit is conservative: all routers are registered on the shared app, so service name alone does not isolate execution. Production fresh currently has `cpu-throttling=false`; backfill has request-based CPU and inherits the same startup concerns already. The new exporter does not add a recurring task.
 
 Potential fresh switch saves an illustrative **$400–1,500/month** at Oct 2–3 overlap/duty cycle, not an approved change. First make all required effects request-owned or durably queued, gate recurring shared-app work by service role, prove cold idle/retry/cancellation behavior in dev, and re-audit. Rollback if a future reviewed switch qualifies: restore always-allocated CPU and the prior revision.
