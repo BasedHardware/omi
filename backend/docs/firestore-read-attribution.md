@@ -8,8 +8,9 @@ does no network I/O, adds no Firestore reads, and never raises into the caller.
 The daily bill-reconcile coverage numerator is the cumulative JSON read ledger
 emitted when `FIRESTORE_READ_LEDGER=1`. The service label is
 `FIRESTORE_READ_LEDGER_SERVICE` when that is set, otherwise Cloud Run
-`K_SERVICE` or `CLOUD_RUN_JOB`. `memory-maintenance-job` uses `CLOUD_RUN_JOB`
-so runtime env does not add another copy of that job name. The ledger reuses the probe's billed
+`K_SERVICE` or `CLOUD_RUN_JOB`, otherwise `DD_SERVICE`. GKE listen and pusher
+use `DD_SERVICE` (`backend-listen` and `pusher`). `memory-maintenance-job`
+uses `CLOUD_RUN_JOB` so runtime env does not add another copy of that job name. The ledger reuses the probe's billed
 `amount` and `kind`, scoped to clients in `based-hardware`; unknown client
 projects are counted and mark the day incomplete. It is sampled at p=1, so
 sampling error is zero. `backend`, `backend-listen`, and `pusher` must show

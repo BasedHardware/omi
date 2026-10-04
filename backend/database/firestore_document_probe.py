@@ -172,16 +172,17 @@ _caller_lock = threading.Lock()
 def _ledger_service_name() -> str:
     """Name this process on the bill.
 
-    An explicit setting wins. Cloud Run already injects ``K_SERVICE`` on
-    services and ``CLOUD_RUN_JOB`` on jobs, so a job whose name is itself a
-    legacy-memory inventory marker does not have to repeat that string in
-    runtime env.
+    An explicit setting wins. Cloud Run injects ``K_SERVICE`` or
+    ``CLOUD_RUN_JOB``. GKE listen and pusher already publish different
+    ``DD_SERVICE`` values, and the co-host gate allows that split, so the
+    ledger reuses it instead of adding a second name that would have to differ.
     """
 
     raw = (
         os.environ.get('FIRESTORE_READ_LEDGER_SERVICE', '').strip()
         or os.environ.get('K_SERVICE', '').strip()
         or os.environ.get('CLOUD_RUN_JOB', '').strip()
+        or os.environ.get('DD_SERVICE', '').strip()
     )
     if re.fullmatch(r'[a-z0-9-]{1,64}', raw):
         return raw

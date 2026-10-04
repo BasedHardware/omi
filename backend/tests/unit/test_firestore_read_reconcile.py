@@ -46,7 +46,10 @@ def test_ledger_service_prefers_explicit_name_then_cloud_run_identity(monkeypatc
     assert probe._ledger_service_name() == "ignored"
     monkeypatch.delenv("K_SERVICE")
     assert probe._ledger_service_name() == "also-ignored"
-    monkeypatch.setenv("CLOUD_RUN_JOB", "Memory Job")
+    monkeypatch.delenv("CLOUD_RUN_JOB")
+    monkeypatch.setenv("DD_SERVICE", "backend-listen")
+    assert probe._ledger_service_name() == "backend-listen"
+    monkeypatch.setenv("DD_SERVICE", "Memory Job")
     assert probe._ledger_service_name() == "other"
 
 
