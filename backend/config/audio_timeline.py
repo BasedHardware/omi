@@ -79,3 +79,8 @@ def capture_send_span_limit() -> int:
 def live_capture_window_merge_preservation_enabled() -> bool:
     """Keep provider pieces when live text repair would discard known capture proof. Default off."""
     return os.getenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', '').strip().lower() in _TRUTHY
+
+
+def live_capture_window_strict_projection_enabled() -> bool:
+    """Reject legacy windows across observed wall hiatuses. Default off for parity."""
+    return os.getenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', '').strip().lower() in _TRUTHY

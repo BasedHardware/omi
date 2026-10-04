@@ -199,15 +199,18 @@ def test_non_api_error_diagnostic_includes_exception_type(cache, caplog):
 
 
 @pytest.mark.parametrize('raw', ['phc_token\n', '  phc_token \r\n'])
-def test_flag_client_strips_secret_mounted_whitespace(monkeypatch, raw):
+def test_flag_client_reads_only_dedicated_token_and_strips_whitespace(monkeypatch, raw):
     constructed = {}
 
     class FakePosthog:
         def __init__(self, **kwargs):
             constructed.update(kwargs)
 
-    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', raw)
-    monkeypatch.setenv('POSTHOG_HOST', 'https://us.posthog.com\n')
+    monkeypatch.setenv('PROACTIVITY_V2_POSTHOG_TOKEN', raw)
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'disabled')
+    monkeypatch.setenv('POSTHOG_API_KEY', 'shared-key-must-not-be-read')
+    monkeypatch.setenv('PROACTIVITY_V2_POSTHOG_HOST', 'https://us.posthog.com\n')
+    monkeypatch.setenv('POSTHOG_HOST', 'https://shared-host.invalid')
     monkeypatch.setattr(flags.importlib, 'import_module', lambda name: SimpleNamespace(Posthog=FakePosthog))
     flags.flag_client.cache_clear()
     try:
@@ -218,12 +221,67 @@ def test_flag_client_strips_secret_mounted_whitespace(monkeypatch, raw):
     assert constructed['host'] == 'https://us.posthog.com'
 
 
-def test_flag_client_whitespace_only_key_is_unavailable(monkeypatch):
-    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', ' \n')
-    monkeypatch.delenv('POSTHOG_API_KEY', raising=False)
+@pytest.mark.parametrize('raw', [None, '', ' \n', 'disabled', 'phx_personal-key', 'private-token'])
+def test_unavailable_dedicated_token_never_falls_back_and_logs_once(monkeypatch, caplog, raw):
+    if raw is None:
+        monkeypatch.delenv('PROACTIVITY_V2_POSTHOG_TOKEN', raising=False)
+    else:
+        monkeypatch.setenv('PROACTIVITY_V2_POSTHOG_TOKEN', raw)
+    # Even usable shared keys cannot grant v2 admission.
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'phc_shared-project')
+    monkeypatch.setenv('POSTHOG_API_KEY', 'phc_shared-legacy')
+    monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
+    factory = Mock()
+    monkeypatch.setattr(flags, 'importlib', SimpleNamespace(import_module=factory))
+    monkeypatch.setattr(flags, 'record_fallback', Mock())
+    monkeypatch.setattr(flags, '_flag_cache', OrderedDict())
+    monkeypatch.setattr(flags, '_next_warning_at', 0.0)
+    now = [100.0]
+    monkeypatch.setattr(flags, 'time', SimpleNamespace(monotonic=lambda: now[0]))
     flags.flag_client.cache_clear()
     try:
-        with pytest.raises(ProactivityDenied):
+        with pytest.raises(ProactivityDenied, match='flag_unavailable'):
             flags.flag_client()
+        for uid in ('private-uid', 'private-uid', 'another-private-uid'):
+            with pytest.raises(ProactivityDenied, match='flag_unavailable'):
+                flags.enabled(uid)
+        assert flags.mentor_pipeline('private-uid') == 'legacy'
+        assert len(caplog.records) == 1
+        assert (
+            caplog.records[0].message
+            == 'proactivity_v2_flag_unavailable error_type=ProactivityDenied http_status=unknown'
+        )
+        assert 'private' not in caplog.text and 'phc_' not in caplog.text
+        now[0] += 60
+        with pytest.raises(ProactivityDenied, match='flag_unavailable'):
+            flags.enabled('private-uid')
+        assert len(caplog.records) == 2
+        factory.assert_not_called()
+    finally:
+        flags.flag_client.cache_clear()
+
+
+@pytest.mark.parametrize('host', [None, '', ' \n', ' https://flag-host.invalid/ \n'])
+def test_flag_client_dedicated_host_and_us_default(monkeypatch, host):
+    monkeypatch.setenv('PROACTIVITY_V2_POSTHOG_TOKEN', 'phc_token')
+    monkeypatch.setenv('POSTHOG_HOST', 'https://shared-host.invalid')
+    if host is None:
+        monkeypatch.delenv('PROACTIVITY_V2_POSTHOG_HOST', raising=False)
+    else:
+        monkeypatch.setenv('PROACTIVITY_V2_POSTHOG_HOST', host)
+    factory = Mock()
+    monkeypatch.setattr(
+        flags, 'importlib', SimpleNamespace(import_module=lambda name: SimpleNamespace(Posthog=factory))
+    )
+    flags.flag_client.cache_clear()
+    try:
+        flags.flag_client()
+        factory.assert_called_once_with(
+            project_api_key='phc_token',
+            host=(host or '').strip() or 'https://us.posthog.com',
+            send=False,
+            sync_mode=True,
+            feature_flags_request_timeout_seconds=2,
+        )
     finally:
         flags.flag_client.cache_clear()

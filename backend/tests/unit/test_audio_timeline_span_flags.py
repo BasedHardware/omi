@@ -57,7 +57,10 @@ def _expected(flag, scope):
 
 
 def test_composed_declarations_pin_rollout_state():
-    composed = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    composed = yaml.load(
+        (BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
 
     def _env_maps(environment):
         env = composed['environments'][environment]
