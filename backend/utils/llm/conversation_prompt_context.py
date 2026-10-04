@@ -37,6 +37,13 @@ class ConversationPromptPrefix:
     has_usable_content: bool = True
     shaped_context: Optional[str] = None
 
+    # Non-owner people bound to a speaker cluster who said enough to name in the
+    # title (#3602), most-spoken first, plus the account owner's bound name(s).
+    # Neither is rendered into ``context``, so the shared prefix bytes and cache
+    # key are unchanged; the notes task carries them in its volatile suffix.
+    title_people: tuple[str, ...] = ()
+    owner_names: tuple[str, ...] = ()
+
     @property
     def cache_key(self) -> str:
         return f'omi-conv-{self.conversation_id}'
@@ -74,6 +81,49 @@ def _transcript_has_source_content(transcript: str, source_ids: frozenset[str]) 
 
 
 _ROSTER_KIND_LABELS = {'owner': 'owner', 'human': 'human', 'ai_agent': 'ai agent'}
+
+
+# A bound person must have spoken at least this share of the conversation's words
+# to be named in its title; a one-word greeting is not what the conversation was.
+TITLE_PERSON_MIN_WORD_SHARE = 0.1
+
+
+def _title_people(
+    speaker_names: Mapping[int, Optional[str]],
+    source_map: Optional[Mapping[int, Optional[str]]],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return ``(title_people, owner_names)`` for the general notes path.
+
+    Only an owner-aware speaker map (``SpeakerMap`` from
+    ``conversation_transcript_and_speaker_map``) can tell the account owner apart
+    from everyone else; a bare mapping names nobody rather than risk titling a
+    note with its owner's own name.
+    """
+    owner_keys = getattr(source_map, 'owner_keys', None)
+    if owner_keys is None:
+        return (), ()
+    word_counts: Mapping[int, int] = getattr(source_map, 'word_counts', None) or {}
+    owner_names: list[str] = []
+    for key in owner_keys:
+        name = speaker_names.get(key)
+        if name and name.casefold() not in {owner.casefold() for owner in owner_names}:
+            owner_names.append(name)
+    owner_folds = {name.casefold() for name in owner_names}
+    total_words = sum(word_counts.values())
+    order = {key: index for index, key in enumerate(speaker_names)}
+    spoken: dict[str, int] = {}
+    first_seen: dict[str, int] = {}
+    display: dict[str, str] = {}
+    for key, name in speaker_names.items():
+        if not name or key in owner_keys or name.casefold() in owner_folds:
+            continue
+        fold = name.casefold()
+        display.setdefault(fold, name)
+        spoken[fold] = spoken.get(fold, 0) + word_counts.get(key, 0)
+        first_seen.setdefault(fold, order[key])
+    people = [fold for fold in spoken if not total_words or spoken[fold] / total_words >= TITLE_PERSON_MIN_WORD_SHARE]
+    people.sort(key=lambda fold: (-spoken[fold], first_seen[fold]))
+    return tuple(display[fold] for fold in people), tuple(owner_names)
 
 
 def _speaker_metadata_lines(
@@ -247,6 +297,8 @@ def build_conversation_prompt_prefix(
         shaped_context = json.dumps(evidence, ensure_ascii=False) + f'\nFULL TRANSCRIPT\n{transcript.strip()}'
 
     source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
+    # Rich meeting notes name people through their roster rules instead.
+    title_people, owner_names = _title_people(speaker_names, speaker_map) if roster is None else ((), ())
     return ConversationPromptPrefix(
         conversation_id=conversation_id,
         context='\n\n'.join(context_parts),
@@ -254,4 +306,6 @@ def build_conversation_prompt_prefix(
         has_usable_content=_transcript_has_source_content(transcript, source_ids)
         or bool(photo_descriptions and photo_descriptions != 'None'),
         shaped_context=shaped_context,
+        title_people=title_people,
+        owner_names=owner_names,
     )

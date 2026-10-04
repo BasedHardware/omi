@@ -14,7 +14,7 @@ summarizer LLMs copy verbatim into titles and overviews.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Protocol
+from typing import Any, Iterable, List, Mapping, Optional, Protocol
 
 from database.auth import get_user_name
 from models.other import Person
@@ -36,21 +36,50 @@ def _speaker_label(segment: Any, user_name: str, people_map: dict[str, str]) -> 
     return speaker_name or f'Speaker {segment.speaker_id}'
 
 
-def _speaker_map(segments: List[Any], user_name: str, people_map: dict[str, str]) -> dict[int, Optional[str]]:
+class SpeakerMap(dict[int, Optional[str]]):
+    """``cluster -> bound name`` mapping that also remembers who the owner is.
+
+    It is the plain mapping every caller already reads. ``owner_keys`` are the
+    clusters bound through ``is_user`` and ``word_counts`` is how many words each
+    cluster spoke, so title naming (#3602) can tell the account owner from the
+    people worth naming without changing the rendered ``spk`` map lines.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        owner_keys: Iterable[int] = (),
+        word_counts: Optional[Mapping[int, int]] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.owner_keys: frozenset[int] = frozenset(owner_keys)
+        self.word_counts: dict[int, int] = dict(word_counts or {})
+
+
+def _speaker_map(segments: List[Any], user_name: str, people_map: dict[str, str]) -> SpeakerMap:
     """Cluster -> bound display name (None = unresolved), ordered by first appearance.
 
     A cluster is bound only through hard evidence: ``is_user`` (profile name) or a
     matched ``person_id`` (person name). Names are never invented.
     """
-    speaker_map: dict[int, Optional[str]] = {}
+    speaker_map = SpeakerMap()
+    owner_keys: set[int] = set()
+    word_counts: dict[int, int] = {}
     for segment in segments:
         speaker_id = getattr(segment, 'speaker_id', None)
-        if speaker_id is None or speaker_id in speaker_map:
+        if speaker_id is None:
+            continue
+        word_counts[speaker_id] = word_counts.get(speaker_id, 0) + len((segment.text or '').split())
+        if speaker_id in speaker_map:
             continue
         if segment.is_user:
             speaker_map[speaker_id] = user_name
+            owner_keys.add(speaker_id)
         else:
             speaker_map[speaker_id] = people_map.get(segment.person_id) if segment.person_id else None
+    speaker_map.owner_keys = frozenset(owner_keys)
+    speaker_map.word_counts = word_counts
     return speaker_map
 
 
@@ -192,6 +221,7 @@ def conversation_transcripts_for_llm(
 
 
 __all__ = [
+    'SpeakerMap',
     'memory_transcript_from_segments',
     'conversation_action_item_speaker_labels',
     'conversation_transcript_and_speaker_map',

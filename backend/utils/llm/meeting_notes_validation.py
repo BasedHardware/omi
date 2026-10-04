@@ -7,7 +7,7 @@ callers and tests already import from it.
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Iterable, List, Optional
+from typing import Any, Iterable, List, Optional, Sequence
 
 from models.structured import Participant, Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.conversations.meeting_participants import MeetingRoster
@@ -236,6 +236,46 @@ def sanitize_structured_speaker_placeholders(structured: Structured) -> Structur
         if item.context:
             item.context = strip_speaker_placeholders(item.context)
     return structured
+
+
+# A title led by people's names stays scannable in the list; the second name is
+# dropped before this is exceeded, and a title is never truncated to fit.
+MAX_LED_TITLE_CHARACTERS = 70
+
+
+def _whole_name_pattern(name: str) -> re.Pattern[str]:
+    return re.compile(r'(?<!\w)' + re.escape(name) + r'(?!\w)', re.IGNORECASE)
+
+
+def title_names_any_person(title: str, people: Iterable[str]) -> bool:
+    """True when the title already names one of ``people`` by full or first name."""
+    for name in people:
+        name = name.strip()
+        if not name:
+            continue
+        candidates = [name]
+        first = name.split()[0]
+        if first != name and len(first) > 1:
+            candidates.append(first)
+        if any(_whole_name_pattern(candidate).search(title) for candidate in candidates):
+            return True
+    return False
+
+
+def lead_title_with_people(title: str, people: Sequence[str]) -> tuple[str, bool]:
+    """Lead a title that names none of the identified people with their names (#3602).
+
+    The prompt asks the model to name them; this deterministic repair holds the
+    contract when it does not. ``Name: Title`` reads the same in every response
+    language, joins at most two people, and never invents a title or a name.
+    """
+    stripped = title.strip()
+    if not stripped or not people or title_names_any_person(stripped, people):
+        return title, False
+    led = f'{" & ".join(people[:2])}: {stripped}'
+    if len(led) > MAX_LED_TITLE_CHARACTERS and len(people) > 1:
+        led = f'{people[0]}: {stripped}'
+    return led, True
 
 
 def _name_in_transcript(name: str, transcript_body: str) -> bool:

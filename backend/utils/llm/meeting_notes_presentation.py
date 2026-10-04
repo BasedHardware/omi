@@ -1,7 +1,7 @@
 """Bounded repair orchestration for generated conversation-note presentation."""
 
 import logging
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional, Sequence
 
 from langchain_core.messages import SystemMessage
 
@@ -9,6 +9,7 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from utils.llm.meeting_notes_validation import (
     PRESENTATION_CONTRACT_VERSION,
     enforce_structured_presentation_contract,
+    lead_title_with_people,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,8 +65,13 @@ def enforce_conversation_note_presentation(
     extraction_parser: Any,
     transcript_segment_ids: Optional[Iterable[object]],
     post_parse_validator: Optional[Callable[[Structured], None]] = None,
+    title_people: Sequence[str] = (),
 ) -> Structured:
-    """Apply static repair, one targeted revision, then a sanitized fallback."""
+    """Apply static repair, one targeted revision, then a sanitized fallback.
+
+    ``title_people`` (general-path notes only) holds the title-naming contract
+    (#3602): a title that names none of them is led by their names.
+    """
 
     report = enforce_structured_presentation_contract(structured, transcript_segment_ids)
     outcome = 'passed'
@@ -103,6 +109,12 @@ def enforce_conversation_note_presentation(
             _record_fallback(reason='other')
     elif report.repairs:
         outcome = 'static_repair'
+
+    structured.title, led = lead_title_with_people(structured.title, title_people)
+    if led:
+        report.repairs.add('title_people_lead')
+        if outcome == 'passed':
+            outcome = 'static_repair'
 
     _record_contract(outcome=outcome, reasons=sorted(report.repairs | report.violations) or ['ok'])
     return structured
