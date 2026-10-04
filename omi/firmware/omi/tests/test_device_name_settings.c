@@ -61,7 +61,8 @@ static void check_invalid_name(const void *bytes, size_t length, int read_result
 {
     assert(app_settings_save_device_name("Previous", 8) == 0);
     writes = 0;
-    name_record = (struct stored_value) {bytes, length, read_result};
+    struct stored_value invalid_record = {bytes, length, read_result};
+    name_record = invalid_record;
     assert(app_settings_init() == 0);
     assert(strcmp(app_settings_get_device_name(), CONFIG_BT_DEVICE_NAME) == 0);
     assert(app_settings_get_dim_ratio() == 77);
@@ -76,7 +77,8 @@ int main(void)
     check_invalid_name(malformed, sizeof(malformed), sizeof(malformed));
     check_invalid_name("Omi", 3, 1);
 
-    name_record = (struct stored_value) {"Kitchen Omi", 11, 11};
+    struct stored_value valid_record = {"Kitchen Omi", 11, 11};
+    name_record = valid_record;
     assert(app_settings_init() == 0);
     assert(strcmp(app_settings_get_device_name(), "Kitchen Omi") == 0);
 
