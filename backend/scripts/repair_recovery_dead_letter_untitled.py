@@ -35,14 +35,16 @@ Ambiguous lease/probe writes require an exact live-body
 match and a new generation before ownership is adopted; no blind overwrite retry.
 
 lease.json fences each prefix with an owner token, expiry and generation match.
-Its 120-second lease is checked every 40 seconds; the sole writer renews at
-half-TTL or to publish the initial reconciled state.
-Every publication/transaction reads live generation/body; clocks use unique create-only names. All GCS PUTs (including manifests and
+It lasts 120 seconds; a heartbeat checks every 40 seconds and the single lease
+writer renews only at half-TTL, or to publish the initial reconciled state.
+Every publication and transaction verifies the live generation/body with reads.
+Clock samples use unique create-only names. All GCS PUTs (including manifests and
 retries) wait at least two seconds after the preceding RPC to that object. The
 SDK retry predicate admits fenced retries with jittered exponential backoff in a
 15-second budget; exact live bytes/new generation reconcile ambiguous commits.
-I/O outages stop with ArtifactError; changed owners or GCS-time expiry raise LeaseLost.
-Diagnostics log lease PUT attempts and maximum per-object rates without object names.
+An I/O outage stops with ArtifactError; LeaseLost requires a changed owner or
+GCS-time expiry. Diagnostics include per-stage lease PUT attempts and the maximum
+observed per-object attempt rate, without object names.
 Active leases reject another resume or rollback. Expired or
 released leases admit a new reconciling owner; it cannot mutate until durable
 intents/receipts have been imported and reconciled. Lost/expired ownership stops
@@ -262,7 +264,6 @@ from google.cloud.storage.retry import DEFAULT_RETRY as GCS_DEFAULT_RETRY
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationSource
 from scripts.conversation_relevance_backfill import AUDIO_TRANSCRIPT_SOURCES
-from utils.conversations.note_claim_mutations import claim_invalidation_patch
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -281,7 +282,7 @@ JOB_FILTERS = {
     'status': 'dead_letter',
     'processing_trigger': 'server_recovery',
 }
-ALLOWED_FIELDS = {'discarded', 'relevance_decision', 'structured.title', 'structured.note_claims'}
+ALLOWED_FIELDS = {'discarded', 'relevance_decision', 'structured.title'}
 RETRYABLE = (Aborted, Conflict, DeadlineExceeded, ServiceUnavailable)
 # The SDK exposes no public predicate accessor; share its pinned retry policy.
 GCS_RETRY_PREDICATE = GCS_DEFAULT_RETRY._predicate  # pyright: ignore[reportPrivateUsage]
@@ -1299,10 +1300,9 @@ def classify(runtime: Runtime, row: dict[str, Any], job: dict[str, Any], ref: An
         'K',
         rule,
         {
-            **claim_invalidation_patch(row.get('structured'), ('/title',)),
             'structured.title': deterministic_minimum_title(
                 conversation, tz_name_provider=lambda: runtime.timezone(job['uid'])
-            ),
+            )
         },
     )
 

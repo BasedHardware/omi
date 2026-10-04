@@ -199,7 +199,8 @@ def test_class_k_title_matches_shared_helper(tmp_path):
     result = evaluate(runtime, log)
     expected = deterministic_minimum_title(SimpleNamespace(transcript_segments=[SimpleNamespace(text=TEXT)]))
     assert result['class'] == 'K' and result['outcome'] == 'written'
-    # Assert literal SDK field-path patches.
+    # Strict fixture stores dotted patches literally; the production SDK applies
+    # the field path. Assert the exact SDK patch rather than alter that fixture.
     assert client.transactions[0].updates[0][1] == {'structured.title': expected}
     assert client.rows[ROW_PATH]['discarded'] is False
 
@@ -707,6 +708,7 @@ def test_sustained_errors_stop_nonzero_and_leave_cursor(tmp_path):
     for i in range(8):
         client.rows[(repair.JOBS, f'job-{i}')] = job()
     runtime.decode = lambda *args: (_ for _ in ()).throw(RuntimeError(TEXT))
+    # Bind all test job IDs so the failure occurs during decode.
     for path in [p for p in client.rows if p[0] == repair.JOBS]:
         client.rows[path]['conversation_id'] = path[-1]
         data = row()
@@ -774,6 +776,7 @@ def test_resume_pending_before_commit_is_unresolved(tmp_path, monkeypatch):
     monkeypatch.setattr(repair.time, 'sleep', lambda *args: None)
     monkeypatch.setattr(repair, 'write_cas', lambda *args, **kwargs: (_ for _ in ()).throw(repair.Aborted('no commit')))
     result = repair.evaluate(runtime, source, JOB_ID, limiter=repair.RateLimiter(100000))
+    # Durable intent exists, but no mutation or result receipt was persisted.
     assert result['outcome'] == 'error' and client.rows[ROW_PATH] == row()
     monkeypatch.setattr(repair, 'write_cas', write)
     resumed = repair.RunLog(source.path, source.config, resume=True)
@@ -813,23 +816,15 @@ def test_cas_detects_revision_change_even_when_values_returned_to_original(tmp_p
     assert not client.transactions[0].updates
 
 
-@pytest.mark.parametrize('annotated', [False, True])
-def test_kept_title_rollback_sdk_patch(tmp_path, annotated):
+def test_kept_title_rollback_sdk_patch(tmp_path):
     client, runtime, source = setup(tmp_path, apply=True, kept=True, text=TEXT)
-    claims = [{'target': '/title', 'text': 'Old'}, {'target': '/overview', 'text': 'Recap'}]
-    client.rows[ROW_PATH]['structured'].update({'note_claims': deepcopy(claims)} if annotated else {})
-    evaluate(runtime, source)
-    # Apply literal dotted patches as the SDK would, preserving whole-row CAS.
-    for field in ('title', 'note_claims'):
-        if 'structured.' + field in client.rows[ROW_PATH]:
-            client.rows[ROW_PATH]['structured'][field] = client.rows[ROW_PATH].pop('structured.' + field)
-    assert not annotated or client.rows[ROW_PATH]['structured']['note_claims'] == claims[1:]
+    result = evaluate(runtime, source)
+    # Represent Firestore's field-path result to exercise rollback's whole-row CAS.
+    patch = client.rows[ROW_PATH].pop('structured.title')
+    client.rows[ROW_PATH]['structured']['title'] = patch
     target = repair.RunLog(tmp_path / 'rollback', source.config)
     assert repair.rollback(runtime, source, target)['outcomes'] == {'written': 1}
-    assert client.transactions[-1].updates[0][1] == {
-        'structured.title': '',
-        **({'structured.note_claims': claims} if annotated else {}),
-    }
+    assert client.transactions[-1].updates[0][1] == {'structured.title': ''}
 
 
 def test_uid_filter_persists_hash_only(tmp_path):
@@ -967,7 +962,8 @@ def test_missing_audio_duration_is_unknown_even_with_capture_timestamps():
 @pytest.mark.parametrize('kept', [False, True])
 def test_dry_run_breakdown_source_rule_duration_shape(tmp_path, monkeypatch, kept):
     client, runtime, log = setup(tmp_path, kept=kept)
-    # Cover every R bucket and known K imports; never log arbitrary source labels.
+    # One R in every bucket, across several capture sources; K includes a known
+    # import source. Arbitrary legacy source text must never become a log label.
     cases = [
         ('omi', '', [], 'R', 'empty_transcript', '0'),
         ('phone', '', [{'duration': 2}, {'duration': 2}], 'R', 'empty_transcript', '<5s'),
@@ -1322,6 +1318,7 @@ def test_artifact_failed_publication_keeps_previous_snapshot_and_can_resume(tmp_
     monkeypatch.setattr(mirror.manifest, 'upload_from_string', fail)
     with pytest.raises(repair.ArtifactError):
         mirror.upload(source.path)
+    # The uploaded audit is an orphan, never a partial published snapshot.
     _, data = storage.objects[('test-bucket', 'repair/run/manifest.json')]
     assert 'audit.jsonl' not in json.loads(data)['files']
     monkeypatch.setattr(mirror.manifest, 'upload_from_string', original)
@@ -1610,7 +1607,8 @@ def test_two_concurrent_resumes_admit_only_one_writer_and_all_writes_are_audited
     observed = assert_durable_before_updates(monkeypatch, client, storage)
     repair.reconcile_pending(runtime, winner)
     assert evaluate(runtime, winner)['outcome'] == 'written'
-    # A losing writer cannot publish an intent or mutate another row.
+    # Even a losing writer that continues classification on a different row
+    # cannot publish an intent or enter that row's Firestore transaction.
     loser = repair.RunLog(tmp_path / 'losing-work', source.config)
     loser.artifacts = loser_mirror
     with pytest.raises(repair.LeaseLost):
@@ -1872,6 +1870,7 @@ def test_commit_held_past_takeover_cannot_report_successful_rollback(tmp_path, m
     resumed.artifacts.lease.close()
     target.artifacts.lease.close()
     clock.expire()
+    # Another lost disk recovers the unresolved receipt and re-reads the late commit.
     recovered = recovered_run(tmp_path, storage, clock, source.config, name='later-source')
     undo = recovered_run(tmp_path, storage, clock, target.config, uri='gs://test-bucket/repair/undo', name='later-undo')
     summary = repair.rollback(runtime, recovered, undo, qps=100000)
@@ -1909,7 +1908,8 @@ def test_unique_lease_probes_require_server_assigned_timestamp(tmp_path, monkeyp
 def test_fresh_run_lease_failure_with_live_gcs_metadata_is_recoverable(tmp_path, monkeypatch, failure):
     client, _, _ = setup(tmp_path)
     storage = FakeStorage()
-    # Use GCS-sized generations, millisecond metadata and cold start without skew or expiry.
+    # Real GCS-sized generations, millisecond metadata, and a cold-start delay
+    # before acquisition. No clock skew or lease expiry is needed for this bug.
     storage.serial = 1790821367159500
     storage.server_clock.now = 1790821180.0
     reload, upload = FakeBlob.reload, FakeBlob.upload_from_string

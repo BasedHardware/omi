@@ -28,7 +28,6 @@ from types import SimpleNamespace
 from typing import Any, Callable, Mapping
 
 from database import conversations as conversations_db
-from utils.conversations.note_claim_mutations import invalidate_note_claims
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.conversations.recovery import structured_has_protected_content
@@ -95,7 +94,6 @@ def _title_update(
         started_at = conversation.get('started_at')
         if not isinstance(started_at, datetime):
             started_at = conversation.get('created_at')
-        invalidate_note_claims(fields, ('/title',))
         fields['title'] = deterministic_minimum_title(
             SimpleNamespace(
                 transcript_segments=[SimpleNamespace(text=text) for text in texts],

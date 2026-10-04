@@ -12,7 +12,6 @@ from models.other import Person
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
-from utils.conversations.note_claim_mutations import invalidate_note_claims
 from utils.conversations.summary_selection import select_primary_summary
 
 logger = logging.getLogger(__name__)
@@ -136,7 +135,6 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
         conv['structured'] = (
             dict(conv['structured']) if not isinstance(conv['structured'], dict) else conv['structured']
         )
-        invalidate_note_claims(conv['structured'], ('/action_items', '/events'))
         conv['structured']['action_items'] = []
         conv['structured']['events'] = []
     conv['apps_results'] = []
@@ -181,7 +179,6 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
         conv['structured'] = (
             dict(conv['structured']) if not isinstance(conv['structured'], dict) else conv['structured']
         )
-        invalidate_note_claims(conv['structured'], ('',))
         conv['structured']['title'] = ''
         conv['structured']['overview'] = ''
         conv['structured']['action_items'] = []

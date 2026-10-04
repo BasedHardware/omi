@@ -13,13 +13,6 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
-from database.conversation_note_edits import note_edit_targets, write_note_edit
-from utils.conversations.note_claim_mutations import (
-    apply_user_title,
-    prepare_generated_note,
-    claim_invalidation_patch,
-    summary_source_reference_invalidations,
-)
 from models.audio_file import AudioFile, ChunkSpan
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
@@ -431,7 +424,12 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
     # User titles are durable overrides. Conversation processing owns the
     # generated title, but must never erase an explicit user edit.
     user_title = effective_user_title(data.get('user_title'))
-    apply_user_title(data, user_title)
+    if user_title is not None:
+        structured = data.get('structured')
+        if not isinstance(structured, dict):
+            structured = {}
+            data['structured'] = structured
+        structured['title'] = user_title
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
@@ -764,7 +762,13 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             if existing.get('folder_user_set'):
                 write_data['folder_id'] = existing.get('folder_id')
 
-            prepare_generated_note(write_data, existing, firestore.DELETE_FIELD)
+            user_title = effective_user_title(existing.get('user_title'))
+            if user_title is not None:
+                structured = write_data.get('structured')
+                if not isinstance(structured, dict):
+                    structured = {}
+                    write_data['structured'] = structured
+                structured['title'] = user_title
 
             _reapply_current_manual_assignments(uid, write_data, existing)
             transaction.set(conversation_ref, write_data, merge=True)
@@ -916,7 +920,13 @@ def persist_processing_result_with_lifecycle(
         if existing.get('folder_user_set'):
             write_data['folder_id'] = existing.get('folder_id')
 
-        prepare_generated_note(write_data, existing, firestore.DELETE_FIELD)
+        user_title = effective_user_title(existing.get('user_title'))
+        if user_title is not None:
+            structured = write_data.get('structured')
+            if not isinstance(structured, dict):
+                structured = {}
+                write_data['structured'] = structured
+            structured['title'] = user_title
 
         _reapply_current_manual_assignments(uid, write_data, existing)
         transaction.set(conversation_ref, write_data, merge=True)
@@ -1403,21 +1413,14 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
             + ', '.join(sorted(lifecycle_fields))
         )
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    doc_snapshot = doc_ref.get()
+    if not doc_snapshot.exists:
+        return False
+
+    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     try:
-        if 'structured' in update_data or note_edit_targets(update_data):
-            if not write_note_edit(
-                doc_ref,
-                db.transaction(),
-                update_data,
-                lambda fields, level: _prepare_conversation_for_write(fields, uid, level),
-            ):
-                return False
-        else:
-            doc_snapshot = doc_ref.get()
-            if not doc_snapshot.exists:
-                return False
-            doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-            doc_ref.update(_prepare_conversation_for_write(update_data, uid, doc_level))
+        doc_ref.update(prepared_data)
     except NotFound:
         # The conversation was deleted between the existence read above and
         # this commit. The contract of this function is to report a gone owner
@@ -1570,13 +1573,12 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
-    if write_note_edit(
-        conversation_ref,
-        db.transaction(),
-        {'structured.title': title, 'user_title': title},
-        lambda fields, _level: fields,
-    ):
-        _sync_conversation_search_index(uid, conversation_id)
+    doc_snapshot = conversation_ref.get()
+    if not doc_snapshot.exists:
+        return
+
+    conversation_ref.update({'structured.title': title, 'user_title': title})
+    _sync_conversation_search_index(uid, conversation_id)
 
 
 def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional[str], content: str) -> str:
@@ -1609,7 +1611,6 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
         if not doc_snapshot.exists:
             return 'not_found'
 
-        raw = doc_snapshot.to_dict() or {}
         updated_at = datetime.now(timezone.utc)
         if app_id is None:
             transaction.update(
@@ -1617,12 +1618,12 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                 {
                     'structured.overview': content,
                     'structured.sections': firestore.DELETE_FIELD,
-                    **claim_invalidation_patch(raw.get('structured'), ('/overview', '/sections')),
                     'updated_at': updated_at,
                 },
             )
             return 'ok'
 
+        raw = doc_snapshot.to_dict() or {}
         stored_results = raw.get('apps_results') or []
         apps_results = copy.deepcopy(stored_results) if isinstance(stored_results, list) else []
         if sum(isinstance(entry, dict) and entry.get('app_id') == app_id for entry in apps_results) > 1:
@@ -1691,7 +1692,9 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
 
         doc_level = conversation_data.get('data_protection_level', 'standard')
         prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
-        prepared_payload.update(summary_source_reference_invalidations(conversation_data.get('structured'), segment_id))
+        prepared_payload.update(
+            _summary_source_reference_invalidations(conversation_data.get('structured'), segment_id)
+        )
         # Keep the summary/reference invalidation and transcript edit under
         # one server-side revision. Consumers can use this as the freshness
         # boundary without pretending that the old evidence still applies.
@@ -2406,6 +2409,39 @@ def _invalidate_client_processing(payload: Dict[str, Any]) -> None:
     """
     for field in PROJECTION_FAMILY_FIELDS:
         payload[field] = firestore.DELETE_FIELD
+
+
+def _summary_source_reference_invalidations(structured: Any, segment_id: str) -> Dict[str, Any]:
+    """Return structured fields whose evidence includes an edited segment.
+
+    Structured summaries remain user-visible after a transcript edit, so this
+    deliberately preserves every item's content and metadata. Clearing the
+    complete reference list for an affected item avoids presenting a partial
+    set of IDs as authoritative for text that has changed. The returned paths
+    are suitable for merging into the same Firestore transaction payload.
+    """
+    if not isinstance(structured, dict):
+        return {}
+
+    invalidations: Dict[str, Any] = {}
+    for field in ('sections', 'action_items'):
+        items = structured.get(field)
+        if not isinstance(items, list):
+            continue
+
+        copied_items = copy.deepcopy(items)
+        changed = False
+        for item in copied_items:
+            if not isinstance(item, dict):
+                continue
+            references = item.get('source_segment_ids')
+            if isinstance(references, (list, tuple, set)) and segment_id in references:
+                item['source_segment_ids'] = []
+                changed = True
+        if changed:
+            invalidations[f'structured.{field}'] = copied_items
+
+    return invalidations
 
 
 def _projection_digest(candidate: Any) -> Any:
