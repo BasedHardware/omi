@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "Suriin ang Koneksyon",
     "forYou": "Para Sa Iyo",
     "stopThese": "Itigil Ang Mga Ito",
-    "dismiss": "Isara"
+    "dismiss": "Isara",
+    "importTranscriptFiles": "Mga file ng transcript",
+    "importTranscriptFilesDescription": "Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito"
 }

@@ -3870,5 +3870,7 @@
     "playbackAudioNetworkFailed": "Sprawdź połączenie",
     "forYou": "Dla Ciebie",
     "stopThese": "Zatrzymaj te",
-    "dismiss": "Ukryj"
+    "dismiss": "Ukryj",
+    "importTranscriptFiles": "Pliki transkrypcji",
+    "importTranscriptFilesDescription": "Wybierz transkrypcje SRT, VTT lub TXT albo plik ZIP z nimi"
 }

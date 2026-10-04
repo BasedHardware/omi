@@ -12188,4 +12188,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dismiss => '忽略';
+
+  @override
+  String get importTranscriptFiles => '转录文件';
+
+  @override
+  String get importTranscriptFilesDescription => '选择 SRT、VTT 或 TXT 转录文件，或包含它们的 ZIP 文件';
 }

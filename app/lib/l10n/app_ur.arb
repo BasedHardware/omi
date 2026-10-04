@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "کنکشن چیک کریں",
     "forYou": "آپ کے لیے",
     "stopThese": "یہ روکیں",
-    "dismiss": "چھپائیں"
+    "dismiss": "چھپائیں",
+    "importTranscriptFiles": "ٹرانسکرپٹ فائلیں",
+    "importTranscriptFilesDescription": "SRT، VTT یا TXT ٹرانسکرپٹس، یا ان کی ZIP فائل منتخب کریں"
 }

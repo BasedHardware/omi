@@ -3870,5 +3870,7 @@
     "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin",
     "forYou": "Sizin İçin",
     "stopThese": "Bunları Durdur",
-    "dismiss": "Gizle"
+    "dismiss": "Gizle",
+    "importTranscriptFiles": "Transkript dosyaları",
+    "importTranscriptFilesDescription": "SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin"
 }

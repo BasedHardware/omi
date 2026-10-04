@@ -12209,4 +12209,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dismiss => '非表示';
+
+  @override
+  String get importTranscriptFiles => '文字起こしファイル';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください';
 }

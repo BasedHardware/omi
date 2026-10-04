@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Comprova la connexió",
     "forYou": "Per a tu",
     "stopThese": "Atura aquests",
-    "dismiss": "Descarta"
+    "dismiss": "Descarta",
+    "importTranscriptFiles": "Fitxers de transcripció",
+    "importTranscriptFilesDescription": "Selecciona transcripcions SRT, VTT o TXT, o un ZIP que les contingui"
 }

@@ -12399,4 +12399,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get dismiss => 'সরিয়ে দিন';
+
+  @override
+  String get importTranscriptFiles => 'ট্রান্সক্রিপ্ট ফাইল';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT, VTT বা TXT ট্রান্সক্রিপ্ট, বা সেগুলোর একটি ZIP নির্বাচন করুন';
 }

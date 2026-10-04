@@ -12412,4 +12412,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get dismiss => 'چھپائیں';
+
+  @override
+  String get importTranscriptFiles => 'ٹرانسکرپٹ فائلیں';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT، VTT یا TXT ٹرانسکرپٹس، یا ان کی ZIP فائل منتخب کریں';
 }

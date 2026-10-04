@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Проверете връзката",
     "forYou": "За вас",
     "stopThese": "Спри тези",
-    "dismiss": "Скрий"
+    "dismiss": "Скрий",
+    "importTranscriptFiles": "Файлове с транскрипции",
+    "importTranscriptFilesDescription": "Изберете транскрипции SRT, VTT или TXT или ZIP архив с тях"
 }

@@ -12403,4 +12403,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dismiss => 'Hylkää';
+
+  @override
+  String get importTranscriptFiles => 'Litterointitiedostot';
+
+  @override
+  String get importTranscriptFilesDescription => 'Valitse SRT-, VTT- tai TXT-litteroinnit tai niitä sisältävä ZIP';
 }

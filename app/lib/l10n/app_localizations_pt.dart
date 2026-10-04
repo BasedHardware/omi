@@ -12417,4 +12417,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get dismiss => 'Dispensar';
+
+  @override
+  String get importTranscriptFiles => 'Arquivos de transcrição';
+
+  @override
+  String get importTranscriptFilesDescription => 'Selecione transcrições SRT, VTT ou TXT, ou um ZIP com elas';
 }

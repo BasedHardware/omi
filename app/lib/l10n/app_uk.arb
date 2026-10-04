@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Перевірте з'єднання",
     "forYou": "Для вас",
     "stopThese": "Вимкнути такі",
-    "dismiss": "Приховати"
+    "dismiss": "Приховати",
+    "importTranscriptFiles": "Файли розшифровок",
+    "importTranscriptFilesDescription": "Виберіть розшифровки SRT, VTT або TXT чи ZIP-архів із ними"
 }

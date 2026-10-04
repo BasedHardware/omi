@@ -12406,4 +12406,10 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get dismiss => 'लपवा';
+
+  @override
+  String get importTranscriptFiles => 'प्रतिलेख फाइल्स';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT, VTT किंवा TXT प्रतिलेख किंवा त्यांची ZIP फाइल निवडा';
 }

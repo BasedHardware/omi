@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Kiểm tra kết nối",
     "forYou": "Dành Cho Bạn",
     "stopThese": "Dừng Loại Này",
-    "dismiss": "Ẩn"
+    "dismiss": "Ẩn",
+    "importTranscriptFiles": "Tệp bản chép lời",
+    "importTranscriptFilesDescription": "Chọn bản chép lời SRT, VTT hoặc TXT, hoặc tệp ZIP chứa chúng"
 }

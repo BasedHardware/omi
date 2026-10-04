@@ -14815,5 +14815,13 @@
     "dismiss": "Dismiss",
     "@dismiss": {
         "description": "Hide a For You card"
+    },
+    "importTranscriptFiles": "Transcript files",
+    "@importTranscriptFiles": {
+        "description": "Import source card title for SRT, VTT or TXT transcripts exported from other apps"
+    },
+    "importTranscriptFilesDescription": "Select SRT, VTT or TXT transcripts, or a ZIP of them",
+    "@importTranscriptFilesDescription": {
+        "description": "Subtitle on the transcript-files import card"
     }
 }

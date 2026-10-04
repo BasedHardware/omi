@@ -12333,4 +12333,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dismiss => 'ปิด';
+
+  @override
+  String get importTranscriptFiles => 'ไฟล์ถอดเสียง';
+
+  @override
+  String get importTranscriptFilesDescription => 'เลือกไฟล์ถอดเสียง SRT, VTT หรือ TXT หรือไฟล์ ZIP ที่รวมไว้';
 }

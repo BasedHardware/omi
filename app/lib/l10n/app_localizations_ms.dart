@@ -12430,4 +12430,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dismiss => 'Tutup';
+
+  @override
+  String get importTranscriptFiles => 'Fail transkrip';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pilih transkrip SRT, VTT atau TXT, atau ZIP yang mengandunginya';
 }

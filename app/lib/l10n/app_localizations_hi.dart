@@ -12382,4 +12382,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get dismiss => 'हटाएँ';
+
+  @override
+  String get importTranscriptFiles => 'ट्रांसक्रिप्ट फ़ाइलें';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT, VTT या TXT ट्रांसक्रिप्ट, या उनकी ZIP फ़ाइल चुनें';
 }

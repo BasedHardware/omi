@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "కనెక్షన్‌ను తనిఖీ చేయండి",
     "forYou": "మీ కోసం",
     "stopThese": "వీటిని ఆపండి",
-    "dismiss": "దాచు"
+    "dismiss": "దాచు",
+    "importTranscriptFiles": "ట్రాన్స్‌క్రిప్ట్ ఫైల్‌లు",
+    "importTranscriptFilesDescription": "SRT, VTT లేదా TXT ట్రాన్స్‌క్రిప్ట్‌లను లేదా వాటి ZIP ఫైల్‌ను ఎంచుకోండి"
 }

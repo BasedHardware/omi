@@ -12403,4 +12403,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dismiss => 'Skrýt';
+
+  @override
+  String get importTranscriptFiles => 'Soubory přepisů';
+
+  @override
+  String get importTranscriptFilesDescription => 'Vyberte přepisy SRT, VTT nebo TXT, nebo jejich ZIP';
 }

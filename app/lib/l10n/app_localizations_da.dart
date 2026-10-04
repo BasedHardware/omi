@@ -12387,4 +12387,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get dismiss => 'Afvis';
+
+  @override
+  String get importTranscriptFiles => 'Transskriptionsfiler';
+
+  @override
+  String get importTranscriptFilesDescription => 'Vælg SRT-, VTT- eller TXT-transskriptioner eller en ZIP med dem';
 }

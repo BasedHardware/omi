@@ -12442,4 +12442,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get dismiss => 'Скрыть';
+
+  @override
+  String get importTranscriptFiles => 'Файлы расшифровок';
+
+  @override
+  String get importTranscriptFilesDescription => 'Выберите расшифровки SRT, VTT или TXT либо ZIP-архив с ними';
 }

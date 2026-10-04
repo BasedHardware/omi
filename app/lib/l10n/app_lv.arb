@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Pārbaudiet savienojumu",
     "forYou": "Jums",
     "stopThese": "Apturēt šos",
-    "dismiss": "Paslēpt"
+    "dismiss": "Paslēpt",
+    "importTranscriptFiles": "Transkripciju faili",
+    "importTranscriptFilesDescription": "Atlasiet SRT, VTT vai TXT transkripcijas vai ZIP arhīvu ar tām"
 }

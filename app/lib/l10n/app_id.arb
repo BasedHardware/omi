@@ -3870,5 +3870,7 @@
     "playbackAudioNetworkFailed": "Periksa Koneksi",
     "forYou": "Untuk Anda",
     "stopThese": "Hentikan Ini",
-    "dismiss": "Tutup"
+    "dismiss": "Tutup",
+    "importTranscriptFiles": "File transkrip",
+    "importTranscriptFilesDescription": "Pilih transkrip SRT, VTT, atau TXT, atau ZIP yang berisi transkrip tersebut"
 }

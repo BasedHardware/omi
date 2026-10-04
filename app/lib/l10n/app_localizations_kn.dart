@@ -12436,4 +12436,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get dismiss => 'ಮರೆಮಾಡಿ';
+
+  @override
+  String get importTranscriptFiles => 'ಪ್ರತಿಲೇಖನ ಫೈಲ್‌ಗಳು';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT, VTT ಅಥವಾ TXT ಪ್ರತಿಲೇಖನಗಳನ್ನು ಅಥವಾ ಅವುಗಳ ZIP ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ';
 }

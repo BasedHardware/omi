@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "Праверце злучэнне",
     "forYou": "Для вас",
     "stopThese": "Спыніць гэта",
-    "dismiss": "Схаваць"
+    "dismiss": "Схаваць",
+    "importTranscriptFiles": "Файлы стэнаграм",
+    "importTranscriptFilesDescription": "Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі"
 }

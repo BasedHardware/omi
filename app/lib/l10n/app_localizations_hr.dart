@@ -12435,4 +12435,10 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get dismiss => 'Sakrij';
+
+  @override
+  String get importTranscriptFiles => 'Datoteke transkripata';
+
+  @override
+  String get importTranscriptFilesDescription => 'Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima';
 }

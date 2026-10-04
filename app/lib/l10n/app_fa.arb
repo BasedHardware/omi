@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "اتصال را بررسی کنید",
     "forYou": "برای شما",
     "stopThese": "توقف این موارد",
-    "dismiss": "رد کردن"
+    "dismiss": "رد کردن",
+    "importTranscriptFiles": "فایل‌های رونوشت",
+    "importTranscriptFilesDescription": "رونوشت‌های SRT، VTT یا TXT یا یک فایل ZIP از آن‌ها را انتخاب کنید"
 }

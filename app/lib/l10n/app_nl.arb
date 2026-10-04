@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Controleer verbinding",
     "forYou": "Voor jou",
     "stopThese": "Deze stoppen",
-    "dismiss": "Verbergen"
+    "dismiss": "Verbergen",
+    "importTranscriptFiles": "Transcriptiebestanden",
+    "importTranscriptFilesDescription": "Selecteer SRT-, VTT- of TXT-transcripties, of een ZIP met deze bestanden"
 }

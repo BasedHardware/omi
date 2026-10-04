@@ -12308,4 +12308,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get dismiss => 'סגירה';
+
+  @override
+  String get importTranscriptFiles => 'קובצי תמלול';
+
+  @override
+  String get importTranscriptFilesDescription => 'בחר תמלולים בפורמט SRT, VTT או TXT, או קובץ ZIP שמכיל אותם';
 }

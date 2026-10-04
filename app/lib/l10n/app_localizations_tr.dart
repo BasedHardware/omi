@@ -12411,4 +12411,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dismiss => 'Gizle';
+
+  @override
+  String get importTranscriptFiles => 'Transkript dosyaları';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin';
 }

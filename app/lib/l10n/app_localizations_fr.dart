@@ -12501,4 +12501,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dismiss => 'Masquer';
+
+  @override
+  String get importTranscriptFiles => 'Fichiers de transcription';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Sélectionnez des transcriptions SRT, VTT ou TXT, ou un ZIP les contenant';
 }

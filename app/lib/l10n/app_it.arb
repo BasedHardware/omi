@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Controlla la connessione",
     "forYou": "Per te",
     "stopThese": "Interrompi questi",
-    "dismiss": "Ignora"
+    "dismiss": "Ignora",
+    "importTranscriptFiles": "File di trascrizione",
+    "importTranscriptFilesDescription": "Seleziona trascrizioni SRT, VTT o TXT, oppure uno ZIP che le contenga"
 }

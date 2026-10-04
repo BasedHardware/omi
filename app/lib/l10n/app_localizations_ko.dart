@@ -12213,4 +12213,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dismiss => '닫기';
+
+  @override
+  String get importTranscriptFiles => '녹취록 파일';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT, VTT 또는 TXT 녹취록이나 이를 묶은 ZIP 파일을 선택하세요';
 }

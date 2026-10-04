@@ -12444,4 +12444,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get dismiss => 'Скрий';
+
+  @override
+  String get importTranscriptFiles => 'Файлове с транскрипции';
+
+  @override
+  String get importTranscriptFilesDescription => 'Изберете транскрипции SRT, VTT или TXT или ZIP архив с тях';
 }

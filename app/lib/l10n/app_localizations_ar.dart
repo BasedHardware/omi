@@ -12328,4 +12328,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get dismiss => 'تجاهل';
+
+  @override
+  String get importTranscriptFiles => 'ملفات النصوص';
+
+  @override
+  String get importTranscriptFilesDescription => 'اختر نصوصًا بصيغة SRT أو VTT أو TXT، أو ملف ZIP يضمها';
 }

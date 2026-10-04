@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Tarkista yhteys",
     "forYou": "Sinulle",
     "stopThese": "Lopeta nämä",
-    "dismiss": "Hylkää"
+    "dismiss": "Hylkää",
+    "importTranscriptFiles": "Litterointitiedostot",
+    "importTranscriptFilesDescription": "Valitse SRT-, VTT- tai TXT-litteroinnit tai niitä sisältävä ZIP"
 }

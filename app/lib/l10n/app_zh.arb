@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "请检查网络连接",
     "forYou": "为你推荐",
     "stopThese": "停止此类推荐",
-    "dismiss": "忽略"
+    "dismiss": "忽略",
+    "importTranscriptFiles": "转录文件",
+    "importTranscriptFilesDescription": "选择 SRT、VTT 或 TXT 转录文件，或包含它们的 ZIP 文件"
 }

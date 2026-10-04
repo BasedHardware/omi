@@ -12387,4 +12387,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dismiss => 'Dismiss';
+
+  @override
+  String get importTranscriptFiles => 'Transcript files';
+
+  @override
+  String get importTranscriptFilesDescription => 'Select SRT, VTT or TXT transcripts, or a ZIP of them';
 }

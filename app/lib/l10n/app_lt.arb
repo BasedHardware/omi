@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Patikrinkite ryšį",
     "forYou": "Jums",
     "stopThese": "Sustabdyti šiuos",
-    "dismiss": "Slėpti"
+    "dismiss": "Slėpti",
+    "importTranscriptFiles": "Transkripcijų failai",
+    "importTranscriptFilesDescription": "Pasirinkite SRT, VTT arba TXT transkripcijas arba jų ZIP archyvą"
 }

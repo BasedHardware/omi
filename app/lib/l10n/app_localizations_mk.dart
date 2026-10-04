@@ -12459,4 +12459,10 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get dismiss => 'Сокриј';
+
+  @override
+  String get importTranscriptFiles => 'Датотеки со транскрипти';
+
+  @override
+  String get importTranscriptFilesDescription => 'Изберете SRT, VTT или TXT транскрипти или ZIP со нив';
 }

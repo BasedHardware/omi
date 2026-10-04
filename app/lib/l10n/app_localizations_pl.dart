@@ -12438,4 +12438,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get dismiss => 'Ukryj';
+
+  @override
+  String get importTranscriptFiles => 'Pliki transkrypcji';
+
+  @override
+  String get importTranscriptFilesDescription => 'Wybierz transkrypcje SRT, VTT lub TXT albo plik ZIP z nimi';
 }

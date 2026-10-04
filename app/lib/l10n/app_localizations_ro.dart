@@ -12454,4 +12454,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dismiss => 'Ascunde';
+
+  @override
+  String get importTranscriptFiles => 'Fișiere de transcriere';
+
+  @override
+  String get importTranscriptFilesDescription => 'Selectează transcrieri SRT, VTT sau TXT ori o arhivă ZIP cu ele';
 }

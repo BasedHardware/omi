@@ -29,10 +29,31 @@ enum ImportJobStatus {
   }
 }
 
+/// Which importer created a job. Jobs from before the server reported it were
+/// all Limitless imports; an importer this build does not know is [other].
+enum ImportJobSource {
+  limitless,
+  transcriptFiles,
+  other;
+
+  static ImportJobSource fromWire(String? value) {
+    switch (value) {
+      case null:
+      case 'limitless':
+        return ImportJobSource.limitless;
+      case 'transcript_files':
+        return ImportJobSource.transcriptFiles;
+      default:
+        return ImportJobSource.other;
+    }
+  }
+}
+
 /// Import job response model
 class ImportJobResponse {
   final String jobId;
   final ImportJobStatus status;
+  final ImportJobSource source;
   final int? totalFiles;
   final int? processedFiles;
   final int? conversationsCreated;
@@ -43,6 +64,7 @@ class ImportJobResponse {
   ImportJobResponse({
     required this.jobId,
     required this.status,
+    this.source = ImportJobSource.limitless,
     this.totalFiles,
     this.processedFiles,
     this.conversationsCreated,
@@ -59,6 +81,7 @@ class ImportJobResponse {
     return ImportJobResponse(
       jobId: generated.jobId,
       status: ImportJobStatus.fromString(generated.status),
+      source: ImportJobSource.fromWire(generated.sourceType),
       totalFiles: generated.totalFiles,
       processedFiles: generated.processedFiles,
       conversationsCreated: generated.conversationsCreated,
@@ -102,6 +125,45 @@ class ImportJobResponse {
   bool get isCompleted => status == ImportJobStatus.completed;
   bool get isFailed => status == ImportJobStatus.failed;
   bool get isProcessing => status == ImportJobStatus.processing || status == ImportJobStatus.pending;
+}
+
+/// File types the transcript importer accepts: one transcript, or a ZIP of them.
+const transcriptImportExtensions = ['zip', 'srt', 'vtt', 'txt'];
+
+String transcriptImportUrl(String baseUrl, {required String language, String? timeZone, String origin = 'other'}) {
+  return Uri.parse('${baseUrl}v1/import/transcripts').replace(
+    queryParameters: {
+      'language': language.isEmpty ? 'en' : language,
+      'tz': (timeZone == null || timeZone.isEmpty) ? 'UTC' : timeZone,
+      'origin': origin,
+    },
+  ).toString();
+}
+
+/// Start importing SRT, VTT or TXT transcripts (or a ZIP of them) exported from
+/// other apps. Returns the job to poll, or null when the upload was refused.
+Future<ImportJobResponse?> startTranscriptImport(
+  File file, {
+  String language = 'en',
+  String? timeZone,
+  String origin = 'other',
+}) async {
+  try {
+    final response = await makeMultipartApiCall(
+      url: transcriptImportUrl(Env.apiBaseUrl ?? '', language: language, timeZone: timeZone, origin: origin),
+      files: [file],
+      fileFieldName: 'file',
+    );
+    if (response.statusCode == 200) {
+      final data = wire.GeneratedImportJobResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return ImportJobResponse.fromGenerated(data);
+    }
+    Logger.debug('Failed to start transcript import. Status: ${response.statusCode}');
+    return null;
+  } catch (e) {
+    Logger.debug('Error starting transcript import: $e');
+    return null;
+  }
 }
 
 /// Start a Limitless import from a ZIP file

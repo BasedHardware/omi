@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "Provjerite vezu",
     "forYou": "Za vas",
     "stopThese": "Zaustavi ovo",
-    "dismiss": "Sakrij"
+    "dismiss": "Sakrij",
+    "importTranscriptFiles": "Datoteke transkripta",
+    "importTranscriptFilesDescription": "Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima"
 }

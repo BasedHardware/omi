@@ -12429,4 +12429,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get dismiss => 'Skrij';
+
+  @override
+  String get importTranscriptFiles => 'Datoteke prepisov';
+
+  @override
+  String get importTranscriptFilesDescription => 'Izberite prepise SRT, VTT ali TXT ali datoteko ZIP z njimi';
 }

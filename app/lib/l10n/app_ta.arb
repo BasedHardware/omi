@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்",
     "forYou": "உங்களுக்காக",
     "stopThese": "இவற்றை நிறுத்து",
-    "dismiss": "மறை"
+    "dismiss": "மறை",
+    "importTranscriptFiles": "படியெடுப்பு கோப்புகள்",
+    "importTranscriptFilesDescription": "SRT, VTT அல்லது TXT படியெடுப்புகளை அல்லது அவற்றின் ZIP கோப்பைத் தேர்ந்தெடுக்கவும்"
 }

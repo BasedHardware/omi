@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Semak Sambungan",
     "forYou": "Untuk Anda",
     "stopThese": "Hentikan Ini",
-    "dismiss": "Tutup"
+    "dismiss": "Tutup",
+    "importTranscriptFiles": "Fail transkrip",
+    "importTranscriptFilesDescription": "Pilih transkrip SRT, VTT atau TXT, atau ZIP yang mengandunginya"
 }

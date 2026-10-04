@@ -12427,4 +12427,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get dismiss => 'Paslēpt';
+
+  @override
+  String get importTranscriptFiles => 'Transkripciju faili';
+
+  @override
+  String get importTranscriptFilesDescription => 'Atlasiet SRT, VTT vai TXT transkripcijas vai ZIP arhīvu ar tām';
 }

@@ -12411,4 +12411,10 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get dismiss => 'Сакриј';
+
+  @override
+  String get importTranscriptFiles => 'Датотеке транскрипата';
+
+  @override
+  String get importTranscriptFilesDescription => 'Изаберите SRT, VTT или TXT транскрипте или ZIP са њима';
 }

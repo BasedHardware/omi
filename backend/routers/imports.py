@@ -4,7 +4,7 @@ Import endpoints for importing data from external sources.
 
 import logging
 import os
-from typing import List
+from typing import List, Optional
 
 from utils.executors import db_executor, storage_executor, run_blocking
 
@@ -15,6 +15,12 @@ import database.import_jobs as import_jobs_db
 from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
+from utils.imports.transcript_files import (
+    TRANSCRIPT_ORIGINS,
+    UPLOAD_EXTENSIONS,
+    create_transcript_import_job,
+    process_transcript_import,
+)
 from utils.multipart import IMPORT_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
@@ -23,6 +29,14 @@ logger = logging.getLogger(__name__)
 
 # Temp directory for uploaded files
 TEMP_DIR = '_temp'
+
+
+def _job_source_type(job: dict) -> Optional[ImportSourceType]:
+    """The importer that created a stored job; unknown or missing values stay unset."""
+    try:
+        return ImportSourceType(job.get('source_type'))
+    except (ValueError, TypeError):
+        return None
 
 
 class DeleteLimitlessConversationsResponse(BaseModel):
@@ -88,7 +102,67 @@ async def import_limitless_data(
     return ImportJobResponse(
         job_id=job.id,
         status=ImportJobStatus.pending,
+        source_type=ImportSourceType.limitless,
     )
+
+
+@router.post(
+    '/v1/import/transcripts',
+    response_model=ImportJobResponse,
+    tags=['import'],
+)
+@max_part_size(IMPORT_MAX_PART_SIZE)
+async def import_transcript_files(
+    file: UploadFile = File(...),
+    language: str = 'en',
+    tz: str = 'UTC',
+    origin: str = 'other',
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Start importing transcripts exported from other tools.
+
+    Accepts one ``.srt``, ``.vtt`` or ``.txt`` transcript, or a ``.zip`` of them. Each
+    transcript becomes a completed conversation (no AI processing); re-importing the
+    same file is skipped. ``tz`` reads dates in file names, and ``origin`` is ``plaud``
+    or ``other``. Poll GET /v1/import/jobs/{job_id} for progress.
+    """
+    filename = os.path.basename((file.filename or '').replace('\\', '/'))
+    if not filename.lower().endswith(UPLOAD_EXTENSIONS):
+        raise HTTPException(status_code=400, detail="Upload a .zip, .srt, .vtt or .txt file")
+    if origin not in TRANSCRIPT_ORIGINS:
+        raise HTTPException(status_code=400, detail=f"origin must be one of: {', '.join(sorted(TRANSCRIPT_ORIGINS))}")
+
+    job = await run_blocking(db_executor, create_transcript_import_job, uid)
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    upload_path = os.path.join(TEMP_DIR, f"{job.id}_{filename}")
+    try:
+        f = await run_blocking(storage_executor, open, upload_path, 'wb')
+        try:
+            while contents := await file.read(1024 * 1024):
+                await run_blocking(storage_executor, f.write, contents)
+        finally:
+            f.close()
+    except Exception as e:
+        await run_blocking(
+            db_executor,
+            import_jobs_db.update_import_job,
+            job.id,
+            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {type(e).__name__}"},
+        )
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file")
+
+    storage_executor.submit(
+        process_transcript_import,
+        job.id,
+        uid,
+        upload_path,
+        original_filename=filename,
+        language_code=language,
+        tz=tz,
+        origin=origin,
+    )
+    return ImportJobResponse(job_id=job.id, status=ImportJobStatus.pending, source_type=job.source_type)
 
 
 @router.get(
@@ -120,6 +194,7 @@ def get_import_jobs(
                 ImportJobResponse(
                     job_id=job['id'],
                     status=ImportJobStatus(job['status']),
+                    source_type=_job_source_type(job),
                     total_files=job.get('total_files'),
                     processed_files=job.get('processed_files'),
                     conversations_created=job.get('conversations_created'),
@@ -170,6 +245,7 @@ def get_import_job_status(
     return ImportJobResponse(
         job_id=job['id'],
         status=status_val,
+        source_type=_job_source_type(job),
         total_files=job.get('total_files'),
         processed_files=job.get('processed_files'),
         conversations_created=job.get('conversations_created'),
@@ -194,6 +270,7 @@ def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)
     return ImportJobResponse(
         job_id=job['id'],
         status=ImportJobStatus.cancelled,
+        source_type=_job_source_type(job),
         total_files=job.get('total_files'),
         processed_files=job.get('processed_files'),
         conversations_created=job.get('conversations_created'),

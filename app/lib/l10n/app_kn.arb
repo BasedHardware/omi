@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ",
     "forYou": "ನಿಮಗಾಗಿ",
     "stopThese": "ಇವುಗಳನ್ನು ನಿಲ್ಲಿಸಿ",
-    "dismiss": "ಮರೆಮಾಡಿ"
+    "dismiss": "ಮರೆಮಾಡಿ",
+    "importTranscriptFiles": "ಪ್ರತಿಲೇಖನ ಫೈಲ್‌ಗಳು",
+    "importTranscriptFilesDescription": "SRT, VTT ಅಥವಾ TXT ಪ್ರತಿಲೇಖನಗಳನ್ನು ಅಥವಾ ಅವುಗಳ ZIP ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ"
 }

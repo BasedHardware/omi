@@ -12421,4 +12421,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get dismiss => 'Slėpti';
+
+  @override
+  String get importTranscriptFiles => 'Transkripcijų failai';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pasirinkite SRT, VTT arba TXT transkripcijas arba jų ZIP archyvą';
 }

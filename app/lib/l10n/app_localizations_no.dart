@@ -12399,4 +12399,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get dismiss => 'Avvis';
+
+  @override
+  String get importTranscriptFiles => 'Transkripsjonsfiler';
+
+  @override
+  String get importTranscriptFilesDescription => 'Velg SRT-, VTT- eller TXT-transkripsjoner, eller en ZIP med dem';
 }

@@ -3931,5 +3931,7 @@
     "playbackAudioNetworkFailed": "Ellenőrizze a kapcsolatot",
     "forYou": "Önnek",
     "stopThese": "Ezek leállítása",
-    "dismiss": "Elrejtés"
+    "dismiss": "Elrejtés",
+    "importTranscriptFiles": "Átiratfájlok",
+    "importTranscriptFilesDescription": "Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt"
 }

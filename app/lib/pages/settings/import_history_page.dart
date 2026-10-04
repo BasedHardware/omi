@@ -9,6 +9,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
+import 'package:omi/backend/http/api/users.dart' show getUsageDeviceTimeZone;
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -22,6 +24,14 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 /// [createdAt] is a server timestamp and parses as UTC; it is projected to local time first so the
 /// row lands on the reader's day.
 String importJobTimestampLabel(OmiDateFormat dates, DateTime createdAt) => dates.timestamp(createdAt.toLocal());
+
+/// The icon an import-history row shows for a job's importer, or null for the
+/// Limitless logo (Limitless jobs, including those from before sources were reported).
+IconData? importJobSourceIcon(ImportJobSource source) => switch (source) {
+      ImportJobSource.limitless => null,
+      ImportJobSource.transcriptFiles => Icons.subtitles_outlined,
+      ImportJobSource.other => Icons.upload_file_outlined,
+    };
 
 class ImportJobCountChip {
   final int count;
@@ -119,15 +129,37 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     }
   }
 
-  Future<void> _startLimitlessImport() async {
+  Future<void> _startLimitlessImport() => _startImport(
+        analyticsSource: 'limitless',
+        allowedExtensions: const ['zip'],
+        upload: (file) => startLimitlessImport(file),
+        retry: _startLimitlessImport,
+      );
+
+  Future<void> _startTranscriptImport() => _startImport(
+        analyticsSource: 'transcript_files',
+        allowedExtensions: transcriptImportExtensions,
+        upload: (file) async => startTranscriptImport(
+          file,
+          language: SharedPreferencesUtil().userPrimaryLanguage,
+          timeZone: await getUsageDeviceTimeZone(),
+        ),
+        retry: _startTranscriptImport,
+      );
+
+  Future<void> _startImport({
+    required String analyticsSource,
+    required List<String> allowedExtensions,
+    required Future<ImportJobResponse?> Function(File file) upload,
+    required VoidCallback retry,
+  }) async {
     try {
       if (!mounted) return;
-      PlatformManager.instance.analytics.importStarted(source: 'limitless');
+      PlatformManager.instance.analytics.importStarted(source: analyticsSource);
       setState(() => _isUploading = true);
 
-      // Pick ZIP file
-      Logger.debug('Opening file picker for ZIP…');
-      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['zip']);
+      Logger.debug('Opening file picker for $analyticsSource import…');
+      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: allowedExtensions);
 
       if (result == null || result.files.isEmpty) {
         Logger.debug('User cancelled file picker');
@@ -150,9 +182,8 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
       final file = File(filePath);
 
-      // Start import
-      Logger.debug('Starting Limitless import…');
-      final response = await startLimitlessImport(file);
+      Logger.debug('Starting $analyticsSource import…');
+      final response = await upload(file);
       Logger.debug('Import response: ${response?.jobId}');
 
       if (mounted) {
@@ -169,7 +200,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
             context,
             context.l10n.failedToStartImport,
             actionLabel: context.l10n.tryAgain,
-            onAction: _startLimitlessImport,
+            onAction: retry,
           );
         }
       }
@@ -214,7 +245,8 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
   Widget _buildImportSourceCard({
     required String name,
-    required String logoPath,
+    String? logoPath,
+    IconData? icon,
     required String description,
     required bool isAvailable,
     required VoidCallback? onTap,
@@ -241,20 +273,27 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                     ExcludeSemantics(
                       child: ClipRRect(
                         borderRadius: OmiRadius.smAll,
-                        child: Image.asset(
-                          logoPath,
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: 48,
-                              height: 48,
-                              color: OmiColors.surface2,
-                              child: Icon(Icons.device_unknown, color: OmiColors.textTertiary),
-                            );
-                          },
-                        ),
+                        child: icon != null || logoPath == null
+                            ? Container(
+                                width: 48,
+                                height: 48,
+                                color: OmiColors.surface2,
+                                child: Icon(icon ?? Icons.upload_file_outlined, color: OmiColors.textSecondary),
+                              )
+                            : Image.asset(
+                                logoPath,
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 48,
+                                    height: 48,
+                                    color: OmiColors.surface2,
+                                    child: Icon(Icons.device_unknown, color: OmiColors.textTertiary),
+                                  );
+                                },
+                              ),
                       ),
                     ),
                     const SizedBox(width: OmiSpacing.md),
@@ -335,6 +374,13 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           isAvailable: true,
           onTap: _isUploading ? null : _startLimitlessImport,
         ),
+        _buildImportSourceCard(
+          name: context.l10n.importTranscriptFiles,
+          icon: Icons.subtitles_outlined,
+          description: context.l10n.importTranscriptFilesDescription,
+          isAvailable: true,
+          onTap: _isUploading ? null : _startTranscriptImport,
+        ),
         // Coming soon placeholder
         Container(
           margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
@@ -402,15 +448,22 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         children: [
           Row(
             children: [
-              // Limitless logo small
+              // Importer badge: the Limitless logo, or an icon for other importers
               ClipRRect(
                 borderRadius: const BorderRadius.all(Radius.circular(6)),
-                child: Image.asset(
-                  'assets/competitor-logos/limitless-logo.jpg',
-                  width: 26,
-                  height: 26,
-                  fit: BoxFit.cover,
-                ),
+                child: importJobSourceIcon(job.source) == null
+                    ? Image.asset(
+                        'assets/competitor-logos/limitless-logo.jpg',
+                        width: 26,
+                        height: 26,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        width: 26,
+                        height: 26,
+                        color: OmiColors.surface2,
+                        child: Icon(importJobSourceIcon(job.source), size: 16, color: OmiColors.textSecondary),
+                      ),
               ),
               const SizedBox(width: OmiSpacing.xs),
               // Status icon (don't show for completed)

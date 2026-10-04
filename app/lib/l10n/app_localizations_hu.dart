@@ -12447,4 +12447,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get dismiss => 'Elrejtés';
+
+  @override
+  String get importTranscriptFiles => 'Átiratfájlok';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt';
 }

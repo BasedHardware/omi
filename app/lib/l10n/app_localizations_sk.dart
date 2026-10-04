@@ -12395,4 +12395,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get dismiss => 'Skryť';
+
+  @override
+  String get importTranscriptFiles => 'Súbory prepisov';
+
+  @override
+  String get importTranscriptFilesDescription => 'Vyberte prepisy SRT, VTT alebo TXT, alebo ZIP s nimi';
 }

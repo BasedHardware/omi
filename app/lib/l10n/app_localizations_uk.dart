@@ -12427,4 +12427,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get dismiss => 'Приховати';
+
+  @override
+  String get importTranscriptFiles => 'Файли розшифровок';
+
+  @override
+  String get importTranscriptFilesDescription => 'Виберіть розшифровки SRT, VTT або TXT чи ZIP-архів із ними';
 }

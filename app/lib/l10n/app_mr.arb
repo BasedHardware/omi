@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "कनेक्शन तपासा",
     "forYou": "तुमच्यासाठी",
     "stopThese": "हे थांबवा",
-    "dismiss": "लपवा"
+    "dismiss": "लपवा",
+    "importTranscriptFiles": "प्रतिलेख फाइल्स",
+    "importTranscriptFilesDescription": "SRT, VTT किंवा TXT प्रतिलेख किंवा त्यांची ZIP फाइल निवडा"
 }

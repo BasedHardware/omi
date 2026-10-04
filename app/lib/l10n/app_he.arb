@@ -11392,5 +11392,7 @@
     "playbackAudioNetworkFailed": "בדקו את החיבור",
     "forYou": "בשבילך",
     "stopThese": "הפסקת אלה",
-    "dismiss": "סגירה"
+    "dismiss": "סגירה",
+    "importTranscriptFiles": "קובצי תמלול",
+    "importTranscriptFilesDescription": "בחר תמלולים בפורמט SRT, VTT או TXT, או קובץ ZIP שמכיל אותם"
 }

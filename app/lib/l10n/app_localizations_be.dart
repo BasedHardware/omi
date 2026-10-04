@@ -12431,4 +12431,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get dismiss => 'Схаваць';
+
+  @override
+  String get importTranscriptFiles => 'Файлы стэнаграм';
+
+  @override
+  String get importTranscriptFilesDescription => 'Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі';
 }

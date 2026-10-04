@@ -12397,4 +12397,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get dismiss => 'رد کردن';
+
+  @override
+  String get importTranscriptFiles => 'فایل‌های رونوشت';
+
+  @override
+  String get importTranscriptFilesDescription => 'رونوشت‌های SRT، VTT یا TXT یا یک فایل ZIP از آن‌ها را انتخاب کنید';
 }

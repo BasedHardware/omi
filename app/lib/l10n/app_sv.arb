@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Kontrollera anslutningen",
     "forYou": "För dig",
     "stopThese": "Stoppa dessa",
-    "dismiss": "Avvisa"
+    "dismiss": "Avvisa",
+    "importTranscriptFiles": "Transkriptionsfiler",
+    "importTranscriptFilesDescription": "Välj SRT-, VTT- eller TXT-transkriptioner eller en ZIP med dem"
 }

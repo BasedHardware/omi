@@ -12394,4 +12394,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dismiss => 'Ẩn';
+
+  @override
+  String get importTranscriptFiles => 'Tệp bản chép lời';
+
+  @override
+  String get importTranscriptFilesDescription => 'Chọn bản chép lời SRT, VTT hoặc TXT, hoặc tệp ZIP chứa chúng';
 }

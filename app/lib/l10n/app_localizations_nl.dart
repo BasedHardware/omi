@@ -12435,4 +12435,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dismiss => 'Verbergen';
+
+  @override
+  String get importTranscriptFiles => 'Transcriptiebestanden';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Selecteer SRT-, VTT- of TXT-transcripties, of een ZIP met deze bestanden';
 }

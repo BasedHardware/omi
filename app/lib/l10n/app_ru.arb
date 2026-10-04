@@ -3870,5 +3870,7 @@
     "playbackAudioNetworkFailed": "Проверьте соединение",
     "forYou": "Для вас",
     "stopThese": "Отключить такие",
-    "dismiss": "Скрыть"
+    "dismiss": "Скрыть",
+    "importTranscriptFiles": "Файлы расшифровок",
+    "importTranscriptFilesDescription": "Выберите расшифровки SRT, VTT или TXT либо ZIP-архив с ними"
 }

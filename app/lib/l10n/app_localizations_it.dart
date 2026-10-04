@@ -12468,4 +12468,11 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get dismiss => 'Ignora';
+
+  @override
+  String get importTranscriptFiles => 'File di trascrizione';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Seleziona trascrizioni SRT, VTT o TXT, oppure uno ZIP che le contenga';
 }

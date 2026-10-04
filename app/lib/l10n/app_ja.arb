@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "接続を確認してください",
     "forYou": "あなたへのおすすめ",
     "stopThese": "この種類を停止",
-    "dismiss": "非表示"
+    "dismiss": "非表示",
+    "importTranscriptFiles": "文字起こしファイル",
+    "importTranscriptFilesDescription": "SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください"
 }

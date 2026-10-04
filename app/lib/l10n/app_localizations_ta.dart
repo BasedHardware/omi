@@ -12483,4 +12483,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get dismiss => 'மறை';
+
+  @override
+  String get importTranscriptFiles => 'படியெடுப்பு கோப்புகள்';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT அல்லது TXT படியெடுப்புகளை அல்லது அவற்றின் ZIP கோப்பைத் தேர்ந்தெடுக்கவும்';
 }

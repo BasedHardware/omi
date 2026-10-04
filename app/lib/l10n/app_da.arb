@@ -3877,5 +3877,7 @@
     "playbackAudioNetworkFailed": "Tjek forbindelsen",
     "forYou": "Til dig",
     "stopThese": "Stop disse",
-    "dismiss": "Afvis"
+    "dismiss": "Afvis",
+    "importTranscriptFiles": "Transskriptionsfiler",
+    "importTranscriptFilesDescription": "Vælg SRT-, VTT- eller TXT-transskriptioner eller en ZIP med dem"
 }

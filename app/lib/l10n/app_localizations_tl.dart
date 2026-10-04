@@ -12500,4 +12500,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get dismiss => 'Isara';
+
+  @override
+  String get importTranscriptFiles => 'Mga file ng transcript';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito';
 }

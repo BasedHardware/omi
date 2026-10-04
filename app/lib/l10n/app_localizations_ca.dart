@@ -12469,4 +12469,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get dismiss => 'Descarta';
+
+  @override
+  String get importTranscriptFiles => 'Fitxers de transcripció';
+
+  @override
+  String get importTranscriptFilesDescription => 'Selecciona transcripcions SRT, VTT o TXT, o un ZIP que les contingui';
 }

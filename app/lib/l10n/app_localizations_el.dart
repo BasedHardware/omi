@@ -12479,4 +12479,11 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get dismiss => 'Απόρριψη';
+
+  @override
+  String get importTranscriptFiles => 'Αρχεία απομαγνητοφωνήσεων';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Επιλέξτε απομαγνητοφωνήσεις SRT, VTT ή TXT ή ένα ZIP που τις περιέχει';
 }

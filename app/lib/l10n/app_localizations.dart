@@ -22202,6 +22202,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dismiss'**
   String get dismiss;
+
+  /// Import source card title for SRT, VTT or TXT transcripts exported from other apps
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript files'**
+  String get importTranscriptFiles;
+
+  /// Subtitle on the transcript-files import card
+  ///
+  /// In en, this message translates to:
+  /// **'Select SRT, VTT or TXT transcripts, or a ZIP of them'**
+  String get importTranscriptFilesDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

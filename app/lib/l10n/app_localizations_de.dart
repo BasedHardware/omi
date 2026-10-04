@@ -12495,4 +12495,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get dismiss => 'Ausblenden';
+
+  @override
+  String get importTranscriptFiles => 'Transkriptdateien';
+
+  @override
+  String get importTranscriptFilesDescription => 'Wähle SRT-, VTT- oder TXT-Transkripte oder ein ZIP mit ihnen aus';
 }

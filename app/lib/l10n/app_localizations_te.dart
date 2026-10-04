@@ -12450,4 +12450,11 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get dismiss => 'దాచు';
+
+  @override
+  String get importTranscriptFiles => 'ట్రాన్స్‌క్రిప్ట్ ఫైల్‌లు';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT లేదా TXT ట్రాన్స్‌క్రిప్ట్‌లను లేదా వాటి ZIP ఫైల్‌ను ఎంచుకోండి';
 }

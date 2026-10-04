@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Kontrollige ühendust",
     "forYou": "Sulle",
     "stopThese": "Peata need",
-    "dismiss": "Peida"
+    "dismiss": "Peida",
+    "importTranscriptFiles": "Transkriptsioonifailid",
+    "importTranscriptFilesDescription": "Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP"
 }

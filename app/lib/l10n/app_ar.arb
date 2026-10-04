@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "تحقق من الاتصال",
     "forYou": "من أجلك",
     "stopThese": "إيقاف هذه",
-    "dismiss": "تجاهل"
+    "dismiss": "تجاهل",
+    "importTranscriptFiles": "ملفات النصوص",
+    "importTranscriptFilesDescription": "اختر نصوصًا بصيغة SRT أو VTT أو TXT، أو ملف ZIP يضمها"
 }

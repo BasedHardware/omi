@@ -3835,5 +3835,7 @@
     "playbackAudioNetworkFailed": "Verificați conexiunea",
     "forYou": "Pentru tine",
     "stopThese": "Oprește acestea",
-    "dismiss": "Ascunde"
+    "dismiss": "Ascunde",
+    "importTranscriptFiles": "Fișiere de transcriere",
+    "importTranscriptFilesDescription": "Selectează transcrieri SRT, VTT sau TXT ori o arhivă ZIP cu ele"
 }
