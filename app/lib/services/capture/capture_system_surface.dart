@@ -69,6 +69,9 @@ class CaptureSystemSurface {
     final userPaused = capture.isPaused || (state == RecordingState.pause && !heldForCall);
     final interrupted = state == RecordingState.interrupted || heldForCall;
     final connecting = state == RecordingState.initialising;
+    // Until a pendant's audio is verified the app claims neither Listening nor a running time
+    // (CaptureIngressHealth), so the card names the pendant without either.
+    final unverified = !capture.pendantCaptureVerified;
     final paused = userPaused || interrupted || connecting;
     final now = _now();
     if (id != _recordingId || revision != _conversationRevision) {
@@ -95,11 +98,13 @@ class CaptureSystemSurface {
                 ? 'interrupted'
                 : connecting
                     ? 'connecting'
-                    : batch
-                        ? 'recording'
-                        : capture.transcriptServiceReady
-                            ? 'listening'
-                            : 'reconnecting';
+                    : unverified
+                        ? 'unverified'
+                        : batch
+                            ? 'recording'
+                            : capture.transcriptServiceReady
+                                ? 'listening'
+                                : 'reconnecting';
     return {
       'recordingId': id ?? '',
       'conversationRevision': revision,

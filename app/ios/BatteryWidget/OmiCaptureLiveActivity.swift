@@ -227,6 +227,8 @@ private struct CaptureStatus: View {
         case "connecting": return "Connecting…"
         case "recording": return "Recording"
         case "reconnecting": return "Reconnecting…"
+        // The pendant's audio is not verified yet: no Listening claim, as in the app.
+        case "unverified": return "Omi pendant"
         default: return "Listening"
         }
     }
@@ -247,6 +249,8 @@ private struct CaptureStatus: View {
     }
 
     private var subtitle: Text {
+        // The title already names the pendant.
+        if state.status == "unverified" { return detail.map { Text($0) } ?? Text(verbatim: "") }
         guard let detail else { return Text(source) }
         return showSource ? Text(source) + Text(" · ") + Text(detail) : Text(detail)
     }
@@ -309,7 +313,7 @@ private struct CaptureClockText: View {
     var body: some View {
         let state = snapshot.state
         Group {
-            if snapshot.isStale {
+            if snapshot.isStale || state.status == "unverified" {
                 Text("—")
             } else if state.paused || state.status == "ended" {
                 // Frozen value in the same format the live timer uses.
@@ -388,7 +392,7 @@ private struct CaptureWaveform: View {
     ]
 
     private var running: Bool {
-        !snapshot.isStale && !snapshot.state.paused && snapshot.state.status != "ended"
+        !snapshot.isStale && !snapshot.state.paused && !["ended", "unverified"].contains(snapshot.state.status)
     }
 
     /// Seconds of capture, the breath's clock. Start shifts `startedAt` by the
