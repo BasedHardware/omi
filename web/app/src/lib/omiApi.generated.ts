@@ -4129,7 +4129,10 @@ export interface ShareTasksRequest {
 
 export interface SharedActionItem {
   completed?: boolean;
+  context?: string | null;
   description: string;
+  due_at?: string | null;
+  owner_name?: string | null;
 }
 
 export interface SharedActionItemPreview {
@@ -4210,6 +4213,12 @@ export interface SharedPluginResult {
   plugin_id: string | null;
 }
 
+export interface SharedSection {
+  body_markdown: string;
+  heading: string;
+  kind?: "main" | "side_notes";
+}
+
 export interface SharedStructured {
   action_items?: Array<SharedActionItem>;
   category?: CategoryEnum;
@@ -4218,6 +4227,7 @@ export interface SharedStructured {
   meeting_type?: "interview" | "intro" | "sales" | "customer" | "one_on_one" | "team_sync" | "planning" | "demo" | "social" | "other" | null;
   overview?: string;
   participants?: Array<SharedParticipant>;
+  sections?: Array<SharedSection>;
   title?: string;
 }
 
@@ -5926,6 +5936,7 @@ export interface OmiApiSchemas {
   "SharedParticipant": SharedParticipant;
   "SharedPerson": SharedPerson;
   "SharedPluginResult": SharedPluginResult;
+  "SharedSection": SharedSection;
   "SharedStructured": SharedStructured;
   "SharedTranscriptSegment": SharedTranscriptSegment;
   "ShortlistEligibility": ShortlistEligibility;
