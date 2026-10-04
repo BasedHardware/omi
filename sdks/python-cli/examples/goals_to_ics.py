@@ -36,7 +36,6 @@ import sys
 import tempfile
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-
 PRODID = "-//Omi Community//Omi Goals Exporter 1.0//EN"
 DEFAULT_EVENT_DURATION = timedelta(minutes=30)
 ACHIEVED_STATUSES = {"completed", "achieved", "done"}
@@ -387,7 +386,11 @@ def load_and_deduplicate(sources: Sequence[str | Path]) -> List[Dict[str, Any]]:
 
         for goal in extracted:
             gid = str(goal["id"])
-            ts = ics_datetime(goal.get("updated_at")) or ics_datetime(goal.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc)
+            ts = (
+                ics_datetime(goal.get("updated_at"))
+                or ics_datetime(goal.get("created_at"))
+                or datetime.min.replace(tzinfo=timezone.utc)
+            )
 
             if gid not in goals_by_id:
                 goals_by_id[gid] = goal
@@ -461,17 +464,13 @@ def write_ics(content: str, dest_path: str | Path, force: bool = False) -> None:
         raise ValueError(f"Path traversal sequence '..' is forbidden: {dest_path}")
 
     if dest.exists() and not force:
-        raise FileExistsError(
-            f"Destination file '{dest}' already exists. Use -f / --force to overwrite."
-        )
+        raise FileExistsError(f"Destination file '{dest}' already exists. Use -f / --force to overwrite.")
 
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     temp_path: Optional[Path] = None
     try:
-        with tempfile.NamedTemporaryFile(
-            dir=dest.parent, prefix=f".{dest.name}.tmp_", delete=False
-        ) as tf:
+        with tempfile.NamedTemporaryFile(dir=dest.parent, prefix=f".{dest.name}.tmp_", delete=False) as tf:
             tf.write(content.encode("utf-8"))
             temp_path = Path(tf.name)
         os.replace(temp_path, dest)
