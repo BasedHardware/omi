@@ -150,6 +150,7 @@ void main() {
       await provider.loadAvailableLanguages(fetch: () async => null);
 
       expect(provider.getLanguageName('ja'), 'Japanese');
+      expect(provider.getLanguageName('gu'), 'Gujarati');
     });
 
     test('returns the code itself for one nothing knows about', () {
