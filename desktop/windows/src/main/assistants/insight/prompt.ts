@@ -90,7 +90,7 @@ export const DB_SCHEMA_BLOCK = `DATABASE SCHEMA for execute_sql:\n${REWIND_SCHEM
 
 /** The final system prompt: the (stored or default) analysis prompt, plus the DB
  *  schema block, plus — only when the user's language is a non-English override —
- *  Mac's language directive. Mirrors InsightAssistant.swift:564-568. */
+ *  the shared output-language instruction (core/outputLanguage.ts). */
 export function buildSystemPrompt(analysisPrompt: string, language: string | null): string {
   let out = analysisPrompt
   const languageInstruction = outputLanguageInstruction(language)
