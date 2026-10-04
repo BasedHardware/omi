@@ -1,10 +1,12 @@
 import {
   actionItemFacts,
   durationMinutes,
+  eventFacts,
   formatDuration,
   meetingTypeLabel,
+  participantFacts,
   shareDateTime,
-  transcriptSpeakerName,
+  transcriptSpeakerResolver,
   transcriptTimestamp,
 } from './shared-note.mjs';
 
@@ -36,7 +38,13 @@ export function shareRepresentation(accept = '') {
     })
     .filter((r) => r.q > 0)
     .sort((a, b) => b.q - a.q || a.index - b.index);
-  return candidates[0]?.type ?? 'text/html';
+  if (candidates.length > 0) return candidates[0].type;
+  const htmlRejected = ranges.some(
+    (range) =>
+      range.q === 0 &&
+      (range.type === 'text/html' || range.type === 'text/*' || range.type === '*/*'),
+  );
+  return htmlRejected ? null : 'text/html';
 }
 
 export function shareAlternates(id) {
@@ -72,12 +80,8 @@ export function sharedConversationMarkdown(memory, id) {
     lines.push(`Meeting type: ${meetingTypeLabel(structured.meeting_type)}`);
   lines.push('', '## Participants', '');
   for (const participant of structured.participants ?? []) {
-    lines.push(
-      `- ${[participant.name, participant.organization, participant.role]
-        .filter(Boolean)
-        .map(inline)
-        .join(' — ')}`,
-    );
+    const { name, details } = participantFacts(participant);
+    lines.push(`- ${[name, ...details].map(inline).join(' — ')}`);
   }
   if (!structured.participants?.length) lines.push('Unknown');
   if (structured.overview) lines.push('', '## Overview', '', structured.overview);
@@ -100,6 +104,19 @@ export function sharedConversationMarkdown(memory, id) {
     if (context) lines.push(`  - Context: ${inline(context)}`);
   }
   if (!structured.action_items?.length) lines.push('None');
+  if (structured.events?.length) {
+    lines.push('', '## Events', '');
+    for (const event of structured.events) {
+      const facts = eventFacts(event);
+      const when = facts.start ? `${facts.start.iso} (${facts.start.label})` : 'Unknown';
+      const until = facts.end ? ` until ${facts.end.iso} (${facts.end.label})` : '';
+      const duration = facts.duration ? `, ${facts.duration}` : '';
+      lines.push(
+        `- ${inline(facts.title || 'Untitled event')}: ${when}${until}${duration}`,
+      );
+      if (facts.description) lines.push(`  - ${inline(facts.description)}`);
+    }
+  }
   lines.push(
     '',
     '## Transcript',
@@ -107,13 +124,13 @@ export function sharedConversationMarkdown(memory, id) {
     'Timestamps are offsets from the conversation start (HH:MM:SS).',
     '',
   );
+  const resolveSpeaker = transcriptSpeakerResolver(
+    memory.people,
+    structured.participants,
+    memory.transcript_segments,
+  );
   for (const segment of memory.transcript_segments ?? []) {
-    const name = transcriptSpeakerName(
-      segment,
-      memory.people,
-      structured.participants,
-      memory.transcript_segments,
-    );
+    const name = resolveSpeaker(segment);
     lines.push(
       `**[${transcriptTimestamp(segment.start)}] ${inline(name)}:** ${inline(
         segment.text,

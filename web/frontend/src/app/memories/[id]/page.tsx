@@ -13,7 +13,6 @@ import envConfig from '@/src/constants/envConfig';
 import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
 import { markdownToPlainText } from '@/src/lib/markdown-to-plain-text.mjs';
 import { getOmiInstallLink } from '@/src/lib/conversation-share-platform-link.mjs';
-import { sharedApiUrl } from '@/src/lib/shared-api-url.mjs';
 import {
   capturePreviewRequest,
   previewAttribution,
@@ -47,33 +46,9 @@ export async function generateMetadata(
     attribution,
   );
   const prevData = (await parent) as Metadata;
-  let memory: {
-    structured?: {
-      title?: string;
-      overview?: string;
-      sections?: unknown;
-    };
-  } | null = null;
-
-  try {
-    const response = await fetch(
-      sharedApiUrl(envConfig.API_URL, 'v1', 'conversations', params.id, 'shared'),
-      {
-        next: {
-          revalidate: 60,
-        },
-      },
-    );
-
-    if (response.ok) {
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        memory = await response.json();
-      }
-    }
-  } catch {
-    // Silently handle errors in metadata generation
-  }
+  // Same uncached read as the page body. Caching this fetch keeps the title
+  // and overview in the document head after the share is revoked.
+  const memory = (await getSharedMemory(params.id)) ?? null;
 
   const title = !memory
     ? 'Shared Conversation Not Found'

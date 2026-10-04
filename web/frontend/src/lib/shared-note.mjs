@@ -97,6 +97,20 @@ export function participantDisplayName(participant) {
   return organization || 'Guest';
 }
 
+/** Name plus organization and role, without repeating the name as the organization. */
+export function participantFacts(participant) {
+  const name = participantDisplayName(participant);
+  const organization =
+    typeof participant?.organization === 'string' ? participant.organization.trim() : '';
+  const role = typeof participant?.role === 'string' ? participant.role.trim() : '';
+  return {
+    name,
+    details: [organization && organization !== name ? organization : '', role].filter(
+      Boolean,
+    ),
+  };
+}
+
 export function participantInitials(displayName) {
   const words = String(displayName || '')
     .trim()
@@ -235,6 +249,55 @@ export function transcriptTimestamp(seconds) {
     .join(':');
 }
 
+const EMAIL_RE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+
+/**
+ * Resolve every turn once. Person links and an exact participant-name match are
+ * the only identities. Roster order is never a guess, and an unmatched speaker
+ * string is not a name.
+ */
+export function transcriptSpeakerResolver(
+  people = [],
+  participants = [],
+  transcript = [],
+) {
+  const peopleById = new Map();
+  for (const person of people ?? []) {
+    const name = person?.name?.trim();
+    if (person?.id && name) peopleById.set(person.id, name);
+  }
+  const namesBySpeaker = new Map();
+  for (const turn of transcript ?? []) {
+    if (turn?.speaker_id == null || !turn.person_id) continue;
+    const name = peopleById.get(turn.person_id);
+    if (!name) continue;
+    const current = namesBySpeaker.get(turn.speaker_id);
+    if (current === undefined) namesBySpeaker.set(turn.speaker_id, name);
+    else if (current !== name) namesBySpeaker.set(turn.speaker_id, '');
+  }
+  const participantsByName = new Map();
+  for (const participant of participants ?? []) {
+    const name = participant?.name?.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (!participantsByName.has(key)) participantsByName.set(key, name);
+  }
+  return function resolveSpeaker(segment) {
+    const direct = segment?.person_id ? peopleById.get(segment.person_id) : '';
+    if (direct) return direct;
+    if (segment?.speaker_id != null && namesBySpeaker.has(segment.speaker_id)) {
+      const shared = namesBySpeaker.get(segment.speaker_id);
+      if (shared) return shared;
+    }
+    const speaker = segment?.speaker?.trim();
+    const participant = speaker ? participantsByName.get(speaker.toLowerCase()) : '';
+    if (participant) return participant;
+    if (segment?.is_user) return 'Owner';
+    if (segment?.speaker_id != null) return `Speaker ${segment.speaker_id}`;
+    return 'Speaker unknown';
+  };
+}
+
 /** Never assign roster names by array order: the roster has no speaker IDs. */
 export function transcriptSpeakerName(
   segment,
@@ -242,32 +305,37 @@ export function transcriptSpeakerName(
   participants = [],
   transcript = [],
 ) {
-  const person = people?.find((p) => segment.person_id && p.id === segment.person_id);
-  if (person?.name?.trim()) return person.name.trim();
-  const names = new Set(
-    transcript
-      .filter((turn) => turn.speaker_id != null && turn.speaker_id === segment.speaker_id)
-      .map((turn) =>
-        people?.find((p) => turn.person_id && p.id === turn.person_id)?.name?.trim(),
-      )
-      .filter(Boolean),
-  );
-  if (names.size === 1) return [...names][0];
-  const name = segment.speaker?.trim();
-  const participant = participants?.find(
-    (p) => name && p.name?.trim().toLowerCase() === name.toLowerCase(),
-  );
-  if (participant?.name?.trim()) return participant.name.trim();
-  return segment.is_user
-    ? 'Owner'
-    : `Speaker ${segment.speaker_id ?? segment.speaker ?? 'unknown'}`;
+  return transcriptSpeakerResolver(people, participants, transcript)(segment);
 }
 
 export function actionItemFacts(item) {
-  const due = shareDateTime({ started_at: item.due_at });
+  const due = shareDateTime({ started_at: item?.due_at });
+  const rawOwner = typeof item?.owner_name === 'string' ? item.owner_name.trim() : '';
   return {
-    owner: item.owner_name?.trim() || 'Unknown',
+    owner: rawOwner && !EMAIL_RE.test(rawOwner) ? rawOwner : 'Unknown',
     due,
-    context: item.context?.trim() || '',
+    context: item?.context?.trim() || '',
+  };
+}
+
+export function eventFacts(event) {
+  const start = shareDateTime({ started_at: event?.start });
+  const startDate = toValidDate(event?.start);
+  const minutes =
+    typeof event?.duration === 'number' &&
+    Number.isFinite(event.duration) &&
+    event.duration >= 0
+      ? Math.round(event.duration)
+      : null;
+  const end =
+    startDate && minutes != null
+      ? shareDateTime({ started_at: new Date(startDate.getTime() + minutes * 60000) })
+      : null;
+  return {
+    title: typeof event?.title === 'string' ? event.title.trim() : '',
+    description: typeof event?.description === 'string' ? event.description.trim() : '',
+    start,
+    end,
+    duration: minutes == null ? '' : formatDuration(minutes),
   };
 }

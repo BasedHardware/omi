@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
@@ -62,6 +63,7 @@ __all__ = [
     'SharedParticipant',
     'SharedPerson',
     'SharedPluginResult',
+    'SharedSection',
     'SharedStructured',
     'SharedTranscriptSegment',
     'project_shared_conversation',
@@ -118,6 +120,9 @@ class SharedConversationChatResponse(BaseModel):
     remaining_free_questions: int | None = Field(default=None, ge=0)
 
 
+_EMAIL_RE = re.compile(r'[^\s@]+@[^\s@]+\.[^\s@]+')
+
+
 class SharedActionItem(BaseModel):
     """Public share projection of an action item."""
 
@@ -128,6 +133,14 @@ class SharedActionItem(BaseModel):
     owner_name: Optional[str] = None
     due_at: Optional[datetime] = None
     context: Optional[str] = None
+
+    @field_validator('owner_name', mode='before')
+    @classmethod
+    def drop_email_shaped_owner(cls, value):
+        # owner_name is a display name. An address here is not a public name.
+        if isinstance(value, str) and _EMAIL_RE.search(value):
+            return None
+        return value
 
 
 class SharedSection(BaseModel):

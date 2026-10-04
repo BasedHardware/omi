@@ -7,11 +7,26 @@ export function proxy(request: NextRequest) {
   if (!match) return NextResponse.next();
   const suffix = /\.(md|json)$/.exec(match[1]);
   const id = suffix ? match[1].slice(0, -suffix[0].length) : match[1];
+  let decodedId: string;
+  try {
+    decodedId = decodeURIComponent(id);
+  } catch {
+    return new NextResponse('Bad Request', {
+      status: 400,
+      headers: { Vary: 'Accept', 'Cache-Control': 'private, no-store' },
+    });
+  }
   const type = suffix
     ? suffix[1] === 'md'
       ? 'text/markdown'
       : 'application/json'
     : shareRepresentation(request.headers.get('accept') || '');
+  if (!type) {
+    return new NextResponse('Not Acceptable', {
+      status: 406,
+      headers: { Vary: 'Accept', 'Cache-Control': 'private, no-store' },
+    });
+  }
   let response;
   if (type === 'text/html') {
     response = NextResponse.next();
@@ -23,7 +38,7 @@ export function proxy(request: NextRequest) {
     response = NextResponse.rewrite(destination);
   }
   response.headers.set('Vary', 'Accept');
-  response.headers.set('Link', shareLinkHeader(decodeURIComponent(id)));
+  response.headers.set('Link', shareLinkHeader(decodedId));
   // Sharing can be revoked. Do not let intermediary caches retain a public body.
   response.headers.set('Cache-Control', 'private, no-store');
   return response;

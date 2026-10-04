@@ -4,6 +4,7 @@ import {
   Person,
   Participant,
 } from '@/src/types/memory.types';
+import { transcriptSpeakerResolver } from '@/src/lib/shared-note.mjs';
 import TranscriptionSegment from './transcription-segment';
 import ExternalData from '../external-data/external-data';
 
@@ -33,6 +34,7 @@ export default function Transcription({
     const uniqueSpeakers = Array.from(
       new Set(transcript.map((segment) => segment.speaker_id)),
     );
+    const resolveSpeaker = transcriptSpeakerResolver(people, participants, transcript);
     return (
       <div>
         <h2 className="sn-h3 mt-10">Transcript</h2>
@@ -45,9 +47,7 @@ export default function Transcription({
             <TranscriptionSegment
               key={index}
               segment={segment}
-              people={people}
-              participants={participants}
-              transcript={transcript}
+              displayName={resolveSpeaker(segment)}
             />
           ))}
         </ul>

@@ -1,10 +1,9 @@
 'use client';
 
-import { TranscriptSegment, Person, Participant } from '@/src/types/memory.types';
+import { TranscriptSegment } from '@/src/types/memory.types';
 import {
   avatarToneIndex,
   participantInitials,
-  transcriptSpeakerName,
   transcriptTimestamp,
 } from '@/src/lib/shared-note.mjs';
 import { useState } from 'react';
@@ -13,14 +12,10 @@ const PREVIEW_CHARS = 600;
 
 export default function TranscriptionSegment({
   segment,
-  people,
-  participants,
-  transcript,
+  displayName,
 }: {
   segment: TranscriptSegment;
-  people?: Person[];
-  participants?: Participant[] | null;
-  transcript?: TranscriptSegment[];
+  displayName: string;
 }) {
   const [showMore, setShowMore] = useState(false);
 
@@ -30,12 +25,6 @@ export default function TranscriptionSegment({
 
   const isUser = segment.is_user;
 
-  const displayName = transcriptSpeakerName(
-    segment,
-    people,
-    participants ?? [],
-    transcript,
-  );
   const isLong = textFormatted.length > PREVIEW_CHARS;
 
   return (

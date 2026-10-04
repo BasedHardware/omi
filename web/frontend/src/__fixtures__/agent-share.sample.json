@@ -13,7 +13,15 @@
       { "description": "Send the release plan", "completed": false, "owner_name": "Ada Example", "due_at": "2026-10-05T16:00:00Z", "context": "For review" },
       { "description": "Choose a venue", "completed": true, "owner_name": null, "due_at": null }
     ],
-    "events": []
+    "events": [
+      {
+        "title": "Release review",
+        "description": "Walk the checklist.",
+        "start": "2026-10-04T18:00:00Z",
+        "duration": 30,
+        "created": false
+      }
+    ]
   },
   "transcript_segments": [
     { "text": "I will send the plan.", "speaker": "SPEAKER_00", "speaker_id": 0, "is_user": true, "person_id": "person-ada", "start": 65.5, "end": 70 },

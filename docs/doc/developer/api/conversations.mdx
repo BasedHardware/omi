@@ -945,6 +945,8 @@ note text is included as authored; this is not a content redaction service.
 Times are explicitly UTC, with ISO-8601 instants in Markdown and JSON. Transcript
 labels use elapsed offsets from the conversation start (`HH:MM:SS`). Speaker
 names use person links or an exact match to a public participant name; roster
-order cannot identify a diarized speaker. Unmapped speakers keep stable anonymous
-labels. Unknown action owners and due times appear as Unknown in Markdown and the
-human page.
+order cannot identify a diarized speaker. An unmatched speaker string is not a
+name: those turns use `Speaker N` when a speaker id exists, otherwise
+`Speaker unknown`. The account holder without a verified name stays `Owner`.
+Event times on the page and in Markdown use the same UTC labels. Unknown action
+owners and due times appear as Unknown. An email-shaped `owner_name` is omitted.

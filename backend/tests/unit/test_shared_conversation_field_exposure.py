@@ -284,6 +284,17 @@ def test_rich_meeting_fields_share_without_emails_or_insights():
     assert 'Met last week' not in serialized
 
 
+def test_email_shaped_action_owner_is_not_public():
+    conversation = _conversation()
+    conversation.structured.action_items[0].owner_name = 'Ada <ada@example.com>'
+    payload = _payload(_call_shared(conversation))
+    item = payload['structured']['action_items'][0]
+    assert item['owner_name'] is None
+    assert item['description'] == 'Send the deck'
+    assert item['context'] == 'Prepare the follow-up'
+    assert 'ada@example.com' not in json.dumps(payload)
+
+
 def test_private_conversation_still_404s():
     with patch.object(conv_router.redis_db, 'get_conversation_uid', return_value='owner-uid'), patch.object(
         conv_router, '_get_valid_conversation_by_id', return_value={'visibility': 'private'}

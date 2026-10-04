@@ -35,6 +35,9 @@ test('negotiates explicit machine preferences while preserving browser HTML', ()
     'application/json',
   );
   assert.equal(shareRepresentation('text/markdown;q=0.1,*/*'), 'text/html');
+  assert.equal(shareRepresentation('text/html;q=0'), null);
+  assert.equal(shareRepresentation('*/*;q=0'), null);
+  assert.equal(shareRepresentation('text/html;q=0, text/markdown'), 'text/markdown');
 });
 
 test('structured Markdown preserves public facts and marks unknown action facts', () => {
@@ -55,9 +58,34 @@ test('structured Markdown preserves public facts and marks unknown action facts'
     'Owner: Unknown',
     'Due: Unknown',
     '[x] Choose a venue',
+    '## Events',
+    'Release review',
+    '2026-10-04T18:00:00.000Z',
+    '6:00 PM UTC',
+    '2026-10-04T18:30:00.000Z',
+    'Walk the checklist.',
   ])
     assert.ok(body.includes(fact), fact);
   assert.doesNotMatch(body, /Owner:\*\*|Speaker 0|<!DOCTYPE|@/i);
+  const leaked = sharedConversationMarkdown(
+    {
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {
+            description: 'Mail the notes',
+            completed: false,
+            owner_name: 'ada@example.com',
+            due_at: null,
+          },
+        ],
+      },
+    },
+    fixture.id,
+  );
+  assert.match(leaked, /Owner: Unknown/);
+  assert.doesNotMatch(leaked, /ada@example\.com/);
   assert.ok(body.startsWith('> Agents:'));
   assert.match(shareLinkHeader(fixture.id), /rel="alternate"; type="text\/markdown"/);
 });
@@ -75,6 +103,23 @@ test('speaker identity uses explicit evidence, including owner person links, wit
   );
   const unmapped = { speaker_id: 2, speaker: 'SPEAKER_02', is_user: false };
   assert.equal(transcriptSpeakerName(unmapped, people, participants), 'Speaker 2');
+  assert.equal(
+    transcriptSpeakerName({ speaker: 'Ada Example', is_user: false }, people, []),
+    'Speaker unknown',
+  );
+  const conflicted = [
+    { speaker_id: 3, person_id: 'person-ada', is_user: false },
+    { speaker_id: 3, person_id: 'person-bea', is_user: false },
+  ];
+  assert.equal(
+    transcriptSpeakerName(
+      { speaker_id: 3, is_user: false, speaker: 'SPEAKER_03' },
+      [...people, { id: 'person-bea', name: 'Bea Example' }],
+      participants,
+      conflicted,
+    ),
+    'Speaker 3',
+  );
   assert.equal(
     transcriptSpeakerName(
       { ...unmapped, speaker_id: 0 },

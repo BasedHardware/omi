@@ -123,8 +123,15 @@ test(
         'Example Labs',
         'Engineer',
         'Ship Thursday.',
+        'Release review',
+        '6:00 PM UTC',
       ])
         assert.ok(document.includes(fact), `${fact}\n${logs}`);
+      // Next dev overwrites rendered HTML cache headers. Production dynamic
+      // rendering follows the uncached fetch; reject a shared max-age either way.
+      const htmlCache = html.headers.get('cache-control') || '';
+      assert.doesNotMatch(htmlCache, /s-maxage=/);
+      assert.doesNotMatch(htmlCache, /max-age=[1-9]/);
       assert.match(
         document,
         /<link[^>]+rel="alternate"[^>]+type="text\/markdown"[^>]+href="[^"]*synthetic-share.md"/,
@@ -139,6 +146,9 @@ test(
       assert.match(markdown, /\[00:01:05\] Ada Example/);
       assert.match(markdown, /Owner: Ada Example/);
       assert.match(markdown, /2026-10-05T16:00:00.000Z/);
+      assert.match(markdown, /Release review/);
+      assert.match(markdown, /6:00 PM UTC/);
+      assert.match(md.headers.get('cache-control') || '', /no-store/);
       const suffix = await get(`${path}.md`, 'text/html');
       assert.equal(suffix.headers.get('content-type'), 'text/markdown; charset=utf-8');
       assert.equal(await suffix.text(), markdown);
@@ -151,7 +161,13 @@ test(
         assert.match(json.headers.get('content-type'), /application\/json/);
         assert.match(json.headers.get('vary'), /accept/i);
         assert.deepEqual(await json.json(), fixture);
+        assert.match(json.headers.get('cache-control') || '', /no-store/);
       }
+      const rejected = await get(path, 'text/html;q=0');
+      assert.equal(rejected.status, 406, logs);
+      assert.doesNotMatch(await rejected.text(), /I will send the plan/);
+      const malformed = await get('/conversations/%');
+      assert.equal(malformed.status, 400, logs);
       const discovery = await get('/llms.txt');
       assert.equal(discovery.status, 200);
       assert.match(await discovery.text(), /^# Omi shared conversations/);
@@ -170,7 +186,15 @@ test(
       // Next may have sent streaming HTML headers before notFound() runs.
       const revokedPage = await get(path, 'text/html');
       const revokedHtml = await revokedPage.text();
-      assert.ok(!revokedHtml.includes('I will send the plan.'));
+      for (const fact of [
+        'I will send the plan.',
+        'Discuss the release.',
+        'Synthetic planning meeting',
+        'Ship Thursday.',
+        'Release review',
+        'Walk the checklist.',
+      ])
+        assert.ok(!revokedHtml.includes(fact), fact);
       assert.match(revokedHtml, /Page not found|private or no longer available/);
     } catch (error) {
       console.error(logs);

@@ -6,7 +6,7 @@ import {
   durationMinutes,
   formatDuration,
   meetingTypeLabel,
-  participantDisplayName,
+  participantFacts,
   participantInitials,
   shareDateTime,
   sortParticipants,
@@ -59,10 +59,8 @@ export default function Memory({ memory, screenshots = null }: MemoryProps) {
         {participants.length > 0 && (
           <ul className="sn-participants" aria-label="Participants">
             {participants.map((participant, index) => {
-              const name = participantDisplayName(participant);
-              const role = [participant.organization, participant.role]
-                .filter(Boolean)
-                .join(' · ');
+              const { name, details } = participantFacts(participant);
+              const role = details.join(' · ');
               return (
                 <li key={index} className="sn-chip" title={role || undefined}>
                   <span
