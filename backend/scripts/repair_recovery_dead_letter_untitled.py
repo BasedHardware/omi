@@ -281,7 +281,7 @@ JOB_FILTERS = {
     'status': 'dead_letter',
     'processing_trigger': 'server_recovery',
 }
-ALLOWED_FIELDS = {'discarded', 'relevance_decision', 'structured.title'}
+ALLOWED_FIELDS = {'discarded', 'relevance_decision', 'structured.title', 'structured.note_claims'}
 RETRYABLE = (Aborted, Conflict, DeadlineExceeded, ServiceUnavailable)
 # The SDK exposes no public predicate accessor; share its pinned retry policy.
 GCS_RETRY_PREDICATE = GCS_DEFAULT_RETRY._predicate  # pyright: ignore[reportPrivateUsage]
