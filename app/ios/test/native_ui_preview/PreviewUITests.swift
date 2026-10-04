@@ -208,7 +208,13 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.buttons["native-settings"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["native-device"].label.contains("53%"))
         XCTAssertTrue(app.buttons["native-recap-recap-1"].isHittable)
-        XCTAssertTrue(app.buttons["native-chat"].isHittable)
+        let chat = app.buttons["native-chat"]
+        // The system glass footer can finish its initial layout after the header is ready.
+        // Wait for the actual tap target, then assert the dispatched owner action too.
+        let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: chat)
+        XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 10), .completed)
+        chat.tap()
+        XCTAssertTrue(app.staticTexts["chat:"].waitForExistence(timeout: 5))
         capture(app, "native-home-liquid-glass")
         app.buttons["native-tasks"].tap()
         capture(app, "native-home-after-tasks-action")
