@@ -32,7 +32,9 @@ def estimate_firestore_document_bytes(data: Mapping[str, Any], document_path: st
     return name_bytes + 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(value) for key, value in data.items())
 
 
-def _value_bytes(value: Any) -> int:
+def _value_bytes(value: Any, _depth: int = 0) -> int:
+    if _depth > 32:
+        return 32
     if value is None or isinstance(value, bool):
         return 1
     if isinstance(value, (int, float, datetime)):
@@ -43,10 +45,10 @@ def _value_bytes(value: Any) -> int:
         return len(value)
     if isinstance(value, Mapping):
         # A map is sized like an embedded document: its fields plus 32 bytes.
-        return 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(item) for key, item in value.items())
+        return 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(item, _depth + 1) for key, item in value.items())
     if isinstance(value, (list, tuple, set, frozenset)):
         # The SDK encodes a set or frozenset as an array.
-        return sum(_value_bytes(item) for item in value)
+        return sum(_value_bytes(item, _depth + 1) for item in value)
     if _is_vector(value):
         return 8 * len(value)
     if hasattr(value, 'latitude') and hasattr(value, 'longitude'):

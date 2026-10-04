@@ -93,6 +93,7 @@ def setUpModule():
         "database.conversations",
         "utils.conversations.deterministic_minimum",
         "utils.conversations.recovery",
+        "utils.firestore_document_size",
         "database.conversation_terminal_title",
     ]
     _saved_modules = snapshot_sys_modules(tracked_names)
@@ -149,7 +150,11 @@ def setUpModule():
         globals()[name] = getattr(mod, name)
     globals()["_has_described_photo"] = getattr(mod, "_has_described_photo", None)
     globals()["_described"] = getattr(mod, "_described", None)
-    globals()["_value_bytes"] = getattr(mod, "_value_bytes", None)
+    try:
+        import utils.firestore_document_size as fds
+        globals()["_value_bytes"] = getattr(fds, "_value_bytes", getattr(mod, "_value_bytes", None))
+    except Exception:
+        globals()["_value_bytes"] = getattr(mod, "_value_bytes", None)
     globals()["_title_update"] = getattr(mod, "_title_update", None)
 
 

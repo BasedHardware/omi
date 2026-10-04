@@ -12,7 +12,7 @@ checks:
   - id: conversation-terminal-title-resilience-tests
     reason: "Hermetic unit tests for conversation terminal title resilience and recursion guards"
     command: ["python3", "backend/tests/unit/test_conversation_terminal_title_resilience.py"]
-    triggers: ["backend/database/conversation_terminal_title.py", "backend/tests/unit/test_conversation_terminal_title_resilience.py", ".github/checks-manifest.yaml"]
+    triggers: ["backend/database/conversation_terminal_title.py", "backend/utils/firestore_document_size.py", "backend/tests/unit/test_conversation_terminal_title_resilience.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
   - id: firestore-index-guard
     command: ["python3", "backend/scripts/run_firestore_index_guard.py"]

@@ -45,18 +45,13 @@ SUMMARY_RETRYABLE_FAILURE_CODES: frozenset[str] = frozenset(
     }
 )
 
-# Firestore's maximum document size, and the headroom kept for estimation error.
-FIRESTORE_MAX_DOCUMENT_BYTES: int = 1_048_576
 # Headroom kept below FIRESTORE_MAX_DOCUMENT_BYTES for estimation error.
 # Generous on purpose: dropping a title near the ceiling costs nothing, while
 # an underestimate aborts the terminal write.
 TERMINAL_SIZE_HEADROOM_BYTES: int = 65_536
 # Bounded probe for a described photo in the child collection.
 PHOTO_DESCRIPTION_PROBE_LIMIT: int = 64
-# Used when a test double exposes no document path.
-_FALLBACK_DOCUMENT_NAME_BYTES: int = 256
 MAX_ID_LENGTH: int = 128
-PHOTO_DESCRIPTION_PROBE_LIMIT = 64
 
 
 def _clean_id(raw_id: Any, field_name: str = 'id') -> str:
@@ -229,49 +224,6 @@ def fit_document_limit(
     if estimated + TERMINAL_SIZE_HEADROOM_BYTES > FIRESTORE_MAX_DOCUMENT_BYTES:
         return safe_base
     return combined
-
-
-def estimate_firestore_document_bytes(data: Mapping[str, Any], document_path: str | None) -> int:
-    """Firestore's documented storage size of one document.
-
-    Document name: each path segment plus one byte, plus 16. Document: the
-    fields plus 32. Field: name (UTF-8 plus one) plus value. Strings are UTF-8
-    plus one; booleans and null one; numbers and timestamps eight; geo points
-    sixteen; bytes their length; arrays the sum of their values; maps are sized
-    like an embedded document (their fields plus 32). See
-    https://firebase.google.com/docs/firestore/storage-size.
-    """
-    if document_path and isinstance(document_path, str):
-        parts = [part for part in document_path.split('/') if part]
-        name_bytes = sum(len(part.encode('utf-8')) + 1 for part in parts) + 16 if parts else _FALLBACK_DOCUMENT_NAME_BYTES
-    else:
-        name_bytes = _FALLBACK_DOCUMENT_NAME_BYTES
-    if not isinstance(data, Mapping):
-        return name_bytes + 32
-    return name_bytes + 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(value) for key, value in data.items())
-
-
-def _value_bytes(value: Any, _depth: int = 0) -> int:
-    """Firestore value size with a depth recursion guard capping at depth 32."""
-    if _depth > 32:
-        return 32
-    if value is None or isinstance(value, bool):
-        return 1
-    if isinstance(value, (int, float, datetime)):
-        return 8
-    if isinstance(value, str):
-        return len(value.encode('utf-8')) + 1
-    if isinstance(value, (bytes, bytearray, memoryview)):
-        return len(value)
-    if isinstance(value, Mapping):
-        # A map is sized like an embedded document: its fields plus 32 bytes.
-        return 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(item, _depth + 1) for key, item in value.items())
-    if isinstance(value, (list, tuple)):
-        return sum(_value_bytes(item, _depth + 1) for item in value)
-    if hasattr(value, 'latitude') and hasattr(value, 'longitude'):
-        return 16
-    # Unknown SDK value: over-estimate rather than under-estimate.
-    return len(str(value).encode('utf-8')) + 1
 
 
 def _has_described_photo(conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any) -> bool:
