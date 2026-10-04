@@ -189,8 +189,8 @@ env:
   - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "true"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
     value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
