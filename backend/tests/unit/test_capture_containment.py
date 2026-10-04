@@ -7,6 +7,7 @@ coverage stays at 0.8125 >= 0.8.
 
 import logging
 import time
+from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -119,6 +120,13 @@ def test_dict_and_model_rows_agree():
     by_model = cc.measure_capture_containment(pendant, model)
     by_dict = cc.measure_capture_containment(pendant, laptop)
     assert by_model == by_dict
+
+
+def test_non_dict_mapping_rows_and_segments_agree():
+    pendant, laptop = complementary_pair()
+    mapping = UserDict(laptop)
+    mapping['transcript_segments'] = [UserDict(item) for item in laptop['transcript_segments']]
+    assert cc.measure_capture_containment(pendant, mapping) == cc.measure_capture_containment(pendant, laptop)
 
 
 def test_unrelated_meetings_with_user_speech_do_not_join():
