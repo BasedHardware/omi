@@ -49,3 +49,8 @@ def sync_lineage_resolve_uid_allowed(uid: object) -> bool:
 def sync_lineage_resolve_active_for(uid: object) -> bool:
     """The sync-side gate: the kill switch is on and the uid is admitted."""
     return sync_lineage_resolve_enabled() and sync_lineage_resolve_uid_allowed(uid)
+
+
+def sync_lineage_s1_required() -> bool:
+    raw = os.getenv('SYNC_LINEAGE_S1_REQUIRED', '').strip().lower()
+    return not raw or raw in _ON_VALUES
