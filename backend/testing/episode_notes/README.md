@@ -54,6 +54,15 @@ negative gap/error/vacuity/property deltas favor episode, while positive
 faithfulness deltas favor episode. Judge variability and small strata still
 require repeated acceptance runs before a quality claim.
 
+Episode notes center the owner's episode and require an evidenced connection for
+screen/background facts. The shared production/reference/judge privacy policy
+marks claims private for private sources OR sensitive content. Names read on a
+screen are shown/written; conclusions about absent evidence are inferred. Rich
+person/pronoun/AI-agent rules also apply. Claims bind factual sentences/bullets
+with short unique exact anchors; headings need no claims. The generation schema
+omits server-authored source metadata; the backend fills it. Compact evidence
+JSON preserves metadata and content while omitting unknown optional values.
+
 Both generation arms reuse production static/volatile helpers and schemas.
 Baseline uses rich notes v2: `build_conversation_prompt_prefix`, normalized roster,
 `rich_static_instructions`, `rich_volatile_instructions`,

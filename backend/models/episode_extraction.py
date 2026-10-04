@@ -4,7 +4,7 @@ from typing import List, Literal
 
 from pydantic import BaseModel, Field
 
-from models.structured import NoteClaim, Structured
+from models.structured import NoteClaim, Structured  # type: ignore[reportAttributeAccessIssue]  # Runtime SDK/fallback export.
 from models.structured_extraction import RichStructuredExtraction
 
 
