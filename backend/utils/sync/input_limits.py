@@ -37,6 +37,16 @@ def raise_sync_storage_pressure(error: Exception) -> None:
         raise BackfillStoragePressure('sync temporary storage full') from error
 
 
+def sync_pcm_format(filename: str) -> tuple[int, int] | None:
+    """Shared with the decoder, including legacy missing-rate fallback names."""
+    if '_pcm16_' not in filename and '_pcm8_' not in filename:
+        return None
+    match = re.search(r'_pcm(?:8|16)_(\d+)_', filename)
+    rate = int(match.group(1)) if match else (16000 if '_pcm16_' in filename else 8000)
+    width = 1 if '_pcm8_' in filename else 2
+    return rate, width
+
+
 def _validate(streams: Iterable[tuple[str, BinaryIO]]) -> None:
     raw_bytes = audio_bytes = frames = 0
     seconds = 0.0
@@ -45,10 +55,9 @@ def _validate(streams: Iterable[tuple[str, BinaryIO]]) -> None:
         count += 1
         if count > MAX_BACKFILL_FILES:
             raise BackfillInputLimitExceeded('backfill file count exceeded')
-        pcm = re.search(r'_pcm(8|16)_(\d+)_', filename)
+        pcm = sync_pcm_format(filename)
         if pcm:
-            width = int(pcm.group(1)) // 8
-            rate = int(pcm.group(2))
+            rate, width = pcm
             if not 8000 <= rate <= 48000:
                 raise BackfillInputLimitExceeded('backfill sample rate unsupported')
         else:

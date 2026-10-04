@@ -83,3 +83,17 @@ def test_full_tmpfs_is_capacity_pressure_and_other_errors_keep_their_class():
     with pytest.raises(limits.BackfillStoragePressure):
         limits.raise_sync_storage_pressure(OSError(errno.ENOSPC, 'synthetic'))
     limits.raise_sync_storage_pressure(OSError(errno.EIO, 'synthetic'))
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        'audio_pcm8_unknown_fs160_1710000000.bin',
+        'audio_pcm16_8000_pcm8_unknown_fs160_1710000000.bin',
+    ],
+)
+def test_legacy_pcm_names_and_mixed_codec_markers_use_actual_decoder_expansion(monkeypatch, name):
+    assert limits.sync_pcm_format(name) == (8000, 1)
+    monkeypatch.setattr(limits, 'MAX_BACKFILL_AUDIO_BYTES', 1279)
+    with pytest.raises(HTTPException):
+        limits.validate_backfill_uploads([uploaded(name=name)])
