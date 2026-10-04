@@ -169,6 +169,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
+  final custodies = <PendantRingCustody>[];
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('ring_custody_dl_test_');
@@ -182,6 +183,12 @@ void main() {
   });
 
   tearDown(() async {
+    // Checkpoint writes resolve their directory through path_provider, so they
+    // must land before the mock is removed and the directory deleted (#20500).
+    for (final custody in custodies) {
+      await custody.flush();
+    }
+    custodies.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       null,
@@ -190,16 +197,18 @@ void main() {
   });
 
   RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal) {
+    final custody = PendantRingCustody(
+      walValidator: (ref) async {
+        final path = await Wal.getFilePath(ref.fileName);
+        if (path == null) return false;
+        final f = File(path);
+        return f.existsSync() && await f.length() == ref.bytes;
+      },
+    );
+    custodies.add(custody);
     final sync = RingStorageSyncImpl(_Listener())
       ..testConnection = card
-      ..testCustody = PendantRingCustody(
-        walValidator: (ref) async {
-          final path = await Wal.getFilePath(ref.fileName);
-          if (path == null) return false;
-          final f = File(path);
-          return f.existsSync() && await f.length() == ref.bytes;
-        },
-      )
+      ..testCustody = custody
       ..testWals = [wal];
     sync.setLocalSync(local);
     sync.setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40));

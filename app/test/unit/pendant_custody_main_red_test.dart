@@ -12,6 +12,7 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/backend/preferences.dart';
@@ -127,6 +128,10 @@ void main() {
   });
 
   tearDown(() async {
+    // The connection and WAL sync persist through the shared custody, whose
+    // directory comes from the path_provider mock below; let queued checkpoint
+    // writes land before the mock is removed and tempDir deleted (#20500).
+    await PendantRingCustody.shared.flush();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       null,

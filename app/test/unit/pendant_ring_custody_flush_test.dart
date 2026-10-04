@@ -1,0 +1,144 @@
+// #20500: custody checkpoint writes that a caller cannot await (mismatch
+// invalidation, ring reincarnation) used to outlive the test that queued them.
+// The `.json.tmp` -> rename then ran after teardown deleted the directory and
+// failed the suite "after it has completed". `flush()` is the one completion a
+// caller can wait on before tearing storage down.
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart';
+
+const _ringId = 0x1122334455667788;
+
+RingInfo _ringInfo({int ringId = _ringId, int readSeq = 0, int writeSeq = 64}) => RingInfo(
+      readSeq: readSeq,
+      writeSeq: writeSeq,
+      capacityPackets: 1024,
+      droppedPackets: 0,
+      packetSize: 444,
+      advertisedCaps: 0x0F,
+      contractVersion: 1,
+      ringId: ringId,
+      infoBytes: 41,
+    );
+
+/// A store whose directory lookups block until [open] is called, so a queued
+/// write is provably still pending — no sleeps, no scheduling luck.
+class _GatedDirectory {
+  _GatedDirectory(this.dir);
+
+  final Directory dir;
+  Completer<void> _gate = Completer<void>()..complete();
+
+  void close() => _gate = Completer<void>();
+
+  void open() {
+    if (!_gate.isCompleted) _gate.complete();
+  }
+
+  Future<Directory> call() async {
+    await _gate.future;
+    return dir;
+  }
+}
+
+Future<bool> _completesWithoutWaiting(Future<void> future) async {
+  var done = false;
+  unawaited(future.then((_) => done = true));
+  // Let every microtask and short timer that does not depend on the gate run.
+  await Future<void>.delayed(const Duration(milliseconds: 20));
+  return done;
+}
+
+void main() {
+  late Directory tmp;
+  late _GatedDirectory gated;
+  late PendantCustodyStore store;
+  late PendantRingCustody custody;
+
+  setUp(() async {
+    tmp = await Directory.systemTemp.createTemp('custody_flush_test');
+    gated = _GatedDirectory(tmp);
+    store = PendantCustodyStore(directoryProvider: gated.call);
+    custody = PendantRingCustody(store: store, walValidator: (_) async => true);
+    await custody.beginConnection('omi-1', 1, _ringInfo());
+    await custody.recordDurableRingRange('omi-1', 1, _ringId, 0, 10, const [
+      CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1),
+    ]);
+  });
+
+  tearDown(() async {
+    gated.open();
+    await custody.flush();
+    if (await tmp.exists()) await tmp.delete(recursive: true);
+  });
+
+  File checkpointFile() => File('${tmp.path}/custody_omi-1.json');
+
+  test('flush waits for a fire-and-forget reincarnation write', () async {
+    gated.close();
+    // A new ring id resets the checkpoint and persists it without awaiting.
+    custody.noteInfo('omi-1', 1, _ringInfo(ringId: 0x99));
+
+    final flushed = custody.flush();
+    expect(await _completesWithoutWaiting(flushed), isFalse,
+        reason: 'flush must not complete while a queued custody write is still pending');
+
+    gated.open();
+    await flushed;
+    final persisted = await store.load('omi-1');
+    expect(persisted?.ringId, 0x99);
+    expect(File('${checkpointFile().path}.tmp').existsSync(), isFalse);
+  });
+
+  test('flush waits for a fire-and-forget mismatch-invalidation write', () async {
+    gated.close();
+    custody.noteMismatch('omi-1', 1);
+
+    final flushed = custody.flush();
+    expect(await _completesWithoutWaiting(flushed), isFalse);
+
+    gated.open();
+    await flushed;
+    final persisted = await store.load('omi-1');
+    expect(persisted, isNotNull);
+    expect(persisted!.durableSeq, 0, reason: 'the invalidated frontier is what reached disk');
+  });
+
+  test('flush also waits for a write queued while it was already waiting', () async {
+    gated.close();
+    custody.noteMismatch('omi-1', 1);
+    final flushed = custody.flush();
+    await Future<void>.delayed(Duration.zero);
+    custody.noteInfo('omi-1', 1, _ringInfo(ringId: 0x77));
+
+    expect(await _completesWithoutWaiting(flushed), isFalse);
+    gated.open();
+    await flushed;
+
+    expect((await store.load('omi-1'))?.ringId, 0x77, reason: 'the later write must land before flush completes');
+  });
+
+  test('flush completes immediately when nothing is queued', () async {
+    expect(await _completesWithoutWaiting(custody.flush()), isTrue);
+    expect(await _completesWithoutWaiting(store.flush()), isTrue);
+  });
+
+  test('a teardown that flushes never leaves a custody write to outlive its directory', () async {
+    final errors = <Object>[];
+    await runZonedGuarded(() async {
+      gated.close();
+      custody.noteInfo('omi-1', 1, _ringInfo(ringId: 0x55));
+      gated.open();
+      // What every custody test teardown now does before deleting storage.
+      await custody.flush();
+      await tmp.delete(recursive: true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }, (error, _) => errors.add(error));
+
+    expect(errors, isEmpty);
+  });
+}

@@ -831,6 +831,19 @@ class PendantRingCustody {
     return true;
   }
 
+  /// Completes once every checkpoint write queued so far has landed, including
+  /// writes queued while waiting. Mismatch invalidation and ring reincarnation
+  /// persist without awaiting, so this is the completion a caller waits on before
+  /// tearing the custody directory down (#20500).
+  Future<void> flush() async {
+    Future<void> queued;
+    do {
+      queued = _saveQueue;
+      await queued;
+    } while (!identical(queued, _saveQueue));
+    await _store.flush();
+  }
+
   Future<void> _persist(RingCustodyCheckpoint cp) {
     if (cp.ringId == null) return Future.value();
     final payload = cp.toJson();
@@ -859,6 +872,15 @@ class PendantCustodyStore {
 
   String _filePath(Directory dir, String deviceId) =>
       '${dir.path}/custody_${deviceId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')}.json';
+
+  /// Completes once the I/O queue is idle, including work queued while waiting.
+  Future<void> flush() async {
+    Future<void> queued;
+    do {
+      queued = _ioQueue;
+      await queued;
+    } while (!identical(queued, _ioQueue));
+  }
 
   Future<RingCustodyCheckpoint?> load(String deviceId) {
     RingCustodyCheckpoint? result;
