@@ -37,7 +37,7 @@ and physical recording tests were performed. Existing service owners remain auth
 - [x] Simulator production-host checks cover conversation playback/read/edit ownership, speaker selection, media paging/cleanup and advanced form validation.
 - [ ] Native journeys cover the remaining graphs, device setup and secure credential tools; physical playback/call checks remain.
 - [x] The conversation/advanced-screen Release artifact is installed over the existing iPhone identity; saved account, appearance, onboarding and pendant pairing passed fresh preservation checks.
-- [ ] Physical screenshots verify the final main flows and accessibility settings on the connected phone. The read-only installed-app check is prepared, but the phone locked before it could run.
+- [ ] Physical screenshots verify the final main flows and accessibility settings on the connected phone. Deferred at the user's request: keep the Wi-Fi Release install and use Simulator UI evidence for this batch. The pending installed-app test was stopped without running its navigation checks.
 - [ ] Maintainer migration-direction review and full upstream mobile CI are complete.
 
 Verification commands and containment/session rules are in [the native UI guide](ios-native-ui.md).
@@ -51,4 +51,6 @@ and fixed a loading-task identity loop, then passed double-tap/pinch/pan/reset.
 After separating the native playback projection from its existing player owner,
 all 30 playback regression checks passed and normal commit/push gates passed.
 The personal Release app opened normally with no failed startup stages or new
-preference quarantines. Full upstream mobile CI remains maintainer-gated.
+preference quarantines. The user selected Simulator UI evidence over a USB physical
+navigation check; physical playback, call routes and screenshots remain unverified.
+Full upstream mobile CI remains maintainer-gated.
