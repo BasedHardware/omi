@@ -160,10 +160,16 @@ class _RecapContent extends StatelessWidget {
     final questions = recap.openQuestions ?? const [];
     final actions = recap.openActionItems ?? const [];
 
+    // Inset and spaced like the settings pages: a margin on both sides and a gap between groups.
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + OmiSpacing.md),
-      children: [
+      padding: EdgeInsets.fromLTRB(
+        OmiSpacing.md,
+        OmiSpacing.md,
+        OmiSpacing.md,
+        MediaQuery.paddingOf(context).bottom + OmiSpacing.md,
+      ),
+      children: _spaced([
         OmiSettingsGroup(
           header: l10n.overview,
           headerSubtitle: range,
@@ -224,9 +230,17 @@ class _RecapContent extends StatelessWidget {
             header: l10n.openTasks,
             children: [for (final action in actions) OmiSettingsRow(title: action.description)],
           ),
-      ],
+      ]),
     );
   }
+
+  /// The groups with a gap before each one after the first.
+  static List<Widget> _spaced(List<Widget> groups) => [
+        for (final (index, group) in groups.indexed) ...[
+          if (index > 0) const SizedBox(height: OmiSpacing.xxl),
+          group,
+        ],
+      ];
 
   /// The topic heads the row and the summary explains it; a highlight with no
   /// topic is titled by its summary rather than showing an empty title.

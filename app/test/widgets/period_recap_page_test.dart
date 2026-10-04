@@ -200,7 +200,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(OmiPartialNotice), findsOneWidget);
-    expect(find.text('Sam'), findsOneWidget);
+    // The people read so far are kept, below the fold under the notice.
+    expect(find.text('Sam', skipOffstage: false), findsOneWidget);
     expect(
       tester.getTopLeft(find.byType(OmiPartialNotice)).dy,
       lessThan(tester.getTopLeft(find.text('Conversations')).dy),
@@ -211,7 +212,7 @@ void main() {
 
     expect(calls, 2);
     expect(find.byType(OmiPartialNotice), findsNothing);
-    expect(find.text('Sam'), findsOneWidget);
+    expect(find.text('Sam', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('pulling down refreshes the recap and keeps it on screen meanwhile', (tester) async {
@@ -291,6 +292,19 @@ void main() {
 
     expect(calls, 2);
     expect(find.text('Sam'), findsOneWidget);
+  });
+
+  testWidgets('the recap groups sit inside the page margins with room between them', (tester) async {
+    await tester.pumpWidget(_app(PeriodRecapPage(load: (period) async => ApiSuccess(_recap(period.name)))));
+    await tester.pumpAndSettle();
+
+    // Like the settings pages: a margin on both sides, and a gap before each further group.
+    final width = tester.getSize(find.byType(PeriodRecapPage)).width;
+    final overview = tester.getRect(find.byType(OmiSettingsGroup).at(0));
+    final people = tester.getRect(find.byType(OmiSettingsGroup).at(1));
+    expect((overview.left, overview.right), (OmiSpacing.md, width - OmiSpacing.md));
+    expect((people.left, people.right), (OmiSpacing.md, width - OmiSpacing.md));
+    expect(people.top - overview.bottom, OmiSpacing.xxl);
   });
 
   testWidgets('a highlight without a topic is titled by its summary', (tester) async {
