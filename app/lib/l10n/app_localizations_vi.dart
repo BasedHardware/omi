@@ -12410,4 +12410,28 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
+
+  @override
+  String get singlePress => 'Nhấn một lần';
+
+  @override
+  String get singlePressAction => 'Hành động nhấn một lần';
+
+  @override
+  String get triplePress => 'Nhấn ba lần';
+
+  @override
+  String get triplePressAction => 'Hành động nhấn ba lần';
+
+  @override
+  String get longPress => 'Nhấn giữ';
+
+  @override
+  String get turnOnOff => 'Bật / Tắt';
+
+  @override
+  String get askQuestion => 'Đặt câu hỏi';
+
+  @override
+  String get longPressPowerWarning => 'Nhấn giữ để bật/tắt thiết bị và không thể tùy chỉnh.';
 }

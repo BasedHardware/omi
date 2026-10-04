@@ -12204,4 +12204,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get showOnLockScreen => '在锁定屏幕上显示';
+
+  @override
+  String get singlePress => '单击';
+
+  @override
+  String get singlePressAction => '单击操作';
+
+  @override
+  String get triplePress => '三击';
+
+  @override
+  String get triplePressAction => '三击操作';
+
+  @override
+  String get longPress => '长按';
+
+  @override
+  String get turnOnOff => '开/关机';
+
+  @override
+  String get askQuestion => '提问';
+
+  @override
+  String get longPressPowerWarning => '长按用于开关机，无法自定义。';
 }

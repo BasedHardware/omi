@@ -3874,5 +3874,13 @@
     "dismiss": "Dispensar",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Mostrar na tela de bloqueio"
+    "showOnLockScreen": "Mostrar na tela de bloqueio",
+    "singlePress": "Toque simples",
+    "singlePressAction": "Ação de toque simples",
+    "triplePress": "Toque triplo",
+    "triplePressAction": "Ação de toque triplo",
+    "longPress": "Pressão longa",
+    "turnOnOff": "Ligar / Desligar",
+    "askQuestion": "Fazer pergunta",
+    "longPressPowerWarning": "Pressionar longamente liga/desliga o dispositivo e não pode ser personalizado."
 }

@@ -3839,5 +3839,13 @@
     "dismiss": "Ẩn",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Hiển thị trên màn hình khóa"
+    "showOnLockScreen": "Hiển thị trên màn hình khóa",
+    "singlePress": "Nhấn một lần",
+    "singlePressAction": "Hành động nhấn một lần",
+    "triplePress": "Nhấn ba lần",
+    "triplePressAction": "Hành động nhấn ba lần",
+    "longPress": "Nhấn giữ",
+    "turnOnOff": "Bật / Tắt",
+    "askQuestion": "Đặt câu hỏi",
+    "longPressPowerWarning": "Nhấn giữ để bật/tắt thiết bị và không thể tùy chỉnh."
 }

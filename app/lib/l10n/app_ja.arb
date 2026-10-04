@@ -3839,5 +3839,13 @@
     "dismiss": "非表示",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "ロック画面に表示"
+    "showOnLockScreen": "ロック画面に表示",
+    "singlePress": "シングルタップ",
+    "singlePressAction": "シングルタップ操作",
+    "triplePress": "トリプルタップ",
+    "triplePressAction": "トリプルタップ操作",
+    "longPress": "長押し",
+    "turnOnOff": "電源オン/オフ",
+    "askQuestion": "質問する",
+    "longPressPowerWarning": "長押しは電源のオン/オフ専用で、カスタマイズできません。"
 }

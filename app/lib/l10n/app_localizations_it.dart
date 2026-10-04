@@ -12484,4 +12484,29 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Mostra sulla schermata di blocco';
+
+  @override
+  String get singlePress => 'Pressione singola';
+
+  @override
+  String get singlePressAction => 'Azione pressione singola';
+
+  @override
+  String get triplePress => 'Pressione tripla';
+
+  @override
+  String get triplePressAction => 'Azione pressione tripla';
+
+  @override
+  String get longPress => 'Pressione prolungata';
+
+  @override
+  String get turnOnOff => 'Accendi / Spegni';
+
+  @override
+  String get askQuestion => 'Fai una domanda';
+
+  @override
+  String get longPressPowerWarning =>
+      'La pressione prolungata accende/spegne il dispositivo e non può essere personalizzata.';
 }

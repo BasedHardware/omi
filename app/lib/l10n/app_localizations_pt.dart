@@ -12433,4 +12433,28 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Mostrar na tela de bloqueio';
+
+  @override
+  String get singlePress => 'Toque simples';
+
+  @override
+  String get singlePressAction => 'Ação de toque simples';
+
+  @override
+  String get triplePress => 'Toque triplo';
+
+  @override
+  String get triplePressAction => 'Ação de toque triplo';
+
+  @override
+  String get longPress => 'Pressão longa';
+
+  @override
+  String get turnOnOff => 'Ligar / Desligar';
+
+  @override
+  String get askQuestion => 'Fazer pergunta';
+
+  @override
+  String get longPressPowerWarning => 'Pressionar longamente liga/desliga o dispositivo e não pode ser personalizado.';
 }

@@ -12229,4 +12229,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get showOnLockScreen => '잠금 화면에 표시';
+
+  @override
+  String get singlePress => '싱글 탭';
+
+  @override
+  String get singlePressAction => '싱글 탭 동작';
+
+  @override
+  String get triplePress => '트리플 탭';
+
+  @override
+  String get triplePressAction => '트리플 탭 동작';
+
+  @override
+  String get longPress => '길게 누르기';
+
+  @override
+  String get turnOnOff => '전원 켜기/끄기';
+
+  @override
+  String get askQuestion => '질문하기';
+
+  @override
+  String get longPressPowerWarning => '길게 누르면 전원이 켜지거나 꺼지며 사용자 지정할 수 없습니다.';
 }

@@ -3839,5 +3839,13 @@
     "dismiss": "Ignora",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Mostra sulla schermata di blocco"
+    "showOnLockScreen": "Mostra sulla schermata di blocco",
+    "singlePress": "Pressione singola",
+    "singlePressAction": "Azione pressione singola",
+    "triplePress": "Pressione tripla",
+    "triplePressAction": "Azione pressione tripla",
+    "longPress": "Pressione prolungata",
+    "turnOnOff": "Accendi / Spegni",
+    "askQuestion": "Fai una domanda",
+    "longPressPowerWarning": "La pressione prolungata accende/spegne il dispositivo e non può essere personalizzata."
 }

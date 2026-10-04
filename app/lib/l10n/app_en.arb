@@ -14844,5 +14844,37 @@
     "showOnLockScreen": "Show on Lock Screen",
     "@showOnLockScreen": {
         "description": "Setting for recording Live Activities on the lock screen and Dynamic Island"
+    },
+    "singlePress": "Single Press",
+    "@singlePress": {
+        "description": "Single press action label"
+    },
+    "singlePressAction": "Single Press Action",
+    "@singlePressAction": {
+        "description": "Single press action setting title"
+    },
+    "triplePress": "Triple Press",
+    "@triplePress": {
+        "description": "Triple press action label"
+    },
+    "triplePressAction": "Triple Press Action",
+    "@triplePressAction": {
+        "description": "Triple press action setting title"
+    },
+    "longPress": "Long Press",
+    "@longPress": {
+        "description": "Long press action label"
+    },
+    "turnOnOff": "Turn On/Off",
+    "@turnOnOff": {
+        "description": "Action to turn device on or off"
+    },
+    "askQuestion": "Ask Question",
+    "@askQuestion": {
+        "description": "Ask question voice command action"
+    },
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "@longPressPowerWarning": {
+        "description": "Warning snackbar explaining long press is fixed to power"
     }
 }

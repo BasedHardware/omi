@@ -12225,4 +12225,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'ロック画面に表示';
+
+  @override
+  String get singlePress => 'シングルタップ';
+
+  @override
+  String get singlePressAction => 'シングルタップ操作';
+
+  @override
+  String get triplePress => 'トリプルタップ';
+
+  @override
+  String get triplePressAction => 'トリプルタップ操作';
+
+  @override
+  String get longPress => '長押し';
+
+  @override
+  String get turnOnOff => '電源オン/オフ';
+
+  @override
+  String get askQuestion => '質問する';
+
+  @override
+  String get longPressPowerWarning => '長押しは電源のオン/オフ専用で、カスタマイズできません。';
 }

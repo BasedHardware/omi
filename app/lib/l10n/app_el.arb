@@ -3839,5 +3839,13 @@
     "dismiss": "Απόρριψη",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος"
+    "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος",
+    "singlePress": "Μονό Πάτημα",
+    "singlePressAction": "Ενέργεια Μονού Πατήματος",
+    "triplePress": "Τριπλό Πάτημα",
+    "triplePressAction": "Ενέργεια Τριπλού Πατήματος",
+    "longPress": "Παρατεταμένο Πάτημα",
+    "turnOnOff": "Ενεργοποίηση / Απενεργοποίηση",
+    "askQuestion": "Υποβολή Ερώτησης",
+    "longPressPowerWarning": "Το παρατεταμένο πάτημα ενεργοποιεί/απενεργοποιεί τη συσκευή και δεν προσαρμόζεται."
 }

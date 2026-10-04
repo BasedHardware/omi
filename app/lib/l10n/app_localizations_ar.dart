@@ -12344,4 +12344,28 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'إظهار على شاشة القفل';
+
+  @override
+  String get singlePress => 'ضغطة واحدة';
+
+  @override
+  String get singlePressAction => 'إجراء الضغطة الواحدة';
+
+  @override
+  String get triplePress => 'ثلاث ضغطات';
+
+  @override
+  String get triplePressAction => 'إجراء الثلاث ضغطات';
+
+  @override
+  String get longPress => 'ضغط مطول';
+
+  @override
+  String get turnOnOff => 'تشغيل / إيقاف';
+
+  @override
+  String get askQuestion => 'طرح سؤال';
+
+  @override
+  String get longPressPowerWarning => 'الضغط المطول يقوم بتشغيل/إيقاف الجهاز ولا يمكن تخصيصه.';
 }

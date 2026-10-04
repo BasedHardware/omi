@@ -3874,5 +3874,13 @@
     "dismiss": "Ukryj",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Pokaż na ekranie blokady"
+    "showOnLockScreen": "Pokaż na ekranie blokady",
+    "singlePress": "Pojedyncze naciśnięcie",
+    "singlePressAction": "Akcja pojedynczego naciśnięcia",
+    "triplePress": "Potrójne naciśnięcie",
+    "triplePressAction": "Akcja potrójnego naciśnięcia",
+    "longPress": "Długie naciśnięcie",
+    "turnOnOff": "Włącz / Wyłącz",
+    "askQuestion": "Zadaj pytanie",
+    "longPressPowerWarning": "Długie naciśnięcie włącza/wyłącza urządzenie i nie można go dostosować."
 }

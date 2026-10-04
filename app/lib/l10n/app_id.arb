@@ -3874,5 +3874,13 @@
     "dismiss": "Tutup",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Tampilkan di layar kunci"
+    "showOnLockScreen": "Tampilkan di layar kunci",
+    "singlePress": "Tekan Sekali",
+    "singlePressAction": "Aksi Tekan Sekali",
+    "triplePress": "Tekan Tiga Kali",
+    "triplePressAction": "Aksi Tekan Tiga Kali",
+    "longPress": "Tekan Lama",
+    "turnOnOff": "Nyalakan / Matikan",
+    "askQuestion": "Ajukan Pertanyaan",
+    "longPressPowerWarning": "Tekan lama menyalakan/mematikan perangkat dan tidak dapat disesuaikan."
 }

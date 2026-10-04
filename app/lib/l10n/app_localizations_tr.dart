@@ -12427,4 +12427,28 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Kilit ekranında göster';
+
+  @override
+  String get singlePress => 'Tek Basma';
+
+  @override
+  String get singlePressAction => 'Tek Basma Eylemi';
+
+  @override
+  String get triplePress => 'Üç Kez Basma';
+
+  @override
+  String get triplePressAction => 'Üç Kez Basma Eylemi';
+
+  @override
+  String get longPress => 'Uzun Basma';
+
+  @override
+  String get turnOnOff => 'Aç / Kapat';
+
+  @override
+  String get askQuestion => 'Soru Sor';
+
+  @override
+  String get longPressPowerWarning => 'Uzun basma cihazı açar/kapatır ve özelleştirilemez.';
 }

@@ -3874,5 +3874,13 @@
     "dismiss": "Скрыть",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Показывать на экране блокировки"
+    "showOnLockScreen": "Показывать на экране блокировки",
+    "singlePress": "Одинарное нажатие",
+    "singlePressAction": "Действие одинарного нажатия",
+    "triplePress": "Тройное нажатие",
+    "triplePressAction": "Действие тройного нажатия",
+    "longPress": "Долгое нажатие",
+    "turnOnOff": "Включение / Выключение",
+    "askQuestion": "Задать вопрос",
+    "longPressPowerWarning": "Долгое нажатие включает/выключает устройство и не настраивается."
 }

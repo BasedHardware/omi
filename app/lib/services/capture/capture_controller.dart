@@ -742,6 +742,7 @@ class CaptureController extends ChangeNotifier
   bool _voiceCommandStartedDuringLongPress = false;
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
+  Timer? _pendingDoubleTapTimer; // Debounce timer to suppress double tap when followed by triple tap
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
 
   RecordingState recordingState = RecordingState.stop;
@@ -1717,6 +1718,9 @@ class CaptureController extends ChangeNotifier
     _handleButtonEvent(deviceId, buttonState);
   }
 
+  @visibleForTesting
+  bool get hasPendingDoubleTapForTesting => _pendingDoubleTapTimer?.isActive ?? false;
+
   void _handleButtonEvent(String deviceId, int buttonState) {
     // Intercept for interactive device onboarding
     if (deviceOnboardingProvider?.isOnboardingActive == true) {
@@ -1836,20 +1840,33 @@ class CaptureController extends ChangeNotifier
     // Triple tap (buttonState == 6)
     if (buttonState == 6) {
       Logger.debug("Triple tap detected");
+      if (_pendingDoubleTapTimer?.isActive == true) {
+        _pendingDoubleTapTimer?.cancel();
+        _pendingDoubleTapTimer = null;
+        Logger.debug("Triple tap: suppressed pending double tap action");
+      }
       handleAction(_preferences.tripleTapAction, gesture: 'triple_tap');
       return;
     }
 
     // Double tap (buttonState == 2)
+    // Debounce by 350ms so that if a third tap arrives (state 6), the double-tap action is suppressed.
     if (buttonState == 2) {
-      Logger.debug("Double tap detected");
-      handleAction(_preferences.doubleTapAction, gesture: 'double_tap');
+      Logger.debug("Double tap detected; debouncing to guard against triple tap");
+      _pendingDoubleTapTimer?.cancel();
+      _pendingDoubleTapTimer = Timer(const Duration(milliseconds: 350), () {
+        _pendingDoubleTapTimer = null;
+        if (_captureControllerDisposed) return;
+        handleAction(_preferences.doubleTapAction, gesture: 'double_tap');
+      });
       return;
     }
 
     // Single tap (buttonState == 1)
     if (buttonState == 1) {
       Logger.debug("Single tap detected");
+      _pendingDoubleTapTimer?.cancel();
+      _pendingDoubleTapTimer = null;
       handleAction(_preferences.singleTapAction, gesture: 'single_tap');
       return;
     }
@@ -2439,6 +2456,8 @@ class CaptureController extends ChangeNotifier
     // synchronously).
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    _pendingDoubleTapTimer?.cancel();
+    _pendingDoubleTapTimer = null;
     unawaited(_sessionOwner?.close());
     unawaited(lifetime.close());
     super.dispose();

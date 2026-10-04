@@ -3839,5 +3839,13 @@
     "dismiss": "हटाएँ",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ"
+    "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ",
+    "singlePress": "एक बार दबाएं",
+    "singlePressAction": "एक बार दबाने की क्रिया",
+    "triplePress": "तीन बार दबाएं",
+    "triplePressAction": "तीन बार दबाने की क्रिया",
+    "longPress": "देर तक दबाएं",
+    "turnOnOff": "चालू / बंद करें",
+    "askQuestion": "प्रश्न पूछें",
+    "longPressPowerWarning": "देर तक दबाने से डिवाइस चालू/बंद होता है और इसे कस्टमाइज़ नहीं किया जा सकता है।"
 }

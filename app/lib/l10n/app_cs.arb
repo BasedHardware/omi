@@ -3839,5 +3839,13 @@
     "dismiss": "Skrýt",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Zobrazit na zamčené obrazovce"
+    "showOnLockScreen": "Zobrazit na zamčené obrazovce",
+    "singlePress": "Jedno stisknutí",
+    "singlePressAction": "Akce jednoho stisknutí",
+    "triplePress": "Trojité stisknutí",
+    "triplePressAction": "Akce trojitého stisknutí",
+    "longPress": "Dlouhé stisknutí",
+    "turnOnOff": "Zapnout / Vypnout",
+    "askQuestion": "Položit otázku",
+    "longPressPowerWarning": "Dlouhé stisknutí zapíná/vypíná zařízení a nelze jej přizpůsobit."
 }

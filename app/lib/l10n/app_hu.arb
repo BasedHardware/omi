@@ -3935,5 +3935,13 @@
     "dismiss": "Elrejtés",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Megjelenítés a zárolási képernyőn"
+    "showOnLockScreen": "Megjelenítés a zárolási képernyőn",
+    "singlePress": "Egyszeri megnyomás",
+    "singlePressAction": "Egyszeri megnyomás művelet",
+    "triplePress": "Háromszori megnyomás",
+    "triplePressAction": "Háromszori megnyomás művelet",
+    "longPress": "Hosszú megnyomás",
+    "turnOnOff": "Be- / Kikapcsolás",
+    "askQuestion": "Kérdés feltevése",
+    "longPressPowerWarning": "A hosszú megnyomás be-/kikapcsolja az eszközt, és nem szabható testre."
 }

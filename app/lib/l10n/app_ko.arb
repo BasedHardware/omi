@@ -3839,5 +3839,13 @@
     "dismiss": "닫기",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "잠금 화면에 표시"
+    "showOnLockScreen": "잠금 화면에 표시",
+    "singlePress": "싱글 탭",
+    "singlePressAction": "싱글 탭 동작",
+    "triplePress": "트리플 탭",
+    "triplePressAction": "트리플 탭 동작",
+    "longPress": "길게 누르기",
+    "turnOnOff": "전원 켜기/끄기",
+    "askQuestion": "질문하기",
+    "longPressPowerWarning": "길게 누르면 전원이 켜지거나 꺼지며 사용자 지정할 수 없습니다."
 }
