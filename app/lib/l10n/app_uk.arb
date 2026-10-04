@@ -3833,6 +3833,7 @@
     "playbackAudioUnavailable": "Аудіо недоступне",
     "playbackAudioLoadFailed": "Не вдалося завантажити аудіо",
     "playbackAudioNetworkFailed": "Перевірте з'єднання",
+    "capturePendantDisconnectedShort": "Omi перепідключиться сам",
     "forYou": "Для вас",
     "stopThese": "Вимкнути такі",
     "dismiss": "Приховати",

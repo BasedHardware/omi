@@ -3833,6 +3833,7 @@
     "playbackAudioUnavailable": "Audio Tidak Tersedia",
     "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuatkan",
     "playbackAudioNetworkFailed": "Semak Sambungan",
+    "capturePendantDisconnectedShort": "Omi akan bersambung semula sendiri",
     "forYou": "Untuk Anda",
     "stopThese": "Hentikan Ini",
     "dismiss": "Tutup",

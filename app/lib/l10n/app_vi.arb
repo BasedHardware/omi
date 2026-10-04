@@ -3833,6 +3833,7 @@
     "playbackAudioUnavailable": "Âm thanh không khả dụng",
     "playbackAudioLoadFailed": "Không thể tải âm thanh",
     "playbackAudioNetworkFailed": "Kiểm tra kết nối",
+    "capturePendantDisconnectedShort": "Omi sẽ tự kết nối lại",
     "forYou": "Dành Cho Bạn",
     "stopThese": "Dừng Loại Này",
     "dismiss": "Ẩn",

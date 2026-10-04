@@ -11300,6 +11300,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Az Omi magától újracsatlakozik';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name és mások';
   }

@@ -11248,6 +11248,9 @@ class AppLocalizationsSk extends AppLocalizations {
       'Prívesok stratil spojenie s týmto telefónom. Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku. Všetko nahraté predtým je v bezpečí.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi sa znova pripojí sám';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name a ďalší';
   }

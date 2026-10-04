@@ -11077,6 +11077,9 @@ class AppLocalizationsJa extends AppLocalizations {
       'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omiは自動で再接続します';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
   }

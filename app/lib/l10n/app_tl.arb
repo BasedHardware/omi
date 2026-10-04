@@ -11390,6 +11390,7 @@
     "playbackAudioUnavailable": "Hindi Magagamit ang Audio",
     "playbackAudioLoadFailed": "Hindi Ma-load ang Audio",
     "playbackAudioNetworkFailed": "Suriin ang Koneksyon",
+    "capturePendantDisconnectedShort": "Kusang kokonekta muli ang Omi",
     "forYou": "Para Sa Iyo",
     "stopThese": "Itigil Ang Mga Ito",
     "dismiss": "Isara",
