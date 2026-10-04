@@ -4230,5 +4230,11 @@
     "activityEmpty": "Még nincs tevékenység",
     "activityNewSemantics": "Tevékenység, új elemek",
     "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
-    "activityNewItem": "Új"
+    "activityNewItem": "Új",
+    "thisWeek": "Ez a hét",
+    "busiestDay": "Legforgalmasabb nap",
+    "timeRecorded": "Rögzített idő",
+    "peopleYouTalkedToMost": "Akikkel a legtöbbet beszéltél",
+    "recapPrevious": "Előző: {value}",
+    "noRecapForPeriod": "Ebben az időszakban még nincs felvétel"
 }

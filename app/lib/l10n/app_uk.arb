@@ -4134,5 +4134,11 @@
     "activityEmpty": "Поки немає активності",
     "activityNewSemantics": "Активність, нові елементи",
     "activityLoadFailed": "Не вдалося завантажити всю активність",
-    "activityNewItem": "Нове"
+    "activityNewItem": "Нове",
+    "thisWeek": "Цей тиждень",
+    "busiestDay": "Найнасиченіший день",
+    "timeRecorded": "Записаний час",
+    "peopleYouTalkedToMost": "З ким ви говорили найбільше",
+    "recapPrevious": "Раніше: {value}",
+    "noRecapForPeriod": "За цей період ще нічого не записано"
 }

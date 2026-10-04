@@ -4134,5 +4134,11 @@
     "activityEmpty": "Zatím žádná aktivita",
     "activityNewSemantics": "Aktivita, nové položky",
     "activityLoadFailed": "Nepodařilo se načíst celou vaši aktivitu",
-    "activityNewItem": "Nové"
+    "activityNewItem": "Nové",
+    "thisWeek": "Tento týden",
+    "busiestDay": "Nejrušnější den",
+    "timeRecorded": "Nahraný čas",
+    "peopleYouTalkedToMost": "Lidé, se kterými jste mluvili nejvíc",
+    "recapPrevious": "Předchozí: {value}",
+    "noRecapForPeriod": "V tomto období zatím nic nahráno"
 }

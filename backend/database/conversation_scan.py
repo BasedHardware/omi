@@ -57,6 +57,10 @@ SPEAKER_BROWSE_BATCH = 50
 # The People-stats recipe pages the projected scan in 100-row reads.
 PEOPLE_STATS_BATCH = 100
 
+# A weekly/monthly recap ranks people over at most this many of the period's
+# newest conversations, through the People-stats projection.
+RECAP_PEOPLE_SCAN_CAP = 500
+
 # Fields the People-stats scan reads: visibility predicates (discarded,
 # deleted), the lock gate, both transcript encodings plus their protection
 # level, and the manual speaker-assignment receipt that rewrites person labels
@@ -237,6 +241,27 @@ def speaker_browse_scan(
         include_discarded=include_discarded,
         start_date=start_date,
         end_date=end_date,
+        budget=budget,
+        firestore_client=firestore_client,
+    )
+
+
+def recap_people_scan(
+    uid: str,
+    *,
+    start_date: datetime,
+    end_date: datetime,
+    budget: ListReadBudget,
+    firestore_client: Any = None,
+) -> Iterator[Dict[str, Any]]:
+    """The period-recap recipe: the People-stats projection bounded to one period."""
+    return iter_conversations(
+        uid,
+        limit=RECAP_PEOPLE_SCAN_CAP,
+        batch=PEOPLE_STATS_BATCH,
+        start_date=start_date,
+        end_date=end_date,
+        field_paths=PEOPLE_STATS_FIELD_PATHS,
         budget=budget,
         firestore_client=firestore_client,
     )

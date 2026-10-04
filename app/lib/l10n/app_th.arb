@@ -4134,5 +4134,11 @@
     "activityEmpty": "ยังไม่มีกิจกรรม",
     "activityNewSemantics": "กิจกรรม, รายการใหม่",
     "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
-    "activityNewItem": "ใหม่"
+    "activityNewItem": "ใหม่",
+    "thisWeek": "สัปดาห์นี้",
+    "busiestDay": "วันที่ยุ่งที่สุด",
+    "timeRecorded": "เวลาที่บันทึก",
+    "peopleYouTalkedToMost": "คนที่คุณคุยด้วยมากที่สุด",
+    "recapPrevious": "ก่อนหน้า: {value}",
+    "noRecapForPeriod": "ยังไม่มีการบันทึกในช่วงนี้"
 }

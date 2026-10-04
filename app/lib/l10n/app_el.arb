@@ -4134,5 +4134,11 @@
     "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
     "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
     "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
-    "activityNewItem": "Νέο"
+    "activityNewItem": "Νέο",
+    "thisWeek": "Αυτή την εβδομάδα",
+    "busiestDay": "Η πιο πολυάσχολη μέρα",
+    "timeRecorded": "Χρόνος ηχογράφησης",
+    "peopleYouTalkedToMost": "Με ποιους μίλησες περισσότερο",
+    "recapPrevious": "Προηγούμενη: {value}",
+    "noRecapForPeriod": "Δεν έχει ηχογραφηθεί τίποτα σε αυτή την περίοδο ακόμα"
 }

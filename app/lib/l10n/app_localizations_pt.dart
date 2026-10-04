@@ -13502,4 +13502,24 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Novo';
+
+  @override
+  String get thisWeek => 'Esta semana';
+
+  @override
+  String get busiestDay => 'Dia mais movimentado';
+
+  @override
+  String get timeRecorded => 'Tempo gravado';
+
+  @override
+  String get peopleYouTalkedToMost => 'Pessoas com quem você mais conversou';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Anterior: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Nada gravado neste período ainda';
 }

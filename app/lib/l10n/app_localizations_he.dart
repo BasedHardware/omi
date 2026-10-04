@@ -13385,4 +13385,24 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'חדש';
+
+  @override
+  String get thisWeek => 'השבוע';
+
+  @override
+  String get busiestDay => 'היום העמוס ביותר';
+
+  @override
+  String get timeRecorded => 'זמן מוקלט';
+
+  @override
+  String get peopleYouTalkedToMost => 'האנשים שדיברת איתם הכי הרבה';
+
+  @override
+  String recapPrevious(String value) {
+    return 'קודם: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'עדיין לא הוקלט דבר בתקופה הזו';
 }

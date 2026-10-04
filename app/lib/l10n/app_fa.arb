@@ -11560,5 +11560,11 @@
     "activityEmpty": "هنوز فعالیتی نیست",
     "activityNewSemantics": "فعالیت، موارد جدید",
     "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
-    "activityNewItem": "جدید"
+    "activityNewItem": "جدید",
+    "thisWeek": "این هفته",
+    "busiestDay": "پرمشغله‌ترین روز",
+    "timeRecorded": "زمان ضبط‌شده",
+    "peopleYouTalkedToMost": "کسانی که بیشتر با آن‌ها صحبت کردید",
+    "recapPrevious": "قبلی: {value}",
+    "noRecapForPeriod": "هنوز در این بازه چیزی ضبط نشده است"
 }

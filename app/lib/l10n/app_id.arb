@@ -4169,5 +4169,11 @@
     "activityEmpty": "Belum ada aktivitas",
     "activityNewSemantics": "Aktivitas, item baru",
     "activityLoadFailed": "Tidak dapat memuat semua aktivitas Anda",
-    "activityNewItem": "Baru"
+    "activityNewItem": "Baru",
+    "thisWeek": "Minggu ini",
+    "busiestDay": "Hari tersibuk",
+    "timeRecorded": "Waktu terekam",
+    "peopleYouTalkedToMost": "Orang yang paling sering Anda ajak bicara",
+    "recapPrevious": "Sebelumnya: {value}",
+    "noRecapForPeriod": "Belum ada yang terekam pada periode ini"
 }

@@ -11560,5 +11560,11 @@
     "activityEmpty": "Пакуль няма актыўнасці",
     "activityNewSemantics": "Актыўнасць, новыя элементы",
     "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
-    "activityNewItem": "Новае"
+    "activityNewItem": "Новае",
+    "thisWeek": "Гэты тыдзень",
+    "busiestDay": "Самы насычаны дзень",
+    "timeRecorded": "Запісаны час",
+    "peopleYouTalkedToMost": "З кім вы размаўлялі найбольш",
+    "recapPrevious": "Папярэдні: {value}",
+    "noRecapForPeriod": "За гэты перыяд пакуль нічога не запісана"
 }

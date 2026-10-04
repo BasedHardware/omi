@@ -11560,5 +11560,11 @@
     "activityEmpty": "Сè уште нема активност",
     "activityNewSemantics": "Активност, нови ставки",
     "activityLoadFailed": "Не можевме да ја вчитаме целата ваша активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "thisWeek": "Оваа недела",
+    "busiestDay": "Најзафатен ден",
+    "timeRecorded": "Снимено време",
+    "peopleYouTalkedToMost": "Луѓе со кои најмногу разговаравте",
+    "recapPrevious": "Претходно: {value}",
+    "noRecapForPeriod": "Сè уште ништо не е снимено во овој период"
 }

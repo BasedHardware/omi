@@ -4134,5 +4134,11 @@
     "activityEmpty": "Veiklos dar nėra",
     "activityNewSemantics": "Veikla, nauji elementai",
     "activityLoadFailed": "Nepavyko įkelti visos jūsų veiklos",
-    "activityNewItem": "Nauja"
+    "activityNewItem": "Nauja",
+    "thisWeek": "Ši savaitė",
+    "busiestDay": "Užimčiausia diena",
+    "timeRecorded": "Įrašytas laikas",
+    "peopleYouTalkedToMost": "Žmonės, su kuriais kalbėjote daugiausia",
+    "recapPrevious": "Ankstesnis: {value}",
+    "noRecapForPeriod": "Šiuo laikotarpiu dar nieko neįrašyta"
 }

@@ -4134,5 +4134,11 @@
     "activityEmpty": "アクティビティはまだありません",
     "activityNewSemantics": "アクティビティ、新着あり",
     "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
-    "activityNewItem": "新着"
+    "activityNewItem": "新着",
+    "thisWeek": "今週",
+    "busiestDay": "最も忙しかった日",
+    "timeRecorded": "録音時間",
+    "peopleYouTalkedToMost": "よく話した人",
+    "recapPrevious": "前回: {value}",
+    "noRecapForPeriod": "この期間の記録はまだありません"
 }

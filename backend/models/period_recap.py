@@ -1,0 +1,75 @@
+"""Weekly and monthly recap responses (GET /v1/users/recaps/{period})."""
+
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, Field
+
+
+class PeriodRecapStats(BaseModel):
+    total_conversations: int = 0
+    total_duration_minutes: int = 0
+    action_items_created: int = 0
+    memories_created: int = 0
+
+
+class PeriodRecapPrevious(BaseModel):
+    total_conversations: int = 0
+    total_duration_minutes: int = 0
+
+
+class PeriodRecapBusiestDay(BaseModel):
+    date: str
+    summary_id: Optional[str] = None
+    total_conversations: int = 0
+    total_duration_minutes: int = 0
+
+
+class PeriodRecapHighlight(BaseModel):
+    date: str
+    topic: Optional[str] = None
+    emoji: Optional[str] = None
+    summary: Optional[str] = None
+    conversation_ids: List[str] = Field(default_factory=list)
+
+
+class PeriodRecapDecision(BaseModel):
+    date: str
+    decision: str
+    conversation_id: Optional[str] = None
+
+
+class PeriodRecapQuestion(BaseModel):
+    date: str
+    question: str
+    conversation_id: Optional[str] = None
+
+
+class PeriodRecapActionItem(BaseModel):
+    date: str
+    description: str
+    priority: Optional[str] = None
+    source_conversation_id: Optional[str] = None
+
+
+class PeriodRecapPerson(BaseModel):
+    person_id: str
+    name: str
+    conversations: int = 0
+    talk_minutes: int = 0
+
+
+class PeriodRecapResponse(BaseModel):
+    period: Literal['week', 'month']
+    start_date: str = Field(description='First local date of the period (YYYY-MM-DD)')
+    end_date: str = Field(description='Last local date of the period (YYYY-MM-DD)')
+    days_recorded: int = Field(default=0, description='Days in the period that have a daily recap')
+    stats: PeriodRecapStats = Field(default_factory=PeriodRecapStats)
+    busiest_day: Optional[PeriodRecapBusiestDay] = None
+    highlights: List[PeriodRecapHighlight] = Field(default_factory=list)
+    decisions: List[PeriodRecapDecision] = Field(default_factory=list)
+    open_questions: List[PeriodRecapQuestion] = Field(default_factory=list)
+    open_action_items: List[PeriodRecapActionItem] = Field(default_factory=list)
+    top_people: List[PeriodRecapPerson] = Field(default_factory=list)
+    previous: Optional[PeriodRecapPrevious] = Field(
+        default=None, description='Totals for the period just before, for trends'
+    )

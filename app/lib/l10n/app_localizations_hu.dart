@@ -13530,4 +13530,24 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Új';
+
+  @override
+  String get thisWeek => 'Ez a hét';
+
+  @override
+  String get busiestDay => 'Legforgalmasabb nap';
+
+  @override
+  String get timeRecorded => 'Rögzített idő';
+
+  @override
+  String get peopleYouTalkedToMost => 'Akikkel a legtöbbet beszéltél';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Előző: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Ebben az időszakban még nincs felvétel';
 }

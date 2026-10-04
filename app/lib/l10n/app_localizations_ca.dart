@@ -13547,4 +13547,24 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nou';
+
+  @override
+  String get thisWeek => 'Aquesta setmana';
+
+  @override
+  String get busiestDay => 'Dia més atrafegat';
+
+  @override
+  String get timeRecorded => 'Temps enregistrat';
+
+  @override
+  String get peopleYouTalkedToMost => 'Persones amb qui més has parlat';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Anterior: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Encara no s\'ha enregistrat res en aquest període';
 }

@@ -11560,5 +11560,11 @@
     "activityEmpty": "ابھی تک کوئی سرگرمی نہیں",
     "activityNewSemantics": "سرگرمی، نئے آئٹمز",
     "activityLoadFailed": "آپ کی تمام سرگرمی لوڈ نہیں ہو سکی",
-    "activityNewItem": "نیا"
+    "activityNewItem": "نیا",
+    "thisWeek": "اس ہفتے",
+    "busiestDay": "سب سے مصروف دن",
+    "timeRecorded": "ریکارڈ شدہ وقت",
+    "peopleYouTalkedToMost": "جن سے آپ نے سب سے زیادہ بات کی",
+    "recapPrevious": "پچھلا: {value}",
+    "noRecapForPeriod": "اس مدت میں ابھی تک کچھ ریکارڈ نہیں ہوا"
 }
