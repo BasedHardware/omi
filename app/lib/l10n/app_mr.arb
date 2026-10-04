@@ -11392,5 +11392,9 @@
     "playbackAudioNetworkFailed": "कनेक्शन तपासा",
     "forYou": "तुमच्यासाठी",
     "stopThese": "हे थांबवा",
-    "dismiss": "लपवा"
+    "dismiss": "लपवा",
+    "pairSecondDevice": "दुसरे डिव्हाइस जोडा",
+    "secondDevice": "दुसरे डिव्हाइस",
+    "pairSecondDeviceDescription": "फोटो आणि ऑडिओ एकाच संभाषणात जाण्यासाठी तुमच्या Omi सोबत OmiGlass कनेक्ट करा.",
+    "forgetSecondDevice": "दुसरे डिव्हाइस विसरा"
 }

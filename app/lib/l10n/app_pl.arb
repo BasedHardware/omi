@@ -3870,5 +3870,9 @@
     "playbackAudioNetworkFailed": "Sprawdź połączenie",
     "forYou": "Dla Ciebie",
     "stopThese": "Zatrzymaj te",
-    "dismiss": "Ukryj"
+    "dismiss": "Ukryj",
+    "pairSecondDeviceDescription": "Podłącz OmiGlass obok swojego Omi, aby zdjęcia i dźwięk trafiały do tej samej rozmowy.",
+    "pairSecondDevice": "Sparuj drugie urządzenie",
+    "secondDevice": "Drugie urządzenie",
+    "forgetSecondDevice": "Zapomnij drugie urządzenie"
 }

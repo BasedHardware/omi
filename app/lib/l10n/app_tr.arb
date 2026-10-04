@@ -3870,5 +3870,9 @@
     "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin",
     "forYou": "Sizin İçin",
     "stopThese": "Bunları Durdur",
-    "dismiss": "Gizle"
+    "dismiss": "Gizle",
+    "pairSecondDeviceDescription": "Fotoğraflar ve ses aynı sohbete gitsin diye OmiGlass'ı Omi'nizin yanına bağlayın.",
+    "pairSecondDevice": "İkinci cihazı eşleştir",
+    "secondDevice": "İkinci cihaz",
+    "forgetSecondDevice": "İkinci cihazı unut"
 }

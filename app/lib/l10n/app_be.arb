@@ -11392,5 +11392,9 @@
     "playbackAudioNetworkFailed": "Праверце злучэнне",
     "forYou": "Для вас",
     "stopThese": "Спыніць гэта",
-    "dismiss": "Схаваць"
+    "dismiss": "Схаваць",
+    "pairSecondDevice": "Спалучыць другую прыладу",
+    "secondDevice": "Другая прылада",
+    "pairSecondDeviceDescription": "Падключыце OmiGlass разам з Omi, каб фота і аўдыя траплялі ў адну размову.",
+    "forgetSecondDevice": "Забыць другую прыладу"
 }

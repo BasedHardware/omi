@@ -3835,5 +3835,9 @@
     "playbackAudioNetworkFailed": "Verificați conexiunea",
     "forYou": "Pentru tine",
     "stopThese": "Oprește acestea",
-    "dismiss": "Ascunde"
+    "dismiss": "Ascunde",
+    "pairSecondDeviceDescription": "Conectează OmiGlass alături de Omi, astfel încât fotografiile și sunetul să ajungă în aceeași conversație.",
+    "pairSecondDevice": "Asociază un al doilea dispozitiv",
+    "secondDevice": "Al doilea dispozitiv",
+    "forgetSecondDevice": "Uită al doilea dispozitiv"
 }

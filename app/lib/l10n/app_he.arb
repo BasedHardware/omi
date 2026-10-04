@@ -11392,5 +11392,9 @@
     "playbackAudioNetworkFailed": "בדקו את החיבור",
     "forYou": "בשבילך",
     "stopThese": "הפסקת אלה",
-    "dismiss": "סגירה"
+    "dismiss": "סגירה",
+    "pairSecondDevice": "צימוד מכשיר שני",
+    "secondDevice": "מכשיר שני",
+    "pairSecondDeviceDescription": "חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.",
+    "forgetSecondDevice": "שכח את המכשיר השני"
 }

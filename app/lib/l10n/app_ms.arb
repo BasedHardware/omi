@@ -3835,5 +3835,9 @@
     "playbackAudioNetworkFailed": "Semak Sambungan",
     "forYou": "Untuk Anda",
     "stopThese": "Hentikan Ini",
-    "dismiss": "Tutup"
+    "dismiss": "Tutup",
+    "pairSecondDeviceDescription": "Sambungkan OmiGlass bersama Omi anda supaya foto dan audio masuk ke perbualan yang sama.",
+    "pairSecondDevice": "Pasangkan peranti kedua",
+    "secondDevice": "Peranti kedua",
+    "forgetSecondDevice": "Lupakan peranti kedua"
 }

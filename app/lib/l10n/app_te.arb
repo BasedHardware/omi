@@ -11392,5 +11392,9 @@
     "playbackAudioNetworkFailed": "కనెక్షన్‌ను తనిఖీ చేయండి",
     "forYou": "మీ కోసం",
     "stopThese": "వీటిని ఆపండి",
-    "dismiss": "దాచు"
+    "dismiss": "దాచు",
+    "pairSecondDevice": "రెండవ పరికరాన్ని జోడించండి",
+    "secondDevice": "రెండవ పరికరం",
+    "pairSecondDeviceDescription": "ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.",
+    "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి"
 }

@@ -3835,5 +3835,9 @@
     "playbackAudioNetworkFailed": "Sjekk tilkoblingen",
     "forYou": "For deg",
     "stopThese": "Stopp disse",
-    "dismiss": "Avvis"
+    "dismiss": "Avvis",
+    "pairSecondDeviceDescription": "Koble til OmiGlass sammen med Omi slik at bilder og lyd havner i samme samtale.",
+    "pairSecondDevice": "Par en annen enhet",
+    "secondDevice": "Andre enhet",
+    "forgetSecondDevice": "Glem andre enhet"
 }

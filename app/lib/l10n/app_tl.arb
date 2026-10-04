@@ -11392,5 +11392,9 @@
     "playbackAudioNetworkFailed": "Suriin ang Koneksyon",
     "forYou": "Para Sa Iyo",
     "stopThese": "Itigil Ang Mga Ito",
-    "dismiss": "Isara"
+    "dismiss": "Isara",
+    "pairSecondDevice": "Ipares ang ikalawang device",
+    "secondDevice": "Ikalawang device",
+    "pairSecondDeviceDescription": "Ikonekta ang OmiGlass kasama ng iyong Omi para mapunta sa iisang usapan ang mga larawan at audio.",
+    "forgetSecondDevice": "Kalimutan ang ikalawang device"
 }

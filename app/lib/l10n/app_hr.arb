@@ -11392,5 +11392,9 @@
     "playbackAudioNetworkFailed": "Provjerite vezu",
     "forYou": "Za vas",
     "stopThese": "Zaustavi ovo",
-    "dismiss": "Sakrij"
+    "dismiss": "Sakrij",
+    "pairSecondDevice": "Upari drugi uređaj",
+    "secondDevice": "Drugi uređaj",
+    "pairSecondDeviceDescription": "Povežite OmiGlass uz svoj Omi kako bi fotografije i zvuk išli u isti razgovor.",
+    "forgetSecondDevice": "Zaboravi drugi uređaj"
 }

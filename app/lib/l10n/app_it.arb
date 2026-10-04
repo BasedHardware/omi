@@ -3835,5 +3835,9 @@
     "playbackAudioNetworkFailed": "Controlla la connessione",
     "forYou": "Per te",
     "stopThese": "Interrompi questi",
-    "dismiss": "Ignora"
+    "dismiss": "Ignora",
+    "pairSecondDeviceDescription": "Collega OmiGlass insieme al tuo Omi così foto e audio finiscono nella stessa conversazione.",
+    "pairSecondDevice": "Associa un secondo dispositivo",
+    "secondDevice": "Secondo dispositivo",
+    "forgetSecondDevice": "Dimentica il secondo dispositivo"
 }
