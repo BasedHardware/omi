@@ -3940,5 +3940,6 @@
     "timeRecorded": "Rögzített idő",
     "peopleYouTalkedToMost": "Akikkel a legtöbbet beszéltél",
     "recapPrevious": "Előző: {value}",
-    "noRecapForPeriod": "Ebben az időszakban még nincs felvétel"
+    "noRecapForPeriod": "Ebben az időszakban még nincs felvétel",
+    "openTasks": "Nyitott feladatok"
 }

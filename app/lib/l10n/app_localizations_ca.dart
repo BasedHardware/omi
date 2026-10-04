@@ -12502,4 +12502,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Encara no s\'ha enregistrat res en aquest període';
+
+  @override
+  String get openTasks => 'Tasques pendents';
 }

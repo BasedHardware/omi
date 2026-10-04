@@ -12445,4 +12445,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'اس مدت میں ابھی تک کچھ ریکارڈ نہیں ہوا';
+
+  @override
+  String get openTasks => 'باقی کام';
 }

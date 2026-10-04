@@ -3844,5 +3844,6 @@
     "timeRecorded": "Temps enregistrat",
     "peopleYouTalkedToMost": "Persones amb qui més has parlat",
     "recapPrevious": "Anterior: {value}",
-    "noRecapForPeriod": "Encara no s'ha enregistrat res en aquest període"
+    "noRecapForPeriod": "Encara no s'ha enregistrat res en aquest període",
+    "openTasks": "Tasques pendents"
 }

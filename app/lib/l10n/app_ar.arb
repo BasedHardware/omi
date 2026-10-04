@@ -3844,5 +3844,6 @@
     "timeRecorded": "مدة التسجيل",
     "peopleYouTalkedToMost": "الأشخاص الذين تحدثت معهم أكثر",
     "recapPrevious": "السابق: {value}",
-    "noRecapForPeriod": "لم يُسجَّل شيء في هذه الفترة بعد"
+    "noRecapForPeriod": "لم يُسجَّل شيء في هذه الفترة بعد",
+    "openTasks": "المهام المفتوحة"
 }

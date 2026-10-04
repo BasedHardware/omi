@@ -3844,5 +3844,6 @@
     "timeRecorded": "Inspelad tid",
     "peopleYouTalkedToMost": "Personer du pratade mest med",
     "recapPrevious": "Föregående: {value}",
-    "noRecapForPeriod": "Inget inspelat under den här perioden än"
+    "noRecapForPeriod": "Inget inspelat under den här perioden än",
+    "openTasks": "Öppna uppgifter"
 }

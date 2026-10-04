@@ -3879,5 +3879,6 @@
     "timeRecorded": "Waktu terekam",
     "peopleYouTalkedToMost": "Orang yang paling sering Anda ajak bicara",
     "recapPrevious": "Sebelumnya: {value}",
-    "noRecapForPeriod": "Belum ada yang terekam pada periode ini"
+    "noRecapForPeriod": "Belum ada yang terekam pada periode ini",
+    "openTasks": "Tugas terbuka"
 }

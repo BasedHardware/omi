@@ -3844,5 +3844,6 @@
     "timeRecorded": "Thời gian ghi âm",
     "peopleYouTalkedToMost": "Những người bạn trò chuyện nhiều nhất",
     "recapPrevious": "Trước đó: {value}",
-    "noRecapForPeriod": "Chưa có gì được ghi âm trong khoảng thời gian này"
+    "noRecapForPeriod": "Chưa có gì được ghi âm trong khoảng thời gian này",
+    "openTasks": "Nhiệm vụ đang mở"
 }

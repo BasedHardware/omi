@@ -3844,5 +3844,6 @@
     "timeRecorded": "녹음 시간",
     "peopleYouTalkedToMost": "가장 많이 대화한 사람",
     "recapPrevious": "이전: {value}",
-    "noRecapForPeriod": "이 기간에 아직 녹음된 내용이 없습니다"
+    "noRecapForPeriod": "이 기간에 아직 녹음된 내용이 없습니다",
+    "openTasks": "미완료 작업"
 }

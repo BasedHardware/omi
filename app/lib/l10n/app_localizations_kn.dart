@@ -12469,4 +12469,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ದಾಖಲಾಗಿಲ್ಲ';
+
+  @override
+  String get openTasks => 'ಬಾಕಿ ಕಾರ್ಯಗಳು';
 }

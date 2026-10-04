@@ -11401,5 +11401,6 @@
     "timeRecorded": "Posneti čas",
     "peopleYouTalkedToMost": "Osebe, s katerimi ste največ govorili",
     "recapPrevious": "Prejšnje: {value}",
-    "noRecapForPeriod": "V tem obdobju še ni nič posnetega"
+    "noRecapForPeriod": "V tem obdobju še ni nič posnetega",
+    "openTasks": "Odprte naloge"
 }

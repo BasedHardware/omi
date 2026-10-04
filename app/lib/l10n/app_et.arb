@@ -3844,5 +3844,6 @@
     "timeRecorded": "Salvestatud aeg",
     "peopleYouTalkedToMost": "Inimesed, kellega rääkisid kõige rohkem",
     "recapPrevious": "Eelmine: {value}",
-    "noRecapForPeriod": "Selles perioodis pole veel midagi salvestatud"
+    "noRecapForPeriod": "Selles perioodis pole veel midagi salvestatud",
+    "openTasks": "Avatud ülesanded"
 }

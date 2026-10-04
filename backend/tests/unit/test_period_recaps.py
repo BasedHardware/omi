@@ -10,6 +10,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
+from models.period_recap import PeriodRecapResponse
 from utils import period_recaps as pr
 
 
@@ -160,6 +161,57 @@ def test_open_tasks_come_from_the_live_task_list_not_the_daily_snapshots():
     ]
 
 
+def test_a_locked_task_is_never_shown_in_full():
+    # Locked tasks are paywalled: the task list truncates them and the chat tools
+    # drop them. The recap leaves them out rather than leak the description.
+    secret = 'Renegotiate the supplier contract ' + 'x' * 166
+    live = [
+        {
+            'id': 'task-locked',
+            'description': secret,
+            'is_locked': True,
+            'created_at': datetime(2026, 9, 29, 15, tzinfo=timezone.utc),
+        },
+        {
+            'id': 'task-open',
+            'description': 'Book flights',
+            'created_at': datetime(2026, 9, 30, 15, tzinfo=timezone.utc),
+        },
+    ]
+    assert len(secret) == 200
+
+    recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), WEEK, action_items=live)
+
+    assert [item['id'] for item in recap['open_action_items']] == ['task-open']
+    assert all(secret not in item['description'] for item in recap['open_action_items'])
+
+
+def test_a_non_string_conversation_id_is_dropped_not_served():
+    days = [
+        _day(
+            '2026-09-29',
+            conversations=1,
+            decisions_made=[{'decision': 'Ship it', 'conversation_id': 42}],
+            unresolved_questions=[{'question': 'Who signs?', 'conversation_id': {'id': 'c1'}}],
+        )
+    ]
+    live = [
+        {
+            'id': 'task-1',
+            'description': 'Book flights',
+            'conversation_id': ['c1'],
+            'created_at': datetime(2026, 9, 30, 15, tzinfo=timezone.utc),
+        }
+    ]
+
+    recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), days, action_items=live)
+
+    assert recap['decisions'][0]['conversation_id'] is None
+    assert recap['open_questions'][0]['conversation_id'] is None
+    assert recap['open_action_items'][0]['source_conversation_id'] is None
+    PeriodRecapResponse(**recap)
+
+
 def test_the_daily_recaps_task_snapshots_are_ignored():
     recap = pr.build_period_recap('week', date(2026, 9, 28), date(2026, 10, 4), WEEK)
 
@@ -239,6 +291,60 @@ def test_previous_totals_only_count_the_comparable_days():
         'end_date': '2026-09-24',
         'total_conversations': 4,
         'total_duration_minutes': 90,
+    }
+
+
+def test_a_monday_without_its_daily_recap_has_nothing_to_compare_yet():
+    # Today's daily recap is written in the evening, so on a Monday morning the
+    # week has no comparable day yet.
+    previous = [_day('2026-09-21', conversations=4, minutes=90)]
+
+    recap = pr.build_period_recap(
+        'week', date(2026, 9, 28), date(2026, 10, 4), [], previous_summaries=previous, today=date(2026, 9, 28)
+    )
+
+    assert recap['previous'] is None
+
+
+def test_mid_week_without_todays_recap_compares_through_yesterday():
+    week = [_day('2026-09-28', conversations=3, minutes=50), _day('2026-10-01', conversations=6, minutes=120)]
+    previous = [_day('2026-09-22', conversations=4, minutes=90), _day('2026-09-25', conversations=1, minutes=10)]
+
+    recap = pr.build_period_recap(
+        'week', date(2026, 9, 28), date(2026, 10, 4), week, previous_summaries=previous, today=date(2026, 10, 2)
+    )
+
+    assert recap['previous'] == {
+        'start_date': '2026-09-21',
+        'end_date': '2026-09-24',
+        'total_conversations': 4,
+        'total_duration_minutes': 90,
+    }
+
+
+def test_mid_week_with_todays_recap_compares_through_today():
+    week = [_day('2026-09-28', conversations=3, minutes=50), _day('2026-10-02', conversations=6, minutes=120)]
+    previous = [_day('2026-09-22', conversations=4, minutes=90), _day('2026-09-25', conversations=1, minutes=10)]
+
+    recap = pr.build_period_recap(
+        'week', date(2026, 9, 28), date(2026, 10, 4), week, previous_summaries=previous, today=date(2026, 10, 2)
+    )
+
+    assert (recap['previous']['end_date'], recap['previous']['total_conversations']) == ('2026-09-25', 5)
+
+
+def test_a_past_period_compares_with_the_whole_previous_one():
+    previous = [_day('2026-09-21', conversations=4, minutes=90), _day('2026-09-27', conversations=1, minutes=10)]
+
+    recap = pr.build_period_recap(
+        'week', date(2026, 9, 28), date(2026, 10, 4), [], previous_summaries=previous, today=date(2026, 10, 10)
+    )
+
+    assert recap['previous'] == {
+        'start_date': '2026-09-21',
+        'end_date': '2026-09-27',
+        'total_conversations': 5,
+        'total_duration_minutes': 100,
     }
 
 

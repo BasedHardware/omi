@@ -12501,4 +12501,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Ancora nessuna registrazione in questo periodo';
+
+  @override
+  String get openTasks => 'Attività aperte';
 }

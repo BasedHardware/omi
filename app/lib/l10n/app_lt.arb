@@ -3844,5 +3844,6 @@
     "timeRecorded": "Įrašytas laikas",
     "peopleYouTalkedToMost": "Žmonės, su kuriais kalbėjote daugiausia",
     "recapPrevious": "Ankstesnis: {value}",
-    "noRecapForPeriod": "Šiuo laikotarpiu dar nieko neįrašyta"
+    "noRecapForPeriod": "Šiuo laikotarpiu dar nieko neįrašyta",
+    "openTasks": "Atviros užduotys"
 }

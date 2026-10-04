@@ -12361,4 +12361,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'لم يُسجَّل شيء في هذه الفترة بعد';
+
+  @override
+  String get openTasks => 'المهام المفتوحة';
 }

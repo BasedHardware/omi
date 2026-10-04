@@ -12460,4 +12460,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'За цей період ще нічого не записано';
+
+  @override
+  String get openTasks => 'Відкриті завдання';
 }

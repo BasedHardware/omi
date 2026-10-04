@@ -12487,4 +12487,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Încă nu s-a înregistrat nimic în această perioadă';
+
+  @override
+  String get openTasks => 'Sarcini deschise';
 }

@@ -11401,5 +11401,6 @@
     "timeRecorded": "రికార్డ్ చేసిన సమయం",
     "peopleYouTalkedToMost": "మీరు ఎక్కువగా మాట్లాడిన వ్యక్తులు",
     "recapPrevious": "మునుపటి: {value}",
-    "noRecapForPeriod": "ఈ వ్యవధిలో ఇంకా ఏమీ రికార్డ్ కాలేదు"
+    "noRecapForPeriod": "ఈ వ్యవధిలో ఇంకా ఏమీ రికార్డ్ కాలేదు",
+    "openTasks": "పెండింగ్ పనులు"
 }

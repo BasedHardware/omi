@@ -12436,4 +12436,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Tältä jaksolta ei ole vielä tallenteita';
+
+  @override
+  String get openTasks => 'Avoimet tehtävät';
 }

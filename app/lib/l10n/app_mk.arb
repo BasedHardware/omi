@@ -11401,5 +11401,6 @@
     "timeRecorded": "Снимено време",
     "peopleYouTalkedToMost": "Луѓе со кои најмногу разговаравте",
     "recapPrevious": "Претходно: {value}",
-    "noRecapForPeriod": "Сè уште ништо не е снимено во овој период"
+    "noRecapForPeriod": "Сè уште ништо не е снимено во овој период",
+    "openTasks": "Отворени задачи"
 }

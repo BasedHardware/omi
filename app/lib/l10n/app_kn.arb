@@ -11401,5 +11401,6 @@
     "timeRecorded": "ದಾಖಲಾದ ಸಮಯ",
     "peopleYouTalkedToMost": "ನೀವು ಹೆಚ್ಚು ಮಾತನಾಡಿದ ಜನರು",
     "recapPrevious": "ಹಿಂದಿನದು: {value}",
-    "noRecapForPeriod": "ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ದಾಖಲಾಗಿಲ್ಲ"
+    "noRecapForPeriod": "ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ದಾಖಲಾಗಿಲ್ಲ",
+    "openTasks": "ಬಾಕಿ ಕಾರ್ಯಗಳು"
 }

@@ -3844,5 +3844,6 @@
     "timeRecorded": "Ierakstītais laiks",
     "peopleYouTalkedToMost": "Cilvēki, ar kuriem runājāt visvairāk",
     "recapPrevious": "Iepriekšējais: {value}",
-    "noRecapForPeriod": "Šajā periodā vēl nekas nav ierakstīts"
+    "noRecapForPeriod": "Šajā periodā vēl nekas nav ierakstīts",
+    "openTasks": "Neizpildītie uzdevumi"
 }

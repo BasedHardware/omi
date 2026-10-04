@@ -11401,5 +11401,6 @@
     "timeRecorded": "زمان ضبط‌شده",
     "peopleYouTalkedToMost": "کسانی که بیشتر با آن‌ها صحبت کردید",
     "recapPrevious": "قبلی: {value}",
-    "noRecapForPeriod": "هنوز در این بازه چیزی ضبط نشده است"
+    "noRecapForPeriod": "هنوز در این بازه چیزی ضبط نشده است",
+    "openTasks": "وظایف باز"
 }

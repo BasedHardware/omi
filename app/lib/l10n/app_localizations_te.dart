@@ -12483,4 +12483,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'ఈ వ్యవధిలో ఇంకా ఏమీ రికార్డ్ కాలేదు';
+
+  @override
+  String get openTasks => 'పెండింగ్ పనులు';
 }

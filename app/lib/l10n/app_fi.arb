@@ -3844,5 +3844,6 @@
     "timeRecorded": "Tallennettu aika",
     "peopleYouTalkedToMost": "Ihmiset, joiden kanssa puhuit eniten",
     "recapPrevious": "Edellinen: {value}",
-    "noRecapForPeriod": "Tältä jaksolta ei ole vielä tallenteita"
+    "noRecapForPeriod": "Tältä jaksolta ei ole vielä tallenteita",
+    "openTasks": "Avoimet tehtävät"
 }

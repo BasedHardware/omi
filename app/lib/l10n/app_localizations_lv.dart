@@ -12460,4 +12460,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Šajā periodā vēl nekas nav ierakstīts';
+
+  @override
+  String get openTasks => 'Neizpildītie uzdevumi';
 }

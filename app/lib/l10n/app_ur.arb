@@ -11401,5 +11401,6 @@
     "timeRecorded": "ریکارڈ شدہ وقت",
     "peopleYouTalkedToMost": "جن سے آپ نے سب سے زیادہ بات کی",
     "recapPrevious": "پچھلا: {value}",
-    "noRecapForPeriod": "اس مدت میں ابھی تک کچھ ریکارڈ نہیں ہوا"
+    "noRecapForPeriod": "اس مدت میں ابھی تک کچھ ریکارڈ نہیں ہوا",
+    "openTasks": "باقی کام"
 }

@@ -3844,5 +3844,6 @@
     "timeRecorded": "เวลาที่บันทึก",
     "peopleYouTalkedToMost": "คนที่คุณคุยด้วยมากที่สุด",
     "recapPrevious": "ก่อนหน้า: {value}",
-    "noRecapForPeriod": "ยังไม่มีการบันทึกในช่วงนี้"
+    "noRecapForPeriod": "ยังไม่มีการบันทึกในช่วงนี้",
+    "openTasks": "งานที่ยังไม่เสร็จ"
 }

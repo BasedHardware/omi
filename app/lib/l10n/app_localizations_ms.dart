@@ -12463,4 +12463,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Belum ada rakaman dalam tempoh ini';
+
+  @override
+  String get openTasks => 'Tugas belum selesai';
 }

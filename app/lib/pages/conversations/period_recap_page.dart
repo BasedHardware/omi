@@ -95,8 +95,7 @@ class _PeriodRecapPageState extends State<PeriodRecapPage> {
     final result = _result;
     return switch (result) {
       null => const OmiLoadingState(),
-      ApiFailure(:final problem) =>
-        OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: problem.retryable ? _load : null),
+      ApiFailure() => OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: _load),
       ApiSuccess(:final data, :final truncated) => _withPartialNotice(
           truncated,
           data.daysRecorded == 0 && (data.topPeople ?? const []).isEmpty && (data.openActionItems ?? const []).isEmpty
@@ -199,7 +198,7 @@ class _RecapContent extends StatelessWidget {
           ),
         if (actions.isNotEmpty)
           OmiSettingsGroup(
-            header: l10n.tasks,
+            header: l10n.openTasks,
             children: [for (final action in actions) OmiSettingsRow(title: action.description)],
           ),
       ],

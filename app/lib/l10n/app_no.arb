@@ -3844,5 +3844,6 @@
     "timeRecorded": "Tid tatt opp",
     "peopleYouTalkedToMost": "Dem du snakket mest med",
     "recapPrevious": "Forrige: {value}",
-    "noRecapForPeriod": "Ingenting tatt opp i denne perioden ennå"
+    "noRecapForPeriod": "Ingenting tatt opp i denne perioden ennå",
+    "openTasks": "Åpne oppgaver"
 }

@@ -11401,5 +11401,6 @@
     "timeRecorded": "זמן מוקלט",
     "peopleYouTalkedToMost": "האנשים שדיברת איתם הכי הרבה",
     "recapPrevious": "קודם: {value}",
-    "noRecapForPeriod": "עדיין לא הוקלט דבר בתקופה הזו"
+    "noRecapForPeriod": "עדיין לא הוקלט דבר בתקופה הזו",
+    "openTasks": "משימות פתוחות"
 }

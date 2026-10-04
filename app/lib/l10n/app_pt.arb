@@ -3879,5 +3879,6 @@
     "timeRecorded": "Tempo gravado",
     "peopleYouTalkedToMost": "Pessoas com quem você mais conversou",
     "recapPrevious": "Anterior: {value}",
-    "noRecapForPeriod": "Nada gravado neste período ainda"
+    "noRecapForPeriod": "Nada gravado neste período ainda",
+    "openTasks": "Tarefas pendentes"
 }

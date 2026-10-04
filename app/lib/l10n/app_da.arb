@@ -3886,5 +3886,6 @@
     "timeRecorded": "Optaget tid",
     "peopleYouTalkedToMost": "Dem, du talte mest med",
     "recapPrevious": "Forrige: {value}",
-    "noRecapForPeriod": "Intet optaget i denne periode endnu"
+    "noRecapForPeriod": "Intet optaget i denne periode endnu",
+    "openTasks": "Åbne opgaver"
 }

@@ -12516,4 +12516,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'இந்தக் காலத்தில் இன்னும் எதுவும் பதிவு செய்யப்படவில்லை';
+
+  @override
+  String get openTasks => 'நிலுவையிலுள்ள பணிகள்';
 }

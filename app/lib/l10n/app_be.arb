@@ -11401,5 +11401,6 @@
     "timeRecorded": "Запісаны час",
     "peopleYouTalkedToMost": "З кім вы размаўлялі найбольш",
     "recapPrevious": "Папярэдні: {value}",
-    "noRecapForPeriod": "За гэты перыяд пакуль нічога не запісана"
+    "noRecapForPeriod": "За гэты перыяд пакуль нічога не запісана",
+    "openTasks": "Адкрытыя задачы"
 }

@@ -77,6 +77,8 @@ void main() {
     await tester.scrollUntilVisible(find.text('Send revised numbers'), 200);
     expect(find.text('Move the offsite to March'), findsOneWidget);
     expect(find.text('Who owns the budget?'), findsOneWidget);
+    // The open tasks are titled apart from the overview's count of tasks created.
+    expect(find.text('Open tasks'), findsOneWidget);
   });
 
   testWidgets('switching to This Month loads the month recap', (tester) async {
@@ -122,14 +124,28 @@ void main() {
     expect(find.text('Sam'), findsOneWidget);
   });
 
-  testWidgets('a failure that trying again cannot fix offers no Try Again', (tester) async {
+  testWidgets('every failed load offers Try Again, whatever the cause', (tester) async {
+    var calls = 0;
     await tester.pumpWidget(
-      _app(PeriodRecapPage(load: (period) async => const ApiFailure(ApiProblem(ApiProblemKind.unprocessable)))),
+      _app(
+        PeriodRecapPage(
+          load: (period) async {
+            calls++;
+            return calls == 1
+                ? const ApiFailure(ApiProblem(ApiProblemKind.unprocessable))
+                : ApiSuccess(_recap(period.name));
+          },
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
     expect(find.byType(OmiErrorState), findsOneWidget);
-    expect(find.text('Try Again'), findsNothing);
+    await tester.tap(find.text('Try Again'));
+    await tester.pumpAndSettle();
+
+    expect(calls, 2);
+    expect(find.text('Sam'), findsOneWidget);
   });
 
   testWidgets('a late answer to an earlier request never replaces the newer one', (tester) async {

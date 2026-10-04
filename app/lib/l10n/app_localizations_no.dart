@@ -12432,4 +12432,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Ingenting tatt opp i denne perioden ennå';
+
+  @override
+  String get openTasks => 'Åpne oppgaver';
 }

@@ -3844,5 +3844,6 @@
     "timeRecorded": "रिकॉर्ड किया गया समय",
     "peopleYouTalkedToMost": "जिनसे आपने सबसे ज़्यादा बात की",
     "recapPrevious": "पिछला: {value}",
-    "noRecapForPeriod": "इस अवधि में अभी तक कुछ रिकॉर्ड नहीं हुआ"
+    "noRecapForPeriod": "इस अवधि में अभी तक कुछ रिकॉर्ड नहीं हुआ",
+    "openTasks": "लंबित कार्य"
 }

@@ -43,18 +43,38 @@ def previous_period_bounds(period: str, start: date) -> Tuple[date, date]:
     return period_bounds(period, start - timedelta(days=1))
 
 
-def comparable_previous_bounds(period: str, start: date, end: date, today: date) -> Tuple[date, date]:
+def comparable_previous_bounds(period: str, start: date, end: date, through: date) -> Tuple[date, date]:
     """The stretch of the previous period to compare with: like for like.
 
-    A period that has ended compares with the whole previous one. One still in
-    progress compares with the same number of days from the previous period's
-    start, so four days into a month are not measured against a full month.
+    ``through`` is the last day of the current period being compared. Past the
+    period's end that is the whole previous period; otherwise the same number
+    of days from the previous period's start, so four days into a month are not
+    measured against a full month.
     """
     previous_start, previous_end = previous_period_bounds(period, start)
-    if today > end:
+    if through > end:
         return previous_start, previous_end
-    elapsed = max((today - start).days, 0)
+    elapsed = max((through - start).days, 0)
     return previous_start, min(previous_start + timedelta(days=elapsed), previous_end)
+
+
+def _comparison_bounds(
+    period: str, start: date, end: date, days: Sequence[Mapping[str, Any]], today: Optional[date]
+) -> Optional[Tuple[date, date]]:
+    """The previous-period dates to compare with, or None when nothing is comparable yet.
+
+    A period that has ended compares with the whole previous one. While it is in
+    progress, today counts only once its daily recap exists (it is written in the
+    evening); before that the comparison runs through yesterday, so the previous
+    period never gets a day the current one is still missing.
+    """
+    if today is None or today > end:
+        return previous_period_bounds(period, start)
+    has_today = any(_parse_day(day.get('date')) == today for day in days)
+    through = today if has_today else today - timedelta(days=1)
+    if through < start:
+        return None
+    return comparable_previous_bounds(period, start, end, through)
 
 
 def _zone(time_zone: Optional[str]) -> ZoneInfo:
@@ -220,11 +240,16 @@ def _collect(
             text = _text(entry.get(text_field))
             if text:
                 items.append(
-                    {'date': summary['date'], text_field: text, **{field: entry.get(field) for field in extra}}
+                    {'date': summary['date'], text_field: text, **{field: _id(entry.get(field)) for field in extra}}
                 )
         return items
 
     return _spread(summaries, day_entries)
+
+
+def _id(value: Any) -> Optional[str]:
+    """A stored reference id, or None when it is not a non-empty string."""
+    return value if isinstance(value, str) and value else None
 
 
 def _iso_instant(value: Any) -> Optional[str]:
@@ -234,22 +259,25 @@ def _iso_instant(value: Any) -> Optional[str]:
 
 
 def _open_action_items(action_items: Iterable[Any], zone: ZoneInfo) -> List[Dict[str, Any]]:
-    """The live open tasks, in the order the task list gives them, dated where the user is."""
+    """The live open tasks, in the order the task list gives them, dated where the user is.
+
+    Locked (paywalled) tasks are left out, as the chat tools do: the recap has no
+    locked state to show, so it must not carry their descriptions.
+    """
     items: List[Dict[str, Any]] = []
     for item in action_items:
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or item.get('is_locked'):
             continue
         task_id, description, created_at = item.get('id'), _text(item.get('description')), item.get('created_at')
         if not isinstance(task_id, str) or not description or not isinstance(created_at, datetime):
             continue
         created = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
-        conversation_id = item.get('conversation_id')
         items.append(
             {
                 'id': task_id,
                 'description': description,
                 'date': created.astimezone(zone).date().isoformat(),
-                'source_conversation_id': conversation_id if isinstance(conversation_id, str) else None,
+                'source_conversation_id': _id(item.get('conversation_id')),
                 'due_at': _iso_instant(item.get('due_at')),
             }
         )
@@ -305,19 +333,18 @@ def build_period_recap(
     """Roll the daily recaps between ``start`` and ``end`` (local dates) into one recap.
 
     ``previous_summaries`` gives the trend, compared like for like as of
-    ``today`` (the whole previous period when ``today`` is not given).
-    ``action_items`` are the live open tasks created in the period; the task
-    snapshots stored on the daily recaps are never used, as they go stale.
+    ``today`` (the whole previous period when ``today`` is not given); it is
+    None until the current period has a comparable day. ``action_items`` are
+    the live open tasks created in the period; the task snapshots stored on the
+    daily recaps are never used, as they go stale.
     """
     if period not in RECAP_PERIODS:
         raise ValueError(f'unknown recap period: {period!r}')
     days = _in_period(summaries, start, end)
     previous = None
-    if previous_summaries is not None:
-        if today is None:
-            previous_start, previous_end = previous_period_bounds(period, start)
-        else:
-            previous_start, previous_end = comparable_previous_bounds(period, start, end, today)
+    bounds = _comparison_bounds(period, start, end, days, today) if previous_summaries is not None else None
+    if previous_summaries is not None and bounds is not None:
+        previous_start, previous_end = bounds
         previous = {
             'start_date': previous_start.isoformat(),
             'end_date': previous_end.isoformat(),

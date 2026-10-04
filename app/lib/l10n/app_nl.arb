@@ -3844,5 +3844,6 @@
     "timeRecorded": "Opgenomen tijd",
     "peopleYouTalkedToMost": "Met wie je het meest sprak",
     "recapPrevious": "Vorige: {value}",
-    "noRecapForPeriod": "Nog niets opgenomen in deze periode"
+    "noRecapForPeriod": "Nog niets opgenomen in deze periode",
+    "openTasks": "Openstaande taken"
 }

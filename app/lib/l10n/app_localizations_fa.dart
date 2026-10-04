@@ -12430,4 +12430,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'هنوز در این بازه چیزی ضبط نشده است';
+
+  @override
+  String get openTasks => 'وظایف باز';
 }

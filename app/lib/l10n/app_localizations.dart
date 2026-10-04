@@ -22245,7 +22245,7 @@ abstract class AppLocalizations {
   /// **'People you talked to most'**
   String get peopleYouTalkedToMost;
 
-  /// Recap trend: the same figure for the previous week or month
+  /// Recap trend: the same figure for the same stretch of the previous week or month (as many days in as the current one so far)
   ///
   /// In en, this message translates to:
   /// **'Previous: {value}'**
@@ -22256,6 +22256,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing recorded in this period yet'**
   String get noRecapForPeriod;
+
+  /// Recap section header: tasks created in the week or month that are still not done (distinct from the count of tasks created)
+  ///
+  /// In en, this message translates to:
+  /// **'Open tasks'**
+  String get openTasks;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

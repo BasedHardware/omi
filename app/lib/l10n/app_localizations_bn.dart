@@ -12432,4 +12432,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'এই সময়ে এখনো কিছু রেকর্ড হয়নি';
+
+  @override
+  String get openTasks => 'বাকি কাজ';
 }

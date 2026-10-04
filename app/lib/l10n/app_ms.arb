@@ -3844,5 +3844,6 @@
     "timeRecorded": "Masa dirakam",
     "peopleYouTalkedToMost": "Orang yang paling kerap anda bercakap",
     "recapPrevious": "Sebelumnya: {value}",
-    "noRecapForPeriod": "Belum ada rakaman dalam tempoh ini"
+    "noRecapForPeriod": "Belum ada rakaman dalam tempoh ini",
+    "openTasks": "Tugas belum selesai"
 }

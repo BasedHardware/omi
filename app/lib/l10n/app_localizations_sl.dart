@@ -12462,4 +12462,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'V tem obdobju še ni nič posnetega';
+
+  @override
+  String get openTasks => 'Odprte naloge';
 }

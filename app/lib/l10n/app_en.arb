@@ -14859,7 +14859,7 @@
     },
     "recapPrevious": "Previous: {value}",
     "@recapPrevious": {
-        "description": "Recap trend: the same figure for the previous week or month",
+        "description": "Recap trend: the same figure for the same stretch of the previous week or month (as many days in as the current one so far)",
         "placeholders": {
             "value": {
                 "type": "String",
@@ -14870,5 +14870,9 @@
     "noRecapForPeriod": "Nothing recorded in this period yet",
     "@noRecapForPeriod": {
         "description": "Empty state when a week or month has no recorded conversations"
+    },
+    "openTasks": "Open tasks",
+    "@openTasks": {
+        "description": "Recap section header: tasks created in the week or month that are still not done (distinct from the count of tasks created)"
     }
 }

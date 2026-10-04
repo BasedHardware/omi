@@ -12439,4 +12439,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'या कालावधीत अद्याप काहीही रेकॉर्ड झालेले नाही';
+
+  @override
+  String get openTasks => 'प्रलंबित कार्ये';
 }

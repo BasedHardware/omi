@@ -3844,5 +3844,6 @@
     "timeRecorded": "Nahraný čas",
     "peopleYouTalkedToMost": "Lidé, se kterými jste mluvili nejvíc",
     "recapPrevious": "Předchozí: {value}",
-    "noRecapForPeriod": "V tomto období zatím nic nahráno"
+    "noRecapForPeriod": "V tomto období zatím nic nahráno",
+    "openTasks": "Otevřené úkoly"
 }

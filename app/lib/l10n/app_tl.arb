@@ -11401,5 +11401,6 @@
     "timeRecorded": "Oras na na-record",
     "peopleYouTalkedToMost": "Mga taong pinakamadalas mong kausap",
     "recapPrevious": "Nakaraan: {value}",
-    "noRecapForPeriod": "Wala pang na-record sa panahong ito"
+    "noRecapForPeriod": "Wala pang na-record sa panahong ito",
+    "openTasks": "Mga bukas na gawain"
 }

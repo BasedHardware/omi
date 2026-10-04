@@ -12426,4 +12426,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Selles perioodis pole veel midagi salvestatud';
+
+  @override
+  String get openTasks => 'Avatud ülesanded';
 }

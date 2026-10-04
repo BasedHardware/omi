@@ -3844,5 +3844,6 @@
     "timeRecorded": "録音時間",
     "peopleYouTalkedToMost": "よく話した人",
     "recapPrevious": "前回: {value}",
-    "noRecapForPeriod": "この期間の記録はまだありません"
+    "noRecapForPeriod": "この期間の記録はまだありません",
+    "openTasks": "未完了のタスク"
 }

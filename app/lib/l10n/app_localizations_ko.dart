@@ -12246,4 +12246,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => '이 기간에 아직 녹음된 내용이 없습니다';
+
+  @override
+  String get openTasks => '미완료 작업';
 }

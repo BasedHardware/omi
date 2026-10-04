@@ -3844,5 +3844,6 @@
     "timeRecorded": "录制时长",
     "peopleYouTalkedToMost": "与你交谈最多的人",
     "recapPrevious": "上一期：{value}",
-    "noRecapForPeriod": "此期间还没有任何录音"
+    "noRecapForPeriod": "此期间还没有任何录音",
+    "openTasks": "未完成的任务"
 }

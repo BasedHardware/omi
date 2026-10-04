@@ -12533,4 +12533,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Wala pang na-record sa panahong ito';
+
+  @override
+  String get openTasks => 'Mga bukas na gawain';
 }

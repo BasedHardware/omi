@@ -12512,4 +12512,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Δεν έχει ηχογραφηθεί τίποτα σε αυτή την περίοδο ακόμα';
+
+  @override
+  String get openTasks => 'Ανοιχτές εργασίες';
 }
