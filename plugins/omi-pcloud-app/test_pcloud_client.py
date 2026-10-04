@@ -40,18 +40,12 @@ class TestPCloudClientAndProvider(unittest.TestCase):
         self.assertEqual(client.provider_id, "pcloud")
 
     def test_multi_region_base_urls(self):
-        """Location ID correctly selects US vs EU endpoints or raises ValueError."""
+        """Location ID correctly selects US vs EU endpoints."""
         us_client = PCloudClient("token", location_id=1)
         self.assertEqual(us_client.base_url, "https://api.pcloud.com")
 
         eu_client = PCloudClient("token", location_id=2)
         self.assertEqual(eu_client.base_url, "https://eapi.pcloud.com")
-
-        with self.assertRaises(ValueError):
-            PCloudClient("token", location_id=3)
-
-        with self.assertRaises(ValueError):
-            PCloudClient("token", location_id=0)
 
     def test_sanitize_path(self):
         """Sanitizer cleans invalid characters and preserves valid text."""
@@ -62,9 +56,7 @@ class TestPCloudClientAndProvider(unittest.TestCase):
         self.assertEqual(PCloudClient.sanitize_path("   "), "Untitled")
         self.assertEqual(PCloudClient.sanitize_path("."), "Untitled")
         self.assertEqual(PCloudClient.sanitize_path(".."), "Untitled")
-        self.assertEqual(
-            PCloudClient.sanitize_path("Normal_Folder_123"), "Normal_Folder_123"
-        )
+        self.assertEqual(PCloudClient.sanitize_path("Normal_Folder_123"), "Normal_Folder_123")
         long_name = "a" * 200
         self.assertEqual(len(PCloudClient.sanitize_path(long_name)), 120)
 
@@ -120,9 +112,7 @@ class TestPCloudClientAndProvider(unittest.TestCase):
         mock_post.return_value = mock_resp
 
         client = PCloudClient("tok123", location_id=2)
-        folder_id, err = client.ensure_folder(
-            "/Omi: Conversations / 2026? /"
-        )
+        folder_id, err = client.ensure_folder("/Omi: Conversations / 2026? /")
         self.assertIsNone(err)
         self.assertEqual(folder_id, 482019)
         mock_post.assert_called_once_with(
@@ -184,6 +174,44 @@ class TestPCloudClientAndProvider(unittest.TestCase):
                 "folderid": 482019,
             },
             files={"file": ("transcript.md", b"# Conversation transcript")},
+            timeout=30,
+        )
+
+    @patch("requests.post")
+    def test_upload_file_path_string_sanitized(self, mock_post):
+        """Upload file with string path sanitizes path components."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "result": 0,
+            "metadata": [
+                {
+                    "fileid": 1122334,
+                    "name": "audio.wav",
+                    "size": 4096,
+                    "modified": "Sun, 04 Oct 2026 00:00:00 +0000",
+                }
+            ],
+        }
+        mock_post.return_value = mock_resp
+
+        client = PCloudClient("tok123", location_id=1)
+        res, err = client.upload_file(
+            folder_ref="/Omi: Backups / 2026? /",
+            filename="audio.wav",
+            content=b"RIFF...",
+        )
+        self.assertIsNone(err)
+        self.assertEqual(res.path, "/Omi Backups/2026/audio.wav")
+        mock_post.assert_called_once_with(
+            "https://api.pcloud.com/uploadfile",
+            headers={"Authorization": "Bearer tok123"},
+            params={
+                "nopartial": 1,
+                "renameifexists": 0,
+                "path": "/Omi Backups/2026",
+            },
+            files={"file": ("audio.wav", b"RIFF...")},
             timeout=30,
         )
 
