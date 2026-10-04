@@ -619,7 +619,8 @@ class ReplayTailSocket:
             self._pumping = True
             self._task = self.host.spawn(self._pump_tail(), name='stt_replay_live_tail')
 
-    def start_tail(self) -> None:
+    def start_tail(self, *, draining: bool = False) -> None:
+        self._draining = self._draining or draining
         if self.tail:
             self._start_pump()
         else:

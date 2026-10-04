@@ -1451,7 +1451,7 @@ class ListenReceiver(ReplayFilterMixin):
         # snapshots the capture ring, never this queue's already accepted prefix.
         self._replay_live_tail = deque()
         self._replay_tail_bytes = 0
-        delivery.start_tail()
+        delivery.start_tail(draining=self.client_closing)
         if ring is not None:
             ring.reserve_replacement_headroom()
         self._record_selected_epoch(epoch, self.stt_socket)
