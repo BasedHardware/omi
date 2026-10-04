@@ -13485,4 +13485,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Intet optaget i denne periode endnu';
+
+  @override
+  String get openTasks => 'Åbne opgaver';
 }

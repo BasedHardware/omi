@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
@@ -52,7 +52,8 @@ def get_period_recap(
     Rolled up from the user's daily recaps: totals, busiest day, highlights,
     decisions, open questions, the live open tasks created in the period, the
     people talked to most, and the previous period's totals over the same
-    stretch. No AI call is made. A scan cut short sets ``X-Omi-List-Truncated``.
+    stretch. No AI call is made. A read cut short by the request budget, or a
+    failed task or people read, sets ``X-Omi-List-Truncated``.
     """
     if period not in RECAP_PERIODS:
         raise HTTPException(status_code=422, detail="period must be 'week' or 'month'")
@@ -81,9 +82,7 @@ def get_period_recap(
     )
     start_utc, end_utc = period_utc_bounds(start, end, time_zone)
     budget = conversation_scan_budget(request, route='period-recap')
-    open_tasks = action_items_db.get_action_items(
-        uid, completed=False, start_date=start_utc, end_date=end_utc, limit=MAX_RECAP_ITEMS, budget=budget
-    )
+    open_tasks = _period_open_tasks(uid, start_utc, end_utc, budget)
     people_stats, people_names = _period_people(uid, start_utc, end_utc, budget)
     recap = PeriodRecapResponse(
         **build_period_recap(
@@ -103,33 +102,50 @@ def get_period_recap(
     return recap
 
 
-def _counted(rows: Iterable[Dict[str, Any]], seen: List[int]) -> Iterator[Dict[str, Any]]:
-    """Pass rows through, counting them; closing it closes the scan underneath."""
+def _mark_partial(budget: ListReadBudget) -> None:
+    """A failed side read leaves the recap partial: report it as truncated.
+
+    The budget names only 'deadline' and 'documents'. A failed read is closer to
+    'deadline': it is transient and Try Again can clear it, whereas 'documents'
+    describes a fixed allowance that a retry would hit again.
+    """
+    budget.mark_exhausted('deadline')
+
+
+def _period_open_tasks(
+    uid: str, start_utc: datetime, end_utc: datetime, budget: ListReadBudget
+) -> List[Dict[str, Any]]:
+    """The live open tasks created in the period; a failed read degrades to none, marked partial."""
     try:
-        for row in rows:
-            seen[0] += 1
-            yield row
-    finally:
-        close = getattr(rows, 'close', None)
-        if callable(close):
-            close()
+        return action_items_db.get_action_items(
+            uid, completed=False, start_date=start_utc, end_date=end_utc, limit=MAX_RECAP_ITEMS, budget=budget
+        )
+    except Exception:
+        record_fallback(
+            component='daily_summary',
+            from_mode='with_tasks',
+            to_mode='without_tasks',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        _mark_partial(budget)
+        return []
 
 
 def _period_people(
     uid: str, start_utc: datetime, end_utc: datetime, budget: ListReadBudget
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:
-    """People stats for the period; a failed scan degrades to a recap without people.
+    """People stats for the period; a failed scan degrades to a recap without people, marked partial.
 
-    A scan that fills its cap may have missed people from older conversations in
-    the period, so it marks the request budget and the response says truncated.
+    The ranking samples the period's newest RECAP_PEOPLE_SCAN_CAP conversations.
+    Filling that cap is the documented sample, not a truncation: only a budget
+    cut (marked by the scan itself) or a failure makes the response partial.
     """
     try:
-        seen = [0]
         conversations = recap_people_scan(uid, start_date=start_utc, end_date=end_utc, budget=budget)
         # No uid: the shared People-stats cache is not scoped to a date range.
-        stats = collect_people_stats(_counted(conversations, seen), scan_cap=RECAP_PEOPLE_SCAN_CAP, budget=budget)
-        if seen[0] >= RECAP_PEOPLE_SCAN_CAP:
-            budget.mark_exhausted('documents')
+        stats = collect_people_stats(conversations, scan_cap=RECAP_PEOPLE_SCAN_CAP, budget=budget)
         names: Dict[str, str] = {}
         for person in users_db.get_people_by_ids(uid, rank_people(stats)[: MAX_TOP_PEOPLE * 3]):
             person_id = person.get('id') if isinstance(person, dict) else None
@@ -146,4 +162,5 @@ def _period_people(
             outcome='degraded',
             log=logger,
         )
+        _mark_partial(budget)
         return {}, {}

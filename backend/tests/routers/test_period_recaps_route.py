@@ -22,6 +22,7 @@ import pytest
 from fastapi import HTTPException, Response
 
 from database.conversation_scan import RECAP_PEOPLE_SCAN_CAP
+from models.period_recap import PeriodRecapResponse
 from routers import recaps as recaps_mod
 from utils.observability.fallback import ALLOWED_COMPONENTS
 from utils.other.list_budget import OMI_LIST_TRUNCATED_HEADER, ListReadBudget
@@ -120,8 +121,8 @@ def test_week_recap_reads_both_periods_in_one_query_and_ranks_people(deps):
     summaries.assert_called_once_with(UID, limit=124, offset=0, start_date='2026-09-21', end_date='2026-10-04')
     assert (recap.start_date, recap.end_date) == ('2026-09-28', '2026-10-04')
     assert recap.stats.total_conversations == 9
-    # Today (Sunday) closes the week, so the whole previous week compares.
-    assert (recap.previous.start_date, recap.previous.end_date) == ('2026-09-21', '2026-09-27')
+    # Today (Sunday) has no daily recap yet, so the week runs through Saturday.
+    assert (recap.previous.start_date, recap.previous.end_date) == ('2026-09-21', '2026-09-26')
     assert recap.previous.total_conversations == 4
     assert recap.busiest_day.date == '2026-10-01'
     assert [(p.name, p.talk_minutes) for p in recap.top_people] == [('Sam', 5), ('Ana', 1)]
@@ -142,8 +143,8 @@ def test_month_recap_defaults_to_the_current_month_in_the_users_timezone(deps):
 
     assert (recap.start_date, recap.end_date) == ('2026-10-01', '2026-10-31')
     assert summaries.call_args.kwargs['start_date'] == '2026-09-01'
-    # Four days into October compares with September 1-4, not all of September.
-    assert (recap.previous.start_date, recap.previous.end_date) == ('2026-09-01', '2026-09-04')
+    # October 4 has no daily recap yet: October 1-3 compares with September 1-3.
+    assert (recap.previous.start_date, recap.previous.end_date) == ('2026-09-01', '2026-09-03')
     assert recap.previous.total_conversations == 2
 
 
@@ -171,11 +172,14 @@ def test_people_scan_failure_still_serves_the_recap_and_records_the_fallback(dep
     monkeypatch.setattr(recaps_mod, 'recap_people_scan', broken_scan)
     monkeypatch.setattr(recaps_mod, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
 
+    response = Response()
     with caplog.at_level(logging.WARNING, logger=recaps_mod.logger.name):
-        recap = _get('week', '2026-10-01')
+        recap = _get('week', '2026-10-01', response=response)
 
     assert recap.stats.total_conversations == 9
     assert recap.top_people == []
+    # The recap is missing its people: the app shows the partial notice.
+    assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
     assert [f['outcome'] for f in fallbacks] == ['degraded']
     # A component outside the closed enum collapses to 'other' on the dashboard.
     assert fallbacks[0]['component'] == 'daily_summary'
@@ -247,7 +251,9 @@ def test_a_complete_recap_has_no_truncation_header(deps):
     assert OMI_LIST_TRUNCATED_HEADER not in response.headers
 
 
-def test_a_people_scan_that_hits_its_cap_is_reported_truncated(deps, monkeypatch):
+def test_a_people_scan_that_fills_its_cap_is_a_sample_not_a_truncation(deps, monkeypatch):
+    # Like the People page, the cap is a documented sample: Try Again could
+    # never clear a notice for it, so the response is not marked truncated.
     closed = []
 
     def full_scan(uid, **_kwargs):
@@ -262,9 +268,45 @@ def test_a_people_scan_that_hits_its_cap_is_reported_truncated(deps, monkeypatch
 
     recap = _get('week', '2026-10-01', response=response)
 
-    assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
+    assert OMI_LIST_TRUNCATED_HEADER not in response.headers
     assert {p.person_id for p in recap.top_people} == {'p-0', 'p-1', 'p-2'}
     assert closed == [True]
+
+
+def test_the_people_sample_is_documented_on_the_response():
+    description = PeriodRecapResponse.model_fields['top_people'].description or ''
+
+    assert f'up to {RECAP_PEOPLE_SCAN_CAP} conversations in the period, newest first' in description
+
+
+def test_a_failed_task_read_still_serves_the_recap_marked_partial(deps, monkeypatch, caplog):
+    fallbacks = []
+
+    def broken_tasks(uid, **_kwargs):
+        raise RuntimeError('firestore unavailable')
+
+    monkeypatch.setattr(recaps_mod.action_items_db, 'get_action_items', broken_tasks)
+    monkeypatch.setattr(recaps_mod, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    response = Response()
+
+    with caplog.at_level(logging.WARNING, logger=recaps_mod.logger.name):
+        recap = _get('week', '2026-10-01', response=response)
+
+    assert recap.stats.total_conversations == 9
+    assert recap.open_action_items == []
+    assert [p.name for p in recap.top_people] == ['Sam', 'Ana']
+    assert fallbacks == [
+        {
+            'component': 'daily_summary',
+            'from_mode': 'with_tasks',
+            'to_mode': 'without_tasks',
+            'reason': 'other',
+            'outcome': 'degraded',
+            'log': recaps_mod.logger,
+        }
+    ]
+    assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
+    assert [r for r in caplog.records if r.name == recaps_mod.logger.name] == []
 
 
 def test_a_scan_cut_by_the_request_budget_is_reported_truncated(deps, monkeypatch):

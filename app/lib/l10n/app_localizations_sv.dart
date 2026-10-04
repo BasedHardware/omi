@@ -13503,4 +13503,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Inget inspelat under den här perioden än';
+
+  @override
+  String get openTasks => 'Öppna uppgifter';
 }

@@ -15,7 +15,10 @@ class PeriodRecapStats(BaseModel):
 class PeriodRecapPrevious(BaseModel):
     start_date: str = Field(description='First local date compared (YYYY-MM-DD)')
     end_date: str = Field(
-        description='Last local date compared (YYYY-MM-DD); while the current period is in progress, as many days in'
+        description=(
+            'Last local date compared (YYYY-MM-DD). While the current period is in progress it matches the days so '
+            'far: through today once its daily recap exists, else through yesterday'
+        )
     )
     total_conversations: int = 0
     total_duration_minutes: int = 0
@@ -76,8 +79,14 @@ class PeriodRecapResponse(BaseModel):
     open_action_items: List[PeriodRecapActionItem] = Field(
         default_factory=list, description='Tasks created in the period that are still open now'
     )
-    top_people: List[PeriodRecapPerson] = Field(default_factory=list)
+    top_people: List[PeriodRecapPerson] = Field(
+        default_factory=list,
+        description='People talked to most, ranked from up to 500 conversations in the period, newest first',
+    )
     previous: Optional[PeriodRecapPrevious] = Field(
         default=None,
-        description='Totals for the same stretch of the period just before, for trends; absent when unknown',
+        description=(
+            'Totals for the same stretch of the period just before, for trends; absent when unknown or before '
+            'the current period has a day to compare (today counts once its daily recap exists)'
+        ),
     )

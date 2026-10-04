@@ -13550,4 +13550,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Ebben az időszakban még nincs felvétel';
+
+  @override
+  String get openTasks => 'Nyitott feladatok';
 }

@@ -13538,4 +13538,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'Aún no hay nada grabado en este período';
+
+  @override
+  String get openTasks => 'Tareas pendientes';
 }

@@ -13494,4 +13494,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'V tomto období zatiaľ nič nenahrané';
+
+  @override
+  String get openTasks => 'Otvorené úlohy';
 }

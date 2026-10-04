@@ -13532,4 +13532,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'U ovom razdoblju još ništa nije snimljeno';
+
+  @override
+  String get openTasks => 'Otvoreni zadaci';
 }

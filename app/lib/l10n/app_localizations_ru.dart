@@ -13544,4 +13544,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'За этот период пока ничего не записано';
+
+  @override
+  String get openTasks => 'Открытые задачи';
 }

@@ -13507,4 +13507,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'У овом периоду још ништа није снимљено';
+
+  @override
+  String get openTasks => 'Отворени задаци';
 }

@@ -13500,4 +13500,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'V tomto období zatím nic nahráno';
+
+  @override
+  String get openTasks => 'Otevřené úkoly';
 }

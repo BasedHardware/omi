@@ -13597,4 +13597,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get noRecapForPeriod => 'In diesem Zeitraum wurde noch nichts aufgenommen';
+
+  @override
+  String get openTasks => 'Offene Aufgaben';
 }
