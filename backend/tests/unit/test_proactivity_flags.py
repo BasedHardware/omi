@@ -2,7 +2,7 @@
 
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier, Event
+from threading import Barrier, Event, Lock
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -151,6 +151,43 @@ def test_cohort_diagnostics_type_status_privacy_and_rate_limit(cache, monkeypatc
     cache.now[0] += 60
     assert flags.mentor_pipeline('private-uid') == 'legacy'
     assert len(caplog.records) == 2
+
+
+@pytest.mark.parametrize('value', [True, False, 'error'])
+def test_cache_hit_does_not_wait_for_colliding_network_lookup(cache, monkeypatch, value):
+    monkeypatch.setattr(flags, '_lookup_locks', (Lock(),))
+    cache.lookup.return_value = {'proactivity_v2': value}
+    if value == 'error':
+        cache.lookup.side_effect = ConnectionError('private-response')
+        with pytest.raises(ProactivityDenied):
+            flags.enabled('cached')
+    else:
+        assert flags.enabled('cached') is value
+    requested, release = Event(), Event()
+
+    def lookup(uid):
+        requested.set()
+        assert release.wait(5)
+        return {'proactivity_v2': True}
+
+    def cached():
+        if value == 'error':
+            with pytest.raises(ProactivityDenied):
+                flags.enabled('cached')
+            return 'error'
+        return flags.enabled('cached')
+
+    cache.lookup.side_effect = lookup
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        miss = executor.submit(flags.enabled, 'uncached')
+        try:
+            assert requested.wait(5)
+            hit = executor.submit(cached)
+            assert hit.result(timeout=1) == value
+        finally:
+            release.set()
+        assert miss.result(timeout=5) is True
+    assert cache.lookup.call_count == 2
 
 
 def test_non_api_error_diagnostic_includes_exception_type(cache, caplog):

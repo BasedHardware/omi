@@ -86,30 +86,38 @@ def flag_client() -> Any:
     )
 
 
+def _cached_result(uid: str) -> _FlagResult | None:
+    with _cache_lock:
+        result = _flag_cache.get(uid)
+        if result is not None and result.expires_at <= time.monotonic():
+            del _flag_cache[uid]
+            return None
+        if result is not None:
+            _flag_cache.move_to_end(uid)
+        return result
+
+
 def enabled(uid: str) -> bool:
     """Cache true/false for 300s and failures for 60s, failing closed on errors."""
-    with _lookup_locks[hash(uid) % len(_lookup_locks)]:
-        now = time.monotonic()
-        with _cache_lock:
-            result = _flag_cache.get(uid)
-            if result is not None and result.expires_at <= now:
-                del _flag_cache[uid]
-                result = None
-            if result is not None:
-                _flag_cache.move_to_end(uid)
-        if result is None:
-            try:
-                flags = flag_client().get_feature_variants(uid)
-                if not isinstance(flags, dict):
-                    raise ProactivityDenied('flag_unavailable')
-                result = _FlagResult(now + FLAG_TTL_SECONDS, enabled=flags.get('proactivity_v2') is True)
-            except Exception as exc:
-                result = _error_result(exc, now + ERROR_TTL_SECONDS)
-            with _cache_lock:
-                _flag_cache[uid] = result
-                _flag_cache.move_to_end(uid)
-                while len(_flag_cache) > MAX_CACHE_ENTRIES:
-                    _flag_cache.popitem(last=False)
+    # Hits never wait for an unrelated user's in-flight lookup in the same stripe.
+    result = _cached_result(uid)
+    if result is None:
+        with _lookup_locks[hash(uid) % len(_lookup_locks)]:
+            result = _cached_result(uid)
+            if result is None:
+                now = time.monotonic()
+                try:
+                    variants = flag_client().get_feature_variants(uid)
+                    if not isinstance(variants, dict):
+                        raise ProactivityDenied('flag_unavailable')
+                    result = _FlagResult(now + FLAG_TTL_SECONDS, enabled=variants.get('proactivity_v2') is True)
+                except Exception as exc:
+                    result = _error_result(exc, now + ERROR_TTL_SECONDS)
+                with _cache_lock:
+                    _flag_cache[uid] = result
+                    _flag_cache.move_to_end(uid)
+                    while len(_flag_cache) > MAX_CACHE_ENTRIES:
+                        _flag_cache.popitem(last=False)
     if result.error_type:
         _log_flag_error(result)
         raise ProactivityFlagUnavailable(result.error_type, result.http_status)
