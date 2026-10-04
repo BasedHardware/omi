@@ -166,13 +166,31 @@ _PLUMBING_EXACT = frozenset({'asyncio', 'threading', 'contextlib'})
 _known_callers: set[str] = set()
 _caller_lock = threading.Lock()
 
+
 # The in-process bill ledger is deliberately independent of caller attribution.
 # It reuses _record's already-computed amount and never walks the stack.
+def _ledger_service_name() -> str:
+    """Name this process on the bill.
+
+    An explicit setting wins. Cloud Run already injects ``K_SERVICE`` on
+    services and ``CLOUD_RUN_JOB`` on jobs, so a job whose name is itself a
+    legacy-memory inventory marker does not have to repeat that string in
+    runtime env.
+    """
+
+    raw = (
+        os.environ.get('FIRESTORE_READ_LEDGER_SERVICE', '').strip()
+        or os.environ.get('K_SERVICE', '').strip()
+        or os.environ.get('CLOUD_RUN_JOB', '').strip()
+    )
+    if re.fullmatch(r'[a-z0-9-]{1,64}', raw):
+        return raw
+    return 'other'
+
+
 _LEDGER_ENABLED = os.environ.get('FIRESTORE_READ_LEDGER') == '1'
 _LEDGER_EPOCH = secrets.token_hex(8)
-_LEDGER_SERVICE = os.environ.get('FIRESTORE_READ_LEDGER_SERVICE', '')
-if not re.fullmatch(r'[a-z0-9-]{1,64}', _LEDGER_SERVICE):
-    _LEDGER_SERVICE = 'other'
+_LEDGER_SERVICE = _ledger_service_name()
 _LEDGER_LOCK = threading.Lock()
 _LEDGER_DAY: str | None = None
 _LEDGER_COUNTS = {'lookup': 0, 'not_found': 0, 'query': 0}

@@ -1918,8 +1918,6 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEDGER_SERVICE:
-              value: memory-maintenance-job
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: dev-omi-frame-requests
@@ -4082,8 +4080,6 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEDGER_SERVICE:
-              value: memory-maintenance-job
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: prod-omi-frame-requests

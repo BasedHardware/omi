@@ -37,6 +37,19 @@ def _client(project_marker="based-hardware"):
     return type("SDKObject", (), {"_client": type("Client", (), {"project": project_marker})()})()
 
 
+def test_ledger_service_prefers_explicit_name_then_cloud_run_identity(monkeypatch):
+    monkeypatch.setenv("FIRESTORE_READ_LEDGER_SERVICE", "backend")
+    monkeypatch.setenv("K_SERVICE", "ignored")
+    monkeypatch.setenv("CLOUD_RUN_JOB", "also-ignored")
+    assert probe._ledger_service_name() == "backend"
+    monkeypatch.delenv("FIRESTORE_READ_LEDGER_SERVICE")
+    assert probe._ledger_service_name() == "ignored"
+    monkeypatch.delenv("K_SERVICE")
+    assert probe._ledger_service_name() == "also-ignored"
+    monkeypatch.setenv("CLOUD_RUN_JOB", "Memory Job")
+    assert probe._ledger_service_name() == "other"
+
+
 def test_ledger_off_by_default(monkeypatch):
     monkeypatch.setattr(probe, "_LEDGER_ENABLED", False)
     probe._ledger_record(3, "query", "based-hardware")
