@@ -279,7 +279,12 @@ class LiveChainSession:
                     raw = await st.process_audio_parakeet(callback, language, sample_rate, 1, keywords=keywords)
                 elif service == st.STTService.soniox:
                     raw = await st.process_audio_soniox(
-                        callback, sample_rate, language, profile=host.language_profile, keywords=keywords
+                        callback,
+                        sample_rate,
+                        language,
+                        profile=host.language_profile,
+                        keywords=keywords,
+                        idle_budget=getattr(self.receiver, 'soniox_idle_budget', None),
                     )
                 elif service == st.STTService.modulate:
                     raw = await connect_modulate(callback, sample_rate, language)
@@ -596,6 +601,8 @@ class LiveLegSocket(STTSocket):
             circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
             health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
             health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
+        elif getattr(self.raw, 'idle_reopen_failed', False) is True:
+            circuit.record_failure()
         else:
             circuit.record_serve_failure()
             health.quarantine(
@@ -783,6 +790,15 @@ class LiveLegSocket(STTSocket):
                 self.gate.mode = 'off'
                 self.gate = None
                 self.session.vad_mode = 'off'
+        observe = getattr(self.raw, 'observe_vad', None)
+        if (
+            getattr(self.raw, 'idle_close_enabled', False) is True
+            and callable(observe)
+            and output is not None
+            and self.gate is not None
+            and not self._replaying
+        ):
+            observe(output, self.gate.mode)
         audio = data if output is None or self.passthrough else output.audio_to_send
         if output is not None and output.is_speech and self._first_speech_at is None:
             self._first_speech_at = time.monotonic()
@@ -831,6 +847,7 @@ class LiveLegSocket(STTSocket):
             self._dead = True
             self._finish_transport()
             return False
+        self._idle_send_spans = sent_spans
         if sent_spans and self._send_tracker is not None:
             self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
@@ -901,6 +918,48 @@ class LiveLegSocket(STTSocket):
         finally:
             self._replaying = False
             self._replay_passthrough = False
+
+    @property
+    def idle_close_enabled(self) -> bool:
+        return getattr(self.raw, 'idle_close_enabled', False) is True
+
+    async def complete_send(self) -> bool:
+        offset = getattr(self.raw, 'set_resume_provider_offset', None)
+        if self._send_tracker is not None and callable(offset):
+            offset(self._send_tracker.last_send_provider_start)
+        complete = getattr(self.raw, 'complete_send', None)
+        completed = (
+            await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else not self.is_connection_dead
+        )
+        if not completed and getattr(self.raw, 'idle_reopen_failed', False) is True:
+            self.leg_outcome.claim(self.typed_death_reason or 'connection_lost', connect=True)
+        return completed
+
+    def commit_send(self) -> None:
+        commit = getattr(self.raw, 'commit_send', None)
+        if callable(commit):
+            commit()
+
+    def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        from utils.stt.soniox_idle import unaccepted_onset
+
+        data, spans = unaccepted_onset(data, spans, self._send_tracker)
+        if not data:
+            return True
+        self._idle_send_spans = spans
+        accepted = self.raw.send(data)
+        if accepted and self._send_tracker is not None and spans:
+            self._send_tracker.note_accepted_spans(spans)
+            self._note_replay_capture(data, spans[0][0])
+        return accepted
+
+    def take_unsent_packet(self) -> Any:
+        data = self.take_unsent_audio()
+        return (data, getattr(self, '_idle_send_spans', ())) if data else None
+
+    def take_unsent_audio(self) -> bytes:
+        take = getattr(self.raw, 'take_unsent_audio', None)
+        return cast(Callable[[], bytes], take)() if callable(take) else b''
 
     def finalize(self) -> None:
         self.raw.finalize()
