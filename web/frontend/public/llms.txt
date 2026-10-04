@@ -1,0 +1,11 @@
+# Omi shared conversations
+
+> Public conversation links provide meeting notes without login. Only conversations already shared by their owner are available.
+
+## Representations
+
+- [Markdown conversation](/conversations/{id}.md): Replace {id} with the ID from a share link. Alternatively GET /conversations/{id} with Accept: text/markdown.
+- [JSON conversation](/conversations/{id}.json): Alternatively GET the same share URL with Accept: application/json. This is the public allowlisted payload.
+- [Human page](/conversations/{id}): The default representation is HTML.
+
+Times are explicitly UTC. Transcript timestamps are elapsed offsets from the conversation start (HH:MM:SS). Unmapped speakers remain anonymous; roster order never determines speaker identity. Unknown action-item owners and due times are marked Unknown.

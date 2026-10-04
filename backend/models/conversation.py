@@ -125,6 +125,19 @@ class SharedActionItem(BaseModel):
 
     description: str
     completed: bool = False
+    owner_name: Optional[str] = None
+    due_at: Optional[datetime] = None
+    context: Optional[str] = None
+
+
+class SharedSection(BaseModel):
+    """Public note content, without internal transcript evidence IDs."""
+
+    model_config = {'extra': 'ignore'}
+
+    heading: str
+    body_markdown: str
+    kind: Literal['main', 'side_notes'] = 'main'
 
 
 class SharedEvent(BaseModel):
@@ -160,6 +173,7 @@ class SharedStructured(BaseModel):
     overview: str = ''
     emoji: str = '🧠'
     category: CategoryEnum = CategoryEnum.other
+    sections: List[SharedSection] = Field(default_factory=list)
     action_items: List[SharedActionItem] = Field(default_factory=list)
     events: List[SharedEvent] = Field(default_factory=list)
     meeting_type: Optional[MeetingType] = None

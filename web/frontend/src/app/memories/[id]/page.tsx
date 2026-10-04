@@ -18,6 +18,7 @@ import {
   capturePreviewRequest,
   previewAttribution,
 } from '@/src/lib/share-preview-analytics.mjs';
+import { shareAlternates } from '@/src/lib/shared-export.mjs';
 import { firstSectionBulletPlainText } from '@/src/lib/shared-note.mjs';
 import { ParamsTypes, SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
@@ -107,6 +108,12 @@ export async function generateMetadata(
 
   return {
     title,
+    alternates: {
+      types: {
+        'text/markdown': shareAlternates(params.id).markdown,
+        'application/json': shareAlternates(params.id).json,
+      },
+    },
     metadataBase: prevData.metadataBase,
     description,
     robots: {

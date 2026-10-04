@@ -27,21 +27,30 @@ export function meetingTypeLabel(value) {
 
 export function toValidDate(value) {
   if (value == null || value === '') return null;
-  const date = value instanceof Date ? value : new Date(value);
+  // Legacy backend timestamps without an offset are UTC, never viewer local time.
+  const instant =
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value)
+      ? `${value}Z`
+      : value;
+  const date = instant instanceof Date ? instant : new Date(instant);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function shareDateTime(memory) {
   const date = toValidDate(memory?.started_at) ?? toValidDate(memory?.created_at);
   if (!date) return null;
-  const sameYear = date.getFullYear() === new Date().getFullYear();
+  const sameYear = date.getUTCFullYear() === new Date().getUTCFullYear();
   const datePart = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     ...(sameYear ? {} : { year: 'numeric' }),
   }).format(date);
   const timePart = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    timeZoneName: 'short',
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
@@ -214,4 +223,51 @@ export function previewBullets(structured, max = 3, maxLength = 64) {
     if (points.length > 0) return points.slice(0, max);
   }
   return [];
+}
+
+/** Transcript offsets are elapsed seconds from the conversation start. */
+export function transcriptTimestamp(seconds) {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0)
+    return 'Time unknown';
+  const total = Math.floor(seconds);
+  return [Math.floor(total / 3600), Math.floor(total / 60) % 60, total % 60]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':');
+}
+
+/** Never assign roster names by array order: the roster has no speaker IDs. */
+export function transcriptSpeakerName(
+  segment,
+  people = [],
+  participants = [],
+  transcript = [],
+) {
+  const person = people?.find((p) => segment.person_id && p.id === segment.person_id);
+  if (person?.name?.trim()) return person.name.trim();
+  const names = new Set(
+    transcript
+      .filter((turn) => turn.speaker_id != null && turn.speaker_id === segment.speaker_id)
+      .map((turn) =>
+        people?.find((p) => turn.person_id && p.id === turn.person_id)?.name?.trim(),
+      )
+      .filter(Boolean),
+  );
+  if (names.size === 1) return [...names][0];
+  const name = segment.speaker?.trim();
+  const participant = participants?.find(
+    (p) => name && p.name?.trim().toLowerCase() === name.toLowerCase(),
+  );
+  if (participant?.name?.trim()) return participant.name.trim();
+  return segment.is_user
+    ? 'Owner'
+    : `Speaker ${segment.speaker_id ?? segment.speaker ?? 'unknown'}`;
+}
+
+export function actionItemFacts(item) {
+  const due = shareDateTime({ started_at: item.due_at });
+  return {
+    owner: item.owner_name?.trim() || 'Unknown',
+    due,
+    context: item.context?.trim() || '',
+  };
 }

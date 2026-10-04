@@ -24,7 +24,7 @@ export default function Memory({ memory, screenshots = null }: MemoryProps) {
   const title = memory.structured?.title || DEFAULT_TITLE_MEMORY;
   const stamp = shareDateTime(memory);
   const minutes = durationMinutes(memory.started_at, memory.finished_at);
-  const duration = minutes && minutes > 0 ? formatDuration(minutes) : '';
+  const duration = formatDuration(minutes);
   const typeLabel = meetingTypeLabel(memory.structured?.meeting_type);
   const participants = sortParticipants(memory.structured?.participants);
   const metaItems = [
@@ -60,8 +60,9 @@ export default function Memory({ memory, screenshots = null }: MemoryProps) {
           <ul className="sn-participants" aria-label="Participants">
             {participants.map((participant, index) => {
               const name = participantDisplayName(participant);
-              const role =
-                typeof participant.role === 'string' ? participant.role.trim() : '';
+              const role = [participant.organization, participant.role]
+                .filter(Boolean)
+                .join(' · ');
               return (
                 <li key={index} className="sn-chip" title={role || undefined}>
                   <span
