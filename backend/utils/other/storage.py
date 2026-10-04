@@ -516,6 +516,7 @@ def get_syncing_file_temporal_url(file_path: str):
     return _blob_public_url(blob, syncing_local_bucket, file_path)
 
 
+@sync_phase('gcs')
 def get_syncing_file_temporal_signed_url(file_path: str):
     bucket = _get_storage_client().bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
