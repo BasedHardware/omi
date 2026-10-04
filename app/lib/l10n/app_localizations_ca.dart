@@ -11696,6 +11696,36 @@ class AppLocalizationsCa extends AppLocalizations {
       'Això elimina la captura de pantalla de la nota d\'aquesta reunió. No es pot desfer.';
 
   @override
+  String get renameDevice => 'Canvia el nom del dispositiu';
+
+  @override
+  String get deviceRenameFailed =>
+      'No s\'ha pogut desar el nom a l\'Omi. Comprova que estigui connectat i torna-ho a provar.';
+
+  @override
+  String get renameDeviceDescription =>
+      'El nom es desa al mateix Omi, així que apareix a qualsevol telèfon amb què l\'emparellis.';
+
+  @override
+  String get tapToRename => 'Toca per canviar el nom';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'El nom del dispositiu no pot estar buit';
+
+  @override
+  String get deviceNameInvalidCharacters => 'El nom conté caràcters no compatibles';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'El nom és massa llarg (fins a $maxBytes caràcters; els emojis i els accents compten més)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Dispositiu reanomenat a $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'No s\'ha pogut crear el resum';
 
   @override

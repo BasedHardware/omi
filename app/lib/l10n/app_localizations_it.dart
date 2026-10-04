@@ -11695,6 +11695,35 @@ class AppLocalizationsIt extends AppLocalizations {
       'Lo screenshot verrà rimosso dalla nota di questa riunione. L\'operazione non può essere annullata.';
 
   @override
+  String get renameDevice => 'Rinomina dispositivo';
+
+  @override
+  String get deviceRenameFailed => 'Impossibile salvare il nome sul tuo Omi. Verifica che sia connesso e riprova.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Il nome viene salvato sul tuo Omi, quindi compare su qualsiasi telefono a cui lo associ.';
+
+  @override
+  String get tapToRename => 'Tocca per rinominare';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Il nome del dispositivo non può essere vuoto';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Il nome contiene caratteri non supportati';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Il nome è troppo lungo (fino a $maxBytes caratteri; emoji e accenti contano di più)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Dispositivo rinominato in $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Riepilogo non riuscito';
 
   @override

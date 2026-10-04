@@ -11653,6 +11653,36 @@ class AppLocalizationsUk extends AppLocalizations {
       'Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати.';
 
   @override
+  String get renameDevice => 'Перейменувати пристрій';
+
+  @override
+  String get deviceRenameFailed =>
+      'Не вдалося зберегти ім\'я на Omi. Перевірте, чи пристрій підключено, і спробуйте ще раз.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Ім\'я зберігається на самому Omi, тому воно з\'явиться на будь-якому телефоні, з яким ви його з\'єднаєте.';
+
+  @override
+  String get tapToRename => 'Торкніться, щоб перейменувати';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Ім\'я пристрою не може бути порожнім';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Ім\'я містить непідтримувані символи';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Ім\'я надто довге (до $maxBytes символів; емодзі та кирилиця займають більше)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Пристрій перейменовано на $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Не вдалося створити підсумок';
 
   @override

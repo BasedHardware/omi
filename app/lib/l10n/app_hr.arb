@@ -11394,5 +11394,13 @@
     "stopThese": "Zaustavi ovo",
     "dismiss": "Sakrij",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "renameDevice": "Preimenuj uređaj",
+    "deviceRenameFailed": "Ime nije bilo moguće spremiti na Omi. Provjerite je li povezan i pokušajte ponovno.",
+    "renameDeviceDescription": "Ime se sprema na samom Omi uređaju, pa se prikazuje na svakom telefonu s kojim ga uparite.",
+    "tapToRename": "Dodirnite za preimenovanje",
+    "deviceNameCannotBeEmpty": "Ime uređaja ne može biti prazno",
+    "deviceNameInvalidCharacters": "Ime sadrži nepodržane znakove",
+    "deviceNameTooLong": "Ime je predugačko (do {maxBytes} znakova; emojiji i dijakritički znakovi broje se više)",
+    "deviceRenamed": "Uređaj je preimenovan u {name}"
 }

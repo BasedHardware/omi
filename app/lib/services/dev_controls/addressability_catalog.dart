@@ -21,6 +21,9 @@ abstract final class OmiKeys {
   static const tasksCreate = ValueKey<String>('omi.tasks.create');
   static const settingsProfile = ValueKey<String>('omi.settings.profile');
   static const settingsDone = ValueKey<String>('omi.settings.done');
+  static const settingsRenameField = ValueKey<String>('omi.settings.rename_field');
+  static const settingsRenameCancel = ValueKey<String>('omi.settings.rename_cancel');
+  static const settingsRenameSave = ValueKey<String>('omi.settings.rename_save');
   static const onboardingGoogle = ValueKey<String>('omi.onboarding.google');
   static const devicesBack = ValueKey<String>('omi.devices.back');
   static const devicesGuide = ValueKey<String>('omi.devices.guide');

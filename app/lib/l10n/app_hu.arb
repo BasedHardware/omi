@@ -3933,5 +3933,13 @@
     "stopThese": "Ezek leállítása",
     "dismiss": "Elrejtés",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "A név nem támogatott karaktereket tartalmaz",
+    "deviceNameTooLong": "A név túl hosszú (legfeljebb {maxBytes} karakter; az emodzsik és ékezetek többet számítanak)",
+    "renameDevice": "Eszköz átnevezése",
+    "deviceRenameFailed": "A nevet nem sikerült elmenteni az Omira. Ellenőrizd, hogy csatlakoztatva van, majd próbáld újra.",
+    "renameDeviceDescription": "A név magán az Omin tárolódik, így minden telefonon megjelenik, amellyel párosítod.",
+    "deviceRenamed": "Az eszköz új neve: {name}",
+    "tapToRename": "Koppints az átnevezéshez",
+    "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres"
 }

@@ -11618,6 +11618,34 @@ class AppLocalizationsEn extends AppLocalizations {
       'This removes the screenshot from this meeting\'s note. It can\'t be undone.';
 
   @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get deviceRenameFailed => 'Could not save the name to your Omi. Check that it is connected and try again.';
+
+  @override
+  String get renameDeviceDescription => 'The name is saved on your Omi, so it shows up on any phone you pair with.';
+
+  @override
+  String get tapToRename => 'Tap to rename';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Name contains unsupported characters';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Name is too long (up to $maxBytes characters; emoji and accents count extra)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Device renamed to $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Summary failed';
 
   @override

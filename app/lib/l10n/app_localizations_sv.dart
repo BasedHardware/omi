@@ -11634,6 +11634,36 @@ class AppLocalizationsSv extends AppLocalizations {
       'Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra.';
 
   @override
+  String get renameDevice => 'Byt namn på enheten';
+
+  @override
+  String get deviceRenameFailed =>
+      'Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.';
+
+  @override
+  String get tapToRename => 'Tryck för att byta namn';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Enhetsnamnet får inte vara tomt';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Namnet innehåller tecken som inte stöds';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Namnet är för långt (upp till $maxBytes tecken; emoji och accenter räknas extra)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Enheten har fått namnet $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Sammanfattningen misslyckades';
 
   @override

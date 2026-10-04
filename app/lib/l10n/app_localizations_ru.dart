@@ -11670,6 +11670,36 @@ class AppLocalizationsRu extends AppLocalizations {
       'Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить.';
 
   @override
+  String get renameDevice => 'Переименовать устройство';
+
+  @override
+  String get deviceRenameFailed =>
+      'Не удалось сохранить имя на Omi. Убедитесь, что устройство подключено, и попробуйте снова.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Имя сохраняется на самом Omi, поэтому оно появится на любом телефоне, с которым вы его сопряжёте.';
+
+  @override
+  String get tapToRename => 'Нажмите, чтобы переименовать';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Имя устройства не может быть пустым';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Имя содержит неподдерживаемые символы';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Имя слишком длинное (до $maxBytes символов; эмодзи и кириллица занимают больше)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Устройство переименовано в $name';
+  }
+
+  @override
   String get conversationSummaryFailed => 'Не удалось создать сводку';
 
   @override

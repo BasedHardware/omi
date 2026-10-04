@@ -11394,5 +11394,13 @@
     "stopThese": "వీటిని ఆపండి",
     "dismiss": "దాచు",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "renameDevice": "పరికరం పేరు మార్చండి",
+    "deviceRenameFailed": "మీ Omi లో పేరును సేవ్ చేయలేకపోయాము. అది కనెక్ట్ అయి ఉందో లేదో తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "renameDeviceDescription": "పేరు మీ Omi లోనే సేవ్ అవుతుంది, అందువల్ల మీరు జోడించే ఏ ఫోన్‌లోనైనా అది కనిపిస్తుంది.",
+    "tapToRename": "పేరు మార్చడానికి నొక్కండి",
+    "deviceNameCannotBeEmpty": "పరికరం పేరు ఖాళీగా ఉండకూడదు",
+    "deviceNameInvalidCharacters": "పేరులో మద్దతు లేని అక్షరాలు ఉన్నాయి",
+    "deviceNameTooLong": "పేరు చాలా పొడవుగా ఉంది (గరిష్ఠంగా {maxBytes} అక్షరాలు; ఎమోజీలు మరియు గుణింతాలు ఎక్కువగా లెక్కించబడతాయి)",
+    "deviceRenamed": "పరికరం పేరు {name} గా మార్చబడింది"
 }

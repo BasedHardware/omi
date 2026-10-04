@@ -3837,5 +3837,13 @@
     "stopThese": "Stoppa dessa",
     "dismiss": "Avvisa",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Namnet innehåller tecken som inte stöds",
+    "deviceNameTooLong": "Namnet är för långt (upp till {maxBytes} tecken; emoji och accenter räknas extra)",
+    "renameDevice": "Byt namn på enheten",
+    "deviceRenameFailed": "Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.",
+    "renameDeviceDescription": "Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.",
+    "deviceRenamed": "Enheten har fått namnet {name}",
+    "tapToRename": "Tryck för att byta namn",
+    "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt"
 }

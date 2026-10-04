@@ -3837,5 +3837,13 @@
     "stopThese": "Sustabdyti šiuos",
     "dismiss": "Slėpti",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Pavadinime yra nepalaikomų simbolių",
+    "deviceNameTooLong": "Pavadinimas per ilgas (iki {maxBytes} simbolių; jaustukai ir diakritiniai ženklai užima daugiau)",
+    "renameDevice": "Pervadinti įrenginį",
+    "deviceRenameFailed": "Nepavyko išsaugoti pavadinimo Omi įrenginyje. Patikrinkite, ar jis prijungtas, ir bandykite dar kartą.",
+    "renameDeviceDescription": "Pavadinimas išsaugomas pačiame Omi, todėl jis rodomas visuose telefonuose, su kuriais jį susiesite.",
+    "deviceRenamed": "Įrenginys pervadintas į {name}",
+    "tapToRename": "Palieskite, kad pervadintumėte",
+    "deviceNameCannotBeEmpty": "Įrenginio pavadinimas negali būti tuščias"
 }

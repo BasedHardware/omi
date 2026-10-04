@@ -3837,5 +3837,13 @@
     "stopThese": "Diese stoppen",
     "dismiss": "Ausblenden",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "deviceNameInvalidCharacters": "Der Name enthält nicht unterstützte Zeichen",
+    "deviceNameTooLong": "Name ist zu lang (bis zu {maxBytes} Zeichen; Emojis und Akzente zählen mehr)",
+    "renameDevice": "Gerät umbenennen",
+    "deviceRenameFailed": "Der Name konnte nicht auf deinem Omi gespeichert werden. Prüfe, ob es verbunden ist, und versuche es erneut.",
+    "renameDeviceDescription": "Der Name wird auf deinem Omi gespeichert und erscheint daher auf jedem Telefon, mit dem du es koppelst.",
+    "deviceRenamed": "Gerät umbenannt in {name}",
+    "tapToRename": "Zum Umbenennen tippen",
+    "deviceNameCannotBeEmpty": "Der Gerätename darf nicht leer sein"
 }
