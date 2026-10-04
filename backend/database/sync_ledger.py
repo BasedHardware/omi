@@ -275,9 +275,7 @@ def claim_sync_content(
     now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    if not isinstance(uid, str) or not uid or not isinstance(content_id, str) or not content_id:
-        return {'outcome': 'invalid_arguments'}
-    if not isinstance(job_id, str) or not job_id:
+    if not uid or not content_id or not job_id:
         return {'outcome': 'invalid_arguments'}
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = _ledger_ref(client, uid, content_id)
@@ -362,9 +360,7 @@ def bind_sync_content_run_token(
     firestore_client: Any = None,
 ) -> SyncContentRunBinding:
     """Transactionally bind a live Redis run token to its ledger claim."""
-    if not isinstance(uid, str) or not uid or not isinstance(content_id, str) or not content_id:
-        return SyncContentRunBinding(SyncContentRunBindingOutcome.LOST)
-    if not isinstance(job_id, str) or not job_id or not isinstance(run_token, str) or not run_token:
+    if not uid or not content_id or not job_id or not run_token:
         return SyncContentRunBinding(SyncContentRunBindingOutcome.LOST)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     return _bind_run_token_transaction(
@@ -616,9 +612,7 @@ def mark_sync_content_completed(
     firestore_client: Any = None,
 ) -> bool:
     """Atomically publish a completed result for the matching ledger owner."""
-    if not isinstance(uid, str) or not uid or not isinstance(content_id, str) or not content_id:
-        return False
-    if not isinstance(job_id, str) or not job_id:
+    if not uid or not content_id or not job_id:
         return False
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = _ledger_ref(client, uid, content_id)
@@ -684,9 +678,7 @@ def release_sync_content_claim(
     firestore_client: Any = None,
 ) -> bool:
     """Atomically free the matching retry claim, returning whether it changed."""
-    if not isinstance(uid, str) or not uid or not isinstance(content_id, str) or not content_id:
-        return False
-    if not isinstance(job_id, str) or not job_id:
+    if not uid or not content_id or not job_id:
         return False
     client = firestore_client if firestore_client is not None else get_firestore_client()
     return _release_claim_transaction(
@@ -748,9 +740,7 @@ def release_sync_content_claim_after_job_retired(
     firestore_client: Any = None,
 ) -> bool:
     """Free an exact retired job claim without treating it as a live worker write."""
-    if not isinstance(uid, str) or not uid or not isinstance(content_id, str) or not content_id:
-        return False
-    if not isinstance(job_id, str) or not job_id:
+    if not uid or not content_id or not job_id:
         return False
     client = firestore_client if firestore_client is not None else get_firestore_client()
     return _release_claim_after_job_retired_transaction(

@@ -92,9 +92,7 @@ def test_repeat_failure_updates_resilience():
         "repeat_failure_count": 2,
     }
 
-    updates = sync_ledger._repeat_failure_updates(
-        existing, "invalid_audio", "decode:sync_invalid_audio", now
-    )
+    updates = sync_ledger._repeat_failure_updates(existing, "invalid_audio", "decode:sync_invalid_audio", now)
     assert updates["repeat_failure_count"] == 3
     assert updates["repeat_failure_first_at"] == datetime(2026, 9, 30, 10, 0, 0, tzinfo=timezone.utc)
     assert updates["repeat_failure_pause_until"] == now + sync_ledger.REPEAT_FAILURE_PAUSE
@@ -116,8 +114,9 @@ def test_claim_sync_content_naive_and_boundaries():
     }
     mock_ref.get.return_value = mock_snapshot
 
-    with patch.object(sync_ledger, "_ledger_ref", return_value=mock_ref), \
-         patch.object(sync_ledger, "get_firestore_client", return_value=mock_client):
+    with patch.object(sync_ledger, "_ledger_ref", return_value=mock_ref), patch.object(
+        sync_ledger, "get_firestore_client", return_value=mock_client
+    ):
         mock_client.transaction.return_value = MagicMock()
 
         res_capped = sync_ledger.claim_sync_content(
@@ -145,6 +144,21 @@ def test_claim_sync_content_naive_and_boundaries():
             now=now,
         )
         assert res_busy["outcome"] == "busy"
+
+        # 3. Unparseable updated_at treated as expired stale claim -> owned
+        mock_snapshot.to_dict.return_value = {
+            "status": "processing",
+            "job_id": "other-job",
+            "updated_at": "invalid-datetime-string",
+        }
+        res_stale = sync_ledger.claim_sync_content(
+            uid="user-1",
+            content_id="content-1",
+            job_id="job-1",
+            lane="audio",
+            now=now,
+        )
+        assert res_stale["outcome"] == "owned"
 
 
 def test_sync_ledger_input_validation():
