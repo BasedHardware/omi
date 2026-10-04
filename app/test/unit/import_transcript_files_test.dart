@@ -27,6 +27,15 @@ void main() {
     test('an importer this build does not know is labeled as other, not as Limitless', () {
       expect(job({'source_type': 'granola'}).source, ImportJobSource.other);
     });
+
+    test('toGenerated keeps the source, so a transcript job never round-trips as a Limitless one', () {
+      expect(job({'source_type': 'transcript_files'}).toGenerated().sourceType, 'transcript_files');
+      expect(job({'source_type': 'limitless'}).toGenerated().sourceType, 'limitless');
+      for (final source in ImportJobSource.values) {
+        final original = ImportJobResponse(jobId: 'j1', status: ImportJobStatus.completed, source: source);
+        expect(ImportJobResponse.fromGenerated(original.toGenerated()).source, source, reason: source.name);
+      }
+    });
   });
 
   group('transcriptImportUrl', () {

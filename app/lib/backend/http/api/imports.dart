@@ -33,9 +33,16 @@ enum ImportJobStatus {
 /// Which importer created a job. Jobs from before the server reported it were
 /// all Limitless imports; an importer this build does not know is [other].
 enum ImportJobSource {
-  limitless,
-  transcriptFiles,
-  other;
+  limitless('limitless'),
+  transcriptFiles('transcript_files'),
+
+  /// The unknown importer's own name is not kept; `other` reads back as [other].
+  other('other');
+
+  const ImportJobSource(this.wireValue);
+
+  /// The job's `source_type` on the wire.
+  final String wireValue;
 
   static ImportJobSource fromWire(String? value) {
     switch (value) {
@@ -109,6 +116,7 @@ class ImportJobResponse {
     return wire.GeneratedImportJobResponse(
       jobId: jobId,
       status: status.name,
+      sourceType: source.wireValue,
       totalFiles: totalFiles,
       processedFiles: processedFiles,
       conversationsCreated: conversationsCreated,
