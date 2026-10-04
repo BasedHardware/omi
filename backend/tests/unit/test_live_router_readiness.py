@@ -102,12 +102,51 @@ async def test_budget_redis_failure_is_conservative(monkeypatch):
     assert not await paid_admission.admit('modulate')
 
 
+@pytest.mark.parametrize('provider', ['soniox', 'modulate', 'deepgram'])
+@pytest.mark.parametrize('configured,expected', [(None, 30), ('0', 0), ('2', 2), ('10000', 10000)])
+def test_budget_valid_caps_and_unset_default(monkeypatch, provider, configured, expected):
+    setting = f'STT_PAID_SPILLOVER_{provider.upper()}_PER_MINUTE'
+    if configured is None:
+        monkeypatch.delenv(setting, raising=False)
+    else:
+        monkeypatch.setenv(setting, configured)
+    assert paid_admission.limit(provider) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider', ['soniox', 'modulate', 'deepgram'])
+@pytest.mark.parametrize('configured', ['typo-private-value', '', '1.5', '-1', '10001'])
+async def test_invalid_budget_denies_before_redis_and_logs_once(monkeypatch, provider, configured):
+    setting = f'STT_PAID_SPILLOVER_{provider.upper()}_PER_MINUTE'
+    monkeypatch.setenv(setting, configured)
+    monkeypatch.setattr(paid_admission, '_client', None)
+    monkeypatch.setattr(paid_admission, '_invalid_config_logged', set())
+    redis = Mock(side_effect=AssertionError('invalid cap must not create Redis client'))
+    monkeypatch.setattr(paid_admission.aioredis, 'Redis', redis)
+    warning = Mock()
+    monkeypatch.setattr(paid_admission.logger, 'warning', warning)
+    with pytest.raises(ValueError):
+        paid_admission.limit(provider)
+    assert not any(await asyncio.gather(*(paid_admission.admit(provider) for _ in range(12))))
+    redis.assert_not_called()
+    warning.assert_called_once()
+    message = warning.call_args.args[0] % warning.call_args.args[1:]
+    assert setting in message
+    if configured:
+        assert configured not in message
+    # Config is read at the call boundary, so correcting it restores admission.
+    monkeypatch.setenv(setting, '2')
+    monkeypatch.setattr(paid_admission, '_client', MinuteRedis())
+    assert await paid_admission.admit(provider)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'mode,budget,expected,percent',
     [
         ('on', True, 'soniox', 100),
         ('on', False, 'modulate', 100),
+        ('on', 'invalid', 'modulate', 100),
         ('shadow', True, 'modulate', 100),
         ('on', True, 'modulate', 0),
         ('off', True, 'modulate', 100),
@@ -128,8 +167,13 @@ async def test_budget_denial_restores_configured_order(monkeypatch, isolated, mo
         ],
     )
     monkeypatch.setattr(live_chain.health, 'cost_snapshot', lambda targets, _: {t.id: GateState() for t in targets})
-    admission = AsyncMock(return_value=budget)
-    monkeypatch.setattr(paid_admission, 'admit', admission)
+    if budget == 'invalid':
+        monkeypatch.setenv('STT_PAID_SPILLOVER_SONIOX_PER_MINUTE', 'typo')
+        admission = AsyncMock(side_effect=AssertionError('invalid cap must not reach Redis'))
+        monkeypatch.setattr(paid_admission, '_client', SimpleNamespace(eval=admission))
+    else:
+        admission = AsyncMock(return_value=budget)
+        monkeypatch.setattr(paid_admission, 'admit', admission)
 
     async def paid():
         return SimpleNamespace(is_connection_dead=False)
@@ -146,7 +190,7 @@ async def test_budget_denial_restores_configured_order(monkeypatch, isolated, mo
         routing_models={'parakeet': 'parakeet-window'},
     )
     assert service.value == expected
-    assert admission.await_count == (1 if mode == 'on' and percent > 0 else 0)
+    assert admission.await_count == (1 if mode == 'on' and percent > 0 and budget != 'invalid' else 0)
 
 
 def test_rescue_has_one_absolute_deadline_and_ambiguous_proof(monkeypatch):

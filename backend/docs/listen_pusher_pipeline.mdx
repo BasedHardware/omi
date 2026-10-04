@@ -238,6 +238,12 @@ transition metrics, classified outcome counters and static/proposed pairs are
 documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
 and [live STT routing runbook](runbooks/live-stt-routing.md).
 
+Router-promoted paid spillover validates each configured provider cap (integer
+0–10000); malformed values deny promotion and preserve configured order with one
+warning per provider per process. Recovery terminal-after-text alert volume and
+ratio queries both select `listen_track="canary"`, which requires recovery enabled
+on that cohort. See the [routing runbook](runbooks/live-stt-routing.md#router-on-readiness-controls-default-off).
+
 The adapter log statements routed through `sanitize_provider_error()` do
 not echo raw provider or user text. Live-socket, batch, and auxiliary STT error paths
 route exception strings and provider frames through

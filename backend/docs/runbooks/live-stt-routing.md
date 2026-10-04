@@ -392,7 +392,9 @@ the same provider share the budget; rotations do not reset it. Defaults are 30 p
 for `STT_PAID_SPILLOVER_SONIOX_PER_MINUTE`,
 `STT_PAID_SPILLOVER_MODULATE_PER_MINUTE`, and
 `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` (range 0–10000). Zero refuses
-promotions. Redis faults or budget denial restore the configured order and
+promotions. Malformed or out-of-range caps deny promotions before Redis access,
+log once per provider per process without the raw value, and report `unavailable`.
+Redis faults or budget denial restore the configured order and
 emit `omi_stt_paid_spillover_admissions_total{provider,outcome}` with outcomes
 `admitted`, `denied`, `unavailable`. This limits additional router promotions;
 the static chain may still require a paid dial. A minute boundary can admit
@@ -438,7 +440,10 @@ the monitoring release process before rollout; committing rules does not make
 them live. The live-STT import allowlist and coverage gate include these rules;
 the monitoring import must precede verification of their live coverage. Lifecycle/replay rules document their configured-chain/recovery
 prerequisites. The #20391 terminal-after-text emitter also requires the pinned
-recovery flag; its dedicated alert is dormant while that flag is off. The
+recovery flag. Its dedicated alert scopes the volume floor, numerator and denominator
+to `listen_track="canary"`; enable recovery on that entire cohort before using it.
+Stable traffic cannot dilute the canary ratio or satisfy its 20-session floor.
+The alert is dormant while recovery is off on the canary cohort. The
 independent mid-session terminal rule covers every path. Never pool lifecycle
 counters across instances or targets.
 

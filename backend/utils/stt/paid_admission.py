@@ -6,6 +6,7 @@ Redis TIME owns the minute boundary; all endpoints/accounts share a provider bud
 """
 
 import asyncio
+import logging
 import os
 from typing import Any
 
@@ -27,6 +28,8 @@ redis.call('HINCRBY', KEYS[1], 'count', 1)
 return 1
 """
 _client: Any = None
+logger = logging.getLogger(__name__)
+_invalid_config_logged: set[str] = set()
 
 
 def enabled() -> bool:
@@ -39,15 +42,26 @@ def limit(provider: str) -> int:
         'modulate': os.getenv('STT_PAID_SPILLOVER_MODULATE_PER_MINUTE', '30'),
         'deepgram': os.getenv('STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE', '30'),
     }
-    try:
-        return min(10000, max(0, int(configured[provider])))
-    except ValueError:
-        return 30
+    cap = int(configured[provider])
+    if not 0 <= cap <= 10000:
+        raise ValueError('Paid spillover cap must be between 0 and 10000')
+    return cap
 
 
 async def admit(provider: str) -> bool:
     global _client
     try:
+        try:
+            cap = limit(provider)
+        except ValueError:
+            if provider not in _invalid_config_logged:
+                _invalid_config_logged.add(provider)
+                # Log only the known setting name, never its untrusted value.
+                logger.warning(
+                    'Invalid STT_PAID_SPILLOVER_%s_PER_MINUTE; denying promotions and retaining configured order',
+                    provider.upper(),
+                )
+            raise
         if _client is None:
             _client = aioredis.Redis(
                 host=os.getenv('REDIS_DB_HOST') or 'localhost',
@@ -59,7 +73,7 @@ async def admit(provider: str) -> bool:
             )
         # Endpoint/credential rotations must not reset the fleet spend cap.
         key = f'omi:live-stt:paid-spillover-v1:{stage()}:{provider}'
-        allowed = bool(await asyncio.wait_for(_client.eval(ADMIT, 1, key, limit(provider)), timeout=0.15))
+        allowed = bool(await asyncio.wait_for(_client.eval(ADMIT, 1, key, cap), timeout=0.15))
         outcome = 'admitted' if allowed else 'denied'
     except Exception:
         allowed, outcome = False, 'unavailable'
