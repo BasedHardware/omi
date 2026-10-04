@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable, Iterator, ParamSpec, TypeVar
 from contextvars import ContextVar
 from contextlib import contextmanager
 from functools import wraps
+import asyncio
 import inspect
 import logging
 import os
@@ -107,18 +108,37 @@ class _BackgroundFlush:
 
     def __init__(self) -> None:
         self.pending: queue.Queue[None] = queue.Queue(maxsize=1)
+        self._admission_lock = threading.Lock()
+        self._stopping = threading.Event()
         self.worker = threading.Thread(target=self._run, name='sync-metrics-export', daemon=True)
         self.worker.start()
 
     def enqueue(self) -> None:
+        if not self._admission_lock.acquire(blocking=False):
+            return
         try:
-            self.pending.put_nowait(None)
-        except queue.Full:
-            pass  # Cumulative histograms retain samples; redundant signals may be dropped.
+            if self._stopping.is_set():
+                return
+            try:
+                self.pending.put_nowait(None)
+            except queue.Full:
+                pass  # Cumulative histograms retain samples; redundant signals may be dropped.
+        finally:
+            self._admission_lock.release()
+
+    def stop(self) -> None:
+        """Close admission; the worker's timed queue wait also wakes it when idle."""
+        self._stopping.set()
 
     def _run(self) -> None:
         while True:
-            self.pending.get()
+            try:
+                self.pending.get(timeout=0.05)
+            except queue.Empty:
+                with self._admission_lock:
+                    if self._stopping.is_set() and self.pending.empty():
+                        return
+                continue
             try:
                 export_snapshot()
             except Exception:
@@ -126,30 +146,66 @@ class _BackgroundFlush:
                 _logger.warning('event=sync_phase_metrics_export outcome=failed')
             finally:
                 self.pending.task_done()
+            with self._admission_lock:
+                if self._stopping.is_set() and self.pending.empty():
+                    return
 
 
 _flush: _BackgroundFlush | None = None
 _flush_start_lock = threading.Lock()
+_flush_shutdown = threading.Event()
 
 
 def _enqueue_export() -> None:
     """No network/ADC, waits, or export exceptions on the request path."""
     global _flush
-    if os.getenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'false').lower() != 'true':
+    if _flush_shutdown.is_set() or os.getenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'false').lower() != 'true':
         return
     try:
         if _flush is None:
             if not _flush_start_lock.acquire(blocking=False):
                 return
             try:
-                if _flush is None:
+                if _flush is None and not _flush_shutdown.is_set():
                     _flush = _BackgroundFlush()
+                    if _flush_shutdown.is_set():
+                        _flush.stop()  # Shutdown may have raced with thread startup.
             finally:
                 _flush_start_lock.release()
-        _flush.enqueue()
+        if _flush is not None:
+            _flush.enqueue()
     except Exception:
         # Starting a diagnostic worker must never fail a successful sync request.
         pass
+
+
+async def shutdown_sync_metrics(timeout: float = 2.0) -> bool:
+    """Stop/drain the exporter, waiting at most two seconds without blocking the loop.
+
+    An exporter still stuck at the deadline remains daemonized; it exits after
+    draining when the export returns, but cannot hold process shutdown open.
+    """
+    _flush_shutdown.set()
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + min(2.0, max(0.0, timeout))
+    while _flush is None and _flush_start_lock.locked():
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            _logger.warning('event=sync_phase_metrics_shutdown outcome=timeout')
+            return False
+        await asyncio.sleep(min(0.01, remaining))
+    flush = _flush
+    if flush is None:
+        return True
+    flush.stop()
+    while flush.worker.is_alive():
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            _logger.warning('event=sync_phase_metrics_shutdown outcome=timeout')
+            return False
+        await asyncio.sleep(min(0.01, remaining))
+    flush.worker.join(timeout=0)
+    return True
 
 
 _export_lock = threading.Lock()

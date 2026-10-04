@@ -1,11 +1,21 @@
+import ast
 import asyncio
 import contextvars
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from utils.observability import sync_phases as metrics
+
+
+@pytest.fixture(autouse=True)
+def fresh_shutdown_state(monkeypatch):
+    monkeypatch.setattr(metrics, '_flush_shutdown', threading.Event())
 
 
 def _count(metric, lane, phase):
@@ -107,8 +117,6 @@ def test_export_is_aggregate_rate_limited_and_best_effort(monkeypatch):
 
 
 def test_request_completes_while_export_is_blocked_and_queue_is_bounded(monkeypatch):
-    import threading
-
     entered = threading.Event()
     release = threading.Event()
     finished = threading.Event()
@@ -138,7 +146,167 @@ def test_request_completes_while_export_is_blocked_and_queue_is_bounded(monkeypa
     finally:
         release.set()
         if metrics._flush is not None:
-            metrics._flush.pending.join()
+            assert asyncio.run(metrics.shutdown_sync_metrics())
+            assert not metrics._flush.worker.is_alive()
+            assert metrics._flush.pending.unfinished_tasks == 0
+
+
+def test_shutdown_drains_in_flight_and_queued_exports_and_joins_worker(monkeypatch):
+    entered = threading.Event()
+    release = threading.Event()
+    exports = []
+
+    def blocked_export():
+        exports.append(True)
+        entered.set()
+        assert release.wait(timeout=2)
+
+    monkeypatch.setenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'true')
+    monkeypatch.setattr(metrics, 'export_snapshot', blocked_export)
+    monkeypatch.setattr(metrics, '_flush', None)
+    metrics._enqueue_export()
+    assert entered.wait(timeout=1)
+    metrics._enqueue_export()
+    flush = metrics._flush
+
+    async def shutdown():
+        task = asyncio.create_task(metrics.shutdown_sync_metrics())
+        await asyncio.sleep(0.02)
+        assert not task.done()
+        assert flush.worker.is_alive()
+        metrics._enqueue_export()  # Admission is closed while draining.
+        assert flush.pending.qsize() == 1
+        release.set()
+        assert await task
+
+    try:
+        asyncio.run(shutdown())
+        assert exports == [True, True]
+        assert not flush.worker.is_alive()
+        assert flush.pending.unfinished_tasks == 0
+        assert asyncio.run(metrics.shutdown_sync_metrics())  # Idempotent.
+    finally:
+        release.set()
+        flush.stop()
+        flush.worker.join(timeout=2)
+
+
+def test_shutdown_wakes_idle_worker_without_exporting(monkeypatch):
+    monkeypatch.setattr(metrics, 'export_snapshot', lambda: pytest.fail('idle shutdown exported'))
+    flush = metrics._BackgroundFlush()
+    monkeypatch.setattr(metrics, '_flush', flush)
+    try:
+        assert asyncio.run(metrics.shutdown_sync_metrics())
+        assert not flush.worker.is_alive()
+        flush.enqueue()
+        assert flush.pending.unfinished_tasks == 0
+    finally:
+        flush.stop()
+        flush.worker.join(timeout=2)
+
+
+@pytest.mark.parametrize('timeout, bound', [(0.05, 0.5), (20.0, 2.3)])
+def test_shutdown_deadline_does_not_wait_for_stuck_export(monkeypatch, timeout, bound):
+    entered = threading.Event()
+    release = threading.Event()
+
+    def stuck_export():
+        entered.set()
+        release.wait(timeout=3)
+
+    monkeypatch.setattr(metrics, 'export_snapshot', stuck_export)
+    flush = metrics._BackgroundFlush()
+    monkeypatch.setattr(metrics, '_flush', flush)
+    flush.enqueue()
+    assert entered.wait(timeout=1)
+    try:
+        started = time.monotonic()
+        assert not asyncio.run(metrics.shutdown_sync_metrics(timeout=timeout))
+        assert time.monotonic() - started < bound
+        assert flush.worker.is_alive()
+    finally:
+        release.set()
+        flush.worker.join(timeout=2)
+    assert not flush.worker.is_alive()
+    assert flush.pending.unfinished_tasks == 0
+
+
+def test_shutdown_without_worker_prevents_late_start(monkeypatch):
+    monkeypatch.setenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'true')
+    monkeypatch.setattr(metrics, '_flush', None)
+    monkeypatch.setattr(metrics, '_BackgroundFlush', lambda: pytest.fail('shutdown started a worker'))
+    assert asyncio.run(metrics.shutdown_sync_metrics())
+    metrics._enqueue_export()
+
+
+def test_shutdown_racing_worker_start_stops_and_joins_worker(monkeypatch):
+    entered = threading.Event()
+    release = threading.Event()
+    constructor = metrics._BackgroundFlush
+
+    def delayed_start():
+        entered.set()
+        assert release.wait(timeout=2)
+        return constructor()
+
+    monkeypatch.setenv('SYNC_PHASE_METRICS_EXPORT_ENABLED', 'true')
+    monkeypatch.setattr(metrics, '_flush', None)
+    monkeypatch.setattr(metrics, '_BackgroundFlush', delayed_start)
+    monkeypatch.setattr(metrics, 'export_snapshot', lambda: pytest.fail('shutdown admitted an export'))
+    starter = threading.Thread(target=metrics._enqueue_export)
+    starter.start()
+
+    async def shutdown():
+        task = asyncio.create_task(metrics.shutdown_sync_metrics())
+        await asyncio.sleep(0.02)
+        assert not task.done()
+        release.set()
+        assert await task
+
+    try:
+        assert entered.wait(timeout=1)
+        asyncio.run(shutdown())
+        assert not metrics._flush.worker.is_alive()
+    finally:
+        release.set()
+        starter.join(timeout=2)
+        if metrics._flush is not None:
+            metrics._flush.stop()
+            metrics._flush.worker.join(timeout=2)
+    assert not starter.is_alive()
+
+
+def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch):
+    # Execute the real handler with unrelated service cleanups replaced, avoiding
+    # main's credential/client initialization and router imports in this unit test.
+    main_path = Path(__file__).resolve().parents[2] / 'main.py'
+    tree = ast.parse(main_path.read_text())
+    handler = next(
+        node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == 'shutdown_event'
+    )
+    handler.decorator_list = []
+    namespace = {
+        'batch_pressure': SimpleNamespace(stop=AsyncMock()),
+        'drain_background_tasks': AsyncMock(),
+        'shutdown_managed_spend_ledger': AsyncMock(),
+        'shutdown_sync_metrics': metrics.shutdown_sync_metrics,
+        'close_all_clients': AsyncMock(),
+        'close_posthog_control_plane': Mock(),
+        'close_free_tier_control_plane': Mock(),
+        'stop_metrics_sidecar_server': Mock(),
+    }
+    exec(compile(ast.Module(body=[handler], type_ignores=[]), str(main_path), 'exec'), namespace)
+    flush = metrics._BackgroundFlush()
+    monkeypatch.setattr(metrics, '_flush', flush)
+    try:
+        asyncio.run(namespace['shutdown_event']())
+        assert metrics._flush_shutdown.is_set()
+        assert not flush.worker.is_alive()
+        assert flush.pending.unfinished_tasks == 0
+        namespace['close_all_clients'].assert_awaited_once()
+    finally:
+        flush.stop()
+        flush.worker.join(timeout=2)
 
 
 def test_export_disabled_records_metrics_without_starting_worker(monkeypatch):
