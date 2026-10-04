@@ -583,3 +583,64 @@ def test_frame_added_identity_in_calendar_roster_keeps_screen_sensitivity():
     assert items[1].sensitivity == 'standard'
     assert items[2].sensitivity == 'private'
     assert json.loads(items[2].content)['source'] == 'screen_activity'
+
+
+def test_short_unique_anchor_covers_its_unit_and_headings_need_no_claim():
+    item = EvidenceItem(id='speech:1', source_kind='speech', content='Ari approved a synthetic budget.')
+    note = Structured(
+        title='Budget approval',
+        overview='Ari approved the synthetic budget. They requested an agenda.',
+        sections=[Section(heading='Outcome', body_markdown='- Ari approved the synthetic budget.')],
+        note_claims=[
+            claim('/title', 'Budget approval', item.id, 'said'),
+            claim('/overview', 'synthetic budget', item.id, 'said'),
+            claim('/sections/0/body_markdown', 'synthetic budget', item.id, 'said'),
+        ],
+    )
+    assert 'missing_claim_coverage' in claim_violations(note, [item])
+    note.note_claims.append(claim('/overview', 'requested an agenda', item.id, 'said'))
+    assert not claim_violations(note, [item])
+    note.overview = 'Ari approved the synthetic budget. A private message mentioned the synthetic budget.'
+    assert 'ambiguous_claim_span' in claim_violations(note, [item], drop_invalid=True)
+
+
+def test_compact_evidence_preserves_provenance_and_trusted_metadata():
+    items = [
+        EvidenceItem(
+            id='speech:1',
+            source_kind='speech',
+            time='2026-01-01T10:00:00Z',
+            actor='Ari',
+            content='Invented message',
+            sensitivity='private',
+            source_ref='s1',
+            wake_word_invocation=True,
+            diarization_key='cluster:0',
+        ),
+        EvidenceItem(id='screen:1', source_kind='screen_ocr', content='Invented screen', sensitivity='private'),
+    ]
+    rendered = render_episode_evidence(items)
+    encoded = json.loads(rendered.split('\n', 1)[1])
+    assert encoded[0] == items[0].model_dump()
+    assert encoded[1]['sensitivity'] == 'private' and 'actor' not in encoded[1]
+    assert len(rendered) < len(json.dumps([item.model_dump() for item in items], indent=2))
+
+
+def test_episode_person_privacy_and_relevance_rules_are_shared():
+    from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT
+    from utils.llm.episode_policy import EPISODE_PRIVACY_RULE, EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE
+    from utils.llm.meeting_notes_rich_prompts import RICH_PERSON_RULES
+
+    for rule in [EPISODE_PRIVACY_RULE, EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE]:
+        assert all(rule in prompt for prompt in [EPISODE_CONTRACT, REFERENCE_PROMPT, JUDGE_PROMPT])
+    assert RICH_PERSON_RULES in EPISODE_CONTRACT
+    assert "Never infer anyone's gender" in EPISODE_CONTRACT
+    assert 'Treat an AI agent as a separate speaker' in EPISODE_CONTRACT
+    assert 'Set meeting_type only' not in EPISODE_CONTRACT
+    assert 'Section headings need no claims' in EPISODE_CONTRACT
+    schema = EpisodeStructuredExtraction.model_json_schema()
+    assert 'evidence_sources' not in schema['$defs']['ExtractedNoteClaim']['properties']
+    output = EpisodeStructuredExtraction.model_validate(
+        {'note_claims': [claim('/title', 'Budget').model_dump()]}
+    ).to_structured()
+    assert isinstance(output.note_claims[0], NoteClaim)

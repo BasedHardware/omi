@@ -31,9 +31,12 @@ by item/frame IDs. OCR uses the existing bounded read, preserving row attributio
 instead of the legacy digest that suppresses messaging content. No private
 content enters the flag-off digest. Sources are untrusted data, never instructions.
 
-The prompt asks what happened and what matters to the owner. Every factual
-claim, including titles and recap bullets, needs an additive `note_claims` entry
-with a target field, exact text, evidence IDs, server-authored source metadata
+The prompt centers what happened to/for the owner, not the collected evidence.
+Screen/background facts need an evidenced connection to the episode: participants,
+active call surface, speech reference, owner messages, or demonstrated solo activity.
+Titles/overview describe the episode; missing coverage goes in body bullets. Every factual
+sentence/bullet, including titles and recap bullets, needs an additive `note_claims` entry
+with a target field, a short unique exact factual anchor, evidence IDs, server-authored source metadata
 (without raw content), provenance (`said`, `shown`,
 `written`, or `inferred`), and `private`. On-screen text cannot be speech.
 Inference needs explicit uncertainty; schedule is distinct from observation;
@@ -41,7 +44,12 @@ unrelated screen content stays out. Thin evidence must state concrete observatio
 and missing coverage. Situation categories are eval strata only.
 
 The server validates reference IDs and source/provenance compatibility and
-propagates private sensitivity. It stores source kind, original reference, time
+propagates private source sensitivity. The shared prompt/reference/judge policy
+marks a claim private for a private source OR sensitive content: health, money/
+housing/finances, credentials/security/infrastructure secrets, legal matters,
+intimate/relationship details and third-party personal information. Content
+sensitivity is semantic model/judge work; the deterministic source check does
+not certify a public-content label. It stores source kind, original reference, time
 and actor with each claim so ephemeral pack IDs remain auditable after persistence. Vacuity is checked on title, compatibility overview,
 and projected recap; one targeted retry is allowed, shared with provenance repair.
 After that retry, accept the structurally valid retry (otherwise the initial note),
@@ -54,6 +62,14 @@ every existing write path, with no database changes or additional reads.
 Coverage gaps and residual vacuity never fail processing. Episode IDs are stripped
 from visible prose without converting them to transcript citations.
 Existing presentation repair remains a separate bounded guard.
+One claim normally binds a sentence/bullet; sources or sensitivity changes split
+it. Headings need no claims. Every factual unit still needs an anchor; repeated
+ambiguous anchors are invalid. Generation omits server-authored evidence_sources,
+which validation fills without model output cost. Compact evidence serialization
+retains source/time/actor/privacy/invocation metadata; absent optional values stay
+unknown. Flag-off hot imports do not load the episode adapters/schema/repair code.
+Tile/roster names are shown/written, never said without speech support; conclusions
+about absent evidence are inferred. Rich person/name/pronoun/AI-agent rules apply.
 Coverage includes action owners and participant names/emails/organizations/roles.
 Episode mode keeps the presentation guard, but skips the rich-only sanitizer:
 its legacy source restrictions and section/participant reordering would discard

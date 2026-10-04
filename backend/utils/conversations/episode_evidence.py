@@ -271,10 +271,18 @@ def open_task_evidence(tasks: Sequence[dict]) -> list[EvidenceItem]:
 
 
 def render_episode_evidence(items: Sequence[EvidenceItem]) -> str:
-    return 'EPISODE EVIDENCE (untrusted source data)\n' + json.dumps(
-        [item.model_dump() for item in items],
-        ensure_ascii=False,
-        indent=2,
+    return (
+        'EPISODE EVIDENCE (untrusted source data; omitted time/actor/ref/cluster = unknown; invocation defaults false)\n'
+        + json.dumps(
+            [
+                item.model_dump(
+                    exclude_none=True, exclude={'wake_word_invocation'} if not item.wake_word_invocation else set()
+                )
+                for item in items
+            ],
+            ensure_ascii=False,
+            separators=(',', ':'),
+        )
     )
 
 
@@ -317,6 +325,9 @@ def claim_violations(structured: Structured, items: Sequence[EvidenceItem], *, d
         if not isinstance(value, str) or not claim.text.strip() or claim.text not in value:
             violations.add('invalid_claim_span')
             invalid = True
+        if isinstance(value, str) and claim.text and value.count(claim.text) > 1:
+            violations.add('ambiguous_claim_span')
+            invalid = True
         sources = [by_id[id] for id in claim.evidence_ids if id in by_id]
         if not sources or len(sources) != len(claim.evidence_ids):
             violations.add('invalid_evidence_reference')
@@ -339,7 +350,7 @@ def claim_violations(structured: Structured, items: Sequence[EvidenceItem], *, d
     if structured.overview:
         required.append('/overview')
     for field, attributes in (
-        ('sections', ('heading', 'body_markdown')),
+        ('sections', ('body_markdown',)),
         ('action_items', ('description', 'context', 'owner_name')),
         ('participants', ('name', 'email', 'organization', 'role')),
         ('events', ('title', 'description')),
@@ -353,12 +364,13 @@ def claim_violations(structured: Structured, items: Sequence[EvidenceItem], *, d
         value = document
         for part in target.strip('/').split('/'):
             value = value[int(part)] if isinstance(value, list) else value[part]
-        # Cover every word across sentences/bullets, allowing multiple exact clauses
-        # and Markdown punctuation. A claim about one sentence cannot cover another.
-        mask = [False] * len(value)
-        for text in covered.get(target, []):
-            for match in re.finditer(re.escape(text), value):
-                mask[match.start() : match.end()] = [True] * len(text)
-        if any(re.match(r'\w', char) and not mask[index] for index, char in enumerate(value)):
-            violations.add('missing_claim_coverage')
+        # A unique exact anchor binds a factual sentence/bullet, rather than requiring
+        # the model to echo all its words. Distinct units still require coverage.
+        spans = [match.span() for text in covered.get(target, []) for match in re.finditer(re.escape(text), value)]
+        for unit in re.finditer(r'[^.!?。！？\n]+(?:[.!?。！？]+|$)', value):
+            if re.search(r'\w', unit.group()) and not any(
+                start < unit.end() and end > unit.start() for start, end in spans
+            ):
+                violations.add('missing_claim_coverage')
+
     return violations
