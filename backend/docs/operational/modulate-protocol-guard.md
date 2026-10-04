@@ -7,17 +7,23 @@ it to `false`; new sockets use the original adapter. This change enables no
 deployment and changes no endpoint, routing order, keepalive or replay policy.
 
 The [vendor streaming contract](https://docs.modulate.ai/api-reference/stt/streaming)
-allows nullable partial timing and speaker metadata, identifies utterances by
-`utterance_uuid`, and permits a later preview before an earlier final. The old
+allows nullable partial timing and speaker metadata. Its partial example and
+field list omit `utterance_uuid`, while finals carry it. The old
 adapter held one preview, cleared it on any final, and divided nullable timing
 by 1000 during terminal flush. A null-timed preview followed by a server error
 erased its typed cause and left the completion event unset; followed by `done`,
 it turned successful completion into a generic socket death.
 
 The guard retains at most 64 pending previews, correlates updates/finals by
-UUID, and retains the last known timestamp/speaker only when that UUID proves
-the association. Empty previews retract prior text. Finals pass through even
-when their preview was evicted. At termination, timed previews emit once in
+UUID when present, and retains the last known timestamp/speaker only when that
+UUID proves the association. UUID-less partials supersede a single anonymous
+preview. Every final retires that anonymous preview, even if its time/text
+differs, to prevent terminal emission of already-finalized text. An interleaved
+final can therefore discard an unfinished UUID-less preview; selective
+retirement requires an identity the documented partial shape does not supply.
+Null-timed UUID-less updates do not inherit an unproven timestamp.
+Empty previews retract prior text. Finals pass through even when their preview
+was evicted. At termination, timed previews emit once in
 capture order; text with no proven timestamp is not assigned an invented
 capture anchor. Such a preview produces a content-free warning. The inherited
 1 ms tail interval is a persistence representation, not a measured duration.

@@ -42,6 +42,43 @@ def partial(identifier, text, start=None, speaker=None):
     }
 
 
+def documented_partial(**updates):
+    # Exact UUID-less example in the vendor's Server messages section:
+    # https://docs.modulate.ai/api-reference/stt/streaming
+    message = {
+        'text': 'Hello, how are',
+        'start_ms': 0,
+        'speaker': 1,
+        'emotion': None,
+        'accent': None,
+        'deepfake_score': None,
+    }
+    message.update(updates)
+    return {'type': 'partial_utterance', 'partial_utterance': message}
+
+
+def documented_final(**updates):
+    message = {
+        'utterance_uuid': 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        'text': 'Hello, how are you today?',
+        'start_ms': 0,
+        'duration_ms': 2500,
+        'speaker': 1,
+        'language': 'en',
+        'emotion': 'Neutral',
+        'accent': 'American',
+        'deepfake_score': None,
+    }
+    message.update(updates)
+    return {'type': 'utterance', 'utterance': message}
+
+
+TERMINALS = [
+    {'type': 'done', 'duration_ms': 45000},
+    {'type': 'error', 'error': 'Internal server error'},
+]
+
+
 async def receive(messages, callback, monkeypatch, *, enabled=True):
     monkeypatch.setenv('MODULATE_STREAM_PROTOCOL_GUARD_ENABLED', str(enabled).lower())
     socket = streaming.SafeModulateSocket(Frames(messages), callback, asyncio.get_running_loop())
@@ -51,6 +88,90 @@ async def receive(messages, callback, monkeypatch, *, enabled=True):
         socket._send_task.cancel()
         await asyncio.gather(socket._send_task, return_exceptions=True)
     return socket
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
+async def test_documented_uuidless_preview_is_not_reemitted_after_final(monkeypatch, enabled, terminal):
+    emitted = []
+    socket = await receive(
+        [documented_partial(), documented_final(), terminal], emitted.extend, monkeypatch, enabled=enabled
+    )
+    assert emitted == [
+        {
+            'speaker': 'SPEAKER_00',
+            'start': 0.0,
+            'end': 2.5,
+            'text': 'Hello, how are you today?',
+            'is_user': False,
+            'person_id': None,
+            '_provider_language': 'en',
+        }
+    ]
+    assert socket.typed_death_reason == ('modulate_serve_error' if terminal['type'] == 'error' else None)
+    assert socket._done_event.is_set()
+    socket._flush_partial()
+    assert len(emitted) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
+@pytest.mark.parametrize('start', [None, 3000])
+async def test_interleaved_uuidless_preview_is_retired_by_any_final(monkeypatch, terminal, start):
+    emitted = []
+    socket = await receive(
+        [
+            documented_partial(),
+            documented_partial(text='Another utterance', start_ms=start, speaker=2),
+            documented_final(),
+            terminal,
+        ],
+        emitted.extend,
+        monkeypatch,
+    )
+    # No UUID proves which preview the final replaces. Drop the anonymous
+    # slot even when its text/time differ, rather than persist a possible echo.
+    assert [segment['text'] for segment in emitted] == ['Hello, how are you today?']
+    assert not socket._has_pending_partial()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
+async def test_uuidless_final_retirement_preserves_identified_and_later_previews(monkeypatch, terminal):
+    emitted = []
+    socket = await receive(
+        [
+            documented_partial(),
+            partial('b', 'Identified tail', 3000, 2),
+            documented_final(),
+            documented_partial(text='Later anonymous tail', start_ms=4000, speaker=3),
+            terminal,
+        ],
+        emitted.extend,
+        monkeypatch,
+    )
+    assert [(segment['text'], segment['speaker'], segment['start']) for segment in emitted] == [
+        ('Hello, how are you today?', 'SPEAKER_00', 0.0),
+        ('Identified tail', 'SPEAKER_01', 3.0),
+        ('Later anonymous tail', 'SPEAKER_02', 4.0),
+    ]
+    socket._flush_partial()
+    assert len(emitted) == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', TERMINALS, ids=['done', 'error'])
+async def test_documented_uuidless_null_timing_does_not_inherit_an_unproven_anchor(monkeypatch, terminal):
+    emitted = []
+    socket = await receive(
+        [documented_partial(), documented_partial(text='Hello, how are you', start_ms=None, speaker=None), terminal],
+        emitted.extend,
+        monkeypatch,
+    )
+    assert emitted == []
+    assert socket._done_event.is_set()
+    assert socket.typed_death_reason == ('modulate_serve_error' if terminal['type'] == 'error' else None)
 
 
 @pytest.mark.asyncio

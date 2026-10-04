@@ -13,6 +13,7 @@ MAX_PENDING_UTTERANCES = 64
 
 def _key(message: dict[str, Any]) -> str:
     identifier = message.get('utterance_uuid')
+    # The documented partial shape has no UUID: keep one anonymous preview.
     return identifier if isinstance(identifier, str) and identifier else ''
 
 
@@ -77,7 +78,7 @@ def modulate_death_reason(err: Any, *, protocol_guard: bool = False) -> Optional
 
 
 class ModulatePendingUtterances:
-    """Finals retire only their own preview; unanchored text cannot invent time."""
+    """Finals retire their UUID and any anonymous preview; never invent time."""
 
     def __init__(self) -> None:
         self._pending: dict[str, dict[str, Any]] = {}
@@ -90,7 +91,7 @@ class ModulatePendingUtterances:
         previous = self._pending.get(key, {})
         start = _timestamp(message.get('start_ms'))
         # A UUID proves that a nullable update belongs to the same utterance.
-        # An older server without UUIDs cannot prove that association.
+        # The documented UUID-less partial cannot prove that association.
         if start is None and key:
             start = previous.get('start_ms')
         speaker = message.get('speaker')
@@ -111,6 +112,10 @@ class ModulatePendingUtterances:
 
     def finalized(self, message: dict[str, Any]) -> None:
         self._pending.pop(_key(message), None)
+        # A final supersedes preceding partials, but without a preview UUID
+        # even time/text cannot prove which utterance it belongs to. Retire
+        # the anonymous slot on every final to prevent a terminal duplicate.
+        self._pending.pop('', None)
 
     def flush(self, preseconds: int = 0) -> list[dict[str, Any]]:
         pending, self._pending = self._pending, {}
