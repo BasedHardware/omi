@@ -54,6 +54,10 @@ wire.GeneratedPeriodRecapResponse _recap(
       },
     });
 
+/// The overview's conversation total, matched inside its own row: a bare number could be any row's value.
+Finder _conversationsTotal(String count) =>
+    find.descendant(of: find.widgetWithText(OmiSettingsRow, 'Conversations'), matching: find.text(count));
+
 Widget _app(Widget home) => MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -67,7 +71,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(OmiBackButton), findsOneWidget);
-    expect(find.text('12'), findsOneWidget);
+    expect(_conversationsTotal('12'), findsOneWidget);
     expect(find.text('Previous: 9'), findsOneWidget);
     // Lengths in rows are compact (ux-contract §8): 95 min, 80 min before, 25 min with Sam.
     expect(find.text('1h 35m'), findsOneWidget);
@@ -103,7 +107,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(requested, [RecapPeriod.week, RecapPeriod.month]);
-    expect(find.text('40'), findsOneWidget);
+    expect(_conversationsTotal('40'), findsOneWidget);
   });
 
   testWidgets('a failed load offers Try Again, which reloads', (tester) async {
@@ -180,9 +184,9 @@ void main() {
     pending[0].complete(ApiSuccess(_recap('week', conversations: 11)));
     await tester.pumpAndSettle();
 
-    expect(find.text('33'), findsOneWidget);
-    expect(find.text('11'), findsNothing);
-    expect(find.text('40'), findsNothing);
+    expect(_conversationsTotal('33'), findsOneWidget);
+    expect(_conversationsTotal('11'), findsNothing);
+    expect(_conversationsTotal('40'), findsNothing);
   });
 
   testWidgets('a cut-short recap says so above what it has, and Try Again reloads', (tester) async {
@@ -238,12 +242,12 @@ void main() {
 
     expect(pending, hasLength(2));
     expect(find.byType(OmiLoadingState), findsNothing);
-    expect(find.text('12'), findsOneWidget);
+    expect(_conversationsTotal('12'), findsOneWidget);
 
     pending.last.complete(ApiSuccess(_recap('week', conversations: 21)));
     await tester.pumpAndSettle();
 
-    expect(find.text('21'), findsOneWidget);
+    expect(_conversationsTotal('21'), findsOneWidget);
   });
 
   testWidgets('pulling down on an empty recap refreshes it too', (tester) async {
