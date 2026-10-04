@@ -55,6 +55,8 @@ final class PreviewHarness: ObservableObject {
     }
     lazy var surface: NativeSurfaceState = NativeSurfaceState(snapshot: try! NativeSurfaceSnapshot.decode(surfaceRaw)) { [weak self] id, value in
         guard let self else { return }
+        // Visibility notifications do not change fixture content or erase a command receipt.
+        if id.hasPrefix("_visible:") { return }
         try await Task.sleep(nanoseconds: 200_000_000)
         if ProcessInfo.processInfo.arguments.contains("failed-edit") && id == "draft" {
             throw NSError(domain: "Fixture", code: 1)

@@ -342,7 +342,11 @@ struct NativeSurfaceView: View {
     private func action(_ row: NativeSurfaceRow, compact: Bool = false) -> some View {
         Button(role: row.destructive ? .destructive : nil) {
             Task { await state.send(row.id) }
-        } label: { actionLabel(row, compact: compact) }
+        } label: {
+            actionLabel(row, compact: compact)
+                .frame(minWidth: compact ? 44 : 0, minHeight: 44)
+                .contentShape(Rectangle())
+        }
             .disabled(!row.enabled || state.pending.contains(row.id))
             .accessibilityIdentifier(row.id)
     }
