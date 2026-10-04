@@ -1,1 +1,135 @@
+# ==============================================================================
+# Git and VCS
+# ==============================================================================
+.git
+.gitignore
+.gitattributes
+.githooks
+
+# Ignore CI workflows, actions and failure classes, but preserve scripts needed during build
+# (e.g. .github/scripts/desktop_release_manifest.py copied by backend/Dockerfile)
+.github/workflows/
+.github/actions/
+.github/agent-docs/
+.github/failure-classes/
+.github/linters/
+
+# ==============================================================================
+# Secrets and Credentials (Critical Security Guard)
+# ==============================================================================
 backend/google-credentials.json
+*.env
+*.env.*
+.env*
+!.env.template
+!.env.example
+!.env.local-dev.template
+!.env.dev.template
+!.env.prod.template
+!.env.offline.template
+!.envrc.example
+*.pem
+*.key
+*.cert
+*.crt
+.personal_configs/
+.secrets.baseline
+
+# ==============================================================================
+# Python / Build Caches & Virtual Environments
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+*venv/
+venv/
+.venv/
+env/
+myenv/
+.local/
+dump/
+
+# ==============================================================================
+# Non-Backend Platform Subtrees (Reduces build context by > 1.2 GB)
+# ==============================================================================
+app/
+desktop/
+omi/
+omiGlass/
+web/
+contracts/
+contract_tests/
+docs/
+product/
+infrastructure/
+plugins/
+sdks/
+community-plugin-stats.json
+codemagic.yaml
+
+# ==============================================================================
+# Node & Web Artifacts
+# ==============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+out/
+
+# ==============================================================================
+# IDEs and Agent Artifacts
+# ==============================================================================
+.idea/
+.vscode/
+.cursor/
+.cursorignore
+.windsurf/
+.agents/
+.agent-artifacts/
+.amp/
+.gemini/
+.coordination/
+
+# ==============================================================================
+# OS Artifacts & Media
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.log
+*.zip
+*.tar.gz
+*.wav
+!backend/testing/release_fixtures/transcription-release-probe.wav
