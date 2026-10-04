@@ -21,13 +21,13 @@ BATCH_LIMIT = 500  # Firestore hard limit
 
 def _user_col(uid: str, collection: str) -> Any:
     """Shorthand for users/{uid}/{collection}."""
-    if not isinstance(uid, str) or not uid.strip():
+    if not uid or not uid.strip():
         raise ValueError('uid must be a non-empty string')
     return db.collection('users').document(uid.strip()).collection(collection)
 
 
 def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any) -> Dict[str, Any]:
-    if not isinstance(content, str) or not content.strip():
+    if not content or not content.strip():
         raise ValueError('content must be a non-empty string')
 
     confidence_raw = kwargs.get('confidence', 0.5)
@@ -42,7 +42,7 @@ def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any
     doc: Dict[str, Any] = {
         'id': advice_id,
         'content': content.strip(),
-        'category': category.strip() if isinstance(category, str) and category.strip() else 'other',
+        'category': category.strip() if category and category.strip() else 'other',
         'reasoning': kwargs.get('reasoning'),
         'source_app': kwargs.get('source_app'),
         'confidence': confidence,
@@ -87,7 +87,7 @@ def get_advice(
 def update_advice(
     uid: str, advice_id: str, is_read: Optional[bool] = None, is_dismissed: Optional[bool] = None
 ) -> Optional[Dict[str, Any]]:
-    if not isinstance(advice_id, str) or not advice_id.strip():
+    if not advice_id or not advice_id.strip():
         raise ValueError('advice_id must be a non-empty string')
 
     ref = _user_col(uid, 'advice').document(advice_id.strip())
@@ -114,7 +114,7 @@ def update_advice(
 
 
 def delete_advice(uid: str, advice_id: str) -> bool:
-    if not isinstance(advice_id, str) or not advice_id.strip():
+    if not advice_id or not advice_id.strip():
         raise ValueError('advice_id must be a non-empty string')
 
     ref = _user_col(uid, 'advice').document(advice_id.strip())
