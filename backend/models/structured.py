@@ -148,6 +148,7 @@ except ModuleNotFoundError:
         source_kind: str
         time: Optional[str] = None
         actor: Optional[str] = None
+        diarization_key: Optional[str] = None
         sensitivity: Literal['standard', 'private'] = 'standard'
         source_ref: Optional[str] = None
 

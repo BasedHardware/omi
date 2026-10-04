@@ -20,6 +20,8 @@ EPISODE_CONTRACT = '''EPISODE NOTES CONTRACT
   (visible messages, documents, calendar or earlier records), inferred (a qualified interpretation of evidence).
   Never present on-screen text as something someone said. A calendar or roster lists expectations, not attendance.
   Show uncertainty and missing coverage; do not infer a cause, identity, agreement or completed action without support.
+- Speech diarization_key distinguishes observed clusters, never real identities. Unknown actor names stay unknown;
+  do not name a cluster or assign its commitments to the owner without attribution evidence.
 - Screen messages and empty call screens may explain the episode when relevant. Keep unrelated screen content out.
   Prior context may explain a reference, but must be attributed as earlier context, never as a new statement here.
 - Thin evidence needs concrete observations and missing coverage. Avoid "brief exchange", "no clear topic",

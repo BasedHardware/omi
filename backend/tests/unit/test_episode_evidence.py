@@ -456,3 +456,28 @@ def test_retry_provider_error_never_invalidates_usable_note(processing, monkeypa
     )
     assert len(calls) == 2 and result.title == 'Quick chat'
     assert 'to=retry_unavailable' in caplog.text
+
+
+def test_unknown_speech_clusters_remain_distinguishable_without_names():
+    segments = [
+        SimpleNamespace(
+            id=f's{index}', text='Synthetic commitment', start=index, end=index + 1, speaker_id=cluster, is_user=False
+        )
+        for index, cluster in enumerate((0, 1, 0))
+    ]
+    items = capture_evidence(SimpleNamespace(transcript_segments=segments))[:3]
+    assert [item.actor for item in items] == [None, None, None]
+    assert [item.diarization_key for item in items] == ['0', '1', '0']
+    note = valid_note()
+    note.note_claims[0].evidence_ids = ['speech:s0']
+    note.note_claims[0].provenance = 'said'
+    claim_violations(note, items)
+    assert note.note_claims[0].evidence_sources[0].diarization_key == '0'
+
+
+def test_empty_retry_keeps_initial_note(processing, monkeypatch, caplog):
+    initial = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
+    result, calls = invoke_notes(processing, monkeypatch, [initial, {}])
+    assert len(calls) == 2
+    assert result.title == 'Quick chat' and result.overview == 'A brief exchange'
+    assert 'to=empty_retry' in caplog.text

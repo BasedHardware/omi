@@ -5,12 +5,12 @@ import re
 from typing import Any, Sequence
 
 from langchain_core.messages import HumanMessage
-from langchain_core.utils.json import parse_json_markdown
 from pydantic import ValidationError
 
 from models.structured import NoteClaim, Structured  # type: ignore[reportAttributeAccessIssue]  # Runtime SDK/fallback export.
 from utils.conversations.episode_evidence import EvidenceItem, SourceKind, claim_violations
 from utils.conversations.episode_vacuity import is_vacuous_note
+from utils.llm.meeting_notes_presentation import has_note_content
 from utils.llm.meeting_notes_validation import visible_text_fields, enforce_structured_presentation_contract
 from utils.observability.fallback import record_fallback
 
@@ -31,7 +31,15 @@ def sanitize_episode_ids(structured: Structured) -> set[str]:
 
 def parse_episode_response(raw_response: str, parser: Any) -> tuple[Structured, set[str]]:
     """Bad optional claim annotations cannot invalidate otherwise usable prose."""
-    data = parse_json_markdown(raw_response)
+    try:
+        return parser.parse(raw_response).to_structured(), set()
+    except Exception:
+        # Preserve the normal parser's Markdown/partial-JSON behavior first.
+        # Only salvage schema-invalid annotations from an otherwise complete JSON note.
+        text = raw_response.strip()
+        if text.startswith('```'):
+            text = text.split('\n', 1)[-1].rsplit('```', 1)[0].strip()
+        data = json.loads(text)
     violations = set()
     if isinstance(data, dict) and 'note_claims' in data:
         entries = data['note_claims']
@@ -82,8 +90,12 @@ def repair_episode_note(
             ]
         )
         # Prefer the retry whenever its extraction schema is structurally valid.
-        structured, retry_violations = parse_episode_response(content_str(retry), parser)
-        violations |= retry_violations
+        revised, retry_violations = parse_episode_response(content_str(retry), parser)
+        violations |= retry_violations | sanitize_episode_ids(revised)
+        if has_note_content(structured) and not has_note_content(revised):
+            violations.add('empty_retry')
+        else:
+            structured = revised
     except Exception:
         violations.add('retry_unavailable')
     residual = sanitize_episode_ids(structured)
@@ -98,6 +110,6 @@ def repair_episode_note(
             from_mode='episode_contract',
             to_mode=violation,
             reason='local_heal',
-            outcome='degraded' if residual or 'retry_unavailable' in violations else 'recovered',
+            outcome='degraded' if residual or violations & {'retry_unavailable', 'empty_retry'} else 'recovered',
         )
     return structured

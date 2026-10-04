@@ -39,6 +39,7 @@ class EvidenceItem(BaseModel):
     sensitivity: Literal['standard', 'private'] = 'standard'
     source_ref: str | None = None
     wake_word_invocation: bool = False
+    diarization_key: str | None = None
 
 
 def evidence_time(value: Any) -> str | None:
@@ -91,6 +92,10 @@ def capture_evidence(
             )
         )
         items[-1].wake_word_invocation = segment_id in invocation_ids
+        cluster = getattr(segment, 'speaker_id', None)
+        if cluster is None:
+            cluster = getattr(segment, 'speaker', None)
+        items[-1].diarization_key = str(cluster) if cluster is not None else None
     if not segments and transcript.strip():
         items.append(_item('speech', 'external', transcript, ref='external_audio_text'))
     for index, photo in enumerate(getattr(conversation, 'photos', None) or []):
