@@ -4,6 +4,7 @@ Import endpoints for importing data from external sources.
 
 import logging
 import os
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from utils.executors import db_executor, storage_executor, run_blocking
@@ -117,7 +118,7 @@ async def import_transcript_files(
     language: str = 'en',
     tz: str = 'UTC',
     origin: str = 'other',
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'file:upload')),
 ):
     """
     Start importing transcripts exported from other tools.
@@ -135,7 +136,8 @@ async def import_transcript_files(
 
     job = await run_blocking(db_executor, create_transcript_import_job, uid)
     os.makedirs(TEMP_DIR, exist_ok=True)
-    upload_path = os.path.join(TEMP_DIR, f"{job.id}_{filename}")
+    # Staged under the job ID: a user's file name can exceed the file-system name limit.
+    upload_path = os.path.join(TEMP_DIR, f"{job.id}{os.path.splitext(filename)[1].lower()}")
     try:
         f = await run_blocking(storage_executor, open, upload_path, 'wb')
         try:
@@ -144,25 +146,49 @@ async def import_transcript_files(
         finally:
             f.close()
     except Exception as e:
-        await run_blocking(
-            db_executor,
-            import_jobs_db.update_import_job,
-            job.id,
-            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {type(e).__name__}"},
-        )
+        await _abandon_transcript_import(job.id, upload_path, f"Failed to save uploaded file: {type(e).__name__}")
         raise HTTPException(status_code=500, detail="Failed to save uploaded file")
 
-    storage_executor.submit(
-        process_transcript_import,
-        job.id,
-        uid,
-        upload_path,
-        original_filename=filename,
-        language_code=language,
-        tz=tz,
-        origin=origin,
-    )
+    try:
+        storage_executor.submit(
+            process_transcript_import,
+            job.id,
+            uid,
+            upload_path,
+            original_filename=filename,
+            language_code=language,
+            tz=tz,
+            origin=origin,
+        )
+    except Exception as e:
+        logger.error('transcript import could not be queued job_id=%s error_class=%s', job.id, type(e).__name__)
+        await _abandon_transcript_import(job.id, upload_path, 'The import could not be started. Please try again.')
+        raise HTTPException(status_code=503, detail="The import could not be started. Try again shortly.")
     return ImportJobResponse(job_id=job.id, status=ImportJobStatus.pending, source_type=job.source_type)
+
+
+def _discard_staged_upload(upload_path: str) -> None:
+    try:
+        os.remove(upload_path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.error('transcript import staged upload cleanup failed error_class=%s', type(e).__name__)
+
+
+async def _abandon_transcript_import(job_id: str, upload_path: str, error: str) -> None:
+    """Fail a job whose upload will never reach the worker, so it is not left pending, and drop the file."""
+    await run_blocking(
+        db_executor,
+        import_jobs_db.update_import_job,
+        job_id,
+        {
+            'status': ImportJobStatus.failed.value,
+            'error': error,
+            'completed_at': datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    await run_blocking(storage_executor, _discard_staged_upload, upload_path)
 
 
 @router.get(

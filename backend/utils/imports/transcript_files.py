@@ -9,6 +9,7 @@ and idempotent (a file's content decides its conversation ID).
 
 from __future__ import annotations
 
+import codecs
 import hashlib
 import html
 import logging
@@ -20,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
 from typing import Callable, Dict, Iterator, List, Mapping, Optional, Sequence
-from zipfile import BadZipFile, ZipFile, ZipInfo, is_zipfile
+from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile, ZipInfo, is_zipfile
 from zoneinfo import ZoneInfo
 
 import database.import_jobs as import_jobs_db
@@ -49,6 +50,9 @@ TRANSCRIPT_ORIGINS = {'plaud': ConversationSource.plaud, 'other': ConversationSo
 MAX_TRANSCRIPT_FILES = 1000
 MAX_TRANSCRIPT_FILE_BYTES = 5 * 1024 * 1024
 MAX_ARCHIVE_TRANSCRIPT_BYTES = 200 * 1024 * 1024
+# Deflate honors the per-read output cap; bzip2 and LZMA members decompress a
+# whole input block regardless, so a tiny member can expand past every limit.
+READABLE_ZIP_COMPRESSION = (ZIP_STORED, ZIP_DEFLATED)
 # Untimed text gets estimated times so turns keep their order and the
 # conversation a plausible duration (about 150 spoken words per minute).
 ESTIMATED_WORDS_PER_SECOND = 2.5
@@ -57,6 +61,8 @@ DEFAULT_TITLE = 'Imported transcript'
 TRANSCRIPT_IMPORT_ID_NAMESPACE = 'transcript-file'
 # A file counts as speaker-labeled when most cues open with "Name: ".
 LABELED_FILE_MIN_SHARE = 0.6
+# Earlier file-name dates are an unset device clock or not a date at all.
+MIN_FILENAME_YEAR = 1990
 
 
 class TranscriptImportError(Exception):
@@ -85,9 +91,12 @@ _TIMESTAMP_RE = re.compile(r'(?:(\d+):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?')
 _CUE_TIMING_RE = re.compile(rf'^\s*({_TIMESTAMP})\s*-->\s*({_TIMESTAMP})')
 _LABEL_RE = re.compile(r"^(?P<label>[^\W\d_][^:\n]{0,39}?)\s*:\s+(?P<rest>\S.*)$")
 _SPEAKER_N_RE = re.compile(r'^(?:speaker|participant|person|spk)\s*\d+$', re.IGNORECASE)
-_VOICE_RE = re.compile(r'<v(?:\.[\w.-]+)?\s+([^>]+)>')
-_TAG_RE = re.compile(r'<[^>]*>')
-_HEADER_NAME_FIRST_RE = re.compile(rf'^(?P<name>\S.*?)\s{{2,}}\(?(?P<ts>{_TIMESTAMP})\)?\s*$')
+# These run on uploaded lines of up to a few MB while holding the GIL, so each
+# must stay linear: no two adjacent unbounded runs that can trade characters
+# (a tag or voice ends at the next '<', and a header name is capped).
+_VOICE_RE = re.compile(r'<v(?:\.[\w.-]+)?\s+([^<>\s][^<>]*)>')
+_TAG_RE = re.compile(r'<[^<>]*>')
+_HEADER_NAME_FIRST_RE = re.compile(rf'^(?P<name>\S(?:[^\n]{{0,58}}\S)?)\s{{2,}}\(?(?P<ts>{_TIMESTAMP})\)?$')
 _HEADER_TIME_FIRST_RE = re.compile(rf"^\[?(?P<ts>{_TIMESTAMP})\]?\s+(?P<name>[^\W\d_][\w .'-]{{0,39}})$")
 _INLINE_TIMED_RE = re.compile(rf'^\[?(?P<ts>{_TIMESTAMP})\]?\s*(?:-\s*)?(?P<rest>\S.*)$')
 
@@ -191,40 +200,60 @@ def parse_vtt(text: str) -> List[TranscriptCue]:
     return _assign_speakers(cues)
 
 
-def _parse_header_turns(lines: List[str]) -> List[TranscriptCue]:
+def _labeled(match: Optional[re.Match[str]]) -> Optional[re.Match[str]]:
+    return match if match and _is_name_label(match.group('name')) else None
+
+
+def _header_lines(content: Sequence[str]) -> List[Optional[re.Match[str]]]:
+    """Per non-empty line, the speaker header that opens a turn there, if any.
+
+    "Name  0:03" headers win when a file has them, so a body line such as
+    "10:30 works for me" stays text. Otherwise "[00:01] Name" opens a turn only
+    when an untimed body line follows it: "[00:01] Hello there" followed by
+    another timed line is an inline-timestamped transcript, not a speaker.
+    """
+    name_first = [_labeled(_HEADER_NAME_FIRST_RE.match(line)) for line in content]
+    if any(name_first):
+        return name_first
+    headers: List[Optional[re.Match[str]]] = []
+    for index, line in enumerate(content):
+        following = content[index + 1] if index + 1 < len(content) else None
+        if following is None or _INLINE_TIMED_RE.match(following):
+            headers.append(None)
+        else:
+            headers.append(_labeled(_HEADER_TIME_FIRST_RE.match(line)))
+    return headers
+
+
+def _parse_header_turns(content: Sequence[str], headers: Sequence[Optional[re.Match[str]]]) -> List[TranscriptCue]:
+    turns: List[tuple[Optional[re.Match[str]], List[str]]] = [(None, [])]
+    for line, header in zip(content, headers):
+        if header:
+            turns.append((header, []))
+        else:
+            turns[-1][1].append(line)
     cues: List[TranscriptCue] = []
-    speaker: Optional[str] = None
-    start: Optional[float] = None
-    body: List[str] = []
-
-    def close() -> None:
+    for header, body in turns:
+        if header is None:
+            if body:
+                cues.append(TranscriptCue(text=' '.join(body)))
+            continue
+        name, start = header.group('name').strip(), _seconds(header.group('ts'))
         if body:
-            cues.append(TranscriptCue(text=' '.join(body), speaker=speaker, start=start))
-
-    for line in lines:
-        header = _HEADER_NAME_FIRST_RE.match(line) or _HEADER_TIME_FIRST_RE.match(line)
-        if header and _is_name_label(header.group('name')):
-            close()
-            speaker, start, body = header.group('name').strip(), _seconds(header.group('ts')), []
-        elif line:
-            body.append(line)
-    close()
+            cues.append(TranscriptCue(text=' '.join(body), speaker=name, start=start))
+        else:
+            # Nothing under it: keep the line's words as text rather than drop them.
+            cues.append(TranscriptCue(text=name, start=start))
     return cues
 
 
 def parse_text_transcript(text: str) -> List[TranscriptCue]:
-    lines = [line.strip() for line in _normalize(text).split('\n')]
-    content = [line for line in lines if line]
+    content = [line.strip() for line in _normalize(text).split('\n') if line.strip()]
     if not content:
         return []
-    headers = sum(
-        1
-        for line in content
-        if (match := (_HEADER_NAME_FIRST_RE.match(line) or _HEADER_TIME_FIRST_RE.match(line)))
-        and _is_name_label(match.group('name'))
-    )
-    if headers:
-        return _parse_header_turns(lines)
+    headers = _header_lines(content)
+    if any(headers):
+        return _parse_header_turns(content, headers)
     timed = [_INLINE_TIMED_RE.match(line) for line in content]
     if sum(1 for match in timed if match) * 2 >= len(content):
         cues: List[TranscriptCue] = []
@@ -273,6 +302,8 @@ def started_at_from_filename(filename: str, tz: Optional[str] = 'UTC') -> Option
     if not match:
         return None
     parts = match.groupdict()
+    if int(parts['y']) < MIN_FILENAME_YEAR:
+        return None
     try:
         local = datetime(
             int(parts['y']),
@@ -283,9 +314,10 @@ def started_at_from_filename(filename: str, tz: Optional[str] = 'UTC') -> Option
             int(parts['s'] or 0),
             tzinfo=_zone(tz),
         )
-    except ValueError:
+        return local.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
+        # Not a real date (or past datetime's range in UTC): the caller falls back.
         return None
-    return local.astimezone(timezone.utc)
 
 
 def title_from_filename(filename: str) -> str:
@@ -297,15 +329,31 @@ def title_from_filename(filename: str) -> str:
     return title if title and not title.replace(' ', '').isdigit() else DEFAULT_TITLE
 
 
+def _decode_transcript(data: bytes) -> Optional[str]:
+    """Text of a transcript file, or ``None`` when the bytes are binary."""
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        # UTF-16 puts a NUL in every ASCII character, so decode before the binary check.
+        try:
+            text = data.decode('utf-16')
+        except UnicodeDecodeError:
+            return None
+        return None if '\x00' in text else text
+    if b'\x00' in data:
+        return None
+    try:
+        return data.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        return data.decode('cp1252', errors='replace')
+
+
 def parse_transcript_file(filename: str, data: bytes, *, tz: Optional[str] = 'UTC') -> Optional[ParsedTranscript]:
     """Parse one transcript file, or ``None`` when it is not a usable transcript."""
     extension = PurePosixPath(filename).suffix.lower()
-    if extension not in TRANSCRIPT_EXTENSIONS or b'\x00' in data:
+    if extension not in TRANSCRIPT_EXTENSIONS:
         return None
-    try:
-        text = data.decode('utf-8-sig')
-    except UnicodeDecodeError:
-        text = data.decode('cp1252', errors='replace')
+    text = _decode_transcript(data)
+    if text is None:
+        return None
     head = _normalize(text).lstrip()
     if head.startswith('WEBVTT'):
         cues = parse_vtt(text)
@@ -332,6 +380,35 @@ def _estimated_seconds(text: str) -> float:
     return max(1.0, len(text.split()) / ESTIMATED_WORDS_PER_SECOND)
 
 
+def _in_time_order(cues: Sequence[TranscriptCue]) -> Sequence[TranscriptCue]:
+    """Cues sorted by start when the timed ones are out of order (stable).
+
+    An untimed cue keeps the start of the timed cue before it, so a continuation
+    stays with its turn.
+    """
+    starts = [cue.start for cue in cues if cue.start is not None]
+    if all(earlier <= later for earlier, later in zip(starts, starts[1:])):
+        return cues
+    keys: List[float] = []
+    current = float('-inf')
+    for cue in cues:
+        if cue.start is not None:
+            current = cue.start
+        keys.append(current)
+    return [cues[index] for index in sorted(range(len(cues)), key=keys.__getitem__)]
+
+
+def _next_starts(cues: Sequence[TranscriptCue]) -> List[Optional[float]]:
+    """For each cue, the start of the next cue that has one, in one reverse pass."""
+    following: List[Optional[float]] = [None] * len(cues)
+    upcoming: Optional[float] = None
+    for index in range(len(cues) - 1, -1, -1):
+        following[index] = upcoming
+        if cues[index].start is not None:
+            upcoming = cues[index].start
+    return following
+
+
 def segments_from_cues(
     cues: Sequence[TranscriptCue],
     *,
@@ -340,21 +417,23 @@ def segments_from_cues(
 ) -> List[TranscriptSegment]:
     """Number speakers by first appearance and bind the owner and known people by name.
 
-    ``people`` maps casefolded person names to person IDs. Missing end times close
-    at the next turn; untimed cues get ordered, estimated times.
+    ``people`` maps casefolded person names to person IDs. Timed cues are put in
+    time order. Missing end times close at the next turn; untimed cues get ordered,
+    estimated times.
     """
+    cues = _in_time_order(cues)
     owner = owner_name.casefold().strip() if owner_name else None
     speaker_ids: Dict[Optional[str], int] = {}
     segments: List[TranscriptSegment] = []
+    next_starts = _next_starts(cues)
     cursor = 0.0
-    for index, cue in enumerate(cues):
+    for cue, following in zip(cues, next_starts):
         key = cue.speaker.casefold() if cue.speaker else None
         speaker_id = speaker_ids.setdefault(key, len(speaker_ids))
         start = cue.start if cue.start is not None else cursor
         start = max(start, segments[-1].start if segments else 0.0)
         end = cue.end
         if end is None or end <= start:
-            following = next((c.start for c in cues[index + 1 :] if c.start is not None), None)
             end = following if following is not None and following > start else start + _estimated_seconds(cue.text)
         is_user = bool(owner and key == owner)
         segments.append(
@@ -488,6 +567,11 @@ def _upload_entries(upload_path: str, original_filename: str, tz: Optional[str])
                 )
             if sum(info.file_size for info in members) > MAX_ARCHIVE_TRANSCRIPT_BYTES:
                 raise TranscriptImportError('The transcripts in this archive are too large to import at once.')
+            if any(info.compress_type not in READABLE_ZIP_COMPRESSION for info in members):
+                raise TranscriptImportError(
+                    'This archive uses an unsupported compression method. '
+                    'Re-create the ZIP with standard compression and try again.'
+                )
             zone = _zone(tz)
             entries = []
             for info in members:
@@ -530,6 +614,11 @@ def create_transcript_import_job(uid: str) -> ImportJob:
 
 
 def _job_cancelled(job_id: str) -> bool:
+    """Whether the user cancelled the job; a cancel is final.
+
+    The cancel route writes the job document directly and there is no conditional
+    update, so the worker reads the status before each status write it makes.
+    """
     current = import_jobs_db.get_import_job(job_id)
     return bool(current and current.get('status') == ImportJobStatus.cancelled.value)
 
@@ -555,6 +644,9 @@ def _notify(uid: str, job_id: str, title: str, body: str, data: Dict[str, str]) 
 
 
 def _fail(uid: str, job_id: str, message: str) -> None:
+    if _job_cancelled(job_id):
+        logger.info('transcript import job %s was cancelled; not recording its failure', job_id)
+        return
     import_jobs_db.update_import_job(
         job_id,
         {
@@ -578,6 +670,9 @@ def process_transcript_import(
 ) -> None:
     """Background worker: turn every transcript in the upload into a conversation."""
     try:
+        if _job_cancelled(job_id):
+            logger.info('transcript import job %s was cancelled before it started', job_id)
+            return
         import_jobs_db.update_import_job(
             job_id,
             {'status': ImportJobStatus.processing.value, 'started_at': datetime.now(timezone.utc).isoformat()},
@@ -593,10 +688,10 @@ def process_transcript_import(
             if total == 0:
                 _fail(uid, job_id, 'No transcript files (.srt, .vtt or .txt) were found in the upload.')
                 return
+            if _job_cancelled(job_id):
+                logger.info('transcript import job %s was cancelled before its first file', job_id)
+                return
             for entry in entries:
-                if processed and _job_cancelled(job_id):
-                    logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
-                    return
                 try:
                     data = entry.read()
                     parsed = parse_transcript_file(entry.name, data, tz=tz)
@@ -634,10 +729,15 @@ def process_transcript_import(
                             'conversations_skipped': skipped,
                         },
                     )
-        if _job_cancelled(job_id):
-            return
+                    # One cancel read per progress write, as in the Limitless importer.
+                    if processed != total and _job_cancelled(job_id):
+                        logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
+                        return
         if errors and created == 0 and skipped == 0:
             _fail(uid, job_id, f'None of the {total} file(s) could be imported ({errors[0]}).')
+            return
+        if _job_cancelled(job_id):
+            logger.info('transcript import job %s was cancelled; not recording its completion', job_id)
             return
         import_jobs_db.update_import_job(
             job_id,
