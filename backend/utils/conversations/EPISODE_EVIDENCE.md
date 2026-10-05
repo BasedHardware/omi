@@ -64,7 +64,7 @@ Other database write paths remain unchanged.
 Coverage gaps and residual vacuity never fail processing. Episode IDs are stripped
 from visible prose without converting them to transcript citations.
 Episode presentation and claim/vacuity repair share ONE optional model call.
-The 60s structure budget includes the repair, transport retries are disabled for
+The active episode tier budget includes the repair, transport retries are disabled for
 episode calls, and repairs are skipped for long inputs or less than 15s headroom.
 Transcripts above 240k UTF-8 bytes use the existing rich prompt. Baseline behavior
 is unchanged. Local sanitization always runs, including when repair is skipped.
@@ -146,15 +146,31 @@ Selector controls: `MEETING_NOTES_EPISODE_SELECTION_EFFORT` defaults low and
 Recoverable selector/repair model errors are separate from processing errors in
 receipts. Source selection failure keeps the conservative evidence and continues.
 
-The recommended DEV configuration uses xhigh only when the complete text/image
-payload is at most `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` (default 24k
-UTF-8 bytes, bounded 4k–240k). This is a local byte estimate, not a tokenizer or
-network read. Larger high/xhigh inputs use the original rich baseline BEFORE an
-episode writer call, preserving original frames/background and one receipt.
-Requested/actual effort and byte ceiling/size are logged. Default effort is xhigh
-with this guard; invalid effort uses no override. The 60s deadline stays unchanged.
-A cache-only fixed-candidate DEV policy replay meets both samples; held-out
-acceptance and operational completion are still required before any ramp.
+Round 10 supersedes guarded C8. Base settings are C7: deterministic selection,
+claims off, no effort override, optional thinking byte guard disabled (0).
+Universal processing-time cost routing admits C6/xhigh for at least 250 speech
+words and two admitted source kinds; thresholds are configurable. No taxonomy or
+user allowlist participates. Long transcript prefixes (>240k bytes) still use rich
+baseline. The same downstream contract applies to every selector/tier.
+
+Jev uses the existing pinned SystemOne gateway/client with the `episode_evidence`
+metric lane. One shared bounded state describes speech, capture times, roster and
+call/device metadata. Each grouped app/window screen segment or prior/person/
+memory/goal/task item gets one connection question. Oversize batches split before
+transport truncation; an individually oversize item, invalid answer or timeout
+fails open to deterministic selection. Speech and trusted device constraints stay.
+No retrieval is added: missing catalog sources remain absent. The offline adapter
+uses the identical typed request/validated answers on OpenRouter's `/systemone`,
+substituting the pinned model for the gateway lane ID. DEV threshold calibration
+must precede enablement; the default selector remains deterministic.
+
+See [deadline audit](EPISODE_DEADLINES.md). Requested episode deadlines are 120s
+(C7) and 180s (C6); the existing gateway's 120s ceiling clamps C6 to 115s. Only
+already leased durable finalizers receive extended budgets. Synchronous request
+paths retain 60s and route to C7. Baseline/legacy deadlines are unchanged. One C6
+timeout/context-limit failure buys one C7 rewrite and disables further model
+repair. Repairs still require 15s remaining headroom. Telemetry records requested/
+effective deadline, tier, route reason, selector actually used and tier fallback.
 
 Known BYOK models outside the supported reasoning family keep their own options,
 with a fixed effort-downgrade violation. Naive capture-end timestamps use UTC,

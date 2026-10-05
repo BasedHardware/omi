@@ -143,10 +143,6 @@ def _invoke_gateway_shadow_chain(chain: Any, values: dict[str, Any], *, feature:
     return response
 
 
-def _word_count(text: str) -> int:
-    return transcript_word_count(text)
-
-
 def _coerce_action_items(response: ActionItemsExtraction) -> List[ActionItem]:
     return response.to_action_items()
 
@@ -1198,7 +1194,7 @@ def get_conversation_notes(
     if run is not None and episode_settings is not None:
         run.configure_episode(episode_settings)
     rich_mode = rich_context_enabled or episode_mode
-    transcript_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
+    transcript_word_count = transcript_word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     density = conversation_note_density(transcript_word_count, rich_mode)
 
     existing_lines: List[str] = []
@@ -1263,6 +1259,9 @@ def get_conversation_notes(
                 episode_settings.selection_effort,
             ),
         )
+        episode_settings, writer_deadline = import_module('utils.llm.episode_writer').episode_runtime_settings(
+            evidence_items, episode_settings, run
+        )
         if screen_frames and episode_settings.selection != 'compact':
             selected_refs = {item.source_ref for item in evidence_items if item.source_kind == 'screen_frame'}
             screen_frames = tuple(frame for frame in screen_frames if frame.frame_id in selected_refs)
@@ -1301,32 +1300,32 @@ def get_conversation_notes(
         messages, episode_settings, run
     ):
         return import_module('utils.llm.episode_writer').baseline_budget_fallback(
-            get_conversation_notes.__wrapped__,
-            run,
-            prefix,
-            started_at=started_at,
-            language_code=language_code,
-            output_language_code=output_language_code,
-            tz=tz,
-            task_intelligence_capture=task_intelligence_capture,
-            existing_action_items=existing_action_items,
-            trusted_wake_word_markers=trusted_wake_word_markers,
-            meeting_context=meeting_context,
-            rich_context_enabled=rich_context_enabled,
-            roster=roster,
-            screen_frames=original_screen_frames,
+            get_conversation_notes.__wrapped__, run, prefix, locals()
         )
     model = get_llm(
         'conv_structure',
         cache_key=cache_key,
         prompt_cache_options=cache_options,
-        request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
+        request_timeout=writer_deadline if episode_mode else CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
         **({'max_retries': 0} if episode_mode else {}),
     )
     if episode_mode:
         model = import_module('utils.llm.episode_writer').bind_episode_effort(model, episode_settings.effort)
     run = current_run()
-    raw_response = _content_str(run.invoke(model, messages) if run else model.invoke(messages))
+    if episode_mode:
+        response, episode_settings = import_module('utils.llm.episode_writer').invoke_episode_writer(
+            model,
+            messages,
+            episode_settings,
+            run,
+            deadline=writer_deadline,
+            fallback_factory=lambda timeout: import_module('utils.llm.episode_writer').episode_retry_model(
+                get_llm, cache_key, cache_options, timeout
+            ),
+        )
+    else:
+        response = run.invoke(model, messages) if run else model.invoke(messages)
+    raw_response = _content_str(response)
     episode_presentation_violations = set()
     if episode_mode:
         structured, episode_presentation_violations = import_module(
@@ -1381,17 +1380,10 @@ def get_conversation_notes(
             transcript_segment_ids=prefix.transcript_segment_ids,
             initial_violations=episode_presentation_violations,
             run=run,
-            repair_budget=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
+            repair_budget=writer_deadline,
             claims_enabled=episode_settings.claims,
-            retry_model_factory=lambda timeout: import_module('utils.llm.episode_writer').bind_episode_effort(
-                get_llm(
-                    'conv_structure',
-                    cache_key=cache_key,
-                    prompt_cache_options=cache_options,
-                    request_timeout=timeout,
-                    max_retries=0,
-                ),
-                episode_settings.effort,
+            retry_model_factory=lambda timeout: import_module('utils.llm.episode_writer').episode_retry_model(
+                get_llm, cache_key, cache_options, timeout, episode_settings.effort
             ),
         )
 

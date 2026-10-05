@@ -20,9 +20,9 @@ from utils.conversations.episode_selection import (
 def test_sticky_writer_settings_are_read_at_call_boundary(monkeypatch):
     assert not episode_writer_settings().claims
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'high')
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'model')
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'luna')
     monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
-    assert episode_writer_settings() == EpisodeWriterSettings('high', 'model', True)
+    assert episode_writer_settings() == EpisodeWriterSettings('high', 'luna', True, tiered=True)
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'invented')
     assert episode_writer_settings().effort == 'default'
 
@@ -89,7 +89,7 @@ def test_two_judges_reuse_candidates_and_reference_with_model_selection(tmp_path
         fixtures(),
         llm,
         arms=('episode', 'baseline'),
-        settings=EpisodeWriterSettings('high', 'model', False),
+        settings=EpisodeWriterSettings('high', 'luna', False),
         cache_dir=tmp_path,
         judge_samples=2,
     )
@@ -101,7 +101,7 @@ def test_two_judges_reuse_candidates_and_reference_with_model_selection(tmp_path
         fixtures(),
         llm,
         arms=('episode', 'baseline'),
-        settings=EpisodeWriterSettings('high', 'model', False),
+        settings=EpisodeWriterSettings('high', 'luna', False),
         cache_dir=tmp_path,
         judge_samples=2,
     )
@@ -118,7 +118,7 @@ def test_selector_failure_keeps_only_conservative_original_evidence(monkeypatch)
     ]
     result = prepare_episode_evidence(
         items,
-        EpisodeWriterSettings(selection='model'),
+        EpisodeWriterSettings(selection='luna'),
         started_at='2026-01-01T10:00:00Z',
         finished_at='2026-01-01T10:05:00Z',
         run=None,
@@ -167,7 +167,7 @@ def test_selector_is_skipped_for_long_evidence_without_model_calls():
     items = [EvidenceItem(id='s', source_kind='speech', content='word ' * 25000)]
     result = prepare_episode_evidence(
         items,
-        EpisodeWriterSettings(selection='model'),
+        EpisodeWriterSettings(selection='luna'),
         started_at='2026-01-01T10:00:00Z',
         finished_at='2026-01-01T11:00:00Z',
         run=None,
@@ -181,7 +181,7 @@ def test_selector_attempt_is_not_reported_as_writer_retry(caplog):
     from utils.llm.notes_observability import NotesRun
 
     run = NotesRun('episode')
-    run.configure_episode(EpisodeWriterSettings('high', 'model', False))
+    run.configure_episode(EpisodeWriterSettings('high', 'luna', False))
     model = SimpleNamespace(
         invoke=lambda m: SimpleNamespace(
             content='Synthetic',
@@ -234,10 +234,10 @@ def test_high_effort_guard_counts_utf8_and_images_without_tokenizer():
 
 def test_production_defaults_choose_guarded_xhigh_and_invalid_budget_fails_safe(monkeypatch):
     monkeypatch.delenv('MEETING_NOTES_EPISODE_EFFORT', raising=False)
-    assert episode_writer_settings().effort == 'xhigh'
+    assert episode_writer_settings().effort == 'default'
     for invalid in ('0', '-1', 'nan', '240001'):
         monkeypatch.setenv('MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES', invalid)
-        assert episode_writer_settings().thinking_max_input_bytes == 24000
+        assert episode_writer_settings().thinking_max_input_bytes == 0
 
 
 def test_budget_route_reuses_baseline_generation_and_both_judges(tmp_path):

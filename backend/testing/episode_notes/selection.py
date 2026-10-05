@@ -15,6 +15,10 @@ from utils.conversations.episode_selection import (
 
 
 def routed_candidate_request(episode, arm, settings, items, candidate_prompt=None):
+    from utils.conversations.episode_tiers import episode_tier
+
+    if arm == 'episode':
+        settings, _, _ = episode_tier(items, settings)
     prompt, payload = candidate_request(episode, arm, settings=settings, items=items)
     if arm == 'episode':
         prompt = candidate_prompt or prompt
@@ -56,3 +60,54 @@ def evaluate_selection(items, episode, *, cache_dir, candidate_model, llm, setti
         if isinstance(exc, LLMCallError):
             receipt = exc.result
         return conservative, receipt, 'selection_unavailable'
+
+
+def evaluate_jev_selection(items, episode, *, cache_dir, llm, settings):
+    from config.jev_decisions import JEV_MODEL
+    from utils.conversations.episode_jev import JEV_SELECTOR_PROMPT
+    from testing.episode_notes.schema import LLMResult
+    from utils.conversations.episode_jev import evidence_question_batches, scored_episode_items
+
+    conservative = deterministic_episode_selection(items, finished_at=episode.evidence.finished_at)
+    receipt, scores = None, {}
+    try:
+        batches = evidence_question_batches(
+            items, started_at=episode.evidence.started_at, finished_at=episode.evidence.finished_at
+        )
+        for batch in batches:
+            result = cached_call(
+                cache_dir,
+                'jev-selection',
+                JEV_MODEL,
+                JEV_SELECTOR_PROMPT,
+                {'state': batch.state, 'questions': batch.questions},
+                llm,
+            )
+            scores.update(result.content['scores'])
+            if receipt is None:
+                receipt = result
+            else:
+                receipt = LLMResult(
+                    content={},
+                    **{
+                        key: (
+                            receipt.cost()[key] + result.cost()[key]
+                            if receipt.cost()[key] is not None and result.cost()[key] is not None
+                            else None
+                        )
+                        for key in receipt.cost()
+                    }
+                )
+        if receipt is not None:
+            receipt = LLMResult(content={'scores': scores}, **receipt.cost())
+        return (
+            scored_episode_items(
+                items, batches, scores, threshold=settings.jev_threshold, finished_at=episode.evidence.finished_at
+            ),
+            receipt,
+            None,
+        )
+    except Exception as exc:
+        if isinstance(exc, LLMCallError):
+            receipt = exc.result
+        return conservative, receipt, 'jev_unavailable'

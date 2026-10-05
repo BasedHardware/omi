@@ -125,7 +125,9 @@ def main(argv: list[str] | None = None) -> None:
         default=24000,
         help='High/xhigh byte ceiling; 0 disables it for offline effort experiments only',
     )
-    parser.add_argument('--selection', choices=SELECTIONS, default='compact')
+    parser.add_argument('--selection', choices=('compact', *SELECTIONS), default='compact')
+    parser.add_argument('--jev-threshold', type=float, default=0.75)
+    parser.add_argument('--tiered', action='store_true')
     parser.add_argument('--no-claims', action='store_true')
     parser.add_argument('--judge-samples', type=int, choices=(1, 2), default=1)
     parser.add_argument('--reference-model', default=os.getenv('EPISODE_EVAL_REFERENCE_MODEL', SCORING_MODEL))
@@ -160,7 +162,13 @@ def main(argv: list[str] | None = None) -> None:
         ]
     }
 
+    from testing.episode_notes.systemone import SystemOneEndpoint, JEV_SELECTOR_PROMPT
+
+    jev = SystemOneEndpoint(key=key, base_url=base_url)
+
     def llm(prompt, payload):
+        if prompt == JEV_SELECTOR_PROMPT:
+            return jev(prompt, payload)
         role = 'reference' if prompt == REFERENCE_PROMPT else 'judge' if prompt == JUDGE_PROMPT else 'candidate'
         return endpoints[role](prompt, payload)
 
@@ -182,6 +190,8 @@ def main(argv: list[str] | None = None) -> None:
                 args.selection,
                 not args.no_claims,
                 thinking_max_input_bytes=args.thinking_max_input_bytes,
+                jev_threshold=args.jev_threshold,
+                tiered=args.tiered,
             ),
             judge_samples=args.judge_samples,
         )

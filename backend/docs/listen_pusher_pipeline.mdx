@@ -3119,3 +3119,10 @@ Completed conversations retain meeting-treatment audit receipts and notes on the
 conversation surface. Finalization, reprocessing, and receipt backfill do not post
 capture or meeting-note cards into Chat; rich conversation links remain available
 in agent replies to a user message.
+
+Episode notes receive extended writer budgets only inside the existing leased
+finalizer, using `episode_runtime.process_with_episode_budget`. Synchronous
+request processing retains its prior writer bound. The episode gateway ceiling,
+tier fallback and shutdown/retry limitations are audited in
+[`EPISODE_DEADLINES.md`](../utils/conversations/EPISODE_DEADLINES.md); no listen,
+pusher, job lease, request deadline or lifecycle write path changes.

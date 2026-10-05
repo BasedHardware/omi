@@ -16,7 +16,7 @@ from testing.episode_notes.prompts import (
     SOURCE_FIELDS,
 )
 from testing.episode_notes.reporting import arm_reports, paired_reports
-from testing.episode_notes.selection import evaluate_selection, routed_candidate_request
+from testing.episode_notes.selection import evaluate_selection, evaluate_jev_selection, routed_candidate_request
 from testing.episode_notes.schema import FixtureSet, JudgeScore, LLMCallError, LLMResult
 from config.episode_writer import EpisodeWriterSettings
 from testing.episode_notes.prompts import fixture_evidence_items
@@ -201,7 +201,7 @@ def evaluate(
                         selected_items = deterministic_episode_selection(
                             selected_items, finished_at=episode.evidence.finished_at
                         )
-                    elif arm == 'episode' and settings.selection == 'model':
+                    elif arm == 'episode' and settings.selection == 'luna':
                         selected_items, selection_result, selection_fallback = evaluate_selection(
                             selected_items,
                             episode,
@@ -209,6 +209,10 @@ def evaluate(
                             candidate_model=candidate_model,
                             llm=llm,
                             settings=settings,
+                        )
+                    elif arm == 'episode' and settings.selection == 'jev':
+                        selected_items, selection_result, selection_fallback = evaluate_jev_selection(
+                            selected_items, episode, cache_dir=cache_dir, llm=llm, settings=settings
                         )
                     phase = 'candidate'
                     prompt, payload, writer_arm = routed_candidate_request(
@@ -247,6 +251,10 @@ def evaluate(
                             'id': episode.id,
                             'judge_sample': sample,
                             'selection_fallback': selection_fallback,
+                            'source_inclusion': {
+                                kind: sum(i.source_kind == kind for i in selected_items)
+                                for kind in SOURCE_FIELDS.values()
+                            },
                             'selection_cost': selection_result.cost() if selection_result else None,
                             'writer_cost': result.cost(),
                             'stratum': episode.stratum,
@@ -307,6 +315,8 @@ def evaluate(
             'selection_effort': settings.selection_effort,
             'selection_timeout': settings.selection_timeout,
             'thinking_max_input_bytes': settings.thinking_max_input_bytes,
+            'jev_threshold': settings.jev_threshold,
+            'tiered': settings.tiered,
         },
         'samples': {
             str(sample): {

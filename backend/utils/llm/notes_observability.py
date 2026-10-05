@@ -13,9 +13,18 @@ _current: ContextVar[Any] = ContextVar('notes_run', default=None)
 class NotesRun:
     def __init__(self, arm: str):
         self.arm = arm
+        self.tier = 'none'
+        self.route_reason = 'none'
+        self.tier_fallback = False
+        self.writer_deadline = 0
+        self.configured_deadline = 0
+        self.repair_disabled = False
+        self.actual_selection = 'none'
+        self.jev_threshold = 0
         self.started = monotonic()
         self.calls = 0
         self.selection_calls = 0
+        self.jev_calls = 0
         self.effort = 'default'
         self.requested_effort = 'default'
         self.thinking_max_input_bytes = 0
@@ -36,6 +45,8 @@ class NotesRun:
     def configure_episode(self, settings):
         self.effort, self.selection, self.claims_enabled = settings.effort, settings.selection, settings.claims
         self.requested_effort = settings.effort
+        self.actual_selection = settings.selection
+        self.jev_threshold = settings.jev_threshold
         self.thinking_max_input_bytes = settings.thinking_max_input_bytes
         self.selection_effort, self.selection_timeout = settings.selection_effort, settings.selection_timeout
 
@@ -84,7 +95,8 @@ class NotesRun:
             'latency_seconds=%.3f retry_count=%s violations=%s vacuity=%s claim_count=%s '
             'fallback_to_best_note=%s errors=%s effort=%s selection=%s claims_enabled=%s selection_calls=%s '
             'selection_effort=%s selection_timeout_seconds=%s model_errors=%s requested_effort=%s '
-            'thinking_max_input_bytes=%s estimated_input_bytes=%s',
+            'thinking_max_input_bytes=%s estimated_input_bytes=%s tier=%s route_reason=%s tier_fallback=%s '
+            'jev_calls=%s writer_deadline_seconds=%s configured_deadline_seconds=%s actual_selection=%s jev_threshold=%s',
             self.arm,
             *(self.usage[key] if self.calls and self.known[key] else None for key in self.usage),
             monotonic() - self.started,
@@ -104,6 +116,14 @@ class NotesRun:
             self.requested_effort,
             self.thinking_max_input_bytes,
             self.estimated_input_bytes,
+            self.tier,
+            self.route_reason,
+            self.tier_fallback,
+            self.jev_calls,
+            self.writer_deadline,
+            self.configured_deadline,
+            self.actual_selection,
+            self.jev_threshold,
         )
 
 

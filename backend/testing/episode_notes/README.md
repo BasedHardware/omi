@@ -177,3 +177,21 @@ reuses baseline generation/judge cache keys when their exact inputs match, keepi
 both samples comparable. Reports record `writer_arm` and `thinking_fallback`;
 no unseen candidate is synthesized from scores. A cache-only replay must reject
 every cache miss and must not be described as a new live generation or resampling.
+
+Round 10 selector experiments use `--selection deterministic|jev|luna`
+(`compact` remains the historical offline control), `--jev-threshold`, and
+`--tiered`. Jev sends the production shared-state/typed-question shape to
+`/systemone`, using the pinned `typesafe/jev-1.13` instead of the internal gateway
+lane alias. Scores are cached independently of threshold/writer effort so a sweep
+reuses decisions. Unknown SystemOne usage is reported as unknown, not zero; writer
+and selector receipts remain separately available. Consecutive screen captures
+are grouped only with observed app/window/time metadata. Flattened external
+fixtures lacking that metadata cannot reproduce production segmentation.
+
+The tier route uses admitted speech words/source kinds, never fixture strata or
+IDs. `--tiered` composes fixed C6/C7 candidate/judge caches when requests match;
+that is a policy replay, not evidence that a slow cached call completes under a
+production deadline. Live deadline/fallback evaluation must record timeout cost
+as indeterminate when the provider does not return usage. Outer serving limits,
+legacy synchronous requests and inherited gateway effort defaults are audited in
+`utils/conversations/EPISODE_DEADLINES.md`. Never run held-out inputs for calibration.
