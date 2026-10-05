@@ -165,12 +165,17 @@ def main(argv: list[str] | None = None) -> None:
         ]
     }
 
-    from testing.episode_notes.systemone import SystemOneEndpoint, JEV_SELECTOR_PROMPT
+    from utils.conversations.episode_jev import JEV_SELECTOR_PROMPT
 
-    jev = SystemOneEndpoint(key=key, base_url=base_url)
+    jev = None
 
     def llm(prompt, payload):
+        nonlocal jev
         if prompt == JEV_SELECTOR_PROMPT:
+            if jev is None:
+                from testing.episode_notes.systemone import SystemOneEndpoint
+
+                jev = SystemOneEndpoint(key=key, base_url=base_url)
             return jev(prompt, payload)
         role = 'reference' if prompt == REFERENCE_PROMPT else 'judge' if prompt == JUDGE_PROMPT else 'candidate'
         return endpoints[role](prompt, payload)
