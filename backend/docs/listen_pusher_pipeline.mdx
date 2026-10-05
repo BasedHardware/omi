@@ -3022,7 +3022,10 @@ raised and unobserved sends grant no new proof. Repaired epochs require complete
 provider sample coverage and a strict wall projection; tolerance-sized overshoot,
 VAD holes, wall hiatuses and compacted anchors remain unplaced with text kept.
 Stored/public schemas, STT selection, transport pacing and audio storage stay
-unchanged. OFF preserves the previous ordering and replay send path. Turning the
+unchanged. OFF preserves the previous ordering and replay send path. The shared
+send mapper always treats an exact exclusive end as belonging to the preceding
+send and refuses capture gaps, duplicates or reorders within a window; this
+correctness repair also applies with the switch OFF. Turning the
 switch off prevents new repair registrations; accepted evidence already recorded
 in an epoch is retained until that epoch ends.
 

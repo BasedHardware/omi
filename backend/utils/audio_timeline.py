@@ -483,9 +483,11 @@ class SendMap:
     def map_interval(self, provider_first_sample: int, provider_last_sample: int) -> Optional[Tuple[int, int]]:
         """Translate a provider interval to capture samples.
 
-        Each endpoint maps independently through its containing span, so a
-        segment is never mapped *through* an unrepresented gap as if it were
-        audio. Endpoints outside every accepted span (beyond edge tolerance)
+        The start is inclusive; an exclusive end exactly at a span boundary
+        belongs to the preceding span, never the next send. Contributing
+        spans must be adjacent on both axes: a capture gap, duplicate or
+        reorder cannot be represented by one capture window.
+        Endpoints outside every accepted span (beyond edge tolerance)
         reject with None rather than landing on another epoch — and so does an
         interval whose two different provider times would clamp onto one
         capture sample: that collapse fabricates a zero-length segment at a
@@ -496,7 +498,11 @@ class SendMap:
         start_capture = self.map_sample(provider_first_sample)
         if start_capture is None:
             return None
-        end_capture = self.map_sample(provider_last_sample)
+        end_span = self._locate(provider_last_sample - 1) if provider_last_sample > provider_first_sample else None
+        if end_span is not None and end_span[0] + end_span[2] == provider_last_sample:
+            end_capture = end_span[1] + end_span[2]
+        else:
+            end_capture = self.map_sample(provider_last_sample)
         if end_capture is None:
             return None
         # Provider time is continuous across VAD-skipped capture audio. The
@@ -509,8 +515,9 @@ class SendMap:
                 break
             if provider_from + length < provider_first_sample:
                 continue
-            if previous is not None and previous[1] + previous[2] != span[1]:
-                return None
+            if previous is not None:
+                if previous[0] + previous[2] != provider_from or previous[1] + previous[2] != span[1]:
+                    return None
             previous = span
         if provider_last_sample > provider_first_sample and end_capture <= start_capture:
             return None
