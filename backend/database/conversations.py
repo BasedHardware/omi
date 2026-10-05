@@ -57,6 +57,8 @@ from utils.other.portability_read import (
     verified_encrypted_read,
 )
 import config.speaker_match_scores as match_scores
+import utils.firestore_document_size as document_size
+import utils.observability.fallback as fallback
 from utils.other.storage import list_audio_chunks
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
@@ -226,28 +228,76 @@ def _reveal_match_scores_for_read(data: Dict[str, Any], uid: str) -> None:
         return
     try:
         data[match_scores.FIELD] = _reveal_json_value(data[match_scores.FIELD], uid, True)
-    except (json.JSONDecodeError, TypeError, zlib.error, ValueError):
+    except Exception:
         if current_portability_read() is not None:
             raise
-        data.pop(match_scores.FIELD, None)
+        _drop_match_scores(data, 'malformed_doc')
+
+
+def _drop_match_scores(data: dict, reason: str = 'other') -> None:
+    data.pop(match_scores.FIELD, None)
+    fallback.record_fallback(
+        component='conversation_finalization',
+        from_mode='speaker_match_scores',
+        to_mode='scores_omitted',
+        reason=reason,
+        outcome='degraded',
+        log=logger,
+    )
+
+
+def _guard_match_score_size(data: dict, existing: Optional[dict] = None, path: Optional[str] = None) -> None:
+    """Optional scores cannot push the existing document towards Firestore's ceiling.
+
+    Uses only the snapshot already read by the write owner. The 124 KiB
+    headroom matches sync's existing budget and covers unknown SDK types.
+    """
+    if match_scores.FIELD not in data:
+        return
+    try:
+        stored = {**(existing or {}), **data}
+        if (
+            document_size.estimate_firestore_document_bytes(stored, path if isinstance(path, str) else None)
+            > 900 * 1024
+        ):
+            _drop_match_scores(data, 'capacity_full')
+    except Exception:
+        _drop_match_scores(data)
 
 
 def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
-    _reveal_match_scores_for_read(data, uid)
     segments = data.get('transcript_segments')
+    try:
+        _reveal_match_scores_for_read(data, uid)
+        if isinstance(segments, list):
+            updates = match_scores.from_segments(segments)
+            if updates and match_scores.enabled():
+                data[match_scores.FIELD] = match_scores.merge(data.get(match_scores.FIELD), updates)
+    except Exception:
+        # Optional metadata must never block content when decoding/merging fails.
+        _drop_match_scores(data)
     if isinstance(segments, list):
-        updates = match_scores.from_segments(segments)
-        if updates and match_scores.enabled():
-            data[match_scores.FIELD] = match_scores.merge(data.get(match_scores.FIELD), updates)
         for segment in segments:
             segment.pop(match_scores.FIELD, None)
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
         data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
         data['transcript_segments_compressed'] = True
-    if isinstance(data.get(match_scores.FIELD), list):
-        data[match_scores.FIELD] = _protect_json_value(match_scores.merge(None, data[match_scores.FIELD]), uid, level)
+    if match_scores.FIELD in data:
+        try:
+            encoded, trimmed = match_scores.encode_bounded(
+                data[match_scores.FIELD], lambda rows: _protect_json_value(rows, uid, level)
+            )
+            if trimmed:
+                _drop_match_scores(data, 'capacity_full')
+            if encoded is not None:
+                data[match_scores.FIELD] = encoded
+            else:
+                data.pop(match_scores.FIELD, None)
+        except Exception:
+            # Never fall back to plaintext for enhanced protection.
+            _drop_match_scores(data)
     if 'manual_speaker_assignments' in data:
         if not isinstance(data['manual_speaker_assignments'], dict):
             raise ValueError('manual_speaker_assignments must be an object')
@@ -258,6 +308,7 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
         else:
             data.pop('manual_speaker_assignments', None)
             data.pop('manual_speaker_assignments_compressed', None)
+    _guard_match_score_size(data)
     return data
 
 
@@ -579,13 +630,15 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     segments = _decode_transcript_segments_strict(
         uid, write_data['transcript_segments'], bool(write_data.get('transcript_segments_compressed'))
     )
-    write_data.update(
-        _prepare_conversation_for_write(
-            {'transcript_segments': apply_manual_assignments(segments, receipt), 'manual_speaker_assignments': receipt},
-            uid,
-            level,
-        )
-    )
+    payload = {
+        'transcript_segments': apply_manual_assignments(segments, receipt),
+        'manual_speaker_assignments': receipt,
+    }
+    if match_scores.FIELD in write_data:
+        # A processing snapshot can predate a protection migration. Remove its
+        # prepared blob first so a failed re-encode cannot retain old plaintext.
+        payload[match_scores.FIELD] = write_data.pop(match_scores.FIELD)
+    write_data.update(_prepare_conversation_for_write(payload, uid, level))
     write_data['data_protection_level'] = level
 
 
@@ -795,6 +848,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                 structured['title'] = user_title
 
             _reapply_current_manual_assignments(uid, write_data, existing)
+            _guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
@@ -954,6 +1008,7 @@ def persist_processing_result_with_lifecycle(
             structured['title'] = user_title
 
         _reapply_current_manual_assignments(uid, write_data, existing)
+        _guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
@@ -1444,6 +1499,7 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
+    _guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
         doc_ref.update(prepared_data)
     except NotFound:
@@ -1927,6 +1983,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             if current.get('data_protection_level', 'standard') == target_level:
                 return False
             payload = {'data_protection_level': target_level}
+            had_match_scores = match_scores.FIELD in current
             if 'transcript_segments' in current:
                 payload['transcript_segments'] = _decode_transcript_segments_strict(
                     uid, current['transcript_segments'], bool(current.get('transcript_segments_compressed'))
@@ -1942,6 +1999,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                     bool(current.get('manual_speaker_assignments_compressed')),
                 )
             prepared = _prepare_conversation_for_write(payload, uid, target_level)
+            _guard_match_score_size(prepared, current, getattr(doc_snapshot.reference, 'path', None))
+            if had_match_scores and match_scores.FIELD not in prepared:
+                # Failed re-encryption must not retain a standard blob after
+                # the document switches to enhanced protection.
+                prepared[match_scores.FIELD] = firestore.DELETE_FIELD
             if 'manual_speaker_assignments' in payload and not payload['manual_speaker_assignments']:
                 prepared['manual_speaker_assignments'] = firestore.DELETE_FIELD
                 prepared['manual_speaker_assignments_compressed'] = firestore.DELETE_FIELD
@@ -2887,7 +2949,13 @@ def update_conversation_segments(
             incoming.extend(s for s in persisted if s.get('id') not in known)
             incoming.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))
         accepted = apply_manual_assignments(incoming, receipt)
-        score_updates = match_scores.merge(match_scores.from_segments(segments), match_scores.from_segments(accepted))
+        score_updates = []
+        try:
+            score_updates = match_scores.merge(
+                match_scores.from_segments(segments), match_scores.from_segments(accepted)
+            )
+        except Exception:
+            _drop_match_scores({})
         # Numeric snapshots never count as transcript content or reach live deltas.
         accepted = [{k: v for k, v in segment.items() if k != match_scores.FIELD} for segment in accepted]
         update_payload = {
@@ -2909,8 +2977,11 @@ def update_conversation_segments(
             # not invalidate a current processor.
             update_payload['sync_content_revision'] = current['sync_content_revision'] + 1
         if score_updates and match_scores.enabled():
-            _reveal_match_scores_for_read(current, uid)
-            update_payload[match_scores.FIELD] = match_scores.merge(current.get(match_scores.FIELD), score_updates)
+            try:
+                _reveal_match_scores_for_read(current, uid)
+                update_payload[match_scores.FIELD] = match_scores.merge(current.get(match_scores.FIELD), score_updates)
+            except Exception:
+                _drop_match_scores(update_payload)
         if capture_evidence is not None:
             update_payload['capture_evidence'] = capture_evidence
         if remap:
@@ -2941,6 +3012,7 @@ def update_conversation_segments(
             # no projection exists. A projection that is really there (overlap
             # with finalize) must still be cleared in this same write.
             _invalidate_client_processing(prepared_payload)
+        _guard_match_score_size(prepared_payload, current, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, prepared_payload)
         if planned is not None:
             return planned.with_segments(accepted)

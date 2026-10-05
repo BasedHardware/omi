@@ -277,6 +277,7 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     literals = preflight.literal_pusher_values(deployment)
 
     assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT"] == "100"
     assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
     assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "2"

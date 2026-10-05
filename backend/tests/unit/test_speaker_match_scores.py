@@ -295,3 +295,191 @@ def test_live_score_only_update_does_not_advance_content_revision(monkeypatch):
     assert store.rows[path]['sync_content_revision'] == 7
     assert scores.FIELD not in result[0]
     assert db.prepare_conversation_for_read(store.rows[path], 'u')[scores.FIELD] == [row()]
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_worst_case_encoded_growth_is_capped(monkeypatch, level):
+    import random
+    import database.conversations as db
+    import utils.firestore_document_size as size
+
+    rng = random.Random(7)
+    rows = []
+    for stage in scores.STAGES:
+        for speaker in range(16):
+            value = row(speaker, stage, ''.join(chr(rng.randrange(0x1000, 0x9000)) for _ in range(128)))
+            value.update(person_id=''.join(chr(rng.randrange(0x1000, 0x9000)) for _ in range(128)))
+            rows.append(value)
+    # Low-compressibility Unicode exercises JSON escaping and encryption's
+    # hex/base64 expansion, rather than measuring just repeated fixture rows.
+    data = {'id': 'c', 'speaker_match_scores': rows}
+    encoded = db.encode_conversation_for_write('u', data, level)
+    blob = encoded[scores.FIELD]
+    bytes_used = len(blob.encode()) if isinstance(blob, str) else len(blob)
+    assert bytes_used <= 8192
+    decoded = db.prepare_conversation_for_read(dict(encoded, data_protection_level=level), 'u')
+    assert 0 < len(decoded[scores.FIELD]) < 48
+    baseline = {k: v for k, v in encoded.items() if k != scores.FIELD}
+    delta = size.estimate_firestore_document_bytes(encoded, None) - size.estimate_firestore_document_bytes(
+        baseline, None
+    )
+    assert delta <= 8214
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_score_encoding_failure_never_blocks_content_commit(monkeypatch, level):
+    import database.conversations as db
+    import tests.unit.fixtures.strict_firestore_transaction as fixture
+
+    store = fixture.StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c')
+    segment = dict(id='s', text='before', speaker_id=1, is_user=False, start=0, end=6)
+    store.rows[path] = dict(id='c', transcript_segments=[segment], data_protection_level=level)
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
+    original = db._protect_json_value
+    events = []
+    monkeypatch.setattr(db.fallback, 'record_fallback', lambda **kwargs: events.append(kwargs))
+
+    def fail_scores(value, uid, protection):
+        if isinstance(value, list) and value and 'stage' in value[0]:
+            raise RuntimeError('synthetic score codec failure')
+        return original(value, uid, protection)
+
+    monkeypatch.setattr(db, '_protect_json_value', fail_scores)
+    db.update_conversation_segments('u', 'c', [dict(segment, text='after', speaker_match_scores=row())])
+    raw = store.rows[path]
+    assert scores.FIELD not in raw
+    assert isinstance(raw['transcript_segments'], str if level == 'enhanced' else bytes)
+    assert db.prepare_conversation_for_read(raw, 'u')['transcript_segments'][0]['text'] == 'after'
+    assert events[-1]['to_mode'] == 'scores_omitted'
+
+
+def test_near_full_document_omits_scores_using_existing_snapshot(monkeypatch):
+    import database.conversations as db
+    import tests.unit.fixtures.strict_firestore_transaction as fixture
+
+    store = fixture.StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c')
+    segment = dict(id='s', text='before', speaker_id=1, is_user=False, start=0, end=6)
+    store.rows[path] = dict(
+        id='c', transcript_segments=[segment], data_protection_level='standard', other_metadata='x' * (900 * 1024)
+    )
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
+    db.update_conversation_segments('u', 'c', [dict(segment, text='after', speaker_match_scores=row())])
+    assert scores.FIELD not in store.rows[path]
+    assert db.prepare_conversation_for_read(store.rows[path], 'u')['transcript_segments'][0]['text'] == 'after'
+
+
+@pytest.mark.parametrize('bad', [[{'stage': 'capture'}], [{'stage': 'capture', 'speaker_id': [], 'margin': object()}]])
+def test_malformed_optional_scores_never_block_content(bad):
+    import database.conversations as db
+
+    encoded = db.encode_conversation_for_write('u', dict(speaker_match_scores=bad, transcript_segments=[]))
+    assert scores.FIELD not in encoded
+    assert db.prepare_conversation_for_read(encoded, 'u')['transcript_segments'] == []
+
+
+@pytest.mark.parametrize('source,target', [('standard', 'enhanced'), ('enhanced', 'standard')])
+@pytest.mark.parametrize('codec_fails', [False, True])
+def test_real_protection_migration_preserves_or_deletes_optional_scores(monkeypatch, source, target, codec_fails):
+    import database.conversations as db
+    import tests.unit.fixtures.strict_firestore_transaction as fixture
+
+    store = fixture.StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c')
+    store.rows[path] = db.encode_conversation_for_write(
+        'u', dict(id='c', transcript_segments=[], data_protection_level=source, speaker_match_scores=[row()]), source
+    )
+
+    def get_all(refs, field_paths):
+        for ref in refs:
+            snap = ref.get()
+            snap.reference = ref
+            snap.id = 'c'
+            yield snap
+
+    monkeypatch.setattr(store, 'get_all', get_all, raising=False)
+    monkeypatch.setattr(store, 'batch', lambda: SimpleNamespace(), raising=False)
+    monkeypatch.setattr(
+        fixture.StrictFirestoreCollection,
+        'select',
+        lambda self, fields: SimpleNamespace(stream=lambda: []),
+        raising=False,
+    )
+    monkeypatch.setattr(db, 'db', store)
+    original = db._protect_json_value
+
+    def protect(value, uid, level):
+        if codec_fails and isinstance(value, list) and value and 'stage' in value[0]:
+            raise RuntimeError('synthetic score migration failure')
+        return original(value, uid, level)
+
+    monkeypatch.setattr(db, '_protect_json_value', protect)
+    db.migrate_conversations_level_batch('u', ['c'], target)
+    raw = store.rows[path]
+    assert raw['data_protection_level'] == target
+    assert isinstance(raw['transcript_segments'], str if target == 'enhanced' else bytes)
+    if codec_fails:
+        # The strict fixture retains sentinels; this is Firestore's field delete.
+        assert raw[scores.FIELD] is db.firestore.DELETE_FIELD
+    else:
+        assert isinstance(raw[scores.FIELD], str if target == 'enhanced' else bytes)
+        assert db.prepare_conversation_for_read(raw, 'u')[scores.FIELD] == [row()]
+
+
+@pytest.mark.parametrize('failure', ['decode', 'size_estimation'])
+def test_optional_score_faults_leave_content_write_successful(monkeypatch, failure):
+    import database.conversations as db
+    import tests.unit.fixtures.strict_firestore_transaction as fixture
+
+    store = fixture.StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c')
+    segment = dict(id='s', text='before', speaker_id=1, is_user=False, start=0, end=6)
+    store.rows[path] = db.encode_conversation_for_write(
+        'u', dict(id='c', transcript_segments=[segment], data_protection_level='standard', speaker_match_scores=[row()])
+    )
+    original = db._reveal_json_value
+    old_blob = store.rows[path][scores.FIELD]
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError('synthetic optional score fault')
+
+    if failure == 'decode':
+        monkeypatch.setattr(
+            db, '_reveal_json_value', lambda raw, *args: fail() if raw == old_blob else original(raw, *args)
+        )
+    else:
+        monkeypatch.setattr(db.document_size, 'estimate_firestore_document_bytes', fail)
+    db.update_conversation_segments('u', 'c', [dict(segment, text='after', speaker_match_scores=row())])
+    assert (
+        db._decode_transcript_segments_strict('u', store.rows[path]['transcript_segments'], True)[0]['text'] == 'after'
+    )
+
+
+@pytest.mark.parametrize('source,target', [('standard', 'enhanced'), ('enhanced', 'standard')])
+@pytest.mark.parametrize('codec_fails', [False, True])
+def test_processing_snapshot_scores_follow_current_transaction_protection(monkeypatch, source, target, codec_fails):
+    import database.conversations as db
+
+    write_data = db.encode_conversation_for_write(
+        'u', dict(transcript_segments=[], data_protection_level=source, speaker_match_scores=[row()]), source
+    )
+    original = db._protect_json_value
+
+    def protect(value, uid, level):
+        if codec_fails and isinstance(value, list) and value and 'stage' in value[0]:
+            raise RuntimeError('synthetic score re-encoding failure')
+        return original(value, uid, level)
+
+    monkeypatch.setattr(db, '_protect_json_value', protect)
+    # This exact helper is called inside both processing-result transactions
+    # after they read the current document, including concurrent migrations.
+    db._reapply_current_manual_assignments('u', write_data, {'data_protection_level': target})
+    assert write_data['data_protection_level'] == target
+    assert isinstance(write_data['transcript_segments'], str if target == 'enhanced' else bytes)
+    if codec_fails:
+        assert scores.FIELD not in write_data
+    else:
+        assert isinstance(write_data[scores.FIELD], str if target == 'enhanced' else bytes)
+        assert db.prepare_conversation_for_read(write_data, 'u')[scores.FIELD] == [row()]

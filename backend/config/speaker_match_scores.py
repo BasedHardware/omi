@@ -11,6 +11,8 @@ from typing import Any, Mapping
 MAX_SPEAKERS_PER_STAGE = 16
 STAGES = ('capture', 'sync', 'resolution')
 FIELD = 'speaker_match_scores'
+# Includes compression/encryption overhead; the stored field never exceeds 8 KiB.
+MAX_STORED_BYTES = 8 * 1024
 
 
 def enabled() -> bool:
@@ -77,3 +79,17 @@ def merge(existing: list | None, updates: list) -> list:
 
 def from_segments(segments: list) -> list:
     return merge(None, [row for segment in segments if (row := segment.get(FIELD))])
+
+
+def encode_bounded(rows: list, encode) -> tuple[object, bool]:
+    """Trim optional snapshots to the final stored byte budget, including encryption."""
+    retained = merge(None, rows)
+    trimmed = False
+    while retained:
+        encoded = encode(retained)
+        size = len(encoded.encode('utf-8')) if isinstance(encoded, str) else len(encoded)
+        if size <= MAX_STORED_BYTES:
+            return encoded, trimmed
+        retained.pop()
+        trimmed = True
+    return None, trimmed

@@ -2780,6 +2780,9 @@ environments:
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -3002,6 +3005,9 @@ environments:
             category: telemetry
           MENTOR_PIPELINE:
             value: cohort
+            category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
             category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -3465,6 +3471,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -3789,6 +3798,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
               value: 'true'
               category: rollout
@@ -4069,6 +4081,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -4308,6 +4323,9 @@ environments:
               category: rollout
             MENTOR_PIPELINE:
               value: cohort
+              category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware

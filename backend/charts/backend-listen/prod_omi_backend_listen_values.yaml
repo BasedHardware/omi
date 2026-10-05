@@ -196,6 +196,8 @@ env:
     value: "gateway"
   - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
     value: "true"
+  - name: SPEAKER_MATCH_SCORES_ENABLED
+    value: "true"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
