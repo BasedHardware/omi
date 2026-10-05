@@ -7,11 +7,12 @@ import XCTest
 final class ActionItemRowMetadataTests: XCTestCase {
   private var calendar: Calendar {
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC")!
+    calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
     return calendar
   }
 
-  private let now = ISO8601DateFormatter().date(from: "2026-10-05T12:00:00Z")!
+  /// 2026-10-05T12:00:00Z.
+  private let now = Date(timeIntervalSince1970: 1_791_201_600)
 
   func testItemWithNothingKnownHasNoMetadata() {
     let metadata = ActionItemRowMetadata(
