@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import json
 import os
 import re
@@ -63,10 +64,11 @@ _HTTP_WEBHOOK_URL_RE = re.compile(
     r'(?:'
     r'(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}|'
     r'localhost|'
-    r'\d{1,3}(?:\.\d{1,3}){3}'
+    r'\d{1,3}(?:\.\d{1,3}){3}|'
+    r'\[[0-9a-fA-F:]+\]'
     r')'
     r'(?::\d{1,5})?'
-    r'(?:/[^\s]*)?$',
+    r'(?:[/?#][^\s]*)?$',
     re.IGNORECASE,
 )
 _UID_RE = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
@@ -104,7 +106,14 @@ def _is_valid_audio_bytes_webhook_url(url: str) -> bool:
     if not _HTTP_WEBHOOK_URL_RE.fullmatch(candidate):
         return False
     parts = urlsplit(candidate)
-    return parts.scheme in ('http', 'https') and bool(parts.netloc)
+    if parts.scheme not in ('http', 'https') or not parts.netloc:
+        return False
+    if parts.hostname and ':' in parts.hostname:
+        try:
+            ipaddress.IPv6Address(parts.hostname)
+        except ValueError:
+            return False
+    return True
 
 
 def _is_valid_audio_bytes_payload_fields(uid: str, sample_rate: int) -> bool:
