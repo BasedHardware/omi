@@ -18,10 +18,18 @@ rollover, while the phone tags all WALs with `client_conversation_id`, stored
 on each live generation as `external_data.recording_origin_id`. Sync binds each
 VAD segment to the one generation whose source, device, lock and interval
 (5 s early, 60 s past its last word) hold it; donors resolve to their survivor,
-overlaps bind only when the phone's stamp names one strict canonical row —
-otherwise the segment keeps no target under `ambiguous_pending`, rechecked
-against a fresh lineage read at most three times before the retryable
-failed-segment path — and straddles split. Otherwise a segment keeps the phone's
+and a strictly contained multi-canonical overlap decides in a fixed order — the
+phone's stamp among rows a visible (not deleted, not discarded) covering
+canonical proves, then the single canonical backed by a validated committed
+live run covering or exactly adjoining the segment's decoded source frames
+(ownership evidence only; the segment is still transcribed), then a lone
+visible canonical — otherwise the segment keeps no target under
+`ambiguous_pending`, rechecked against a fresh lineage read at most three
+times before the retryable
+failed-segment path — and straddles split. Missing or non-deciding frame
+evidence (no decoded map, or none projected) is an ordinary abstain, not a
+failure: two visible covering canonicals stay pending while a lone visible
+canonical wins. Otherwise a segment keeps the phone's
 `conversation_id` stamp or the unbound path, which never adopts a live row.
 Bound segments lexically repeating a live window drop only when independent
 source-frame evidence proves the repeat — a unique `sync_vad` receipt per
@@ -93,7 +101,10 @@ The full API `backend-integration` image also mounts sync and listen routes and 
 
 The bounded lookup filters by both start and finish so an old stamp-extended
 row cannot hide behind newer generations; a truncated overlap set proves no
-binding. With lineage enabled, sync defers enrichment for an open live row,
+binding. The read projects the lineage routing field paths only — widened to
+each row's `capture_evidence` envelope solely when the tiebreak could decide
+(safe-overlap admitted, dark write on, a decoded segment map present), under
+the same document ceiling. With lineage enabled, sync defers enrichment for an open live row,
 and fresh live speech advances the revision fence after sync has enriched it.
 Sync preserves a pinned live origin when the WAL begins earlier; pre-pin
 speech is retained but marked unplaced for playback. The index must include

@@ -2500,6 +2500,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         is_locked,
                         job_id,
                         segment_binding_reasons,
+                        **({'segment_source_maps': segment_source_maps} if segment_source_maps else {}),
                     )
                 except Exception:
                     # Span construction and the executor call are also part of
