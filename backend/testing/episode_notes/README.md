@@ -26,8 +26,10 @@ the judge. Original stored generation cost is unknown (null), not invented zero.
 
 Candidate model is fixed to `openai/gpt-6-luna`. Production `conv_structure`
 uses `LUNA_MODEL` with provider openai in `utils/llm/model_config.py`; route options
-and `clients.get_llm` add no reasoning-effort override. The harness likewise sends
-no `reasoning_effort`, `reasoning`, or temperature override. Reference/judge default
+and `clients.get_llm` add no reasoning-effort override unless episode writer
+configuration explicitly requests one. The harness's default effort likewise sends
+no reasoning override; `--candidate-effort high|xhigh` applies only to the episode
+writer. Baseline/reference/judge receive no effort or temperature override. Reference/judge default
 to `openai/gpt-6-sol`, configurable with `--reference-model` / `--judge-model` or
 `EPISODE_EVAL_REFERENCE_MODEL` / `EPISODE_EVAL_JUDGE_MODEL`. Live use requires an
 explicit key and HTTPS base URL. Requests default to a configurable 32000-token output cap (`--max-tokens`) and
