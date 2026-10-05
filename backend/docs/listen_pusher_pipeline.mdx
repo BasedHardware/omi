@@ -2069,6 +2069,9 @@ even if a previous ON socket registered them in the same process:
 | `omi_soniox_wire_ledger_intervals_total{outcome="known\|unplaceable_by_race\|other_refused"}` | One outcome per translator candidate, before persistence/merging. `known` grants an observed-send window. A refused native interval overlapping PCM emitted while the finalize clock was uncertain is `unplaceable_by_race`; unknown origins, provider padding, capture gaps and other refusals are `other_refused` unless they also overlap that uncertainty. |
 
 Race attribution retains at most 4096 coalesced provider intervals per epoch.
+Checkpoint telemetry settlement never resets pending provider controls or
+anchors later queued audio. Finalizes begun after receive termination count
+as missing acknowledgments immediately; repeated teardown counts nothing twice.
 It cannot authorize a window. Late refusals beyond this attribution history
 fall into `other_refused`; the capture map still fails closed independently.
 Unbound emitted prefixes remain unknown-origin refusals. New socket clocks

@@ -49,6 +49,7 @@ class SonioxProviderClock:
         self._audio_inflight = 0
         self._audio_after_finalize = False
         self._uncertain = False
+        self._checkpoints_closed = False
 
     def begin_audio(self) -> bool:
         self._audio_inflight += 1
@@ -64,6 +65,8 @@ class SonioxProviderClock:
     def begin_finalize(self) -> None:
         self._pending += 1
         self._audio_after_finalize = False
+        if self._checkpoints_closed:
+            self._metrics.checkpoints.labels(outcome='missing_ack').inc()
 
     def response(self, message: dict[str, Any]) -> int:
         acknowledgments = sum(
@@ -91,16 +94,22 @@ class SonioxProviderClock:
         hole = position - self.samples
         self.samples = position
         self._uncertain = False
-        self._metrics.checkpoints.labels(outcome='clean').inc()
+        if not self._checkpoints_closed:
+            self._metrics.checkpoints.labels(outcome='clean').inc()
         return hole
 
     def _raced(self, settled: int) -> int:
         # Invalid/missing positions and overlapping controls also cannot prove
         # ordering. Unsolicited/duplicate acks settle no finalize controls.
-        self._metrics.checkpoints.labels(outcome='raced').inc(settled)
+        if not self._checkpoints_closed:
+            self._metrics.checkpoints.labels(outcome='raced').inc(settled)
         return 0
 
     def close(self) -> None:
         """Settle unmatched controls once, on receive-loop termination."""
-        self._metrics.checkpoints.labels(outcome='missing_ack').inc(self._pending)
-        self._pending = 0
+        if not self._checkpoints_closed:
+            self._metrics.checkpoints.labels(outcome='missing_ack').inc(self._pending)
+            self._checkpoints_closed = True
+        # This is telemetry settlement, never a provider-clock reset. Writes
+        # already queued may still begin after receive termination; a pending
+        # finalize must keep those writes unplaceable just as before metrics.

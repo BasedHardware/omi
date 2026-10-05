@@ -207,3 +207,34 @@ async def test_prebind_reported_hole_is_registered_once_on_logical_epoch(monkeyp
         assert epoch.wire_audio_samples == 42732 + RATE
     finally:
         await close(leg)
+
+
+@pytest.mark.asyncio
+async def test_receive_teardown_settles_metrics_without_anchoring_later_queued_audio(monkeypatch):
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    missing = value('finalize_checkpoints', 'missing_ack')
+    refused = value('intervals', 'unplaceable_by_race')
+    try:
+        send_observed(receiver, leg, 42732)
+        leg.finalize()
+        await barrier(leg.raw, peer)
+        # The real receive loop exits with the finalize still unacknowledged.
+        await consume(peer, dict(finished=True, tokens=[]))
+        await asyncio.wait_for(leg.raw._recv_task, 0.1)
+        assert value('finalize_checkpoints', 'missing_ack') == missing + 1
+        send_observed(receiver, leg, RATE)
+        leg.finalize()
+        await barrier(leg.raw, peer)
+        # Writes begun after receive termination have no possible ack consumer.
+        assert value('finalize_checkpoints', 'missing_ack') == missing + 2
+        assert epoch.wire_audio_samples == 42732 + RATE
+        assert epoch.send_map.accepted_provider_samples(0, epoch.wire_provider_samples) == 42732
+        # Exercise the actual parser/callback/receiver/persistence with a delayed
+        # token for that emitted interval; metric settlement grants no window.
+        leg.raw._handle_tokens([dict(text='Delayed audio. ', is_final=True, speaker='1', start_ms=3000, end_ms=3200)])
+        assert known(await tick(receiver, processor, store)) == 0
+        assert value('intervals', 'unplaceable_by_race') == refused + 1
+        leg.raw._provider_clock.close()
+        assert value('finalize_checkpoints', 'missing_ack') == missing + 2
+    finally:
+        await close(leg)
