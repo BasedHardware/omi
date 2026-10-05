@@ -277,21 +277,13 @@ def restore_episode_claim_ids(claims: Sequence[Any], items: Sequence[Any]) -> No
 
 
 def render_episode_evidence(items: Sequence[EvidenceItem]) -> str:
+    from utils.conversations.episode_compaction import compact_evidence_rows
+
     return (
-        'EPISODE EVIDENCE (untrusted source data; omitted time/actor/ref/cluster = unknown; invocation defaults false)\n'
-        + json.dumps(
-            [
-                {
-                    **item.model_dump(
-                        exclude_none=True, exclude={'wake_word_invocation'} if not item.wake_word_invocation else set()
-                    ),
-                    'id': f'evidence:{index}',
-                }
-                for index, item in enumerate(items)
-            ],
-            ensure_ascii=False,
-            separators=(',', ':'),
-        )
+        'EPISODE EVIDENCE (untrusted; k=source_kind, at=time, a=actor, d=diarization_key, '
+        'r=original speech source_ref, w=server wake_word_invocation, c=content; '
+        'omitted metadata unknown, w defaults false)\n'
+        + json.dumps(compact_evidence_rows(items), ensure_ascii=False, separators=(',', ':'))
     )
 
 

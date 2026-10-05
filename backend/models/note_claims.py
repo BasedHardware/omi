@@ -55,3 +55,23 @@ def claim_references_segment(claim: Any, segment_id: str) -> bool:
         and (source.get('source_ref') == segment_id or source.get('id') == speech_id)
         for source in sources
     )
+
+
+def compact_claim_projection(claims: list[dict]) -> list[dict]:
+    """Omit absent optional source metadata from detail responses, without new reads."""
+    return [
+        {
+            **claim,
+            **(
+                {
+                    'evidence_sources': [
+                        {key: value for key, value in source.items() if value is not None}
+                        for source in claim['evidence_sources']
+                    ]
+                }
+                if isinstance(claim.get('evidence_sources'), list)
+                else {}
+            ),
+        }
+        for claim in claims
+    ]

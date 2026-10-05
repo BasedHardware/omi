@@ -58,6 +58,7 @@ from utils.llm.meeting_notes_validation import (
     enforce_structured_presentation_contract,
     validate_structured_source_segment_ids,
 )
+from utils.llm.notes_observability import current_run, observe_notes
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
@@ -1149,6 +1150,7 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 
 
+@observe_notes
 def get_conversation_notes(
     prefix: ConversationPromptPrefix,
     *,
@@ -1176,6 +1178,13 @@ def get_conversation_notes(
     always include user content.
     """
     episode_mode = episode_evidence is not None
+    run = current_run()
+    if episode_mode and len(prefix.context) > 240000:
+        # Very long speech follows the existing rich path, without episode metadata overhead.
+        episode_mode = False
+        if run is not None:
+            run.arm = 'baseline_long'
+            run.violations.add('long_input_baseline')
     if not episode_mode and (
         not prefix.context.strip() or not (prefix.has_usable_content or (rich_context_enabled and screen_frames))
     ):
@@ -1248,6 +1257,7 @@ def get_conversation_notes(
         else []
     )
     if episode_mode:
+        evidence_items = import_module('utils.conversations.episode_compaction').compact_episode_items(evidence_items)
         volatile_instructions = import_module('utils.llm.episode_notes_prompts').episode_volatile_instructions(
             **{
                 key: value
@@ -1281,8 +1291,10 @@ def get_conversation_notes(
         cache_key=cache_key,
         prompt_cache_options=cache_options,
         request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
+        **({'max_retries': 0} if episode_mode else {}),
     )
-    raw_response = _content_str(model.invoke(messages))
+    run = current_run()
+    raw_response = _content_str(run.invoke(model, messages) if run else model.invoke(messages))
     episode_presentation_violations = set()
     if episode_mode:
         structured, episode_presentation_violations = import_module(
@@ -1302,27 +1314,28 @@ def get_conversation_notes(
             background_body=meeting_context or '',
         )
 
-    structured = enforce_conversation_note_presentation(
-        structured,
-        raw_response=raw_response,
-        model=model,
-        messages=messages,
-        extraction_parser=extraction_parser,
-        transcript_segment_ids=prefix.transcript_segment_ids,
-        post_parse_validator=(
-            lambda value: (
-                validate_rich_meeting_notes(
-                    value,
-                    transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
-                    roster=roster,
-                    has_background_context=bool(meeting_context and meeting_context.strip()),
-                    background_body=meeting_context or '',
+    if not episode_mode:
+        structured = enforce_conversation_note_presentation(
+            structured,
+            raw_response=raw_response,
+            model=run.instrument(model) if run else model,
+            messages=messages,
+            extraction_parser=extraction_parser,
+            transcript_segment_ids=prefix.transcript_segment_ids,
+            post_parse_validator=(
+                lambda value: (
+                    validate_rich_meeting_notes(
+                        value,
+                        transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
+                        roster=roster,
+                        has_background_context=bool(meeting_context and meeting_context.strip()),
+                        background_body=meeting_context or '',
+                    )
+                    if rich_mode and not episode_mode
+                    else None
                 )
-                if rich_mode and not episode_mode
-                else None
-            )
-        ),
-    )
+            ),
+        )
 
     if episode_mode:
         structured = import_module('utils.llm.episode_notes_validation').repair_episode_note(
@@ -1335,6 +1348,15 @@ def get_conversation_notes(
             content_str=_content_str,
             transcript_segment_ids=prefix.transcript_segment_ids,
             initial_violations=episode_presentation_violations,
+            run=run,
+            repair_budget=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
+            retry_model_factory=lambda timeout: get_llm(
+                'conv_structure',
+                cache_key=cache_key,
+                prompt_cache_options=cache_options,
+                request_timeout=timeout,
+                max_retries=0,
+            ),
         )
 
     for action_item in structured.action_items:
@@ -1352,11 +1374,8 @@ def get_conversation_notes(
     projected_overview = render_sections_markdown(structured.sections)
     if projected_overview:
         if episode_mode:
-            # Compatibility overview is now section text. Remap its provenance spans.
+            # Overview is a projection; section claims already cover the same prose.
             structured.note_claims = [claim for claim in structured.note_claims or [] if claim.target != '/overview']
-            for claim in list(structured.note_claims):
-                if claim.target.startswith('/sections/') and claim.text in projected_overview:
-                    structured.note_claims.append(claim.model_copy(update={'target': '/overview'}))
         structured.overview = projected_overview
     return structured
 

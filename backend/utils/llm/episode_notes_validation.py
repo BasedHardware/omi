@@ -7,7 +7,8 @@ from typing import Any, Sequence
 from langchain_core.messages import HumanMessage
 from pydantic import ValidationError
 
-from models.structured import NoteClaim, Structured  # type: ignore[reportAttributeAccessIssue]  # Runtime SDK/fallback export.
+from models.episode_extraction import ExtractedNoteClaim
+from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # Runtime SDK/fallback export.
 from utils.conversations.episode_evidence import EvidenceItem, SourceKind, claim_violations, restore_episode_claim_ids
 from utils.conversations.episode_vacuity import is_vacuous_note
 from utils.llm.meeting_notes_presentation import has_note_content
@@ -49,7 +50,7 @@ def parse_episode_response(raw_response: str, parser: Any) -> tuple[Structured, 
         valid = []
         for entry in entries:
             try:
-                valid.append(NoteClaim.model_validate(entry).model_dump(mode='json'))
+                valid.append(ExtractedNoteClaim.model_validate(entry).model_dump(mode='json'))
             except ValidationError:
                 violations.add('invalid_claim_schema')
         data['note_claims'] = valid
@@ -67,25 +68,36 @@ def repair_episode_note(
     content_str: Any,
     transcript_segment_ids: Sequence[str],
     initial_violations: set[str],
+    run: Any = None,
+    repair_budget: float = 60,
+    retry_model_factory: Any = None,
 ) -> Structured:
     restore_episode_claim_ids(structured.note_claims or [], evidence)
-    violations = initial_violations | sanitize_episode_ids(structured) | claim_violations(structured, evidence)
+    violations = initial_violations | sanitize_episode_ids(structured)
+    presentation = enforce_structured_presentation_contract(structured, transcript_segment_ids)
+    if presentation.needs_revision:
+        violations.add('presentation_contract')
+    violations |= claim_violations(structured, evidence)
     if is_vacuous_note(structured):
         violations.add('vacuity')
     if not violations:
         return structured
     try:
-        retry = model.invoke(
+        # Long inputs get local repair only; never buy a second full long-context call.
+        remaining = run.remaining(repair_budget) if run else repair_budget
+        if remaining < 15 or sum(len(str(message.content)) for message in messages) > 120000:
+            violations.add('repair_budget_exhausted')
+            raise TimeoutError('repair budget exhausted')
+        retry_model = retry_model_factory((remaining // 5) * 5) if retry_model_factory is not None else model
+        invoke = (lambda payload: run.invoke(retry_model, payload)) if run else retry_model.invoke
+        retry = invoke(
             [
                 *messages,
                 HumanMessage(
                     content=(
                         'Regenerate complete JSON once. State concretely what evidence shows and what coverage is missing; '
                         'remove vacuous filler. Repair every claim span, evidence reference and provenance. '
-                        'Keep evidence IDs out of visible prose. Errors: '
-                        + ', '.join(sorted(violations))
-                        + '\nPrior JSON:\n'
-                        + raw_response
+                        'Keep evidence IDs out of visible prose. Errors: ' + ', '.join(sorted(violations))
                     )
                 ),
             ]
@@ -105,6 +117,10 @@ def repair_episode_note(
     residual |= claim_violations(structured, evidence, drop_invalid=True)
     if is_vacuous_note(structured):
         residual.add('vacuity')
+    if run is not None:
+        run.violations.update(violations | residual)
+        run.vacuity = is_vacuous_note(structured)
+        run.fallback_to_best_note = bool(residual or violations & {'retry_unavailable', 'empty_retry'})
     for violation in sorted(violations | residual):
         # Fixed validator classes only; no note text or source contents in telemetry.
         record_fallback(

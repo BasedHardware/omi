@@ -130,6 +130,9 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
 # every member of this set.
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
+    if isinstance(conv.get('structured'), dict) and 'note_claims' in conv['structured']:
+        conv['structured'] = dict(conv['structured'])
+        conv['structured'].pop('note_claims', None)
     if not conv.get('is_locked', False):
         return conv
     if 'structured' in conv:

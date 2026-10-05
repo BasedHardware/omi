@@ -56,9 +56,10 @@ def test_flag_defaults_off_and_reads_env_at_call_boundary(monkeypatch):
 
     monkeypatch.delenv('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED', raising=False)
     assert not wiring.meeting_notes_episode_evidence_enabled()
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_PERCENT', '100')
     for raw in ('true', '1', 'on', 'YES'):
         monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED', raw)
-        assert wiring.meeting_notes_episode_evidence_enabled()
+        assert wiring.meeting_notes_episode_evidence_enabled('synthetic-owner')
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED', 'off')
     assert not wiring.meeting_notes_episode_evidence_enabled()
 
@@ -143,7 +144,7 @@ def test_episode_prompt_replaces_speech_only_rules_and_binds_images():
     assert len(screen_frames_message([frame])['content']) == 2
 
 
-def invoke_notes(processing, monkeypatch, responses, *, episode=True, sections=False):
+def invoke_notes(processing, monkeypatch, responses, *, episode=True, sections=False, cache=False):
     from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
     calls = []
@@ -153,7 +154,7 @@ def invoke_notes(processing, monkeypatch, responses, *, episode=True, sections=F
         return SimpleNamespace(content=json.dumps(responses[min(len(calls) - 1, len(responses) - 1)]))
 
     monkeypatch.setattr(processing, 'get_llm', lambda *a, **k: SimpleNamespace(invoke=invoke))
-    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: False)
+    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: cache)
     prefix = ConversationPromptPrefix(
         conversation_id='synthetic', context='FULL TRANSCRIPT\n', has_usable_content=False
     )
@@ -274,7 +275,8 @@ def test_section_projection_remaps_claims(processing, monkeypatch):
     assert len(calls) == 1
     assert result.overview.startswith('## Written decision')
     overview_claims = [c for c in result.note_claims if c.target == '/overview']
-    assert len(overview_claims) == 2 and all(c.text in result.overview for c in overview_claims)
+    assert overview_claims == []
+    assert any(c.target == '/sections/0/body_markdown' for c in result.note_claims)
 
 
 def test_sdk_and_backend_fallback_keep_claims_optional():
@@ -626,8 +628,17 @@ def test_compact_evidence_preserves_provenance_and_trusted_metadata():
     ]
     rendered = render_episode_evidence(items)
     encoded = json.loads(rendered.split('\n', 1)[1])
-    assert encoded[0] == items[0].model_dump() | {'id': 'evidence:0'}
-    assert 'actor' not in encoded[1] and 'sensitivity' not in encoded[1]
+    assert encoded[0] == {
+        'id': 'evidence:0',
+        'k': 'speech',
+        'at': items[0].time,
+        'a': 'Ari',
+        'c': items[0].content,
+        'r': 's1',
+        'w': True,
+        'd': 'cluster:0',
+    }
+    assert 'a' not in encoded[1] and 'sensitivity' not in encoded[1]
     assert len(rendered) < len(json.dumps([item.model_dump() for item in items], indent=2))
 
 
@@ -689,3 +700,96 @@ def test_written_roster_provenance_is_valid():
     )
     assert not claim_violations(note, [item], drop_invalid=True)
     assert note.note_claims[0].evidence_sources[0].source_kind == 'roster'
+
+
+def test_episode_and_presentation_repairs_share_two_call_budget(processing, monkeypatch, caplog):
+    bad = valid_note().model_dump(mode='json')
+    bad['note_claims'] = []
+    bad['overview'] += ' screen_ocr:1'
+    good = valid_note().model_dump(mode='json')
+    with caplog.at_level('INFO'):
+        result, calls = invoke_notes(processing, monkeypatch, [bad, good])
+    assert len(calls) == 2
+    assert result.title == 'Written approval'
+    assert 'retry_count=1' in caplog.text and 'evidence_id_in_prose' in caplog.text
+    assert 'Prior JSON' not in calls[-1][-1].content
+
+
+def test_large_episode_has_no_full_context_repair(processing, monkeypatch, caplog):
+    from langchain_core.output_parsers import PydanticOutputParser
+    from utils.llm.episode_notes_validation import repair_episode_note
+    from utils.llm.notes_observability import NotesRun
+    from langchain_core.messages import HumanMessage
+
+    note = valid_note()
+    note.note_claims = []
+    run = NotesRun('episode')
+    result = repair_episode_note(
+        note,
+        evidence=[EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Invented')],
+        model=SimpleNamespace(invoke=lambda _: pytest.fail('long evidence must not retry')),
+        messages=[HumanMessage(content='x' * 120001)],
+        parser=PydanticOutputParser(pydantic_object=EpisodeStructuredExtraction),
+        raw_response='{}',
+        content_str=lambda response: response.content,
+        transcript_segment_ids=(),
+        initial_violations=set(),
+        run=run,
+    )
+    assert result.title == note.title and run.calls == 0
+    assert 'repair_budget_exhausted' in run.violations and run.fallback_to_best_note
+
+
+def test_long_speech_uses_baseline_prompt_with_no_episode_overhead(processing, monkeypatch, caplog):
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
+
+    calls, configs = [], []
+
+    def model(*args, **kwargs):
+        configs.append(kwargs)
+        return SimpleNamespace(
+            invoke=lambda messages: calls.append(messages)
+            or SimpleNamespace(
+                content=json.dumps(
+                    {
+                        'title': 'Pricing decision',
+                        'overview': 'Ari approved pricing.',
+                    }
+                )
+            )
+        )
+
+    monkeypatch.setattr(processing, 'get_llm', model)
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='invented',
+        transcript='Ari approved pricing. ' * 15000,
+        started_at=START,
+        timezone_name='UTC',
+        language_code='en',
+    )
+    with caplog.at_level('INFO'):
+        result = processing.get_conversation_notes(
+            prefix,
+            started_at=START,
+            language_code='en',
+            output_language_code=None,
+            tz='UTC',
+            task_intelligence_capture=False,
+            rich_context_enabled=True,
+            episode_evidence=[EvidenceItem(id='speech:1', source_kind='speech', content=prefix.context)],
+        )
+    assert result.title == 'Pricing decision' and len(calls) == 1
+    assert 'EPISODE NOTES CONTRACT' not in str(calls[0][0].content)
+    assert 'FULL TRANSCRIPT' in calls[0][1].content
+    assert 'baseline_long' in caplog.text and 'retry_count=0' in caplog.text
+    assert configs[0]['request_timeout'] == processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+
+
+def test_episode_static_prefix_keeps_explicit_cache_breakpoint(processing, monkeypatch):
+    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: True)
+    monkeypatch.setattr(processing, 'explicit_cache_switch_enabled', lambda: True)
+    _, calls = invoke_notes(processing, monkeypatch, [valid_note().model_dump(mode='json')], cache=True)
+    static = calls[0][0].content[0]
+    assert static['prompt_cache_breakpoint'] == {'mode': 'explicit'}
+    assert 'EPISODE NOTES CONTRACT' in static['text']
+    assert 'screen_ocr:1' not in static['text']

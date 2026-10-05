@@ -5,7 +5,7 @@ import math
 import os
 
 
-def episode_notes_cohort(uid: str | None) -> bool:
+def episode_notes_cohort(uid: object) -> bool:
     if not uid or not isinstance(uid, str):
         return False
     try:

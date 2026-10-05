@@ -42,8 +42,10 @@ EPISODE_CONTRACT = (
   Normally use ONE claim per bullet/sentence, combining its smallest supporting evidence_ids. Split when sources,
   provenance differ. Use a short UNIQUE exact factual anchor in the target field, not a copy of
   the whole long sentence. Aim for 2-8 anchor words; use more only to disambiguate. The anchor binds the entire sentence/bullet to that claim; cover every factual unit.
-  Each entry has text, JSON-pointer target, evidence_ids, provenance. The server supplies evidence_sources;
+  Each entry uses compact keys t (anchor text), p (JSON-pointer target), e (evidence_ids), v (provenance). The server supplies evidence_sources;
   omit that field. Evidence/source IDs belong only in metadata, never visible prose.
+  Check the ENTIRE bound sentence, including identity, timing, completion and certainty, against its sources.
+  Metadata naming a speaker cannot support said for that name. Omit unsupported details rather than filling gaps.
   Audit coverage and attribution before returning.
   Return compact JSON only; omit optional server metadata and unnecessary null/empty detail fields.
 - Extra evidence gives context, not task authority. Preserve explicit commitments; do not create commitments

@@ -2,7 +2,10 @@
 
 An episode is a capture window. Speech is one observation, not its boundary.
 `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` defaults off and applies only to notes
-v2. It enables the rich inputs for notes; existing screen text/image flags and
+v2, additionally requiring sticky hashed-UID admission through
+`MEETING_NOTES_EPISODE_EVIDENCE_PERCENT` (default 0, malformed values fail closed).
+The boolean is the immediate kill switch. See [rollout runbook](EPISODE_ROLLOUT.md).
+It enables the rich inputs for notes; existing screen text/image flags and
 account screenshot consent still control those sources. Flag off retains the
 existing schemas and prompt bytes. No source retrieval window is widened here.
 
@@ -59,11 +62,22 @@ transaction that clears source_segment_ids; no new read or transaction is added.
 Other database write paths remain unchanged.
 Coverage gaps and residual vacuity never fail processing. Episode IDs are stripped
 from visible prose without converting them to transcript citations.
-Existing presentation repair remains a separate bounded guard.
+Episode presentation and claim/vacuity repair share ONE optional model call.
+The 60s structure budget includes the repair, transport retries are disabled for
+episode calls, and repairs are skipped for long inputs or less than 15s headroom.
+Transcripts above 240k characters use the existing rich prompt. Baseline behavior
+is unchanged. Local sanitization always runs, including when repair is skipped.
 One claim normally binds a sentence/bullet; sources or provenance changes split
 it. Headings need no claims. Every factual unit still needs an anchor; repeated
 ambiguous anchors are invalid. Generation omits server-authored evidence_sources,
-which validation fills without model output cost. Compact evidence serialization
+which validation fills without model output cost. Screen selection removes repeated OCR lines/chrome on the same surface and ranks
+participant/call/speech connections, with a 12k-character screen allowance and
+1.2k exploratory allowance for unlinked/solo observations. Lexical rank is not
+proof of relevance; the model still requires a connection. Speech is never
+truncated. Compact generation keys t/p/e/v expand to the original claim schema.
+Compatibility overview does not duplicate section claims. List/search projections
+omit claims; detail serialization omits absent optional source fields.
+Compact evidence serialization
 retains source/time/actor/invocation metadata; absent optional values stay
 unknown. Short prompt-local evidence IDs are expanded to the original IDs before
 validation/scoring; original source references and metadata remain intact.
