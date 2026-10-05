@@ -381,6 +381,10 @@ class SendMap:
         """Count accepted VAD output in a capture interval, excluding gated gaps."""
         return sum(max(0, min(end, start + length) - max(first, start)) for _, start, length in self._spans)
 
+    def accepted_provider_samples(self, first: int, end: int) -> int:
+        """Observed provider samples inside an interval, without edge tolerance."""
+        return sum(max(0, min(end, start + length) - max(first, start)) for start, _, length in self._spans)
+
     def capture_run_containing(self, first: int, end: int) -> Optional[Tuple[int, int]]:
         """One coalesced accepted span covering [first, end), without edge tolerance."""
         for _, start, length in self._spans:
@@ -604,6 +608,7 @@ class ProviderEpochTranslator:
         # timestamp axis at zero; replayed segments must use their original
         # capture positions instead.
         self.replay_origin_sample: Optional[int] = None
+        self.require_observed_send_mapping = False
 
     def capture_merge_proof(self, first: int, end: int) -> Optional[CaptureWindowProof]:
         """Snapshot one accepted run, split at strict half-open wall hiatuses.
@@ -829,17 +834,32 @@ class ProviderEpochTranslator:
                     )
                 if interval is None:
                     self._reject(segment, reason)
-                    if reason == 'outside_accepted_sends' and self._on_outside is not None:
-                        try:
-                            self._on_outside(self.send_map.outside_reason(first_sample, last_sample))
-                        except Exception:
-                            pass
                     if reason == 'outside_accepted_sends' and self._on_past_send is not None:
                         end = self.send_map.last_provider_sample
                         try:
                             self._on_past_send(None if end is None else (last_sample - end) / rate)
                         except Exception:
                             pass
+                    if self._project_times:
+                        self._append_unplaced(translated, segment)
+                    else:
+                        translated.append(segment)
+                    continue
+            if self.require_observed_send_mapping:
+                # A repaired prefix grants no tolerance, extrapolation or wall
+                # hiatus bridging. Keep text but refuse any unobserved edge.
+                covered = self.send_map.accepted_provider_samples(first_sample, last_sample)
+                if covered != last_sample - first_sample or self.timeline.project_window(*interval) is None:
+                    reason = (
+                        'outside_accepted_sends'
+                        if covered != last_sample - first_sample
+                        else (
+                            'evicted_interval'
+                            if self.timeline.wall_strict(interval[0]) is None
+                            else 'discontinuous_interval'
+                        )
+                    )
+                    self._reject(segment, reason)
                     if self._project_times:
                         self._append_unplaced(translated, segment)
                     else:
@@ -899,6 +919,13 @@ class ProviderEpochTranslator:
         # Transient metadata only; the legacy refusal metric and text stay unchanged.
         attribution = 'anchor_compacted' if reason == 'evicted_interval' else 'translator_' + reason
         if reason == 'outside_accepted_sends':
+            if self._on_outside is not None:
+                try:
+                    first = int(float(segment['start']) * self.provider_sample_rate)
+                    end = int(float(segment['end']) * self.provider_sample_rate)
+                    self._on_outside(self.send_map.outside_reason(first, end))
+                except Exception:
+                    pass
             try:
                 if self.send_map.is_evicted_provider_sample(float(segment['start']) * self.provider_sample_rate):
                     attribution = 'send_map_evicted'

@@ -21,6 +21,7 @@ from config.capture_evidence import (
 )
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+from utils.stt.replay_capture_accounting import record_replay_sends
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
 from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
@@ -1422,7 +1423,7 @@ class ListenReceiver(ReplayFilterMixin):
             prefix_deadline = min(prefix_deadline, self.shutdown_deadline)
         try:
             rejected_sample = await replay_chunks(
-                raw,
+                record_replay_sends(raw, epoch),
                 replay,
                 source=meter_source if meter_source is not None else ring,
                 provider=dead_provider or 'parakeet',

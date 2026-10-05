@@ -3004,6 +3004,28 @@ the close drain. These are estimated connection savings, not vendor invoices.
 The fake-mode local soak establishes byte preservation and lifecycle behavior;
 it does not measure real provider handshake latency or acoustic quality.
 
+### Accepted replay sends and translator coverage
+
+`LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS` defaults to `false` in code, the runtime
+env overlays and listen/pusher Helm values. ON records successful raw replay
+prefix sends before both the paced recovery pump and the legacy cross-provider
+rebuild adopt a live-tail wrapper. Managed legs already account for replay and
+are excluded from this extra wrapper. The prefix's compact provider axis begins
+at zero and continues into tail sends; original capture sample references are
+retained. No provider elapsed-axis selection or guessed callback offset is added.
+The existing unpaced same-provider reconnect already wraps its prefix.
+
+ON also registers a managed leg's accepted PCM immediately after `raw.send`
+returns exactly `True`, before a subsequent `finalize` can fail. That failure
+still fails the send boundary and follows the existing recovery policy. False,
+raised and unobserved sends grant no new proof. Repaired epochs require complete
+provider sample coverage and a strict wall projection; tolerance-sized overshoot,
+VAD holes, wall hiatuses and compacted anchors remain unplaced with text kept.
+Stored/public schemas, STT selection, transport pacing and audio storage stay
+unchanged. OFF preserves the previous ordering and replay send path. Turning the
+switch off prevents new repair registrations; accepted evidence already recorded
+in an epoch is retained until that epoch ends.
+
 ### Live capture-window attribution
 
 `omi_audio_timeline_outside_sends_total{provider,send_path,subreason}` adds bounded
