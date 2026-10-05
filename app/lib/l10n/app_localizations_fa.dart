@@ -9933,6 +9933,15 @@ class AppLocalizationsFa extends AppLocalizations {
       'Pendant هنوز در حال ضبط است، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
 
   @override
+  String get pendantLostConnection => 'آویز شما اتصالش را با این تلفن از دست داد.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود.';
+
+  @override
+  String get pendantRecordingSafe => 'هر آنچه پیش از این ضبط شده محفوظ است.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'حافظه Pendant پر است و همچنان در حالت ضبط قرار دارد، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
 
@@ -11262,10 +11271,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'حافظه تقریباً پر است';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi خودش دوباره وصل می‌شود';

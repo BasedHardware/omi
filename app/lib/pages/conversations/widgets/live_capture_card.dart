@@ -4,6 +4,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/capture_sources.dart';
+import 'package:omi/widgets/device_tile.dart';
 
 /// The one capture status and control surface on Home: what is recording now.
 ///
@@ -13,9 +14,12 @@ import 'package:omi/widgets/capture_sources.dart';
 /// amber and replaces the preview with [detail]; tapping that text opens a sheet that explains it.
 /// Trailing: Pause while live, Resume only when [paused]. A [note] sits under the line only when set.
 ///
-/// Calls and Transcribe Later keep the stacked card: a source circle, the status, and the elapsed
-/// time of *that* recording (the call, or audio saved so far), because those clocks are the thing
-/// on screen.
+/// Calls and Transcribe Later keep the stacked card, because the elapsed time of *that* recording
+/// (the call, or audio saved so far) is the thing on screen. Leading: the source's [DeviceTile] with
+/// a dot, green while live and grey when paused or not capturing yet ([live]), named for screen
+/// readers but not in text; a problem marks the words, not the tile. Then the short [status], and
+/// in a muted colour the elapsed time and the [detail]. Trailing: Pause/Resume, or a chevron for a
+/// call because the call page owns the call's controls. Below: the latest transcript line and a [note].
 class LiveCaptureCard extends StatelessWidget {
   const LiveCaptureCard({
     super.key,
@@ -24,11 +28,13 @@ class LiveCaptureCard extends StatelessWidget {
     this.detail,
     this.explanation,
     this.paused = false,
+    this.live = true,
     this.compact = false,
     this.elapsed,
     this.lastLine,
     this.note,
     this.onPauseToggle,
+    this.onShowDetails,
   });
 
   /// A conversation source ('omi', 'phone', …) or [callSource].
@@ -46,6 +52,10 @@ class LiveCaptureCard extends StatelessWidget {
   /// The reader (or the pendant) paused capture: the trailing control resumes.
   final bool paused;
 
+  /// Audio is actually being captured. False while a call connects or rings, or the microphone is
+  /// still opening: the dot stays grey until capture runs.
+  final bool live;
+
   /// One-line listening pill. Ignores [elapsed]: the session clock is not shown.
   final bool compact;
   final Duration? elapsed;
@@ -55,10 +65,10 @@ class LiveCaptureCard extends StatelessWidget {
   /// Null hides the Pause/Resume control.
   final VoidCallback? onPauseToggle;
 
-  static const String callSource = 'call';
+  /// Opens a problem's own sheet instead of the [explanation] one (a dropped pendant).
+  final VoidCallback? onShowDetails;
 
-  /// Diameter of the leading source glyph's circle.
-  static const double sourceDiameter = 36;
+  static const String callSource = 'call';
 
   /// The pill row's fixed width before the status: the source glyph, the live dot, and the two
   /// gaps around them.
@@ -118,7 +128,7 @@ class LiveCaptureCard extends StatelessWidget {
         ? (detail?.trim().isNotEmpty == true ? detail!.trim() : null)
         : (lastLine?.trim().isNotEmpty == true ? lastLine!.trim() : null);
     final statusColor = problem ? OmiColors.warning : OmiColors.textPrimary;
-    final dotColor = problem ? OmiColors.warning : (paused ? OmiColors.textTertiary : OmiColors.danger);
+    final dotColor = problem ? OmiColors.warning : (paused || !live ? OmiColors.textTertiary : OmiColors.danger);
     final sourceName = isCall
         ? l10n.captureSourceCall
         : source == 'phone'
@@ -137,7 +147,7 @@ class LiveCaptureCard extends StatelessWidget {
         hint: l10n.learnMore,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => showDetails(context, title: status, explanation: explanation!),
+          onTap: onShowDetails ?? () => showDetails(context, title: status, explanation: explanation!),
           child: statusText,
         ),
       );
@@ -227,7 +237,7 @@ class LiveCaptureCard extends StatelessWidget {
     if (!problem) return text;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => showDetails(context, title: status, explanation: explanation!),
+      onTap: onShowDetails ?? () => showDetails(context, title: status, explanation: explanation!),
       child: text,
     );
   }
@@ -240,18 +250,16 @@ class LiveCaptureCard extends StatelessWidget {
         : source == 'phone'
             ? l10n.phone
             : CaptureSources.label(context, source);
-    final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
+    final secondary = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
     final problem = explanation != null;
 
     final leading = Semantics(
       label: sourceName,
       excludeSemantics: true,
-      child: Container(
-        width: sourceDiameter,
-        height: sourceDiameter,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
-        child: Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
+      child: DeviceTile(
+        source: isCall ? null : source,
+        icon: isCall ? Icons.call_rounded : null,
+        status: problem ? null : (paused || !live ? OmiColors.textTertiary : OmiColors.success),
       ),
     );
 
@@ -270,7 +278,7 @@ class LiveCaptureCard extends StatelessWidget {
           child: Text(status,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+              style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
         ),
       ]),
       if (line2.isNotEmpty)
@@ -286,7 +294,7 @@ class LiveCaptureCard extends StatelessWidget {
         hint: l10n.learnMore,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => showDetails(context, title: status, explanation: explanation!),
+          onTap: onShowDetails ?? () => showDetails(context, title: status, explanation: explanation!),
           child: ConstrainedBox(constraints: const BoxConstraints(minHeight: kOmiMinTapTarget), child: text),
         ),
       );
@@ -294,7 +302,7 @@ class LiveCaptureCard extends StatelessWidget {
 
     final statusRow = Row(children: [
       leading,
-      const SizedBox(width: OmiSpacing.xs),
+      const SizedBox(width: OmiSpacing.sm),
       Expanded(child: text),
       if (isCall)
         SizedBox(
@@ -306,23 +314,30 @@ class LiveCaptureCard extends StatelessWidget {
           icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 22),
           label: paused ? l10n.resume : l10n.pause,
           diameter: 36,
-          fillColor: OmiColors.surface3,
           onPressed: onPauseToggle,
         ),
     ]);
+    // The transcript line and the note sit under the text, clear of the tile.
+    const indent = EdgeInsetsDirectional.only(start: DeviceTile.size + OmiSpacing.sm);
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       statusRow,
       if (lastLine != null && lastLine!.trim().isNotEmpty) ...[
-        const SizedBox(height: OmiSpacing.xs),
-        Text('… ${lastLine!.trim()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
+        const SizedBox(height: OmiSpacing.xxs),
+        Padding(
+          padding: indent,
+          child: Text('… ${lastLine!.trim()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
+        ),
       ],
       if (note != null) ...[
-        const SizedBox(height: OmiSpacing.sm),
-        Row(children: [
-          Icon(CaptureSources.icon('omi'), size: 14, color: OmiColors.textTertiary),
-          const SizedBox(width: OmiSpacing.xs),
-          Flexible(child: Text(note!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary))),
-        ]),
+        const SizedBox(height: OmiSpacing.xs),
+        Padding(
+          padding: indent,
+          child: Row(children: [
+            Icon(CaptureSources.icon('omi'), size: 14, color: OmiColors.textTertiary),
+            const SizedBox(width: OmiSpacing.xs),
+            Flexible(child: Text(note!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary))),
+          ]),
+        ),
       ],
     ]);
   }

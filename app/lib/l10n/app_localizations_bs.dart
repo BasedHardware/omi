@@ -9962,6 +9962,15 @@ class AppLocalizationsBs extends AppLocalizations {
       'Pendant još uvijek snima, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, zatim ponovo sinhronizujte.';
 
   @override
+  String get pendantLostConnection => 'Privjesak je izgubio vezu s ovim telefonom.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi će se sam ponovo povezati kad je privjesak uključen i u blizini.';
+
+  @override
+  String get pendantRecordingSafe => 'Sve snimljeno do sada je sačuvano.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Memorija Pendanta je puna i još uvijek je u režimu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, a zatim ponovo sinhronizujte.';
 
@@ -11295,10 +11304,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Memorija je skoro puna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi će se sam ponovo povezati';

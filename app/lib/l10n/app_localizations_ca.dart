@@ -9995,6 +9995,15 @@ class AppLocalizationsCa extends AppLocalizations {
       'El Pendant encara està gravant, així que el seu àudio emmagatzemat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar.';
 
   @override
+  String get pendantLostConnection => 'El penjoll ha perdut la connexió amb aquest telèfon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop.';
+
+  @override
+  String get pendantRecordingSafe => 'Tot el que s\'ha gravat abans és segur.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'L\'emmagatzematge del Pendant és ple i encara està en mode de gravació, així que l\'àudio desat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar.';
 
@@ -11333,10 +11342,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Emmagatzematge gairebé ple';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi es tornarà a connectar sol';

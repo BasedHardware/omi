@@ -9945,6 +9945,16 @@ class AppLocalizationsId extends AppLocalizations {
       'Pendant masih merekam, jadi audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
 
   @override
+  String get pendantLostConnection => 'Liontin kehilangan koneksi dengan ponsel ini.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda.';
+
+  @override
+  String get pendantRecordingSafe => 'Semua yang direkam sebelumnya aman.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
 
@@ -11277,10 +11287,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Penyimpanan hampir penuh';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi akan menyambung kembali sendiri';

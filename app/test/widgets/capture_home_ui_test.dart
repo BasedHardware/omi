@@ -168,8 +168,15 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   BtDevice? get pairedDevice => paired ? _pendant : null;
   @override
   bool get isConnecting => connecting ?? !connected;
+  @override
+  bool get isConnected => connected;
   void drop() {
     connected = false;
+    notifyListeners();
+  }
+
+  void reconnect() {
+    connected = true;
     notifyListeners();
   }
 
@@ -402,6 +409,7 @@ void main() {
 
   group('pendant disconnect', () {
     testWidgets('a pendant that drops mid-capture shows Disconnected, not nothing', (tester) async {
+      final semantics = tester.ensureSemantics();
       final device = _Device();
       await pump(tester, const ConversationCaptureWidget(showsCall: true),
           capture: _Capture(_Live.pendant), device: device);
@@ -417,10 +425,35 @@ void main() {
       expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNull);
       expect(find.textContaining('12:04'), findsNothing);
       await tester.pump(const Duration(seconds: 3));
+      // The pill shows no session clock.
       expect(find.textContaining('12:04'), findsNothing);
+
+      // The words open the Disconnected sheet: what happened, the pendant reconnecting, two things to know.
+      // (The spinner runs while it reconnects, so the sheet is pumped by frames, not settled.)
       await tester.tap(find.text(en.disconnected));
-      await tester.pumpAndSettle();
-      expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(OmiSpinner), findsOneWidget);
+      expect(find.text(en.pendantLostConnection), findsOneWidget);
+      expect(find.byKey(const ValueKey('pendant_dropped_status')), findsOneWidget);
+      expect(find.text(en.pendantRecordingSafe), findsOneWidget);
+      expect(find.text(en.pendantReconnectsOnItsOwn), findsOneWidget);
+      expect(find.text(en.deviceSettings), findsOneWidget);
+
+      // The pendant comes back while the sheet is open: it says Connected, and the spinner stops.
+      device.reconnect();
+      await tester.pump();
+      expect(find.byType(OmiSpinner), findsNothing);
+      final connected = find.descendant(
+          of: find.byKey(const ValueKey('pendant_dropped_status')), matching: find.textContaining(en.connected));
+      expect(connected, findsOneWidget);
+      // The line is a live region, so a screen reader announces the change.
+      expect(tester.getSemantics(connected), containsSemantics(isLiveRegion: true));
+      await tester.tap(find.text(en.gotIt));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text(en.pendantLostConnection), findsNothing);
+      semantics.dispose();
     });
 
     testWidgets('a dropped pendant that is not reconnecting yet still says what happens next', (tester) async {
@@ -438,7 +471,8 @@ void main() {
       expect(find.textContaining(en.reconnecting), findsNothing);
       await tester.tap(find.text(en.disconnected));
       await tester.pumpAndSettle();
-      expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
+      // A pendant's drop opens the Disconnected sheet.
+      expect(find.text(en.pendantLostConnection), findsOneWidget);
       await tester.tap(find.text(en.gotIt));
       await tester.pumpAndSettle();
     });

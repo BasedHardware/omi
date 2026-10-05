@@ -10007,6 +10007,16 @@ class AppLocalizationsEl extends AppLocalizations {
       'Το Pendant εξακολουθεί να ηχογραφεί, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την ηχογράφηση και συγχρονίστε ξανά.';
 
   @override
+  String get pendantLostConnection => 'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά.';
+
+  @override
+  String get pendantRecordingSafe => 'Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Ο αποθηκευτικός χώρος του Pendant είναι πλήρης και βρίσκεται ακόμα σε λειτουργία εγγραφής, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την εγγραφή και μετά συγχρονίστε ξανά.';
 
@@ -11344,10 +11354,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Ο χώρος σχεδόν γέμισε';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 
   @override
   String get capturePendantDisconnectedShort => 'Το Omi θα επανασυνδεθεί μόνο του';

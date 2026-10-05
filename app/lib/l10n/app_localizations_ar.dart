@@ -9875,6 +9875,15 @@ class AppLocalizationsAr extends AppLocalizations {
       'لا يزال Pendant يسجّل، لذا لا يمكن نقل الصوت المخزّن عليه. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
 
   @override
+  String get pendantLostConnection => 'فقد القلادة اتصالها بهذا الهاتف.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة.';
+
+  @override
+  String get pendantRecordingSafe => 'كل ما سُجّل قبل ذلك محفوظ.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'ذاكرة Pendant ممتلئة وما زال في وضع التسجيل، لذا لا يمكن نقل الصوت المخزّن. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
 
@@ -11201,10 +11210,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'المساحة ممتلئة تقريبًا';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.';
 
   @override
   String get capturePendantDisconnectedShort => 'سيعيد Omi الاتصال تلقائيًا';

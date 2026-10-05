@@ -9937,6 +9937,15 @@ class AppLocalizationsSv extends AppLocalizations {
       'Pendant spelar fortfarande in, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera igen.';
 
   @override
+  String get pendantLostConnection => 'Hängsmycket tappade anslutningen till den här telefonen.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ansluter igen av sig själv när hängsmycket är på och i närheten.';
+
+  @override
+  String get pendantRecordingSafe => 'Allt som spelats in innan är säkert.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Lagringen på din Pendant är full och den är fortfarande i inspelningsläge, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera sedan igen.';
 
@@ -11273,10 +11282,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lagringen är nästan full';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi ansluter igen av sig själv';
