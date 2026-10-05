@@ -100,8 +100,14 @@ def repair_episode_note(
                 HumanMessage(
                     content=(
                         'Regenerate complete JSON once. State concretely what evidence shows and what coverage is missing; '
-                        'remove vacuous filler. Repair every claim span, evidence reference and provenance. '
-                        'Keep evidence IDs out of visible prose. Errors: ' + ', '.join(sorted(violations))
+                        'remove vacuous filler. '
+                        + (
+                            'Repair every claim span, evidence reference and provenance. '
+                            if claims_enabled
+                            else 'Repair source attribution and uncertainty; do not generate note_claims. '
+                        )
+                        + 'Keep evidence IDs out of visible prose. Errors: '
+                        + ', '.join(sorted(violations))
                     )
                 ),
             ]

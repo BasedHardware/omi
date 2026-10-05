@@ -67,9 +67,7 @@ def deterministic_episode_selection(items: Sequence[Any], *, finished_at: str | 
             continue
         overlap = (episode_words(item.content) - _GENERIC) & words
         named = any(re.search(r'(?<!\w)' + re.escape(actor) + r'(?!\w)', item.content.casefold()) for actor in actors)
-        if item.source_kind in {'calendar', 'roster'} or (
-            item.source_kind == 'device_state' and _CALL.search(item.content)
-        ):
+        if item.source_kind in {'calendar', 'roster', 'device_state'}:
             chosen.append(item)
         elif (
             len(overlap) >= 3

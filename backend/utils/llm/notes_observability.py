@@ -27,6 +27,7 @@ class NotesRun:
         self.fallback_to_best_note = False
         self.claim_count = 0
         self.error = False
+        self.model_errors = 0
         self.vacuity = False
 
     def configure_episode(self, settings):
@@ -42,7 +43,7 @@ class NotesRun:
         try:
             response = model.invoke(messages)
         except Exception:
-            self.error = True
+            self.model_errors += 1
             self.known = {key: False for key in self.usage}
             raise
         usage = getattr(response, 'usage_metadata', None) or {}
@@ -77,7 +78,7 @@ class NotesRun:
             'conversation_notes_receipt arm=%s input_tokens=%s output_tokens=%s cached_tokens=%s reasoning_tokens=%s '
             'latency_seconds=%.3f retry_count=%s violations=%s vacuity=%s claim_count=%s '
             'fallback_to_best_note=%s errors=%s effort=%s selection=%s claims_enabled=%s selection_calls=%s '
-            'selection_effort=%s selection_timeout_seconds=%s',
+            'selection_effort=%s selection_timeout_seconds=%s model_errors=%s',
             self.arm,
             *(self.usage[key] if self.calls and self.known[key] else None for key in self.usage),
             monotonic() - self.started,
@@ -93,6 +94,7 @@ class NotesRun:
             self.selection_calls,
             self.selection_effort,
             self.selection_timeout,
+            self.model_errors,
         )
 
 

@@ -9,7 +9,7 @@ from typing import Any, Literal, Mapping, Sequence, cast
 
 from pydantic import BaseModel
 
-from utils.conversations.meeting_participants import bind_speakers_with_roster
+from utils.conversations.meeting_participants import bind_speakers_with_roster, is_silent_recorder
 from utils.conversations.wake_word import escape_spoken_wake_word_marker, find_wake_word_segment_ids
 
 from models.structured import NoteEvidenceRef, Structured  # type: ignore[reportAttributeAccessIssue]  # Runtime SDK/fallback export.
@@ -108,6 +108,9 @@ def capture_evidence(
                 )
             )
     source = getattr(conversation, 'source', None)
+    remote_count = sum(
+        entry.kind != 'owner' and not is_silent_recorder(entry) for entry in getattr(roster, 'entries', ())
+    )
     items.append(
         _item(
             'device_state',
@@ -118,6 +121,9 @@ def capture_evidence(
                 'finished_at': evidence_time(getattr(conversation, 'finished_at', None)),
                 'transcript_segments': len(segments) if segments else (1 if transcript.strip() else 0),
                 'speaker_map': speaker_names,
+                'desktop_capture': desktop_capture,
+                'remote_channel_may_mix_people': desktop_capture,
+                'roster_remote_entries': remote_count,
             },
             time=getattr(conversation, 'started_at', None),
             ref='capture_metadata',

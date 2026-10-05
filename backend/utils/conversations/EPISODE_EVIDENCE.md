@@ -134,3 +134,14 @@ effort/selection/claim mode. Two independently cached judgments of fixed candida
 measure judge variance; selection costs join writer tokens/latency/provider dollars.
 No held-out input may guide these choices. Defaults remain subject to measured DEV
 gates and external held-out acceptance; sticky rollout remains zero here.
+
+Capture/device constraints are always retained by deterministic selection, even
+without topical word overlap. The capture adapter records desktop remote-channel
+mixing capability and roster-entry count (not observed speaker count); neither
+establishes attendance or identity. Writer instructions require every field to
+respect those constraints and keep unclear referents/intent/outcomes unresolved.
+A connected evidence item can still contain unrelated clauses, which stay out.
+Selector controls: `MEETING_NOTES_EPISODE_SELECTION_EFFORT` defaults low and
+`MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS` defaults 30 (bounded 1–30).
+Recoverable selector/repair model errors are separate from processing errors in
+receipts. Source selection failure keeps the conservative evidence and continues.

@@ -199,3 +199,17 @@ def test_selector_attempt_is_not_reported_as_writer_retry(caplog):
     assert 'retry_count=0' in caplog.text and 'selection_calls=1' in caplog.text
     assert 'reasoning_tokens=4' in caplog.text and 'effort=high' in caplog.text
     assert 'Synthetic' not in caplog.text
+
+
+def test_capture_constraints_survive_relevance_selection_without_topic_overlap():
+    items = [
+        EvidenceItem(id='s', source_kind='speech', content='Yes.'),
+        EvidenceItem(
+            id='state',
+            source_kind='device_state',
+            source_ref='capture_metadata',
+            content='The remote channel may contain several people; identities are unresolved.',
+        ),
+        EvidenceItem(id='noise', source_kind='screen_ocr', content='An unrelated invented recipe document.'),
+    ]
+    assert [item.id for item in deterministic_episode_selection(items)] == ['s', 'state']
