@@ -6,7 +6,7 @@ import os
 import time
 from typing import Any, Callable
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import REGISTRY, Counter, Histogram
 
 logger = logging.getLogger(__name__)
 _last_sample_log = float('-inf')
@@ -19,24 +19,62 @@ def enabled() -> bool:
 AXIS_DELTA = Histogram(
     'omi_soniox_capture_axis_delta_seconds',
     'Raw original final-token/processing clocks minus socket-local reference clocks; response events',
-    ['reference', 'phase', 'write_state'],
+    ['reference', 'phase', 'write_state', 'queue'],
+    registry=None,
     buckets=(-60, -30, -10, -3, -1, -0.1, 0, 0.1, 1, 3, 10, 30, 60),
 )
 AXIS_EVENTS = Counter(
     'omi_soniox_capture_axis_events_total',
     'Successful raw Soniox wire frames and bounded diagnostic failures',
     ['event'],
+    registry=None,
 )
 AXIS_COMPARISON = Counter(
     'omi_soniox_capture_axis_comparison_total',
     'Joint raw final-token overshoot and compact ledger conservation per response',
-    ['wire', 'ledger', 'phase', 'write_state'],
+    ['wire', 'ledger', 'phase', 'write_state', 'queue'],
+    registry=None,
 )
 VALIDATION_DETAIL = Counter(
     'omi_audio_timeline_elapsed_validation_detail_total',
     'Elapsed validation events separated by candidate/gate availability',
     ['provider', 'reason'],
+    registry=None,
 )
+
+
+class _EnabledCollectors:
+    """Reserve names once, but expose neither metadata nor samples while OFF."""
+
+    metrics = (AXIS_DELTA, AXIS_EVENTS, AXIS_COMPARISON, VALIDATION_DETAIL)
+
+    def describe(self):
+        for metric in self.metrics:
+            yield from metric.describe()
+
+    def collect(self):
+        if enabled():
+            for metric in self.metrics:
+                yield from metric.collect()
+
+
+REGISTRY.register(_EnabledCollectors())
+
+
+def diagnostic_error() -> None:
+    """One static event label; telemetry failure must never affect transport."""
+    try:
+        AXIS_EVENTS.labels(event='diagnostic_error').inc()
+    except Exception:
+        pass
+
+
+def disable_socket_diagnostics(socket: Any) -> None:
+    """Setup callers stay outside the transport failure domain, even for wrappers."""
+    try:
+        socket.disable_capture_axis_diagnostics()
+    except Exception:
+        diagnostic_error()
 
 
 class CaptureAxisDiagnostics:
@@ -74,81 +112,69 @@ class CaptureAxisDiagnostics:
     def response(self, msg: dict[str, Any]) -> None:
         """Observe before preseconds subtraction, idle offsets, VAD remap or leg rebase."""
         global _last_sample_log
-        try:
-            ends = [
-                float(token['end_ms']) / 1000
-                for token in msg.get('tokens') or ()
-                if isinstance(token, dict)
-                and token.get('is_final')
-                and token.get('translation_status') != 'translation'
-                and token.get('text') not in ('<fin>', '<end>', '', None)
-                and token.get('end_ms') is not None
-            ]
-            state = 'inflight' if self.inflight else 'settled'
+        ends = [
+            float(token['end_ms']) / 1000
+            for token in msg.get('tokens') or ()
+            if isinstance(token, dict)
+            and token.get('is_final')
+            and token.get('translation_status') != 'translation'
+            and token.get('text') not in ('<fin>', '<end>', '', None)
+            and token.get('end_ms') is not None
+        ]
+        state = 'inflight' if self.inflight else 'settled'
+        queue = 'drained' if self.written == self.queued else 'backlogged'
 
-            def observe(reference: str, delta: float) -> None:
-                if math.isfinite(delta):
-                    AXIS_DELTA.labels(reference=reference, phase=self.phase, write_state=state).observe(delta)
+        def observe(reference: str, delta: float) -> None:
+            if math.isfinite(delta):
+                AXIS_DELTA.labels(reference=reference, phase=self.phase, write_state=state, queue=queue).observe(delta)
 
-            if ends:
-                end = max(ends)
-                now = time.monotonic()
-                observe('token_minus_written', end - self.written / self.rate)
-                observe('token_minus_queued', end - self.queued / self.rate)
-                observe('token_minus_connected_elapsed', end - (now - self.connected_at))
-                if self.first_write_at is not None:
-                    observe('token_minus_first_write_elapsed', end - (now - self.first_write_at))
-                ledger = self.ledger() if self.ledger is not None else None
-                if ledger is not None:
-                    observe('queued_minus_ledger', (self.queued - (ledger - self.origin)) / self.rate)
-                else:
-                    AXIS_EVENTS.labels(event='ledger_unavailable').inc()
-                wire_result = (
-                    'no_audio' if not self.written else 'past' if end > self.written / self.rate + 0.1 else 'within'
+        if ends:
+            end = max(ends)
+            now = time.monotonic()
+            observe('token_minus_written', end - self.written / self.rate)
+            observe('token_minus_queued', end - self.queued / self.rate)
+            observe('token_minus_connected_elapsed', end - (now - self.connected_at))
+            if self.first_write_at is not None:
+                observe('token_minus_first_write_elapsed', end - (now - self.first_write_at))
+            ledger = self.ledger() if self.ledger is not None else None
+            if ledger is not None:
+                observe('queued_minus_ledger', (self.queued - (ledger - self.origin)) / self.rate)
+            else:
+                AXIS_EVENTS.labels(event='ledger_unavailable').inc()
+            wire_result = (
+                'no_audio' if not self.written else 'past' if end > self.written / self.rate + 0.1 else 'within'
+            )
+            ledger_delta = self.queued - (ledger - self.origin) if ledger is not None else None
+            ledger_result = (
+                'unavailable'
+                if ledger_delta is None
+                else 'equal' if ledger_delta == 0 else 'queue_ahead' if ledger_delta > 0 else 'ledger_ahead'
+            )
+            AXIS_COMPARISON.labels(
+                wire=wire_result, ledger=ledger_result, phase=self.phase, write_state=state, queue=queue
+            ).inc()
+            if wire_result == 'past' and not self.inflight and self.sample_logs < 4 and now - _last_sample_log >= 60:
+                self.sample_logs += 1
+                _last_sample_log = now
+                # All numeric, same-response evidence; no audio/text/identity.
+                logger.info(
+                    'soniox_capture_axis_sample phase=%s rate=%d token_end=%.6f queued=%d written=%d '
+                    'ledger=%s origin=%d connected_elapsed=%.6f first_write_elapsed=%s keepalives=%d finalizes=%d',
+                    self.phase,
+                    self.rate,
+                    end,
+                    self.queued,
+                    self.written,
+                    ledger,
+                    self.origin,
+                    now - self.connected_at,
+                    None if self.first_write_at is None else now - self.first_write_at,
+                    self.keepalives,
+                    self.finalizes,
                 )
-                ledger_delta = self.queued - (ledger - self.origin) if ledger is not None else None
-                ledger_result = (
-                    'unavailable'
-                    if ledger_delta is None
-                    else 'equal' if ledger_delta == 0 else 'queue_ahead' if ledger_delta > 0 else 'ledger_ahead'
-                )
-                AXIS_COMPARISON.labels(
-                    wire=wire_result, ledger=ledger_result, phase=self.phase, write_state=state
-                ).inc()
-                if (
-                    wire_result == 'past'
-                    and not self.inflight
-                    and self.sample_logs < 4
-                    and now - _last_sample_log >= 60
-                ):
-                    self.sample_logs += 1
-                    _last_sample_log = now
-                    # All numeric, same-response evidence; no audio/text/identity.
-                    logger.info(
-                        'soniox_capture_axis_sample phase=%s rate=%d token_end=%.6f queued=%d written=%d '
-                        'ledger=%s origin=%d connected_elapsed=%.6f first_write_elapsed=%s keepalives=%d finalizes=%d',
-                        self.phase,
-                        self.rate,
-                        end,
-                        self.queued,
-                        self.written,
-                        ledger,
-                        self.origin,
-                        now - self.connected_at,
-                        None if self.first_write_at is None else now - self.first_write_at,
-                        self.keepalives,
-                        self.finalizes,
-                    )
-            for key in ('total_audio_proc_ms', 'final_audio_proc_ms'):
-                if msg.get(key) is not None:
-                    observe(key + '_minus_written', float(msg[key]) / 1000 - self.written / self.rate)
-        except Exception:
-            # A broken getter, malformed diagnostic field or telemetry failure
-            # must never suppress parsing or change transport death publication.
-            try:
-                AXIS_EVENTS.labels(event='diagnostic_error').inc()
-            except Exception:
-                pass
+        for key in ('total_audio_proc_ms', 'final_audio_proc_ms'):
+            if msg.get(key) is not None:
+                observe(key + '_minus_written', float(msg[key]) / 1000 - self.written / self.rate)
 
 
 def validation_detail(provider: str, interval: Any, gate: Any, outcome: str) -> None:

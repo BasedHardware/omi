@@ -24,7 +24,7 @@ from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
-from utils.stt.soniox_capture_axis import enabled as capture_axis_diagnostics_enabled
+from utils.stt.soniox_capture_axis import disable_socket_diagnostics, enabled as capture_axis_diagnostics_enabled
 from config.live_stt_replay import ReplayLimits
 from config.audio_timeline import live_capture_window_translator_sends_enabled
 from config.live_stt_recovery import session_recovery_enabled
@@ -430,16 +430,19 @@ class LiveLegSocket(STTSocket):
         # Audio-timeline v2: the provider epoch translator that records
         # accepted sends and maps provider times to the capture timeline.
         self._send_tracker = send_tracker
-        if service == st.STTService.soniox and send_tracker is not None and capture_axis_diagnostics_enabled():
-            bind = getattr(raw, 'set_capture_axis_ledger', None)
-            if callable(bind):
-                bind(
-                    lambda: (
-                        None
-                        if send_tracker.soniox_elapsed_mode == 'on'
-                        else (send_tracker.send_map.last_provider_sample or 0)
+        try:
+            if service == st.STTService.soniox and send_tracker is not None and capture_axis_diagnostics_enabled():
+                bind = getattr(raw, 'set_capture_axis_ledger', None)
+                if callable(bind):
+                    bind(
+                        lambda: (
+                            None
+                            if send_tracker.soniox_elapsed_mode == 'on'
+                            else (send_tracker.send_map.last_provider_sample or 0)
+                        )
                     )
-                )
+        except Exception:
+            disable_socket_diagnostics(raw)
         self.speaker_provider_epoch: SpeakerProviderEpoch | None = None
         self._dead = False
         self._local_death_reason: str | None = None

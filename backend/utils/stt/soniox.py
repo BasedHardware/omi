@@ -25,7 +25,11 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
 from config.soniox_idle import idle_close_seconds
-from utils.stt.soniox_capture_axis import CaptureAxisDiagnostics, enabled as capture_axis_diagnostics_enabled
+from utils.stt.soniox_capture_axis import (
+    CaptureAxisDiagnostics,
+    diagnostic_error,
+    enabled as capture_axis_diagnostics_enabled,
+)
 from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
@@ -188,7 +192,13 @@ class SafeSonioxSocket(STTSocket):
         *,
         sample_rate: int = 16000,
     ) -> None:
-        self._capture_axis = CaptureAxisDiagnostics(sample_rate) if capture_axis_diagnostics_enabled() else None
+        self._capture_axis: CaptureAxisDiagnostics | None = None
+        self._capture_axis_failed = False
+        try:
+            if capture_axis_diagnostics_enabled():
+                self._capture_axis = CaptureAxisDiagnostics(sample_rate)
+        except Exception:
+            self.disable_capture_axis_diagnostics()
         self._ws: Any = ws
         self._stream_transcript = stream_transcript
         self._loop = loop
@@ -265,8 +275,7 @@ class SafeSonioxSocket(STTSocket):
 
         try:
             self._send_queue.put_nowait(aligned)
-            if self._capture_axis is not None:
-                self._capture_axis.queued += len(aligned) // 2
+            self._diagnostic(lambda diagnostic: setattr(diagnostic, 'queued', diagnostic.queued + len(aligned) // 2))
         except asyncio.QueueFull:
             self._mark_dead('send queue full', typed_reason='capacity_full')
             return False
@@ -360,26 +369,32 @@ class SafeSonioxSocket(STTSocket):
         except Exception:
             pass
 
+    def disable_capture_axis_diagnostics(self) -> None:
+        self._capture_axis = None
+        if not self._capture_axis_failed:
+            self._capture_axis_failed = True
+            diagnostic_error()
+
+    def _diagnostic(self, hook: Callable[[CaptureAxisDiagnostics], None]) -> None:
+        diagnostic = self._capture_axis
+        if diagnostic is not None:
+            try:
+                hook(diagnostic)
+            except Exception:
+                self.disable_capture_axis_diagnostics()
+
     def set_capture_axis_ledger(
         self, ledger: Callable[[], int | None], origin: int = 0, phase: str = 'initial'
     ) -> None:
-        if self._capture_axis is not None:
-            self._capture_axis.bind(ledger, origin, phase)
+        self._diagnostic(lambda diagnostic: diagnostic.bind(ledger, origin, phase))
 
     async def _write(self, data: bytes | str) -> None:
-        diagnostic = self._capture_axis
-        if diagnostic is None:
-            await self._ws.send(data)
-            return
-        diagnostic.inflight = True
+        self._diagnostic(lambda diagnostic: setattr(diagnostic, 'inflight', True))
         try:
             await self._ws.send(data)
-            try:
-                diagnostic.sent(data)
-            except Exception:
-                pass
+            self._diagnostic(lambda diagnostic: diagnostic.sent(data))
         finally:
-            diagnostic.inflight = False
+            self._diagnostic(lambda diagnostic: setattr(diagnostic, 'inflight', False))
 
     async def _send_loop(self) -> None:
         try:
@@ -498,8 +513,7 @@ class SafeSonioxSocket(STTSocket):
                     self._mark_dead(f'soniox error: {err}', typed_reason=typed)
                     break
 
-                if self._capture_axis is not None:
-                    self._capture_axis.response(msg)
+                self._diagnostic(lambda diagnostic: diagnostic.response(msg))
                 tokens: List[Any] = msg.get('tokens') or []
                 if tokens:
                     self._handle_tokens(tokens)

@@ -1967,7 +1967,7 @@ each actual Soniox socket retains queued/written PCM sample counts and two
 monotonic clock anchors, with no audio or transcript retention. It measures raw
 original final-token ends before preseconds subtraction, idle-reopen offset,
 VAD remap or managed leg rebase. `omi_soniox_capture_axis_delta_seconds` has
-bounded reference/phase/write_state labels: token minus written/queued PCM,
+bounded reference/phase/write_state/queue labels: token minus written/queued PCM,
 connection/first-write elapsed time, queued minus the compact managed ledger,
 and optional provider `total_audio_proc_ms`/`final_audio_proc_ms` minus written
 PCM. Those processing fields are measured as reported, without assigning them
@@ -1980,11 +1980,26 @@ can establish overshoot beyond successfully written PCM. Successful text
 keepalive/finalize/end and binary audio frames have bounded sibling event counts;
 control frames add zero samples. The sibling
 `omi_soniox_capture_axis_comparison_total` joins wire overshoot (greater than
-100 ms), exact queued/compact-ledger conservation, phase and write state on the
-same response. The 100 ms threshold is diagnostic only. Numeric overshoot
+100 ms), exact queued/compact-ledger conservation, phase, write state and queue on the
+same response. `queue=drained|backlogged` compares written and queued samples exactly
+at response receipt. `settled` alone can still have backlog. Query
+`ledger="equal",queue="drained",write_state="settled"` on the joint counter for
+conserved, drained PCM; every delta histogram also has the queue discriminator.
+Histogram marginals do not additionally select ledger equality. The full static
+label Cartesian product is at most 1,150 series per process including `_created`:
+56 histogram children x 16 samples, 96 comparison children x 2, six event children
+x 2 and 25 validation-detail children x 2. The 100 ms threshold is diagnostic only. Numeric overshoot
 samples log at most four times per socket and once per minute per process;
 no audio, text or identity is logged. Missing ledgers and diagnostic errors count
-separately. Initial and idle-reopened transports have separate phase labels;
+separately. Constructor, binding, queue/write accounting, response, getter, metric
+and log failures disable diagnostics for that actual socket and attempt one bounded
+`diagnostic_error` increment without changing connection, PCM or parsing. If the
+error collector itself fails, transport still proceeds. All four new families
+(including HELP/TYPE) are hidden from scrapes while the switch is OFF, even after
+an ON observation; existing families keep their registration and data. Admission
+remains pinned at socket construction; runtime OFF hides old samples immediately
+but new socket construction/restart is needed to remove existing socket state.
+Initial and idle-reopened transports have separate phase labels;
 reopened ledger references subtract the exact configured provider resume offset.
 Elapsed-axis `on` deliberately reports the compact ledger as unavailable.
 

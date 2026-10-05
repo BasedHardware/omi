@@ -135,7 +135,7 @@ async def test_managed_provider_frames_never_promote_unproven_axis(monkeypatch, 
         before = (
             REGISTRY.get_sample_value(
                 'omi_soniox_capture_axis_delta_seconds_count',
-                {'reference': 'token_minus_written', 'phase': 'initial', 'write_state': 'settled'},
+                {'reference': 'token_minus_written', 'phase': 'initial', 'write_state': 'settled', 'queue': 'drained'},
             )
             or 0
         )
@@ -155,7 +155,12 @@ async def test_managed_provider_frames_never_promote_unproven_axis(monkeypatch, 
             assert (
                 REGISTRY.get_sample_value(
                     'omi_soniox_capture_axis_delta_seconds_count',
-                    {'reference': 'token_minus_written', 'phase': 'initial', 'write_state': 'settled'},
+                    {
+                        'reference': 'token_minus_written',
+                        'phase': 'initial',
+                        'write_state': 'settled',
+                        'queue': 'drained',
+                    },
                 )
                 == before + 1
             )
@@ -229,8 +234,10 @@ def test_wire_counts_do_not_include_controls_and_errors_never_suppress_tokens(mo
         diag.sent(control)
     assert diag.written == 8000
     diag.bind(lambda: (_ for _ in ()).throw(RuntimeError('local getter failure')))
-    diag.response({'tokens': [{'text': 'word', 'is_final': True, 'end_ms': 1700}]})
-    diag.response({'total_audio_proc_ms': 'malformed'})
+    with pytest.raises(RuntimeError, match='local getter failure'):
+        diag.response({'tokens': [{'text': 'word', 'is_final': True, 'end_ms': 1700}]})
+    with pytest.raises(ValueError):
+        diag.response({'total_audio_proc_ms': 'malformed'})
     assert diag.written == 8000
 
 
@@ -321,7 +328,13 @@ async def test_idle_reopen_diagnostic_origin_is_exact_and_raw_times_are_unshifte
         assert current._capture_axis.phase == 'reopened'
         assert current._capture_axis.ledger() - current._capture_axis.origin == current._capture_axis.queued == RATE
         assert await current._ws.writes.get() == b'\1\0' * RATE
-        labels = {'reference': 'token_minus_written', 'phase': 'reopened', 'write_state': 'settled', 'le': '-0.1'}
+        labels = {
+            'reference': 'token_minus_written',
+            'phase': 'reopened',
+            'write_state': 'settled',
+            'queue': 'drained',
+            'le': '-0.1',
+        }
         before = REGISTRY.get_sample_value('omi_soniox_capture_axis_delta_seconds_bucket', labels) or 0
         await final(current._ws, current, 200, 800)
         assert seen[0]['start'] == 1.2 and seen[0]['end'] == 1.8
@@ -348,7 +361,7 @@ async def test_wire_ledger_fault_diagnostics_preserve_receiver_persistence(monke
             assert getattr(leg.raw, '_capture_axis', None) is not None
             leg.raw._capture_axis.ledger = lambda: (_ for _ in ()).throw(RuntimeError('local getter failure'))
         before = diagnostics.AXIS_COMPARISON.labels(
-            wire='within', ledger='queue_ahead', phase='initial', write_state='settled'
+            wire='within', ledger='queue_ahead', phase='initial', write_state='settled', queue='drained'
         )._value.get()
         pcm = b'\1\0' * RATE
         start, _, _ = receiver.capture_timeline.accept(pcm, T0 + 1, 1)
@@ -363,7 +376,7 @@ async def test_wire_ledger_fault_diagnostics_preserve_receiver_persistence(monke
         if fault == 'missing_ledger':
             assert (
                 diagnostics.AXIS_COMPARISON.labels(
-                    wire='within', ledger='queue_ahead', phase='initial', write_state='settled'
+                    wire='within', ledger='queue_ahead', phase='initial', write_state='settled', queue='drained'
                 )._value.get()
                 == before + 1
             )
