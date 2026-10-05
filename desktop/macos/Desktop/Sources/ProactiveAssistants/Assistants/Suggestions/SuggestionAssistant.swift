@@ -543,7 +543,8 @@ actor SuggestionAssistant: ProactiveAssistant {
   @discardableResult
   private func resolveDelivery(
     _ result: AssistantResult,
-    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
+    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void,
+    onPresentation: (@Sendable (Bool) -> Void)? = nil
   ) async -> SuggestionAssistantTelemetry.DeliveryOutcome? {
     guard let result = result as? SuggestionResult else { return nil }
     guard result.hasSuggestion, let suggestion = result.suggestion else {
@@ -641,7 +642,8 @@ actor SuggestionAssistant: ProactiveAssistant {
       suggestion,
       result: result,
       ownerID: ownerID,
-      telemetryIdentity: telemetryIdentity
+      telemetryIdentity: telemetryIdentity,
+      onPresentation: onPresentation
     )
     return .delivered
   }
@@ -660,7 +662,8 @@ actor SuggestionAssistant: ProactiveAssistant {
     _ suggestion: ExtractedSuggestion,
     result: SuggestionResult,
     ownerID: String,
-    telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
+    telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?,
+    onPresentation: (@Sendable (Bool) -> Void)? = nil
   ) async {
     let taskId = SuggestionCommitmentGuard.groundedTaskId(
       suggestion: suggestion.suggestion,
@@ -698,13 +701,15 @@ actor SuggestionAssistant: ProactiveAssistant {
         context: context,
         suggestionTelemetryIdentity: telemetryIdentity,
         onPresented: { [weak self] in
+          onPresentation?(true)
           Task {
             await self?.recordPresentedSuggestion(
               suggestion,
               taskId: taskId,
               ownerID: ownerID)
           }
-        })
+        },
+        onDropped: { onPresentation?(false) })
     }
   }
 
@@ -797,19 +802,46 @@ actor SuggestionAssistant: ProactiveAssistant {
       ]
     }
 
-    // Report what delivery actually did, not that a suggestion existed. `outcome` is
-    // "delivered" only when a card reached NotificationService.
-    let delivery = await resolveDelivery(result, sendEvent: sendEvent)
+    // Report what delivery actually did, not that a suggestion existed. Handing a card to
+    // NotificationService is not delivery: snooze, presence, category and frequency gates and
+    // the bar can still withhold it, so `delivered` waits for the real presentation outcome.
+    let (presentations, reportPresentation) = AsyncStream.makeStream(of: Bool.self)
+    let delivery = await resolveDelivery(result, sendEvent: sendEvent) { presented in
+      reportPresentation.yield(presented)
+      reportPresentation.finish()
+    }
+    let presented =
+      delivery == .delivered ? await Self.awaitPresentation(presentations, timeout: .seconds(10)) : false
+    let outcome =
+      delivery == .delivered && !presented ? "handed_off_not_presented" : delivery?.rawValue ?? "no_delivery_decision"
 
     return [
-      "outcome": delivery?.rawValue ?? "no_delivery_decision",
-      "delivered": delivery == .delivered ? "true" : "false",
+      "outcome": outcome,
+      "delivered": presented ? "true" : "false",
       "suggestion": suggestion.suggestion,
       "category": suggestion.category.rawValue,
       "confidence": "\(Int(suggestion.confidence * 100))",
       "commitments": "\(grounding.openCommitments.count)",
       "goals": "\(grounding.goals.count)",
     ]
+  }
+
+  /// The first presentation outcome the notification service reports, or `false` when none
+  /// arrives within `timeout` (for example, a card still queued behind another one).
+  static func awaitPresentation(_ outcomes: AsyncStream<Bool>, timeout: Duration) async -> Bool {
+    await withTaskGroup(of: Bool.self) { group in
+      group.addTask {
+        for await presented in outcomes { return presented }
+        return false
+      }
+      group.addTask {
+        try? await Task.sleep(for: timeout)
+        return false
+      }
+      let first = await group.next() ?? false
+      group.cancelAll()
+      return first
+    }
   }
 
   // MARK: - Lifecycle
