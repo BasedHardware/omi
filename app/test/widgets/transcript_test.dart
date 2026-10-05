@@ -1079,7 +1079,7 @@ void main() {
         expect(find.text('Ben'), findsOneWidget);
       });
 
-      testWidgets('a changed label source alone does not start a new name row', (tester) async {
+      testWidgets('a changed label badge starts a paragraph under that badge, not a new name row', (tester) async {
         final now = DateTime.now();
         await setupSharedPreferences(
           cachedPeople: [
@@ -1094,10 +1094,19 @@ void main() {
         await pumpDetail(tester, [
           line('a1', 5, 'First labelled line.', 0, personId: 'p1', source: 'manual'),
           line('a2', 5, 'Second labelled line.', 10, personId: 'p1', source: 'auto'),
+          line('a3', 5, 'Third labelled line.', 20, personId: 'p1', source: 'auto'),
         ]);
         await tester.pumpAndSettle();
 
         expect(find.text('Ada'), findsOneWidget);
+        final first = find.byKey(const ValueKey('transcript-paragraph-a1'));
+        final second = find.byKey(const ValueKey('transcript-paragraph-a2'));
+        expect(find.descendant(of: first, matching: find.byKey(const Key('speaker_label_confirmed'))), findsOneWidget);
+        expect(find.descendant(of: second, matching: find.byKey(const Key('speaker_label_likely'))), findsOneWidget,
+            reason: 'the auto lines show "Likely", not the manual line\'s check');
+        expect(tester.widget<RichText>(paragraphOf('Third labelled line.')).text.toPlainText(), contains('Second'),
+            reason: 'lines with the same badge stay together');
+        expect(find.text('0:10'), findsNothing, reason: 'a badge split adds no time');
       });
 
       testWidgets('a continuation keeps its likely-speaker confirmation on the first auto line', (tester) async {
@@ -1137,7 +1146,7 @@ void main() {
         final confirmBadge = find.byType(SpeakerLikelyConfirm);
         expect(confirmBadge, findsOneWidget);
         expect(
-          find.descendant(of: find.byKey(const ValueKey('transcript-paragraph-m1')), matching: confirmBadge),
+          find.descendant(of: find.byKey(const ValueKey('transcript-paragraph-a2')), matching: confirmBadge),
           findsOneWidget,
         );
 

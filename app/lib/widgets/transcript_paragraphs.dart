@@ -15,15 +15,27 @@ const double _paragraphBottom = 6;
 const double _dimmedInkAlpha = 0.35;
 
 /// A run of consecutive saved-conversation lines drawn as one paragraph: segment indexes
-/// [first]..[last], under a name row when it [startsTurn] and a clock time when it [showsTime].
+/// [first]..[last], under a name row when it [startsTurn], a clock time when it [showsTime] and the
+/// label badge when it [showsBadge].
 class _DetailParagraph {
-  _DetailParagraph({required this.first, required this.last, required this.startsTurn, required this.showsTime});
+  _DetailParagraph({
+    required this.first,
+    required this.last,
+    required this.startsTurn,
+    required this.showsTime,
+    required this.showsBadge,
+  });
 
   final int first;
   int last;
   final bool startsTurn;
   final bool showsTime;
+  final bool showsBadge;
 }
+
+/// What [SpeakerLabelBadge] draws for [source]: a check, "Likely", or nothing (null).
+String? _badgeKind(String? source) =>
+    SpeakerLabelSource.isConfirmed(source) ? 'confirmed' : (source == SpeakerLabelSource.auto ? 'likely' : null);
 
 /// Saved conversations: a speaker's turn drawn as one paragraph, each line still its own target.
 extension _TranscriptParagraphs on _TranscriptWidgetState {
@@ -49,10 +61,11 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
 
   /// Saved-conversation lines grouped into paragraphs. A speaker's turn reads as one paragraph, and a
   /// long turn starts a new one once [_paragraphTimeGap] has passed since the paragraph began, under
-  /// its clock time when times can be shown. A line with a translation, or with the "Yes / Not
-  /// <name>" question under it, ends its paragraph so the extra sits right below it, and no paragraph
-  /// grows past [_maxLinesPerParagraph] lines, which keeps a long monologue from becoming one huge
-  /// text layout.
+  /// its clock time when times can be shown. A line whose label badge differs from the line before
+  /// (a check, then "Likely") starts one under that badge, with no name. A line with a translation,
+  /// or with the "Yes / Not <name>" question under it, ends its paragraph so the extra sits right
+  /// below it, and no paragraph grows past [_maxLinesPerParagraph] lines, which keeps a long
+  /// monologue from becoming one huge text layout.
   List<_DetailParagraph> _groupParagraphs(Set<String> askSegmentIds) {
     final segments = widget.segments;
     final paragraphs = <_DetailParagraph>[];
@@ -62,19 +75,27 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
       final open = paragraphs.isEmpty ? null : paragraphs.last;
       final startsTurn = _startsTurn(previous, data);
       if (open == null || previous == null) {
-        paragraphs.add(_DetailParagraph(first: i, last: i, startsTurn: true, showsTime: true));
+        paragraphs.add(_DetailParagraph(first: i, last: i, startsTurn: true, showsTime: true, showsBadge: true));
         continue;
       }
       final minuteLater = data.start - segments[open.first].start >= _paragraphTimeGap;
+      final badgeChanged =
+          data.personId != null && _badgeKind(data.speakerLabelSource) != _badgeKind(previous.speakerLabelSource);
       final breaks = startsTurn ||
           minuteLater ||
+          badgeChanged ||
           data.translations.isNotEmpty ||
           previous.translations.isNotEmpty ||
           askSegmentIds.contains(previous.id) ||
           i - open.first >= _maxLinesPerParagraph;
       if (breaks) {
-        paragraphs
-            .add(_DetailParagraph(first: i, last: i, startsTurn: startsTurn, showsTime: startsTurn || minuteLater));
+        paragraphs.add(_DetailParagraph(
+          first: i,
+          last: i,
+          startsTurn: startsTurn,
+          showsTime: startsTurn || minuteLater,
+          showsBadge: startsTurn || badgeChanged,
+        ));
       } else {
         open.last = i;
       }
@@ -153,15 +174,23 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
           if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
         ],
       );
-    } else if (time != null || isTagging) {
-      header = Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          if (time != null) Text(time, style: timeStyle),
-          if (isTagging) ...[if (time != null) const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
-        ],
-      );
+    } else {
+      // Inside a turn: the badge where the label changed, the time after a minute, no name.
+      final badge = paragraph.showsBadge && person != null && !isTagging && _badgeKind(head.speakerLabelSource) != null;
+      if (badge || time != null || isTagging) {
+        header = Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            if (badge) SpeakerLabelBadge(source: head.speakerLabelSource),
+            if (time != null) ...[if (badge) const SizedBox(width: 8), Text(time, style: timeStyle)],
+            if (isTagging) ...[
+              if (time != null) const SizedBox(width: 6),
+              const OmiSpinner(size: OmiSpinnerSize.small),
+            ],
+          ],
+        );
+      }
     }
 
     final seek = widget.onSegmentTap;
