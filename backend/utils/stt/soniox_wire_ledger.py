@@ -28,3 +28,63 @@ def observed_audio(data: bytes, epoch: Any, spans: tuple[tuple[int, int], ...]) 
         and all(n > 0 and 0 <= first < first + n <= epoch.timeline.next_sample for first, n in spans)
     )
     return LedgerAudio(data, spans if observed else ())
+
+
+class SonioxProviderClock:
+    """Local provider cursor, separate from emitted PCM, with no transport waits.
+
+    A finalize report is an anchor only while it is the sole outstanding control
+    and no subsequent audio write has begun. Raced audio stays unplaceable until
+    a later uncontested finalize reports an exact position. The measured 120ms
+    quantum is deliberately not a runtime assumption.
+    """
+
+    def __init__(self, sample_rate: int) -> None:
+        self.sample_rate = sample_rate
+        self.samples = 0
+        self._pending = 0
+        self._audio_inflight = 0
+        self._audio_after_finalize = False
+        self._uncertain = False
+
+    def begin_audio(self) -> bool:
+        self._audio_inflight += 1
+        if self._pending:
+            self._audio_after_finalize = True
+            self._uncertain = True
+        return not self._uncertain
+
+    def end_audio(self, length: int) -> None:
+        self._audio_inflight -= 1
+        self.samples += length
+
+    def begin_finalize(self) -> None:
+        self._pending += 1
+        self._audio_after_finalize = False
+
+    def response(self, message: dict[str, Any]) -> int:
+        acknowledgments = sum(
+            isinstance(token, dict) and token.get('is_final') is True and token.get('text') == '<fin>'
+            for token in message.get('tokens') or []
+        )
+        if not acknowledgments:
+            return 0
+        uncontested = self._pending == acknowledgments == 1 and not (self._audio_after_finalize or self._audio_inflight)
+        self._pending = max(0, self._pending - acknowledgments)
+        self._uncertain = True
+        if not uncontested:
+            return 0
+        total, final = message.get('total_audio_proc_ms'), message.get('final_audio_proc_ms')
+        # Full finalize acknowledgment must carry one exact, non-regressing
+        # position. A token endpoint, lagging progress report or missing field
+        # cannot establish padding. Reject bools, strings and fractional samples.
+        if type(total) is not int or type(final) is not int or total != final or total < 0:
+            return 0
+        numerator = total * self.sample_rate
+        if numerator % 1000 or numerator // 1000 < self.samples:
+            return 0
+        position = numerator // 1000
+        hole = position - self.samples
+        self.samples = position
+        self._uncertain = False
+        return hole

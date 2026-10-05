@@ -196,7 +196,7 @@ class IdleSonioxSocket(STTSocket):
         if self._wire_epoch is not None:
             # complete_send can run before the old writer finishes its queue.
             # Freeze the replacement origin only after the old drain above.
-            offset = (self._wire_epoch.wire_audio_samples or 0) / self._rate
+            offset = (self._wire_epoch.wire_provider_samples or 0) / self._rate
         else:
             offset = self._resume_offset if self._resume_offset is not None else self._admitted_samples / self._rate
         self._resume_offset = None
@@ -211,7 +211,13 @@ class IdleSonioxSocket(STTSocket):
             if self._capture_axis_ledger is not None:
                 try:
                     self._transport.set_capture_axis_ledger(
-                        self._capture_axis_ledger, round(offset * self._rate), 'reopened'
+                        self._capture_axis_ledger,
+                        (
+                            (self._wire_epoch.wire_audio_samples or 0)
+                            if self._wire_epoch is not None
+                            else round(offset * self._rate)
+                        ),
+                        'reopened',
                     )
                 except Exception:
                     disable_socket_diagnostics(self._transport)

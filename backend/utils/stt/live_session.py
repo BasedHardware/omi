@@ -968,7 +968,7 @@ class LiveLegSocket(STTSocket):
         offset = getattr(self.raw, 'set_resume_provider_offset', None)
         if self._send_tracker is not None and callable(offset):
             offset(
-                self._send_tracker.wire_audio_samples or 0
+                self._send_tracker.wire_provider_samples or 0
                 if self._soniox_wire_ledger
                 else self._send_tracker.last_send_provider_start
             )

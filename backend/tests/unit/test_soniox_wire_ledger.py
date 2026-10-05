@@ -20,7 +20,7 @@ from utils.stt.soniox_idle import IdleSonioxSocket
 
 
 async def barrier(raw, wire):
-    marker = '{"type":"finalize","r12_barrier":true}'
+    marker = '{"type":"keepalive","r12_barrier":true}'
     raw._send_queue.put_nowait(marker)
     while await asyncio.wait_for(wire.writes.get(), 0.1) != marker:
         pass
@@ -124,8 +124,10 @@ async def test_real_vad_preroll_hangover_and_replay_conserve_bytes(monkeypatch, 
             assert leg.replay_send(pcm, start) if replay else leg.send(pcm, start_sample=start)
         await barrier(leg.raw, wire)
         samples = sum(len(v) // 2 for v in wire.sent if isinstance(v, bytes))
-        assert epoch.wire_audio_samples == epoch.send_map.last_provider_sample == samples
-        assert epoch.send_map.accepted_provider_samples(0, samples) == samples
+        assert epoch.wire_audio_samples == epoch.wire_provider_samples == samples
+        # The real VAD finalize is preserved. With no peer acknowledgment,
+        # the later onset cannot be mapped onto a guessed provider clock.
+        assert epoch.send_map.accepted_provider_samples(0, samples) < samples
         assert leg.raw._capture_axis.queued == leg.raw._capture_axis.written == samples
         # Keepalive/finalize consume no provider samples.
         await leg.raw._write('{"type":"keepalive"}')
@@ -202,85 +204,6 @@ async def test_off_receipt(monkeypatch):
     monkeypatch.setenv('SONIOX_WIRE_LEDGER', 'false')
     # Reuse the persisted/wire/metric receipt used to prove R10/R11 OFF parity.
     await off_receipt(monkeypatch)
-
-
-class FinalizePaddingWire(Wire):
-    """Replay the observed Soniox 120ms boundary rounding, independently of ledger state."""
-
-    def __init__(self):
-        super().__init__()
-        self.provider_ms = 0
-        self.pcm_bytes = 0
-        self.finalizes = 0
-
-    async def send(self, value):
-        await super().send(value)
-        if isinstance(value, bytes):
-            self.pcm_bytes += len(value)
-            self.provider_ms += len(value) * 1000 / (RATE * 2)
-        elif value and json.loads(value).get('type') == 'finalize':
-            self.finalizes += 1
-            self.provider_ms = ((self.provider_ms + 119.999999) // 120) * 120
-
-    def final_response(self):
-        self.messages.put_nowait(
-            json.dumps(
-                {
-                    'tokens': [
-                        {
-                            'text': 'Observed audio. ',
-                            'is_final': True,
-                            'speaker': '1',
-                            'start_ms': round(self.provider_ms - 800),
-                            'end_ms': round(self.provider_ms - 200),
-                        }
-                    ],
-                    'total_audio_proc_ms': self.provider_ms,
-                }
-            )
-        )
-
-
-@pytest.mark.asyncio
-async def test_repeated_finalize_no_longer_adds_unobserved_provider_time(monkeypatch):
-    monkeypatch.setenv('SONIOX_WIRE_LEDGER', 'true')
-    receiver, epoch, processor, store, leg, original, _ = await managed(monkeypatch, True)
-    original.__class__ = FinalizePaddingWire
-    peer = original
-    peer.provider_ms, peer.pcm_bytes, peer.finalizes = 0, 0, 0
-    # Keep the actual writer/parser/managed callback; change only the offline peer.
-    leg.gate = None
-    try:
-        # 12 × (2670.75ms -> 2760ms) reproduces the measured +1.071s on main.
-        for i in range(12):
-            pcm = b'\1\0' * 42732
-            start, _, _ = receiver.capture_timeline.accept(pcm, T0 + (i + 1) * 2.67075, (i + 1) * 2.67075)
-            assert leg.send(pcm, start_sample=start)
-            leg.finalize()
-        # A unique keepalive barrier does not finalize or change audio time.
-        marker = '{"type":"keepalive","r12_barrier":true}'
-        leg.raw._send_queue.put_nowait(marker)
-        while await asyncio.wait_for(peer.writes.get(), 0.1) != marker:
-            pass
-        await asyncio.sleep(0)
-        assert peer.provider_ms - peer.pcm_bytes * 1000 / (2 * RATE) == 0
-        assert peer.finalizes == 0
-        peer.final_response()
-        for _ in range(20):
-            await asyncio.sleep(0)
-            if peer.messages.empty():
-                break
-        rows = await tick(receiver, processor, store)
-        assert known(rows) == 1
-        assert rows[0]['audio_capture_end'] == pytest.approx(T0 + 32.049 - 0.2)
-        assert leg.raw._capture_axis.written == epoch.wire_audio_samples == peer.pcm_bytes // 2
-        # Planned close remains a real finalization/drain boundary on the old socket.
-        leg.raw._planned_close = True
-        leg.finalize()
-        assert await asyncio.wait_for(peer.writes.get(), 0.1) == '{"type": "finalize"}'
-        assert peer.finalizes == 1
-    finally:
-        await close(leg)
 
 
 @pytest.mark.asyncio

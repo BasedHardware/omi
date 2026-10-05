@@ -617,6 +617,7 @@ class ProviderEpochTranslator:
         self.replay_origin_sample: Optional[int] = None
         self.require_observed_send_mapping = False
         self.wire_audio_samples: Optional[int] = None
+        self.wire_provider_samples: Optional[int] = None
 
     def capture_merge_proof(self, first: int, end: int) -> Optional[CaptureWindowProof]:
         """Snapshot one accepted run, split at strict half-open wall hiatuses.
@@ -672,12 +673,18 @@ class ProviderEpochTranslator:
 
     def note_wire_audio(self, length: int, spans: Sequence[Tuple[int, int]]) -> None:
         """Consume actual emitted PCM; holes carry no capture or owner proof."""
-        start = self.wire_audio_samples or 0
-        self.wire_audio_samples = start + length
+        start = self.wire_provider_samples or 0
+        self.wire_provider_samples = start + length
+        self.wire_audio_samples = (self.wire_audio_samples or 0) + length
         self.require_observed_send_mapping = True
         self.send_path = 'managed_chain'
         if spans:
             self.note_accepted_spans(spans, provider_start=start)
+
+    def note_provider_hole(self, length: int) -> None:
+        """Advance only the provider axis; internal padding is never wire PCM."""
+        if length > 0:
+            self.wire_provider_samples = (self.wire_provider_samples or 0) + length
 
     def note_accepted_spans(self, spans: Sequence[Tuple[int, int]], *, provider_start: Optional[int] = None) -> None:
         first_span = True

@@ -2020,17 +2020,34 @@ consumes compact provider time; missing, malformed, partly unknown or
 out-of-receiver capture spans reserve an unplaceable provider interval. A
 prefix emitted before binding is also unplaceable. Later known sends cannot
 slide backward across that interval. Failed writes grant no capture proof.
-Repeated manual finalization was independently reproduced to advance Soniox's
-processed-audio axis beyond emitted PCM (12 controls added 1.071 seconds for
-synthetic 2.670750-second blocks). ON therefore suppresses midstream manual
-finalize on bound managed sockets, keeping their compact axis continuous.
-Streaming final tokens continue normally; finish and planned idle close still
-drain the tail. No padding duration is invented or granted a capture origin.
-The switch selects the probe-verified compact axis over the experimental
-elapsed axis, retains strict observed-send containment, and keeps unknown text
-without granting audio windows. OFF retains the admission-time ledger exactly.
-The diagnostic ledger reference counts all emitted samples, including unknown
-intervals; its written-PCM counter still measures actual binary writes only.
+Repeated manual finalization advances Soniox's processed-audio axis without
+wire PCM. Synthetic probes at the production 16 kHz configuration measured
+strict advancement to the next 120 ms boundary, including a further 120 ms for
+an exact-boundary or no-audio finalize. This measured quantum is not a runtime
+assumption. ON sends every audio and control frame exactly as OFF does,
+including VAD-pause finalize, keepalive, terminal end and planned idle drain.
+No acknowledgment wait, altered pacing or transcription latency policy is added.
+
+The provider cursor is separate from the emitted-PCM ledger. Only a final
+`<fin>` response to the sole outstanding finalize, received before any subsequent
+audio write begins, may anchor the cursor. Both `total_audio_proc_ms` and
+`final_audio_proc_ms` must report the same nonnegative integer position, exactly
+representable at the configured rate and no earlier than the cursor. The delta
+reserves a provider-only hole with no capture or ownership proof. Token endpoints
+and ordinary progress responses never authorize padding. A write begun before
+acknowledgment, even if it completes afterward, is unplaceable; subsequent PCM
+remains unplaceable until a later uncontested finalize establishes an anchor.
+Missing, malformed, overlapping or regressing acknowledgments also fail closed.
+Every successful binary write still counts as emitted PCM regardless of origin.
+The switch selects the compact-with-reported-holes axis over the experimental
+elapsed axis and retains strict observed-send containment. Unknown text persists
+without an audio window. OFF retains the admission-time ledger exactly.
+
+Idle reopen freezes its provider offset after the old writer and receiver drain,
+including any acknowledged provider-only padding. The replacement transport starts
+a fresh local clock. Its diagnostic origin uses emitted PCM independently;
+provider padding is never called queued, written or ledger PCM. The diagnostic
+ledger reference includes emitted samples with unknown capture origins.
 Pusher carries an inert mirror declaration; managed Soniox sockets run in listen.
 
 `SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
