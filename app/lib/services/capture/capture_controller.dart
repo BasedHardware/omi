@@ -1805,7 +1805,10 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _executeButtonAction(int action, String deviceId, {required String eventType}) async {
     final now = _now();
-    if (_lastButtonActionTime != null && now.difference(_lastButtonActionTime!) < _buttonActionDebounce) {
+    final isEndingVoiceSession = action == 3 && _voiceCommandSession != null;
+    if (!isEndingVoiceSession &&
+        _lastButtonActionTime != null &&
+        now.difference(_lastButtonActionTime!) < _buttonActionDebounce) {
       Logger.debug("Button action debounce active ($eventType), ignoring event");
       return;
     }

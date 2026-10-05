@@ -179,6 +179,17 @@ void check_button_level(struct k_work *work_item)
     if (btn_state == BUTTON_PRESSED && !btn_is_pressed) {
         btn_is_pressed = true;
         btn_press_start_time = now;
+
+        // Expire any pending tap sequence if timeout window elapsed before this press
+        if (tap_count > 0 && (now - btn_last_tap_time > DOUBLE_TAP_WINDOW_MS)) {
+            if (tap_count == 1) {
+                event = BUTTON_EVENT_SINGLE_TAP;
+            } else if (tap_count == 2) {
+                event = BUTTON_EVENT_DOUBLE_TAP;
+            }
+            tap_count = 0;
+            btn_last_tap_time = 0;
+        }
     }
     // 2. Handle button release
     else if (btn_state == BUTTON_RELEASED && btn_is_pressed) {
