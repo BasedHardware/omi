@@ -45,6 +45,9 @@ environments:
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
             value: 'false'
             category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -529,6 +532,9 @@ environments:
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
             value: 'false'
             category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -966,6 +972,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1312,6 +1321,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1626,6 +1638,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1891,6 +1906,9 @@ environments:
               value: 'false'
               category: rollout
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -2445,6 +2463,9 @@ environments:
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
             value: 'true'
             category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'true'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -2822,6 +2843,9 @@ environments:
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -2962,6 +2986,9 @@ environments:
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
             value: 'true'
             category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'true'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -3050,6 +3077,9 @@ environments:
             category: telemetry
           MENTOR_PIPELINE:
             value: cohort
+            category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
             category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -3313,6 +3343,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3519,6 +3552,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -3677,6 +3713,9 @@ environments:
               value: 'false'
               category: rollout
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -3849,6 +3888,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
               value: 'true'
               category: rollout
@@ -3984,6 +4026,9 @@ environments:
               value: 'false'
               category: rollout
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -4135,6 +4180,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -4267,6 +4315,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -4380,6 +4431,9 @@ environments:
               category: rollout
             MENTOR_PIPELINE:
               value: cohort
+              category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware

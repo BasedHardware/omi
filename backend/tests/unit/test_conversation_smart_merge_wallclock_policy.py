@@ -242,6 +242,25 @@ def test_legacy_branch_is_byte_identical_when_wallclock_flag_off():
     assert a == b and a.same_recording is False
 
 
+@pytest.mark.parametrize('created_s', [599, 1600])
+def test_legacy_accepted_pair_never_enters_the_wall_path(monkeypatch, created_s):
+    """Legacy-first: a pass returns the legacy PairCheck untouched, so a wall
+    clock that is negative (599) or invalid (1600 > finished) stays unseen."""
+    survivor, s_segments, new, n_segments = _drifted_pair()
+    new['created_at'] = T0 + timedelta(seconds=created_s)
+    new['started_at'] = T0 + timedelta(seconds=900)
+    new['finished_at'] = T0 + timedelta(seconds=1500)
+    legacy = policy.check_pair(survivor, s_segments, new, n_segments)
+    assert legacy.reason is None and legacy.same_recording is False
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('a legacy-accepted pair must not reach the wall-clock path')
+
+    monkeypatch.setattr(policy, '_check_pair_wallclock', forbidden)
+    check = policy.check_pair(survivor, s_segments, new, n_segments, wallclock_gap=True, last_fragment_row=survivor)
+    assert check == legacy
+
+
 def _ledger_survivor(donor_fragment, **extra):
     survivor = _live_row('s', -3600, -3600, -3000, **extra)
     survivor['smart_merge'] = {

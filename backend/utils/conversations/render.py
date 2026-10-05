@@ -127,8 +127,18 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
 # sinks (persist strip, transcript-edit clear, in-memory drop) still hardcode
 # a single name today; the trust-boundary suite requires they actually clear
 # every member of this set.
+def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
+    """Voice calibration evidence stays inside backend persistence and processing."""
+    conv.pop('speaker_match_scores', None)
+    for segment in conv.get('transcript_segments') or []:
+        if isinstance(segment, dict):
+            segment.pop('speaker_match_scores', None)
+    return conv
+
+
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
+    _strip_match_scores(conv)
     if not conv.get('is_locked', False):
         return conv
     if 'structured' in conv:
@@ -164,6 +174,7 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     # Geolocation is private capture metadata and is not part of the public
     # integration contract. Strip it before either locked or unlocked data is
     # serialized into an integration response.
+    _strip_match_scores(conv)
     conv.pop('geolocation', None)
     for field in PROJECTION_FAMILY_FIELDS:
         conv.pop(field, None)
@@ -297,7 +308,7 @@ def serialize_datetimes(obj: Any) -> Any:
 
 def conversation_to_dict(conversation: Conversation) -> Dict[str, Any]:
     """Convert a Conversation to a JSON-safe dict with ISO datetime strings."""
-    return serialize_datetimes(conversation.model_dump())
+    return _strip_match_scores(serialize_datetimes(conversation.model_dump()))
 
 
 # Allowlisted citation-card fields. A denylist cannot protect a field added

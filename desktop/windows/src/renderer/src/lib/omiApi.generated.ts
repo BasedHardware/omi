@@ -851,6 +851,10 @@ export interface CancelSubscriptionRequest {
   reason_details?: string | null;
 }
 
+export interface CandidateAcceptanceRequest {
+  summary_item?: SummaryTaskReference | null;
+}
+
 export type CandidateAction = "create" | "update" | "complete" | "cancel" | "supersede";
 
 export interface CandidateCompatibilityMetadata {
@@ -1720,13 +1724,21 @@ export interface DailySummaryResponse {
 }
 
 export interface DailySummarySettingsResponse {
+  depth?: "brief" | "normal" | "deep";
   enabled: boolean;
   hour: number;
 }
 
 export interface DailySummarySettingsUpdate {
+  depth?: "brief" | "normal" | "deep" | null;
   enabled?: boolean | null;
   hour?: number | null;
+}
+
+export interface DailySummarySettingsUpdateResponse {
+  depth?: "brief" | "normal" | "deep" | null;
+  message?: string | null;
+  status: string;
 }
 
 export interface DailySummaryTestResponse {
@@ -2860,6 +2872,7 @@ export interface McpApiKey {
 
 export interface McpApiKeyCreate {
   name: string;
+  scopes?: Array<string> | null;
 }
 
 export interface McpApiKeyCreated {
@@ -2881,6 +2894,17 @@ export interface McpCreateActionItem {
 
 export interface McpOauthGrantsResponse {
   grants?: Array<Record<string, unknown>>;
+}
+
+export interface McpPersonMutationResponse {
+  dismissed?: boolean | null;
+  name?: string | null;
+  person_id: string;
+  success: boolean;
+}
+
+export interface McpPersonRenameRequest {
+  name: string;
 }
 
 export interface McpRefreshToolsResponse {
@@ -4510,6 +4534,12 @@ export interface SubscriptionPlan {
 
 export type SubscriptionStatus = "active" | "inactive";
 
+export interface SummaryTaskReference {
+  action_item_index: number;
+  conversation_id: string;
+  expected_description: string;
+}
+
 export interface SyncBatchItem {
   apple_reminder_id?: string | null;
   completed?: boolean | null;
@@ -5497,6 +5527,7 @@ export interface OmiApiSchemas {
   "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
   "CancelSubscriptionRequest": CancelSubscriptionRequest;
+  "CandidateAcceptanceRequest": CandidateAcceptanceRequest;
   "CandidateAction": CandidateAction;
   "CandidateCompatibilityMetadata": CandidateCompatibilityMetadata;
   "CandidateCreate": CandidateCreate;
@@ -5607,6 +5638,7 @@ export interface OmiApiSchemas {
   "DailySummaryResponse": DailySummaryResponse;
   "DailySummarySettingsResponse": DailySummarySettingsResponse;
   "DailySummarySettingsUpdate": DailySummarySettingsUpdate;
+  "DailySummarySettingsUpdateResponse": DailySummarySettingsUpdateResponse;
   "DailySummaryTestResponse": DailySummaryTestResponse;
   "DailySummaryTopicHighlight": DailySummaryTopicHighlight;
   "DailySummaryUnresolvedQuestion": DailySummaryUnresolvedQuestion;
@@ -5759,6 +5791,8 @@ export interface OmiApiSchemas {
   "McpApiKeyCreated": McpApiKeyCreated;
   "McpCreateActionItem": McpCreateActionItem;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
+  "McpPersonMutationResponse": McpPersonMutationResponse;
+  "McpPersonRenameRequest": McpPersonRenameRequest;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
   "McpScreenActivityAppSummary": McpScreenActivityAppSummary;
   "McpScreenActivityRow": McpScreenActivityRow;
@@ -5989,6 +6023,7 @@ export interface OmiApiSchemas {
   "Subscription": Subscription;
   "SubscriptionPlan": SubscriptionPlan;
   "SubscriptionStatus": SubscriptionStatus;
+  "SummaryTaskReference": SummaryTaskReference;
   "SyncBatchItem": SyncBatchItem;
   "SyncBatchRequest": SyncBatchRequest;
   "SyncCaptureManifestFile": SyncCaptureManifestFile;
@@ -6946,6 +6981,16 @@ export interface OmiApiPaths {
       operationId: "get_candidate_workflow_control_v1_candidates_control_get";
       responses: {
         "200": TaskWorkflowControl;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/candidates/from-conversation": {
+    post: {
+      operationId: "prepare_conversation_task_candidate_v1_candidates_from_conversation_post";
+      responses: {
+        "200": CandidateRecord;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -8755,6 +8800,28 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/mcp/people/{person_id}/dismiss": {
+    post: {
+      operationId: "dismiss_person_v1_mcp_people__person_id__dismiss_post";
+      responses: {
+        "200": McpPersonMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/people/{person_id}/name": {
+    patch: {
+      operationId: "rename_person_v1_mcp_people__person_id__name_patch";
+      responses: {
+        "200": McpPersonMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/mcp/profile": {
     get: {
       operationId: "get_user_profile_v1_mcp_profile_get";
@@ -9675,7 +9742,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "update_daily_summary_settings_v1_users_daily_summary_settings_patch";
       responses: {
-        "200": UserStatusResponse;
+        "200": DailySummarySettingsUpdateResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -12638,6 +12705,29 @@ export async function get_candidate_workflow_control_v1_candidates_control_get(h
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function prepare_conversation_task_candidate_v1_candidates_from_conversation_post(header: { X_Account_Generation: number, Idempotency_Key: string, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SummaryTaskReference, init?: OmiApiClientInit): Promise<CandidateRecord> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates/from-conversation`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      "X-Account-Generation": String(header.X_Account_Generation),
+      "Idempotency-Key": String(header.Idempotency_Key),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function drain_candidate_integrations_v1_candidates_integrations_drain_post(query: { limit?: number }, header: { X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Record<string, number>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/candidates/integrations/drain`;
@@ -12701,13 +12791,14 @@ export async function get_candidate_v1_candidates__candidate_id__get(path: { can
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function accept_candidate_v1_candidates__candidate_id__accept_post(path: { candidate_id: string }, header: { X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CandidateResolutionReceipt> {
+export async function accept_candidate_v1_candidates__candidate_id__accept_post(path: { candidate_id: string }, header: { X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CandidateAcceptanceRequest | null, init?: OmiApiClientInit): Promise<CandidateResolutionReceipt> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/candidates/${path.candidate_id}/accept`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
     headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       "X-Account-Generation": String(header.X_Account_Generation),
@@ -12716,6 +12807,7 @@ export async function accept_candidate_v1_candidates__candidate_id__accept_post(
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -16070,6 +16162,38 @@ export async function get_people_v1_mcp_people_get(init?: OmiApiClientInit): Pro
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function dismiss_person_v1_mcp_people__person_id__dismiss_post(path: { person_id: string }, init?: OmiApiClientInit): Promise<McpPersonMutationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/people/${path.person_id}/dismiss`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function rename_person_v1_mcp_people__person_id__name_patch(path: { person_id: string }, body: McpPersonRenameRequest, init?: OmiApiClientInit): Promise<McpPersonMutationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/people/${path.person_id}/name`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_profile_v1_mcp_profile_get(init?: OmiApiClientInit): Promise<UserProfile> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/profile`;
@@ -17802,7 +17926,7 @@ export async function get_daily_summary_settings_v1_users_daily_summary_settings
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function update_daily_summary_settings_v1_users_daily_summary_settings_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DailySummarySettingsUpdate, init?: OmiApiClientInit): Promise<UserStatusResponse> {
+export async function update_daily_summary_settings_v1_users_daily_summary_settings_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DailySummarySettingsUpdate, init?: OmiApiClientInit): Promise<DailySummarySettingsUpdateResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summary-settings`;
   const _search = "";
@@ -20482,4 +20606,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 476 client methods generated.
+// Total: 479 client methods generated.
