@@ -57,6 +57,8 @@ class _LiveActivitySettingsState extends State<LiveActivitySettings> with Widget
     setState(() => _saving = true);
     try {
       if (!await SharedPreferencesUtil().setShowCaptureLiveActivity(value)) {
+        // The cache already holds the rejected value, and the next card update would send it.
+        await SharedPreferencesUtil().setShowCaptureLiveActivity(previous);
         throw StateError('Preference was not saved');
       }
       if (mounted) setState(() => _enabled = value);

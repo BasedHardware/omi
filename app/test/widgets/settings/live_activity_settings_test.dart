@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -70,6 +71,29 @@ void main() {
     }
   });
 
+  testWidgets('a rejected preference write keeps the old choice for the next card update', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final nativeCalls = <String>[];
+    try {
+      SharedPreferences.resetStatic();
+      SharedPreferencesStorePlatform.instance = _RejectingStore();
+      await SharedPreferencesUtil.init();
+      await pumpSettings(tester);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+        nativeCalls.add(call.method);
+        return call.method == 'availability' ? {'supported': true, 'authorized': true} : null;
+      });
+      await tester.tap(find.byKey(toggle));
+      await tester.pumpAndSettle();
+
+      expect(switchValue(tester), isTrue);
+      expect(SharedPreferencesUtil().showCaptureLiveActivity, isTrue);
+      expect(nativeCalls, isNot(contains('setEnabled')));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('a failed native update restores the switch and the saved preference', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     try {
@@ -89,4 +113,20 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+}
+
+/// Storage that refuses every write, as a full disk does. SharedPreferences caches a value
+/// before writing it, so a refused write is still read back unless the caller restores it.
+class _RejectingStore extends SharedPreferencesStorePlatform {
+  @override
+  Future<Map<String, Object>> getAll() async => {};
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async => false;
+
+  @override
+  Future<bool> remove(String key) async => false;
+
+  @override
+  Future<bool> clear() async => false;
 }

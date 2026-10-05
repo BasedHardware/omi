@@ -367,12 +367,33 @@ void main() {
       ble.notifyListeners();
       expect(p.pendantCaptureVerified, isTrue);
       expect(card.snapshot['status'], isNot('unverified'));
+      expect(card.snapshot['paused'], isFalse);
+      expect(card.snapshot['elapsed'], 0, reason: 'waiting for audio was not capture time');
 
-      // A lapse hides the claim again; it is not a pause, so the recording's time keeps running.
-      world.clock.advanceTo(world.clock.now().add(const Duration(seconds: 35)));
+      final verifiedAt = world.clock.now();
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 20)));
+      expect(card.snapshot['elapsed'], 20);
+
+      // A lapse hides the claim again and stops the clock until audio is verified again.
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 35)));
       expect(p.pendantCaptureVerified, isFalse);
       expect(card.snapshot['status'], 'unverified');
+      expect(card.snapshot['paused'], isTrue);
+      expect(card.snapshot['elapsed'], 35);
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 50)));
+      expect(card.snapshot['elapsed'], 35);
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'fresh',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      );
+      ble.notifyListeners();
       expect(card.snapshot['paused'], isFalse);
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 55)));
+      expect(card.snapshot['elapsed'], 40);
     } finally {
       await world.dispose();
       await dir.delete(recursive: true);

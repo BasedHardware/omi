@@ -22,6 +22,23 @@ void main() {
     source.dispose();
   });
 
+  test('an owned Listenable stops delivering as soon as close starts, before its removal runs', () async {
+    final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+    final source = ChangeNotifier();
+    final gate = Completer<void>();
+    // Released first, so the listener is still attached while this cancellation is pending.
+    bag.own(() => gate.future);
+    var calls = 0;
+    bag.listenTo(source, () => calls++);
+    final closing = bag.close();
+    await pumpEventQueue();
+    source.notifyListeners();
+    expect(calls, 0);
+    gate.complete();
+    await closing;
+    source.dispose();
+  });
+
   test('close does not cancel timers the bag did not register', () async {
     final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
     final events = <String>[];
