@@ -28,6 +28,10 @@ class TestAudioBytesWebhookUrl(unittest.IsolatedAsyncioTestCase):
         url = 'https://[2606:4700:4700::1111]/audio'
         self.assertTrue(_is_valid_audio_bytes_webhook_url(url))
 
+    def test_ipv4_mapped_ipv6_literal_target_is_valid(self):
+        url = 'https://[::ffff:8.8.8.8]/audio'
+        self.assertTrue(_is_valid_audio_bytes_webhook_url(url))
+
     def test_ipv6_literal_with_port_and_query_is_valid(self):
         url = 'https://[2606:4700:4700::1111]:8080?token=synthetic'
         self.assertTrue(_is_valid_audio_bytes_webhook_url(url))
