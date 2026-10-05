@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
@@ -87,7 +88,10 @@ OUTCOMES = (
     'lookup_failed',
     'disabled',
     'not_allowlisted',
+    's1_refused',
 )
+
+S1_REFUSAL_REASONS = ('no_claims', 'parse_failed', 'count_mismatch', 'filename_mismatch', 'not_admitted')
 
 
 @dataclass(frozen=True)
@@ -134,6 +138,67 @@ def _s1_claims_complete(capture_evidence_claims: Optional[Mapping], filenames: S
     return len(parsed) == len(filenames) == len(capture_evidence_claims)
 
 
+def _s1_refusal_reason(capture_evidence_claims: object, filenames: Sequence[str]) -> str:
+    """Bounded reason for a false S1 gate; never raises and never leaks claim content.
+
+    Claims rejected at the upload HTTP boundary arrive here as ``{}`` — the
+    queued shape does not carry the earlier refusal, so those classify as
+    ``no_claims`` rather than the original parse failure.
+    """
+    try:
+        if not capture_evidence_dark_write_enabled():
+            return 'not_admitted'
+        if capture_evidence_claims is None:
+            return 'no_claims'
+        if not isinstance(capture_evidence_claims, Mapping):
+            return 'parse_failed'
+        if not capture_evidence_claims:
+            return 'no_claims'
+        for claim in capture_evidence_claims.values():
+            if not isinstance(claim, Mapping):
+                return 'parse_failed'
+            try:
+                uuid.UUID(str(claim['capture_root']))
+                epoch, start, count, rate = (
+                    claim[key] for key in ('clock_epoch', 'source_frame_start', 'frame_count', 'rate_hz')
+                )
+                if (
+                    any(type(number) is not int or number < 0 for number in (epoch, start, count, rate))
+                    or count == 0
+                    or rate == 0
+                    or claim['codec'] not in {'pcm16', 'opus'}
+                    or claim.get('channel') != 'mono'
+                ):
+                    return 'parse_failed'
+            except Exception:
+                return 'parse_failed'
+        try:
+            claim_items = [dict(claim, name=name) for name, claim in capture_evidence_claims.items()]
+        except Exception:
+            return 'parse_failed'
+        if not filenames or len(capture_evidence_claims) > 20 or len(filenames) > 20:
+            return 'count_mismatch'
+        if len(capture_evidence_claims) != len(filenames) or len(set(filenames)) != len(filenames):
+            return 'count_mismatch'
+        if set(capture_evidence_claims.keys()) != set(filenames):
+            return 'filename_mismatch'
+        try:
+            payload = json.dumps({'version': 1, 'files': claim_items})
+            if len(payload.encode('utf-8')) > 4096:
+                return 'parse_failed'
+        except Exception:
+            return 'parse_failed'
+        return 'parse_failed'
+    except Exception:
+        return 'parse_failed'
+
+
+def emit_s1_refusal(reason: str) -> None:
+    """One bounded s1_refused outcome per refused upload; no ids, names or claim content."""
+    safe_reason = reason if reason in S1_REFUSAL_REASONS else 'parse_failed'
+    _emit(LineagePlan(targets={}, outcome='s1_refused', reason=safe_reason), None, diagnostics=False)
+
+
 def lineage_resolution_requested(
     uid: Optional[str],
     recording_session_id: Optional[str],
@@ -169,6 +234,7 @@ def lineage_resolution_requested(
         )
         return False
     if sync_lineage_s1_required() and not _s1_claims_complete(capture_evidence_claims, filenames):
+        emit_s1_refusal(_s1_refusal_reason(capture_evidence_claims, filenames))
         return False
     return True
 
