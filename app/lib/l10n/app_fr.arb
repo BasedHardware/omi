@@ -3874,5 +3874,13 @@
     "dismiss": "Masquer",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Afficher sur l’écran verrouillé"
+    "showOnLockScreen": "Afficher sur l’écran verrouillé",
+"singlePress": "Simple appui",
+    "singlePressAction": "Action simple appui",
+    "triplePress": "Triple appui",
+    "triplePressAction": "Action triple appui",
+    "longPress": "Appui long",
+    "longPressFixedNotice": "Fixé dans le matériel de l'appareil",
+    "turnOnOff": "Allumer / Éteindre",
+    "buttonActionNone": "Aucun"
 }

@@ -3839,5 +3839,13 @@
     "dismiss": "Descartar",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Mostrar en la pantalla de bloqueo"
+    "showOnLockScreen": "Mostrar en la pantalla de bloqueo",
+"singlePress": "Pulsación única",
+    "singlePressAction": "Acción de pulsación única",
+    "triplePress": "Triple pulsación",
+    "triplePressAction": "Acción de triple pulsación",
+    "longPress": "Pulsación larga",
+    "longPressFixedNotice": "Fijo en el hardware del dispositivo",
+    "turnOnOff": "Encender / Apagar",
+    "buttonActionNone": "Ninguno"
 }

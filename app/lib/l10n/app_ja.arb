@@ -3839,5 +3839,13 @@
     "dismiss": "非表示",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "ロック画面に表示"
+    "showOnLockScreen": "ロック画面に表示",
+"singlePress": "シングルプレス",
+    "singlePressAction": "シングルプレスアクション",
+    "triplePress": "トリプルプレス",
+    "triplePressAction": "トリプルプレスアクション",
+    "longPress": "長押し",
+    "longPressFixedNotice": "デバイスハードウェアで固定",
+    "turnOnOff": "オン / オフの切り替え",
+    "buttonActionNone": "なし"
 }

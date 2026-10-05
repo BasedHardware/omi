@@ -26,33 +26,6 @@ String _micGainDescription(BuildContext context, int level) {
   return level >= 0 && level < descriptions.length ? descriptions[level] : '';
 }
 
-/// Lets the reader pick what a double tap on the device does. Resolves to the chosen action
-/// (0 end and process, 1 mute/unmute, 2 star), or null when dismissed.
-Future<int?> showDoubleTapActionSheet(BuildContext context, {required int current}) {
-  final l10n = context.l10n;
-  final options = [l10n.endAndProcess, l10n.deviceOnboardingMuteUnmute, l10n.starOngoing];
-  return showOmiSheet<int>(
-    context: context,
-    title: l10n.doubleTapAction,
-    padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-    builder: (sheetContext) => Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < options.length; i++)
-          Semantics(
-            selected: i == current,
-            child: OmiSettingsRow(
-              title: options[i],
-              showChevron: false,
-              trailing: i == current ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
-              onTap: () => Navigator.of(sheetContext).pop(i),
-            ),
-          ),
-      ],
-    ),
-  );
-}
-
 /// Hardware button action picker (3 ask question, 1 mute/unmute, 0 end and process, 2 star, 4 none).
 Future<int?> showButtonActionSheet(
   BuildContext context, {
@@ -65,7 +38,7 @@ Future<int?> showButtonActionSheet(
     (1, l10n.deviceOnboardingMuteUnmute),
     (0, l10n.endAndProcess),
     (2, l10n.starOngoing),
-    (4, 'None'),
+    (4, l10n.buttonActionNone),
   ];
   return showOmiSheet<int>(
     context: context,

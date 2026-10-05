@@ -740,7 +740,7 @@ class CaptureController extends ChangeNotifier
   int _voiceCommandSubmissionGeneration = 0;
   bool _voiceCommandStartedDuringOnboarding = false;
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
-  Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
+  Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
   DateTime? _lastButtonActionTime; // Debounce timestamp for button operations
   static const _buttonActionDebounce = Duration(milliseconds: 400);
@@ -1783,13 +1783,20 @@ class CaptureController extends ChangeNotifier
   }
 
   void _startVoiceCommandSession(String deviceId) {
+    final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
+    if (autoSubmittedAt != null && _now().difference(autoSubmittedAt) <= _voiceCommandAutoSubmitGrace) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.autoEndGrace);
+      return;
+    }
     debugPrint("Starting voice question session (toggle mode)");
     if (OmiVoicePlaybackService.instance.isSpeaking) {
       OmiVoicePlaybackService.instance.interrupt(
         source: VoiceReplyPlaybackInterruptSource.newVoiceQuery,
       );
     }
-    _voiceCommandSession = DateTime.now();
+    _lastVoiceCommandAutoSubmitAt = null;
+    _voiceCommandSession = _now();
+    _voiceCommandTrigger = _VoiceCommandTrigger.toggle;
     _commandBytes = [];
     _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
     _startVoiceCommandTimeout(deviceId);
@@ -1797,7 +1804,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _executeButtonAction(int action, String deviceId, {required String eventType}) async {
-    final now = DateTime.now();
+    final now = _now();
     if (_lastButtonActionTime != null && now.difference(_lastButtonActionTime!) < _buttonActionDebounce) {
       Logger.debug("Button action debounce active ($eventType), ignoring event");
       return;

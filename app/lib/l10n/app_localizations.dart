@@ -1317,6 +1317,30 @@ abstract class AppLocalizations {
   /// **'Double Tap Action'**
   String get doubleTapAction;
 
+  /// Label for single press button gesture
+  String get singlePress => 'Single Press';
+
+  /// Single press action picker title
+  String get singlePressAction => 'Single Press Action';
+
+  /// Label for triple press button gesture
+  String get triplePress => 'Triple Press';
+
+  /// Triple press action picker title
+  String get triplePressAction => 'Triple Press Action';
+
+  /// Label for long press button gesture
+  String get longPress => 'Long Press';
+
+  /// Notice indicating long press action is hardware fixed
+  String get longPressFixedNotice => 'Fixed in device hardware';
+
+  /// Power on and off action description
+  String get turnOnOff => 'Turn On / Off';
+
+  /// None option for button action selection
+  String get buttonActionNone => 'None';
+
   /// End and process action
   ///
   /// In en, this message translates to:

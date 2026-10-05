@@ -14844,5 +14844,37 @@
     "showOnLockScreen": "Show on Lock Screen",
     "@showOnLockScreen": {
         "description": "Setting for recording Live Activities on the lock screen and Dynamic Island"
+    },
+    "singlePress": "Single Press",
+    "@singlePress": {
+        "description": "Label for single press button gesture"
+    },
+    "singlePressAction": "Single Press Action",
+    "@singlePressAction": {
+        "description": "Single press action picker title"
+    },
+    "triplePress": "Triple Press",
+    "@triplePress": {
+        "description": "Label for triple press button gesture"
+    },
+    "triplePressAction": "Triple Press Action",
+    "@triplePressAction": {
+        "description": "Triple press action picker title"
+    },
+    "longPress": "Long Press",
+    "@longPress": {
+        "description": "Label for long press button gesture"
+    },
+    "longPressFixedNotice": "Fixed in device hardware",
+    "@longPressFixedNotice": {
+        "description": "Notice indicating long press action is hardware fixed"
+    },
+    "turnOnOff": "Turn On / Off",
+    "@turnOnOff": {
+        "description": "Power on and off action description"
+    },
+    "buttonActionNone": "None",
+    "@buttonActionNone": {
+        "description": "None option for button action selection"
     }
 }

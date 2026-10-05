@@ -192,7 +192,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       case 3:
         return context.l10n.deviceOnboardingAskQuestionTitle;
       case 4:
-        return 'None';
+        return context.l10n.buttonActionNone;
       default:
         return context.l10n.endConversation;
     }
@@ -201,7 +201,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Future<void> _pickSinglePressAction() async {
     final action = await showButtonActionSheet(
       context,
-      title: 'Single Press Action',
+      title: context.l10n.singlePressAction,
       current: SharedPreferencesUtil().singlePressAction,
     );
     if (action == null || !mounted) return;
@@ -221,7 +221,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Future<void> _pickTriplePressAction() async {
     final action = await showButtonActionSheet(
       context,
-      title: 'Triple Press Action',
+      title: context.l10n.triplePressAction,
       current: SharedPreferencesUtil().triplePressAction,
     );
     if (action == null || !mounted) return;
@@ -457,7 +457,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           if (_omiButtonActionsEnabled) ...[
             OmiSettingsRow(
               leading: const FaIcon(FontAwesomeIcons.handPointer),
-              title: 'Single Press',
+              title: l10n.singlePress,
               value: _buttonActionLabel(SharedPreferencesUtil().singlePressAction),
               onTap: _pickSinglePressAction,
               showChevron: true,
@@ -465,16 +465,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             doubleTapRow,
             OmiSettingsRow(
               leading: const FaIcon(FontAwesomeIcons.handPointer),
-              title: 'Triple Press',
+              title: l10n.triplePress,
               value: _buttonActionLabel(SharedPreferencesUtil().triplePressAction),
               onTap: _pickTriplePressAction,
               showChevron: true,
             ),
-            const OmiSettingsRow(
-              leading: FaIcon(FontAwesomeIcons.powerOff),
-              title: 'Long Press',
-              subtitle: 'Fixed in device hardware',
-              value: 'Turn On / Off',
+            OmiSettingsRow(
+              leading: const FaIcon(FontAwesomeIcons.powerOff),
+              title: l10n.longPress,
+              subtitle: l10n.longPressFixedNotice,
+              value: l10n.turnOnOff,
               showChevron: false,
             ),
           ],

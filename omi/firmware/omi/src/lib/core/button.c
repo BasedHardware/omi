@@ -197,8 +197,9 @@ void check_button_level(struct k_work *work_item)
                 btn_last_tap_time = 0;
             }
         } else {
-            // Release exceeding short tap threshold (e.g. aborted long press);
-            // clear tap state to prevent ghost taps.
+            // Held press released exceeding short tap threshold (e.g. legacy hold-to-talk release);
+            // clear tap state and emit release event (BUTTON_RELEASE / state 5)
+            event = BUTTON_EVENT_RELEASE;
             tap_count = 0;
             btn_last_tap_time = 0;
         }
@@ -242,6 +243,11 @@ void check_button_level(struct k_work *work_item)
         LOG_INF("triple tap detected");
         btn_last_event = event;
         notify_triple_tap();
+        break;
+    case BUTTON_EVENT_RELEASE:
+        LOG_INF("release detected");
+        btn_last_event = event;
+        notify_unpress();
         break;
     case BUTTON_EVENT_LONG_PRESS:
         if (btn_last_event != BUTTON_EVENT_LONG_PRESS) {

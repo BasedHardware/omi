@@ -3935,5 +3935,13 @@
     "dismiss": "Elrejtés",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Megjelenítés a zárolási képernyőn"
+    "showOnLockScreen": "Megjelenítés a zárolási képernyőn",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "longPressFixedNotice": "Fixed in device hardware",
+    "turnOnOff": "Turn On / Off",
+    "buttonActionNone": "None"
 }

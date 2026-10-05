@@ -581,6 +581,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doubleTapAction => '双击操作';
 
   @override
+  String get singlePress => '单击';
+
+  @override
+  String get singlePressAction => '单击操作';
+
+  @override
+  String get triplePress => '三击';
+
+  @override
+  String get triplePressAction => '三击操作';
+
+  @override
+  String get longPress => '长按';
+
+  @override
+  String get longPressFixedNotice => '硬件固定功能';
+
+  @override
+  String get turnOnOff => '开关机';
+
+  @override
+  String get buttonActionNone => '无';
+
+  @override
   String get endAndProcess => '结束并处理';
 
   @override

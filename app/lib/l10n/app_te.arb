@@ -11396,5 +11396,13 @@
     "dismiss": "దాచు",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు"
+    "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "longPressFixedNotice": "Fixed in device hardware",
+    "turnOnOff": "Turn On / Off",
+    "buttonActionNone": "None"
 }

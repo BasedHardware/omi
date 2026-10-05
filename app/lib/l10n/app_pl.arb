@@ -3874,5 +3874,13 @@
     "dismiss": "Ukryj",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Pokaż na ekranie blokady"
+    "showOnLockScreen": "Pokaż na ekranie blokady",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "longPressFixedNotice": "Fixed in device hardware",
+    "turnOnOff": "Turn On / Off",
+    "buttonActionNone": "None"
 }

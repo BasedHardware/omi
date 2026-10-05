@@ -591,6 +591,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get doubleTapAction => 'Double Tap Action';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get longPressFixedNotice => 'Fixed in device hardware';
+
+  @override
+  String get turnOnOff => 'Turn On / Off';
+
+  @override
+  String get buttonActionNone => 'None';
+
+  @override
   String get endAndProcess => 'End & Process Conversation';
 
   @override
