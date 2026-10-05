@@ -331,11 +331,13 @@ def check_pair(
         return PairCheck(SkipReason.PREDECESSOR_REFRESH_PENDING)
     if has_wake_word(survivor_segments):
         return PairCheck(SkipReason.WAKE_WORD)
-    if wallclock_gap:
-        check = _check_pair_wallclock(survivor, survivor_segments, new, new_segments, last_fragment_row)
-        if check is not None:
-            return check
-    return _check_pair_legacy(survivor, survivor_segments, new, new_segments)
+    legacy = _check_pair_legacy(survivor, survivor_segments, new, new_segments)
+    if legacy.reason is None or not wallclock_gap:
+        return legacy
+    check = _check_pair_wallclock(survivor, survivor_segments, new, new_segments, last_fragment_row)
+    if check is not None:
+        return check
+    return legacy
 
 
 def _check_pair_legacy(

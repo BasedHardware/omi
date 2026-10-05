@@ -60,10 +60,11 @@ def _set_wall(world, mode):
     world.monkeypatch.setenv(WALL_ENV, mode)
 
 
-def test_on_merges_a_drifted_same_recording_pair(world):
+def test_on_merges_a_drifted_same_recording_pair(world, caplog):
     _drifted_pair(world)
     world.jev_answers = [0.35]
     _set_wall(world, 'on')
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
 
     assert world.finish('n') is True
 
@@ -77,9 +78,49 @@ def test_on_merges_a_drifted_same_recording_pair(world):
     assert sorted(s['id'] for s in survivor['transcript_segments']) == ['n-s0', 'n-s1', 'p-s0', 'p-s1']
     assert len(world.jev_calls) == 1
     assert '2 min after A ended' in world.jev_calls[0]['state']
+    merged = [r.getMessage() for r in caplog.records if 'decision=merged' in r.getMessage()]
+    assert len(merged) == 1 and 'gap_path=wallclock' in merged[0]
     fragments = survivor['smart_merge']['fragments']
     assert [f['id'] for f in fragments] == ['p', 'n']
     assert fragments[1]['started_at'] == T0 + timedelta(seconds=400)
+
+
+@pytest.mark.parametrize('wall_mode', [None, 'off', 'shadow', 'on'])
+@pytest.mark.parametrize('created_s', [599, 1600])
+def test_legacy_accepted_pair_merges_identically_in_every_mode(world, caplog, wall_mode, created_s):
+    """A pair the legacy gate accepts keeps its exact legacy verdict under on,
+    even when its wall times are negative (599) or invalid (1600 > finished)."""
+    _add(world, 'p', 0, 0, 600)
+    _add(world, 'n', created_s, 900, 1500)
+    world.jev_answers = [0.35]
+    if wall_mode is not None:
+        _set_wall(world, wall_mode)
+    seen = []
+    world.monkeypatch.setattr(
+        metrics.CONVERSATION_SMART_MERGE_DECISION_TOTAL,
+        'labels',
+        lambda **labels: SimpleNamespace(inc=lambda: seen.append(labels)),
+    )
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
+
+    assert world.finish('n') is True
+
+    donor = world.raw('n')
+    assert donor['deleted'] is True and donor['sync_merged_into'] == 'p'
+    assert donor['smart_merge']['role'] == 'donor'
+    record = donor['smart_merge_decision']
+    assert record['decision'] == 'merged' and record['reason'] == 'jev_same'
+    assert record['gap_seconds'] == 300.0 and record['speech_gap_seconds'] == 300.0
+    assert len(world.jev_calls) == 1
+    assert '5 min after A ended' in world.jev_calls[0]['state']
+    assert _shadow_lines(caplog) == []
+    assert seen == [{'mode': 'merge', 'decision': 'merge', 'reason': 'absorbed', 'gap_bucket': '5_15m'}]
+    merged = [r.getMessage() for r in caplog.records if 'decision=merged' in r.getMessage()]
+    assert len(merged) == 1
+    if wall_mode == 'on':
+        assert 'gap_path=legacy' in merged[0]
+    else:
+        assert 'gap_path' not in merged[0]
 
 
 def test_off_keeps_the_legacy_verdict_without_extra_reads(world):
@@ -297,6 +338,69 @@ def test_last_fragment_finish_mutation_rejects_a_stale_wall_gap(world):
     assert not world.raw('f3').get('deleted')
 
 
+@pytest.mark.parametrize('post_plan_created_s', [None, 1600])
+def test_union_recheck_lets_a_legacy_plan_survive_a_bad_wall_clock(world, post_plan_created_s):
+    """A legacy-admitted on plan rechecks the union rule: a negative (599) or
+    invalid (1600 > finished) wall clock cannot reject what legacy admits."""
+    _add(world, 'p', 0, 0, 600)
+    _add(world, 'n', 599, 900, 1500)
+    world.jev_answers = [0.35]
+    _set_wall(world, 'on')
+    plan = smart_merge._decide(
+        UID, 'n', mode=config.SmartMergeMode.MERGE, trigger=ProcessingTrigger.CAPTURE_END, owner='job'
+    )
+    assert plan is not None
+    assert plan.wallclock_gap is True and plan.same_recording is False
+    assert plan.admission_path == 'legacy'
+    if post_plan_created_s is not None:
+        world.raw('n')['created_at'] = T0 + timedelta(seconds=post_plan_created_s)
+    assert smart_merge._absorb(UID, 'n', plan, mode=config.SmartMergeMode.MERGE, owner='job') is True
+    assert world.raw('n')['deleted'] is True and world.raw('n')['sync_merged_into'] == 'p'
+
+
+def test_union_recheck_lets_a_wall_plan_survive_a_fresh_legacy_pass(world, caplog):
+    """A wall-admitted plan still commits when fresh rows would pass legacy,
+    even though the same fresh rows make the wall gap negative."""
+    _drifted_pair(world)
+    world.jev_answers = [0.9]
+    _set_wall(world, 'on')
+    plan = smart_merge._decide(
+        UID, 'n', mode=config.SmartMergeMode.MERGE, trigger=ProcessingTrigger.CAPTURE_END, owner='job'
+    )
+    assert plan is not None
+    assert plan.wallclock_gap is True and plan.same_recording is True
+    assert plan.admission_path == 'wallclock'
+    world.raw('n')['started_at'] = T0 + timedelta(seconds=900)
+    world.raw('n')['created_at'] = T0 + timedelta(seconds=599)
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
+    caplog.clear()
+    assert smart_merge._absorb(UID, 'n', plan, mode=config.SmartMergeMode.MERGE, owner='job') is True
+    assert world.raw('n')['deleted'] is True
+    merged = [r.getMessage() for r in caplog.records if 'decision=merged' in r.getMessage()]
+    assert len(merged) == 1 and 'gap_path=legacy' in merged[0]
+
+
+def test_union_recheck_rescues_a_legacy_plan_on_fresh_data(world, caplog):
+    """A legacy-admitted on plan whose fresh rows now skip legacy is rescued
+    by the wall-clock proof re-evaluated inside the transaction."""
+    _add(world, 'p', 0, 0, 600)
+    _add(world, 'n', 720, 900, 1500)
+    world.jev_answers = [0.9]
+    _set_wall(world, 'on')
+    plan = smart_merge._decide(
+        UID, 'n', mode=config.SmartMergeMode.MERGE, trigger=ProcessingTrigger.CAPTURE_END, owner='job'
+    )
+    assert plan is not None
+    assert plan.wallclock_gap is True and plan.same_recording is False
+    world.raw('n')['started_at'] = T0 + timedelta(seconds=400)
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
+    caplog.clear()
+    assert smart_merge._absorb(UID, 'n', plan, mode=config.SmartMergeMode.MERGE, owner='job') is True
+    assert world.raw('n')['deleted'] is True and world.raw('n')['sync_merged_into'] == 'p'
+    merged = [r.getMessage() for r in caplog.records if 'decision=merged' in r.getMessage()]
+    assert len(merged) == 1 and 'gap_path=wallclock' in merged[0]
+
+
 def _shadow_lines(caplog):
     return [r.getMessage() for r in caplog.records if 'event=smart_merge_wallclock_shadow' in r.getMessage()]
 
@@ -457,10 +561,26 @@ def test_on_does_not_reuse_a_legacy_cached_decision(world):
     assert world.finish('n') is False
     assert world.raw('n')['smart_merge_decision']['speech_gap_seconds'] is not None
 
+    world.raw('n')['started_at'] = T0 + timedelta(seconds=400)
     world.jev_answers = [0.9]
     _set_wall(world, 'on')
     assert world.finish('n') is True
     assert len(world.jev_calls) == 2
+
+
+def test_on_reuses_a_legacy_cached_decision_when_legacy_still_admits(world):
+    """A sticky legacy keep is honored under on: same candidate, same path, no re-ask."""
+    _add(world, 'p', 0, 0, 600)
+    _add(world, 'n', 700, 900, 1500)
+    world.jev_answers = [0.2]
+    assert world.finish('n') is False
+
+    _set_wall(world, 'on')
+    assert world.finish('n') is False
+    assert len(world.jev_calls) == 1
+    record = world.raw('n')['smart_merge_decision']
+    assert record['decision'] == 'kept' and record['reason'] == 'jev_different'
+    assert record['gap_seconds'] == 300.0 and record['speech_gap_seconds'] == 300.0
 
 
 def test_on_reuses_a_wall_record_for_the_same_pair(world):
