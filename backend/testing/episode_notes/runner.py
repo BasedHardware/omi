@@ -17,7 +17,9 @@ from testing.episode_notes.prompts import (
 )
 from testing.episode_notes.reporting import arm_reports, paired_reports
 from testing.episode_notes.schema import FixtureSet, JudgeScore, LLMCallError, LLMResult
-from utils.conversations.episode_evidence import restore_episode_claim_ids
+from models.episode_extraction import EpisodeStructuredExtraction
+from utils.conversations.episode_compaction import compact_episode_items
+from utils.conversations.episode_evidence import EvidenceItem, restore_episode_claim_ids
 from utils.conversations.episode_vacuity import is_vacuous_note
 from utils.llm.episode_policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
 
@@ -171,9 +173,19 @@ def evaluate(
                     result = cached_call(cache_dir, arm, candidate_model, prompt, payload, llm)
                     prompt_hash = fingerprint(prompt)
                 if arm == 'episode':
+                    result.content['note_claims'] = [
+                        claim.model_dump()
+                        for claim in EpisodeStructuredExtraction.model_validate(result.content).note_claims
+                    ]
                     restore_episode_claim_ids(
                         result.content.get('note_claims', []),
-                        [item for field in SOURCE_FIELDS for item in getattr(episode.evidence, field)],
+                        compact_episode_items(
+                            [
+                                EvidenceItem(source_kind=kind, **item.model_dump())
+                                for field, kind in SOURCE_FIELDS.items()
+                                for item in getattr(episode.evidence, field)
+                            ]
+                        ),
                     )
                 phase = 'judge'
                 judged = cached_call(

@@ -124,3 +124,18 @@ A single synthetic dev smoke can use `--episode-id launch-review --concurrency 1
 Tests run only through `backend/test.sh` with an explicit file list; fake scores
 prove harness mechanics, not note quality. No production account APIs or Google
 credentials are needed or permitted by this harness.
+
+Round-8 scale measurements add provider cached-token counts and an estimate of
+claim-array tokens (o200k tokenizer, compact JSON). Output-token totals still
+include billed reasoning; claim share is an estimate of visible metadata, not
+its share of reasoning. Missing provider cache counts remain unknown.
+Production uses a stable system-message cache breakpoint; this OpenRouter eval
+uses ordinary system/user messages and measures provider automatic cache reads,
+so cache behavior does not reproduce the internal explicit-cache route.
+Episode compaction and extraction aliases are the production helpers; returned
+claim aliases expand before judging. List/search omit claims; detail retains them.
+
+For judge variance, copy reference and generated candidate receipts (not judge
+receipts) into a second outside-worktree cache and run the same DEV comparison.
+This fixes evidence/reference/candidates and resamples only the judge; it does
+not measure generation variance. Never include held-out inputs in an iteration.

@@ -151,7 +151,13 @@ def test_stored_fixture_mapping_and_all_arm_paired_report(tmp_path):
     assert set(report['paired']) == {'episode_vs_baseline', 'episode_vs_stored'}
     stored_row = [row for row in report['cases'] if row['arm'] == 'stored'][0]
     assert not stored_row['generation_performed']
-    assert stored_row['candidate_cost'] == {'input_tokens': None, 'output_tokens': None, 'latency_seconds': None}
+    assert stored_row['candidate_cost'] == {
+        'input_tokens': None,
+        'output_tokens': None,
+        'latency_seconds': None,
+        'cached_tokens': None,
+        'claim_tokens': None,
+    }
     with pytest.raises(ValueError, match='requires --stored-notes'):
         evaluate(fixtures(), fake, arms=('stored',))
 

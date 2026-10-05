@@ -103,12 +103,16 @@ class LLMResult:
     latency_seconds: float | None = None
     finish_reason: str | None = None
     reasoning_tokens: int | None = None
+    cached_tokens: int | None = None
+    claim_tokens: int | None = None
 
     def cost(self) -> dict:
         return {
             'input_tokens': self.input_tokens,
             'output_tokens': self.output_tokens,
             'latency_seconds': self.latency_seconds,
+            'cached_tokens': self.cached_tokens,
+            'claim_tokens': self.claim_tokens,
         }
 
 

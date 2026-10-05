@@ -9,7 +9,7 @@ METRICS = (
     'deterministic_vacuity',
     'faithfulness_pass',
 )
-COSTS = ('input_tokens', 'output_tokens', 'latency_seconds')
+COSTS = ('input_tokens', 'output_tokens', 'latency_seconds', 'cached_tokens', 'claim_tokens')
 
 
 def summarize(rows: list[dict]) -> dict:
@@ -30,7 +30,7 @@ def summarize(rows: list[dict]) -> dict:
             }
             for metric in COSTS
             for values in [
-                [row['candidate_cost'][metric] for row in attempts if row['candidate_cost'][metric] is not None]
+                [row['candidate_cost'].get(metric) for row in attempts if row['candidate_cost'].get(metric) is not None]
             ]
         },
     }
@@ -68,9 +68,9 @@ def paired_reports(rows: list[dict]) -> dict:
                         'property_failure_count': len(episode['property_failures']) - len(other['property_failures']),
                         **{
                             metric: (
-                                episode['candidate_cost'][metric] - other['candidate_cost'][metric]
-                                if episode['candidate_cost'][metric] is not None
-                                and other['candidate_cost'][metric] is not None
+                                episode['candidate_cost'].get(metric) - other['candidate_cost'].get(metric)
+                                if episode['candidate_cost'].get(metric) is not None
+                                and other['candidate_cost'].get(metric) is not None
                                 else None
                             )
                             for metric in COSTS

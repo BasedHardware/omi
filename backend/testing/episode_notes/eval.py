@@ -66,6 +66,7 @@ class CompatibleEndpoint:
             latency_seconds=latency,
             finish_reason=choice.get('finish_reason'),
             reasoning_tokens=(usage.get('completion_tokens_details') or {}).get('reasoning_tokens'),
+            cached_tokens=(usage.get('prompt_tokens_details') or {}).get('cached_tokens'),
         )
         if receipt.finish_reason == 'length':
             raise LLMCallError('output_truncated', receipt)
@@ -75,6 +76,18 @@ class CompatibleEndpoint:
                 raise ValueError('provider response must be a JSON object')
         except Exception as exc:
             raise LLMCallError(type(exc).__name__, receipt) from None
+        if content.get('note_claims'):
+            import tiktoken
+            from dataclasses import replace
+
+            receipt = replace(
+                receipt,
+                claim_tokens=len(
+                    tiktoken.get_encoding('o200k_base').encode(
+                        json.dumps(content['note_claims'], ensure_ascii=False, separators=(',', ':'))
+                    )
+                ),
+            )
         return LLMResult(
             content=content,
             **receipt.cost(),

@@ -58,7 +58,14 @@ def test_fake_llm_reports_per_stratum_and_does_not_leak_expectations():
     assert json.loads(json.dumps(report)) == report
     assert len(report['arms']['episode']['prompt_sha256']) == 64
     assert all(
-        row['candidate_cost'] == {'input_tokens': 120, 'output_tokens': 45, 'latency_seconds': 0.25}
+        row['candidate_cost']
+        == {
+            'input_tokens': 120,
+            'output_tokens': 45,
+            'latency_seconds': 0.25,
+            'cached_tokens': None,
+            'claim_tokens': None,
+        }
         for row in report['cases']
     )
 
@@ -112,11 +119,48 @@ def test_endpoint_reports_provider_usage_and_candidate_latency(monkeypatch):
     endpoint = CompatibleEndpoint(key='fake', base_url='https://example.com/v1', model='fake')
     result = endpoint('prompt', {})
     assert result.content == {'title': 'Synthetic'}
-    assert result.cost() == {'input_tokens': 321, 'output_tokens': 123, 'latency_seconds': 0.75}
+    assert result.cost() == {
+        'input_tokens': 321,
+        'output_tokens': 123,
+        'latency_seconds': 0.75,
+        'cached_tokens': None,
+        'claim_tokens': None,
+    }
     del response['usage']
-    assert endpoint('prompt', {}).cost() == {'input_tokens': None, 'output_tokens': None, 'latency_seconds': 1.0}
+    assert endpoint('prompt', {}).cost() == {
+        'input_tokens': None,
+        'output_tokens': None,
+        'latency_seconds': 1.0,
+        'cached_tokens': None,
+        'claim_tokens': None,
+    }
 
     assert all(
         'reasoning_effort' not in request and 'reasoning' not in request and 'temperature' not in request
         for request in requests
     )
+
+
+@pytest.fixture
+def cost_encoder():
+    import tiktoken
+
+    return tiktoken.get_encoding('o200k_base')
+
+
+def test_endpoint_measures_cache_read_and_compact_claim_share(monkeypatch, cost_encoder):
+    import io
+    from testing.episode_notes import eval as module
+
+    claims = [{'t': 'Approved price', 'p': '/title', 'e': ['evidence:0'], 'v': 'inferred'}]
+    packet = {
+        'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps({'note_claims': claims})}}],
+        'usage': {'prompt_tokens': 100, 'completion_tokens': 60, 'prompt_tokens_details': {'cached_tokens': 80}},
+    }
+    monkeypatch.setattr(module, 'urlopen', lambda *a, **k: io.StringIO(json.dumps(packet)))
+    receipt = CompatibleEndpoint(key='fake', base_url='https://example.com/v1', model='fake')('prompt', {})
+    assert receipt.cached_tokens == 80
+    assert receipt.claim_tokens == len(
+        cost_encoder.encode(json.dumps(claims, ensure_ascii=False, separators=(',', ':')))
+    )
+    assert receipt.output_tokens == 60 and receipt.finish_reason == 'stop'
