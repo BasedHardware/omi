@@ -1,6 +1,7 @@
 """Feed offline bundles through the production notes prompt builders."""
 
 from datetime import datetime
+from config.episode_writer import EpisodeWriterSettings
 
 from langchain_core.output_parsers import PydanticOutputParser
 
@@ -63,7 +64,19 @@ APPROXIMATIONS = [
 ]
 
 
-def candidate_request(episode: EpisodeFixture, arm: str) -> tuple[str, dict]:
+def fixture_evidence_items(episode: EpisodeFixture) -> list[EvidenceItem]:
+    return compact_episode_items(
+        [
+            EvidenceItem(source_kind=kind, **item.model_dump())
+            for field, kind in SOURCE_FIELDS.items()
+            for item in getattr(episode.evidence, field)
+        ]
+    )
+
+
+def candidate_request(
+    episode: EpisodeFixture, arm: str, *, settings: EpisodeWriterSettings | None = None, items=None
+) -> tuple[str, dict]:
     bundle = episode.evidence
     words = sum(len(item.content.split()) for item in bundle.transcript_segments)
     density = (
@@ -84,18 +97,23 @@ def candidate_request(episode: EpisodeFixture, arm: str) -> tuple[str, dict]:
         task_intelligence_capture=False,
     )
     if arm == 'episode':
-        items = [
-            EvidenceItem(source_kind=kind, **item.model_dump())
-            for field, kind in SOURCE_FIELDS.items()
-            for item in getattr(bundle, field)
-        ]
-        items = compact_episode_items(items)
+        settings = settings or EpisodeWriterSettings(selection='compact', claims=True)
+        items = fixture_evidence_items(episode) if items is None else items
         volatile = episode_volatile_instructions(
             **common,
             evidence_block=render_episode_evidence(items),
             wake_word_rules=EPISODE_WAKE_WORD_RULES if any(item.wake_word_invocation for item in items) else '',
         )
-        return CANDIDATE_PROMPT, {'instructions': volatile}
+        prompt = (
+            CANDIDATE_PROMPT
+            if settings.claims
+            else episode_static_instructions(
+                PydanticOutputParser(pydantic_object=RichStructuredExtraction).get_format_instructions(),
+                conversation_notes_static_instructions,
+                include_claims=False,
+            )
+        )
+        return prompt, {'instructions': volatile}
     if arm != 'baseline':
         raise ValueError('unknown generation arm')
     # The bundle preserves text observations, not raw CalendarMeetingContext fields.

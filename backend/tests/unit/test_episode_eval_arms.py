@@ -157,6 +157,8 @@ def test_stored_fixture_mapping_and_all_arm_paired_report(tmp_path):
         'latency_seconds': None,
         'cached_tokens': None,
         'claim_tokens': None,
+        'reasoning_tokens': None,
+        'provider_cost': None,
     }
     with pytest.raises(ValueError, match='requires --stored-notes'):
         evaluate(fixtures(), fake, arms=('stored',))

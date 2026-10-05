@@ -1,0 +1,107 @@
+"""Synthetic relevance/configuration/cost contracts; no private fixture content."""
+
+import json
+from dataclasses import replace
+
+from config.episode_writer import EpisodeWriterSettings, episode_writer_settings
+from testing.episode_notes.cache import cached_call
+from testing.episode_notes.runner import combined_cost, evaluate
+from testing.episode_notes.schema import LLMResult
+from tests.unit.test_episode_eval_arms import fixtures, fake
+from utils.conversations.episode_evidence import EvidenceItem
+from utils.conversations.episode_selection import (
+    deterministic_episode_selection,
+    selected_episode_items,
+    SELECTION_PROMPT,
+)
+
+
+def test_sticky_writer_settings_are_read_at_call_boundary(monkeypatch):
+    assert not episode_writer_settings().claims
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'high')
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'model')
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
+    assert episode_writer_settings() == EpisodeWriterSettings('high', 'model', True)
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'invented')
+    assert episode_writer_settings().effort == 'default'
+
+
+def test_deterministic_links_need_specific_support_and_preserve_speech():
+    items = [
+        EvidenceItem(id='s', source_kind='speech', actor='Ari', content='Agree to ship the cobalt widget prototype.'),
+        EvidenceItem(
+            id='unrelated', source_kind='screen_ocr', content='Ari has a document about meetings and projects.'
+        ),
+        EvidenceItem(id='linked', source_kind='screen_ocr', content='The cobalt widget prototype passed tests.'),
+        EvidenceItem(
+            id='later', source_kind='screen_ocr', time='2026-01-01T11:00:00Z', content='cobalt widget prototype'
+        ),
+    ]
+    assert [i.id for i in deterministic_episode_selection(items, finished_at='2026-01-01T10:00:00Z')] == ['s', 'linked']
+    selected = selected_episode_items(items, {'selected': [{'id': 'linked', 'reason': 'Explicit topic reference'}]})
+    assert [i.id for i in selected] == ['s', 'linked']
+    assert selected[1].content == items[2].content
+
+
+def test_effort_is_part_of_candidate_cache_identity(tmp_path):
+    calls = []
+
+    def llm(prompt, payload):
+        calls.append(payload)
+        return LLMResult(content={'title': 'Synthetic'})
+
+    for effort in ('default', 'high', 'default'):
+        cached_call(tmp_path, 'episode', 'luna', 'prompt', {'_request_options': {'effort': effort}}, llm)
+    assert len(calls) == 2
+
+
+def test_combined_selection_cost_keeps_unknowns_unknown():
+    writer = LLMResult(
+        content={}, input_tokens=20, output_tokens=5, reasoning_tokens=3, latency_seconds=2, provider_cost=0.002
+    )
+    selector = LLMResult(
+        content={}, input_tokens=10, output_tokens=2, reasoning_tokens=1, latency_seconds=1, provider_cost=0.001
+    )
+    cost = combined_cost(writer, selector)
+    assert (cost['input_tokens'], cost['output_tokens'], cost['reasoning_tokens'], cost['latency_seconds']) == (
+        30,
+        7,
+        4,
+        3,
+    )
+    assert cost['provider_cost'] == 0.003
+    assert combined_cost(writer, replace(selector, provider_cost=None))['provider_cost'] is None
+
+
+def test_two_judges_reuse_candidates_and_reference_with_model_selection(tmp_path):
+    calls = []
+
+    def llm(prompt, payload):
+        calls.append(prompt)
+        if prompt == SELECTION_PROMPT:
+            return {'selected': []}
+        if 'Do not generate note_claims' in prompt:
+            return {'title': 'Synthetic budget approval', 'overview': 'Ari approved the budget.'}
+        return fake(prompt, payload)
+
+    report = evaluate(
+        fixtures(),
+        llm,
+        arms=('episode', 'baseline'),
+        settings=EpisodeWriterSettings('high', 'model', False),
+        cache_dir=tmp_path,
+        judge_samples=2,
+    )
+    assert len(calls) == 8  # reference + selector + two candidates + four judgments
+    assert len(report['cases']) == 4
+    assert report['samples']['2']['arms']['episode']['overall']['count'] == 1
+    calls.clear()
+    evaluate(
+        fixtures(),
+        llm,
+        arms=('episode', 'baseline'),
+        settings=EpisodeWriterSettings('high', 'model', False),
+        cache_dir=tmp_path,
+        judge_samples=2,
+    )
+    assert not calls

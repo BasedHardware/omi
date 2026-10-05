@@ -75,7 +75,6 @@ def cached_call(
                     'content': result.content,
                     **result.cost(),
                     'finish_reason': result.finish_reason,
-                    'reasoning_tokens': result.reasoning_tokens,
                 },
             },
         )

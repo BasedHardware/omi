@@ -65,6 +65,8 @@ def test_fake_llm_reports_per_stratum_and_does_not_leak_expectations():
             'latency_seconds': 0.25,
             'cached_tokens': None,
             'claim_tokens': None,
+            'reasoning_tokens': None,
+            'provider_cost': None,
         }
         for row in report['cases']
     )
@@ -125,6 +127,8 @@ def test_endpoint_reports_provider_usage_and_candidate_latency(monkeypatch):
         'latency_seconds': 0.75,
         'cached_tokens': None,
         'claim_tokens': None,
+        'reasoning_tokens': None,
+        'provider_cost': None,
     }
     del response['usage']
     assert endpoint('prompt', {}).cost() == {
@@ -133,6 +137,8 @@ def test_endpoint_reports_provider_usage_and_candidate_latency(monkeypatch):
         'latency_seconds': 1.0,
         'cached_tokens': None,
         'claim_tokens': None,
+        'reasoning_tokens': None,
+        'provider_cost': None,
     }
 
     assert all(

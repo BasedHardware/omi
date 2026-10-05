@@ -17,6 +17,14 @@ from testing.episode_notes.prompts import (
 )
 from testing.episode_notes.reporting import arm_reports, paired_reports
 from testing.episode_notes.schema import FixtureSet, JudgeScore, LLMCallError, LLMResult
+from config.episode_writer import EpisodeWriterSettings
+from testing.episode_notes.prompts import fixture_evidence_items
+from utils.conversations.episode_selection import (
+    SELECTION_PROMPT,
+    deterministic_episode_selection,
+    selected_episode_items,
+    selection_payload,
+)
 from models.episode_extraction import EpisodeStructuredExtraction
 from utils.conversations.episode_compaction import compact_episode_items
 from utils.conversations.episode_evidence import EvidenceItem, restore_episode_claim_ids
@@ -49,6 +57,19 @@ reasons (strings). A concrete account of missing capture coverage is informative
     + '\n'
     + EPISODE_PROVENANCE_RULE
 )
+
+
+def combined_cost(writer: LLMResult, selection: LLMResult | None) -> dict:
+    if selection is None:
+        return writer.cost()
+    return {
+        key: (
+            writer.cost()[key] + selection.cost()[key]
+            if writer.cost()[key] is not None and selection.cost()[key] is not None
+            else None
+        )
+        for key in writer.cost()
+    }
 
 
 def stored_note_map(directory: Path) -> dict[str, dict]:
@@ -97,11 +118,16 @@ def evaluate(
     cache_dir: Path | None = None,
     concurrency: int = 1,
     episode_ids: tuple[str, ...] = (),
-    candidate_prompt: str = CANDIDATE_PROMPT,
+    candidate_prompt: str | None = None,
     candidate_model: str = CANDIDATE_MODEL,
     reference_model: str = SCORING_MODEL,
     judge_model: str = SCORING_MODEL,
+    settings: EpisodeWriterSettings | None = None,
+    judge_samples: int = 1,
 ) -> dict:
+    settings = settings or EpisodeWriterSettings(selection='compact', claims=True)
+    if judge_samples not in (1, 2):
+        raise ValueError('judge samples must be 1 or 2')
     if split == 'held_out' and not frozen:
         raise ValueError('held_out requires explicit --split held_out --frozen acknowledgement')
     if (
@@ -161,15 +187,45 @@ def evaluate(
         rows = []
         for arm in arms:
             result, judged = None, None
+            selection_result = None
+            selected_items = fixture_evidence_items(episode)
             phase = 'candidate'
             try:
                 if arm == 'stored':
                     result = LLMResult(content=stored[episode.id])
                     prompt_hash = None
                 else:
-                    prompt, payload = candidate_request(episode, arm)
+                    if arm == 'episode' and settings.selection == 'deterministic':
+                        selected_items = deterministic_episode_selection(
+                            selected_items, finished_at=episode.evidence.finished_at
+                        )
+                    elif arm == 'episode' and settings.selection == 'model':
+                        phase = 'selection'
+                        selection_result = cached_call(
+                            cache_dir,
+                            'selection',
+                            candidate_model,
+                            SELECTION_PROMPT,
+                            {
+                                **selection_payload(
+                                    selected_items, episode.evidence.started_at, episode.evidence.finished_at
+                                ),
+                                '_request_options': {'effort': 'low'},
+                            },
+                            llm,
+                        )
+                        selected_items = selected_episode_items(
+                            selected_items, selection_result.content, finished_at=episode.evidence.finished_at
+                        )
+                    phase = 'candidate'
+                    prompt, payload = candidate_request(episode, arm, settings=settings, items=selected_items)
                     if arm == 'episode':
-                        prompt = candidate_prompt
+                        prompt = candidate_prompt or prompt
+                        payload['_request_options'] = {
+                            'effort': settings.effort,
+                            'selection': settings.selection,
+                            'claims': settings.claims,
+                        }
                     result = cached_call(cache_dir, arm, candidate_model, prompt, payload, llm)
                     prompt_hash = fingerprint(prompt)
                 if arm == 'episode':
@@ -179,65 +235,66 @@ def evaluate(
                     ]
                     restore_episode_claim_ids(
                         result.content.get('note_claims', []),
-                        compact_episode_items(
-                            [
-                                EvidenceItem(source_kind=kind, **item.model_dump())
-                                for field, kind in SOURCE_FIELDS.items()
-                                for item in getattr(episode.evidence, field)
-                            ]
-                        ),
+                        selected_items,
                     )
                 phase = 'judge'
-                judged = cached_call(
-                    cache_dir,
-                    f'judge-{arm}',
-                    judge_model,
-                    JUDGE_PROMPT,
-                    {
-                        'evidence': evidence,
-                        'candidate': result.content,
-                        'reference': reference_result.content,
-                        'expected': episode.expected.model_dump(),
-                    },
-                    llm,
-                    validate=JudgeScore.model_validate,
-                )
-                score = JudgeScore.model_validate(judged.content)
-                rows.append(
-                    {
-                        'id': episode.id,
-                        'stratum': episode.stratum,
-                        'arm': arm,
-                        'status': 'ok',
-                        'candidate': result.content,
-                        'candidate_cost': result.cost(),
-                        'generation_performed': arm != 'stored',
-                        'candidate_reasoning_tokens': result.reasoning_tokens,
-                        'prompt_sha256': prompt_hash,
-                        'reference': reference_result.content,
-                        'reference_cost': reference_result.cost(),
-                        'judge_cost': judged.cost(),
-                        'finish_reasons': {
-                            'candidate': result.finish_reason,
-                            'reference': reference_result.finish_reason,
-                            'judge': judged.finish_reason,
+                for sample in range(1, judge_samples + 1):
+                    judged = cached_call(
+                        cache_dir,
+                        f'judge-{arm}' if sample == 1 else f'judge-{arm}-sample{sample}',
+                        judge_model,
+                        JUDGE_PROMPT,
+                        {
+                            'evidence': evidence,
+                            'candidate': result.content,
+                            'reference': reference_result.content,
+                            'expected': episode.expected.model_dump(),
                         },
-                        **score.model_dump(),
-                        'deterministic_vacuity': is_vacuous_note(result.content),
-                        'faithfulness_pass': score.unsupported_claims == 0 and score.wrong_provenance_claims == 0,
-                    }
-                )
+                        llm,
+                        validate=JudgeScore.model_validate,
+                    )
+                    score = JudgeScore.model_validate(judged.content)
+                    rows.append(
+                        {
+                            'id': episode.id,
+                            'judge_sample': sample,
+                            'selection_cost': selection_result.cost() if selection_result else None,
+                            'writer_cost': result.cost(),
+                            'stratum': episode.stratum,
+                            'arm': arm,
+                            'status': 'ok',
+                            'candidate': result.content,
+                            'candidate_cost': combined_cost(result, selection_result),
+                            'generation_performed': arm != 'stored',
+                            'candidate_reasoning_tokens': result.reasoning_tokens,
+                            'prompt_sha256': prompt_hash,
+                            'reference': reference_result.content,
+                            'reference_cost': reference_result.cost(),
+                            'judge_cost': judged.cost(),
+                            'finish_reasons': {
+                                'candidate': result.finish_reason,
+                                'reference': reference_result.finish_reason,
+                                'judge': judged.finish_reason,
+                            },
+                            **score.model_dump(),
+                            'deterministic_vacuity': is_vacuous_note(result.content),
+                            'faithfulness_pass': score.unsupported_claims == 0 and score.wrong_provenance_claims == 0,
+                        }
+                    )
             except Exception as exc:
                 rows.append(error_row(arm, phase, exc, result, judged))
         return rows
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         rows = [row for group in pool.map(episode_rows, episodes) for row in group]
-    reports = arm_reports(rows, arms)
+    first_sample = [row for row in rows if row.get('judge_sample', 1) == 1]
+    reports = arm_reports(first_sample, arms)
     for arm, report in reports.items():
         report['model'] = candidate_model if arm != 'stored' else None
         report['prompt_sha256'] = (
-            fingerprint(candidate_prompt if arm == 'episode' else BASELINE_PROMPT) if arm != 'stored' else None
+            fingerprint(candidate_prompt or CANDIDATE_PROMPT if arm == 'episode' else BASELINE_PROMPT)
+            if arm != 'stored'
+            else None
         )
     return {
         'schema_version': 'episode_notes.report.v3',
@@ -250,5 +307,13 @@ def evaluate(
         'approximations': APPROXIMATIONS,
         'cases': rows,
         'arms': reports,
-        'paired': paired_reports(rows),
+        'paired': paired_reports(first_sample),
+        'configuration': {'effort': settings.effort, 'selection': settings.selection, 'claims': settings.claims},
+        'samples': {
+            str(sample): {
+                'arms': arm_reports([row for row in rows if row.get('judge_sample', 1) == sample], arms),
+                'paired': paired_reports([row for row in rows if row.get('judge_sample', 1) == sample]),
+            }
+            for sample in range(1, judge_samples + 1)
+        },
     }

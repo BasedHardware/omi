@@ -9,7 +9,15 @@ METRICS = (
     'deterministic_vacuity',
     'faithfulness_pass',
 )
-COSTS = ('input_tokens', 'output_tokens', 'latency_seconds', 'cached_tokens', 'claim_tokens')
+COSTS = (
+    'input_tokens',
+    'output_tokens',
+    'latency_seconds',
+    'cached_tokens',
+    'claim_tokens',
+    'reasoning_tokens',
+    'provider_cost',
+)
 
 
 def summarize(rows: list[dict]) -> dict:

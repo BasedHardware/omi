@@ -12,6 +12,7 @@ from testing.episode_notes.cache import validate_output_path, write_json
 from testing.episode_notes.prompts import CANDIDATE_MODEL, SCORING_MODEL
 from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT, evaluate
 from testing.episode_notes.schema import FIXTURES, LLMCallError, LLMResult, load_fixtures
+from config.episode_writer import EFFORTS, SELECTIONS, EpisodeWriterSettings
 
 
 class CompatibleEndpoint:
@@ -29,6 +30,11 @@ class CompatibleEndpoint:
         self.max_tokens, self.timeout = max_tokens, timeout
 
     def __call__(self, prompt: str, payload: dict) -> LLMResult:
+        options = payload.get('_request_options') or {}
+        payload = {key: value for key, value in payload.items() if key != '_request_options'}
+        effort = options.get('effort', 'default')
+        if effort not in (*EFFORTS, 'low'):
+            raise ValueError('invalid candidate effort')
         body = json.dumps(
             {
                 'model': self.model,
@@ -38,6 +44,7 @@ class CompatibleEndpoint:
                     {'role': 'system', 'content': prompt},
                     {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)},
                 ],
+                **({'reasoning': {'effort': effort}} if effort != 'default' else {}),
             }
         ).encode()
         request = Request(
@@ -67,6 +74,7 @@ class CompatibleEndpoint:
             finish_reason=choice.get('finish_reason'),
             reasoning_tokens=(usage.get('completion_tokens_details') or {}).get('reasoning_tokens'),
             cached_tokens=(usage.get('prompt_tokens_details') or {}).get('cached_tokens'),
+            provider_cost=usage.get('cost') if isinstance(usage.get('cost'), (int, float)) else None,
         )
         if receipt.finish_reason == 'length':
             raise LLMCallError('output_truncated', receipt)
@@ -92,7 +100,6 @@ class CompatibleEndpoint:
             content=content,
             **receipt.cost(),
             finish_reason=receipt.finish_reason,
-            reasoning_tokens=receipt.reasoning_tokens,
         )
 
 
@@ -109,6 +116,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--concurrency', type=int, default=4, choices=range(1, 9))
     parser.add_argument('--max-tokens', type=int, default=32000)
     parser.add_argument('--timeout', type=float, default=300)
+    parser.add_argument('--candidate-effort', choices=EFFORTS, default='default')
+    parser.add_argument('--selection', choices=SELECTIONS, default='compact')
+    parser.add_argument('--no-claims', action='store_true')
+    parser.add_argument('--judge-samples', type=int, choices=(1, 2), default=1)
     parser.add_argument('--reference-model', default=os.getenv('EPISODE_EVAL_REFERENCE_MODEL', SCORING_MODEL))
     parser.add_argument('--judge-model', default=os.getenv('EPISODE_EVAL_JUDGE_MODEL', SCORING_MODEL))
     args = parser.parse_args(argv)
@@ -156,6 +167,8 @@ def main(argv: list[str] | None = None) -> None:
             episode_ids=tuple(args.episode_id),
             reference_model=args.reference_model,
             judge_model=args.judge_model,
+            settings=EpisodeWriterSettings(args.candidate_effort, args.selection, not args.no_claims),
+            judge_samples=args.judge_samples,
         )
         write_json(output, report)
     except Exception as exc:

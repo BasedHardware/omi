@@ -54,7 +54,7 @@ EPISODE_CONTRACT = (
 )
 
 
-def episode_static_instructions(format_instructions: str, legacy_static) -> str:
+def episode_static_instructions(format_instructions: str, legacy_static, *, include_claims: bool = True) -> str:
     # Start from the faithful legacy recap, replacing the speech-only source rule.
     text = legacy_static(format_instructions)
     text = (
@@ -86,7 +86,22 @@ def episode_static_instructions(format_instructions: str, legacy_static) -> str:
   use [] for non-speech claims or external speech without original segment IDs. Keep all episode IDs
   and source IDs out of visible prose. Claim-level evidence_ids may reference any supporting source.""",
     )
-    return text.replace(format_instructions, EPISODE_CONTRACT + '\n' + format_instructions)
+    contract = EPISODE_CONTRACT
+    if not include_claims:
+        begin = contract.index('- Supply note_claims')
+        end = contract.index('- Extra evidence gives context')
+        contract = (
+            contract[:begin]
+            + '''- Do not generate note_claims. Provenance still applies to every visible factual sentence.
+  Attribute screen/message/prior-context facts explicitly in natural prose, preserving uncertainty.
+  A person's speech-cluster label identifies the source, not words they spoke. Do not write that a name,
+  attendance, completion or absence of evidence was said unless those words are independently in speech.
+  Check every clause for actual support; omit unsupported or unconnected details. Keep all evidence IDs
+  out of visible prose. Return compact JSON only, omitting unnecessary null/empty optional fields.
+'''
+            + contract[end:]
+        )
+    return text.replace(format_instructions, contract + '\n' + format_instructions)
 
 
 def episode_volatile_instructions(

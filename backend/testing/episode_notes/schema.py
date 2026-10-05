@@ -105,6 +105,7 @@ class LLMResult:
     reasoning_tokens: int | None = None
     cached_tokens: int | None = None
     claim_tokens: int | None = None
+    provider_cost: float | None = None
 
     def cost(self) -> dict:
         return {
@@ -113,6 +114,8 @@ class LLMResult:
             'latency_seconds': self.latency_seconds,
             'cached_tokens': self.cached_tokens,
             'claim_tokens': self.claim_tokens,
+            'reasoning_tokens': self.reasoning_tokens,
+            'provider_cost': self.provider_cost,
         }
 
 
