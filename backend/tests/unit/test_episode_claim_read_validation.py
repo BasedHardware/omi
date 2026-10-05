@@ -109,8 +109,10 @@ def test_locked_projection_filters_claims_after_redaction(render):
             'provenance': 'said',
         }
     )
-    listed = render.redact_conversation_for_list({'is_locked': True, 'structured': deepcopy(structured)})
+    listed = render.redact_conversation_for_list({'is_locked': True, 'structured': structured})
     assert 'note_claims' not in listed['structured']
+    assert structured['action_items'] == [{'description': 'Send invoice'}]
+    assert structured['note_claims']  # Projection must not mutate the source note.
     integrated = render.redact_conversation_for_integration({'is_locked': True, 'structured': deepcopy(structured)})
     assert [claim['target'] for claim in integrated['structured']['note_claims']] == ['/sections/0/body_markdown']
 

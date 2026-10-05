@@ -139,6 +139,7 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
     if not conv.get('is_locked', False):
         return _omit_list_note_claims(conv)
+    _omit_list_note_claims(conv)
     if 'structured' in conv:
         conv['structured'] = (
             dict(conv['structured']) if not isinstance(conv['structured'], dict) else conv['structured']
