@@ -162,7 +162,7 @@ El mecanismo de búsqueda exacta por aplicación, ventana y OCR para `omi --json
 
 ## Árbol de comandos
 
-El árbol completo (ejecuta `omi --help` para la versión interactiva):
+El árbol completo (ejecuta `omi --help` para ver el árbol de comandos de la versión instalada):
 
 ```text
 omi
@@ -235,7 +235,7 @@ Las opciones numéricas y los valores de progreso para objetivos también deben 
 ```text
 --json                 Emite JSON a stdout (procesable por máquina, ideal para agentes).
 --profile, -p NAME     Usa un perfil específico.
---api-base URL         Invalida la URL base de la API.
+--api-base URL         Sobrescribe la URL base de la API.
 --verbose, -v          Registra el tráfico HTTP en stderr.
 --no-color             Desactiva la salida con color (también respeta $NO_COLOR).
 --version              Muestra la versión instalada.
@@ -265,7 +265,7 @@ El CLI está construido para que un LLM pueda usarlo sin necesidad de un contene
 * Las variables de entorno `OMI_API_KEY` y `OMI_API_BASE` funcionan sin requerir un `auth login` previo.
 * `OMI_LOCAL_API_URL` y `OMI_LOCAL_TOKEN` anulan las configuraciones de la API local de Desktop del perfil para `omi local`.
 
-Consulta [`examples/agent_quickstart.md`](examples/agent_quickstart.md) para ver un ejemplo detallado.
+Consulta [`examples/agent_quickstart.es.md`](examples/agent_quickstart.es.md) (versión en inglés: [`examples/agent_quickstart.md`](examples/agent_quickstart.md)) para ver un ejemplo detallado.
 
 ## Límites de tasa
 
