@@ -349,7 +349,7 @@ async def test_gated_provider_axis_is_never_guessed(monkeypatch, enabled, provid
     assert known(rows) == int(axis == 'compact')
     if axis == 'compact':
         assert (rows[0]['audio_capture_start'], rows[0]['audio_capture_end']) == pytest.approx(
-            (T0 + 41.2, T0 + 41.8), abs=1 / RATE
+            (T0 + 41.2, T0 + 41.8), abs=1 / RATE, rel=0
         )
     # The same observed sends cannot establish whether late elapsed-looking
     # tokens identify that span or are genuine provider drift. Never guess.
@@ -373,7 +373,9 @@ async def test_delayed_prefix_final_never_borrows_live_tail_samples(monkeypatch,
     # to newly accepted tail bytes. ON must retain the original prefix samples.
     first = 3.2 if enabled else 5.2
     end = 3.8 if enabled else 5.8
-    assert (rows[0]['audio_capture_start'], rows[0]['audio_capture_end']) == pytest.approx((T0 + first, T0 + end))
+    assert (rows[0]['audio_capture_start'], rows[0]['audio_capture_end']) == pytest.approx(
+        (T0 + first, T0 + end), abs=1 / RATE, rel=0
+    )
     task = receiver.stt_socket._task
     if task is not None:
         await task
