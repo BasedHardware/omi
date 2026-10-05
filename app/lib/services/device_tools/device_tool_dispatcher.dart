@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/device_tools/device_tool_surface.dart';
@@ -147,22 +147,25 @@ class DeviceToolDispatcher {
   }
 
   Future<void> _postResult(String callId, DeviceToolResult result) async {
-    try {
-      final response = await makeApiCall(
+    final sent = await executeApi<String>(
+      request: ApiRequest(
         url: '${Env.apiBaseUrl}v2/messages/device-tool/$callId/result',
-        headers: {'Content-Type': 'application/json'},
         method: 'POST',
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'result': result.payload}),
-        timeout: const Duration(seconds: 10),
-        retries: 0,
-      );
-      if (response == null || response.statusCode != 200) {
-        Logger.error('Device tool result rejected: status=${response?.statusCode}');
-      }
-    } catch (e) {
-      // Nothing more to do — the server-side call times out on its own and the
-      // model answers without the result rather than hanging forever.
-      Logger.error('Could not deliver device tool result: $e');
+      ),
+      decode: (body) => body,
+    );
+    // Nothing more to do on any failure — the server-side call times out on its
+    // own and the model answers without the result rather than hanging forever.
+    switch (sent) {
+      case ApiSuccess():
+        return;
+      case ApiFailure(:final problem):
+        final status = problem.statusCode;
+        Logger.error(
+          'Could not deliver device tool result: ${problem.kind.name}${status == null ? '' : ' status=$status'}',
+        );
     }
   }
 }
