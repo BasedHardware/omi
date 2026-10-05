@@ -99,7 +99,9 @@ def validate_db_path(db_path: str) -> Path:
     p = Path(db_path)
     if ".." in p.parts:
         raise ValueError(f"Output path {db_path!r} contains '..'; refusing relative traversal.")
-    if p.exists() and p.is_file() and p.stat().st_size >= 16:
+    if p.exists() and p.is_file():
+        if p.stat().st_size < 16:
+            raise ValueError(f"Existing file {db_path!r} is too small to be a valid SQLite database.")
         with open(p, "rb") as f:
             header = f.read(16)
         if header != _SQLITE_MAGIC:
@@ -161,10 +163,20 @@ def import_memories_to_sqlite(items: List[Dict[str, Any]], db_path: str) -> int:
 
         cursor.executemany(
             """
-            INSERT OR REPLACE INTO memories (
+            INSERT INTO memories (
                 id, content, category, tags, visibility, source,
                 conversation_id, created_at, updated_at, raw_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                content=excluded.content,
+                category=excluded.category,
+                tags=excluded.tags,
+                visibility=excluded.visibility,
+                source=excluded.source,
+                conversation_id=excluded.conversation_id,
+                created_at=excluded.created_at,
+                updated_at=excluded.updated_at,
+                raw_json=excluded.raw_json
             """,
             records,
         )

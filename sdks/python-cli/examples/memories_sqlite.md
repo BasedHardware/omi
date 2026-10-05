@@ -71,7 +71,7 @@ LIMIT 10;
 ## Security & Reliability Invariants
 
 - **Full-Text Search Indexing**: Automated FTS5 virtual table with triggers for sync on insert, update, or delete.
-- **Idempotent Multi-Page Merges**: Uses `INSERT OR REPLACE` keyed on unique memory IDs so running multiple imports never duplicates records.
+- **Idempotent Multi-Page Merges**: Uses `ON CONFLICT(id) DO UPDATE` so re-importing updated memories triggers `memories_au` to keep full-text indexes synchronized.
 - **Surrogate Pair Defense**: Strips unpaired UTF-16 surrogates to prevent `sqlite3.UnicodeEncodeError` exceptions.
 - **Path Traversal Protection**: Rejects paths containing `..` components.
-- **File Integrity Validation**: Confirms SQLite 3 magic byte header on pre-existing files to avoid corrupting unrelated data.
+- **File Integrity Validation**: Confirms SQLite 3 magic byte header on pre-existing files (rejecting partial or non-SQLite files) to avoid corrupting unrelated data.

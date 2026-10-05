@@ -59,6 +59,12 @@ class TestMemoriesToSqlite(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_db_path("../escape.sqlite")
 
+        # File shorter than 16 bytes
+        tiny = self.dir_path / "tiny.sqlite"
+        tiny.write_bytes(b"short")
+        with self.assertRaises(ValueError):
+            validate_db_path(str(tiny))
+
         # Corrupt file with invalid header
         corrupt = self.dir_path / "corrupt.sqlite"
         corrupt.write_bytes(b"INVALID_HEADER_DATA_1234567")
@@ -100,6 +106,18 @@ class TestMemoriesToSqlite(unittest.TestCase):
         self.assertEqual(rows[0][3], "frontend, tech")
 
     def test_fts5_search(self):
+        test_conn = sqlite3.connect(":memory:")
+        fts5_supported = True
+        try:
+            test_conn.execute("CREATE VIRTUAL TABLE _probe USING fts5(x)")
+        except sqlite3.OperationalError:
+            fts5_supported = False
+        finally:
+            test_conn.close()
+
+        if not fts5_supported:
+            self.skipTest("SQLite build does not support FTS5")
+
         items = [
             {
                 "id": "mem_fts_1",
@@ -119,23 +137,50 @@ class TestMemoriesToSqlite(unittest.TestCase):
 
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
-        # Verify FTS search works if FTS5 is available
+        cursor.execute(
+            """
+            SELECT m.id FROM memories m
+            JOIN memories_fts f ON m.rowid = f.rowid
+            WHERE memories_fts MATCH 'latency'
+            """
+        )
+        results = cursor.fetchall()
+        conn.close()
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0][0], "mem_fts_1")
+
+    def test_fts_updated_on_reimport(self):
+        test_conn = sqlite3.connect(":memory:")
+        fts5_supported = True
         try:
-            cursor.execute(
-                """
-                SELECT m.id FROM memories m
-                JOIN memories_fts f ON m.rowid = f.rowid
-                WHERE memories_fts MATCH 'latency'
-                """
-            )
-            results = cursor.fetchall()
-            self.assertEqual(len(results), 1)
-            self.assertEqual(results[0][0], "mem_fts_1")
+            test_conn.execute("CREATE VIRTUAL TABLE _probe USING fts5(x)")
         except sqlite3.OperationalError:
-            # In environments without FTS5 compiled, skip test cleanly
-            pass
+            fts5_supported = False
         finally:
-            conn.close()
+            test_conn.close()
+
+        if not fts5_supported:
+            self.skipTest("SQLite build does not support FTS5")
+
+        import_memories_to_sqlite(
+            [{"id": "mem_upd", "content": "Initial draft about Kubernetes"}],
+            str(self.db_path),
+        )
+        import_memories_to_sqlite(
+            [{"id": "mem_upd", "content": "Revised draft about Docker"}],
+            str(self.db_path),
+        )
+
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT m.id FROM memories m JOIN memories_fts f ON m.rowid = f.rowid WHERE memories_fts MATCH 'Docker'")
+        docker_results = cursor.fetchall()
+        cursor.execute("SELECT m.id FROM memories m JOIN memories_fts f ON m.rowid = f.rowid WHERE memories_fts MATCH 'Kubernetes'")
+        k8s_results = cursor.fetchall()
+        conn.close()
+
+        self.assertEqual(len(docker_results), 1)
+        self.assertEqual(len(k8s_results), 0)
 
     def test_idempotent_merge(self):
         items_v1 = [
