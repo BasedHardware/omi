@@ -40,6 +40,7 @@ class _Tasks extends ActionItemsProvider {
     DateTime? dueAt,
     String? conversationId,
     bool completed = false,
+    String? idempotencyKey,
   }) {
     writes++;
     savedDueDate = dueAt;
