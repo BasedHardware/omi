@@ -193,7 +193,12 @@ class IdleSonioxSocket(STTSocket):
         if self._finishing:
             return False
         self._account_avoided()
-        offset = self._resume_offset if self._resume_offset is not None else self._admitted_samples / self._rate
+        if self._wire_epoch is not None:
+            # complete_send can run before the old writer finishes its queue.
+            # Freeze the replacement origin only after the old drain above.
+            offset = (self._wire_epoch.wire_audio_samples or 0) / self._rate
+        else:
+            offset = self._resume_offset if self._resume_offset is not None else self._admitted_samples / self._rate
         self._resume_offset = None
 
         self._socket_epoch += 1

@@ -135,7 +135,8 @@ async def test_real_vad_preroll_hangover_and_replay_conserve_bytes(monkeypatch, 
 
 
 @pytest.mark.asyncio
-async def test_idle_reopen_retains_observed_onset_provenance(monkeypatch):
+@pytest.mark.parametrize('pending_close', [False, True])
+async def test_idle_reopen_retains_observed_onset_provenance(monkeypatch, pending_close):
     monkeypatch.setenv('SONIOX_WIRE_LEDGER', 'true')
     receiver, epoch, processor, store, leg, wire, _ = await managed(monkeypatch, True)
     leg.gate = None
@@ -154,7 +155,13 @@ async def test_idle_reopen_retains_observed_onset_provenance(monkeypatch):
         pcm = b'\1\0' * RATE
         start, _, _ = receiver.capture_timeline.accept(pcm, T0 + 1, 1)
         assert leg.send(pcm, start_sample=start)
-        await barrier(peers[0], wire)
+        if pending_close:
+            # Real old writer has not run yet: complete_send sees an empty
+            # emitted ledger, and then waits for this old-transport drain.
+            assert epoch.wire_audio_samples == 0
+            idle._close_task = asyncio.ensure_future(barrier(peers[0], wire))
+        else:
+            await barrier(peers[0], wire)
         idle._idle_since = 1
         start, _, _ = receiver.capture_timeline.accept(pcm, T0 + 2, 2)
         assert leg.send(pcm, start_sample=start)
