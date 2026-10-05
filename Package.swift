@@ -53,6 +53,7 @@ let package = Package(
                 "src/omi_backend_recording.cpp",
                 "src/omi_device.cpp",
                 "src/omi_auth.cpp",
+                "src/omi_text.cpp",
             ],
             publicHeadersPath: "include",
             linkerSettings: [.linkedLibrary("bcrypt", .when(platforms: [.windows]))]

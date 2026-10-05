@@ -25,6 +25,9 @@ target_link_libraries(omi_device PUBLIC omi_native_boundary)
 add_library(omi_auth STATIC src/omi_auth.cpp)
 target_include_directories(omi_auth PUBLIC include)
 
+add_library(omi_text STATIC src/omi_text.cpp)
+target_include_directories(omi_text PUBLIC include)
+
 enable_testing()
 add_executable(test_omi_native_boundary tests/test_omi_native_boundary.cpp)
 target_link_libraries(test_omi_native_boundary PRIVATE omi_native_boundary)
@@ -49,3 +52,7 @@ add_test(NAME DeviceHostTest COMMAND test_omi_device)
 add_executable(test_omi_auth tests/test_omi_auth.cpp)
 target_link_libraries(test_omi_auth PRIVATE omi_auth)
 add_test(NAME AuthHostTest COMMAND test_omi_auth)
+
+add_executable(test_omi_text tests/test_omi_text.cpp)
+target_link_libraries(test_omi_text PRIVATE omi_text)
+add_test(NAME TextHostTest COMMAND test_omi_text)
