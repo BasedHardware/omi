@@ -13,7 +13,12 @@ from google.cloud import firestore
 from config.summary_speaker_labels import summary_speaker_labels_enabled
 from database.read_boundary import parse_payload_strict
 from models.transcript_segment import TranscriptSegment
-from utils.conversations.summary_speaker_labels import normalized_name, select_candidates, transcript_identity
+from utils.conversations.summary_speaker_labels import (
+    full_real_name,
+    normalized_name,
+    select_candidates,
+    transcript_identity,
+)
 from utils.speaker_permissions import named_speaker_prompts_allowed
 
 logger = logging.getLogger(__name__)
@@ -109,7 +114,7 @@ def apply_summary_speaker_labels(uid: str, conversation, *, firestore_client=Non
                         for p in people
                         if normalized_name(p.get('name') or '') == proposed_name
                         or (
-                            len(proposed_name.split()) >= 2
+                            full_real_name(proposed_name)
                             and proposed_name in [normalized_name(a) for a in p.get('aliases', [])]
                         )
                     ]

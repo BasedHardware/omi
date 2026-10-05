@@ -84,6 +84,48 @@ def test_uncited_longer_introduction_is_contrary_to_contextual_owner():
 @pytest.mark.parametrize(
     'text',
     [
+        "I'm David. My name is David Nguyen.",
+        'My name is David. My name is David Nguyen.',
+        "My name is O'Brien.",
+        "My name is D'Angelo.",
+        'My name is O’Brien.',
+        'My name is D’Angelo.',
+    ],
+)
+def test_every_explicit_introduction_can_veto_a_contextual_owner(text):
+    c = candidate('David', is_owner=True)
+    c.bindings[0].evidence_kind = 'contextual'
+    assert not select([c], [segment(text=text)])
+
+
+@pytest.mark.parametrize('name', ["O'Brien", "D'Angelo"])
+def test_one_letter_apostrophe_prefix_is_extended_before_name_validation(name):
+    assert select([candidate(name)], [segment(text=f'My name is {name}.')])
+
+
+@pytest.mark.parametrize('name,prefix', [('Joan of Arc', 'Joan'), ('Nguyen To Anh', 'Nguyen')])
+def test_in_name_particles_cannot_turn_a_full_introduction_into_a_prefix(name, prefix):
+    rows = [segment(text=f'My name is {name}.')]
+    admitted = select([candidate(name)], rows)
+    assert admitted and admitted[0].may_create
+    assert not select([candidate(prefix)], rows)
+
+
+@pytest.mark.parametrize('name', ['David Nguyen', 'So David Nguyen'])
+def test_leading_non_name_word_makes_name_first_introduction_ambiguous(name):
+    assert not select([candidate(name)], [segment(text='So David Nguyen is my name.')])
+
+
+@pytest.mark.parametrize('text', ['My name is David and Nguyen.', 'My name is David from Nguyen.'])
+def test_ambiguous_name_continuation_declines_contextual_owner(text):
+    c = candidate('David', is_owner=True)
+    c.bindings[0].evidence_kind = 'contextual'
+    assert not select([c], [segment(text=text)])
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
         'My name is David nguyen.',
         'My name is David-Nguyen.',
         "My name is David'Nguyen.",
@@ -92,12 +134,9 @@ def test_uncited_longer_introduction_is_contrary_to_contextual_owner():
     ],
 )
 def test_full_introduction_check_also_rejects_lowercase_surnames_and_other_lead_ins(text):
-    from utils.speaker_identification import detect_speaker_introduction
-    from utils.conversations.summary_speaker_labels import introduction_matches
-
-    detection = detect_speaker_introduction(text)
-    assert detection and detection.explicit
-    assert not introduction_matches(detection, text, 'david')
+    c = candidate('David', is_owner=True)
+    c.bindings[0].evidence_kind = 'contextual'
+    assert not select([c], [segment(text=text)])
 
 
 @pytest.mark.parametrize(
@@ -181,6 +220,14 @@ def test_context_alone_cannot_create_from_a_mention_or_first_name(source, name):
 def test_first_name_explicit_intro_needs_an_existing_person():
     admitted = select([candidate('Ann')], [segment(text='My name is Ann.')])
     assert admitted and not admitted[0].may_create
+
+
+def test_unspaced_cjk_calendar_full_name_can_authorize_creation():
+    c = candidate('山田太郎')
+    c.bindings[0].evidence_kind = 'contextual'
+    r = MeetingRoster((entry('David', 'owner'), entry('山田太郎')), 'Intro', False)
+    admitted = select_candidates([c], [segment(text='I can help.')], {}, r, allow_named=True)
+    assert admitted and admitted[0].may_create
 
 
 def test_reused_key_labels_only_the_evidence_scope():
@@ -349,6 +396,21 @@ def test_short_alias_cannot_resolve_another_full_name(world, own_name, expected)
         assert conv.transcript_segments[0].person_id == 'p1'
     else:
         assert store.rows == before
+
+
+def test_unspaced_cjk_full_alias_resolves_existing_person_without_duplicate(world):
+    stage, db, store, path, conv = world
+    conv.structured._summary_speaker_candidates = [candidate('山田太郎')]
+    conv.transcript_segments = [TranscriptSegment.model_validate(segment(text='私の名前は山田太郎です。'))]
+    store.rows[path].update(
+        db.encode_conversation_for_write(
+            'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
+        )
+    )
+    store.rows[('users', 'u', 'people', 'p1')] = dict(name='Taro Yamada', aliases=['山田太郎'])
+    assert stage.apply_summary_speaker_labels('u', conv) == 1
+    assert conv.transcript_segments[0].person_id == 'p1'
+    assert len([p for p in store.rows if p[-2] == 'people']) == 1
 
 
 def test_contextual_identity_can_attach_an_existing_exact_person_without_a_roster_name(world):

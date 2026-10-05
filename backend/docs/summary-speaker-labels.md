@@ -27,8 +27,16 @@ Separate independently evidenced bindings can identify different voices that
 share a number across scopes. Conflicting introductions are checked throughout
 the admitted scope. A complete explicit introduction must match the proposed
 name: “My name is David Nguyen” is contrary evidence for “David”, even if the
-model cites a different turn. Contiguous surnames cannot be discarded or
-borrowed from a later mention.
+model cites a different turn. Every explicit lead-in in a segment is checked;
+a prior bare “I'm David” or matching explicit introduction cannot hide a later
+contradictory one. One-letter apostrophe prefixes are extended across ASCII or
+curly apostrophes before length validation. Contiguous surnames and internal
+name particles (“Joan of Arc”, “Nguyen To Anh”) cannot be discarded or borrowed
+from a later mention. Leading discourse words and ambiguous clause continuations
+decline the binding rather than trimming or guessing a name boundary. Latin
+name tokens require capitals except internal particles; uncertain lowercase
+spans decline. This scanner reuses main's explicit lead-ins and CJK validation
+without changing the shared detector's other callers.
 
 The existing `named_speaker_prompts_allowed` gate runs before candidate admission
 and person lookup. Free accounts can identify the owner; other humans require
@@ -43,18 +51,21 @@ not a confident non-owner signal; unknown/ambiguous states are not invented
 negative evidence. Existing labels and manual decisions still take precedence.
 
 People resolve by a roster person link, normalized name, or retained alias.
-An alias must equal the entire proposed name and contain two or more tokens;
+An alias must equal the entire proposed full real name;
 a short alias such as “Ann” cannot assign “Anne Smith”. Exact equality with the
 person's own normalized name remains eligible. Duplicate matches decline.
 Contextual evidence can attach an existing exact-name person even when the
 cited text never says the name and the roster lacks it. Context alone never
 creates a person. Creation needs a verified full-name explicit introduction,
-or a two-or-more-token real name from an actual calendar/call participant roster
+or a full real name from an actual calendar/call participant roster
 plus the high-confidence binding. Main's system/macOS/Google/Outlook calendar
 sources and corroborated `screen_activity` call rosters supply that authority;
 background mentions and unsupported sources do not. A first-name-only explicit
 introduction can attach an existing exact person, but cannot create one. The
-bounded catalog reads at most 501 documents once per transaction attempt; a
+same `full_real_name` predicate gates introductions, rosters, and aliases: two
+or more space-separated tokens or a complete unspaced CJK name of 2–6 characters.
+Thus a CJK alias can resolve the existing person instead of creating a duplicate.
+The bounded catalog reads at most 501 documents once per transaction attempt; a
 catalog exceeding 500 people declines named assignments because uniqueness
 cannot be established. Owner-only admission does not read this catalog.
 People and labels commit atomically; encoding/model validation happens before

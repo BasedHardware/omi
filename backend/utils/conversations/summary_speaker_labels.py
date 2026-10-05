@@ -13,9 +13,7 @@ from utils.conversations.meeting_participants import MeetingRoster, looks_like_a
 _MEETING_ROSTER_SOURCES = frozenset(
     {'system_calendar', 'macos_calendar', 'google_calendar', 'outlook_calendar', 'google', 'outlook', 'screen_activity'}
 )
-_INTRO_CLAUSE_BOUNDARIES = frozenset(
-    {'and', 'but', 'from', 'with', 'at', 'of', 'to', 'here', 'i', "i'm", 'is', 'am', 'we', 'hi', 'hello'}
-)
+_NAME_PARTICLES = frozenset({'of', 'to', 'de', 'del', 'da', 'di', 'van', 'von', 'der', 'den', 'la', 'le'})
 _NAME_TOKEN = r"[^\W\d_]+(?:[-'’][^\W\d_]+)*"
 
 
@@ -23,37 +21,56 @@ def normalized_name(name: str) -> str:
     return ' '.join(unicodedata.normalize('NFKC', name).casefold().split())
 
 
-def introduction_matches(detection, text: str, name: str) -> bool:
-    if not detection or not detection.explicit:
-        return False
-    from utils.speaker_identification import patterns_to_check
+def explicit_introduction_names(text: str) -> list[Optional[str]]:
+    """Read every explicit span; None reserves an ambiguous introduction.
 
-    # Locate the shared detector's capture, then read the entire contiguous
-    # name. Its first-token match cannot prove a shorter candidate or borrow
-    # a surname from a later sentence. Ambiguous trailing words decline.
+    Reuse main's lead-ins and CJK validation without its first-hit/short-name
+    filtering. A bare copula cannot hide a later explicit introduction. Never
+    trim discourse or clause words to guess where a name starts or ends.
+    """
+    from utils.speaker_identification import (
+        PATTERN_TO_LANG,
+        SPEAKER_NAME_STOPWORDS,
+        _is_explicit_introduction,
+        _is_valid_cjk_speaker_name,
+        patterns_to_check,
+    )
+
+    names: list[Optional[str]] = []
     for pattern in patterns_to_check:
-        match = re.search(pattern, text)
-        if not match or normalized_name(match.groups()[-1]) != normalized_name(detection.name):
-            continue
-        start, end = match.span(len(match.groups()))
-        name_first = start == match.start()
-        # The detector also truncates a compound name at a hyphen/apostrophe.
-        while preceding := re.search(r'(' + _NAME_TOKEN + r")[-'’]$", text[:start]):
-            start = preceding.start(1)
-        while following := re.match(r"[-'’](" + _NAME_TOKEN + r')', text[end:]):
-            end += following.end(1)
-        if name_first:  # "David Nguyen is my name": extend left
-            while previous := re.search(r'(' + _NAME_TOKEN + r')\s+$', text[:start]):
-                if normalized_name(previous.group(1)) in _INTRO_CLAUSE_BOUNDARIES:
-                    break
-                start = previous.start(1)
-        else:
-            while following := re.match(r'\s+(' + _NAME_TOKEN + r')', text[end:]):
-                if normalized_name(following.group(1)) in _INTRO_CLAUSE_BOUNDARIES:
-                    break
+        for match in re.finditer(pattern, text):
+            if not _is_explicit_introduction(pattern, match):
+                continue
+            start, end = match.span(len(match.groups()))
+            captured = text[start:end]
+            if re.search(r'[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7a3]', captured):
+                names.append(
+                    normalized_name(captured)
+                    if _is_valid_cjk_speaker_name(captured, PATTERN_TO_LANG.get(pattern))
+                    else None
+                )
+                continue
+            name_first = start == match.start()
+            # Extend even a one-letter capture before deciding it is too short.
+            while preceding := re.search(r'(' + _NAME_TOKEN + r")[-'’]$", text[:start]):
+                start = preceding.start(1)
+            while following := re.match(r"[-'’](" + _NAME_TOKEN + r')', text[end:]):
                 end += following.end(1)
-        return normalized_name(text[start:end]) == name
-    return False
+            if name_first:
+                while previous := re.search(r'(' + _NAME_TOKEN + r')\s+$', text[:start]):
+                    start = previous.start(1)
+            else:
+                while following := re.match(r'\s+(' + _NAME_TOKEN + r')', text[end:]):
+                    end += following.end(1)
+            span = text[start:end]
+            tokens = span.split()
+            valid = len(span) >= 2 and all(
+                (0 < i < len(tokens) - 1 and normalized_name(token) in _NAME_PARTICLES)
+                or (token[0].isupper() and normalized_name(token) not in SPEAKER_NAME_STOPWORDS)
+                for i, token in enumerate(tokens)
+            )
+            names.append(normalized_name(span) if valid else None)
+    return names
 
 
 def full_real_name(name: str) -> bool:
@@ -93,7 +110,7 @@ def select_candidates(
     """
     if not roster or len(candidates) > 32:
         return []
-    from utils.speaker_identification import SPEAKER_NAME_STOPWORDS, detect_speaker_introduction
+    from utils.speaker_identification import SPEAKER_NAME_STOPWORDS
 
     by_key: dict[int, list[dict]] = {}
     by_id: dict[str, dict] = {}
@@ -178,15 +195,10 @@ def select_candidates(
                 admitted = []
                 break
             evidence = [s for s in evidence if s is not None]
-            introductions = [detect_speaker_introduction(s['text']) for s in evidence]
-            explicit_name = any(introduction_matches(d, s['text'], name) for d, s in zip(introductions, evidence))
+            explicit_name = any(name in explicit_introduction_names(s['text']) for s in evidence)
             # Contrary self-introductions anywhere in this scoped key invalidate the
             # whole candidate, even when the model cites a convenient subset.
-            contrary = any(
-                d and d.explicit and not introduction_matches(d, s['text'], name)
-                for s in cluster
-                for d in [detect_speaker_introduction(s['text'])]
-            )
+            contrary = any(introduced != name for s in cluster for introduced in explicit_introduction_names(s['text']))
             if contrary or (binding.evidence_kind == 'self_introduction' and not explicit_name):
                 admitted = []
                 break
@@ -194,7 +206,7 @@ def select_candidates(
             # name in these turns. Creation needs a full explicit introduction
             # or a full real name from main's actual calendar/call roster.
             may_create = (explicit_name and full_real_name(name)) or (
-                len(name.split()) >= 2 and any(e.source in _MEETING_ROSTER_SOURCES for e in named_entries)
+                full_real_name(name) and any(e.source in _MEETING_ROSTER_SOURCES for e in named_entries)
             )
             admitted.append(
                 AdmittedSpeaker(
