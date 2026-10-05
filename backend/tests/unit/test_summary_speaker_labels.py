@@ -81,7 +81,16 @@ def test_uncited_longer_introduction_is_contrary_to_contextual_owner():
     assert not select([c], [segment(text='We should ship this.'), segment('s2', text='My name is David Nguyen.')])
 
 
-@pytest.mark.parametrize('text', ['My name is David nguyen.', 'Me llamo David Nguyen.', "Je m'appelle David Nguyen."])
+@pytest.mark.parametrize(
+    'text',
+    [
+        'My name is David nguyen.',
+        'My name is David-Nguyen.',
+        "My name is David'Nguyen.",
+        'Me llamo David Nguyen.',
+        "Je m'appelle David Nguyen.",
+    ],
+)
 def test_full_introduction_check_also_rejects_lowercase_surnames_and_other_lead_ins(text):
     from utils.speaker_identification import detect_speaker_introduction
     from utils.conversations.summary_speaker_labels import introduction_matches

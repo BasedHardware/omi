@@ -36,7 +36,13 @@ def introduction_matches(detection, text: str, name: str) -> bool:
         if not match or normalized_name(match.groups()[-1]) != normalized_name(detection.name):
             continue
         start, end = match.span(len(match.groups()))
-        if start == match.start():  # "David Nguyen is my name": extend left
+        name_first = start == match.start()
+        # The detector also truncates a compound name at a hyphen/apostrophe.
+        while preceding := re.search(r'(' + _NAME_TOKEN + r")[-'’]$", text[:start]):
+            start = preceding.start(1)
+        while following := re.match(r"[-'’](" + _NAME_TOKEN + r')', text[end:]):
+            end += following.end(1)
+        if name_first:  # "David Nguyen is my name": extend left
             while previous := re.search(r'(' + _NAME_TOKEN + r')\s+$', text[:start]):
                 if normalized_name(previous.group(1)) in _INTRO_CLAUSE_BOUNDARIES:
                     break
