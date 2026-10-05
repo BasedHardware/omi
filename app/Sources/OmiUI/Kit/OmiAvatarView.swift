@@ -39,8 +39,8 @@ public struct OmiAvatarView: View {
         let radius = index % 2 == 0 ? axis : diagonal
         let centre = 0.5
         return CGPoint(
-            x: side * CGFloat(centre + radius * sin(theta)),
-            y: side * CGFloat(centre - radius * cos(theta))
+            x: side * CGFloat(centre + radius * 0.5 * sin(theta)),
+            y: side * CGFloat(centre - radius * 0.5 * cos(theta))
         )
     }
 
@@ -49,6 +49,20 @@ public struct OmiAvatarView: View {
     }
 
     public var body: some View {
+        #if SKIP
+        Path { path in
+            for index in 0..<8 {
+                let point = center(index: index, side: size)
+                path.addEllipse(
+                    in: CGRect(
+                        x: point.x - dotSize / 2, y: point.y - dotSize / 2,
+                        width: dotSize, height: dotSize))
+            }
+        }
+        .fill(inkColor)
+        .frame(width: size, height: size)
+        .accessibilityLabel("Omi")
+        #else
         ZStack {
             ForEach(0..<8, id: \.self) { index in
                 Circle()
@@ -62,6 +76,7 @@ public struct OmiAvatarView: View {
         .frame(width: size, height: size)
         .animation(reduceMotion ? nil : breatheAnimation, value: motion)
         .accessibilityLabel("Omi")
+        #endif
     }
 
     private var breatheAnimation: Animation? {

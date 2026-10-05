@@ -301,10 +301,7 @@ public struct TaskCard: View {
             }
         }
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .fill(selected ? OmiColor.hex(0x292929) : Palette.surface)
-        )
+        .background(selected ? OmiColor.hex(0x292929) : Palette.surface, in: RoundedRectangle(cornerRadius: Radius.lg))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.lg)
                 .strokeBorder(

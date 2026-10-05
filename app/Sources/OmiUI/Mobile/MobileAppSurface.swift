@@ -96,16 +96,20 @@ public struct MobileAppSurface: View {
     }
 
     public var body: some View {
-        // Session gate (DesktopSurface parity): the signed-out and
-        // onboarding phases render the onboarding card flow; only a ready
-        // session gets the app shell.
-        if store.authState == AuthUiState.onboarding
-            || store.authState == AuthUiState.signedOut
-        {
-            MobileOnboardingPage(returning: store.returningUser)
-        } else {
-            appContent
+        Group {
+            // Session gate (DesktopSurface parity): the signed-out and
+            // onboarding phases render the onboarding card flow; only a ready
+            // session gets the app shell.
+            if store.authState == AuthUiState.onboarding
+                || store.authState == AuthUiState.signedOut
+            {
+                MobileOnboardingPage(returning: store.returningUser)
+            } else {
+                appContent
+            }
         }
+        .textFieldStyle(.plain)
+        .preferredColorScheme(.dark)
     }
 
     private var appContent: some View {
@@ -208,6 +212,7 @@ public struct MobileAppSurface: View {
                     tasksStage
                 } else {
                     ConversationsPage(embedded: true)
+                        .padding(.horizontal, MobileSpace.md)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .top).frame(maxHeight: .infinity)
@@ -526,10 +531,7 @@ public struct MobileTabBar: View {
                     )
             }
             .frame(maxWidth: .infinity, minHeight: 60)
-            .background(
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(isSelected ? MobilePalette.surfaceRaised : Color.clear)
-            )
+            .background(isSelected ? MobilePalette.surfaceRaised : Color.clear, in: RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(KitPressableStyle())
         .animation(KitMotion.slide, value: selected)

@@ -189,10 +189,7 @@ public struct ConversationsPage: View {
                 )
                 .foregroundColor(selected ? MobilePalette.text : MobilePalette.textMuted)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: MobileRadius.sm)
-                        .fill(selected ? MobilePalette.surfaceRaised : Color.clear)
-                )
+                .background(selected ? MobilePalette.surfaceRaised : Color.clear, in: RoundedRectangle(cornerRadius: MobileRadius.sm))
         }
         .buttonStyle(KitPressableStyle())
         .animation(KitMotion.slide, value: selected)
@@ -205,7 +202,9 @@ public struct ConversationsPage: View {
             if selected == nil {
                 listPane
             }
-            detailPane
+            if !embedded || selected != nil {
+                detailPane
+            }
         }
         .frame(maxWidth: .infinity, alignment: .top).frame(maxHeight: .infinity)
     }
@@ -423,10 +422,7 @@ public struct ConversationListRow: View {
                     )
             }
             .padding(embedded ? 18.0 : 12.0)
-            .background(
-                RoundedRectangle(cornerRadius: embedded ? 22.0 : Radius.lg)
-                    .fill(embedded ? MobilePalette.surface : Palette.surface)
-            )
+            .background(embedded ? MobilePalette.surface : Palette.surface, in: RoundedRectangle(cornerRadius: embedded ? 22.0 : Radius.lg))
             .overlay(
                 RoundedRectangle(cornerRadius: embedded ? 22.0 : Radius.lg)
                     .strokeBorder(

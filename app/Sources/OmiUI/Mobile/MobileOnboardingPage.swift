@@ -70,7 +70,9 @@ public struct MobileOnboardingPage: View {
             navigationRow
         }
         .padding(24)
+        #if !SKIP
         .frame(maxWidth: 440)
+        #endif
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(Color(red: 0.102, green: 0.110, blue: 0.094))
@@ -87,11 +89,17 @@ public struct MobileOnboardingPage: View {
     /// mid-transition.
     private var stepStage: some View {
         ZStack {
+            #if SKIP
+            stepContent
+            #else
             stepContent
                 .id(step)
                 .transition(stepBeat)
+            #endif
         }
+        #if !SKIP
         .frame(minHeight: 320)
+        #endif
     }
 
     /// Direction-aware step beat (DesktopOnboardingPage's `stepBeat`, mobile
@@ -369,10 +377,7 @@ public struct MobileOnboardingPage: View {
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(KitPressableStyle())
-                .background(
-                    RoundedRectangle(cornerRadius: MobileRadius.chip)
-                        .fill(selected ? MobilePalette.text : MobilePalette.surfaceQuiet)
-                )
+                .background(selected ? MobilePalette.text : MobilePalette.surfaceQuiet, in: RoundedRectangle(cornerRadius: MobileRadius.chip))
                 .accessibilityLabel(item.name)
                 .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
@@ -395,10 +400,7 @@ public struct MobileOnboardingPage: View {
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .buttonStyle(KitPressableStyle())
-                    .background(
-                        RoundedRectangle(cornerRadius: MobileRadius.chip)
-                            .fill(selected ? MobilePalette.text : MobilePalette.surfaceQuiet)
-                    )
+                    .background(selected ? MobilePalette.text : MobilePalette.surfaceQuiet, in: RoundedRectangle(cornerRadius: MobileRadius.chip))
                     .accessibilityLabel(item)
                     .accessibilityAddTraits(selected ? [.isSelected] : [])
                 }
@@ -538,10 +540,7 @@ public struct MobileOnboardingPage: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 48)
-            .background(
-                RoundedRectangle(cornerRadius: MobileRadius.chip)
-                    .fill(MobilePalette.text)
-            )
+            .background(MobilePalette.text, in: RoundedRectangle(cornerRadius: MobileRadius.chip))
         }
         .buttonStyle(KitPressableStyle())
         .disabled(busy || store.signingIn)

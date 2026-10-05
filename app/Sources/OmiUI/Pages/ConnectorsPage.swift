@@ -54,7 +54,7 @@ public struct ConnectorsPage: View {
                         Button(action: { Task { await signIn() } }) {
                             Text(signingIn ? "Signing in…" : "Sign in")
                                 .font(TypeStyle(size: 13, lineHeight: 18, weight: .semibold).font)
-                                .foregroundColor(Color.white)
+                                .foregroundColor(Palette.textInverse)
                                 .frame(minHeight: 44)
                                 .padding(.horizontal, Space.md)
                                 .background(Palette.primary)
@@ -118,10 +118,7 @@ public struct ConnectorsPage: View {
                             isSelected ? MobilePalette.background : MobilePalette.textMuted
                         )
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(isSelected ? MobilePalette.text : MobilePalette.surface)
-                        )
+                        .background(isSelected ? MobilePalette.text : MobilePalette.surface, in: RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(KitPressableStyle())
                 .animation(KitMotion.slide, value: catalogTab)

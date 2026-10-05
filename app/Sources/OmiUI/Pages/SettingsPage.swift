@@ -47,6 +47,11 @@ public struct SettingsPage: View {
             .padding(.top, 4)
             .padding(.bottom, 24)
         }
+        .onAppear {
+            if snapshot == nil, !signedOut {
+                Task { await store.refreshConnectors() }
+            }
+        }
     }
 
     private var tabs: some View {
@@ -60,12 +65,7 @@ public struct SettingsPage: View {
                             isSelected ? OmiColor.hex(0xEEEEEE) : OmiColor.hex(0xA0A0A0)
                         )
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(
-                            RoundedRectangle(cornerRadius: Radius.md)
-                                .fill(
-                                    isSelected ? Palette.primary : Color.clear
-                                )
-                        )
+                        .background(isSelected ? MobilePalette.surfaceRaised : Color.clear, in: RoundedRectangle(cornerRadius: Radius.md))
                         .overlay(
                             RoundedRectangle(cornerRadius: Radius.md)
                                 .strokeBorder(Palette.line, lineWidth: Borders.width)
@@ -88,6 +88,7 @@ public struct SettingsPage: View {
                 .foregroundColor(Color.white)
             content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Space.lg)
         .background(MobilePalette.surface)
         .overlay(
@@ -125,7 +126,7 @@ public struct SettingsPage: View {
                     Button(action: { Task { await store.startSignIn() } }) {
                         Text(signingIn ? "Signing in…" : "Sign in")
                             .font(TypeStyle(size: 13, lineHeight: 18, weight: .semibold).font)
-                            .foregroundColor(Color.white)
+                            .foregroundColor(Palette.textInverse)
                             .frame(minHeight: 44)
                             .padding(.horizontal, Space.md)
                             .background(Palette.primary)
@@ -143,7 +144,7 @@ public struct SettingsPage: View {
                     Button(action: { Task { await store.completeOnboarding() } }) {
                         Text("Continue")
                             .font(TypeStyle(size: 13, lineHeight: 18, weight: .semibold).font)
-                            .foregroundColor(Color.white)
+                            .foregroundColor(Palette.textInverse)
                             .frame(minHeight: 44)
                             .padding(.horizontal, Space.md)
                             .background(Palette.primary)
@@ -381,12 +382,17 @@ public struct SettingRow: View {
                         .font(TypeStyle(size: 12, lineHeight: 17, weight: .regular).font)
                         .foregroundColor(OmiColor.hex(0x888888))
                 }
+                #if SKIP
+                .frame(maxWidth: .infinity, alignment: .leading)
+                #else
                 .frame(minWidth: 160, maxWidth: .infinity, alignment: .leading)
+                #endif
                 if let actionLabel, action != nil {
                     rowButton(actionLabel)
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, Space.lg)
         .overlay(alignment: .top) {
             Rectangle()

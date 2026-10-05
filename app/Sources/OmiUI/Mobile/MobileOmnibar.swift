@@ -48,6 +48,7 @@ public struct MobileOmnibar: View {
                 text: $value
             )
             .onSubmit { submit() }
+            .textFieldStyle(.plain)
             .font(TypeStyle(size: 16, lineHeight: 22, weight: .regular).font)
             .foregroundColor(MobilePalette.text)
             .padding(.horizontal, 8)
@@ -103,10 +104,7 @@ public struct MobileOmnibar: View {
         Button(action: submit) {
             submitGlyph
                 .frame(width: 44, height: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: MobileRadius.chip)
-                        .fill(MobilePalette.text)
-                )
+                .background(MobilePalette.text, in: RoundedRectangle(cornerRadius: MobileRadius.chip))
         }
         .buttonStyle(KitPressableStyle())
         .opacity(disabled ? 0.35 : 1.0)
