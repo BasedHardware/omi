@@ -80,7 +80,12 @@ class IdleSonioxSocket(STTSocket):
         self._writer_pacing: tuple[Any, ...] | None = None
         self._socket_epoch = 0
         self._last_end = 0.0
+        self._capture_axis_ledger: Callable[[], int | None] | None = None
         transport._stream_transcript = self._socket_callback(0.0, 0)
+
+    def set_capture_axis_ledger(self, ledger: Callable[[], int | None]) -> None:
+        self._capture_axis_ledger = ledger
+        self._transport.set_capture_axis_ledger(ledger)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._transport, name)
@@ -177,6 +182,10 @@ class IdleSonioxSocket(STTSocket):
 
         try:
             self._transport = await self._connect(callback)
+            if self._capture_axis_ledger is not None:
+                self._transport.set_capture_axis_ledger(
+                    self._capture_axis_ledger, round(offset * self._rate), 'reopened'
+                )
             if self._writer_pacing is not None:
                 self._transport.enable_writer_pacing(*self._writer_pacing)
             if self._transport.is_connection_dead:

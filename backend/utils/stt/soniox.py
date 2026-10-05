@@ -25,6 +25,7 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
 from config.soniox_idle import idle_close_seconds
+from utils.stt.soniox_capture_axis import CaptureAxisDiagnostics, enabled as capture_axis_diagnostics_enabled
 from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
@@ -184,7 +185,10 @@ class SafeSonioxSocket(STTSocket):
         stream_transcript: Callable[[List[Dict[str, Any]]], None],
         loop: asyncio.AbstractEventLoop,
         preseconds: int = 0,
+        *,
+        sample_rate: int = 16000,
     ) -> None:
+        self._capture_axis = CaptureAxisDiagnostics(sample_rate) if capture_axis_diagnostics_enabled() else None
         self._ws: Any = ws
         self._stream_transcript = stream_transcript
         self._loop = loop
@@ -261,6 +265,8 @@ class SafeSonioxSocket(STTSocket):
 
         try:
             self._send_queue.put_nowait(aligned)
+            if self._capture_axis is not None:
+                self._capture_axis.queued += len(aligned) // 2
         except asyncio.QueueFull:
             self._mark_dead('send queue full', typed_reason='capacity_full')
             return False
@@ -354,21 +360,42 @@ class SafeSonioxSocket(STTSocket):
         except Exception:
             pass
 
+    def set_capture_axis_ledger(
+        self, ledger: Callable[[], int | None], origin: int = 0, phase: str = 'initial'
+    ) -> None:
+        if self._capture_axis is not None:
+            self._capture_axis.bind(ledger, origin, phase)
+
+    async def _write(self, data: bytes | str) -> None:
+        diagnostic = self._capture_axis
+        if diagnostic is None:
+            await self._ws.send(data)
+            return
+        diagnostic.inflight = True
+        try:
+            await self._ws.send(data)
+            try:
+                diagnostic.sent(data)
+            except Exception:
+                pass
+        finally:
+            diagnostic.inflight = False
+
     async def _send_loop(self) -> None:
         try:
             while not self._closed and not self._dead:
                 try:
                     data = await asyncio.wait_for(self._send_queue.get(), timeout=SONIOX_KEEPALIVE_SECONDS)
                 except asyncio.TimeoutError:
-                    await self._ws.send(json.dumps({'type': 'keepalive'}))
+                    await self._write(json.dumps({'type': 'keepalive'}))
                     continue
                 if not self.recovery_enabled:
                     if data == b'':
                         # Documented end-of-audio signal: an empty text frame.
                         if self._audio_sent:
-                            await self._ws.send('')
+                            await self._write('')
                         break
-                    await self._ws.send(data)
+                    await self._write(data)
                     if isinstance(data, bytes):
                         self._audio_sent = True
                     continue
@@ -379,9 +406,9 @@ class SafeSonioxSocket(STTSocket):
                         pace = self._writer_pace
                         if pace is not None:
                             async with asyncio.timeout(pace.write_bound()):
-                                await self._ws.send('')
+                                await self._write('')
                         else:
-                            await self._ws.send('')
+                            await self._write('')
                     break
                 pace = self._writer_pace
                 deadline = getattr(self._send_queue, 'inflight_deadline', None) if isinstance(data, bytes) else None
@@ -393,13 +420,13 @@ class SafeSonioxSocket(STTSocket):
                     if pace is not None:
                         try:
                             async with asyncio.timeout(pace.write_bound(deadline)):
-                                await self._ws.send(data)
+                                await self._write(data)
                         except TimeoutError:
                             if deadline is not None and deadline <= clock():
                                 raise AudioDeliveryExpired('live audio delivery expired')
                             raise
                     else:
-                        await self._ws.send(data)
+                        await self._write(data)
                     self._send_queue.note_written(data)
                     written = True
                     if pace is not None and isinstance(data, bytes):
@@ -471,6 +498,8 @@ class SafeSonioxSocket(STTSocket):
                     self._mark_dead(f'soniox error: {err}', typed_reason=typed)
                     break
 
+                if self._capture_axis is not None:
+                    self._capture_axis.response(msg)
                 tokens: List[Any] = msg.get('tokens') or []
                 if tokens:
                     self._handle_tokens(tokens)
@@ -688,6 +717,6 @@ async def _open_soniox(config: Dict[str, Any], url: str, stream_transcript: Any,
             logger.warning('Failed to close Soniox socket after config send failure')
         raise
     loop = asyncio.get_running_loop()
-    sock = SafeSonioxSocket(ws, stream_transcript, loop, preseconds=preseconds)
+    sock = SafeSonioxSocket(ws, stream_transcript, loop, preseconds=preseconds, sample_rate=sample_rate)
     logger.info('Soniox streaming connection established')
     return sock
