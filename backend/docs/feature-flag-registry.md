@@ -187,7 +187,7 @@ and an explicit empty literal renders as `''`.
 | `MEETING_NOTES_EPISODE_JEV_THRESHOLD` | Calibrated Jev evidence connection cutoff; deterministic remains default selector | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_TIERED_ENABLED` | Universal evidence-volume cost routing: high-value C6, otherwise C7; default enabled inside episode cohort | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS` | C6 admitted source-kind threshold, default 2 | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
-| `MEETING_NOTES_EPISODE_TIER_MIN_WORDS` | C6 admitted speech word threshold, default 250 | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
+| `MEETING_NOTES_EPISODE_TIER_MIN_WORDS` | C6 admitted speech word threshold, default 1500 | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS` | Episode C7 writer budget, default 120s in durable jobs; synchronous requests retain 60s | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_RICH_CONTEXT_ENABLED` | Gather the rich meeting context pack for meeting notes | backend | env | closed | false | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-15 | dazheng |
 | `MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED` | Attach up to four approved meeting screenshots as images on the rich notes call | backend | env | closed | false | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-21 | dazheng |
@@ -387,7 +387,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` — Optional high/xhigh byte ceiling, default disabled (0); long transcript guard stays active (fail: closed)
 - `MEETING_NOTES_EPISODE_TIERED_ENABLED` — Universal evidence-volume cost routing: high-value C6, otherwise C7; default enabled inside episode cohort (fail: closed)
 - `MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS` — C6 admitted source-kind threshold, default 2 (fail: closed)
-- `MEETING_NOTES_EPISODE_TIER_MIN_WORDS` — C6 admitted speech word threshold, default 250 (fail: closed)
+- `MEETING_NOTES_EPISODE_TIER_MIN_WORDS` — C6 admitted speech word threshold, default 1500 (fail: closed)
 - `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS` — Episode C7 writer budget, default 120s in durable jobs; synchronous requests retain 60s (fail: closed)
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)

@@ -17,7 +17,7 @@ class EpisodeWriterSettings:
     thinking_max_input_bytes: int = 0
     jev_threshold: float = 0.70
     tiered: bool = False
-    tier_min_words: int = 250
+    tier_min_words: int = 1500
     tier_min_source_kinds: int = 2
     writer_timeout: float = 120
     c6_timeout: float = 180
@@ -48,7 +48,7 @@ def episode_writer_settings() -> EpisodeWriterSettings:
         thinking_max_input_bytes=thinking_max_input_bytes,
         jev_threshold=_number('MEETING_NOTES_EPISODE_JEV_THRESHOLD', 0.70, 0, 1),
         tiered=os.getenv('MEETING_NOTES_EPISODE_TIERED_ENABLED', 'true').strip().lower() in {'true', '1', 'yes'},
-        tier_min_words=int(_number('MEETING_NOTES_EPISODE_TIER_MIN_WORDS', 250, 1, 100000)),
+        tier_min_words=int(_number('MEETING_NOTES_EPISODE_TIER_MIN_WORDS', 1500, 1, 100000)),
         tier_min_source_kinds=int(_number('MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS', 2, 1, 12)),
         writer_timeout=_number('MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS', 120, 15, 120),
         c6_timeout=_number('MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS', 180, 15, 300),

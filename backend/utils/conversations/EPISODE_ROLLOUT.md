@@ -18,7 +18,7 @@ Writer configuration (episode cohort only, read at each call):
 - `MEETING_NOTES_EPISODE_CLAIMS_ENABLED=false` (default).
 - `MEETING_NOTES_EPISODE_EFFORT=default`; high/xhigh are explicit experiments.
 - `MEETING_NOTES_EPISODE_TIERED_ENABLED=true` inside the admitted episode cohort.
-- `MEETING_NOTES_EPISODE_TIER_MIN_WORDS=250` and `..._TIER_MIN_SOURCE_KINDS=2`.
+- `MEETING_NOTES_EPISODE_TIER_MIN_WORDS=1500` (David 2026-10-06: about 10 min of speech; 250 was too low) and `..._TIER_MIN_SOURCE_KINDS=2`.
 - `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS=120`, `..._C6_TIMEOUT_SECONDS=180`.
   The existing gateway route clamps C6 to 115s; synchronous requests remain
   C7/60s. Only already-leased durable finalizers get extended budgets.

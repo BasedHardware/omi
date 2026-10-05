@@ -55,7 +55,9 @@ def test_default_c7_and_explicit_tier_cost_route(monkeypatch):
     assert not episode_writer_settings().claims
     assert episode_writer_settings().thinking_max_input_bytes == 0
     settings = EpisodeWriterSettings(tiered=True)
-    items = [item('s', 'speech', 'word ' * 250), item('r', 'roster')]
+    assert settings.tier_min_words == 1500
+    assert episode_tier([item('s', 'speech', 'word ' * 1499), item('r', 'roster')], settings)[1] == 'C7'
+    items = [item('s', 'speech', 'word ' * 1500), item('r', 'roster')]
     assert episode_tier(items, settings)[1:] == ('C6', 'speech_and_source_volume')
     assert episode_tier(items[:1], settings)[1] == 'C7'
     run = NotesRun('episode')

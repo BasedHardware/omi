@@ -132,7 +132,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--apply-deadlines', action='store_true')
     parser.add_argument('--writer-timeout', type=float, default=120)
     parser.add_argument('--c6-timeout', type=float, default=115)
-    parser.add_argument('--tier-min-words', type=int, default=250)
+    parser.add_argument('--tier-min-words', type=int, default=1500)
     parser.add_argument('--tier-min-source-kinds', type=int, default=2)
     parser.add_argument(
         '--candidate-max-tokens', type=int, help='Experimental C6-only output budget; part of the cache key'
