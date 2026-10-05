@@ -58,6 +58,7 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         pass
 
 
+_PRE_EXISTING_MODULES = set(sys.modules.keys())
 _finder = _Finder()
 sys.meta_path.insert(0, _finder)
 try:
@@ -65,6 +66,13 @@ try:
     from utils import webhooks
 finally:
     sys.meta_path.remove(_finder)
+
+
+def teardown_module(module=None):
+    """Restore sys.modules to prevent stubs from leaking into subsequent test files."""
+    for key in list(sys.modules.keys()):
+        if key not in _PRE_EXISTING_MODULES:
+            sys.modules.pop(key, None)
 
 
 @pytest.mark.parametrize(
@@ -79,6 +87,10 @@ finally:
         ('https://[2606:4700:4700::1111]:8080/audio', True),
         ('https://[2606:4700:4700::1111]?token=synthetic', True),
         ('https://[2606:4700:4700::1111]', True),
+        # Dotted IPv4-mapped IPv6 literals
+        ('https://[::ffff:8.8.8.8]/', True),
+        ('https://[::ffff:8.8.8.8]:8443/audio', True),
+        ('https://[::ffff:198.51.100.1]?token=synthetic', True),
         # Standard hostnames and IPv4
         ('http://localhost:8000/webhook', True),
         ('http://198.51.100.1:8080/audio', True),
@@ -96,6 +108,9 @@ finally:
         ('javascript:alert(1)', False),
         ('https://example.com with spaces', False),
         ('https://[invalid-ipv6-chars]/audio', False),
+        # Valid bracket characters that fail urlsplit IPv6 parsing (exercises ValueError handler)
+        ('https://[::::]/', False),
+        ('https://[::1::1]/', False),
     ],
 )
 def test_is_valid_audio_bytes_webhook_url(url, expected):

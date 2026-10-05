@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import importlib.util
 import sys
 import types
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -97,7 +98,7 @@ def _install_prometheus_client_stub():
     prometheus_client.CONTENT_TYPE_LATEST = 'text/plain; version=0.0.4; charset=utf-8'
     prometheus_client.generate_latest = lambda registry=None: b''
     prometheus_client.disable_created_metrics = lambda: None
-    prometheus_client.start_http_server = lambda *args, **kwargs: None
+    prometheus_client.start_http_server = lambda *args, **kwargs: (MagicMock(), MagicMock())
 
     sys.modules['prometheus_client'] = prometheus_client
 
