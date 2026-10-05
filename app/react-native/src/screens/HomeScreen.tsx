@@ -8,6 +8,14 @@ import { useConversationsStore } from '@/state/conversationsStore';
 import { useAuthStore } from '@/state/authStore';
 import { createActionItem } from '@/api/omiApi';
 import { runAgent } from '@/services/localAgent';
+import {
+  routeWithProvider,
+  ROUTE_PROTOTYPES,
+  OUT_OF_DOMAIN_PROTOTYPES,
+  type Route,
+} from '@/services/localBrainRouter';
+import { createNativeRouter, isLocalBrainAvailable } from '../../modules/local-brain';
+import { LocalBrainBar, type RouteTrace } from '@/components/LocalBrainBar';
 import type { Conversation, Memory } from '@/api/omiApi';
 
 function dayLabel(iso?: string): string {
@@ -52,12 +60,35 @@ export default function HomeScreen() {
   const [query, setQuery] = useState('')
   const uid = useAuthStore((s) => s.uid)
 
+  // Routing is the embedder when the native module is present, and the existing
+  // regexes otherwise. Built once and reused: configure() crosses the bridge on
+  // the first call and caches the promise on the provider.
+  const brainRouter = useMemo(
+    () =>
+      isLocalBrainAvailable
+        ? createNativeRouter(ROUTE_PROTOTYPES, OUT_OF_DOMAIN_PROTOTYPES)
+        : null,
+    []
+  );
+
+  const [trace, setTrace] = useState<RouteTrace | null>(null);
+
   // On-device local agent: a task/reminder command is handled without the cloud;
   // anything else falls through to "Ask Omi" chat.
   const submit = async (): Promise<void> => {
     const text = query.trim()
     if (!text) return
-    const action = await runAgent(text)
+    const outcome = await routeWithProvider(text, brainRouter)
+    setTrace({
+      source: outcome.source,
+      route:
+        outcome.decision.kind === 'chat'
+          ? 'chat'
+          : (outcome.decision.kind as Route),
+      margin: 'margin' in outcome ? outcome.margin : 0,
+      reason: outcome.source === 'heuristic' ? outcome.reason : undefined,
+    })
+    const action = outcome.decision
     if (action.kind === 'chat') {
       // Chat streaming isn't wired on this surface yet; don't pretend to answer.
       Alert.alert('Ask Omi', 'Chat isn’t wired on this screen yet — task/reminder commands work: try "add a task: …".')
@@ -148,6 +179,9 @@ export default function HomeScreen() {
           ))}
         </View>
       </ScrollView>
+
+      {/* Routing transparency: which layer decided, and how confident it was. */}
+      <LocalBrainBar trace={trace} />
 
       <View style={styles.inputBar}>
         <View style={styles.inputBox}>

@@ -152,3 +152,20 @@ export const ROUTE_PROTOTYPES: Record<Route, string[]> = {
     'Tell me what I said earlier.',
   ],
 }
+/**
+ * Out-of-domain phrasing, so the router has something to decline toward.
+ *
+ * Without this the decline class has no prototypes and the abstain threshold
+ * cannot fire: an argmax over three routes will always pick one. Kept next to
+ * ROUTE_PROTOTYPES so both banks are reviewed together.
+ */
+export const OUT_OF_DOMAIN_PROTOTYPES: string[] = [
+  'what is the weather',
+  'play some music',
+  'who won the match',
+  'how do i tie a knot',
+  'what time is it',
+  'translate this to french',
+  'tell me a joke',
+  'set an alarm for six in the morning',
+]

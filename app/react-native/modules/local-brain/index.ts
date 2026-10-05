@@ -1,24 +1,37 @@
 import { requireNativeModule } from 'expo-modules-core'
-import type { Route, RouteProvider } from './src/services/localBrainRouter'
+import type { Route, RouteProvider } from '../../src/services/localBrainRouter'
 
 // Present only when the native module is linked. Absent in Expo Go and in tests,
 // so callers must handle null rather than assume it exists.
-const native = requireNativeModule<any>('LocalBrain') as
-  | {
-      configure(prototypes: Record<string, string[]>, outOfDomain: string[]): Promise<{ ok: boolean }>
-      load(): Promise<{ ok: boolean; ready: boolean }>
-      route(text: string): Promise<{
-        route: Route
-        margin: number
-        declined: boolean
-        negated: boolean
-        runnerUp: string
-        latencyMs: number
-        reason: string
-      }>
-      isReady(): Promise<boolean>
-    }
-  | null
+interface LocalBrainNative {
+  configure(
+    prototypes: Record<string, string[]>,
+    outOfDomain: string[]
+  ): Promise<{ ok: boolean }>
+  load(): Promise<{ ok: boolean; ready: boolean }>
+  route(text: string): Promise<{
+    route: Route
+    margin: number
+    declined: boolean
+    negated: boolean
+    runnerUp: string
+    latencyMs: number
+    reason: string
+  }>
+  isReady(): Promise<boolean>
+}
+
+// requireNativeModule throws when the module is absent, so probe first. This is
+// what keeps the app rendering under Expo Go and in tests.
+function probe(): LocalBrainNative | null {
+  try {
+    return requireNativeModule<LocalBrainNative>('LocalBrain')
+  } catch {
+    return null
+  }
+}
+
+const native = probe()
 
 export const isLocalBrainAvailable = native != null
 
