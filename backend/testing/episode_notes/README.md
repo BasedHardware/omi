@@ -167,15 +167,15 @@ The CLI retains historical `compact` + claims-on defaults for reproducible befor
 comparisons. To test the current tiered production defaults, pass
 `--selection deterministic --no-claims --candidate-effort default --tiered --thinking-max-input-bytes 0`
 explicitly. Eval otherwise permits 300s per writer call; use
-`--apply-tier-deadlines --c7-deadline-seconds 120 --c6-deadline-seconds 115` for the
+`--apply-deadlines --writer-timeout 120 --c6-timeout 115` for the
 durable tier comparison. Synchronous production paths retain C7/60s. A socket
 timeout is not a hard total wall-clock limit. Record deadline exceedances
 separately from eval errors before interpreting ramp readiness.
 
 `--thinking-max-input-bytes` defaults to 24000 and reuses the production byte
 measurement and baseline routing before generation for high/xhigh inputs.
-`0` disables this guard only for offline effort experiments (C5/C6); production
-environment configuration cannot disable the guard with zero. Baseline fallback
+`0` disables this optional byte guard; it is also the current production default.
+The existing long-transcript baseline guard remains independent. Baseline fallback
 reuses baseline generation/judge cache keys when their exact inputs match, keeping
 both samples comparable. Reports record `writer_arm` and `thinking_fallback`;
 no unseen candidate is synthesized from scores. A cache-only replay must reject
