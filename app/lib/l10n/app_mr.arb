@@ -11395,5 +11395,6 @@
     "stopThese": "हे थांबवा",
     "dismiss": "लपवा",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "लॉक स्क्रीनवर दाखवा"
 }

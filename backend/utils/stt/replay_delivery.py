@@ -554,10 +554,12 @@ class ReplayTailSocket:
         source: str = 'unknown',
         birth: 'BirthLedger | None' = None,
         retire_interval: Callable[[int], int] | None = None,
+        write_wait_seconds: float | None = None,
     ) -> None:
         self.connection, self.pacer, self.tail, self.host = socket, pacer, tail, host
         self._birth = birth
         self._retire_interval = retire_interval
+        self._write_wait_seconds = write_wait_seconds
         self._task: asyncio.Task[Any] | None = None
         self._pumping = True
         self._dead = False
@@ -714,15 +716,20 @@ class ReplayTailSocket:
                         self._dead = True
                         return
                     try:
-                        confirmed = await await_frozen_writes(self.connection, packet_deadline)
+                        write_deadline = packet_deadline
+                        if self._write_wait_seconds is not None:
+                            write_deadline = min(write_deadline, clock() + self._write_wait_seconds)
+                        confirmed = await await_frozen_writes(self.connection, write_deadline)
                     except asyncio.CancelledError:
-                        if not self._debit_pending_write():
+                        if not self._closing and not self._debit_pending_write():
                             entry.start = position
                         raise
                     if not confirmed:
                         if not self._debit_pending_write():
                             entry.start = position
                         self._dead = True
+                        if clock() < packet_deadline and not self.connection.is_connection_dead:
+                            self._local_reason = 'capacity_full'
                         return
                     self._pending_write = None
                     entry.start = position + len(packet) // 2
@@ -782,7 +789,11 @@ class ReplayTailSocket:
         self._closing = True
         if self._task is not None:
             self._task.cancel()
-        self.connection.finish()
+        try:
+            self.connection.finish()
+        finally:
+            # The receiver tracks the inner connection, not this tail wrapper.
+            release_live_stt_socket(self.connection)
         self._debit_pending_write()
         self._pending_write = None
         outcome = getattr(self.connection, 'leg_outcome', None)
@@ -792,6 +803,24 @@ class ReplayTailSocket:
             )
         self.tail.clear()
         self._tail_bytes = 0
+
+    def take_tail(self) -> deque[TailPacket]:
+        """Transfer unwritten capture before aborting a leg without a replay ring.
+
+        Freeze the pump synchronously so cancellation cannot mutate the handed
+        off packets. Confirmed writes are debited; an ambiguous write remains
+        owed to the successor. The original capture timestamps stay intact.
+        """
+        self._closing = True
+        if self._task is not None:
+            self._task.cancel()
+        self._debit_pending_write()
+        self._pending_write = None
+        while self.tail and not self.tail[0].data:
+            self.tail.popleft()
+        tail, self.tail = self.tail, deque()
+        self._tail_bytes = 0
+        return tail
 
     async def drain_and_close(self) -> None:
         # Accepted tail remains owed after client departure. Drain it before

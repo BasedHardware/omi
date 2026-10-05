@@ -263,7 +263,9 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "LIVE_SPEAKER_SPAN_RESOLUTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION", "value": "false"},\n'
-        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},',
+        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},\n'
+        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_UNION", "value": "false"},\n'
+        '        {"name": "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS", "value": "false"},',
     )
 
 
@@ -503,6 +505,31 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         + ',\n        '
         + json.dumps({'name': 'FIRESTORE_READ_LEDGER_SERVICE', 'value': match.group('service')})
         + ',',
+        payload,
+        flags=re.DOTALL,
+    )
+    payload = re.sub(
+        r'("backend-sync(?:-backfill)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "SYNC_PHASE_METRICS_EXPORT_ENABLED", "value": "true"},'
+        r'\n        {"name": "SYNC_PHASE_METRICS_PROJECT", "value": "based-hardware-dev"},',
+        payload,
+        flags=re.DOTALL,
+    )
+    # These gateway/secret fixtures still need the dedicated public v2 binding.
+    public_token = re.search(
+        r'apiKey = "(phc_[^"]+)"',
+        (ROOT.parent / 'desktop/macos/Desktop/Sources/PostHogManager.swift').read_text(),
+    )[1]
+    entries = ',\n'.join(
+        '        ' + json.dumps({'name': name, 'value': value})
+        for name, value in {
+            'PROACTIVITY_V2_POSTHOG_TOKEN': public_token,
+            'PROACTIVITY_V2_POSTHOG_HOST': 'https://us.posthog.com',
+        }.items()
+    )
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        lambda match: match.group(1) + '\n' + entries + ',',
         payload,
         flags=re.DOTALL,
     )

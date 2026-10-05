@@ -6,6 +6,13 @@ environments:
       namespace: dev-omi-backend
       release_name: dev-omi-llm-gateway
       ingress_name: dev-omi-llm-gateway
+      env:
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
       static_address_name: dev-llm-gateway-ilb-ip-address
     gcp_project: based-hardware-dev
     gke:
@@ -27,6 +34,12 @@ environments:
             value: 'false'
             category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
             value: 'false'
             category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -382,6 +395,12 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -495,6 +514,12 @@ environments:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -556,6 +581,12 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -832,6 +863,12 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
@@ -906,6 +943,12 @@ environments:
               value: 'false'
               category: rollout
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -1103,6 +1146,12 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: dev-v1
               category: memory_rollout
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -1234,6 +1283,12 @@ environments:
               value: 'false'
               category: rollout
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -1389,6 +1444,18 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             BUCKET_SCREEN_FRAMES:
               value: based-hardware-dev-screen-frames
               category: storage_retention
@@ -1526,6 +1593,12 @@ environments:
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1658,6 +1731,18 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1769,6 +1854,12 @@ environments:
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1872,6 +1963,12 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2307,6 +2404,12 @@ environments:
       release_name: prod-omi-llm-gateway
       ingress_name: prod-omi-llm-gateway
       env:
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         PROACTIVITY_REDIS_HOST:
           config_map:
             name: prod-omi-backend-config
@@ -2352,6 +2455,12 @@ environments:
             category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'true'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'true'
             category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
@@ -2704,6 +2813,12 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           PROACTIVITY_REDIS_HOST:
             config_map:
               name: prod-omi-backend-config
@@ -2852,6 +2967,12 @@ environments:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'true'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'true'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -2911,6 +3032,12 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           POSTHOG_PROJECT_API_KEY:
             secret:
               name: prod-omi-backend-secrets
@@ -3086,6 +3213,12 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
@@ -3177,6 +3310,12 @@ environments:
               value: 'false'
               category: rollout
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -3373,6 +3512,12 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
@@ -3527,6 +3672,12 @@ environments:
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3679,6 +3830,18 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
@@ -3808,6 +3971,12 @@ environments:
               value: 'false'
               category: rollout
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -3941,6 +4110,18 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
@@ -4067,6 +4248,12 @@ environments:
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -4169,6 +4356,12 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             MENTOR_PIPELINE:
               value: cohort
               category: rollout

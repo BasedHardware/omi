@@ -8,6 +8,7 @@ import re
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 from pydantic.json_schema import SkipJsonSchema
 
+from models.capture_window_proof import CaptureWindowProof
 from models.other import Person
 from models.speaker_label_provenance import project_source
 
@@ -126,6 +127,15 @@ class TranscriptSegment(BaseModel):
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
     # Transaction-local attribution, never serialized or persisted.
     _audio_capture_reason: str = PrivateAttr(default='missing_window')
+    _capture_merge_proof: Optional[CaptureWindowProof] = PrivateAttr(default=None)
+
+    @property
+    def capture_merge_proof(self) -> Optional[CaptureWindowProof]:
+        return self._capture_merge_proof
+
+    @capture_merge_proof.setter
+    def capture_merge_proof(self, proof: Optional[CaptureWindowProof]) -> None:
+        self._capture_merge_proof = proof if proof and proof.matches(self.capture_window_bounds()) else None
 
     @property
     def capture_window_reason(self) -> str:
@@ -195,6 +205,7 @@ class TranscriptSegment(BaseModel):
 
     def _clear_audio_capture_window(self) -> None:
         self.audio_capture_start = self.audio_capture_end = None
+        self._capture_merge_proof = None
 
     def _clear_audio_evidence(self) -> None:
         self._clear_audio_capture_window()
@@ -226,6 +237,24 @@ class TranscriptSegment(BaseModel):
         }
 
     def _merge_audio_capture_window(self, other: 'TranscriptSegment') -> None:
+        from config.audio_timeline import live_capture_window_merge_union_enabled
+
+        proof = None
+        if live_capture_window_merge_union_enabled():
+            left, right = self._capture_merge_proof, other._capture_merge_proof
+            if (
+                left
+                and right
+                and left.matches(self.capture_window_bounds())
+                and right.matches(other.capture_window_bounds())
+            ):
+                proof = left.union(right)
+        if proof is not None:
+            self.audio_capture_start, self.audio_capture_end = proof.window
+            self._capture_merge_proof = proof
+            self._audio_capture_reason = 'known_window'
+            return
+        self._capture_merge_proof = None
         a_start, a_end = self.audio_capture_start, self.audio_capture_end
         b_start, b_end = other.audio_capture_start, other.audio_capture_end
         if (

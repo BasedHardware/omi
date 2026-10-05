@@ -12448,4 +12448,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dismiss => 'Descartar';
+
+  @override
+  String get showOnLockScreen => 'Mostrar en la pantalla de bloqueo';
 }

@@ -3838,5 +3838,6 @@
     "stopThese": "Dừng Loại Này",
     "dismiss": "Ẩn",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Hiển thị trên màn hình khóa"
 }

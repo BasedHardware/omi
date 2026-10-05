@@ -3838,5 +3838,6 @@
     "stopThese": "この種類を停止",
     "dismiss": "非表示",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "ロック画面に表示"
 }

@@ -12341,4 +12341,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get dismiss => 'تجاهل';
+
+  @override
+  String get showOnLockScreen => 'إظهار على شاشة القفل';
 }

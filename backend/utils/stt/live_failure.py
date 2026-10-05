@@ -571,6 +571,11 @@ async def send_live_stt_audio(
         OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(provider=bounded_provider(provider), stage='buffer').inc()
 
     async def _recoverable_failure(reason: str) -> None:
+        if session_recovery_enabled(getattr(session, 'receiver', None)):
+            # A synchronous enqueue can latch capacity_full before returning
+            # False. Preserve that local cause rather than benching a healthy
+            # provider as send_failed; OFF retains its original vocabulary.
+            reason = live_stt_terminal_reason(stt_socket, reason)
         outcome = getattr(stt_socket, 'leg_outcome', None)
         if outcome is not None and outcome.owner_closing:
             # The final client-tail flush may still send valid audio, but its

@@ -12424,4 +12424,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get dismiss => 'Tutup';
+
+  @override
+  String get showOnLockScreen => 'Tampilkan di layar kunci';
 }

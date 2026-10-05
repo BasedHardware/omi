@@ -12444,4 +12444,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get dismiss => 'Схаваць';
+
+  @override
+  String get showOnLockScreen => 'Паказваць на экране блакіроўкі';
 }

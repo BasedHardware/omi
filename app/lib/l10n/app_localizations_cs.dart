@@ -12416,4 +12416,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dismiss => 'Skrýt';
+
+  @override
+  String get showOnLockScreen => 'Zobrazit na zamčené obrazovce';
 }

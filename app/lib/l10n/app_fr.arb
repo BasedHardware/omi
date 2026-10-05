@@ -3873,5 +3873,6 @@
     "stopThese": "Ne plus recevoir ceci",
     "dismiss": "Masquer",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Afficher sur l’écran verrouillé"
 }

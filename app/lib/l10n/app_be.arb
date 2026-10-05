@@ -11395,5 +11395,6 @@
     "stopThese": "Спыніць гэта",
     "dismiss": "Схаваць",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Паказваць на экране блакіроўкі"
 }
