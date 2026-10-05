@@ -2685,6 +2685,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tasksNoDeadline => 'No Deadline';
 
   @override
+  String get tasksNextPageFailed => 'Couldn\'t load more tasks. Pull down to try again.';
+
+  @override
   String get tasksLater => 'Later';
 
   @override
@@ -9119,6 +9122,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Select All';
+
+  @override
+  String get selectAllTasksPartial => 'Couldn\'t load every task. Only the tasks already loaded are selected.';
 
   @override
   String get connectTaskAppToExport => 'Connect a task app in Settings to export';

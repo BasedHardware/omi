@@ -2691,6 +2691,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get tasksNoDeadline => 'Tiada tarikh akhir';
 
   @override
+  String get tasksNextPageFailed => 'Tidak dapat memuatkan lebih banyak tugasan. Tarik ke bawah untuk mencuba lagi.';
+
+  @override
   String get tasksLater => 'Kemudian';
 
   @override
@@ -9145,6 +9148,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Pilih semua';
+
+  @override
+  String get selectAllTasksPartial =>
+      'Tidak dapat memuatkan semua tugasan. Hanya tugasan yang sudah dimuatkan dipilih.';
 
   @override
   String get connectTaskAppToExport => 'Sambungkan aplikasi tugas dalam Tetapan untuk mengeksport';

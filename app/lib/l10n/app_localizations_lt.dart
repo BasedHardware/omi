@@ -2683,6 +2683,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get tasksNoDeadline => 'Be termino';
 
   @override
+  String get tasksNextPageFailed => 'Nepavyko įkelti daugiau užduočių. Patraukite žemyn, kad bandytumėte dar kartą.';
+
+  @override
   String get tasksLater => 'Vėliau';
 
   @override
@@ -9132,6 +9135,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Pasirinkti viską';
+
+  @override
+  String get selectAllTasksPartial => 'Nepavyko įkelti visų užduočių. Pasirinktos tik jau įkeltos užduotys.';
 
   @override
   String get connectTaskAppToExport => 'Prijunkite užduočių programą Nustatymuose, kad galėtumėte eksportuoti';

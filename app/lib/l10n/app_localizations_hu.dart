@@ -2698,6 +2698,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get tasksNoDeadline => 'Nincs határidő';
 
   @override
+  String get tasksNextPageFailed => 'Nem sikerült több feladatot betölteni. Húzd le az újrapróbáláshoz.';
+
+  @override
   String get tasksLater => 'Később';
 
   @override
@@ -9160,6 +9163,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Összes kijelölése';
+
+  @override
+  String get selectAllTasksPartial =>
+      'Nem sikerült minden feladatot betölteni. Csak a már betöltött feladatok vannak kijelölve.';
 
   @override
   String get connectTaskAppToExport => 'Csatlakoztasson egy feladatalkalmazást a Beállításokban az exportáláshoz';

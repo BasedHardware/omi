@@ -2681,6 +2681,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tasksNoDeadline => 'Tähtajata';
 
   @override
+  String get tasksNextPageFailed => 'Rohkem ülesandeid ei õnnestunud laadida. Uuesti proovimiseks tõmba alla.';
+
+  @override
   String get tasksLater => 'Hiljem';
 
   @override
@@ -9118,6 +9121,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Vali kõik';
+
+  @override
+  String get selectAllTasksPartial =>
+      'Kõiki ülesandeid ei õnnestunud laadida. Valitud on ainult juba laaditud ülesanded.';
 
   @override
   String get connectTaskAppToExport => 'Eksportimiseks ühendage Seadetes ülesannete rakendus';

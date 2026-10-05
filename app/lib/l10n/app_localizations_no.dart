@@ -2680,6 +2680,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get tasksNoDeadline => 'Ingen frist';
 
   @override
+  String get tasksNextPageFailed => 'Kunne ikke laste inn flere oppgaver. Dra ned for å prøve igjen.';
+
+  @override
   String get tasksLater => 'Senere';
 
   @override
@@ -9120,6 +9123,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Velg alle';
+
+  @override
+  String get selectAllTasksPartial =>
+      'Kunne ikke laste inn alle oppgaver. Bare de som allerede er lastet inn, er valgt.';
 
   @override
   String get connectTaskAppToExport => 'Koble til en oppgaveapp i Innstillinger for å eksportere';

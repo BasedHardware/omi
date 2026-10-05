@@ -100,7 +100,7 @@ void main() {
     expect(find.text('Open'), findsOneWidget);
     expect(find.text('Select'), findsOneWidget);
     expect(find.text('Outdent'), findsOneWidget);
-    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Delete Task'), findsOneWidget);
 
     await tester.tap(find.text('Outdent'));
     await tester.pumpAndSettle();
@@ -112,5 +112,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(provider.isSelectionMode, isTrue);
     expect(provider.isItemSelected('child'), isTrue);
+  });
+
+  testWidgets('long-press offers Export for one task and points to Connect when no app is linked', (tester) async {
+    await pumpPage(tester);
+
+    await tester.longPress(find.text('Book the venue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Export'), findsOneWidget);
+
+    await tester.tap(find.text('Export'));
+    await tester.pump();
+    expect(find.text('Connect a task app in Settings to export'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 8));
+    await tester.pumpAndSettle();
   });
 }

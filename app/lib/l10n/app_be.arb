@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Не ўдалося загрузіць больш задач. Пацягніце ўніз, каб паўтарыць.",
     "tasksLater": "Позней",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10493,6 +10494,7 @@
     "searchActionItems": "Шукаць задачы",
     "selectActionItems": "Выбраць некалькі",
     "selectAllTasksMenu": "Выбраць усе",
+    "selectAllTasksPartial": "Не ўдалося загрузіць усе задачы. Выбраны толькі ўжо загружаныя задачы.",
     "showCompletedTasks": "Паказаць завершаныя",
     "startCallRecording": "Пачаць запіс званка",
     "startVoiceRecording": "Пачаць галасавы запіс",

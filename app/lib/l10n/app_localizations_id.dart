@@ -2688,6 +2688,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get tasksNoDeadline => 'Tanpa tenggat';
 
   @override
+  String get tasksNextPageFailed => 'Tidak dapat memuat tugas lainnya. Tarik ke bawah untuk mencoba lagi.';
+
+  @override
   String get tasksLater => 'Nanti';
 
   @override
@@ -9131,6 +9134,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Pilih semua';
+
+  @override
+  String get selectAllTasksPartial => 'Tidak dapat memuat semua tugas. Hanya tugas yang sudah dimuat yang dipilih.';
 
   @override
   String get connectTaskAppToExport => 'Hubungkan aplikasi tugas di Pengaturan untuk mengekspor';

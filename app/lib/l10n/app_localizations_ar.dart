@@ -2663,6 +2663,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get tasksNoDeadline => 'بدون موعد نهائي';
 
   @override
+  String get tasksNextPageFailed => 'تعذر تحميل المزيد من المهام. اسحب للأسفل للمحاولة مرة أخرى.';
+
+  @override
   String get tasksLater => 'لاحقاً';
 
   @override
@@ -9061,6 +9064,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'تحديد الكل';
+
+  @override
+  String get selectAllTasksPartial => 'تعذر تحميل كل المهام. تم تحديد المهام المحمّلة فقط.';
 
   @override
   String get connectTaskAppToExport => 'قم بربط تطبيق مهام في الإعدادات للتصدير';

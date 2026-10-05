@@ -2704,6 +2704,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get tasksNoDeadline => 'நিலுவையில் இல்லை';
 
   @override
+  String get tasksNextPageFailed => 'மேலும் பணிகளை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்க கீழே இழுக்கவும்.';
+
+  @override
   String get tasksLater => 'பிற்பாடு';
 
   @override
@@ -9191,6 +9194,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'அனைத்தையும் தேர்ந்தெடு';
+
+  @override
+  String get selectAllTasksPartial =>
+      'எல்லா பணிகளையும் ஏற்ற முடியவில்லை. ஏற்கனவே ஏற்றப்பட்ட பணிகள் மட்டுமே தேர்ந்தெடுக்கப்பட்டுள்ளன.';
 
   @override
   String get connectTaskAppToExport => 'ஏற்றுமதி செய்ய அமைப்புகளில் ஒரு பணி செயலியை இணைக்கவும்';

@@ -2667,6 +2667,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get tasksNoDeadline => 'Ingen frist';
 
   @override
+  String get tasksNextPageFailed => 'Kunne ikke indlæse flere opgaver. Træk ned for at prøve igen.';
+
+  @override
   String get tasksLater => 'Senere';
 
   @override
@@ -9114,6 +9117,9 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Vælg alle';
+
+  @override
+  String get selectAllTasksPartial => 'Kunne ikke indlæse alle opgaver. Kun de allerede indlæste er valgt.';
 
   @override
   String get connectTaskAppToExport => 'Forbind en opgaveapp i Indstillinger for at eksportere';

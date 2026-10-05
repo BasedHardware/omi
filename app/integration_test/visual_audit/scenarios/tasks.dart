@@ -56,9 +56,9 @@ final tasksScenarios = <AuditScenario>[
   ),
   AuditScenario(
     id: 'tasks-edit',
-    title: 'Task form editing an existing task',
+    title: 'Task form editing an existing task heard in a conversation',
     page: 'lib/pages/action_items/widgets/action_item_form_sheet.dart (ActionItemFormSheet)',
-    state: 'One open task due tomorrow at 9:00, opened for editing on a neutral host',
+    state: 'One open task due tomorrow at 9:00, from a conversation, opened for editing through openTaskEditor',
     run: (a) async {
       final tomorrow = DateTime.now().add(const Duration(days: 1));
       final item = ActionItemWithMetadata(
@@ -66,9 +66,10 @@ final tasksScenarios = <AuditScenario>[
         description: 'Book the venue for the launch',
         completed: false,
         dueAt: DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 9),
+        conversationId: 'conversation-1',
       );
-      await a.pumpHost((context) => _openTaskForm(context, item: item));
-      await a.shot('Open an existing task for editing');
+      await a.pumpHost((context) => openTaskEditor(context, item));
+      await a.shot('Open an existing task for editing, with Open conversation');
     },
   ),
   AuditScenario(

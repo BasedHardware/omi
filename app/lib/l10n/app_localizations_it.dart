@@ -2694,6 +2694,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get tasksNoDeadline => 'Nessuna scadenza';
 
   @override
+  String get tasksNextPageFailed => 'Impossibile caricare altre attività. Trascina verso il basso per riprovare.';
+
+  @override
   String get tasksLater => 'Più tardi';
 
   @override
@@ -9177,6 +9180,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Seleziona tutto';
+
+  @override
+  String get selectAllTasksPartial =>
+      'Impossibile caricare tutte le attività. Sono selezionate solo quelle già caricate.';
 
   @override
   String get connectTaskAppToExport => 'Collega un\'app attività nelle Impostazioni per esportare';

@@ -2688,6 +2688,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get tasksNoDeadline => 'Nav termiņa';
 
   @override
+  String get tasksNextPageFailed => 'Neizdevās ielādēt vairāk uzdevumu. Pavelciet uz leju, lai mēģinātu vēlreiz.';
+
+  @override
   String get tasksLater => 'Vēlāk';
 
   @override
@@ -9143,6 +9146,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Atlasīt visus';
+
+  @override
+  String get selectAllTasksPartial => 'Neizdevās ielādēt visus uzdevumus. Atlasīti tikai jau ielādētie uzdevumi.';
 
   @override
   String get connectTaskAppToExport => 'Savienojiet uzdevumu lietotni Iestatījumos, lai eksportētu';

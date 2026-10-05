@@ -2682,6 +2682,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tasksNoDeadline => 'Ei määräaikaa';
 
   @override
+  String get tasksNextPageFailed => 'Tehtävien lataaminen ei onnistunut. Yritä uudelleen vetämällä alas.';
+
+  @override
   String get tasksLater => 'Myöhemmin';
 
   @override
@@ -9124,6 +9127,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Valitse kaikki';
+
+  @override
+  String get selectAllTasksPartial => 'Kaikkia tehtäviä ei voitu ladata. Vain jo ladatut tehtävät on valittu.';
 
   @override
   String get connectTaskAppToExport => 'Yhdistä tehtäväsovellus Asetuksissa vientiä varten';

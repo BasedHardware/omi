@@ -2686,6 +2686,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get tasksNoDeadline => 'Không có thời hạn';
 
   @override
+  String get tasksNextPageFailed => 'Không thể tải thêm việc cần làm. Kéo xuống để thử lại.';
+
+  @override
   String get tasksLater => 'Sau này';
 
   @override
@@ -9124,6 +9127,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Chọn tất cả';
+
+  @override
+  String get selectAllTasksPartial => 'Không thể tải tất cả việc cần làm. Chỉ những việc đã tải được chọn.';
 
   @override
   String get connectTaskAppToExport => 'Kết nối ứng dụng tác vụ trong Cài đặt để xuất';
