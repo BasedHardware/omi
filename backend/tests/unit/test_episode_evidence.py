@@ -41,7 +41,12 @@ def valid_note(title='Written approval', overview='The message shows approval.')
 def claim_generation_mode(monkeypatch):
     # These regression fixtures exercise the existing annotated path explicitly.
     monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'compact')
+    # Isolate annotation/repair regressions from the separately tested selector.
+    from dataclasses import replace
+    from config import episode_writer
+
+    configured = episode_writer.episode_writer_settings
+    monkeypatch.setattr(episode_writer, 'episode_writer_settings', lambda: replace(configured(), selection='compact'))
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'default')
 
 

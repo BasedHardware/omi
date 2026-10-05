@@ -143,6 +143,10 @@ def _invoke_gateway_shadow_chain(chain: Any, values: dict[str, Any], *, feature:
     return response
 
 
+def _word_count(text: str) -> int:
+    return transcript_word_count(text)
+
+
 def _coerce_action_items(response: ActionItemsExtraction) -> List[ActionItem]:
     return response.to_action_items()
 
@@ -1194,8 +1198,8 @@ def get_conversation_notes(
     if run is not None and episode_settings is not None:
         run.configure_episode(episode_settings)
     rich_mode = rich_context_enabled or episode_mode
-    transcript_word_count = transcript_word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
-    density = conversation_note_density(transcript_word_count, rich_mode)
+    notes_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
+    density = conversation_note_density(notes_word_count, rich_mode)
 
     existing_lines: List[str] = []
     for item in existing_action_items or []:

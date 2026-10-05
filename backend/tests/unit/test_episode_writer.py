@@ -4,6 +4,8 @@ import json
 from dataclasses import replace
 import pytest
 
+from utils.observability import fallback
+
 from config.episode_writer import EpisodeWriterSettings, episode_writer_settings
 from testing.episode_notes.cache import cached_call
 from testing.episode_notes.runner import combined_cost, evaluate
@@ -232,7 +234,7 @@ def test_high_effort_guard_counts_utf8_and_images_without_tokenizer():
     assert not episode_budget_exceeded(messages, replace(settings, effort='default'), run)
 
 
-def test_production_defaults_choose_guarded_xhigh_and_invalid_budget_fails_safe(monkeypatch):
+def test_production_defaults_choose_c7_and_invalid_budget_fails_safe(monkeypatch):
     monkeypatch.delenv('MEETING_NOTES_EPISODE_EFFORT', raising=False)
     assert episode_writer_settings().effort == 'default'
     for invalid in ('0', '-1', 'nan', '240001'):

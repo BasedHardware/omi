@@ -32,6 +32,10 @@ def routed_candidate_request(episode, arm, settings, items, candidate_prompt=Non
             'selection': settings.selection,
             'claims': settings.claims,
         }
+    if arm == 'episode' and settings.apply_deadlines:
+        payload['_request_options']['timeout_seconds'] = (
+            settings.c6_timeout if settings.effort == 'xhigh' else settings.writer_timeout
+        )
     return prompt, payload, arm
 
 

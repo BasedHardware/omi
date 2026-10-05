@@ -506,6 +506,7 @@ JEV_DECISION_LABELS = {
             'conversation_relevance',
             'memory_owner',
             'screen_task',
+            'episode_evidence',
             'capture_same_scene',
             'capture_resummary',
             'conversation_smart_merge',

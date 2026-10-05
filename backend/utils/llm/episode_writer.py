@@ -164,7 +164,11 @@ def prepare_jev_evidence(items, settings, *, started_at, finished_at, run):
                 run.jev_calls += 1
             answers = ask_jev(batch.state, batch.questions, lane=LANE, max_attempts=1)
             if answers is None:
+                if run is not None:
+                    run.add_jev_usage({})
                 raise ValueError('jev_unavailable')
+            if run is not None:
+                run.add_jev_usage(answers.usage)
             scores.update({q: answers.noul(q) for q in batch.questions})
         if run is not None:
             run.actual_selection = 'jev'

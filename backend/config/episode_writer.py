@@ -21,6 +21,7 @@ class EpisodeWriterSettings:
     tier_min_source_kinds: int = 2
     writer_timeout: float = 120
     c6_timeout: float = 180
+    apply_deadlines: bool = False
 
 
 def episode_writer_settings() -> EpisodeWriterSettings:

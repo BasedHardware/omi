@@ -128,6 +128,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--selection', choices=('compact', *SELECTIONS), default='compact')
     parser.add_argument('--jev-threshold', type=float, default=0.75)
     parser.add_argument('--tiered', action='store_true')
+    parser.add_argument('--apply-deadlines', action='store_true')
+    parser.add_argument('--writer-timeout', type=float, default=120)
+    parser.add_argument('--c6-timeout', type=float, default=115)
     parser.add_argument('--no-claims', action='store_true')
     parser.add_argument('--judge-samples', type=int, choices=(1, 2), default=1)
     parser.add_argument('--reference-model', default=os.getenv('EPISODE_EVAL_REFERENCE_MODEL', SCORING_MODEL))
@@ -192,6 +195,9 @@ def main(argv: list[str] | None = None) -> None:
                 thinking_max_input_bytes=args.thinking_max_input_bytes,
                 jev_threshold=args.jev_threshold,
                 tiered=args.tiered,
+                apply_deadlines=args.apply_deadlines,
+                writer_timeout=args.writer_timeout,
+                c6_timeout=args.c6_timeout,
             ),
             judge_samples=args.judge_samples,
         )

@@ -1,6 +1,7 @@
 """Pure SystemOne evidence questions, shared by the gateway and offline evaluation."""
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Sequence
@@ -102,6 +103,15 @@ def evidence_question_batches(items, *, started_at, finished_at):
 
 def scored_episode_items(items, batches, scores, *, threshold, finished_at=None):
     """Select exact original evidence, keeping speech and trusted capture constraints."""
+    expected = {question for batch in batches for question in batch.questions}
+    if set(scores) != expected or any(
+        isinstance(score, bool)
+        or not isinstance(score, (int, float))
+        or not math.isfinite(score)
+        or not 0 <= score <= 1
+        for score in scores.values()
+    ):
+        raise ValueError('invalid_jev_scores')
     selected = {
         item_id
         for batch in batches

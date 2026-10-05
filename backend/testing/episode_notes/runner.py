@@ -188,6 +188,7 @@ def evaluate(
         rows = []
         for arm in arms:
             writer_arm = arm
+            tier, route_reason, tier_fallback, failed_writer = 'none', 'none', False, None
             result, judged = None, None
             selection_result, selection_fallback = None, None
             selected_items = fixture_evidence_items(episode)
@@ -218,7 +219,31 @@ def evaluate(
                     prompt, payload, writer_arm = routed_candidate_request(
                         episode, arm, settings, selected_items, candidate_prompt
                     )
-                    result = cached_call(cache_dir, writer_arm, candidate_model, prompt, payload, llm)
+                    if arm == 'episode':
+                        from utils.conversations.episode_tiers import episode_tier
+
+                        effective_settings, tier, route_reason = episode_tier(selected_items, settings)
+                    try:
+                        result = cached_call(cache_dir, writer_arm, candidate_model, prompt, payload, llm)
+                    except LLMCallError as exc:
+                        if tier != 'C6' or exc.error_class not in {
+                            'TimeoutError',
+                            'output_truncated',
+                            'context_length_exceeded',
+                        }:
+                            raise
+                        from dataclasses import replace
+
+                        failed_writer = exc.result
+                        prompt, payload, writer_arm = routed_candidate_request(
+                            episode,
+                            arm,
+                            replace(settings, tiered=False, effort='default'),
+                            selected_items,
+                            candidate_prompt,
+                        )
+                        result = cached_call(cache_dir, writer_arm, candidate_model, prompt, payload, llm)
+                        tier_fallback = True
                     prompt_hash = fingerprint(prompt)
                 if writer_arm == 'episode':
                     result.content['note_claims'] = [
@@ -257,13 +282,24 @@ def evaluate(
                             },
                             'selection_cost': selection_result.cost() if selection_result else None,
                             'writer_cost': result.cost(),
+                            'tier': tier,
+                            'route_reason': route_reason,
+                            'tier_fallback': tier_fallback,
+                            'failed_writer_cost': failed_writer.cost() if failed_writer else None,
                             'stratum': episode.stratum,
                             'arm': arm,
                             'writer_arm': writer_arm,
                             'thinking_fallback': arm == 'episode' and writer_arm == 'baseline',
                             'status': 'ok',
                             'candidate': result.content,
-                            'candidate_cost': combined_cost(result, selection_result),
+                            'candidate_cost': combined_cost(
+                                (
+                                    LLMResult(content={}, **combined_cost(result, failed_writer))
+                                    if failed_writer
+                                    else result
+                                ),
+                                selection_result,
+                            ),
                             'generation_performed': arm != 'stored',
                             'candidate_reasoning_tokens': result.reasoning_tokens,
                             'prompt_sha256': prompt_hash,
@@ -317,6 +353,9 @@ def evaluate(
             'thinking_max_input_bytes': settings.thinking_max_input_bytes,
             'jev_threshold': settings.jev_threshold,
             'tiered': settings.tiered,
+            'apply_deadlines': settings.apply_deadlines,
+            'writer_timeout': settings.writer_timeout,
+            'c6_timeout': settings.c6_timeout,
         },
         'samples': {
             str(sample): {

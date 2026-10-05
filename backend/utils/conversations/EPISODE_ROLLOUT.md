@@ -5,30 +5,42 @@
 Owner: David. No production enablement in this PR. Held-out acceptance on a new
 cohort must precede the first ramp. Sharing remains a decision about the whole note.
 
-Round-9 DEV status: **hold at 0% pending held-out acceptance**. The recommended
-experimental configuration is deterministic selection, claims off, xhigh only
-within a 24k UTF-8 input-byte budget; larger inputs retain the existing rich
-baseline before buying a writer call. A cache-only replay on fixed DEV candidates
-meets both numerical judge samples with no observed writer deadline exceedance.
-This is a size policy replay, not another live generation or production guarantee.
-Unbounded xhigh had 7/24 calls above 60s (maximum 164s). The endpoint's 300s eval
-timeout does not establish production completion. Do not raise the byte ceiling
-or route deadlines without separately accepting long-meeting and route budgets.
+Round-10 default settings supersede C8: **hold at 0% pending v3 held-out
+acceptance**. C7 uses deterministic selection, claims off and no request effort
+override. Universal volume routing selects C6/xhigh when admitted speech has at
+least 250 words and at least two source kinds; other captures use C7. This rule
+has no UID, allowlist or situation category. DEV routing share is not a production
+traffic estimate without matching kept-capture/source distributions.
 
 Writer configuration (episode cohort only, read at each call):
 
-- `MEETING_NOTES_EPISODE_SELECTION=deterministic` (default), `compact`, or `model`.
-- `MEETING_NOTES_EPISODE_CLAIMS_ENABLED=false` (default); true restores metadata.
-- `MEETING_NOTES_EPISODE_EFFORT=xhigh` (default), `default`, or `high`.
-- `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES=24000` (default, bounded
-  4k–240k): high/xhigh above this text/image payload size use baseline.
-- Optional selector: `MEETING_NOTES_EPISODE_SELECTION_EFFORT=low` and
-  `MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS=30` (bounded 1–30).
+- `MEETING_NOTES_EPISODE_SELECTION=deterministic` (default), `jev`, or `luna`.
+- `MEETING_NOTES_EPISODE_CLAIMS_ENABLED=false` (default).
+- `MEETING_NOTES_EPISODE_EFFORT=default`; high/xhigh are explicit experiments.
+- `MEETING_NOTES_EPISODE_TIERED_ENABLED=true` inside the admitted episode cohort.
+- `MEETING_NOTES_EPISODE_TIER_MIN_WORDS=250` and `..._TIER_MIN_SOURCE_KINDS=2`.
+- `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS=120`, `..._C6_TIMEOUT_SECONDS=180`.
+  The existing gateway route clamps C6 to 115s; synchronous requests remain
+  C7/60s. Only already-leased durable finalizers get extended budgets.
+- `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES=0`: optional experimental guard
+  disabled by default; setting 4k–240k retains the previous baseline size policy.
+- Luna selector effort defaults low, timeout 30s (bounded 1–30).
+- Jev threshold defaults 0.75 as an experimental midpoint; it is NOT an accepted
+  shipping cutoff. DEV sweeps 0.70/0.80/0.90 did not justify replacing deterministic
+  selection. The selector flag stays deterministic unless renewed acceptance does.
 
-Invalid effort falls back to no override; invalid selection/budget retain safe defaults. The model selector adds a paid call and
-up to 30s before the writer; invalid selection falls back to deterministic links.
-DEV did not justify its extra cost. References/judges remain unchanged. Do not
-raise an effort or enable the selector during a ramp without renewed acceptance.
+Invalid selectors/efforts retain deterministic/no override; invalid tier controls
+fall back to C7 or documented bounded values. Jev errors/oversize use deterministic
+selection. Jev receipts use the existing `episode_evidence` decision metric lane,
+and report actual selector, calls, usage/cost when returned; never source text.
+Read the [outer deadline audit](EPISODE_DEADLINES.md) before increasing a budget.
+A full 180s C6 serving deadline is blocked by the existing shared gateway route;
+no outer request, lease, shutdown or client limit changes here. C7 timeout/oversize
+remains an ordinary provider failure. C6 gets one C7 rewrite only for timeout or
+context-limit failure; auth/quota/refusal errors are not retried as C7. After that
+fallback all further model repair is disabled. The worst requested writer time is
+115s + 120s, plus bounded selection/transport overhead, inside the 1500s job lease.
+This is not a hard guarantee against process termination or the rest of enrichment.
 
 Set `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED=true` AND
 `MEETING_NOTES_EPISODE_EVIDENCE_PERCENT=1` for a sticky SHA-256 UID cohort.
@@ -46,7 +58,8 @@ Logs contain no note/evidence text. Usage is provider input/output/cache-read me
 missing usage is unknown, not zero. Existing fallback counters retain each violation.
 Receipts also record reasoning tokens, effort, selection mode/effort/deadline,
 claims enabled, selection calls, requested/actual effort, estimated input bytes,
-configured byte ceiling and model errors. Retry count excludes selection.
+configured byte ceiling and model errors, tier/route reason, configured/effective writer deadline,
+actual selector, Jev calls/cost and tier fallback. Retry count excludes selection.
 Recoverable selector/repair errors are separate from processing errors. Known
 BYOK models outside the supported reasoning family retain their own options;
 `effort_unsupported_model` records the downgrade without model/key/content logs.
@@ -67,20 +80,16 @@ Hold or abort a step if, relative to the simultaneous baseline control:
 - Kept/discarded counts or per-kept retrieval reads change unexpectedly. Episode
   admission does not alter relevance/discard; discarded conversations have no new reads.
 
-Do not advance on improved information coverage alone. Confirm stable cache-hit share
-and long-meeting completion; long speech (>240k transcript-prefix UTF-8 bytes) stays on
-rich baseline, and episode repair is bounded to remaining 60s (no transport retries).
-At most two model calls per episode note; long evidence (>120k message UTF-8 bytes)
-within the episode arm gets one call plus local repair.
-Those counts apply to the default deterministic/compact modes. Optional model
-selection permits one additional call (three total), skips large evidence, and
-consumes repair headroom; it can add up to 30s before a 60s initial writer call.
-Transport deadlines and gateway/direct hops are not hard wall-clock guarantees.
-The baseline_long/baseline_budget arms retain baseline presentation/transport
-retry policy and original frames/background. Budget fallback shares one receipt;
-it never buys an episode writer before choosing baseline. Residual contract violations preserve a usable note.
-These limits do not eliminate baseline provider errors or guarantee every meeting
-finishes in 60s; they prevent additional long-context episode repair cost.
+Do not advance on improved information coverage alone. Confirm cache-hit share,
+source inclusion, routing share and long-meeting completion. Speech above 240k
+transcript-prefix bytes stays on rich baseline. Episode repair needs at least
+15s remaining tier budget, skips inputs above 120k message bytes, and never follows
+a C6→C7 fallback. Default deterministic notes buy at most two writers total;
+optional selectors add their own calls (Jev splits only for context overflow).
+Baseline long/budget paths retain their existing transport/presentation policy.
+Monitor C6 fallback rate separately; abort/hold if above 5% of routed captures for
+30 min, or if the blended latency/cost exceeds David's accepted premium. The first
+ramp needs real gateway timing/effort evidence, not just direct-provider DEV results.
 
 Claims are not rendered today. Compact keys only affect extraction, not client models.
 List/search omit claims; detail returns filtered provenance when enabled. DEV

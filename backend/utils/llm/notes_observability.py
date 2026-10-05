@@ -21,6 +21,8 @@ class NotesRun:
         self.repair_disabled = False
         self.actual_selection = 'none'
         self.jev_threshold = 0
+        self.jev_cost = 0.0
+        self.jev_cost_known = True
         self.started = monotonic()
         self.calls = 0
         self.selection_calls = 0
@@ -49,6 +51,23 @@ class NotesRun:
         self.jev_threshold = settings.jev_threshold
         self.thinking_max_input_bytes = settings.thinking_max_input_bytes
         self.selection_effort, self.selection_timeout = settings.selection_effort, settings.selection_timeout
+
+    def add_jev_usage(self, usage):
+        import math
+
+        for key in ('input_tokens', 'output_tokens'):
+            value = usage.get(key)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                self.usage[key] += value
+            else:
+                self.known[key] = False
+        cost = usage.get('cost')
+        if isinstance(cost, (int, float)) and math.isfinite(cost) and cost >= 0:
+            self.jev_cost += cost
+        else:
+            self.jev_cost_known = False
+        self.known['cached_tokens'] = False
+        self.known['reasoning_tokens'] = False
 
     def remaining(self, budget: float) -> float:
         return max(0.0, budget - (monotonic() - self.started))
@@ -96,7 +115,7 @@ class NotesRun:
             'fallback_to_best_note=%s errors=%s effort=%s selection=%s claims_enabled=%s selection_calls=%s '
             'selection_effort=%s selection_timeout_seconds=%s model_errors=%s requested_effort=%s '
             'thinking_max_input_bytes=%s estimated_input_bytes=%s tier=%s route_reason=%s tier_fallback=%s '
-            'jev_calls=%s writer_deadline_seconds=%s configured_deadline_seconds=%s actual_selection=%s jev_threshold=%s',
+            'jev_calls=%s jev_cost=%s writer_deadline_seconds=%s configured_deadline_seconds=%s actual_selection=%s jev_threshold=%s',
             self.arm,
             *(self.usage[key] if self.calls and self.known[key] else None for key in self.usage),
             monotonic() - self.started,
@@ -120,6 +139,7 @@ class NotesRun:
             self.route_reason,
             self.tier_fallback,
             self.jev_calls,
+            self.jev_cost if self.jev_cost_known and self.jev_calls else None,
             self.writer_deadline,
             self.configured_deadline,
             self.actual_selection,
