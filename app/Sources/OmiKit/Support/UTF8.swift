@@ -133,6 +133,22 @@ public func encodeQueryComponent(_ value: String) -> String {
     return utf8String(output)
 }
 
+public func encodeQueryItemPart(_ value: String) -> String {
+    let hexBytes = Array("0123456789ABCDEF".utf8)
+    let allowed = Array("-._~!$'()*,;:@/?".utf8)
+    var output = [UInt8]()
+    for byte in Array(value.utf8) {
+        if ASCII.isAlphanumeric(byte) || allowed.contains(byte) {
+            output.append(byte)
+        } else {
+            output.append(ASCII.percent)
+            output.append(hexBytes[Int(byte) >> 4])
+            output.append(hexBytes[Int(byte) & 0x0F])
+        }
+    }
+    return utf8String(output)
+}
+
 public enum Base64Codec {
     /// Port of `react-native/src/base64.ts` `encodeBase64`.
     public static func encode(_ bytes: [UInt8]) -> String {

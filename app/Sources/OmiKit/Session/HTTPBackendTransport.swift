@@ -348,6 +348,27 @@ public actor HTTPBackendTransport: BackendTransport {
                 streamBody += chunk
                 onFrame(chunk)
             }
+            #elseif SKIP
+            let streamed = try await streamWithoutRedirects(urlRequest) { bytes in
+                guard await self.isPlaneCurrent(revision) else { throw TransportFailure.cancelled }
+                for byte in bytes {
+                    if let frame = decoder.append(byte) {
+                        let chunk = frame + "\n\n"
+                        streamBody += chunk
+                        onFrame(chunk)
+                    }
+                }
+            }
+            data = streamed.0
+            guard let response = streamed.1 as? HTTPURLResponse else {
+                throw TransportFailure.transportFailed
+            }
+            http = response
+            if http.statusCode == 200, let frame = decoder.finish() {
+                let chunk = frame + "\n\n"
+                streamBody += chunk
+                onFrame(chunk)
+            }
             #else
             // Skip/FoundationNetworking do not expose Apple's AsyncBytes API.
             // Preserve their existing response path with the shared UTF-8 decoder.
@@ -566,7 +587,7 @@ private let backendHTTPClient: OkHttpClient = OkHttpClient.Builder()
     .followSslRedirects(false)
     .build()
 
-private func fetchWithoutRedirects(_ urlRequest: URLRequest) async throws -> (Data, URLResponse) {
+private func backendCall(_ urlRequest: URLRequest) throws -> okhttp3.Call {
     guard let url = urlRequest.url else { throw TransportFailure.transportFailed }
     var client = backendHTTPClient
     if urlRequest.timeoutInterval > 0.0 {
@@ -580,7 +601,12 @@ private func fetchWithoutRedirects(_ urlRequest: URLRequest) async throws -> (Da
     if let headerMap = urlRequest.allHTTPHeaderFields?.kotlin(nocopy: true) as? Map<String, String> {
         builder.headers(headerMap.toHeaders())
     }
-    let call = client.newCall(builder.build())
+    return client.newCall(builder.build())
+}
+
+private func fetchWithoutRedirects(_ urlRequest: URLRequest) async throws -> (Data, URLResponse) {
+    guard let url = urlRequest.url else { throw TransportFailure.transportFailed }
+    let call = try backendCall(urlRequest)
     return withContext(Dispatchers.IO) {
         let response = call.execute()
         let bytes = response.body?.bytes()
@@ -591,6 +617,49 @@ private func fetchWithoutRedirects(_ urlRequest: URLRequest) async throws -> (Da
             url: url, statusCode: status, httpVersion: nil, headerFields: headers)
         else { throw TransportFailure.transportFailed }
         return (bytes == nil ? Data() : Data(platformValue: bytes!), http as URLResponse)
+    }
+}
+
+private func streamWithoutRedirects(
+    _ urlRequest: URLRequest, onBytes: ([UInt8]) async throws -> Void
+) async throws -> (Data, URLResponse) {
+    guard let url = urlRequest.url else { throw TransportFailure.transportFailed }
+    let call = try backendCall(urlRequest)
+    return withContext(Dispatchers.IO) {
+        let response = call.execute()
+        let status = response.code
+        let headers = Dictionary(response.headers.toMap(), nocopy: true)
+        guard let http = HTTPURLResponse(
+            url: url, statusCode: status, httpVersion: nil, headerFields: headers)
+        else {
+            response.close()
+            throw TransportFailure.transportFailed
+        }
+        defer { response.close() }
+        var errorBody: [UInt8] = []
+        if let stream = response.body?.byteStream() {
+            let buffer = kotlin.ByteArray(4096)
+            while true {
+                do {
+                    try await kotlinx.coroutines.yield()
+                } catch {
+                    call.cancel()
+                    throw error
+                }
+                let read = stream.read(buffer)
+                if read < 0 { break }
+                var chunk: [UInt8] = []
+                for index in 0..<read {
+                    chunk.append(UInt8(buffer[index]))
+                }
+                if status == 200 {
+                    try await onBytes(chunk)
+                } else {
+                    errorBody.append(contentsOf: chunk)
+                }
+            }
+        }
+        return (Data(errorBody), http as URLResponse)
     }
 }
 #endif

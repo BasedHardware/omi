@@ -156,4 +156,15 @@ final class FoundationTests: XCTestCase {
         XCTAssertTrue(Policy.softwarePlaneIsNew(stored: nil, stampedValid: true))
         XCTAssertFalse(Policy.softwarePlaneIsNew(stored: nil, stampedValid: false))
     }
+
+    func testRetryAfterMillisecondsClampToThirtyTwoBits() {
+        XCTAssertEqual(retryAfterMillisecondsClamped(seconds: 30), 30_000)
+        XCTAssertEqual(retryAfterMillisecondsClamped(seconds: -5), 0)
+        XCTAssertEqual(retryAfterMillisecondsClamped(seconds: 10_000_000), 2_147_483_000)
+    }
+
+    func testQueryItemPartEncodesSeparatorsAndKeepsURLSafeCharacters() {
+        XCTAssertEqual(encodeQueryItemPart("http://h:1/cb?x"), "http://h:1/cb?x")
+        XCTAssertEqual(encodeQueryItemPart("a&b=c+d #é%"), "a%26b%3Dc%2Bd%20%23%C3%A9%25")
+    }
 }

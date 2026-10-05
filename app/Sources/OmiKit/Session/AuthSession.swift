@@ -150,15 +150,18 @@ public enum AuthCrypto {
 public func legacyAuthorizeURL(
     base: String, redirectURI: String, state: String, codeChallenge: String
 ) -> String? {
-    guard var components = URLComponents(string: base) else { return nil }
-    components.queryItems = [
-        URLQueryItem(name: "provider", value: "google"),
-        URLQueryItem(name: "redirect_uri", value: redirectURI),
-        URLQueryItem(name: "state", value: state),
-        URLQueryItem(name: "code_challenge", value: codeChallenge),
-        URLQueryItem(name: "code_challenge_method", value: "S256"),
+    guard !base.isEmpty, !base.contains("?"), !base.contains("#"), URL(string: base) != nil
+    else { return nil }
+    let items = [
+        ("provider", "google"),
+        ("redirect_uri", redirectURI),
+        ("state", state),
+        ("code_challenge", codeChallenge),
+        ("code_challenge_method", "S256"),
     ]
-    return components.string
+    return base + "?"
+        + items.map { encodeQueryItemPart($0.0) + "=" + encodeQueryItemPart($0.1) }
+            .joined(separator: "&")
 }
 
 /// The callback shape check the native module applies before exchange: the

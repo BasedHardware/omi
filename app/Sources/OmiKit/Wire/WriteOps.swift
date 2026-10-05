@@ -63,8 +63,12 @@ public struct ClassifiedResponse: Sendable {
     }
 
     public var retryAfterMilliseconds: Int? {
-        retryAfterSeconds.map { $0 * 1000 }
+        retryAfterSeconds.map { retryAfterMillisecondsClamped(seconds: $0) }
     }
+}
+
+public func retryAfterMillisecondsClamped(seconds: Int) -> Int {
+    min(max(seconds, 0), 2_147_483) * 1000
 }
 
 // MARK: - classifyStatus (kernel)

@@ -233,7 +233,7 @@ func sendOmiTaskPatch(
         if response.status == 429 {
             let seconds = response.retryAfterSeconds
             let retryAfterMs =
-                (seconds != nil && seconds! >= 0) ? seconds! * 1000 : 1000
+                (seconds != nil && seconds! >= 0) ? retryAfterMillisecondsClamped(seconds: seconds!) : 1000
             return .failed(
                 failure: .rateLimited(
                     retryAfterMilliseconds: retryAfterMs,
