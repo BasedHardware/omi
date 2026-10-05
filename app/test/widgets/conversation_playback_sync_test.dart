@@ -333,21 +333,27 @@ Future<void> _removeDetail(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 200));
 }
 
-/// The ink [text] (one line's words) is drawn in, read from the paragraph's spans.
-Color? _inkOf(WidgetTester tester, String text) {
-  Color? ink;
+/// The style [text] (one line's words) is drawn in, read from the paragraph's spans.
+TextStyle? _styleOf(WidgetTester tester, String text) {
+  TextStyle? style;
   for (final paragraph in tester.widgetList<RichText>(find.byType(RichText))) {
     paragraph.text.visitChildren((span) {
       // A line's span also holds the word joiner before its words and the space after them.
-      if (span is TextSpan && span.text?.replaceAll('\u2060', '').trim() == text) ink = span.style?.color;
-      return ink == null;
+      if (span is TextSpan && span.text?.replaceAll('\u2060', '').trim() == text) style = span.style;
+      return style == null;
     });
-    if (ink != null) break;
+    if (style != null) break;
   }
-  return ink;
+  return style;
 }
 
-Color get _dimmed => OmiColors.textPrimary.withValues(alpha: 0.35);
+Color? _inkOf(WidgetTester tester, String text) => _styleOf(tester, text)?.color;
+
+/// Whether [text] (one line's words) is drawn as the marked line: a touch heavier, as no other is.
+bool _marked(WidgetTester tester, String text) => _styleOf(tester, text)?.shadows != null;
+
+/// The ink of a line nobody marked, when it is not the owner's.
+Color get _resting => OmiColors.textPrimary.withValues(alpha: 0.8);
 
 ServerConversation _snapshotConversation({required double audioSeconds, required double transcriptEnd}) =>
     _conversation(
@@ -480,7 +486,9 @@ void main() {
       reason: 'the current line is announced to assistive tech as selected',
     );
     expect(_inkOf(tester, 'Words for seg3'), OmiColors.textPrimary, reason: 'the playing line is full ink');
-    expect(_inkOf(tester, 'Words for seg2'), _dimmed, reason: 'every other line dims while the audio plays');
+    expect(_marked(tester, 'Words for seg3'), isTrue, reason: 'and marked');
+    expect(_inkOf(tester, 'Words for seg2'), _resting, reason: 'no other line changes while the audio plays');
+    expect(_marked(tester, 'Words for seg2'), isFalse);
     final top = _topOf(tester, const ValueKey('transcript_current_seg3'));
     final listTop = tester.getTopLeft(find.byType(ListView)).dy;
     expect(
@@ -517,7 +525,9 @@ void main() {
     expect(fetches, 0, reason: 'a pre-Play scrub answers the gesture without loading audio');
     expect(find.byKey(const ValueKey('transcript_current_seg3')), findsOneWidget);
     expect(_inkOf(tester, 'Words for seg3'), OmiColors.textPrimary, reason: 'the scrubbed line stands out');
-    expect(_inkOf(tester, 'Words for seg1'), _dimmed);
+    expect(_marked(tester, 'Words for seg3'), isTrue);
+    expect(_inkOf(tester, 'Words for seg1'), _resting);
+    expect(_marked(tester, 'Words for seg1'), isFalse);
     final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
     expect(
       painter.progress,
@@ -703,7 +713,7 @@ void main() {
     expect(controller.markedSegmentId, isNull, reason: 'without a wall mapping no line is marked');
   });
 
-  testWidgets('a scrub into silence keeps the last spoken line lit and the rest dimmed', (tester) async {
+  testWidgets('a scrub into silence keeps the last spoken line marked, and no other', (tester) async {
     final fake = _FakeAudioDevice();
     final segments = [_segment('seg0', 0, 8), _segment('seg1', 30, 38, speakerId: 1), _segment('seg2', 60, 68)];
     await _pumpDetail(
@@ -722,8 +732,10 @@ void main() {
 
     expect(find.byKey(const ValueKey('transcript_current_seg1')), findsNothing, reason: 'nobody speaks at 0:48');
     expect(_inkOf(tester, 'Words for seg1'), OmiColors.textPrimary, reason: 'the last spoken line stays lit');
-    expect(_inkOf(tester, 'Words for seg0'), _dimmed);
-    expect(_inkOf(tester, 'Words for seg2'), _dimmed, reason: 'the next line lights only when it starts');
+    expect(_marked(tester, 'Words for seg1'), isTrue);
+    expect(_inkOf(tester, 'Words for seg0'), _resting);
+    expect(_inkOf(tester, 'Words for seg2'), _resting, reason: 'the next line lights only when it starts');
+    expect(_marked(tester, 'Words for seg2'), isFalse);
     await _removeDetail(tester);
   });
 
@@ -763,8 +775,10 @@ void main() {
       OmiColors.textPrimary,
       reason: 'scrolling while paused lights the line on the reading line',
     );
+    expect(_marked(tester, 'Words for ${readingSeg.id}'), isTrue);
     final next = segments[segments.indexOf(readingSeg) + 1];
-    expect(_inkOf(tester, 'Words for ${next.id}'), _dimmed, reason: 'and dims the rest');
+    expect(_inkOf(tester, 'Words for ${next.id}'), _resting, reason: 'and no other line');
+    expect(_marked(tester, 'Words for ${next.id}'), isFalse);
 
     fake.calls.clear();
     await tester.tap(find.bySemanticsLabel('Play'));
@@ -1284,7 +1298,7 @@ void main() {
     await _removeDetail(tester);
   });
 
-  testWidgets('consecutive owner lines pass full ink along while the audio plays', (tester) async {
+  testWidgets('consecutive owner lines pass the mark along while the audio plays', (tester) async {
     final previousPalette = OmiColors.active;
     addTearDown(() => OmiColors.active = previousPalette);
     for (final palette in [OmiPalette.dark, OmiPalette.light]) {
@@ -1315,8 +1329,11 @@ void main() {
         OmiColors.textPrimary,
         reason: 'the playing owner line is full ink (${palette == OmiPalette.dark ? 'dark' : 'light'})',
       );
-      expect(_inkOf(tester, 'Words for s1'), _dimmed, reason: 'the next owner line in its paragraph dims');
-      expect(_inkOf(tester, 'Words for s2'), _dimmed);
+      expect(_marked(tester, 'Words for s0'), isTrue,
+          reason: 'an owner line is always full ink; the mark sets it apart');
+      expect(_marked(tester, 'Words for s1'), isFalse, reason: 'the next owner line in its paragraph is not marked');
+      expect(_inkOf(tester, 'Words for s1'), OmiColors.textPrimary, reason: 'and keeps its own ink');
+      expect(_inkOf(tester, 'Words for s2'), _resting);
 
       fake.emit(playing: true, positionSec: 15);
       await _flushPlatform(tester);
@@ -1326,9 +1343,10 @@ void main() {
       expect(
         _inkOf(tester, 'Words for s1'),
         OmiColors.textPrimary,
-        reason: 'full ink moves to the newly playing owner line inside the same paragraph',
+        reason: 'the newly playing owner line inside the same paragraph is full ink',
       );
-      expect(_inkOf(tester, 'Words for s0'), _dimmed, reason: 'the previous owner line dims again');
+      expect(_marked(tester, 'Words for s1'), isTrue, reason: 'the mark moves to it');
+      expect(_marked(tester, 'Words for s0'), isFalse, reason: 'and leaves the previous owner line');
       expect(
         find.ancestor(
           of: find.byKey(const ValueKey('transcript_current_s1')),
@@ -1341,7 +1359,7 @@ void main() {
     }
   });
 
-  testWidgets('consecutive non-owner lines pass full ink along while the audio plays', (tester) async {
+  testWidgets('consecutive non-owner lines pass the mark along while the audio plays', (tester) async {
     final fake = _FakeAudioDevice();
     final segments = [
       _segment('s0', 0, 8, speakerId: 2),
@@ -1364,7 +1382,9 @@ void main() {
 
     expect(find.byKey(const ValueKey('transcript_current_s0')), findsOneWidget);
     expect(_inkOf(tester, 'Words for s0'), OmiColors.textPrimary, reason: 'the playing non-owner line is full ink');
-    expect(_inkOf(tester, 'Words for s1'), _dimmed, reason: 'the next line in its paragraph dims');
+    expect(_marked(tester, 'Words for s0'), isTrue);
+    expect(_inkOf(tester, 'Words for s1'), _resting, reason: 'the next line in its paragraph keeps its ink');
+    expect(_marked(tester, 'Words for s1'), isFalse);
 
     fake.emit(playing: true, positionSec: 15);
     await _flushPlatform(tester);
@@ -1376,7 +1396,9 @@ void main() {
       OmiColors.textPrimary,
       reason: 'full ink moves between same-speaker non-owner lines',
     );
-    expect(_inkOf(tester, 'Words for s0'), _dimmed);
+    expect(_marked(tester, 'Words for s1'), isTrue);
+    expect(_inkOf(tester, 'Words for s0'), _resting, reason: 'the line it left is back at its own ink');
+    expect(_marked(tester, 'Words for s0'), isFalse);
     await _removeDetail(tester);
   });
 

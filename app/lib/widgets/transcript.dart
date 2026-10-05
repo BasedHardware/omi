@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
     show RenderAbstractViewport, RenderBox, RenderParagraph, ScrollDirection, SelectedContent;
@@ -63,10 +64,10 @@ class TranscriptWidget extends StatefulWidget {
   final bool followCurrentSegment;
   final int playbackFollowRequest;
 
-  /// The line a saved conversation draws in full ink, dimming every other line: the playhead's line
-  /// while the audio plays or once the reader has given playback a point (Play, a line tap, a scrub,
-  /// a scroll), the last spoken line through silence. Null marks no line, as on a transcript just
-  /// opened.
+  /// The line a saved conversation marks, with a bar behind its words, full ink and a touch more
+  /// weight: the playhead's line while the audio plays or once the reader has given playback a point
+  /// (Play, a line tap, a scrub, a scroll), the last spoken line through silence. Null marks no
+  /// line, as on a transcript just opened.
   final String? highlightedSegmentId;
 
   /// The reader's gestures: fired once per drag on [onUserScroll], and with the segment at the
@@ -212,8 +213,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   final List<GlobalKey> _matchKeys = [];
 
   // Saved conversations: the lines grouped into paragraphs (derived from the widget on every build),
-  // each paragraph's text (to find the line a tap in a gap or a double-tap landed on), one tap
-  // recognizer per line, and where the last double-tap went down.
+  // each paragraph's text (to find the line a tap in a gap or a double-tap landed on, and where the
+  // marked line's words sit), one tap recognizer per line, and where the last double-tap went down.
   List<_DetailParagraph> _paragraphs = const [];
   final Map<String, GlobalKey> _paragraphTextKeys = {};
   final Map<String, TapGestureRecognizer> _lineTapRecognizers = {};
@@ -856,7 +857,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     // Derived from this build's widget; the row callbacks below and the scroll helpers read it.
     _paragraphs = _usesParagraphs ? _groupParagraphs(askSegmentIds) : const [];
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
-    final transcriptList = NotificationListener<ScrollMetricsNotification>(
+    final Widget list = NotificationListener<ScrollMetricsNotification>(
       onNotification: _onScrollMetrics,
       child: NotificationListener<ScrollNotification>(
         onNotification: _onScrollNotification,
@@ -873,6 +874,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               }
             },
             child: ListView.builder(
+              clipBehavior: _usesParagraphs ? Clip.none : Clip.hardEdge,
               controller: _scrollController,
               padding: EdgeInsets.only(top: searchBarHeight),
               itemCount: widget.leadingItems.length + _rowCount + 2,
@@ -924,6 +926,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         ),
       ),
     );
+    // A saved conversation's list is cut at its top and bottom only: the marked line's bar reaches a
+    // little past the words, into the page's side gutters.
+    final transcriptList = _usesParagraphs ? ClipRect(clipper: const _SideOpenClip(), child: list) : list;
 
     if (!widget.followLatest) return transcriptList;
 

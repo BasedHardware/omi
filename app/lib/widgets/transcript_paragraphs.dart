@@ -11,8 +11,17 @@ const double _paragraphFirstTop = 8;
 const double _paragraphTurnTop = 14;
 const double _paragraphBottom = 6;
 
-/// While the current line is marked, every other line is drawn at this share of full ink.
-const double _dimmedInkAlpha = 0.35;
+/// The marked line sits on a bar that covers only its words, in full ink and a touch heavier; no
+/// other line changes. The mark takes [_markFade] to pass from one line to the next.
+const Duration _markFade = Duration(milliseconds: 200);
+
+/// The marked line's extra weight: its ink drawn again this far to each side. A heavier font is
+/// wider, so it would re-wrap the paragraph every time the mark moved.
+const double _markedLineWeight = 0.2;
+
+/// The bar reaches this far past the marked line's words on each side, and its corners are rounded.
+const double _lineBarReach = 4;
+const double _lineBarRadius = 5;
 
 /// A run of consecutive saved-conversation lines drawn as one paragraph: segment indexes
 /// [first]..[last], under a name row when it [startsTurn], a clock time when it [showsTime] and the
@@ -120,9 +129,9 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
   /// turn's lines flowing together, with no bubble or avatar. The name and time are 13/600 in the
   /// tertiary ink (the owner's in the primary ink, a voice nobody has named underlined with dots); the
   /// words are 17 pt at a 1.5 line in 80 % ink (the owner's in the primary ink). The marked line
-  /// ([TranscriptWidget.highlightedSegmentId]) is full ink and every other line dims. Each line stays
-  /// its own target: tapping it plays the recording from there, double-tapping it edits it, and
-  /// tapping the name names the speaker.
+  /// ([TranscriptWidget.highlightedSegmentId]) sits on a bar, in full ink and a touch heavier. Each
+  /// line stays its own target: tapping it plays the recording from there, double-tapping it edits
+  /// it, and tapping the name names the speaker.
   Widget _buildParagraph(
     _DetailParagraph paragraph,
     List<Person> people,
@@ -199,21 +208,18 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
 
     final seek = widget.onSegmentTap;
     final markedId = widget.highlightedSegmentId;
-    final lineSpans = <InlineSpan>[];
+    // Each line's pieces, made once per build: its marker, then its text as one run (the joiner, its
+    // words, then the space before the next line), so assistive tech stops once per line; only a
+    // search match splits the run. The frames of a mark fade differ in nothing but the inks.
+    final linePieces = <List<Object>>[];
+    final recognizers = <TapGestureRecognizer?>[];
+    final marked = lineIndexes.indexWhere((i) => segments[i].id == markedId);
     for (final i in lineIndexes) {
       final data = segments[i];
-      final isCurrent = data.id == widget.currentSegmentId;
-      final ink = markedId != null
-          ? (data.id == markedId ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: _dimmedInkAlpha))
-          : (data.isUser ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8));
-      final style = TextStyle(color: ink);
-      final recognizer = seek == null ? null : _lineTapRecognizer(data, seek);
-      // The line's text is one span (the joiner, its words, then the space before the next line), so
-      // assistive tech stops once per line; only a search match splits it.
-      final children = <InlineSpan>[
+      final pieces = <Object>[
         WidgetSpan(
           alignment: PlaceholderAlignment.top,
-          child: _lineMarker(data, isCurrent: isCurrent, seekable: seek != null),
+          child: _lineMarker(data, isCurrent: data.id == widget.currentSegmentId, seekable: seek != null),
         ),
       ];
       var run = _wordJoiner;
@@ -224,19 +230,54 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
         }
         if (run == _wordJoiner) {
           // A line that opens on a search match: the joiner still glues the marker to it, unannounced.
-          children.add(const TextSpan(text: _wordJoiner, semanticsLabel: ''));
+          pieces.add(const TextSpan(text: _wordJoiner, semanticsLabel: ''));
         } else if (run.isNotEmpty) {
-          children.add(TextSpan(text: run, style: style, recognizer: recognizer));
+          pieces.add(run);
         }
-        children.add(span);
+        pieces.add(span);
         run = '';
       }
       if (i < paragraph.last) run += ' ';
-      if (run.isNotEmpty) children.add(TextSpan(text: run, style: style, recognizer: recognizer));
-      lineSpans.add(TextSpan(children: children));
+      if (run.isNotEmpty) pieces.add(run);
+      linePieces.add(pieces);
+      recognizers.add(seek == null ? null : _lineTapRecognizer(data, seek));
     }
+    final full = OmiColors.textPrimary;
+    // The weight keeps one ink through a fade, so a frame of it never lays the text out again.
+    final heavier = [
+      Shadow(color: full, offset: const Offset(_markedLineWeight, 0)),
+      Shadow(color: full, offset: const Offset(-_markedLineWeight, 0)),
+    ];
+    // [marks] is each line's share of the mark, from 0 (its resting ink) to 1 (full ink).
+    TextStyle lineStyle(int k, double mark) => TextStyle(
+          color: Color.lerp(_restingInk(lineIndexes[k]), full, mark),
+          shadows: k == marked ? heavier : null,
+        );
+    List<InlineSpan> lineSpans(List<double> marks) => [
+          for (var k = 0; k < linePieces.length; k++)
+            TextSpan(
+              children: [
+                for (final piece in linePieces[k])
+                  piece is String
+                      ? TextSpan(text: piece, style: lineStyle(k, marks[k]), recognizer: recognizers[k])
+                      : piece as InlineSpan,
+              ],
+            ),
+        ];
     // Character lengths of the lines, placeholders included, to map a text position back to its line.
-    final lineLengths = [for (final span in lineSpans) span.toPlainText(includeSemanticsLabels: false).length];
+    final lineLengths = [
+      for (final span in lineSpans(List.filled(linePieces.length, 0)))
+        span.toPlainText(includeSemanticsLabels: false).length,
+    ];
+    // Each line's words in the paragraph's text: after its marker and joiner, before the space that
+    // joins it to the next line.
+    final wordRanges = <TextRange>[];
+    var lineStart = 0;
+    for (var k = 0; k < lineLengths.length; k++) {
+      final lineEnd = lineStart + lineLengths[k];
+      wordRanges.add(TextRange(start: lineStart + 2, end: k + 1 < lineLengths.length ? lineEnd - 1 : lineEnd));
+      lineStart = lineEnd;
+    }
     final textKey = _paragraphTextKeys.putIfAbsent(head.id, GlobalKey.new);
 
     int lineAt(Offset globalPosition) {
@@ -276,16 +317,31 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Under the selection area, so a long press selects the words, and at the system text size.
+            // The mark eases to the line it moved to, at once with Reduce Motion.
             _JoinerFreeSelection(
-              child: Builder(
-                builder: (context) => RichText(
-                  key: textKey,
-                  textAlign: TextAlign.left,
-                  textScaler: MediaQuery.textScalerOf(context),
-                  selectionRegistrar: SelectionContainer.maybeOf(context),
-                  selectionColor:
-                      DefaultSelectionStyle.of(context).selectionColor ?? DefaultSelectionStyle.defaultColor,
-                  text: TextSpan(style: OmiType.body.copyWith(letterSpacing: 0.0, height: 1.5), children: lineSpans),
+              child: _MarkFade(
+                lines: lineIndexes.length,
+                marked: marked,
+                duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : _markFade,
+                builder: (context, marks) => CustomPaint(
+                  painter: _LineBarPainter(
+                    textKey: textKey,
+                    wordRanges: wordRanges,
+                    marks: marks,
+                    fill: OmiColors.surface3,
+                  ),
+                  child: RichText(
+                    key: textKey,
+                    textAlign: TextAlign.left,
+                    textScaler: MediaQuery.textScalerOf(context),
+                    selectionRegistrar: SelectionContainer.maybeOf(context),
+                    selectionColor:
+                        DefaultSelectionStyle.of(context).selectionColor ?? DefaultSelectionStyle.defaultColor,
+                    text: TextSpan(
+                      style: OmiType.body.copyWith(letterSpacing: 0.0, height: 1.5),
+                      children: lineSpans(marks),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -359,6 +415,11 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
     );
   }
 
+  /// The ink of the line at segment [index] while it is not marked: the owner's lines in full ink,
+  /// everyone else's at 80 %.
+  Color _restingInk(int index) =>
+      widget.segments[index].isUser ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8);
+
   /// A zero-size box at the start of a line's words. It carries the line's [_segmentKeys] entry, so
   /// following, locating, search and the reading line find each line inside its paragraph, plus the
   /// keys that name the line's tap target and the playing line.
@@ -399,6 +460,17 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
   }
 }
 
+/// Cuts the list at its top and bottom, and [_lineBarReach] outside its left and right edges.
+class _SideOpenClip extends CustomClipper<Rect> {
+  const _SideOpenClip();
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(-_lineBarReach, 0, size.width + _lineBarReach, size.height);
+
+  @override
+  bool shouldReclip(_SideOpenClip oldClipper) => false;
+}
+
 /// A paragraph's selectable words: copying them leaves out the [_wordJoiner]s.
 class _JoinerFreeSelection extends StatefulWidget {
   const _JoinerFreeSelection({required this.child});
@@ -428,4 +500,165 @@ class _JoinerFreeSelectionDelegate extends StaticSelectionContainerDelegate {
     final content = super.getSelectedContent();
     return content == null ? null : SelectedContent(plainText: content.plainText.replaceAll(_wordJoiner, ''));
   }
+}
+
+/// Eases a paragraph's mark from the line it was on to line [marked] (-1 when the marked line is not
+/// in this paragraph) over [duration], at once when that is zero. [builder] gets each line's share
+/// of the mark, from 0 to 1.
+class _MarkFade extends StatefulWidget {
+  const _MarkFade({required this.lines, required this.marked, required this.duration, required this.builder});
+
+  final int lines;
+  final int marked;
+  final Duration duration;
+  final Widget Function(BuildContext context, List<double> marks) builder;
+
+  @override
+  State<_MarkFade> createState() => _MarkFadeState();
+}
+
+class _MarkFadeState extends State<_MarkFade> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(vsync: this, value: 1);
+  List<double> _from = const [];
+
+  /// The shares on screen now: part of the way from [_from] to [target]'s mark while a fade runs.
+  List<double> _shown(_MarkFade target) => [
+        for (var k = 0; k < target.lines; k++) _ease(k < _from.length ? _from[k] : 0, k == target.marked ? 1 : 0),
+      ];
+
+  double _ease(double from, double to) => from + (to - from) * _controller.value;
+
+  @override
+  void didUpdateWidget(_MarkFade oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.marked == widget.marked && oldWidget.lines == widget.lines) return;
+    _from = _shown(oldWidget);
+    // A paragraph that gained or lost a line has nothing to ease from.
+    if (widget.duration == Duration.zero || oldWidget.lines != widget.lines) {
+      _controller.value = 1;
+    } else {
+      _controller
+        ..duration = widget.duration
+        ..forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) => widget.builder(context, _shown(widget)),
+      );
+}
+
+/// The bar behind the words of each line that holds a share of the mark, drawn at that share of
+/// [fill]: one rounded outline around the line's text rows, which reaches [_lineBarReach] past the
+/// words on each side.
+class _LineBarPainter extends CustomPainter {
+  _LineBarPainter({required this.textKey, required this.wordRanges, required this.marks, required this.fill});
+
+  final GlobalKey textKey;
+  final List<TextRange> wordRanges;
+  final List<double> marks;
+  final Color fill;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final text = textKey.currentContext?.findRenderObject();
+    if (text is! RenderParagraph) return;
+    for (var k = 0; k < wordRanges.length; k++) {
+      if (marks[k] <= 0) continue;
+      final rows = _rows(text, wordRanges[k]);
+      final bar = Path();
+      for (var first = 0, next = 1; next <= rows.length; next++) {
+        // Two rows join into one outline when they share enough width for the corners between them.
+        if (next < rows.length) {
+          final shared = min(rows[next - 1].right, rows[next].right) - max(rows[next - 1].left, rows[next].left);
+          if (shared >= 2 * _lineBarRadius) continue;
+        }
+        bar.addPath(_outline(rows.sublist(first, next)), Offset.zero);
+        first = next;
+      }
+      canvas.drawPath(bar, Paint()..color = fill.withValues(alpha: fill.a * marks[k]));
+    }
+  }
+
+  /// The text rows [words] cover, top to bottom, each [_lineBarReach] wider than its words on both
+  /// sides and ending where the next begins.
+  static List<Rect> _rows(RenderParagraph text, TextRange words) {
+    // A text row can come back as several boxes: a search match or a change of direction splits it.
+    final boxes = <Rect>[];
+    for (final box in text.getBoxesForSelection(TextSelection(baseOffset: words.start, extentOffset: words.end))) {
+      final rect = box.toRect();
+      if (rect.width <= 0) continue;
+      if (boxes.isNotEmpty && rect.center.dy > boxes.last.top && rect.center.dy < boxes.last.bottom) {
+        boxes.last = boxes.last.expandToInclude(rect);
+      } else {
+        boxes.add(rect);
+      }
+    }
+    return [
+      for (var r = 0; r < boxes.length; r++)
+        Rect.fromLTRB(
+          boxes[r].left - _lineBarReach,
+          boxes[r].top - 1,
+          boxes[r].right + _lineBarReach,
+          r + 1 < boxes.length ? boxes[r + 1].top - 1 : boxes[r].bottom + 1,
+        ),
+    ];
+  }
+
+  /// One outline around [rows]: along the top, down the right edges, along the bottom and back up
+  /// the left edges, with every corner rounded by [_lineBarRadius].
+  static Path _outline(List<Rect> rows) {
+    final corners = [rows.first.topLeft, rows.first.topRight];
+    for (var r = 0; r + 1 < rows.length; r++) {
+      if (rows[r].right != rows[r + 1].right) {
+        corners
+          ..add(rows[r].bottomRight)
+          ..add(Offset(rows[r + 1].right, rows[r].bottom));
+      }
+    }
+    corners
+      ..add(rows.last.bottomRight)
+      ..add(rows.last.bottomLeft);
+    for (var r = rows.length - 1; r > 0; r--) {
+      if (rows[r].left != rows[r - 1].left) {
+        corners
+          ..add(rows[r].topLeft)
+          ..add(Offset(rows[r - 1].left, rows[r].top));
+      }
+    }
+    final outline = Path();
+    for (var i = 0; i < corners.length; i++) {
+      final corner = corners[i];
+      // The rounding leaves each edge the radius from the corner, and never past the edge's middle.
+      Offset toward(Offset neighbour) {
+        final edge = neighbour - corner;
+        return corner + edge / edge.distance * min(_lineBarRadius, edge.distance / 2);
+      }
+
+      final start = toward(corners[(i - 1) % corners.length]);
+      final end = toward(corners[(i + 1) % corners.length]);
+      if (i == 0) {
+        outline.moveTo(start.dx, start.dy);
+      } else {
+        outline.lineTo(start.dx, start.dy);
+      }
+      // Every corner is a right angle, so this weight draws a quarter circle.
+      outline.conicTo(corner.dx, corner.dy, end.dx, end.dy, sqrt1_2);
+    }
+    return outline..close();
+  }
+
+  @override
+  bool shouldRepaint(_LineBarPainter oldDelegate) =>
+      oldDelegate.fill != fill ||
+      !listEquals(oldDelegate.marks, marks) ||
+      !listEquals(oldDelegate.wordRanges, wordRanges);
 }

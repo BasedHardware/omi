@@ -3,6 +3,7 @@ import 'dart:ui' show SemanticsFlag;
 
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart' show MethodCall, SystemChannels;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -868,44 +869,141 @@ void main() {
       expect(tester.getTopLeft(next).dx, tester.getTopLeft(paragraphOf('Short 0.')).dx);
     });
 
-    testWidgets('a marked current line is full ink and the rest dims; unmarked, no line stands out', (tester) async {
-      await setupSharedPreferences();
-      Color? inkOf(String text) {
-        Color? ink;
-        tester.widget<RichText>(paragraphOf(text)).text.visitChildren((span) {
-          // A line's span also holds the word joiner before its words and the space after them.
-          if (span is TextSpan && span.text?.replaceAll('\u2060', '').trim() == text) ink = span.style?.color;
-          return ink == null;
-        });
-        return ink;
-      }
+    /// The style [text] (one line's words) is drawn in, read from its paragraph's spans.
+    TextStyle? styleOf(WidgetTester tester, String text) {
+      TextStyle? style;
+      tester.widget<RichText>(paragraphOf(text)).text.visitChildren((span) {
+        // A line's span also holds the word joiner before its words and the space after them.
+        if (span is TextSpan && span.text?.replaceAll('⁠', '').trim() == text) style = span.style;
+        return style == null;
+      });
+      return style;
+    }
 
-      Future<void> pumpPlayback({required bool marked}) => tester.pumpWidget(
-            MaterialApp(
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
-              supportedLocales: AppLocalizations.supportedLocales,
-              home: Scaffold(
-                body: TranscriptWidget(
-                  segments: voicesFixture(),
-                  isConversationDetail: true,
-                  currentSegmentId: 'a2',
-                  highlightedSegmentId: marked ? 'a2' : null,
-                ),
+    /// Where [text] (one line's words) sits inside its paragraph: one box per text row.
+    List<Rect> rowsOf(WidgetTester tester, String text) {
+      final paragraph = tester.renderObject<RenderParagraph>(paragraphOf(text));
+      final start = paragraph.text.toPlainText().indexOf(text);
+      final words = TextSelection(baseOffset: start, extentOffset: start + text.length);
+      return [for (final box in paragraph.getBoxesForSelection(words)) box.toRect()];
+    }
+
+    /// What paints behind the paragraph holding [text]: the marked line's bar, when it has one.
+    Finder barBehind(String text) => find.ancestor(of: paragraphOf(text), matching: find.byType(CustomPaint)).first;
+
+    Future<void> pumpMarked(
+      WidgetTester tester,
+      List<TranscriptSegment> segments,
+      String? marked, {
+      bool reduceMotion = false,
+    }) =>
+        tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: reduceMotion),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: TranscriptWidget(
+                segments: segments,
+                isConversationDetail: true,
+                currentSegmentId: marked,
+                highlightedSegmentId: marked,
               ),
             ),
-          );
+          ),
+        );
 
-      await pumpPlayback(marked: false);
+    testWidgets('the marked line sits on a bar over its words, full ink and heavier; no other line changes',
+        (tester) async {
+      await setupSharedPreferences();
+      await pumpMarked(tester, voicesFixture(), null);
       await tester.pumpAndSettle();
       final resting = OmiColors.textPrimary.withValues(alpha: 0.8);
-      expect(inkOf('Still the same voice.'), resting, reason: 'a transcript just opened marks no line');
-      expect(inkOf('First thing they said.'), resting);
+      expect(styleOf(tester, 'Still the same voice.')?.color, resting,
+          reason: 'a transcript just opened marks no line');
+      expect(styleOf(tester, 'Still the same voice.')?.shadows, isNull);
+      expect(barBehind('Still the same voice.'), isNot(paints..path()), reason: 'and draws no bar');
 
-      await pumpPlayback(marked: true);
-      await tester.pump();
-      expect(inkOf('Still the same voice.'), OmiColors.textPrimary);
-      expect(inkOf('First thing they said.'), OmiColors.textPrimary.withValues(alpha: 0.35));
-      expect(inkOf('Another voice replies.'), OmiColors.textPrimary.withValues(alpha: 0.35));
+      await pumpMarked(tester, voicesFixture(), 'a2');
+      await tester.pumpAndSettle();
+      final marked = styleOf(tester, 'Still the same voice.');
+      expect(marked?.color, OmiColors.textPrimary);
+      expect(marked?.shadows, hasLength(2), reason: 'heavier by drawing its ink twice more, not by a wider font');
+      expect(styleOf(tester, 'First thing they said.')?.color, resting, reason: 'no other line dims');
+      expect(styleOf(tester, 'First thing they said.')?.shadows, isNull);
+      expect(styleOf(tester, 'Another voice replies.')?.color, resting);
+      expect(
+        barBehind('Still the same voice.'),
+        paints
+          ..path(
+            color: OmiColors.surface3,
+            includes: [for (final row in rowsOf(tester, 'Still the same voice.')) row.center],
+            excludes: [rowsOf(tester, 'First thing they said.').first.center],
+          ),
+        reason: 'the bar covers the marked line and stops at its first word, not at the edge of the screen',
+      );
+      expect(barBehind('Another voice replies.'), isNot(paints..path()), reason: 'no bar in any other paragraph');
+    });
+
+    testWidgets('a marked line that wraps has one bar around all its rows', (tester) async {
+      await setupSharedPreferences();
+      const before = 'A short opening line.';
+      const wrapped = 'Then a much longer line, one that runs past the end of the row and on to the next one.';
+      const after = 'And a closing line.';
+      await pumpMarked(tester, [line('w1', 3, before, 0), line('w2', 3, wrapped, 10), line('w3', 3, after, 20)], 'w2');
+      await tester.pumpAndSettle();
+
+      final rows = rowsOf(tester, wrapped);
+      expect(rows.length, greaterThan(1), reason: 'the line wraps in this layout');
+      // Rows that share width join: the point where one row ends and the next begins is inside too.
+      final joinX = (rows[0].left + rows[1].right) / 2;
+      expect(rows[1].right, greaterThan(rows[0].left), reason: 'the rows share width in this layout');
+      expect(
+        barBehind(wrapped),
+        paints
+          ..path(
+            color: OmiColors.surface3,
+            includes: [for (final row in rows) row.center, Offset(joinX, rows[1].top)],
+            excludes: [rowsOf(tester, before).first.center, rowsOf(tester, after).last.center],
+          ),
+      );
+    });
+
+    testWidgets('the mark eases from one line to the next, and moves at once with Reduce Motion', (tester) async {
+      await setupSharedPreferences();
+      final resting = OmiColors.textPrimary.withValues(alpha: 0.8);
+      await pumpMarked(tester, voicesFixture(), 'a1');
+      await tester.pumpAndSettle();
+
+      await pumpMarked(tester, voicesFixture(), 'a2');
+      await tester.pump(const Duration(milliseconds: 100));
+      final arriving = styleOf(tester, 'Still the same voice.')!.color!.a;
+      final leaving = styleOf(tester, 'First thing they said.')!.color!.a;
+      expect(arriving, allOf(greaterThan(0.8), lessThan(1.0)), reason: 'half way, the new line is part lit');
+      expect(leaving, allOf(greaterThan(0.8), lessThan(1.0)), reason: 'and the old one has not let go yet');
+      expect(
+          barBehind('Still the same voice.'),
+          paints
+            ..path()
+            ..path(),
+          reason: 'both lines hold part of the bar');
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(styleOf(tester, 'Still the same voice.')?.color, OmiColors.textPrimary);
+      expect(styleOf(tester, 'First thing they said.')?.color, resting);
+
+      await pumpMarked(tester, voicesFixture(), 'a1', reduceMotion: true);
+      await tester.pumpAndSettle();
+      await pumpMarked(tester, voicesFixture(), 'a2', reduceMotion: true);
+      expect(styleOf(tester, 'Still the same voice.')?.color, OmiColors.textPrimary, reason: 'no fade to wait for');
+      expect(styleOf(tester, 'First thing they said.')?.color, resting);
+      expect(
+        barBehind('Still the same voice.'),
+        paints..path(excludes: [rowsOf(tester, 'First thing they said.').first.center]),
+        reason: 'the bar is on the new line only',
+      );
     });
 
     group('unresolved', () {
