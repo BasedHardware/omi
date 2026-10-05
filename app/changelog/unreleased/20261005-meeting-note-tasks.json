@@ -1,3 +1,3 @@
 {
-  "change": "Meeting notes call the section Action items and show owners, context, and confirmed or tentative due dates, with row actions to add, complete, reopen, and find tasks in the transcript."
+  "change": "Meeting notes call the section Action items, retain action-item metadata in cache, show owners, context, and confirmed or tentative due dates, and support adding, completing, reopening, and finding tasks in the transcript."
 }
