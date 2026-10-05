@@ -123,6 +123,33 @@ class TestConversationsToCsv(unittest.TestCase):
         self.assertEqual(row2[3], "2026-09-20T14:30:00Z")
         self.assertEqual(row2[4], "wearable_omi")
 
+    def test_convert_formula_injection_escaping(self):
+        """Formula-prefixed values in conversation exports must be escaped in the output CSV."""
+        items_with_formulas = [
+            {
+                "id": "conv_calc",
+                "structured": {
+                    "title": "=SUM(1,2)",
+                    "category": "+finance",
+                },
+                "started_at": "-2026-10-04",
+                "source": "@smart_mic",
+            }
+        ]
+        self.source_file.write_text(json.dumps(items_with_formulas), encoding="utf-8")
+        count = convert(self.source_file, self.dest_file)
+        self.assertEqual(count, 1)
+
+        content = self.dest_file.read_bytes().decode("utf-8-sig")
+        reader = list(csv.reader(io.StringIO(content)))
+        self.assertEqual(len(reader), 2)
+        row = reader[1]
+        self.assertEqual(row[0], "conv_calc")
+        self.assertEqual(row[1], "'=SUM(1,2)")
+        self.assertEqual(row[2], "'+finance")
+        self.assertEqual(row[3], "'-2026-10-04")
+        self.assertEqual(row[4], "'@smart_mic")
+
     def test_convert_missing_and_loose_fields(self):
         """Items with null structured field or missing keys must convert gracefully."""
         loose_items = [

@@ -11,7 +11,9 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -80,18 +82,32 @@ def convert(source: str | Path, destination: str | Path) -> int:
     payload = buffer.getvalue().encode("utf-8-sig")
 
     output_path = Path(destination)
-    # Exclusive creation still protects an existing export.
-    try:
-        output = output_path.open("xb")
-    except FileExistsError:
-        raise FileExistsError(f"Refusing to overwrite existing {output_path}") from None
+    if output_path.exists():
+        raise FileExistsError(f"Refusing to overwrite existing {output_path}")
 
+    # Write to a temporary sibling file in the same directory to allow atomic publish.
+    parent_dir = output_path.parent if str(output_path.parent) != "" else Path(".")
+    temp_path: Optional[Path] = None
     try:
-        with output:
-            output.write(payload)
-    except OSError:
-        # Leave no partial export behind when the write itself fails.
-        output_path.unlink(missing_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=parent_dir,
+            prefix=f".{output_path.name}.",
+            delete=False,
+        ) as tmp:
+            temp_path = Path(tmp.name)
+            tmp.write(payload)
+
+        try:
+            os.link(temp_path, output_path)
+            temp_path.unlink(missing_ok=True)
+        except (AttributeError, OSError):
+            if output_path.exists():
+                raise FileExistsError(f"Refusing to overwrite existing {output_path}")
+            temp_path.replace(output_path)
+    except Exception:
+        if temp_path and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
         raise
 
     return len(rows)
