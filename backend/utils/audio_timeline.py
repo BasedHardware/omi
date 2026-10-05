@@ -365,6 +365,18 @@ class SendMap:
             return None
         return self._spans[-1][0] + self._spans[-1][2]
 
+    def outside_reason(self, first: int, end: int) -> str:
+        """Bounded geometry of an outside-send refusal, not a causal guess."""
+        if not self._spans:
+            return 'empty_map'
+        if self.is_evicted_provider_sample(first):
+            return 'evicted'
+        if first < self._spans[0][0]:
+            return 'before_first_send'
+        if end > self._spans[-1][0] + self._spans[-1][2]:
+            return 'after_last_send'
+        return 'interior_hole'
+
     def accepted_samples_in_capture_range(self, first: int, end: int) -> int:
         """Count accepted VAD output in a capture interval, excluding gated gaps."""
         return sum(max(0, min(end, start + length) - max(first, start)) for _, start, length in self._spans)
@@ -555,6 +567,7 @@ class ProviderEpochTranslator:
         on_mapped: Optional[Callable[[], None]] = None,
         on_recover: Optional[Callable[[str], None]] = None,
         on_past_send: Optional[Callable[[Optional[float]], None]] = None,
+        on_outside: Optional[Callable[[str], None]] = None,
         on_validation: Optional[Callable[[str, Optional[Tuple[int, int]]], None]] = None,
         owner_at_send: Optional[Callable[[int, int], Optional[str]]] = None,
         project_times: bool = True,
@@ -568,6 +581,7 @@ class ProviderEpochTranslator:
         self._on_mapped = on_mapped
         self._on_recover = on_recover
         self._on_past_send = on_past_send
+        self._on_outside = on_outside
         self._on_validation = on_validation
         self._owner_at_send = owner_at_send
         self._project_times = project_times
@@ -815,6 +829,11 @@ class ProviderEpochTranslator:
                     )
                 if interval is None:
                     self._reject(segment, reason)
+                    if reason == 'outside_accepted_sends' and self._on_outside is not None:
+                        try:
+                            self._on_outside(self.send_map.outside_reason(first_sample, last_sample))
+                        except Exception:
+                            pass
                     if reason == 'outside_accepted_sends' and self._on_past_send is not None:
                         end = self.send_map.last_provider_sample
                         try:

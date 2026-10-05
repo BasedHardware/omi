@@ -3006,6 +3006,16 @@ it does not measure real provider handshake latency or acoustic quality.
 
 ### Live capture-window attribution
 
+`omi_audio_timeline_outside_sends_total{provider,send_path,subreason}` adds bounded
+geometry to `translator_outside_accepted_sends`: `empty_map`, `before_first_send`,
+`after_last_send`, `interior_hole`, or `evicted`. These describe the retained send
+ledger, not an inferred provider fault. Empty maps can indicate missing replay
+registration; after-last refusals can be either an omitted prefix or actual
+overshoot. Existing refusal, past-send, and stored-segment counters keep their
+names, labels and counting semantics. This sibling counter counts provider
+callbacks, not distinct persisted segments, and stores no session identifiers.
+
+
 `omi_live_audio_capture_windows_total` keeps its existing labels and committed-version
 semantics. The additive `omi_live_audio_capture_attribution_total{population,reason}`
 counts the same versions (`population="version"`) and first stored segment IDs
