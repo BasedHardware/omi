@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Hiển thị trên màn hình khóa",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Nhấn một lần",
+    "singlePressAction": "Hành động nhấn một lần",
+    "triplePress": "Nhấn ba lần",
+    "triplePressAction": "Hành động nhấn ba lần",
+    "longPress": "Nhấn giữ",
+    "longPressFixedNotice": "Cố định trong phần cứng thiết bị",
+    "turnOnOff": "Bật / Tắt",
+    "buttonActionNone": "Không có"
 }

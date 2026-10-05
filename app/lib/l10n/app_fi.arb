@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Näytä lukitusnäytöllä",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Yksi painallus",
+    "singlePressAction": "Yhden painalluksen toiminto",
+    "triplePress": "Kolmoispainallus",
+    "triplePressAction": "Kolmoispainalluksen toiminto",
+    "longPress": "Pitkä painallus",
+    "longPressFixedNotice": "Kiinteä laitteistossa",
+    "turnOnOff": "Kytke päälle / pois",
+    "buttonActionNone": "Ei mitään"
 }

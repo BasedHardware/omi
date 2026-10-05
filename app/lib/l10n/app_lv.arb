@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Rādīt bloķēšanas ekrānā",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Viens nospiešana",
+    "singlePressAction": "Viena nospieduma darbība",
+    "triplePress": "Trīskāršs nospiešana",
+    "triplePressAction": "Trīskārša nospieduma darbība",
+    "longPress": "Ilgs nospiedums",
+    "longPressFixedNotice": "Fiksēts ierīces aparatūrā",
+    "turnOnOff": "Ieslēgt / Izslēgt",
+    "buttonActionNone": "Nav"
 }

@@ -3875,12 +3875,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Pokaż na ekranie blokady",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Pojedyncze naciśnięcie",
+    "singlePressAction": "Działanie pojedynczego naciśnięcia",
+    "triplePress": "Potrójne naciśnięcie",
+    "triplePressAction": "Działanie potrójnego naciśnięcia",
+    "longPress": "Długie naciśnięcie",
+    "longPressFixedNotice": "Stałe w sprzęcie urządzenia",
+    "turnOnOff": "Włącz / Wyłącz",
+    "buttonActionNone": "Brak"
 }

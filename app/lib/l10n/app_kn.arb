@@ -11397,12 +11397,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "ಒಮ್ಮೆ ಒತ್ತಿರಿ",
+    "singlePressAction": "ಒಮ್ಮೆ ಒತ್ತುವ ಕ್ರಿಯೆ",
+    "triplePress": "ಮೂರು ಬಾರಿ ಒತ್ತಿರಿ",
+    "triplePressAction": "ಮೂರು ಬಾರಿ ಒತ್ತುವ ಕ್ರಿಯೆ",
+    "longPress": "ದೀರ್ಘವಾಗಿ ಒತ್ತಿರಿ",
+    "longPressFixedNotice": "ಸಾಧನದ ಹಾರ್ಡ್‌ವೇರ್‌ನಲ್ಲಿ ನಿಗದಿಯಾಗಿದೆ",
+    "turnOnOff": "ಆನ್ / ಆಫ್ ಮಾಡಿ",
+    "buttonActionNone": "ಯಾವುದೂ ಇಲ್ಲ"
 }

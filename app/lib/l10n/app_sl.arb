@@ -11397,12 +11397,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Prikaži na zaklenjenem zaslonu",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Enojni pritisk",
+    "singlePressAction": "Dejanje enojnega pritiska",
+    "triplePress": "Trojni pritisk",
+    "triplePressAction": "Dejanje trojnega pritiska",
+    "longPress": "Dolg pritisk",
+    "longPressFixedNotice": "Fiksno v strojni opremi naprave",
+    "turnOnOff": "Vklop / Izklop",
+    "buttonActionNone": "Brez"
 }

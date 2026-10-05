@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Toon op vergrendelscherm",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Enkele druk",
+    "singlePressAction": "Actie voor enkele druk",
+    "triplePress": "Drievoudige druk",
+    "triplePressAction": "Actie voor drievoudige druk",
+    "longPress": "Lang indrukken",
+    "longPressFixedNotice": "Vast in apparaathardware",
+    "turnOnOff": "In- / uitschakelen",
+    "buttonActionNone": "Geen"
 }

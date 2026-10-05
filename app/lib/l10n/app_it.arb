@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Mostra sulla schermata di blocco",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Pressione singola",
+    "singlePressAction": "Azione pressione singola",
+    "triplePress": "Pressione tripla",
+    "triplePressAction": "Azione pressione tripla",
+    "longPress": "Pressione prolungata",
+    "longPressFixedNotice": "Fisso nell'hardware del dispositivo",
+    "turnOnOff": "Accendi / Spegni",
+    "buttonActionNone": "Nessuna"
 }

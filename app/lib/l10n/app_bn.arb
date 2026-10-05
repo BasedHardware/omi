@@ -11397,12 +11397,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "লক স্ক্রিনে দেখান",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "একবার চাপুন",
+    "singlePressAction": "একবার চাপার কাজ",
+    "triplePress": "তিনবার চাপুন",
+    "triplePressAction": "তিনবার চাপার কাজ",
+    "longPress": "দীর্ঘক্ষণ চেপে রাখুন",
+    "longPressFixedNotice": "ডিভাইস হার্ডওয়্যারে নির্দিষ্ট",
+    "turnOnOff": "চালু / বন্ধ করুন",
+    "buttonActionNone": "কিছুই নয়"
 }

@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Visa på låsskärmen",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Enkeltryck",
+    "singlePressAction": "Åtgärd för enkeltryck",
+    "triplePress": "Trippeltryck",
+    "triplePressAction": "Åtgärd för trippeltryck",
+    "longPress": "Långt tryck",
+    "longPressFixedNotice": "Fast i enhetens hårdvara",
+    "turnOnOff": "Slå på / av",
+    "buttonActionNone": "Ingen"
 }

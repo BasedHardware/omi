@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Afișează pe ecranul de blocare",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Apăsare unică",
+    "singlePressAction": "Acțiune apăsare unică",
+    "triplePress": "Apăsare triplă",
+    "triplePressAction": "Acțiune apăsare triplă",
+    "longPress": "Apăsare lungă",
+    "longPressFixedNotice": "Fixat în hardware-ul dispozitivului",
+    "turnOnOff": "Pornire / Oprire",
+    "buttonActionNone": "Niciuna"
 }

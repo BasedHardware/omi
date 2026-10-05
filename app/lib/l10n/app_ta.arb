@@ -11397,12 +11397,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "பூட்டுத் திரையில் காட்டு",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "ஒருமுறை அழுத்துக",
+    "singlePressAction": "ஒருமுறை அழுத்துவதற்கான செயல்",
+    "triplePress": "மூன்று முறை அழுத்துக",
+    "triplePressAction": "மூன்று முறை அழுத்துவதற்கான செயல்",
+    "longPress": "நீண்ட நேரம் அழுத்துக",
+    "longPressFixedNotice": "சாதன வன்பொருளில் நிலையானது",
+    "turnOnOff": "இயக்கு / அணை",
+    "buttonActionNone": "எதுவுமில்லை"
 }

@@ -3875,12 +3875,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Kilit ekranında göster",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Tek basma",
+    "singlePressAction": "Tek basma eylemi",
+    "triplePress": "Üç kez basma",
+    "triplePressAction": "Üç kez basma eylemi",
+    "longPress": "Uzun basma",
+    "longPressFixedNotice": "Cihaz donanımında sabit",
+    "turnOnOff": "Aç / Kapat",
+    "buttonActionNone": "Hiçbiri"
 }

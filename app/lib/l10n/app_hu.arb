@@ -3936,12 +3936,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Megjelenítés a zárolási képernyőn",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Egyszeri megnyomás",
+    "singlePressAction": "Egyszeri megnyomás művelete",
+    "triplePress": "Háromszori megnyomás",
+    "triplePressAction": "Háromszori megnyomás művelete",
+    "longPress": "Hosszú megnyomás",
+    "longPressFixedNotice": "Eszköz hardverében rögzítve",
+    "turnOnOff": "Bekapcsolás / Kikapcsolás",
+    "buttonActionNone": "Nincs"
 }

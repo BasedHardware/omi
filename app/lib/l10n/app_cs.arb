@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Zobrazit na zamčené obrazovce",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Jedno stisknutí",
+    "singlePressAction": "Akce jednoho stisknutí",
+    "triplePress": "Trojité stisknutí",
+    "triplePressAction": "Akce trojitého stisknutí",
+    "longPress": "Dlouhé stisknutí",
+    "longPressFixedNotice": "Pevně v hardwaru zařízení",
+    "turnOnOff": "Zapnout / Vypnout",
+    "buttonActionNone": "Žádná"
 }

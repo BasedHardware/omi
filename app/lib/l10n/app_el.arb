@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Μονό πάτημα",
+    "singlePressAction": "Ενέργεια μονού πατήματος",
+    "triplePress": "Τριπλό πάτημα",
+    "triplePressAction": "Ενέργεια τριπλού πατήματος",
+    "longPress": "Παρατεταμένο πάτημα",
+    "longPressFixedNotice": "Σταθερό στο υλικό της συσκευής",
+    "turnOnOff": "Ενεργοποίηση / Απενεργοποίηση",
+    "buttonActionNone": "Κανένα"
 }

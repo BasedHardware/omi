@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Kuva lukustuskuval",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Ühekordne vajutus",
+    "singlePressAction": "Ühekordse vajutuse toiming",
+    "triplePress": "Kolmekordne vajutus",
+    "triplePressAction": "Kolmekordse vajutuse toiming",
+    "longPress": "Pikk vajutus",
+    "longPressFixedNotice": "Fikseeritud seadme riistvaras",
+    "turnOnOff": "Lülita sisse / välja",
+    "buttonActionNone": "Puudub"
 }

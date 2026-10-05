@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Tunjukkan pada skrin kunci",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Tekan sekali",
+    "singlePressAction": "Tindakan tekan sekali",
+    "triplePress": "Tekan tiga kali",
+    "triplePressAction": "Tindakan tekan tiga kali",
+    "longPress": "Tekan lama",
+    "longPressFixedNotice": "Tetap dalam perkakasan peranti",
+    "turnOnOff": "Hidupkan / Matikan",
+    "buttonActionNone": "Tiada"
 }

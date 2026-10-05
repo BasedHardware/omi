@@ -11397,12 +11397,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Паказваць на экране блакіроўкі",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Адзіночнае націсканне",
+    "singlePressAction": "Дзеянне пры адзіночным націсканні",
+    "triplePress": "Трайное націсканне",
+    "triplePressAction": "Дзеянне пры трайным націсканні",
+    "longPress": "Доўгае націсканне",
+    "longPressFixedNotice": "Фіксавана ў апаратнай частцы прылады",
+    "turnOnOff": "Уключэнне / выключэнне",
+    "buttonActionNone": "Няма"
 }

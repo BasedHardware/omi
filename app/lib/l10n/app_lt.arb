@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Rodyti užrakinimo ekrane",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Vienas paspaudimas",
+    "singlePressAction": "Vieno paspaudimo veiksmas",
+    "triplePress": "Trigubas paspaudimas",
+    "triplePressAction": "Trigubo paspaudimo veiksmas",
+    "longPress": "Ilgas paspaudimas",
+    "longPressFixedNotice": "Fiksuota įrenginio aparatinėje įrangoje",
+    "turnOnOff": "Įjungti / Išjungti",
+    "buttonActionNone": "Nėra"
 }

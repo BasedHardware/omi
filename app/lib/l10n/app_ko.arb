@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "잠금 화면에 표시",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "한 번 누르기",
+    "singlePressAction": "한 번 누르기 동작",
+    "triplePress": "세 번 누르기",
+    "triplePressAction": "세 번 누르기 동작",
+    "longPress": "길게 누르기",
+    "longPressFixedNotice": "기기 하드웨어에 고정됨",
+    "turnOnOff": "전원 켜기 / 끄기",
+    "buttonActionNone": "없음"
 }

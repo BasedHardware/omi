@@ -11397,12 +11397,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "ఒకసారి నొక్కండి",
+    "singlePressAction": "ఒకసారి నొక్కినప్పుడు చర్య",
+    "triplePress": "మూడుసార్లు నొక్కండి",
+    "triplePressAction": "మూడుసార్లు నొక్కినప్పుడు చర్య",
+    "longPress": "ఎక్కువసేపు నొక్కండి",
+    "longPressFixedNotice": "పరికర హార్డ్‌వేర్‌లో స్థిరమైనది",
+    "turnOnOff": "ఆన్ / ఆఫ్ చేయండి",
+    "buttonActionNone": "ఏదీ లేదు"
 }

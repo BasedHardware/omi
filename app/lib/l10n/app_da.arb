@@ -3882,12 +3882,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Vis på låseskærmen",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Enkelt tryk",
+    "singlePressAction": "Handling for enkelt tryk",
+    "triplePress": "Tredobbelt tryk",
+    "triplePressAction": "Handling for tredobbelt tryk",
+    "longPress": "Langt tryk",
+    "longPressFixedNotice": "Fast i enhedens hardware",
+    "turnOnOff": "Tænd / Sluk",
+    "buttonActionNone": "Ingen"
 }

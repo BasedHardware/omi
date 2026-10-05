@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Показване на заключения екран",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Единично натискане",
+    "singlePressAction": "Действие при единично натискане",
+    "triplePress": "Тройно натискане",
+    "triplePressAction": "Действие при тройно натискане",
+    "longPress": "Дълго натискане",
+    "longPressFixedNotice": "Фиксирано в хардуера на устройството",
+    "turnOnOff": "Включване / Изключване",
+    "buttonActionNone": "Няма"
 }

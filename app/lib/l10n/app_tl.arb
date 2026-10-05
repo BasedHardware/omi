@@ -11397,12 +11397,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Ipakita sa lock screen",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Isang pindot",
+    "singlePressAction": "Aksyon sa isang pindot",
+    "triplePress": "Tatlong pindot",
+    "triplePressAction": "Aksyon sa tatlong pindot",
+    "longPress": "Pindutin nang matagal",
+    "longPressFixedNotice": "Nakaayos sa hardware ng device",
+    "turnOnOff": "I-on / I-off",
+    "buttonActionNone": "Wala"
 }

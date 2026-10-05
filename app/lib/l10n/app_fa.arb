@@ -11397,12 +11397,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "نمایش در صفحهٔ قفل",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "یک بار فشار دادن",
+    "singlePressAction": "اقدام یک بار فشار دادن",
+    "triplePress": "سه بار فشار دادن",
+    "triplePressAction": "اقدام سه بار فشار دادن",
+    "longPress": "فشار طولانی",
+    "longPressFixedNotice": "ثابت در سخت‌افزار دستگاه",
+    "turnOnOff": "روشن / خاموش کردن",
+    "buttonActionNone": "هیچ‌کدام"
 }

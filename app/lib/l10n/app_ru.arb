@@ -3875,12 +3875,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Показывать на экране блокировки",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "Одинарное нажатие",
+    "singlePressAction": "Действие при одинарном нажатии",
+    "triplePress": "Тройное нажатие",
+    "triplePressAction": "Действие при тройном нажатии",
+    "longPress": "Долгое нажатие",
+    "longPressFixedNotice": "Закреплено в оборудовании устройства",
+    "turnOnOff": "Включение / выключение",
+    "buttonActionNone": "Нет"
 }

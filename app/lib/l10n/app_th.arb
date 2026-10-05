@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "แสดงบนหน้าจอล็อก",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "กดครั้งเดียว",
+    "singlePressAction": "การทำงานเมื่อกดครั้งเดียว",
+    "triplePress": "กดสามครั้ง",
+    "triplePressAction": "การทำงานเมื่อกดสามครั้ง",
+    "longPress": "กดค้าง",
+    "longPressFixedNotice": "กำหนดตายตัวในฮาร์ดแวร์ของอุปกรณ์",
+    "turnOnOff": "เปิด / ปิดเครื่อง",
+    "buttonActionNone": "ไม่มี"
 }

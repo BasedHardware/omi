@@ -3840,12 +3840,12 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ",
-"singlePress": "Single Press",
-    "singlePressAction": "Single Press Action",
-    "triplePress": "Triple Press",
-    "triplePressAction": "Triple Press Action",
-    "longPress": "Long Press",
-    "longPressFixedNotice": "Fixed in device hardware",
-    "turnOnOff": "Turn On / Off",
-    "buttonActionNone": "None"
+    "singlePress": "एक बार दबाएं",
+    "singlePressAction": "एक बार दबाने पर क्रिया",
+    "triplePress": "तीन बार दबाएं",
+    "triplePressAction": "तीन बार दबाने पर क्रिया",
+    "longPress": "देर तक दबाएं",
+    "longPressFixedNotice": "डिवाइस हार्डवेयर में निश्चित",
+    "turnOnOff": "चालू / बंद करें",
+    "buttonActionNone": "कोई नहीं"
 }
