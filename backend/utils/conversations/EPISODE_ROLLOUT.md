@@ -1,3 +1,5 @@
+# LIFECYCLE: permanent
+
 # Episode notes rollout
 
 Owner: David. No production enablement in this PR. Held-out acceptance on a new
