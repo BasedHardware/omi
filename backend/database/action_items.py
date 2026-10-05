@@ -1241,16 +1241,7 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
 
 
 def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
-    """
-    Delete all action items for a specific conversation.
-
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-
-    Returns:
-        Number of deleted items
-    """
+    """Delete all action items for a specific conversation."""
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(action_items_collection).where(
         filter=FieldFilter('conversation_id', '==', conversation_id)
