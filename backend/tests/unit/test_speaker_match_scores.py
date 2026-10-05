@@ -1015,3 +1015,40 @@ def test_partial_transcript_writes_reclaim_stored_scores(manual_score_routes, le
         assert stored_segment['is_user']
     else:
         assert stored_segment['translations'] == [{'lang': 'en', 'text': 'translated'}]
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('other_stages', [False, True])
+def test_successful_resolution_without_comparisons_clears_stale_rows(monkeypatch, level, other_stages):
+    import database.conversations as db
+    import tests.unit.test_conversation_speaker_resolution_stage as fixture
+    import utils.conversations.speaker_resolution as stage
+
+    fixture.env.__wrapped__(monkeypatch)
+    plan = [0, 1] * 4
+    fixture._install_audio(monkeypatch, plan)
+    conv = fixture._conversation(plan)
+    old = [row(7, 'resolution')]
+    retained = [row(1, 'capture'), row(2, 'sync')] if other_stages else []
+    conv.speaker_match_scores = retained + old
+    stage.resolve_speakers_for_processing('u1', conv)
+    assert conv.speaker_resolution.status == 'resolved'
+    assert conv.speaker_match_scores == retained
+    # Processing merges against the current stored blob, so check persistence,
+    # including an entirely empty score list, rather than just in-memory state.
+    concurrent = [row(9, 'capture')] if other_stages else []
+    existing = db.encode_conversation_for_write('u1', dict(speaker_match_scores=concurrent + old), level)
+    existing['data_protection_level'] = level
+    update = db.encode_conversation_for_write('u1', conv.model_dump(), level)
+    assert scores.FIELD in update
+    db._reapply_current_manual_assignments('u1', update, existing)
+    decoded = db.prepare_conversation_for_read(update, 'u1')
+    assert decoded[scores.FIELD] == concurrent + retained
+    assert all(r['stage'] != 'resolution' for r in decoded[scores.FIELD])
+    assert len(conv.transcript_segments) == len(plan)
+
+
+def test_empty_processing_scores_preserve_resolution_without_resolution_state():
+    current = [row(7, 'resolution')]
+    assert scores.merge_processing(current, []) == current
+    assert scores.merge_processing(current, [], replace_resolution=True) == []

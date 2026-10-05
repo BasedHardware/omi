@@ -39,12 +39,12 @@ def record_failure(log, *, trimmed: bool = False, reason: str = 'other') -> None
         pass
 
 
-def merge_processing(current: list, snapshot: list) -> list:
-    """Current capture/sync wins; a fresh resolution replaces the old resolution."""
+def merge_processing(current: list, snapshot: list, *, replace_resolution: bool = False) -> list:
+    """Current capture/sync wins; an explicit resolution may replace with no rows."""
     current = merge(None, current)
     snapshot = merge(None, snapshot)
     new_resolution = [r for r in snapshot if r['stage'] == 'resolution']
-    retained = [r for r in current if not new_resolution or r['stage'] != 'resolution']
+    retained = [r for r in current if not (new_resolution or replace_resolution) or r['stage'] != 'resolution']
     keys = {(r['stage'], r.get('speaker_id_scope', ''), r['speaker_id']) for r in retained}
     retained += [
         r
@@ -146,6 +146,13 @@ def encode_bounded(rows: list, encode) -> tuple[object, bool]:
     """Trim optional snapshots to the final stored byte budget, including encryption."""
     retained = merge(None, rows)
     trimmed = False
+    if not retained:
+        # An explicit empty processing snapshot can clear a prior resolution.
+        # Absence still means no new evidence, and trimming every row below
+        # remains an omission rather than a successful empty replacement.
+        encoded = encode([])
+        size = len(encoded.encode('utf-8')) if isinstance(encoded, str) else len(encoded)
+        return (encoded, False) if size <= MAX_STORED_BYTES else (None, True)
     while retained:
         encoded = encode(retained)
         size = len(encoded.encode('utf-8')) if isinstance(encoded, str) else len(encoded)

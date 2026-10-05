@@ -1229,7 +1229,7 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
         return
 
     try:
-        if match_scores.enabled() and resolution.match_scores:
+        if match_scores.enabled():
             retained = [r for r in (conversation.speaker_match_scores or []) if r['stage'] != 'resolution']
             conversation.speaker_match_scores = match_scores.merge(retained, resolution.match_scores)
     except Exception:

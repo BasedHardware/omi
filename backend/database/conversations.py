@@ -639,7 +639,10 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
                 _reveal_json_value(existing[match_scores.FIELD], uid, True) if match_scores.FIELD in existing else []
             )
             payload[match_scores.FIELD] = match_scores.merge_processing(
-                current_scores, _reveal_json_value(snapshot_scores, uid, True)
+                current_scores,
+                _reveal_json_value(snapshot_scores, uid, True),
+                replace_resolution=(write_data.get('speaker_resolution') or {}).get('status')
+                in ('resolved', 'unavailable'),
             )
         except Exception:
             # Omitting this optional update leaves the current stored blob intact.

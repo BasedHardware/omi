@@ -3275,9 +3275,17 @@ trims report `scores_trimmed`; only complete omission reports `scores_omitted`.
 Score exceptions also cannot interrupt model construction or speaker assignment.
 Diagnostics import shared telemetry only at call time, preserving package-stub
 import isolation. Invalid decoded shapes are discarded before model validation.
+Every Conversation entry point also drops raw or invalid optional score values
+before typed validation. Manual assignment returns scores through the validated
+UID-aware decode path, so committed assignment/rejection edits cannot fail their
+response because of a stored score blob.
 Capacity guards on existing documents delete an old score blob to reclaim space.
+Partial text edits, assignments and translation materialization use the same
+already-read document for that guard.
 Processing transactions merge the current stored capture/sync rows ahead of stale
-snapshot rows, while replacing resolution rows with a fresh result. Sync bridges
+snapshot rows, while replacing resolution rows with a fresh result. A successful
+resolution with no comparisons clears the old stage; an explicit empty snapshot
+survives encoding so the processing transaction cannot restore stale rows. Sync bridges
 aggregate decoded donor score lists before the existing encoding/write; manual
 and smart merges do the same. Unscoped donor keys receive their source conversation
 scope so equal speaker IDs do not collapse. Identity-merged resolution rows sum
