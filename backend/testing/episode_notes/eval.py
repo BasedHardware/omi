@@ -38,7 +38,7 @@ class CompatibleEndpoint:
         body = json.dumps(
             {
                 'model': self.model,
-                'max_tokens': self.max_tokens,
+                'max_tokens': int(options.get('max_tokens', self.max_tokens)),
                 'response_format': {'type': 'json_object'},
                 'messages': [
                     {'role': 'system', 'content': prompt},
@@ -132,6 +132,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--apply-deadlines', action='store_true')
     parser.add_argument('--writer-timeout', type=float, default=120)
     parser.add_argument('--c6-timeout', type=float, default=115)
+    parser.add_argument('--tier-min-words', type=int, default=250)
+    parser.add_argument('--tier-min-source-kinds', type=int, default=2)
+    parser.add_argument(
+        '--candidate-max-tokens', type=int, help='Experimental C6-only output budget; part of the cache key'
+    )
     parser.add_argument('--no-claims', action='store_true')
     parser.add_argument('--judge-samples', type=int, choices=(1, 2), default=1)
     parser.add_argument(
@@ -144,6 +149,7 @@ def main(argv: list[str] | None = None) -> None:
             'best_two',
             'jev_veto',
             'jev_per_source',
+            'jev_per_source_pool',
             'jev_rank',
             'jev_discussed',
             'jev_choice',
@@ -246,10 +252,13 @@ def main(argv: list[str] | None = None) -> None:
                 apply_deadlines=args.apply_deadlines,
                 writer_timeout=args.writer_timeout,
                 c6_timeout=args.c6_timeout,
+                tier_min_words=args.tier_min_words,
+                tier_min_source_kinds=args.tier_min_source_kinds,
             ),
             judge_samples=args.judge_samples,
             experiment=args.experiment,
             experiment_cutoff=args.experiment_cutoff,
+            candidate_max_tokens=args.candidate_max_tokens,
         )
         write_json(output, report)
     except Exception as exc:

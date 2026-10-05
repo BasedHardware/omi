@@ -172,3 +172,56 @@ def test_verify_cost_is_in_candidate_receipt_without_extra_writer():
     assert report['cases'][0]['candidate_cost']['provider_cost'] == pytest.approx(0.005)
     assert report['cases'][0]['candidate_cost']['latency_seconds'] == 3
     assert len(calls) == 4
+
+
+def test_output_budget_is_keyed_and_only_applied_to_c6_then_one_c7_fallback():
+    sample = fixture()
+    sample.episodes[0].evidence.transcript_segments[0].content = 'speech ' * 1000
+    sample.episodes[0].evidence.device_state = [Observation(id='device:1', content='recording')]
+    writers = []
+
+    def fake(prompt, payload):
+        if prompt == REFERENCE_PROMPT:
+            return {'narrative': 'synthetic', 'claims': []}
+        if prompt == JUDGE_PROMPT:
+            return {
+                'informativeness_gap': 0,
+                'unsupported_claims': 0,
+                'wrong_provenance_claims': 0,
+                'unrelated_content_claims': 0,
+                'vacuous': False,
+                'property_failures': [],
+                'reasons': [],
+            }
+        options = payload['_request_options']
+        writers.append(options)
+        if options['effort'] == 'xhigh':
+            assert options['max_tokens'] == 8000
+            raise LLMCallError(
+                'output_truncated',
+                LLMResult(content={}, provider_cost=0.008, latency_seconds=80, finish_reason='length'),
+            )
+        assert 'max_tokens' not in options and options['effort'] == 'default'
+        return LLMResult(
+            content={'title': 'Synthetic launch', 'overview': 'Spoken plan captured', 'note_claims': []},
+            provider_cost=0.002,
+            latency_seconds=10,
+        )
+
+    report = evaluate(
+        sample, fake, settings=EpisodeWriterSettings(tiered=True, tier_min_words=1000), candidate_max_tokens=8000
+    )
+    row = report['cases'][0]
+    assert len(writers) == 2 and row['tier_fallback'] and row['status'] == 'ok'
+    assert row['candidate_cost']['provider_cost'] == pytest.approx(0.010)
+    assert row['candidate_cost']['latency_seconds'] == 90
+
+
+def test_jev_router_is_one_typed_question_with_bounded_excerpt():
+    from testing.episode_notes.jev_router import router_payload
+
+    episode = fixture().episodes[0]
+    episode.evidence.transcript_segments[0].content = 'speech ' * 10000
+    payload = router_payload(episode)
+    assert len(payload['questions']) == 1 and payload['questions']['careful_summary']['type'] == 'noul'
+    assert len(payload['state']) < 24000 and '[excerpt gap]' in payload['state']

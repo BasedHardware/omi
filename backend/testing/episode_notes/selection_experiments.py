@@ -9,7 +9,7 @@ from testing.episode_notes.schema import LLMResult
 from utils.conversations.episode_jev import JEV_SELECTOR_PROMPT, evidence_question_batches
 from utils.conversations.episode_selection import deterministic_episode_selection
 
-MODES = ('jev_veto', 'jev_per_source', 'jev_rank', 'jev_discussed', 'jev_choice')
+MODES = ('jev_veto', 'jev_per_source', 'jev_rank', 'jev_discussed', 'jev_choice', 'jev_per_source_pool')
 
 
 def experiment_batches(items, episode, mode):
@@ -48,8 +48,10 @@ def experiment_batches(items, episode, mode):
 
 def experiment_selection(items, episode, *, mode, cutoff, cache_dir, llm):
     conservative = deterministic_episode_selection(items, finished_at=episode.evidence.finished_at)
+    question_items = conservative if mode == 'jev_per_source_pool' else items
+    mode = 'jev_per_source' if mode == 'jev_per_source_pool' else mode
     receipts, scores = [], {}
-    batches = experiment_batches(items, episode, mode)
+    batches = experiment_batches(question_items, episode, mode)
     for batch in batches:
         result = cached_call(
             cache_dir,

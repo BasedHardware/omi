@@ -195,3 +195,31 @@ production deadline. Live deadline/fallback evaluation must record timeout cost
 as indeterminate when the provider does not return usage. Outer serving limits,
 legacy synchronous requests and inherited gateway effort defaults are audited in
 `utils/conversations/EPISODE_DEADLINES.md`. Never run held-out inputs for calibration.
+
+Round-11 DEV ablations are explicit `--experiment` modes, never production
+settings: `verify`, `fact_check`, `facts_first`, `best_two`, `jev_veto`,
+`jev_per_source`, `jev_per_source_pool`, `jev_rank`, `jev_discussed`, `jev_choice`.
+Use `--experiment-cutoff` for a selector/fact-check threshold (rank uses a
+fraction of the existing deterministic pool). Every selector is removal-only;
+the pool variant asks Jev only about already-admitted candidates. Existing
+writer/reference/judge contracts remain unchanged. Experiments reject held-out,
+even with `--frozen`; this is separate from the normal frozen acceptance CLI.
+
+`--tier-min-words` / `--tier-min-source-kinds` parameterize offline routing.
+`--candidate-max-tokens` caps C6 only, includes the cap in its request/cache key,
+and preserves the one C7 fallback on truncation/timeout. It never caps baseline,
+C7, reference or judge. This is a token budget, not a hard wall-clock deadline.
+`--spend-log` appends content-free receipts only for **fresh endpoint calls**;
+cache hits retain original cost for policy comparison but are not new spend.
+Private spend-log/output/cache paths must all be outside git worktrees.
+
+`policy_replay.py` produces routing summaries from cached C6/C7 and both judges;
+no models are called. Keep a complete C6 candidate map: a previously unrouted
+C7 row must not masquerade as a C6 candidate. Real fixtures expose capture times
+and segment start timestamps, but not segment ends: timestamp span/capture span
+are duration proxies, not measured active speech time. Selection-only sweeps
+measure removals/input volume, not note quality. Best-of-two receipts report
+summed call latency plus a separately marked **modeled parallel critical path**;
+reusing an already cached first draft does not demonstrate production parallel
+serving latency. Failed exact-quote extraction is a per-case error, not a valid
+low-cost note; include errors rather than comparing only successful cases.

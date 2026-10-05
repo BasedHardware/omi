@@ -127,8 +127,11 @@ def evaluate(
     judge_samples: int = 1,
     experiment: str = 'none',
     experiment_cutoff: float = 0.3,
+    candidate_max_tokens: int | None = None,
 ) -> dict:
     settings = settings or EpisodeWriterSettings(selection='compact', claims=True)
+    if candidate_max_tokens is not None and (split != 'dev' or not 1000 <= candidate_max_tokens <= 32000):
+        raise ValueError('C6 output-budget experiments require DEV and 1000..32000 tokens')
     if experiment != 'none' and split != 'dev':
         raise ValueError('generation/selection experiments are DEV only')
     if (
@@ -141,6 +144,7 @@ def evaluate(
             'best_two',
             'jev_veto',
             'jev_per_source',
+            'jev_per_source_pool',
             'jev_rank',
             'jev_discussed',
             'jev_choice',
@@ -262,6 +266,8 @@ def evaluate(
                         from utils.conversations.episode_tiers import episode_tier
 
                         effective_settings, tier, route_reason = episode_tier(selected_items, settings)
+                        if candidate_max_tokens is not None and effective_settings.effort == 'xhigh':
+                            payload['_request_options']['max_tokens'] = candidate_max_tokens
                     try:
                         result = cached_call(cache_dir, writer_arm, candidate_model, prompt, payload, llm)
                     except LLMCallError as exc:
@@ -438,6 +444,7 @@ def evaluate(
             'c6_timeout': settings.c6_timeout,
             'experiment': experiment,
             'experiment_cutoff': experiment_cutoff,
+            'candidate_max_tokens': candidate_max_tokens,
         },
         'samples': {
             str(sample): {
