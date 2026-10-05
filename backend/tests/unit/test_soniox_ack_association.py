@@ -12,11 +12,23 @@ from prometheus_client import REGISTRY
 
 from tests.unit.test_soniox_finalize_padding import setup_peer, send_observed, consume, final, PaddingPeer, ClosingPeer
 from tests.unit.test_soniox_capture_axis_r10 import close, managed, soniox_capture_uuid
-from tests.unit.test_soniox_wire_ledger import barrier
 from tests.unit.test_capture_window_merge_union_r5 import tick, known
 from tests.unit.test_audio_timeline_round3 import RATE, T0
 from utils.stt import soniox, soniox_wire_metrics
 from utils.stt.soniox_idle import IdleSonioxSocket
+
+
+async def barrier(raw, wire):
+    """Exact local write completion, bounded by turns rather than host wall time."""
+    marker = '{"type":"keepalive","r12_barrier":true}'
+    raw._send_queue.put_nowait(marker)
+    for _ in range(20):
+        await asyncio.sleep(0)
+        while not wire.writes.empty():
+            if wire.writes.get_nowait() == marker:
+                await asyncio.sleep(0)
+                return
+    pytest.fail('Local FIFO writer did not complete the barrier in 20 turns')
 
 
 def gate_values(mode):
@@ -142,10 +154,9 @@ async def test_new_idle_transport_recovers_after_old_association_loss(monkeypatc
             await close(type('Leg', (), dict(raw=raw, finish=raw.finish))())
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize('ordered', [False, True])
-@pytest.mark.parametrize('case', ['clean', 'mismatch', 'combined', 'missing', 'failed', 'inside_write', 'overflow'])
-async def test_gate_counts_successful_controls_once_and_releases_occupancy(monkeypatch, ordered, case):
+@pytest.fixture
+async def gate_accounting_peer(monkeypatch, request):
+    ordered = request.node.callspec.params['ordered']
     monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', str(ordered).lower())
     mode = 'ordered' if ordered else 'reported'
     before = gate_values(mode)
@@ -160,6 +171,17 @@ async def test_gate_counts_successful_controls_once_and_releases_occupancy(monke
         for outcome in ('verified', 'mismatch', 'unverified')
     }
     receiver, _, _, _, leg, peer, _ = await setup_peer(monkeypatch)
+    yield receiver, leg, peer, mode, before, gauge, states, occupancy, lost_before, ordered_before
+    await close(leg)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ordered', [False, True])
+@pytest.mark.parametrize('case', ['clean', 'mismatch', 'combined', 'missing', 'failed', 'inside_write', 'overflow'])
+async def test_gate_counts_successful_controls_once_and_releases_occupancy(
+    monkeypatch, ordered, case, gate_accounting_peer
+):
+    receiver, leg, peer, mode, before, gauge, states, occupancy, lost_before, ordered_before = gate_accounting_peer
     try:
         send_observed(receiver, leg, 42732)
         await barrier(leg.raw, peer)
@@ -216,8 +238,7 @@ async def test_gate_counts_successful_controls_once_and_releases_occupancy(monke
         if ordered:
             for outcome, previous in ordered_before.items():
                 assert (
-                    REGISTRY.get_sample_value('omi_soniox_ordered_finalize_checkpoints_total', {'outcome': outcome})
-                    or 0
+                    soniox_wire_metrics.ordered_finalize_metrics().labels(outcome=outcome)._value.get()
                 ) - previous == delta[outcome]
     finally:
         await close(leg)
