@@ -217,6 +217,21 @@ def test_under_window_nonoverlap_sync_row_is_skipped(world):
     assert world.raw('n')['smart_merge_decision']['candidate_id'] == 'p'
 
 
+def test_stretch_ignores_the_skipped_duplicate(world):
+    world.add('old', -10, 5)
+    world.add('p', 0, 5)
+    _sync(world, 'p2', -1, 16, created_at=T0 + timedelta(minutes=7))
+    world.add('n', 10, 15)
+    world.jev_answers = [0.5]
+    untouched_p2 = deepcopy(world.raw('p2'))
+    assert world.finish('n') is True
+    record = world.raw('n')['smart_merge_decision']
+    assert record['candidate_id'] == 'p' and record['stretch_count'] == 1
+    state = world.jev_calls[0]['state']
+    assert 'title old' in state and 'title p2' not in state
+    assert world.raw('p2') == untouched_p2
+
+
 @pytest.mark.parametrize('answer,decision', [(0.34, 'kept'), (0.35, 'merged'), (None, 'kept')])
 def test_jev_outcomes_follow_the_chosen_row_not_the_skipped_one(world, answer, decision):
     world.add('p', 0, 5)

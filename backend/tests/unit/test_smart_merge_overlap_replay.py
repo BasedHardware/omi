@@ -104,6 +104,15 @@ def test_exported_score_requires_exact_pair_and_state(score, decision, reason):
         assert replay_tool.replay(altered)[0]['new']['reason'] == 'score_missing'
 
 
+def test_replay_stretch_ignores_the_skipped_duplicate():
+    payload = fixture()
+    payload['conversations'][1]['started_at'] = (T0 - timedelta(minutes=1)).isoformat()
+    row = replay_tool.replay(scored(payload, 0.35))[0]['new']
+    assert row['predecessor'] == 'p'
+    assert row['stretch_count'] == 0
+    assert row['decision'] == 'would_merge'
+
+
 def test_pending_refresh_is_not_a_predicted_merge():
     payload = scored(fixture(), 0.9)
     payload['conversations'][0]['smart_merge'] = {'role': 'survivor', 'revision': 2, 'refreshed_revision': 1}

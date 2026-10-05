@@ -343,7 +343,7 @@ def _decide(
         a = fragments[-1]
         candidates = list(fragments[:-1])
         for row in rows:
-            if str(row.get('id')) != survivor_id:
+            if str(row.get('id')) != survivor_id and str(row.get('id')) not in selection.skipped_ids:
                 candidates.extend(ledger_fragments(row))
         stretch = stretch_before(a, candidates)
         state = build_state(
