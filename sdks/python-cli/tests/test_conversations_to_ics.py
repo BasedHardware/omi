@@ -1,16 +1,21 @@
+import importlib.util
 import json
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from examples.conversations_to_ics import (
-    convert,
-    fold,
-    ics_datetime,
-    ics_text,
-    stamp,
-)
+# Load conversations_to_ics example script dynamically
+script_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_to_ics.py"
+spec = importlib.util.spec_from_file_location("conversations_to_ics", script_path)
+c2i = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(c2i)
+
+convert = c2i.convert
+fold = c2i.fold
+ics_datetime = c2i.ics_datetime
+ics_text = c2i.ics_text
+stamp = c2i.stamp
 
 
 class TestConversationsToICS(unittest.TestCase):
@@ -21,6 +26,7 @@ class TestConversationsToICS(unittest.TestCase):
             ics_text("hello; world, with \\ slash and \r\n newline"),
             "hello\\; world\\, with \\\\ slash and \\n newline",
         )
+        self.assertEqual(ics_text("lone\rcarriage\rreturn"), "lone\\ncarriage\\nreturn")
         self.assertEqual(ics_text(12345), "12345")
         self.assertEqual(ics_text(True), "True")
         self.assertEqual(ics_text(["tag1", "tag2"]), '["tag1"\\, "tag2"]')
@@ -65,7 +71,7 @@ class TestConversationsToICS(unittest.TestCase):
         multibyte = "SUMMARY:" + "ñ" * 50
         folded = fold(multibyte)
         for part in folded:
-            part.encode("utf-8")
+            self.assertLessEqual(len(part.encode("utf-8")), 75)
         reconstructed = folded[0] + "".join(part[1:] for part in folded[1:])
         self.assertEqual(reconstructed, multibyte)
 
