@@ -649,11 +649,14 @@ from utils.metrics_smart_merge import (  # noqa: E402
     CONVERSATION_SMART_MERGE_SCORE as CONVERSATION_SMART_MERGE_SCORE,
     CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS as CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS,
     CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL as CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL,
+    CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL as CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL,
+    CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS as CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS,
     OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL as OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL,
     record_conversation_smart_merge as record_conversation_smart_merge,
     record_conversation_smart_merge_audit as record_conversation_smart_merge_audit,
     record_conversation_smart_merge_refresh as record_conversation_smart_merge_refresh,
     record_conversation_smart_merge_survivor_deleted as record_conversation_smart_merge_survivor_deleted,
+    record_conversation_smart_merge_wallclock_shadow as record_conversation_smart_merge_wallclock_shadow,
     record_smart_merge_flatten as record_smart_merge_flatten,
 )
 
@@ -1119,8 +1122,8 @@ OMI_SYNC_INTAKE_TOTAL = Counter(
 OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
     'omi_sync_lineage_resolve_total',
     (
-        'Sync recording-lineage binding decisions. outcome is a closed set: bound|split_across_generations|'
-        'stamp_overridden|stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted'
+        'Sync lineage binding decisions. outcome is a closed set: bound|split_across_generations|stamp_overridden|'
+        'stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted|s1_refused'
     ),
     ['outcome'],
 )

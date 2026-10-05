@@ -201,18 +201,19 @@ void main() {
     CaptureWedgeMonitor.instance = monitor;
     const id = 'synthetic-device';
     void report(bool exhausted) => bridge.onCaptureHealth(
-        id,
-        jsonEncode({
-          'phase': exhausted ? 'actionRequired' : 'recovering',
-          'generation': 'android-gatt',
-          'reason': CaptureIngressHealth.cccdRecoveryReason,
-          'valid_until_ms': 0,
-          'subscription_confirmed': false,
-          'unverified_since_ms': world.clock.now().millisecondsSinceEpoch,
-          'recovery_outcome': exhausted ? 'failed' : 'none',
-          'recovery_spent': exhausted,
-          'reconnect_spent': exhausted,
-        }));
+          id,
+          jsonEncode({
+            'phase': exhausted ? 'actionRequired' : 'recovering',
+            'generation': 'android-gatt',
+            'reason': CaptureIngressHealth.cccdRecoveryReason,
+            'valid_until_ms': 0,
+            'subscription_confirmed': false,
+            'unverified_since_ms': world.clock.now().millisecondsSinceEpoch,
+            'recovery_outcome': exhausted ? 'failed' : 'none',
+            'recovery_spent': exhausted,
+            'reconnect_spent': exhausted,
+          }),
+        );
     try {
       world.disposeController();
       world.deviceConnection = ScriptedDeviceConnection();
@@ -278,15 +279,17 @@ void main() {
     try {
       world.disposeController();
       world.deviceConnection = ScriptedDeviceConnection();
-      final p = composeCaptureProvider(_deps(
-        world: world,
-        ble: ble,
-        telemetry: RecordingLifecycleTelemetry(
-          emitter: (event, _) => events.add(event),
-          clock: world.clock.now,
-          idFactory: () => 'ingress',
+      final p = composeCaptureProvider(
+        _deps(
+          world: world,
+          ble: ble,
+          telemetry: RecordingLifecycleTelemetry(
+            emitter: (event, _) => events.add(event),
+            clock: world.clock.now,
+            idFactory: () => 'ingress',
+          ),
         ),
-      ));
+      );
       addTearDown(p.dispose);
       final device = BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50);
       await p.streamDeviceRecording(device: device);
@@ -351,7 +354,8 @@ void main() {
       addTearDown(p.dispose);
       final card = CaptureSystemSurface(p, _NoCard(), now: world.clock.now);
       await p.streamDeviceRecording(
-          device: BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50));
+        device: BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50),
+      );
       expect(p.pendantCaptureVerified, isFalse);
       expect(card.snapshot['status'], 'unverified');
       expect(card.snapshot['canPause'], isTrue, reason: 'Pause stays on the card, as in the app');
@@ -884,8 +888,13 @@ void main() {
         }) async {
           final transport = ScriptedPureSocket();
           transports.add(transport);
-          final socket =
-              TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport, source: source);
+          final socket = TranscriptSegmentSocketService.withSocket(
+            sampleRate,
+            codec,
+            language,
+            transport,
+            source: source,
+          );
           await socket.start();
           return socket;
         },

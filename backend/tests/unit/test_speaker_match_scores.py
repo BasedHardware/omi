@@ -844,7 +844,7 @@ def test_smart_merge_transaction_retains_decoded_donor_scores(monkeypatch, score
     if omit_scores:
         monkeypatch.setattr(scores, 'aggregate', lambda *a: None)
 
-    def plan(s, ss, d, ds, ancestors):
+    def plan(s, ss, d, ds, ancestors, last_fragment=None):
         update, tombstone = policy.absorb_payloads(s, ss, d, ds, merged_at=fixture.T0, decision={})
         return None, update, tombstone, {}
 

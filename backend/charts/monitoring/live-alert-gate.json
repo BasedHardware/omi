@@ -22,6 +22,17 @@
     "omi-stt-window-first-text",
     "omi-stt-batch-queue-depth",
     "omi-stt-batch-queue-latency",
-    "omi-stt-sync-prerecorded-errors"
+    "omi-stt-sync-prerecorded-errors",
+    "omi-stt-terminal-after-text",
+    "omi-stt-mid-session-terminal",
+    "omi-stt-paid-capacity",
+    "omi-stt-combined-pressure",
+    "omi-stt-window-post-latency",
+    "omi-stt-replay-continuity",
+    "omi-stt-evidence-loss",
+    "omi-stt-leg-lifecycle-gap",
+    "omi-stt-snapshot-unready",
+    "omi-stt-stage-disagreement",
+    "omi-stt-enabled-state-unknown"
   ]
 }

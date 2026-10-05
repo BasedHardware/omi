@@ -77,7 +77,12 @@ complete validated S1 upload claim set for the exact uploaded basename set
 under `CAPTURE_EVIDENCE_V1_DARK_WRITE`. Absent, invalid or incomplete claims
 fall back to the pre-lineage whole-batch resolver even for admitted users, and
 a post-decode mapping-count mismatch at the coordinator takes the same route
-before VAD. Turning the gate off broadens eligibility back to the prior
+before VAD. Each refusal emits exactly one bounded
+`omi_sync_lineage_resolve_total{outcome="s1_refused"}` increment and log line
+with a closed reason (`no_claims`, `parse_failed`, `count_mismatch`,
+`filename_mismatch`, `not_admitted`) and no ids, names or claim content;
+claims rejected at the upload HTTP boundary reach the gate as `{}` and
+classify as `no_claims`. Turning the gate off broadens eligibility back to the prior
 ungated binding; it is not a lineage kill switch and never widens the
 allowlist or bypasses `SYNC_LINEAGE_RESOLVE_ENABLED`. Prod declares `true` on
 Cloud Run `backend`, `backend-sync`, `backend-sync-backfill` and
@@ -237,6 +242,13 @@ Global-stage pod cache views (including freshness/unknown state), scoped CAS
 transition metrics, classified outcome counters and static/proposed pairs are
 documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
 and [live STT routing runbook](runbooks/live-stt-routing.md).
+
+Router-promoted paid spillover validates each configured provider cap (integer
+0–10000); malformed values deny promotion and preserve configured order with one
+warning per provider per process. The recovery terminal-after-text alert aggregates
+all `backend-listen-metrics` traffic, including stable and former-canary series;
+the pinned recovery flag is enabled across production listen. See the
+[routing runbook](runbooks/live-stt-routing.md#router-on-readiness-controls-default-off).
 
 The adapter log statements routed through `sanitize_provider_error()` do
 not echo raw provider or user text. Live-socket, batch, and auxiliary STT error paths
@@ -729,6 +741,37 @@ any error keeps both. Every answered pair stores a server-only
 `smart_merge_decision` (numbers and ids, no text) on the new conversation.
 For a merge verdict, the decision is persisted before the absorb transaction
 so a retry reuses the same score.
+
+`CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` (`off` default, `shadow`, `on`;
+unset/blank/unknown = `off`) relaxes the recorded/speech-gap window for one
+narrow case: two rows proven to be generations of the same client recording.
+Live creators stamp `external_data.recording_session_id` (per server rollover
+generation) and `external_data.recording_origin_id` (the client's stable
+recording id); proof requires both stamps nonempty on both rows plus equal
+origin ids — generation ids are never equated — and the usual source,
+device-partition and lock gates still apply. Under `on`, the gap for such a
+pair is `new.created_at` minus the newest fragment's own row `finished_at`,
+where "newest" is the maximum `finished_at` in the survivor's
+`smart_merge.fragments` ledger (the ledger stays on the drifted speech axis,
+so selection never trusts `started_at`). When that fragment is a donor
+tombstone rather than the survivor, its full row is read once at decision
+time and re-read inside the absorb transaction — reusing the flatten ancestry
+read when possible — and the plan re-verifies lineage, wall times and span
+against that fresh row, so a mutation such as a moved `finished_at` is
+decided on the transaction's current data rather than the decision-time
+read. Gaps of `0..3600` s are eligible, negative or malformed wall times get
+the bounded `wallclock_gap_negative`/`wallclock_time_invalid` reasons, and
+the 3 h span cap is measured on `created_at`/`finished_at`. `shadow` keeps
+the legacy verdict but asks Jev once with corrected timing for proven pairs
+the legacy gate skipped, logging `event=smart_merge_wallclock_shadow` and
+counting `omi_conversation_smart_merge_wallclock_shadow_total`. The setting
+ships `off` in the shared base and `shadow` in both the dev and prod
+overlays on all six smart-merge hosts (`backend`, `backend-sync`,
+`backend-sync-backfill`, `backend-integration`, `backend-listen`,
+`pusher`). No timestamp computation changes: `started_at` still anchors
+rebasing and stored ledger fragments; only the decision-time gap and the
+Jev state endpoints use server wall times. No further timestamp behavior
+changes are intended here.
 
 A merge keeps the earlier conversation's id. One transaction appends the new
 transcript on the survivor's absolute timeline and turns the new row into the

@@ -42,6 +42,12 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
+  case searchContacts = "search_contacts"
+  case listMessageChats = "list_message_chats"
+  case readMessageHistory = "read_message_history"
+  case listMailMessages = "list_mail_messages"
+  case sendMessage = "send_message"
+  case runApplescript = "run_applescript"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
   case renderChatBlocks = "render_chat_blocks"
@@ -55,8 +61,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:4229125ab7bc141b319e17bfe8b1732a33b75a9a41cea75bbb3898782d174421"
-  static let chatFirstManifestDigest = "sha256:9eb8045b6417eda6dcde0fb018f76fefe14d85e1753a8c843a1faf94d3599dc3"
+  static let manifestDigest = "sha256:05c2be0a329bbdf779e8f5eb8f7db30150acabe3c3a5a90d40ae64bd4b6c0704"
+  static let chatFirstManifestDigest = "sha256:5d3b84c6e49cb6a1d367e89b780e97d7ed24b433907a4037bb413e4c311ec431"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -105,6 +111,12 @@ enum GeneratedToolExecutors {
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
+    .searchContacts: .chatToolExecutor,
+    .listMessageChats: .chatToolExecutor,
+    .readMessageHistory: .chatToolExecutor,
+    .listMailMessages: .chatToolExecutor,
+    .sendMessage: .chatToolExecutor,
+    .runApplescript: .chatToolExecutor,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,
@@ -174,6 +186,12 @@ enum GeneratedToolExecutors {
     case completeOnboarding
     case getEmailInsights
     case createCalendarEvent
+    case searchContacts
+    case listMessageChats
+    case readMessageHistory
+    case listMailMessages
+    case sendMessage
+    case runApplescript
     case createCanonicalGoal
     case getCanonicalGoals
     case renderChatBlocks
@@ -220,6 +238,12 @@ enum GeneratedToolExecutors {
     case .completeOnboarding: return .completeOnboarding
     case .getEmailInsights: return .getEmailInsights
     case .createCalendarEvent: return .createCalendarEvent
+    case .searchContacts: return .searchContacts
+    case .listMessageChats: return .listMessageChats
+    case .readMessageHistory: return .readMessageHistory
+    case .listMailMessages: return .listMailMessages
+    case .sendMessage: return .sendMessage
+    case .runApplescript: return .runApplescript
     case .createCanonicalGoal: return .createCanonicalGoal
     case .getCanonicalGoals: return .getCanonicalGoals
     case .renderChatBlocks: return .renderChatBlocks
