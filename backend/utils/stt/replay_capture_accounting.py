@@ -1,7 +1,7 @@
 # LIFECYCLE: permanent
 """Accepted-send bookkeeping for raw legacy replay, before live-tail adoption."""
 
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence, cast
 
 from config.audio_timeline import live_capture_window_translator_sends_enabled
 from utils.audio_timeline import ProviderEpochTranslator
@@ -34,7 +34,7 @@ class ObservedReplaySocket:
         replay = getattr(self.raw, 'replay_send', None)
         if not callable(replay):
             return self.send(data, start_sample=start_sample)
-        accepted = replay(data, start_sample)
+        accepted = cast(Callable[[bytes, int], bool], replay)(data, start_sample)
         self._record(accepted, data, start_sample)
         return accepted
 
