@@ -1,0 +1,195 @@
+---
+title: "Configuração do Omi"
+description: "Comece a usar o seu dispositivo Omi"
+sidebarTitle: "Configuração do Omi"
+---
+
+<img src="/omi-without-rope.png" alt="Dispositivo Omi" style={{maxWidth: '250px'}} />
+
+<Tip>
+Available in English: [Omi Setup](/onboarding/omi).
+</Tip>
+
+## Configuração Rápida
+
+<Steps>
+  <Step title="Carregue o Seu Dispositivo" icon="battery-full">
+    Certifique-se de que o seu dispositivo Omi esteja carregado. Ao ligá-lo, o indicador luminoso deverá acender.
+
+    - Pressione o botão uma vez para ligar o dispositivo
+    - Observe a luz LED para confirmar que ele está ligado (azul se conectado, vermelho se ainda não foi emparelhado)
+  </Step>
+  <Step title="Baixe o Aplicativo Omi" icon="mobile">
+    Baixe o aplicativo oficial do Omi na loja de aplicativos do seu dispositivo:
+
+    <CardGroup cols={2}>
+      <Card title="App Store" icon="apple" href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163">
+        Baixar para iOS
+      </Card>
+      <Card title="Play Store" icon="google-play" href="https://play.google.com/store/apps/details?id=com.friend.ios&hl=en_US&pli=1">
+        Baixar para Android
+      </Card>
+    </CardGroup>
+
+    <Tip>
+    Você também pode pesquisar por "**Omi AI**" na loja de aplicativos.
+    </Tip>
+  </Step>
+  <Step title="Emparelhe o Seu Dispositivo" icon="bluetooth">
+    1. Abra o aplicativo Omi após o download
+    2. Siga as instruções no aplicativo para emparelhar o dispositivo
+    3. Aguarde o estabelecimento da conexão Bluetooth
+  </Step>
+  <Step title="Teste a Transcrição" icon="microphone">
+    Após o emparelhamento, teste se a transcrição está funcionando:
+
+    - Fale perto do seu dispositivo Omi
+    - Você deverá ver as transcrições aparecerem no aplicativo
+    - Se não vir as transcrições imediatamente, aguarde 30 segundos ou mais
+
+    <Frame>
+      <img src="/images/IMG_5DCB13BE239B-1.jpeg" alt="Exemplo de Transcrição" style={{maxWidth: '300px'}} />
+    </Frame>
+  </Step>
+</Steps>
+
+---
+
+## Controles do Botão
+
+<CardGroup cols={3}>
+  <Card title="Toque Simples" icon="microphone">
+    **Fazer uma Pergunta**
+
+    Toque uma vez para começar a gravar uma pergunta por voz. Toque novamente quando terminar de falar (ou aguarde 15 segundos). Sua resposta aparecerá no chat do Omi.
+  </Card>
+  <Card title="Toque Duplo" icon="hand-peace">
+    **Ação Rápida (Configurável)**
+
+    Dê um toque duplo para acionar uma ação rápida. Você pode escolher o comportamento em **Configurações → Configurações do Dispositivo → Ação de Toque Duplo**:
+    - Finalizar e salvar conversa (padrão)
+    - Pausar / retomar gravação
+    - Destacar a conversa atual com estrela
+  </Card>
+  <Card title="Pressionar por 3s" icon="power-off">
+    **Desligar**
+
+    Mantenha pressionado por 3 segundos para desligar o dispositivo. Pressione o botão uma vez para ligá-lo novamente.
+  </Card>
+</CardGroup>
+
+---
+
+## Indicadores Luminosos
+
+Entenda o status do seu Omi através das cores do LED:
+
+| Cor | Status |
+|-------|--------|
+| 🔴 **Vermelho Fixo** | Dispositivo ligado, mas desconectado do telefone |
+| 🔴 **Vermelho Piscando** | Dispositivo ainda não sincronizou o horário: conecte-o ao aplicativo Omi |
+| 🔵 **Azul Fixo** | Dispositivo ligado e conectado ao telefone |
+| 🟢 **Verde + Vermelho Piscando** | Carregando enquanto desconectado |
+| 🟢 **Verde + Azul Piscando** | Carregando enquanto conectado |
+| 🟢 **Verde Fixo** | Totalmente carregado (bateria ≥ 98%) |
+
+<Note>
+A luz **vermelha piscando** significa apenas que o Omi ainda não recebeu o horário atual. Ele obtém o horário do telefone via Bluetooth, portanto **conecte o dispositivo ao aplicativo Omi** para que a sincronização ocorra automaticamente e a luz pare de piscar. Se o dispositivo já estiver conectado e continuar piscando, **desconecte e reconecte** no aplicativo.
+</Note>
+
+---
+
+## Importante: Mantenha o Aplicativo em Execução
+
+<Warning>
+**Não encerre o aplicativo!** Uma vez ativado, o Omi funciona em segundo plano. Você pode minimizar o aplicativo, mas se forçar o fechamento (encerrar o processo), a transcrição será interrompida e o dispositivo será desconectado.
+</Warning>
+
+---
+
+## Funcionalidades
+
+<CardGroup cols={3}>
+  <Card title="Transcrição em Tempo Real" icon="microphone">
+    Conversão de fala em texto em tempo real
+  </Card>
+  <Card title="Memória de Conversas" icon="brain">
+    Recordação inteligente com IA
+  </Card>
+  <Card title="Modo Offline" icon="wifi-slash">
+    Funciona sem conexão com a internet
+  </Card>
+  <Card title="Mercado de Aplicativos" icon="store">
+    Expanda recursos com aplicativos da comunidade
+  </Card>
+  <Card title="Identificação de Locutor" icon="users">
+    Identifica quem está falando
+  </Card>
+  <Card title="Perguntas por Voz" icon="comments">
+    Faça perguntas sem usar as mãos
+  </Card>
+</CardGroup>
+
+---
+
+## Solução de Problemas
+
+<AccordionGroup>
+  <Accordion title="Nenhuma luz ou transcrição aparecendo" icon="circle-question">
+    Se você não vir nenhuma luz ou transcrição:
+
+    1. O dispositivo pode precisar de firmware: [instale aqui](/doc/get_started/Flash_device)
+    2. Certifique-se de que o dispositivo esteja carregado
+    3. Tente desligá-lo e ligá-lo novamente
+
+    Se o problema persistir, pergunte no [Discord](http://discord.omi.me) ou entre em contato com [help@omi.me](mailto:help@omi.me)
+  </Accordion>
+  <Accordion title="Luz vermelha piscando" icon="clock">
+    A luz vermelha piscando significa que o dispositivo ainda não sincronizou o horário. O Omi obtém o horário atual do seu telefone via Bluetooth.
+
+    1. Abra o aplicativo Omi e conecte ao seu dispositivo: o horário será sincronizado automaticamente e a luz parará de piscar.
+    2. Se o dispositivo já estiver conectado e a luz continuar piscando, desconecte e reconecte no aplicativo.
+  </Accordion>
+  <Accordion title="Dispositivo não emparelha" icon="bluetooth">
+    - Certifique-se de que o Bluetooth esteja ativado no seu telefone
+    - Tente reiniciar o telefone e o dispositivo Omi
+    - Verifique se o dispositivo está carregado e ligado
+    - Aproxime-se do dispositivo durante o emparelhamento
+  </Accordion>
+  <Accordion title="Transcrição com atraso" icon="clock">
+    - Aguarde até 60 segundos para a transcrição inicial
+    - Verifique sua conexão com a internet
+    - Certifique-se de falar claramente perto do dispositivo
+    - Tente aproximar o dispositivo da sua boca
+  </Accordion>
+  <Accordion title="Bateria descarregando rapidamente" icon="battery-quarter">
+    - Certifique-se de que o dispositivo esteja executando o firmware mais recente
+    - Verifique se há problemas de conexão causando loops de reconexão
+    - Entre em contato com o suporte se a autonomia da bateria estiver significativamente reduzida
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Precisa de Ajuda?
+
+<CardGroup cols={2}>
+  <Card title="Comunidade no Discord" icon="discord" href="http://discord.omi.me">
+    Obtenha ajuda da equipe e da comunidade
+  </Card>
+  <Card title="Central de Ajuda" icon="circle-question" href="https://intercom.help/omi-37041f50f654/en">
+    Consulte perguntas frequentes e artigos de suporte
+  </Card>
+  <Card title="Criar Aplicativos" icon="code" href="/doc/developer/apps/Introduction">
+    Crie suas próprias integrações com o Omi
+  </Card>
+  <Card title="Suporte por E-mail" icon="envelope" href="mailto:help@omi.me">
+    Entre em contato pelo help@omi.me
+  </Card>
+</CardGroup>
+
+---
+
+<Card title="← Voltar à seleção de dispositivos" icon="arrow-left" href="/pt/getstartedwithomi">
+  Escolher um dispositivo diferente
+</Card>
