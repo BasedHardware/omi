@@ -295,3 +295,10 @@ pnpm-workspace.yaml
 
 .github/firestore-workflow
 .github/firestore-source
+
+# Local-brain routing model. 90 MB, above the size this repo should carry in
+# git, and the app already fetches models at runtime (OnDeviceWhisperProvider takes
+# a modelPath rather than reading an asset), so this follows that convention.
+# Fetch with app/scripts/fetch_local_brain_model.sh.
+app/android/app/src/main/assets/minilm.tflite
+
