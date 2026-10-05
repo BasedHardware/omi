@@ -267,6 +267,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get askAnything => 'Zapytaj o cokolwiek';
 
   @override
+  String get askAnythingButton => 'Zapytaj o cokolwiek';
+
+  @override
   String get noMessagesYet => 'Brak wiadomości!\nCzemu nie rozpoczniesz rozmowy?';
 
   @override

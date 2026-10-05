@@ -83,6 +83,7 @@
     "mergingInBackground": "Fusion en cours en arrière-plan. Cela peut prendre un moment.",
     "failedToStartMerge": "Échec du démarrage de la fusion",
     "askAnything": "Demandez n'importe quoi",
+    "askAnythingButton": "Demandez n'importe quoi",
     "noMessagesYet": "Pas encore de messages !\nPourquoi ne pas commencer une conversation ?",
     "deletingMessages": "Suppression de vos messages de la mémoire d'Omi…",
     "messageCopied": "✨ Message copié dans le presse-papiers",

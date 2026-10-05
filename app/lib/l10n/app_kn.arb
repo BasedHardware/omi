@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ",
     "noMessagesYet": "ಇನ್ನೂ ಯಾವ ಸಂದೇಶ ಇಲ್ಲ!\nನೀವು ಸಂವಾದ ಪ್ರಾರಂಭಿಸಿರಿ?",
     "@noMessagesYet": {
         "description": "Empty chat state message"

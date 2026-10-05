@@ -268,6 +268,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get askAnything => 'ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ';
 
   @override
+  String get askAnythingButton => 'ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ';
+
+  @override
   String get noMessagesYet => 'ಇನ್ನೂ ಯಾವ ಸಂದೇಶ ಇಲ್ಲ!\nನೀವು ಸಂವಾದ ಪ್ರಾರಂಭಿಸಿರಿ?';
 
   @override

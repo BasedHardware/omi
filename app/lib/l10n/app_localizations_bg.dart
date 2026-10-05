@@ -268,6 +268,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get askAnything => 'Попитайте каквото и да е';
 
   @override
+  String get askAnythingButton => 'Попитайте каквото и да е';
+
+  @override
   String get noMessagesYet => 'Все още няма съобщения!\nЗащо не започнете разговор?';
 
   @override

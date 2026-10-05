@@ -268,6 +268,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get askAnything => 'Праши било што';
 
   @override
+  String get askAnythingButton => 'Прашај било што';
+
+  @override
   String get noMessagesYet => 'Сè нема пораки!\nЗошто не почнете разговор?';
 
   @override

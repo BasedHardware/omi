@@ -83,6 +83,7 @@
     "mergingInBackground": "Slår ihop i bakgrunden. Detta kan ta en stund.",
     "failedToStartMerge": "Det gick inte att starta ihopslagning",
     "askAnything": "Fråga vad som helst",
+    "askAnythingButton": "Fråga vad som helst",
     "noMessagesYet": "Inga meddelanden ännu!\nVarför inte starta en konversation?",
     "deletingMessages": "Raderar dina meddelanden från Omis minne…",
     "messageCopied": "✨ Meddelande kopierat till urklipp",

@@ -268,6 +268,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get askAnything => 'எதையும் கேளுங்கள்';
 
   @override
+  String get askAnythingButton => 'எதையும் கேளுங்கள்';
+
+  @override
   String get noMessagesYet => 'இன்னும் செய்திகள் இல்லை!\nநீங்கள் ஒரு உரையாடலைத் தொடங்க ஏன் வேண்டாம்?';
 
   @override

@@ -83,6 +83,7 @@
     "mergingInBackground": "Fletter i baggrunden. Dette kan tage et øjeblik.",
     "failedToStartMerge": "Kunne ikke starte fletning",
     "askAnything": "Spørg om hvad som helst",
+    "askAnythingButton": "Spørg om hvad som helst",
     "noMessagesYet": "Ingen beskeder endnu!\nHvorfor starter du ikke en samtale?",
     "deletingMessages": "Sletter dine beskeder fra Omis hukommelse…",
     "messageCopied": "✨ Besked kopieret til udklipsholder",

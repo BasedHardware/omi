@@ -269,6 +269,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get askAnything => 'Ρωτήστε οτιδήποτε';
 
   @override
+  String get askAnythingButton => 'Ρωτήστε οτιδήποτε';
+
+  @override
   String get noMessagesYet => 'Δεν υπάρχουν μηνύματα ακόμα!\nΓιατί δεν ξεκινάτε μια συνομιλία;';
 
   @override

@@ -82,6 +82,7 @@
     "mergingInBackground": "バックグラウンドでマージ中。しばらくお待ちください。",
     "failedToStartMerge": "マージの開始に失敗しました",
     "askAnything": "何でも聞いてください",
+    "askAnythingButton": "何でも聞いてください",
     "noMessagesYet": "まだメッセージがありません！\n会話を始めてみませんか？",
     "deletingMessages": "Omiの記憶からメッセージを削除しています…",
     "messageCopied": "✨ メッセージをクリップボードにコピーしました",

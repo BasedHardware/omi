@@ -268,6 +268,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get askAnything => 'Tanungin ang kahit ano';
 
   @override
+  String get askAnythingButton => 'Tanungin ang kahit ano';
+
+  @override
   String get noMessagesYet => 'Walang mensahe pa!\nBakit hindi ka magsimula ng pag-uusap?';
 
   @override

@@ -267,6 +267,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get askAnything => 'Tanya apa sahaja';
 
   @override
+  String get askAnythingButton => 'Tanya apa sahaja';
+
+  @override
   String get noMessagesYet => 'Tiada mesej lagi!\nMengapa tidak mulakan perbualan?';
 
   @override

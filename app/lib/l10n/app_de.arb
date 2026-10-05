@@ -83,6 +83,7 @@
     "mergingInBackground": "Zusammenführung im Hintergrund. Dies kann einen Moment dauern.",
     "failedToStartMerge": "Zusammenführung konnte nicht gestartet werden",
     "askAnything": "Frag irgendetwas",
+    "askAnythingButton": "Frag irgendetwas",
     "noMessagesYet": "Noch keine Nachrichten!\nWarum starten Sie keine Unterhaltung?",
     "deletingMessages": "Ihre Nachrichten werden aus Omis Speicher gelöscht…",
     "messageCopied": "✨ Nachricht in Zwischenablage kopiert",

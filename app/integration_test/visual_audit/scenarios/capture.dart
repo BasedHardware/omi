@@ -1,10 +1,9 @@
 // Home's capture surfaces where the app really draws them: the live card at the top of Home, the
 // record button to the right of the floating Ask Omi bar, the device chip in the header,
-// the sheets they open, and the live page. The frame mirrors HomePage's layout; its Ask Omi bar
-// is a copy of HomePage._buildChatBar (private there).
+// the sheets they open, and the live page. The frame mirrors HomePage's layout and draws the same
+// HomeAskOmiButton.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -210,7 +209,7 @@ class HomeFrame extends StatelessWidget {
             HeaderCircleButton(
               semanticLabel: 'Settings',
               onTap: () {},
-              icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+              icon: OmiLineIcon(OmiLineGlyph.settings, size: 20, color: OmiColors.textSecondary),
             ),
           ]),
         ]),
@@ -226,38 +225,15 @@ class HomeFrame extends StatelessWidget {
             left: 16,
             right: 16,
             bottom: homeChatBarOffset(context),
-            child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
+            child: Row(children: [
+              Expanded(child: HomeAskOmiButton(onTap: () {}, onVoice: () {})),
+              const SizedBox(width: 10),
+              const HomeRecordButton(),
+            ]),
           ),
       ]),
     );
   }
-}
-
-/// Copy of HomePage._buildChatBar's look.
-class _AskOmiBar extends StatelessWidget {
-  const _AskOmiBar();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        height: kHomeChatBarHeight,
-        decoration: BoxDecoration(
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.pillAll,
-          border: Border.all(color: OmiColors.border, width: 1),
-        ),
-        child: Row(children: [
-          const SizedBox(width: 18),
-          Expanded(child: Text('Ask Omi', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary))),
-          Container(
-            width: 42,
-            height: 42,
-            margin: const EdgeInsets.only(right: 6),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-            child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-          ),
-        ]),
-      );
 }
 
 Future<void> _runHome(

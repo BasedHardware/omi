@@ -83,6 +83,7 @@
     "mergingInBackground": "Đang gộp trong nền. Có thể mất một chút thời gian.",
     "failedToStartMerge": "Không thể bắt đầu gộp",
     "askAnything": "Hỏi bất cứ điều gì",
+    "askAnythingButton": "Hỏi bất cứ điều gì",
     "noMessagesYet": "Chưa có tin nhắn nào!\nHãy bắt đầu cuộc trò chuyện nhé?",
     "deletingMessages": "Đang xóa tin nhắn của bạn khỏi bộ nhớ của Omi…",
     "messageCopied": "✨ Tin nhắn đã được sao chép vào clipboard",

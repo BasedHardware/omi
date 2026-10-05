@@ -266,6 +266,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get askAnything => 'कुछ भी पूछें';
 
   @override
+  String get askAnythingButton => 'कुछ भी पूछें';
+
+  @override
   String get noMessagesYet => 'अभी तक कोई संदेश नहीं!\nबातचीत क्यों नहीं शुरू करते?';
 
   @override

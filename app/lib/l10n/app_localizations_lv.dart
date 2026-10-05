@@ -268,6 +268,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get askAnything => 'Jautājiet jebko';
 
   @override
+  String get askAnythingButton => 'Jautājiet jebko';
+
+  @override
   String get noMessagesYet => 'Vēl nav ziņojumu!\nKāpēc nesākt sarunu?';
 
   @override

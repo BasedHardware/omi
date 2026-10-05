@@ -83,6 +83,7 @@
     "mergingInBackground": "Ühendamine käib taustal. See võib võtta hetke aega.",
     "failedToStartMerge": "Ühendamise alustamine ebaõnnestus",
     "askAnything": "Küsi mida tahes",
+    "askAnythingButton": "Küsi mida tahes",
     "noMessagesYet": "Sõnumeid pole veel!\nMiks te ei alusta vestlust?",
     "deletingMessages": "Teie sõnumite kustutamine Omi mälust…",
     "messageCopied": "✨ Sõnum kopeeritud lõikelauale",

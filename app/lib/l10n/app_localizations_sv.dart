@@ -268,6 +268,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get askAnything => 'Fråga vad som helst';
 
   @override
+  String get askAnythingButton => 'Fråga vad som helst';
+
+  @override
   String get noMessagesYet => 'Inga meddelanden ännu!\nVarför inte starta en konversation?';
 
   @override

@@ -268,6 +268,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get askAnything => 'Her şeyi sor';
 
   @override
+  String get askAnythingButton => 'Her şeyi sor';
+
+  @override
   String get noMessagesYet => 'Henüz mesaj yok!\nNeden bir konuşma başlatmıyorsunuz?';
 
   @override

@@ -267,6 +267,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get askAnything => 'Tanyakan apa saja';
 
   @override
+  String get askAnythingButton => 'Tanyakan apa saja';
+
+  @override
   String get noMessagesYet => 'Belum ada pesan!\nMengapa tidak memulai percakapan?';
 
   @override

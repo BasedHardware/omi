@@ -269,6 +269,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get askAnything => 'Demandez n\'importe quoi';
 
   @override
+  String get askAnythingButton => 'Demandez n\'importe quoi';
+
+  @override
   String get noMessagesYet => 'Pas encore de messages !\nPourquoi ne pas commencer une conversation ?';
 
   @override

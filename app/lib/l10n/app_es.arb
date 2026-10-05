@@ -83,6 +83,7 @@
     "mergingInBackground": "Fusionando en segundo plano. Esto puede tardar un momento.",
     "failedToStartMerge": "Error al iniciar fusión",
     "askAnything": "Pregunta cualquier cosa",
+    "askAnythingButton": "Pregunta cualquier cosa",
     "noMessagesYet": "¡No hay mensajes!\n¿Por qué no inicias una conversación?",
     "deletingMessages": "Eliminando tus mensajes de la memoria de Omi…",
     "messageCopied": "✨ Mensaje copiado al portapapeles",

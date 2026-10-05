@@ -269,6 +269,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get askAnything => 'Kérdezz bármit';
 
   @override
+  String get askAnythingButton => 'Kérdezz bármit';
+
+  @override
   String get noMessagesYet => 'Még nincsenek üzenetek!\nMiért nem kezdesz egy beszélgetést?';
 
   @override

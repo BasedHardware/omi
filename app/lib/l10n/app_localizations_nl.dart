@@ -268,6 +268,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get askAnything => 'Vraag wat je wilt';
 
   @override
+  String get askAnythingButton => 'Vraag wat je wilt';
+
+  @override
   String get noMessagesYet => 'Nog geen berichten!\nWaarom begin je geen gesprek?';
 
   @override
