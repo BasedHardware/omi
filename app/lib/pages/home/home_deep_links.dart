@@ -65,16 +65,17 @@ class HomeDeepLink {
   /// The home tab the link belongs to, so the parent (the tab) shows before the child (the page
   /// pushed over it). Null keeps the current tab.
   int? get tabIndex => switch (alias) {
-    'action-items' || 'task' => HomeProvider.tasksTab,
-    'capture' ||
-    'memories' ||
-    'facts' ||
-    'memory' ||
-    'search' ||
-    'conversations' ||
-    'conversation' => HomeProvider.homeTab,
-    _ => null,
-  };
+        'action-items' || 'task' => HomeProvider.tasksTab,
+        'capture' ||
+        'memories' ||
+        'facts' ||
+        'memory' ||
+        'search' ||
+        'conversations' ||
+        'conversation' =>
+          HomeProvider.homeTab,
+        _ => null,
+      };
 }
 
 /// Opens [link] on top of the home shell whose [context] is given: parent first (the tab, or the
@@ -218,8 +219,8 @@ Future<Memory?> _resolveIndexedMemoryById(String id) async {
   return resolveIndexedMemoryById(id, uid: uid, ownerIsCurrent: () => FirebaseAuth.instance.currentUser?.uid == uid);
 }
 
-typedef IndexedMemoryPageFetcher =
-    Future<memories_api.GetMemoriesResult> Function({required int limit, required int offset, String? cursor});
+typedef IndexedMemoryPageFetcher = Future<memories_api.GetMemoriesResult> Function(
+    {required int limit, required int offset, String? cursor});
 
 /// Resolve a Siri memory against owner-wide pages, including rows hidden by
 /// useful-now, this-device, search, or the first visible page.
@@ -234,15 +235,14 @@ Future<Memory?> resolveIndexedMemoryById(
   String? cursor;
   final seenCursors = <String>{};
   for (var page = 0; page < 100; page++) {
-    final result =
-        await (fetchPage?.call(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor) ??
-            memories_api.getMemoriesResult(
-              limit: limit,
-              offset: cursor == null ? offset : 0,
-              cursor: cursor,
-              view: memories_api.MemoryReadView.all,
-              forceView: true,
-            ));
+    final result = await (fetchPage?.call(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor) ??
+        memories_api.getMemoriesResult(
+          limit: limit,
+          offset: cursor == null ? offset : 0,
+          cursor: cursor,
+          view: memories_api.MemoryReadView.all,
+          forceView: true,
+        ));
     if (!ownerIsCurrent() || !result.ok || result.truncated) return null;
     for (final row in result.memories) {
       if (row.id == id && row.uid == uid && siriMemoryIsIndexable(row, DateTime.now())) return row;

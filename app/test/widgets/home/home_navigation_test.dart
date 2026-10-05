@@ -77,13 +77,14 @@ void main() {
       bool micInterrupted = false,
       PhoneCallState call = PhoneCallState.idle,
       bool firmware = false,
-    }) => promptsBlocked(
-      recordingState: recording,
-      phoneMicBatchRecording: batch,
-      micInterruptedByCall: micInterrupted,
-      callState: call,
-      firmwareUpdateInProgress: firmware,
-    );
+    }) =>
+        promptsBlocked(
+          recordingState: recording,
+          phoneMicBatchRecording: batch,
+          micInterruptedByCall: micInterrupted,
+          callState: call,
+          firmwareUpdateInProgress: firmware,
+        );
 
     test('idle, passive wearable capture and a muted pendant do not hold prompts', () {
       expect(blocked(), isFalse);
@@ -180,9 +181,16 @@ void main() {
   testWidgets('indexed task opens by backend id outside the visible filtered page', (tester) async {
     const task = ActionItemWithMetadata(id: 'task-150', description: 'Older indexed task', completed: false);
     final provider = ActionItemsProvider(
-      getActionItems:
-          ({limit = 100, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async =>
-              const ActionItemsResponse(actionItems: [], hasMore: false),
+      getActionItems: (
+              {limit = 100,
+              offset = 0,
+              completed,
+              conversationId,
+              startDate,
+              endDate,
+              dueStartDate,
+              dueEndDate}) async =>
+          const ActionItemsResponse(actionItems: [], hasMore: false),
     );
     addTearDown(provider.dispose);
     final opened = <String>[];
@@ -317,15 +325,15 @@ void main() {
   test('indexed memory resolver follows owner-wide cursors beyond the visible page', () async {
     final now = DateTime.now();
     Memory memory(String id, {String uid = 'owner', MemoryLayer? layer}) => Memory(
-      id: id,
-      uid: uid,
-      content: id,
-      category: MemoryCategory.manual,
-      createdAt: now,
-      updatedAt: now,
-      visibility: MemoryVisibility.private,
-      layer: layer,
-    );
+          id: id,
+          uid: uid,
+          content: id,
+          category: MemoryCategory.manual,
+          createdAt: now,
+          updatedAt: now,
+          visibility: MemoryVisibility.private,
+          layer: layer,
+        );
     final cursors = <String?>[];
     final found = await resolveIndexedMemoryById(
       'target',

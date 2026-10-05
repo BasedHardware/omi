@@ -55,8 +55,7 @@ class CaptureSystemSurface {
     final id = capture.activeRecordingId;
     final revision = capture.systemSurfaceConversationRevision;
     final state = capture.recordingState;
-    final active =
-        id != null &&
+    final active = id != null &&
         (state == RecordingState.record ||
             state == RecordingState.deviceRecord ||
             state == RecordingState.pause ||
@@ -95,18 +94,18 @@ class CaptureSystemSurface {
     final status = !active
         ? 'ended'
         : userPaused
-        ? 'paused'
-        : interrupted
-        ? 'interrupted'
-        : connecting
-        ? 'connecting'
-        : unverified
-        ? 'unverified'
-        : batch
-        ? 'recording'
-        : capture.transcriptServiceReady
-        ? 'listening'
-        : 'reconnecting';
+            ? 'paused'
+            : interrupted
+                ? 'interrupted'
+                : connecting
+                    ? 'connecting'
+                    : unverified
+                        ? 'unverified'
+                        : batch
+                            ? 'recording'
+                            : capture.transcriptServiceReady
+                                ? 'listening'
+                                : 'reconnecting';
     return {
       'recordingId': id ?? '',
       'conversationRevision': revision,
@@ -117,8 +116,7 @@ class CaptureSystemSurface {
       'elapsed': _anchor == null ? 0 : (_pausedAt ?? now).difference(_anchor!).inSeconds.clamp(0, 2147483647),
       'paused': paused,
       'canPause': active && !capture.isCallActive && !heldForCall,
-      'canFinish':
-          active &&
+      'canFinish': active &&
           (capture.systemSurfacePhoneCapture || batch || capture.segments.isNotEmpty || capture.photos.isNotEmpty),
       'busy': _busy,
       'actionFailed': _failedState != null,
@@ -147,14 +145,12 @@ class CaptureSystemSurface {
     if (!force && key == _lastFingerprint) return;
     _lastFingerprint = key;
     _armHourMark(value);
-    _delivery = _delivery
-        .then((_) async {
-          if (!_closed) await sink.publish(value);
-        })
-        .catchError((Object error) {
-          _lastFingerprint = null;
-          Logger.debug('Live Activity update failed: $error');
-        });
+    _delivery = _delivery.then((_) async {
+      if (!_closed) await sink.publish(value);
+    }).catchError((Object error) {
+      _lastFingerprint = null;
+      Logger.debug('Live Activity update failed: $error');
+    });
   }
 
   /// The card's timer stops at the end of its range, the next full hour, until an

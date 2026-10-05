@@ -39,7 +39,7 @@ class _RecordingActions extends NoopCaptureExternalActions {
 
 class _GatedPhoneSync {
   _GatedPhoneSync(Completer<void> finalizeGate, {this.stampError, List<Completer<void>> laterFinalizeGates = const []})
-    : finalizeGates = [finalizeGate, ...laterFinalizeGates];
+      : finalizeGates = [finalizeGate, ...laterFinalizeGates];
 
   /// One gate per drain, in call order; later drains reuse the last gate.
   final List<Completer<void>> finalizeGates;
