@@ -21,10 +21,18 @@ class DailyRecapsPage extends StatefulWidget {
 class _DailyRecapsPageState extends State<DailyRecapsPage> {
   final GlobalKey<DailySummariesListState> _listKey = GlobalKey<DailySummariesListState>();
 
+  // The recaps read like Home: rows on the canvas (a white page in light mode).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OmiCanvas(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.dailyRecaps)),
+      backgroundColor: OmiColors.canvas,
+      appBar: AppBar(
+        backgroundColor: OmiColors.canvas,
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.dailyRecaps),
+      ),
       body: RefreshIndicator(
         color: OmiColors.onAccent,
         backgroundColor: OmiColors.accent,
