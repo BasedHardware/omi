@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Hindi ma-load ang iba pang mga gawain. Hilahin pababa para subukang muli.",
     "tasksLater": "Mamaya",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10497,6 +10498,7 @@
     "searchActionItems": "Maghanap ng mga gawain",
     "selectActionItems": "Pumili ng marami",
     "selectAllTasksMenu": "Piliin lahat",
+    "selectAllTasksPartial": "Hindi ma-load ang lahat ng gawain. Ang mga na-load na gawain lang ang napili.",
     "showCompletedTasks": "Ipakita ang tapos na",
     "startCallRecording": "Simulan ang pag-record ng tawag",
     "startVoiceRecording": "Simulan ang voice recording",

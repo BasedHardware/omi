@@ -2636,6 +2636,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tasksNoDeadline => '无截止日期';
 
   @override
+  String get tasksNextPageFailed => '无法加载更多任务。下拉以重试。';
+
+  @override
   String get tasksLater => '稍后';
 
   @override
@@ -8984,6 +8987,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => '全选';
+
+  @override
+  String get selectAllTasksPartial => '无法加载全部任务。仅选中了已加载的任务。';
 
   @override
   String get connectTaskAppToExport => '在设置中连接任务应用以导出';

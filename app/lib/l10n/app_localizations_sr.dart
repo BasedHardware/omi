@@ -2687,6 +2687,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get tasksNoDeadline => 'Нема крајњег рока';
 
   @override
+  String get tasksNextPageFailed => 'Није могуће учитати више задатака. Повуците надоле да покушате поново.';
+
+  @override
   String get tasksLater => 'Касније';
 
   @override
@@ -9141,6 +9144,9 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Изабери све';
+
+  @override
+  String get selectAllTasksPartial => 'Није могуће учитати све задатке. Изабрани су само већ учитани задаци.';
 
   @override
   String get connectTaskAppToExport => 'Повежите апликацију за задатке у Подешавањима за извоз';

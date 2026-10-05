@@ -2689,6 +2689,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get tasksNoDeadline => 'Brez roka';
 
   @override
+  String get tasksNextPageFailed => 'Več opravil ni bilo mogoče naložiti. Povlecite navzdol za ponovni poskus.';
+
+  @override
   String get tasksLater => 'Kasneje';
 
   @override
@@ -9157,6 +9160,9 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Izberi vse';
+
+  @override
+  String get selectAllTasksPartial => 'Vseh opravil ni bilo mogoče naložiti. Izbrana so samo že naložena opravila.';
 
   @override
   String get connectTaskAppToExport => 'Povežite aplikacijo za naloge v Nastavitvah za izvoz';

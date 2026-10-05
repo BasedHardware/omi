@@ -2688,6 +2688,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get tasksNoDeadline => 'کوئی مقررہ نہیں';
 
   @override
+  String get tasksNextPageFailed => 'مزید کام لوڈ نہیں ہو سکے۔ دوبارہ کوشش کرنے کے لیے نیچے کھینچیں۔';
+
+  @override
   String get tasksLater => 'بعد میں';
 
   @override
@@ -9149,6 +9152,9 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'سب منتخب کریں';
+
+  @override
+  String get selectAllTasksPartial => 'تمام کام لوڈ نہیں ہو سکے۔ صرف پہلے سے لوڈ شدہ کام منتخب کیے گئے ہیں۔';
 
   @override
   String get connectTaskAppToExport => 'ایکسپورٹ کے لیے ترتیبات میں ٹاسک ایپ جوڑیں';

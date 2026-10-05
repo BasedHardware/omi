@@ -2705,6 +2705,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tasksNoDeadline => 'Walang Deadline';
 
   @override
+  String get tasksNextPageFailed => 'Hindi ma-load ang iba pang mga gawain. Hilahin pababa para subukang muli.';
+
+  @override
   String get tasksLater => 'Mamaya';
 
   @override
@@ -9216,6 +9219,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Piliin lahat';
+
+  @override
+  String get selectAllTasksPartial => 'Hindi ma-load ang lahat ng gawain. Ang mga na-load na gawain lang ang napili.';
 
   @override
   String get connectTaskAppToExport => 'Ikonekta ang isang task app sa Settings para mag-export';

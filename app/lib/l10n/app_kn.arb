@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "ಇನ್ನಷ್ಟು ಕಾರ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು ಕೆಳಗೆ ಎಳೆಯಿರಿ.",
     "tasksLater": "ನಂತರ",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10497,6 +10498,7 @@
     "searchActionItems": "ಕಾರ್ಯಗಳನ್ನು ಹುಡುಕಿ",
     "selectActionItems": "ಬಹು ಆಯ್ಕೆ",
     "selectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ",
+    "selectAllTasksPartial": "ಎಲ್ಲಾ ಕಾರ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ಈಗಾಗಲೇ ಲೋಡ್ ಆದ ಕಾರ್ಯಗಳನ್ನು ಮಾತ್ರ ಆಯ್ಕೆ ಮಾಡಲಾಗಿದೆ.",
     "showCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ತೋರಿಸಿ",
     "startCallRecording": "ಕರೆ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
     "startVoiceRecording": "ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",

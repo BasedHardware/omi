@@ -2692,6 +2692,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get tasksNoDeadline => 'Без узроку';
 
   @override
+  String get tasksNextPageFailed => 'Не ўдалося загрузіць больш задач. Пацягніце ўніз, каб паўтарыць.';
+
+  @override
   String get tasksLater => 'Позней';
 
   @override
@@ -9158,6 +9161,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Выбраць усе';
+
+  @override
+  String get selectAllTasksPartial => 'Не ўдалося загрузіць усе задачы. Выбраны толькі ўжо загружаныя задачы.';
 
   @override
   String get connectTaskAppToExport => 'Падключыце праграму задач у Наладах для экспарту';

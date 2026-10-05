@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "بارگیری وظایف بیشتر ممکن نشد. برای تلاش دوباره به پایین بکشید.",
     "tasksLater": "بعدتر",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10497,6 +10498,7 @@
     "searchActionItems": "جستجوی وظایف",
     "selectActionItems": "انتخاب چندگانه",
     "selectAllTasksMenu": "انتخاب همه",
+    "selectAllTasksPartial": "بارگیری همه وظایف ممکن نشد. فقط وظایف بارگیری‌شده انتخاب شدند.",
     "showCompletedTasks": "نمایش انجام‌شده‌ها",
     "startCallRecording": "شروع ضبط تماس",
     "startVoiceRecording": "شروع ضبط صدا",

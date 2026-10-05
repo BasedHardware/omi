@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "مزید کام لوڈ نہیں ہو سکے۔ دوبارہ کوشش کرنے کے لیے نیچے کھینچیں۔",
     "tasksLater": "بعد میں",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10497,6 +10498,7 @@
     "searchActionItems": "کام تلاش کریں",
     "selectActionItems": "متعدد منتخب کریں",
     "selectAllTasksMenu": "سب منتخب کریں",
+    "selectAllTasksPartial": "تمام کام لوڈ نہیں ہو سکے۔ صرف پہلے سے لوڈ شدہ کام منتخب کیے گئے ہیں۔",
     "showCompletedTasks": "مکمل شدہ دکھائیں",
     "startCallRecording": "کال ریکارڈنگ شروع کریں",
     "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",

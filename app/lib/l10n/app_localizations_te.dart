@@ -2698,6 +2698,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get tasksNoDeadline => 'డెడ్‌లైన్ లేదు';
 
   @override
+  String get tasksNextPageFailed => 'మరిన్ని పనులను లోడ్ చేయలేకపోయాము. మళ్లీ ప్రయత్నించడానికి కిందికి లాగండి.';
+
+  @override
   String get tasksLater => 'తరువాత';
 
   @override
@@ -9183,6 +9186,9 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'అన్నీ ఎంచుకోండి';
+
+  @override
+  String get selectAllTasksPartial => 'అన్ని పనులను లోడ్ చేయలేకపోయాము. ఇప్పటికే లోడ్ అయిన పనులు మాత్రమే ఎంచుకోబడ్డాయి.';
 
   @override
   String get connectTaskAppToExport => 'ఎగుమతి చేయడానికి సెట్టింగ్‌లలో టాస్క్ యాప్‌ను కనెక్ట్ చేయండి';

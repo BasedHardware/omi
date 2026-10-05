@@ -2703,6 +2703,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tasksNoDeadline => 'Χωρίς προθεσμία';
 
   @override
+  String get tasksNextPageFailed =>
+      'Δεν ήταν δυνατή η φόρτωση περισσότερων εργασιών. Τραβήξτε προς τα κάτω για να δοκιμάσετε ξανά.';
+
+  @override
   String get tasksLater => 'Αργότερα';
 
   @override
@@ -9198,6 +9202,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Επιλογή όλων';
+
+  @override
+  String get selectAllTasksPartial =>
+      'Δεν ήταν δυνατή η φόρτωση όλων των εργασιών. Επιλέχθηκαν μόνο όσες έχουν ήδη φορτωθεί.';
 
   @override
   String get connectTaskAppToExport => 'Συνδέστε μια εφαρμογή εργασιών στις Ρυθμίσεις για εξαγωγή';

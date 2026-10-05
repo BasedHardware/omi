@@ -2688,6 +2688,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get tasksNoDeadline => 'Bez termínu';
 
   @override
+  String get tasksNextPageFailed => 'Ďalšie úlohy sa nepodarilo načítať. Potiahnutím nadol to skúste znova.';
+
+  @override
   String get tasksLater => 'Neskôr';
 
   @override
@@ -9125,6 +9128,9 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Vybrať všetko';
+
+  @override
+  String get selectAllTasksPartial => 'Nepodarilo sa načítať všetky úlohy. Vybrané sú len už načítané úlohy.';
 
   @override
   String get connectTaskAppToExport => 'Pripojte aplikáciu úloh v Nastaveniach na export';

@@ -2686,6 +2686,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get tasksNoDeadline => 'Bez terminu';
 
   @override
+  String get tasksNextPageFailed => 'Nie udało się wczytać więcej zadań. Przeciągnij w dół, aby spróbować ponownie.';
+
+  @override
   String get tasksLater => 'Później';
 
   @override
@@ -9157,6 +9160,9 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Zaznacz wszystkie';
+
+  @override
+  String get selectAllTasksPartial => 'Nie udało się wczytać wszystkich zadań. Zaznaczono tylko już wczytane zadania.';
 
   @override
   String get connectTaskAppToExport => 'Połącz aplikację zadań w Ustawieniach, aby eksportować';

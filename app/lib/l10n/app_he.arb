@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "לא ניתן לטעון משימות נוספות. משכו למטה כדי לנסות שוב.",
     "tasksLater": "מאוחר יותר",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10497,6 +10498,7 @@
     "searchActionItems": "חפש משימות",
     "selectActionItems": "בחירה מרובה",
     "selectAllTasksMenu": "בחר הכל",
+    "selectAllTasksPartial": "לא ניתן לטעון את כל המשימות. נבחרו רק המשימות שכבר נטענו.",
     "showCompletedTasks": "הצג הושלמו",
     "startCallRecording": "התחל הקלטת שיחה",
     "startVoiceRecording": "התחל הקלטה קולית",

@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "আরও কাজ লোড করা যায়নি। আবার চেষ্টা করতে নিচে টানুন।",
     "tasksLater": "পরে",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10497,6 +10498,7 @@
     "searchActionItems": "কাজ অনুসন্ধান করুন",
     "selectActionItems": "একাধিক নির্বাচন",
     "selectAllTasksMenu": "সমস্ত নির্বাচন",
+    "selectAllTasksPartial": "সব কাজ লোড করা যায়নি। শুধু ইতিমধ্যে লোড হওয়া কাজগুলো নির্বাচিত হয়েছে।",
     "showCompletedTasks": "সম্পন্ন দেখান",
     "startCallRecording": "কল রেকর্ডিং শুরু করুন",
     "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",

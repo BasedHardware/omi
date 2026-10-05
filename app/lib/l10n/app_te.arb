@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "మరిన్ని పనులను లోడ్ చేయలేకపోయాము. మళ్లీ ప్రయత్నించడానికి కిందికి లాగండి.",
     "tasksLater": "తరువాత",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10497,6 +10498,7 @@
     "searchActionItems": "పనులను వెతకండి",
     "selectActionItems": "బహుళ ఎంపిక",
     "selectAllTasksMenu": "అన్నీ ఎంచుకోండి",
+    "selectAllTasksPartial": "అన్ని పనులను లోడ్ చేయలేకపోయాము. ఇప్పటికే లోడ్ అయిన పనులు మాత్రమే ఎంచుకోబడ్డాయి.",
     "showCompletedTasks": "పూర్తయినవి చూపించు",
     "startCallRecording": "కాల్ రికార్డింగ్ ప్రారంభించండి",
     "startVoiceRecording": "వాయిస్ రికార్డింగ్ ప్రారంభించండి",

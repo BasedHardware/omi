@@ -2668,6 +2668,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get tasksNoDeadline => 'אין תאריך יעד';
 
   @override
+  String get tasksNextPageFailed => 'לא ניתן לטעון משימות נוספות. משכו למטה כדי לנסות שוב.';
+
+  @override
   String get tasksLater => 'מאוחר יותר';
 
   @override
@@ -9065,6 +9068,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'בחר הכל';
+
+  @override
+  String get selectAllTasksPartial => 'לא ניתן לטעון את כל המשימות. נבחרו רק המשימות שכבר נטענו.';
 
   @override
   String get connectTaskAppToExport => 'חבר אפליקציית משימות בהגדרות כדי לייצא';

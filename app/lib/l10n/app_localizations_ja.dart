@@ -2641,6 +2641,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tasksNoDeadline => '期限なし';
 
   @override
+  String get tasksNextPageFailed => 'タスクをさらに読み込めませんでした。下に引いて再試行してください。';
+
+  @override
   String get tasksLater => '後で';
 
   @override
@@ -8997,6 +9000,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'すべて選択';
+
+  @override
+  String get selectAllTasksPartial => 'すべてのタスクを読み込めませんでした。読み込み済みのタスクのみ選択されています。';
 
   @override
   String get connectTaskAppToExport => 'エクスポートするには設定でタスクアプリを接続してください';

@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Več opravil ni bilo mogoče naložiti. Povlecite navzdol za ponovni poskus.",
     "tasksLater": "Kasneje",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10497,6 +10498,7 @@
     "searchActionItems": "Iskanje nalog",
     "selectActionItems": "Izberi več",
     "selectAllTasksMenu": "Izberi vse",
+    "selectAllTasksPartial": "Vseh opravil ni bilo mogoče naložiti. Izbrana so samo že naložena opravila.",
     "showCompletedTasks": "Prikaži dokončane",
     "startCallRecording": "Začni snemanje klica",
     "startVoiceRecording": "Začni glasovno snemanje",

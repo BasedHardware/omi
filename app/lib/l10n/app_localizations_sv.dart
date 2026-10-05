@@ -2686,6 +2686,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tasksNoDeadline => 'Ingen deadline';
 
   @override
+  String get tasksNextPageFailed => 'Kunde inte läsa in fler uppgifter. Dra nedåt för att försöka igen.';
+
+  @override
   String get tasksLater => 'Senare';
 
   @override
@@ -9137,6 +9140,9 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Välj alla';
+
+  @override
+  String get selectAllTasksPartial => 'Kunde inte läsa in alla uppgifter. Bara de redan inlästa uppgifterna är valda.';
 
   @override
   String get connectTaskAppToExport => 'Anslut en uppgiftsapp i Inställningar för att exportera';

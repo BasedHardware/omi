@@ -2687,6 +2687,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get tasksNoDeadline => 'কোনো সময়সীমা নেই';
 
   @override
+  String get tasksNextPageFailed => 'আরও কাজ লোড করা যায়নি। আবার চেষ্টা করতে নিচে টানুন।';
+
+  @override
   String get tasksLater => 'পরে';
 
   @override
@@ -9142,6 +9145,9 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'সমস্ত নির্বাচন';
+
+  @override
+  String get selectAllTasksPartial => 'সব কাজ লোড করা যায়নি। শুধু ইতিমধ্যে লোড হওয়া কাজগুলো নির্বাচিত হয়েছে।';
 
   @override
   String get connectTaskAppToExport => 'রপ্তানি করতে সেটিংসে একটি টাস্ক অ্যাপ সংযুক্ত করুন';

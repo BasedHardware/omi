@@ -2694,6 +2694,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get tasksNoDeadline => 'ಮುಕ್ತಾಯ ಮಿತಿ ಇಲ್ಲ';
 
   @override
+  String get tasksNextPageFailed => 'ಇನ್ನಷ್ಟು ಕಾರ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು ಕೆಳಗೆ ಎಳೆಯಿರಿ.';
+
+  @override
   String get tasksLater => 'ನಂತರ';
 
   @override
@@ -9164,6 +9167,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ';
+
+  @override
+  String get selectAllTasksPartial =>
+      'ಎಲ್ಲಾ ಕಾರ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ಈಗಾಗಲೇ ಲೋಡ್ ಆದ ಕಾರ್ಯಗಳನ್ನು ಮಾತ್ರ ಆಯ್ಕೆ ಮಾಡಲಾಗಿದೆ.';
 
   @override
   String get connectTaskAppToExport => 'ರಫ್ತು ಮಾಡಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕಾರ್ಯ ಅಪ್ಲಿಕೇಶನ್ ಸಂಪರ್ಕಿಸಿ';

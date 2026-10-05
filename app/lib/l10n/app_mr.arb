@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "आणखी कामे लोड करता आली नाहीत. पुन्हा प्रयत्न करण्यासाठी खाली ओढा.",
     "tasksLater": "नंतर",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10497,6 +10498,7 @@
     "searchActionItems": "कार्ये शोधा",
     "selectActionItems": "अनेक निवडा",
     "selectAllTasksMenu": "सर्व निवडा",
+    "selectAllTasksPartial": "सर्व कामे लोड करता आली नाहीत. फक्त आधीच लोड झालेली कामे निवडली आहेत.",
     "showCompletedTasks": "पूर्ण झालेले दाखवा",
     "startCallRecording": "कॉल रेकॉर्डिंग सुरू करा",
     "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा",

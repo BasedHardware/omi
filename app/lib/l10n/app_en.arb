@@ -3033,6 +3033,10 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Couldn't load more tasks. Pull down to try again.",
+    "@tasksNextPageFailed": {
+        "description": "Toast on the Tasks list when the next page of tasks fails to load; pull-to-refresh retries."
+    },
     "tasksLater": "Later",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10891,6 +10895,10 @@
     "selectAllTasksMenu": "Select All",
     "@selectAllTasksMenu": {
         "description": "Action menu entry to select every task in the action items list"
+    },
+    "selectAllTasksPartial": "Couldn't load every task. Only the tasks already loaded are selected.",
+    "@selectAllTasksPartial": {
+        "description": "Toast after Select All on the Tasks list when some pages of tasks could not be loaded, so the selection is partial."
     },
     "connectTaskAppToExport": "Connect a task app in Settings to export",
     "@connectTaskAppToExport": {
