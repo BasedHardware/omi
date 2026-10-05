@@ -16,6 +16,7 @@ from typing import Any, Awaitable, Callable
 from config.soniox_idle import idle_max_closes_per_hour, idle_rearm_seconds
 from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
+from utils.stt.soniox_capture_axis import disable_socket_diagnostics
 from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.live_metrics import soniox_idle_metrics
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
@@ -80,7 +81,18 @@ class IdleSonioxSocket(STTSocket):
         self._writer_pacing: tuple[Any, ...] | None = None
         self._socket_epoch = 0
         self._last_end = 0.0
+        self._capture_axis_ledger: Callable[[], int | None] | None = None
         transport._stream_transcript = self._socket_callback(0.0, 0)
+
+    def set_capture_axis_ledger(self, ledger: Callable[[], int | None]) -> None:
+        self._capture_axis_ledger = ledger
+        try:
+            self._transport.set_capture_axis_ledger(ledger)
+        except Exception:
+            disable_socket_diagnostics(self._transport)
+
+    def disable_capture_axis_diagnostics(self) -> None:
+        disable_socket_diagnostics(self._transport)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._transport, name)
@@ -177,6 +189,13 @@ class IdleSonioxSocket(STTSocket):
 
         try:
             self._transport = await self._connect(callback)
+            if self._capture_axis_ledger is not None:
+                try:
+                    self._transport.set_capture_axis_ledger(
+                        self._capture_axis_ledger, round(offset * self._rate), 'reopened'
+                    )
+                except Exception:
+                    disable_socket_diagnostics(self._transport)
             if self._writer_pacing is not None:
                 self._transport.enable_writer_pacing(*self._writer_pacing)
             if self._transport.is_connection_dead:
