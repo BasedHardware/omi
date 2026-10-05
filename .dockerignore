@@ -77,20 +77,24 @@ myenv/
 dump/
 
 # ==============================================================================
-# Non-Backend Platform Subtrees (Reduces build context by > 1.2 GB)
+# Anchored Non-Backend Platform Subtrees
+# Notice: Patterns are anchored with leading '/' so they only match at the repo
+# root and never over-match nested backend directories (e.g. backend/docs/ or
+# backend/testing/contracts/).
+# Notice: /web/ and /plugins/ are intentionally NOT excluded here because deploy
+# workflows (gcp_app.yml, gcp_frontend.yml, gcp_personas.yml, gcp_plugins.yml)
+# use root build context with Dockerfiles under web/ and plugins/.
 # ==============================================================================
-app/
-desktop/
-omi/
-omiGlass/
-web/
-contracts/
-contract_tests/
-docs/
-product/
-infrastructure/
-plugins/
-sdks/
+/app/
+/desktop/
+/omi/
+/omiGlass/
+/contracts/
+/contract_tests/
+/docs/
+/product/
+/infrastructure/
+/sdks/
 community-plugin-stats.json
 codemagic.yaml
 
@@ -131,5 +135,3 @@ Thumbs.db
 *.log
 *.zip
 *.tar.gz
-*.wav
-!backend/testing/release_fixtures/transcription-release-probe.wav
