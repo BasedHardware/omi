@@ -71,18 +71,16 @@ extension SettingsContentView {
             GlassSeparator()
 
             settingRow(
-              title: "Insight Notifications",
-              subtitle: "Show notification when an insight is generated",
-              settingId: "notifications.insight"
+              title: "Goal and Reminder Notifications",
+              subtitle: "Allow goals and resurfaced items to notify you",
+              settingId: "notifications.goalReminder"
             ) {
-              Toggle("", isOn: $insightNotificationsEnabled)
+              Toggle("", isOn: $goalReminderNotificationsEnabled)
                 .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
-                .onChange(of: insightNotificationsEnabled) { _, newValue in
-                  InsightAssistantSettings.shared.notificationsEnabled = newValue
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      insight: InsightSettingsResponse(notificationsEnabled: newValue)))
+                .onChange(of: goalReminderNotificationsEnabled) { _, newValue in
+                  NotificationService.goalReminderNotificationsEnabled = newValue
+
                 }
             }
 
@@ -188,6 +186,39 @@ extension SettingsContentView {
                 updateDailySummarySettings(hour: hour)
               }
             }
+
+            GlassSeparator()
+
+            settingRow(
+              title: "Recap Depth",
+              subtitle: "Choose how much detail future daily summaries include",
+              settingId: "notifications.recapdepth"
+            ) {
+              HStack(spacing: OmiSpacing.sm) {
+                if dailySummaryDepthSaving {
+                  ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Saving recap depth")
+                }
+                SettingsMenuPicker(selection: $dailySummaryDepth) {
+                  Text("Brief").tag(DailySummaryDepth.brief)
+                  Text("Normal").tag(DailySummaryDepth.normal)
+                  Text("Deep Reflection").tag(DailySummaryDepth.deep)
+                }
+                .frame(minWidth: 155)
+                .disabled(dailySummaryDepthSaving)
+                .onChange(of: dailySummaryDepth) { _, depth in
+                  updateDailySummaryDepth(depth)
+                }
+              }
+            }
+
+            if let dailySummaryDepthError {
+              Text(dailySummaryDepthError)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.errorRed)
+                .accessibilityIdentifier("recap-depth-save-error")
+            }
           }
         }
       }
@@ -210,7 +241,7 @@ extension SettingsContentView {
   /// server just supplied, which is idempotent.
   func syncNotificationTogglesFromAssistantSettings() {
     taskNotificationsEnabled = TaskAssistantSettings.shared.notificationsEnabled
-    insightNotificationsEnabled = InsightAssistantSettings.shared.notificationsEnabled
+    goalReminderNotificationsEnabled = NotificationService.goalReminderNotificationsEnabled
     memoryNotificationsEnabled = MemoryAssistantSettings.shared.notificationsEnabled
   }
 

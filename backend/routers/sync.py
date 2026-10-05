@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
 import logging
@@ -28,7 +29,6 @@ from database.sync_jobs import (
     fenced_mark_job_queued_for_retry,
     get_sync_ledger_fence_mode,
     get_sync_job,
-    get_raw_sync_job,
     is_sync_job_stale,
     mark_job_completed,
     mark_job_failed,
@@ -1287,7 +1287,7 @@ async def sync_local_files_v2(
                     if not registered:
                         # A fast worker may have consumed the last pending
                         # document and removed its owner before this read.
-                        observed_job = await run_blocking(db_executor, get_raw_sync_job, job_id)
+                        observed_job = await run_blocking(db_executor, get_sync_job, job_id)
                         registered = bool(observed_job and observed_job.get('status') in TERMINAL_STATUSES)
                     if not registered:
                         sequencer_registration_started = False
@@ -1792,7 +1792,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
-            legacy_job = await run_blocking(db_executor, get_raw_sync_job, payload['job_id'])
+            legacy_job = await run_blocking(db_executor, get_sync_job, payload['job_id'])
             sequencer_on = uid_sequencer.enabled()
             owner = (
                 await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
@@ -1866,7 +1866,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         name=f'sync:uid-lease:{job_id}',
     )
     try:
-        prior_job = await run_blocking(db_executor, get_raw_sync_job, job_id)
+        prior_job = await run_blocking(db_executor, get_sync_job, job_id)
         prior_attempt = prior_job.get('attempt', 0) if isinstance(prior_job, dict) else 0
         effective_retry_count = max(task_retry_count, prior_attempt if isinstance(prior_attempt, int) else 0)
         response = await _run_sync_job_body(request, effective_retry_count)
@@ -1874,7 +1874,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         stop.set()
         await heartbeat
     if response.status_code < 300:
-        job = await run_blocking(db_executor, get_raw_sync_job, job_id)
+        job = await run_blocking(db_executor, get_sync_job, job_id)
         if job is not None and job.get('status') not in TERMINAL_STATUSES:
             logger.error('event=sync_uid_sequencer action=delivery outcome=nonterminal_ack')
             return JSONResponse(status_code=500, content={'status': 'nonterminal_ack'})
@@ -1885,6 +1885,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     return response
 
 
+@sync_attempt
 async def _run_sync_job_body(request: Request, task_retry_count: int):
     """Cloud Tasks handler: runs one sync job inside the request.
 
@@ -1931,6 +1932,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         if not isinstance(capture_claims, dict) or len(capture_claims) > 20:
             capture_claims = {}
         sync_lane = payload.get('lane') if payload.get('lane') in ('fresh', 'backfill') else SyncLane.FRESH.value
+        set_sync_metrics_lane(sync_lane)
         content_id = payload.get('content_id') if isinstance(payload.get('content_id'), str) else None
         payload_uses_fence = payload.get('ledger_fence_mode') == SyncLedgerFenceMode.ACTIVE.value
         enqueued_at = payload.get('enqueued_at')

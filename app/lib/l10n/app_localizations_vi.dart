@@ -6013,12 +6013,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Kích thước ước tính';
+    return 'Kích thước ước tính: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Không gian khả dụng';
+    return 'Dung lượng khả dụng: $space';
   }
 
   @override
@@ -6029,7 +6029,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Lỗi tải xuống';
+    return 'Lỗi tải xuống: $error';
   }
 
   @override
@@ -6382,7 +6382,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String failedToSendReply(String error) {
-    return 'Không thể gửi phản hồi';
+    return 'Không thể gửi phản hồi: $error';
   }
 
   @override
@@ -6390,7 +6390,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String starFilter(int count) {
-    return 'Lọc theo sao';
+    return '$count sao';
   }
 
   @override
@@ -9257,6 +9257,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Đang tải xuống từ thiết bị của bạn';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current trên $total';
   }
@@ -11242,6 +11252,9 @@ class AppLocalizationsVi extends AppLocalizations {
       'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi sẽ tự kết nối lại';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name và những người khác';
   }
@@ -12288,7 +12301,51 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Không thể kết nối. Hãy kiểm tra kết nối của bạn và thử lại.';
+
+  @override
+  String get chatReplyServerError => 'Đã xảy ra lỗi từ phía chúng tôi. Vui lòng thử lại.';
+
+  @override
+  String get chatReplyTimeout => 'Phản hồi mất quá nhiều thời gian. Vui lòng thử lại.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Bạn chưa đăng nhập. Đăng nhập và thử lại.';
+
+  @override
+  String get chatAppsLoadFailed => 'Không thể tải ứng dụng trò chuyện. Vui lòng thử lại.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Giọng nói';
+
+  @override
+  String get assistantVoice => 'Giọng trợ lý';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Giọng nói bạn chọn được dùng chung trên di động và máy tính.';
+
+  @override
+  String get readChatRepliesAloud => 'Đọc to câu trả lời trong chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Chỉ đọc to khi Phản hồi bằng giọng nói cho phép.';
+
+  @override
+  String get voicePreviewSample => 'Chào bạn, mình là Omi. Đây là giọng của mình.';
+
+  @override
   String get peopleStatsIncomplete => 'Số đếm có thể chưa đầy đủ.';
+
+  @override
+  String get previousDay => 'Ngày trước';
+
+  @override
+  String get nextDay => 'Ngày sau';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Không có tác vụ vào $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Đang xử lý lại cuộc trò chuyện…';
@@ -12341,4 +12398,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Kiểm tra kết nối';
+
+  @override
+  String get forYou => 'Dành Cho Bạn';
+
+  @override
+  String get stopThese => 'Dừng Loại Này';
+
+  @override
+  String get dismiss => 'Ẩn';
+
+  @override
+  String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
 }

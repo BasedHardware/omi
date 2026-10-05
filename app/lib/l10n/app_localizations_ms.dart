@@ -9279,6 +9279,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Memuat turun daripada peranti anda';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current daripada $total';
   }
@@ -11272,6 +11282,9 @@ class AppLocalizationsMs extends AppLocalizations {
       'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi akan bersambung semula sendiri';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name dan lain-lain';
   }
@@ -12324,7 +12337,51 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Tidak dapat menyambung. Semak sambungan anda dan cuba lagi.';
+
+  @override
+  String get chatReplyServerError => 'Sesuatu telah berlaku di pihak kami. Sila cuba lagi.';
+
+  @override
+  String get chatReplyTimeout => 'Respons mengambil masa terlalu lama. Sila cuba lagi.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Anda belum log masuk. Log masuk dan cuba lagi.';
+
+  @override
+  String get chatAppsLoadFailed => 'Tidak dapat memuatkan aplikasi sembang. Sila cuba lagi.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Suara';
+
+  @override
+  String get assistantVoice => 'Suara Pembantu';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Pilihan suara anda dikongsi merentas mudah alih dan desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Baca balasan sembang dengan kuat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hanya bercakap apabila Respons Suara membenarkannya.';
+
+  @override
+  String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
+
+  @override
   String get peopleStatsIncomplete => 'Kiraan mungkin tidak lengkap.';
+
+  @override
+  String get previousDay => 'Hari sebelumnya';
+
+  @override
+  String get nextDay => 'Hari berikutnya';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Tiada tugas pada $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Memproses semula perbualan…';
@@ -12377,4 +12434,16 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Semak Sambungan';
+
+  @override
+  String get forYou => 'Untuk Anda';
+
+  @override
+  String get stopThese => 'Hentikan Ini';
+
+  @override
+  String get dismiss => 'Tutup';
+
+  @override
+  String get showOnLockScreen => 'Tunjukkan pada skrin kunci';
 }

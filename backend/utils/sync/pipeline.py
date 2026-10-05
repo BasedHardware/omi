@@ -7,6 +7,8 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.observability.sync_phases import sync_phase, sync_attempt
+
 import asyncio
 import contextlib
 import hashlib
@@ -16,9 +18,9 @@ import os
 import shutil
 import threading
 import time
-import wave
 import uuid
 from collections import deque
+from functools import partial
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -75,14 +77,7 @@ from database.sync_ledger import (
     release_sync_content_claim,
 )
 from config.capture_evidence import capture_evidence_dark_write_enabled
-from utils.capture_evidence import (
-    bounded_envelope,
-    decoded_frame_map,
-    merge_track_receipts,
-    sync_segment_receipt,
-    unknown_envelope,
-)
-from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
+from utils.capture_evidence import bounded_envelope, unknown_envelope
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
 from models.geolocation import Geolocation
@@ -152,16 +147,20 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
+from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
 from config.sync_lineage import sync_lineage_resolve_active_for
+from utils.sync import recording_lineage as sync_recording_lineage
 from utils.sync.recording_lineage import (
+    ambiguous_binding_pending,
     fallback_segment_targets,
     lineage_resolution_requested,
-    resolve_segment_targets,
+    plan_segment_targets,
     merge_lineage_partial_results,
     restore_lineage_enrichment_intent,
     lineage_partial_result,
 )
 from utils.sync.bridge import finish_sync_segment
+
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
     SyncAssignmentSuperseded,
@@ -170,6 +169,12 @@ from utils.sync.assignment_errors import (
 from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
+from utils.sync.intake_completion import (
+    acknowledge_processed_segment,
+    apply_capture_evidence_dark_write,
+    complete_sync_intake,
+    record_capture_evidence_metric,
+)
 from utils.sync.lanes import SyncLane
 from utils.sync.telemetry import bounded_correlation_ref as _bounded_correlation_ref
 from utils.sync.telemetry import bounded_exception_class
@@ -962,6 +967,7 @@ def _merge_and_cap_vad_segments(voice_segments: list) -> list:
     return segments
 
 
+@sync_phase('decode_vad')
 def retrieve_vad_segments(
     path: str,
     segmented_paths: set,
@@ -991,7 +997,7 @@ def retrieve_vad_segments(
 
     try:
         for i, segment in enumerate(segments):
-            if (segment['end'] - segment['start']) < 1:
+            if segment['end'] - segment['start'] < 1 and not (source_frame_map or {}).get('coverage_trimmed'):
                 continue
             segment_timestamp = start_timestamp + segment['start']
             segment_path = f'{path_dir}/{segment_timestamp}.wav'
@@ -1103,6 +1109,7 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
     return _build_person_embeddings_cache(uid, dependencies=_speaker_identity_dependencies())
 
 
+@sync_phase('gcs')
 def _download_audio_bytes(url: str) -> Optional[bytes]:
     """Download audio from a signed URL. Returns WAV bytes or None on failure."""
     try:
@@ -1114,6 +1121,7 @@ def _download_audio_bytes(url: str) -> Optional[bytes]:
         return None
 
 
+@sync_phase('speaker_id')
 def identify_speakers_for_segments(
     transcript_segments: List['TranscriptSegment'],
     audio_bytes: Optional[bytes],
@@ -1196,12 +1204,16 @@ def process_segment(
     segment_key: str | None = None,
     attempt_ref: str | None = None,
     source_position_map: tuple[dict, int] | None = None,
+    lineage_binding: Optional[str] = None,
 ):
     conversation_id = None
     provider = 'unknown'
     model = 'unknown'
     phase = 'provider_select'
     try:
+        if ambiguous_binding_pending(uid, lineage_binding):
+            phase = 'persistence'
+            raise SyncAssignmentConflict('sync lineage generation ownership remains ambiguous')
         url = get_syncing_file_temporal_signed_url(path)
         schedule_syncing_temporal_file_deletion(path)
 
@@ -1339,26 +1351,9 @@ def process_segment(
             **create_memory.model_dump(),
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
-        if capture_evidence_dark_write_enabled():
-            receipt = unknown_envelope('missing_source_position', origin='sync_vad')
-            if source_position_map is not None:
-                frame_map, derivative_start = source_position_map
-                rate = frame_map['claim']['rate_hz']
-                mapped = [
-                    sync_segment_receipt(
-                        frame_map,
-                        wav_sample_start=derivative_start + round(segment.start * rate),
-                        wav_sample_end=derivative_start + round(segment.end * rate),
-                        segment_id=str(segment.id),
-                    )
-                    for segment in transcript_segments
-                ]
-                if all(item is not None for item in mapped):
-                    receipt = merge_track_receipts([], mapped)
-                    if frame_map['incomplete'] and receipt.get('capability') == 'source_position':
-                        receipt['coverage'] = 'incomplete'
-                    receipt = bounded_envelope(receipt)
-            incoming['capture_evidence'] = receipt
+        apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
+        if lineage_binding is not None and target_conversation_id:
+            incoming['_sync_lineage_binding'] = lineage_binding
         phase = 'persistence'
         from utils.conversations.lifecycle import ingest_sync_conversation
 
@@ -1368,55 +1363,47 @@ def process_segment(
             candidate_id=closest_memory['id'] if closest_memory else None,
             target_id=target_conversation_id,
         )
-        if capture_evidence_dark_write_enabled():
-            OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
-                path='sync',
-                status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
-            ).inc()
+        record_capture_evidence_metric(incoming)
+
+        def mark_finalize():
+            nonlocal phase
+            phase = 'finalize'
+
         conversation_id = assigned['id']
-        with lock:
-            response['new_memories' if created else 'updated_memories'].add(conversation_id)
-            if assigned['sync_relevance'] == 'keep':
-                response.setdefault('_merged', {})[conversation_id] = language
-        if private_cloud_sync_enabled and survivors:
-            if len(survivors) == len(transcript_segments):
-                _store_sync_audio_chunk(uid, conversation_id, timestamp, audio_bytes, data_protection_level)
-            else:
-                store_partial_merge_survivor_audio(
-                    uid=uid,
-                    conversation_id=conversation_id,
-                    file_timestamp=timestamp,
-                    audio_bytes=audio_bytes,
-                    data_protection_level=data_protection_level,
-                    survivors=survivors,
-                )
-        phase = 'finalize'
-        finish_sync_segment(
-            uid,
-            assigned,
-            response,
-            lock,
-            language,
-            audio_source_id=conversation_id if private_cloud_sync_enabled and survivors else None,
-        )
-        _set_deferred_segment_outcome(
-            deferred_outcome,
-            outcome=TranscriptionOutcome.SUCCESS,
-            provider=provider,
-            model=model,
-            retryable=False,
-        )
-        if deferred_outcome is None:
-            _record_sync_segment_outcome(
-                TranscriptionOutcome.SUCCESS,
+        complete_sync_intake(
+            uid=uid,
+            assigned=assigned,
+            created=created,
+            survivors=survivors,
+            response=response,
+            lock=lock,
+            language=language,
+            audio_enabled=bool(private_cloud_sync_enabled and survivors),
+            store_audio=partial(
+                _store_intake_audio,
+                uid,
+                timestamp,
+                audio_bytes,
+                data_protection_level,
+                survivors,
+                len(transcript_segments),
+                private_cloud_sync_enabled,
+            ),
+            finish=finish_sync_segment,
+            mark_finalize=mark_finalize,
+            acknowledge=partial(
+                acknowledge_processed_segment,
+                deferred_outcome,
                 provider=provider,
                 model=model,
                 lane=sync_lane,
-                retryable=False,
                 job_id=job_id,
                 segment_key=segment_key,
                 attempt_ref=attempt_ref,
-            )
+                set_outcome=_set_deferred_segment_outcome,
+                record_outcome=_record_sync_segment_outcome,
+            ),
+        )
         return True
     except SyncAssignmentSuperseded:
         # Acknowledge user authority without failing the WAL or dropping siblings.
@@ -1578,6 +1565,30 @@ def _wav_bytes_to_pcm16_16k(audio_bytes: Optional[bytes]) -> Optional[bytes]:
     return seg.raw_data
 
 
+def _store_intake_audio(
+    uid: str,
+    timestamp: float,
+    audio_bytes: Optional[bytes],
+    data_protection_level: str,
+    survivors: list,
+    transcript_segment_count: int,
+    private_cloud_sync_enabled: bool,
+    conversation_id: str,
+) -> None:
+    if private_cloud_sync_enabled and survivors:
+        if len(survivors) == transcript_segment_count:
+            _store_sync_audio_chunk(uid, conversation_id, timestamp, audio_bytes, data_protection_level)
+        else:
+            store_partial_merge_survivor_audio(
+                uid=uid,
+                conversation_id=conversation_id,
+                file_timestamp=timestamp,
+                audio_bytes=audio_bytes,
+                data_protection_level=data_protection_level,
+                survivors=survivors,
+            )
+
+
 def _store_sync_audio_chunk(
     uid: str,
     conversation_id: str,
@@ -1599,6 +1610,7 @@ def _store_sync_audio_chunk(
         logger.warning(f'sync: failed to store audio chunk for {conversation_id}@{timestamp}: {e}')
 
 
+@sync_phase('firestore')
 def _finalize_sync_audio_files(uid: str, response: dict):
     """After all segments are assigned, build audio_files from the uploaded chunks and
     persist them on each conversation — exactly as the realtime flush does — then warm the
@@ -1867,6 +1879,7 @@ async def _resolve_safety_wal_target(
     )
 
 
+@sync_attempt
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -1918,7 +1931,13 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # its allowlist, the whole batch resolves here as before: a unique match replaces the
     # stamp, a miss drops it. Old clients without this proof retain their stamp either way.
     use_lineage = lineage_resolution_requested(
-        uid, recording_session_id, audio_start_seconds, audio_end_seconds, job_id=job_id
+        uid,
+        recording_session_id,
+        audio_start_seconds,
+        audio_end_seconds,
+        job_id=job_id,
+        capture_evidence_claims=capture_evidence_claims,
+        filenames=[os.path.basename(path) for path in raw_paths],
     )
     if not use_lineage:
         target_conversation_id = await _resolve_safety_wal_target(
@@ -1976,6 +1995,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     async with concurrency_gate:
         set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
+        coverage_suppressed_all = False
         wav_paths = []
         decoded_frames: dict[str, list[int]] = {}
         source_frame_maps: dict[str, dict] = {}
@@ -2097,26 +2117,38 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     failure_key='invalid_audio',
                 )
                 return
-
-            if capture_evidence_dark_write_enabled() and capture_evidence_claims:
-                for wav_path in wav_paths:
-                    claim = capture_evidence_claims.get(os.path.basename(wav_path).replace('.wav', '.bin'))
-                    if (
-                        claim is None
-                        or (claim['codec'] == 'pcm16' and '_pcm16_' not in wav_path)
-                        or (claim['codec'] == 'opus' and '_opus_' not in wav_path)
-                    ):
-                        continue
-                    with wave.open(wav_path, 'rb') as decoded_wav:
-                        mapping = decoded_frame_map(
-                            claim,
-                            decoded_frames.get(wav_path, []),
-                            wav_rate_hz=decoded_wav.getframerate(),
-                            wav_channels=decoded_wav.getnchannels(),
-                        )
-                    if mapping is not None:
-                        source_frame_maps[wav_path] = mapping
-
+            try:
+                wav_paths, source_frame_maps, coverage_suppressed_all = await apply_sync_wal_audio_coverage(
+                    uid,
+                    source,
+                    should_lock,
+                    client_device_id,
+                    recording_session_id,
+                    capture_evidence_claims,
+                    wav_paths,
+                    decoded_frames,
+                    run_blocking=run_blocking,
+                    db_executor=db_executor,
+                    storage_executor=storage_executor,
+                    cleanup_files=_cleanup_files,
+                )
+            except asyncio.CancelledError:
+                preserve_retry_material = True
+                raise
+            if use_lineage and sync_recording_lineage.sync_lineage_s1_required():
+                if len(source_frame_maps) != len(wav_paths):
+                    sync_recording_lineage.emit_s1_refusal('count_mismatch')
+                    use_lineage = False
+                    target_conversation_id = await _resolve_safety_wal_target(
+                        uid,
+                        target_conversation_id,
+                        recording_session_id,
+                        source,
+                        client_device_id,
+                        should_lock,
+                        audio_start_seconds,
+                        audio_end_seconds,
+                    )
             # --- Phase 2: VAD ---
             job_phase = 'vad'
             await run_blocking(
@@ -2216,13 +2248,16 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             )
 
             if total_segments == 0:
+                empty_outcome = (
+                    TranscriptionOutcome.SUCCESS if coverage_suppressed_all else TranscriptionOutcome.EXPECTED_SILENCE
+                )
                 empty_result = {
                     'new_memories': [],
                     'updated_memories': [],
                     'failed_segments': 0,
                     'total_segments': 0,
                     'errors': [],
-                    'outcome': TranscriptionOutcome.EXPECTED_SILENCE.value,
+                    'outcome': empty_outcome.value,
                     'provider': 'unknown',
                     'model': 'unknown',
                     'lane': sync_lane,
@@ -2251,7 +2286,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 if ledger_fence_active:
                     await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
                 await _record_sync_job_outcome_async(
-                    TranscriptionOutcome.EXPECTED_SILENCE,
+                    empty_outcome,
                     provider='unknown',
                     model='unknown',
                     lane=sync_lane,
@@ -2391,11 +2426,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 },
             )
             # Mirror realtime: store conversation audio only when private cloud sync is on.
-            (
-                private_cloud_sync_enabled,
-                data_protection_level,
-                person_embeddings_cache,
-            ) = await _load_sync_segment_context(uid)
+            private_cloud_sync_enabled, data_protection_level, person_embeddings_cache = (
+                await _load_sync_segment_context(uid)
+            )
 
             # --- Phase 5: Process segments (STT + LLM) ---
             job_phase = 'persistence'
@@ -2429,11 +2462,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             already_processed = set()
             if task_mode:
                 already_processed = await run_blocking(db_executor, get_processed_segments, job_id)
-                if already_processed:
-                    logger.info(
-                        'event=sync_transcription_retry outcome=deduplicated segment_count=%d',
-                        len(already_processed),
-                    )
+            if already_processed:
+                logger.info(
+                    'event=sync_transcription_retry outcome=deduplicated segment_count=%d', len(already_processed)
+                )
 
             durable_processed_segment_ids: set[str] = set()
             segment_ids_by_path: dict[str, str] = {}
@@ -2442,8 +2474,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     db_executor, get_processed_sync_segment_ids, uid, content_id
                 )
                 segment_ids_by_path = {
-                    path: await run_blocking(sync_executor, compute_sync_segment_id, uid, path)
-                    for path in segmented_paths
+                    p: await run_blocking(sync_executor, compute_sync_segment_id, uid, p) for p in segmented_paths
                 }
 
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
@@ -2452,31 +2483,31 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
             segment_targets: dict = {}
+            segment_binding_reasons: dict = {}
             if use_lineage and segment_list:
-
-                def _segment_targets() -> dict:
-                    spans = {
-                        p: (get_timestamp_from_path(p), get_timestamp_from_path(p) + get_wav_duration(p))
-                        for p in segment_list
-                    }
-                    return resolve_segment_targets(
+                try:
+                    segment_targets = await run_blocking(
+                        db_executor,
+                        plan_segment_targets,
+                        segment_list,
+                        get_timestamp_from_path,
+                        get_wav_duration,
                         uid,
                         str(recording_session_id),
-                        spans,
-                        stamped_target=target_conversation_id,
-                        source=source,
-                        client_device_id=client_device_id,
-                        is_locked=is_locked,
-                        job_id=job_id,
+                        target_conversation_id,
+                        source,
+                        client_device_id,
+                        is_locked,
+                        job_id,
+                        segment_binding_reasons,
                     )
-
-                try:
-                    segment_targets = await run_blocking(db_executor, _segment_targets)
                 except Exception:
                     # Span construction and the executor call are also part of
                     # planning. Keep the stamp if either fails, then ingest
                     # siblings normally under the existing persistence fences.
-                    segment_targets = fallback_segment_targets(segment_list, target_conversation_id, job_id=job_id)
+                    segment_targets = fallback_segment_targets(
+                        segment_list, target_conversation_id, job_id=job_id, binding_reasons=segment_binding_reasons
+                    )
 
             def _process_one_segment(path: str):
                 segment_target = segment_targets.get(path, target_conversation_id)
@@ -2510,6 +2541,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     segment_key=segment_id or path,
                     attempt_ref=attempt_ref,
                     source_position_map=segment_source_maps.get(path),
+                    **({'lineage_binding': segment_binding_reasons.get(path)} if use_lineage else {}),
                 )
                 if ok:
                     # Persist result contributions before the processed marker.

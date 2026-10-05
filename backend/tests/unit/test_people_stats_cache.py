@@ -28,6 +28,7 @@ from google.api_core.exceptions import Aborted, AlreadyExists
 import database.conversation_finalization_jobs as finalization_jobs
 import database.conversations as conversations_db
 import database.people_stats_cache as people_stats_cache
+import database.proactivity as proactivity_db
 import database.recording_sessions as recording_sessions_db
 import database.redis_db as redis_db
 import database.smart_merge as smart_merge_db
@@ -682,6 +683,20 @@ def test_delete_conversation_invalidates_before_child_cleanup(writer_env):
     assert invalidated == ['u1']
 
 
+def test_delete_conversation_invalidates_cache_when_proactivity_cleanup_fails(writer_env, monkeypatch):
+    store, invalidated = writer_env
+    store.seed_conv('u1', 'c1', status='completed')
+
+    def fail_purge(**kwargs):
+        raise RuntimeError('source cleanup failed')
+
+    monkeypatch.setattr(proactivity_db, 'purge_source_items', fail_purge)
+    with pytest.raises(RuntimeError, match='source cleanup failed'):
+        conversations_db.delete_conversation('u1', 'c1')
+    assert store.conv_path('u1', 'c1') not in store.rows
+    assert invalidated == ['u1']
+
+
 def test_transition_conversation_status_invalidates(writer_env):
     store, invalidated = writer_env
     store.seed_conv('u1', 'c1', status='in_progress')
@@ -874,7 +889,7 @@ def test_smart_merge_absorb_invalidates_after_absorbed_commit(writer_env, monkey
     store.seed_conv('u1', 'donor', status='completed', transcript_segments=[])
     monkeypatch.setattr(smart_merge_db.audit_db, 'gate_skip', lambda *a, **k: smart_merge_db.audit_db.SKIPPED_ERROR)
 
-    plan = lambda survivor, s_segs, donor, d_segs, ancestor_rows: (
+    plan = lambda survivor, s_segs, donor, d_segs, ancestor_rows, last_fragment_row: (
         None,
         {'data_protection_level': 'standard', 'smart_merge': {'revision': 4}},
         {'deleted': True, 'smart_merge': {'role': 'donor', 'survivor_id': 'surv'}},

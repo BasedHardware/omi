@@ -100,6 +100,7 @@ def _default_to_no_legal_hold(monkeypatch):
     # path perform a real Firestore subscription read; billing-specific tests
     # replace this boundary explicitly.
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.stripe_utils, 'find_billable_app_subscription_ids', MagicMock(return_value=[]))
 
 
 def test_start_account_deletion_fails_closed_when_legal_hold_is_active(monkeypatch):
@@ -1394,6 +1395,41 @@ def test_background_wipe_still_fails_when_subscription_is_not_terminal(monkeypat
     account_deletion.auth.delete_account.assert_not_called()
     account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once()
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+
+
+def test_background_wipe_cancels_app_subscriptions_without_a_plan_subscription(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(
+        account_deletion.stripe_utils, 'find_billable_app_subscription_ids', MagicMock(return_value=['sub_app_1'])
+    )
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=MagicMock()))
+
+    assert account_deletion.background_wipe_user_data('uid1') is True
+
+    account_deletion.stripe_utils.find_billable_app_subscription_ids.assert_called_once_with('uid1')
+    account_deletion.stripe_utils.cancel_subscription.assert_called_once_with('sub_app_1')
+    account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
+
+
+def test_background_wipe_fails_when_an_app_subscription_still_bills(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(
+        account_deletion.stripe_utils,
+        'find_billable_app_subscription_ids',
+        MagicMock(return_value=['sub_app_canceled', 'sub_app_billing']),
+    )
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(
+        account_deletion.stripe_utils,
+        'is_subscription_terminal',
+        MagicMock(side_effect=lambda subscription_id: subscription_id == 'sub_app_canceled'),
+    )
+
+    assert account_deletion.background_wipe_user_data('uid1') is False
+
+    account_deletion.auth.delete_account.assert_not_called()
+    account_deletion.users_db.delete_user_data.assert_not_called()
+    assert account_deletion.users_db.mark_user_deletion_billing_failed.call_args.args[:2] == ('uid1', 'sub_app_billing')
 
 
 def test_gce_project_uses_deployed_google_cloud_project(monkeypatch):

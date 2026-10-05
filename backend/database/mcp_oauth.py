@@ -15,7 +15,6 @@ from google.cloud import firestore
 
 from config.mcp_client_ids import is_url_form_client_id
 from config.mcp_resource_urls import canonical_mcp_resource_url, legacy_mcp_resource_url, mcp_resource_urls_match
-from config.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 import database.mcp_cache_integrity as mcp_cache_integrity
 import database.mcp_client_metadata as mcp_client_metadata
 import database.mcp_token_cache as mcp_token_cache
@@ -28,6 +27,7 @@ from database.memory_app_key_grants import (
     MCP_CONSUMER,
     build_app_key_scope_grant_contract_state,
 )
+from utils.mcp_scopes import MCP_SUPPORTED_SCOPES
 
 PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp"
 # Omi Beta intentionally serves MCP data from dev while retaining the production
@@ -45,7 +45,7 @@ DEFAULT_CLAUDE_CLIENT_ID = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_ID", "omi-claude-p
 DEFAULT_CLAUDE_CLIENT_NAME = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_NAME", "Claude")
 DEFAULT_PUBLIC_CLIENT_ID = os.getenv("MCP_OAUTH_PUBLIC_CLIENT_ID", "omi-mcp-public")
 DEFAULT_PUBLIC_CLIENT_NAME = os.getenv("MCP_OAUTH_PUBLIC_CLIENT_NAME", "Omi MCP Public")
-SUPPORTED_SCOPES = MCP_FULL_ACCESS_SCOPES
+SUPPORTED_SCOPES = MCP_SUPPORTED_SCOPES
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "3600"))
 AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))

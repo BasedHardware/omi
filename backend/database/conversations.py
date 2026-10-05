@@ -17,6 +17,7 @@ from models.audio_file import AudioFile, ChunkSpan
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
+from models.capture_window_proof import CaptureWindowProof
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from utils.conversations.transcript_hash import (
@@ -27,8 +28,7 @@ from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
-    LiveTranscriptMerge,
-    LiveTranscriptReplayReceipt,
+    replay_receipt_commits,
     apply_manual_assignments,
     donor_selected_ids,
     manual_assignment,
@@ -1141,6 +1141,8 @@ def get_conversations(
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
     date_field: str = 'created_at',
+    *,
+    metadata_only: bool = False,
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -1166,6 +1168,26 @@ def get_conversations(
     # Sort — must match the range-filter field to satisfy Firestore index requirements
     sort_field = date_field if (start_date or end_date) else 'created_at'
     conversations_ref = conversations_ref.order_by(sort_field, direction=firestore.Query.DESCENDING)
+
+    if metadata_only:
+        # Support needs presence, never decoded content or photo hydration. Bound
+        # the query itself, including discarded/deleted lifecycle evidence.
+        fields = [
+            'id',
+            'started_at',
+            'finished_at',
+            'status',
+            'postprocessing.status',
+            'postprocessing_status',
+            'audio_files',
+            'transcript_segments_compressed',
+            'discarded',
+            'deleted',
+        ]
+        return [
+            dict(doc.to_dict() or {}, id=doc.id)
+            for doc in conversations_ref.select(fields).limit(limit).offset(offset).stream()
+        ]
 
     return _collect_visible_conversation_page(
         conversations_ref, limit=limit, offset=offset, include_discarded=include_discarded
@@ -1747,6 +1769,9 @@ def delete_conversation(uid, conversation_id):
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
     invalidate_people_stats_cache(uid)
+    from database.proactivity import purge_source_items
+
+    purge_source_items(uid=uid, source_kind='conversation', source_id=conversation_id, firestore_client=db)
     # A shadow metric writer can have read the parent just before deletion and
     # committed a child after our first enumeration. Its transaction prevents
     # writes once the parent is gone; this second sweep catches that narrow
@@ -2717,16 +2742,15 @@ def update_conversation_segments(
     return_segments: bool = False,
     preserve_unseen: bool = False,
     live_segments: Optional[List[dict]] = None,
+    live_capture_reasons: Optional[Dict[str, str]] = None,
+    live_capture_proofs: Optional[Dict[str, CaptureWindowProof]] = None,
     segment_update_fields: Optional[tuple[str, ...]] = None,
 ):
     """Write a transcript using an explicit segment-set ownership mode.
 
-    ``live_segments`` supplies fresh, unmerged speech. Merge planning reads the
-    current receipt in this transaction; its LiveTranscriptMerge return value
-    owns both storage and the client deletion delta. ``segments`` then carries
-    only optional inference identity updates, not cached text or timestamps.
-    ``segment_update_fields`` patches existing IDs only (translation/inference);
-    absent IDs are ignored and current speech content and ordering survive.
+    ``live_segments`` plans fresh speech against this transaction's receipt;
+    LiveTranscriptMerge owns storage/client deltas. ``segments`` and ``segment_update_fields``
+    patch identities only. ``live_capture_proofs`` never enters storage.
 
     ``invalidate_client_processing`` defaults to TRUE, and that default is the
     point. This function's whole job is replacing the transcript, and a stored
@@ -2776,16 +2800,17 @@ def update_conversation_segments(
                 uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
             )
             if 'live_transcript_replay_receipt' in current:
-                prior_commits = parse_payload_strict(
-                    LiveTranscriptReplayReceipt,
+                prior_commits = replay_receipt_commits(
                     _reveal_json_value(current['live_transcript_replay_receipt'], uid, True),
-                    document_path=doc_ref.path,
-                ).commits
+                    doc_ref.path,
+                )
             planned = merge_live_segments(
                 persisted,
                 live_segments,
                 receipt,
                 absorbed_ids=[absorbed_id for commit in prior_commits for absorbed_id in commit],
+                capture_reasons=live_capture_reasons,
+                capture_proofs=live_capture_proofs,
             )
         remap = planned.absorbed_into if planned is not None else {}
         if remap:
@@ -2883,7 +2908,7 @@ def update_conversation_segments(
             _invalidate_client_processing(prepared_payload)
         transaction.update(doc_ref, prepared_payload)
         if planned is not None:
-            return LiveTranscriptMerge(accepted, planned.updated_ids, planned.removed_ids, planned.absorbed_into)
+            return planned.with_segments(accepted)
         return accepted if return_segments else True
 
     result = run_transactional(client, _write_segments)

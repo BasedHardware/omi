@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from utils.audio_timeline import ProviderEpochTranslator
+from config.audio_timeline import live_capture_window_strict_projection_enabled
+from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.metrics import (
     AUDIO_TIMELINE_REJECT_REASONS,
     OMI_AUDIO_TIMELINE_MAPPED_TOTAL,
     OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL,
+    OMI_AUDIO_TIMELINE_OUTSIDE_SENDS_TOTAL,
     OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     audio_timeline_past_send_bucket,
@@ -92,6 +94,11 @@ def build_stt_callbacks(receiver: Any) -> Tuple[Any, Any, Optional[ProviderEpoch
             send_path=audio_timeline_send_path_label(epoch.send_path),
             bucket=audio_timeline_past_send_bucket(seconds),
         ).inc(),
+        on_outside=lambda subreason: OMI_AUDIO_TIMELINE_OUTSIDE_SENDS_TOTAL.labels(
+            provider=audio_timeline_provider_label(epoch.provider_label),
+            send_path=audio_timeline_send_path_label(epoch.send_path),
+            subreason=subreason,
+        ).inc(),
         owner_at_send=receiver._proven_send_owner,
         project_times=receiver.capture_timeline_v2,
     )
@@ -140,3 +147,20 @@ def build_stt_callbacks(receiver: Any) -> Tuple[Any, Any, Optional[ProviderEpoch
         receiver._loop_hop(clock_only(True)),
         epoch,
     )
+
+
+def attach_legacy_capture_window(segment: Dict[str, Any], timeline: CaptureTimeline) -> None:
+    """Project translator-proven samples; preserve the original refusal when absent."""
+    start_sample = segment.pop('_capture_start_sample', None)
+    end_sample = segment.pop('_capture_end_sample', None)
+    if start_sample is not None and end_sample is not None and end_sample >= start_sample:
+        window = timeline.project_window(
+            start_sample, end_sample, strict=live_capture_window_strict_projection_enabled()
+        )
+        if window is not None:
+            segment['_capture_abs_start'], segment['_capture_abs_end'] = window
+            return
+        segment['_capture_window_reason'] = (
+            'anchor_compacted' if timeline.wall_strict(start_sample) is None else 'translator_discontinuous_interval'
+        )
+    segment['_capture_window_unavailable'] = True

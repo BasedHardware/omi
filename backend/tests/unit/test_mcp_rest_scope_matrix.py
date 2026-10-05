@@ -15,7 +15,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 import dependencies
-from config.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from config.mcp_scopes import MCP_FULL_ACCESS_SCOPES, MCP_OPT_IN_SCOPES
 from routers import mcp as rest
 from utils.mcp_scopes import normalize_mcp_scopes
 from utils.mcp_server.registry import TOOL_REQUIRED_SCOPE
@@ -40,6 +40,8 @@ REST_TO_TOOL = {
     ("GET", "/v1/mcp/goals"): "get_goals",
     ("GET", "/v1/mcp/chat"): "get_chat_messages",
     ("GET", "/v1/mcp/people"): "get_people",
+    ("PATCH", "/v1/mcp/people/{person_id}/name"): "rename_person",
+    ("POST", "/v1/mcp/people/{person_id}/dismiss"): "dismiss_person",
     ("GET", "/v1/mcp/screen-activity"): "get_screen_activity",
     ("GET", "/v1/mcp/daily-summaries"): "get_daily_summaries",
 }
@@ -111,7 +113,7 @@ def scope_client(monkeypatch):
 def _request(client, operation):
     method, path = operation
     path = path.replace('{memory_id}', 'memory-1').replace('{conversation_id}', 'conversation-1')
-    path = path.replace('{action_item_id}', 'action-1')
+    path = path.replace('{action_item_id}', 'action-1').replace('{person_id}', 'person-1')
     body = None
     if method == 'POST' and path == '/v1/mcp/memories':
         body = {'content': 'test fact'}
@@ -119,6 +121,8 @@ def _request(client, operation):
         body = {'content': 'updated fact'}
     elif method in {'POST', 'PATCH'} and '/action-items' in path and not path.endswith('/complete'):
         body = {'description': 'test task'}
+    elif method == 'PATCH' and path.endswith('/name'):
+        body = {'name': 'Renamed Person'}
     params = {}
     if path.endswith('/search'):
         params['query'] = 'test query'
@@ -131,6 +135,11 @@ def _request(client, operation):
 def test_full_scope_context_passes_each_route(scope_client, operation):
     client, state, budget, handler = scope_client
     response = _request(client, operation)
+    if TOOL_REQUIRED_SCOPE[REST_TO_TOOL[operation]] in MCP_OPT_IN_SCOPES:
+        # Full access deliberately excludes opt-in scopes; they need an explicit grant.
+        assert response.status_code == 403, response.text
+        handler.assert_not_called()
+        return
     assert response.status_code == 204, response.text
     handler.assert_called_once()
     assert budget.await_count == 1

@@ -14,7 +14,6 @@ import main
 from routers import jit_ledger_snapshot, jit_rollout
 from utils.memory.jit_trigger_contract import TriggerAction
 from utils.memory.jit_trigger_contract import DEFAULT_TRIGGER_RUNTIME_POLICY
-from utils.memory.jit_trigger_snapshot import AuthoritativeTriggerRow, AuthoritativeTriggerSnapshot
 from utils import jit_rollout as authority_module
 from utils.jit_rollout import (
     DEFAULT_JIT_ROLLOUT_CACHE_SECONDS,
@@ -561,7 +560,7 @@ async def test_posthog_decide_coalesces_same_uid_calls():
 
 
 @pytest.mark.asyncio
-async def test_trigger_snapshot_final_refresh_bypasses_stale_posthog_call(monkeypatch):
+async def test_force_refresh_bypasses_stale_posthog_call():
     started = threading.Event()
     release = threading.Event()
 
@@ -587,35 +586,8 @@ async def test_trigger_snapshot_final_refresh_bypasses_stale_posthog_call(monkey
         await asyncio.sleep(0.001)
     assert started.is_set()
 
-    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
-        if not force_refresh:
-            evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
-            return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
-        return await authority.resolve(uid, stage=stage, force_refresh=True)
-
-    snapshot = AuthoritativeTriggerSnapshot(
-        owner_id='owner',
-        account_generation=7,
-        head_commit_id='head',
-        commit_sequence=11,
-        snapshot_revision='secret-revision',
-        complete=True,
-        rows=(),
-    )
-
-    async def immediate(_executor, function, uid):
-        assert function is jit_rollout.read_authoritative_trigger_snapshot
-        assert uid == 'owner'
-        return snapshot
-
-    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
-
     try:
-        response = await asyncio.wait_for(
-            jit_rollout.get_jit_trigger_snapshot(Response(), uid='owner'),
-            timeout=1,
-        )
+        refreshed = await authority.resolve('owner', stage=JITDecisionStage.READ_ONLY, force_refresh=True)
     finally:
         release.set()
 
@@ -623,10 +595,7 @@ async def test_trigger_snapshot_final_refresh_bypasses_stale_posthog_call(monkey
     assert stale_result.rollout == TriState.ENABLED
     assert stale_result.kill_switch == TriState.DISABLED
     assert client.calls == 2
-    assert response.complete is False
-    assert response.rows == []
-    assert response.snapshot_revision == ''
-    assert response.failure_reason == 'rollout_not_enabled'
+    assert refreshed.permits_work is False
 
 
 @pytest.mark.asyncio
@@ -748,443 +717,39 @@ def test_main_and_desktop_apps_mount_one_read_only_decision_contract():
         assert route.methods == {'GET'}
 
 
-def test_trigger_snapshot_is_owner_authenticated_default_off_and_never_reads_memory(monkeypatch):
-    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
-        assert uid == 'owner'
-        evaluation = JITFlagEvaluation(TriState.DISABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
-        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
+def test_retired_trigger_snapshot_is_authenticated_empty_and_does_not_resolve_flags(monkeypatch):
+    async def forbidden(*args, **kwargs):
+        raise AssertionError('retired snapshots must not read rollout or storage')
 
-    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(
-        jit_rollout,
-        'read_authoritative_trigger_snapshot',
-        lambda *_args, **_kwargs: pytest.fail('flag-off request must not read the memory ledger'),
-    )
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', forbidden)
     app = FastAPI()
     app.include_router(jit_rollout.router)
     app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    response = TestClient(app).get('/v1/jit/trigger-snapshot?uid=attacker')
-
+    with TestClient(app) as client:
+        response = client.get('/v1/jit/trigger-snapshot')
     assert response.status_code == 200
-    assert response.headers['cache-control'] == 'no-store'
-    assert response.json() == {
-        'owner_id': 'owner',
-        'account_generation': 0,
-        'head_commit_id': '',
-        'commit_sequence': 0,
-        'snapshot_revision': '',
-        'complete': False,
-        'rows': [],
-        'policy': DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json'),
-        'failure_reason': 'rollout_not_enabled',
-        'budget_day': None,
-        'budget_timezone': None,
-    }
+    assert response.headers['Cache-Control'] == 'no-store'
+    body = response.json()
+    assert body['owner_id'] == 'owner'
+    assert body['complete'] is False
+    assert body['rows'] == []
+    assert body['account_generation'] == 0
+    assert body['head_commit_id'] == body['snapshot_revision'] == ''
+    assert body['failure_reason'] == 'rollout_not_enabled'
 
 
-def test_trigger_snapshot_serializes_exhaustive_action_receipt(monkeypatch):
-    observed: list[bool] = []
+@pytest.mark.parametrize('path', ['/v1/jit/trigger-feedback', '/v1/jit/proactivity/reservations'])
+def test_retired_jit_mutations_are_static_and_do_not_authenticate_or_parse_body(path, monkeypatch):
+    async def forbidden(*args, **kwargs):
+        raise AssertionError('retired mutations must not resolve authority')
 
-    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
-        observed.append(force_refresh)
-        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
-        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
-
-    snapshot = AuthoritativeTriggerSnapshot(
-        owner_id='owner',
-        account_generation=7,
-        head_commit_id='head',
-        commit_sequence=11,
-        snapshot_revision='revision',
-        complete=True,
-        rows=(
-            AuthoritativeTriggerRow(
-                memory_id='trigger-1',
-                item_revision=3,
-                updated_at=datetime(2026, 8, 24, tzinfo=timezone.utc),
-                trigger_condition={
-                    'schema_version': 'jit_trigger.v1',
-                    'match_mode': 'all',
-                    'keywords': ['release'],
-                    'action': {'type': 'agent_prompt', 'prompt': 'Give the next release step.'},
-                },
-                action=TriggerAction(type='agent_prompt', prompt='Give the next release step.'),
-                wakeup_budget_per_day=1,
-                snoozed_until=datetime(2026, 8, 25, tzinfo=timezone.utc),
-            ),
-        ),
-        budget_day='2026-08-24',
-        budget_timezone='America/New_York',
-    )
-
-    async def immediate(_executor, function, uid):
-        assert uid == 'owner'
-        assert function is jit_rollout.read_authoritative_trigger_snapshot
-        return snapshot
-
-    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
+    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', forbidden)
     app = FastAPI()
     app.include_router(jit_rollout.router)
-    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    payload = TestClient(app).get('/v1/jit/trigger-snapshot').json()
-
-    assert payload['owner_id'] == 'owner'
-    assert payload['snapshot_revision'] == 'revision'
-    assert payload['rows'][0]['action'] == {
-        'type': 'agent_prompt',
-        'prompt': 'Give the next release step.',
-    }
-    assert payload['rows'][0]['snoozed_until'] == '2026-08-25T00:00:00Z'
-    assert payload['budget_day'] == '2026-08-24'
-    assert payload['budget_timezone'] == 'America/New_York'
-    assert payload['policy'] == DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json')
-    assert '"action"' in payload['rows'][0]['trigger_condition_json']
-    assert observed == [False, True]
-
-
-def test_trigger_snapshot_final_authority_fence_discards_scan_after_disable(monkeypatch):
-    observed: list[bool] = []
-
-    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
-        assert uid == 'owner'
-        observed.append(force_refresh)
-        evaluation = (
-            JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
-            if not force_refresh
-            else JITFlagEvaluation(TriState.DISABLED, TriState.ENABLED, JITDecisionReason.EVALUATED)
-        )
-        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
-
-    snapshot = AuthoritativeTriggerSnapshot(
-        owner_id='owner',
-        account_generation=7,
-        head_commit_id='head',
-        commit_sequence=11,
-        snapshot_revision='secret-revision',
-        complete=True,
-        rows=(),
-    )
-
-    async def immediate(_executor, function, uid):
-        assert function is jit_rollout.read_authoritative_trigger_snapshot
-        assert uid == 'owner'
-        return snapshot
-
-    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
-    app = FastAPI()
-    app.include_router(jit_rollout.router)
-    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    payload = TestClient(app).get('/v1/jit/trigger-snapshot').json()
-
-    assert observed == [False, True]
-    assert payload == {
-        'owner_id': 'owner',
-        'account_generation': 0,
-        'head_commit_id': '',
-        'commit_sequence': 0,
-        'snapshot_revision': '',
-        'complete': False,
-        'rows': [],
-        'policy': DEFAULT_TRIGGER_RUNTIME_POLICY.model_dump(mode='json'),
-        'failure_reason': 'rollout_not_enabled',
-        'budget_day': None,
-        'budget_timezone': None,
-    }
-
-
-def test_trigger_snapshot_preserves_owner_generation_failure_as_non_actionable(monkeypatch):
-    observed: list[bool] = []
-
-    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
-        assert uid == 'owner'
-        observed.append(force_refresh)
-        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
-        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
-
-    stale_snapshot = AuthoritativeTriggerSnapshot(
-        owner_id='owner',
-        account_generation=7,
-        head_commit_id='head-before-transition',
-        commit_sequence=11,
-        snapshot_revision='',
-        complete=False,
-        rows=(),
-        failure_reason='authority_changed',
-    )
-
-    async def immediate(_executor, function, uid):
-        assert function is jit_rollout.read_authoritative_trigger_snapshot
-        assert uid == 'owner'
-        return stale_snapshot
-
-    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
-    app = FastAPI()
-    app.include_router(jit_rollout.router)
-    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    payload = TestClient(app).get('/v1/jit/trigger-snapshot').json()
-
-    assert observed == [False, True]
-    assert payload['owner_id'] == 'owner'
-    assert payload['account_generation'] == 7
-    assert payload['head_commit_id'] == 'head-before-transition'
-    assert payload['complete'] is False
-    assert payload['rows'] == []
-    assert payload['snapshot_revision'] == ''
-    assert payload['failure_reason'] == 'authority_changed'
-
-
-def test_trigger_feedback_is_owner_authenticated_and_remains_available_while_rollout_is_off(monkeypatch):
-    observed = {}
-    receipt = JITTriggerFeedbackReceipt(
-        uid='owner',
-        feedback_id='f' * 64,
-        event_id='e' * 64,
-        trigger_memory_id='trigger-1',
-        account_generation=3,
-        expected_trigger_revision=4,
-        action='useful',
-        recorded_at=datetime(2026, 8, 24, tzinfo=timezone.utc),
-        request_hash='a' * 64,
-        applied_trigger_revision=5,
-    )
-
-    async def immediate(_executor, function, uid, memory_id, **kwargs):
-        observed.update(function=function, uid=uid, memory_id=memory_id, kwargs=kwargs)
-        return SimpleNamespace(
-            item=SimpleNamespace(memory_id=memory_id, item_revision=5, status=MemoryItemStatus.active),
-            applied=True,
-            receipt=receipt,
-        )
-
-    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
-    app = FastAPI()
-    app.include_router(jit_rollout.router)
-    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    response = TestClient(app).post(
-        '/v1/jit/trigger-feedback?uid=attacker',
-        json={
-            'feedback_id': 'f' * 64,
-            'event_id': 'e' * 64,
-            'trigger_memory_id': 'trigger-1',
-            'account_generation': 3,
-            'trigger_revision': 4,
-            'action': 'useful',
-            'recorded_at': '2026-08-24T00:00:00Z',
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()['applied'] is True
-    assert response.json()['trigger_revision'] == 5
-    assert observed['function'] is jit_rollout._apply_trigger_feedback_on_data_plane
-    assert observed['uid'] == 'owner'
-    assert observed['kwargs']['event_id'] == 'e' * 64
-
-
-def test_trigger_feedback_writes_through_the_same_data_plane_the_snapshot_reads(monkeypatch):
-    """Feedback must resolve the trigger row where the snapshot published it.
-
-    This route is served by desktop-backend, whose compute project differs
-    from the customer data plane in development. Letting the canonical
-    adapter fall back to its compute-plane default would look for the trigger
-    in the wrong project, so every retraction would 409 while the trigger kept
-    firing -- with the rollout flag off, this is the user's only off switch.
-    """
-
-    observed = {}
-    data_plane = object()
-    compute_plane = object()
-
-    def record(uid, memory_id, **kwargs):
-        observed.update(uid=uid, memory_id=memory_id, kwargs=kwargs)
-        return 'applied'
-
-    monkeypatch.setattr(jit_rollout, 'apply_canonical_trigger_feedback', record)
-    monkeypatch.setattr(jit_rollout, 'get_data_plane_firestore_client', lambda: data_plane)
-
-    result = jit_rollout._apply_trigger_feedback_on_data_plane(
-        'owner',
-        'trigger-1',
-        event_id='e' * 64,
-        expected_account_generation=3,
-        expected_item_revision=4,
-        feedback=None,
-    )
-
-    assert result == 'applied'
-    assert observed['uid'] == 'owner'
-    assert observed['memory_id'] == 'trigger-1'
-    assert observed['kwargs']['event_id'] == 'e' * 64
-    # The point of the test: the plane is pinned, not left to the adapter's
-    # compute-plane default, which on desktop-backend is a different project.
-    assert observed['kwargs']['db_client'] is data_plane
-    assert observed['kwargs']['db_client'] is not compute_plane
-
-
-def test_trigger_feedback_rejects_stale_authority_without_leaking_details(monkeypatch):
-    async def conflict(*_args, **_kwargs):
-        raise ValueError('secret stale target detail')
-
-    monkeypatch.setattr(jit_rollout, 'run_blocking', conflict)
-    app = FastAPI()
-    app.include_router(jit_rollout.router)
-    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    response = TestClient(app).post(
-        '/v1/jit/trigger-feedback',
-        json={
-            'feedback_id': 'f' * 64,
-            'event_id': 'e' * 64,
-            'trigger_memory_id': 'trigger-1',
-            'account_generation': 3,
-            'trigger_revision': 4,
-            'action': 'disable',
-            'recorded_at': '2026-08-24T00:00:00Z',
-        },
-    )
-
-    assert response.status_code == 409
-    assert response.json()['detail'] == 'Trigger feedback authority changed or is unavailable'
-    assert 'secret' not in response.text
-
-
-def test_trigger_feedback_snooze_requires_a_later_expiry():
-    app = FastAPI()
-    app.include_router(jit_rollout.router)
-    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    response = TestClient(app).post(
-        '/v1/jit/trigger-feedback',
-        json={
-            'feedback_id': 'f' * 64,
-            'event_id': 'e' * 64,
-            'trigger_memory_id': 'trigger-1',
-            'account_generation': 3,
-            'trigger_revision': 4,
-            'action': 'snooze',
-            'recorded_at': '2026-08-24T00:00:00Z',
-        },
-    )
-
-    assert response.status_code == 422
-
-
-def test_proactivity_reservation_force_refreshes_paid_authority_and_uses_authenticated_owner(monkeypatch):
-    observed = {}
-
-    async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
-        observed.update(resolve=(uid, stage, force_refresh))
-        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
-        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
-
-    receipt = JITProactivityEventReceipt(
-        uid='owner',
-        event_id='e' * 64,
-        candidate_id='c' * 64,
-        operation='full_turn',
-        account_generation=3,
-        budget_day='2026-08-24',
-        parent_event_id='a' * 64,
-        device_id='d' * 64,
-        created_at=datetime(2026, 8, 24, tzinfo=timezone.utc),
-        request_hash='b' * 64,
-    )
-
-    async def immediate(_executor, function, uid, **kwargs):
-        observed.update(function=function, uid=uid, kwargs=kwargs)
-        return receipt, True
-
-    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(jit_rollout, 'run_blocking', immediate)
-    app = FastAPI()
-    app.include_router(jit_rollout.router)
-    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    response = TestClient(app).post(
-        '/v1/jit/proactivity/reservations?uid=attacker',
-        json={
-            'event_id': 'e' * 64,
-            'candidate_id': 'c' * 64,
-            'operation': 'full_turn',
-            'account_generation': 3,
-            'device_id': 'd' * 64,
-            'parent_event_id': 'a' * 64,
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()['reserved'] is True
-    assert observed['resolve'] == ('owner', JITDecisionStage.PAID_BOUNDARY, True)
-    assert observed['function'] is jit_rollout.reserve_jit_proactivity_event
-    assert observed['uid'] == 'owner'
-
-
-def test_proactivity_reservation_does_no_mutation_when_rollout_is_off(monkeypatch):
-    async def resolve(*_args, **_kwargs):
-        evaluation = JITFlagEvaluation(TriState.DISABLED, TriState.ENABLED, JITDecisionReason.EVALUATED)
-        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
-
-    async def no_write(*_args, **_kwargs):
-        pytest.fail('disabled rollout must block reservation writes')
-
-    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(jit_rollout, 'run_blocking', no_write)
-    app = FastAPI()
-    app.include_router(jit_rollout.router)
-    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    response = TestClient(app).post(
-        '/v1/jit/proactivity/reservations',
-        json={
-            'event_id': 'e' * 64,
-            'candidate_id': 'c' * 64,
-            'operation': 'ambient_notification',
-            'account_generation': 3,
-            'device_id': 'd' * 64,
-        },
-    )
-
-    assert response.status_code == 403
-
-
-def test_proactivity_reservation_maps_malformed_authority_to_retryable_unavailable(monkeypatch):
-    async def resolve(*_args, **_kwargs):
-        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
-        return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
-
-    async def malformed_authority(*_args, **_kwargs):
-        raise MalformedDocError(
-            document_path='users/owner/jit_proactivity/control',
-            error_types=('missing',),
-            error_fields=('account_generation',),
-        )
-
-    monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
-    monkeypatch.setattr(jit_rollout, 'run_blocking', malformed_authority)
-    app = FastAPI()
-    app.include_router(jit_rollout.router)
-    app.dependency_overrides[get_current_user_uid] = lambda: 'owner'
-
-    response = TestClient(app).post(
-        '/v1/jit/proactivity/reservations',
-        json={
-            'event_id': 'e' * 64,
-            'candidate_id': 'c' * 64,
-            'operation': 'ambient_notification',
-            'account_generation': 3,
-            'device_id': 'd' * 64,
-        },
-    )
-
-    assert response.status_code == 503
-    assert response.json() == {'detail': 'JIT proactive authority is temporarily unavailable'}
-    assert 'users/owner' not in response.text
-    assert 'account_generation' not in response.text
+    route = next(route for route in app.routes if route.path == path)
+    assert route.dependant.dependencies == []
+    assert route.dependant.body_params == []
+    with TestClient(app) as client:
+        response = client.post(path, content=b'not json', headers={'Authorization': 'Bearer expired'})
+    assert response.status_code == 410
+    assert response.json()['detail']['error'] == 'feature_retired'

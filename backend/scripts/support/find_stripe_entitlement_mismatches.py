@@ -26,8 +26,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
-from google.cloud import firestore
-
 # Keep the script executable as ``python scripts/support/...`` from backend/.
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 if str(BACKEND_ROOT) not in sys.path:
@@ -170,6 +168,8 @@ def build_stripe_source_of_truth(
 
 
 def compare_firestore(project: str, stripe_by_uid: dict[str, StripeSub]) -> list[Mismatch]:
+    from google.cloud import firestore
+
     db = firestore.Client(project=project)
     mismatches: list[Mismatch] = []
 

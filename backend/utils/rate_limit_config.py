@@ -90,6 +90,7 @@ _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_
 # ---------------------------------------------------------------------------
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
+    "proactivity:api": (120, 60),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),
     "conversations:reprocess": (3, 3600),
@@ -104,6 +105,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Chat — 2-6 LLM calls per message
     "chat:send_message": (120, 3600),
     "chat:initial": (60, 3600),
+    # Device tool results carry no LLM cost — one cheap Redis write per tool the
+    # model calls on the user's own device. Bounded well above chat:send_message
+    # because a single turn can dispatch several device tool calls.
+    "chat:device_tool_result": (600, 3600),
     # Voice — Deepgram + LLM
     "voice:transcribe": (60, 3600),
     "voice:transcribe_stream": (60, 3600),

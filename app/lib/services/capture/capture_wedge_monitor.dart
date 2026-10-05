@@ -255,9 +255,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     );
   }
 
-  /// Surfaces a bounded-retention eviction once per cap-engagement event.
-  void observeStorageAtRisk({required DateTime engagedAt, required int evictedCount, required int retainedCount}) {
-    final fingerprint = '${engagedAt.microsecondsSinceEpoch}:$evictedCount:$retainedCount';
+  void observeStorageAtRisk({
+    required DateTime engagedAt,
+    required int blockedCount,
+    required int retainedCount,
+    required String reason,
+  }) {
+    final fingerprint = '${engagedAt.microsecondsSinceEpoch}:$blockedCount:$retainedCount:$reason';
     if (_lastRetentionRiskFingerprint == fingerprint) return;
     _lastRetentionRiskFingerprint = fingerprint;
     final state = _stateFor(localWalDeviceId);
@@ -269,9 +273,10 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         trigger: triggerStorageAtRisk,
         requireFeatureGate: false,
         extraProperties: {
-          'evicted_wal_count': evictedCount,
+          'blocked_wal_count': blockedCount,
           'retained_wal_count': retainedCount,
-          'retention_policy': 'oldest_first_count_cap',
+          'retention_policy': 'admission_count_cap',
+          'block_reason': reason,
         },
       ),
     );

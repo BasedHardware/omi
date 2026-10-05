@@ -4,6 +4,9 @@ from contextlib import contextmanager
 import importlib.util
 import sys
 import types
+from unittest.mock import MagicMock
+
+import pytest
 
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,
@@ -94,6 +97,8 @@ def _install_prometheus_client_stub():
     prometheus_client.REGISTRY = registry
     prometheus_client.CONTENT_TYPE_LATEST = 'text/plain; version=0.0.4; charset=utf-8'
     prometheus_client.generate_latest = lambda registry=None: b''
+    prometheus_client.disable_created_metrics = lambda: None
+    prometheus_client.start_http_server = lambda *args, **kwargs: (MagicMock(), MagicMock())
 
     sys.modules['prometheus_client'] = prometheus_client
 
@@ -203,3 +208,37 @@ def _install_cachetools_stub():
 _install_prometheus_client_stub()
 _install_redis_stub()
 _install_cachetools_stub()
+
+
+@pytest.fixture(autouse=True)
+def _reset_live_stt_fleet_health():
+    """Reset the module-level live STT fleet-health singleton in place.
+
+    Account quarantine now persists in the shared singleton even while the
+    cost-routing kill switch is off (a mode-independent hard exclusion), so a
+    test that records a synthetic bench must not withdraw providers from
+    later tests. The reset swaps instance state in place because sibling
+    modules (live_chain, streaming, live_session) keep import-time references
+    to this exact object; rebinding the module attribute would leave them
+    sharing the polluted instance.
+    """
+    import sys
+
+    if 'utils.stt.live_health' not in sys.modules:
+        # Unrelated shards must not pay this module's import chain.
+        yield
+        return
+    from utils.stt import live_health
+
+    shared = live_health.health
+    fresh = type(shared)()
+    with shared._lock:
+        vars(shared).update(vars(fresh))
+    if 'utils.stt.streaming' in sys.modules:
+        # Family circuits re-derive their per-family endpoint/credential identity
+        # each test; a stale latch must not reset a bench the next test arms on
+        # a freshly swapped breaker.
+        from utils.stt import streaming
+
+        streaming._family_circuits_identity.clear()
+    yield

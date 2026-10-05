@@ -103,7 +103,8 @@ final memoriesScenarios = <AuditScenario>[
     run: (a) async {
       final memories = MemoriesProvider();
       await a.tester.runAsync(
-          () => memories.createMemory('Prefers morning meetings and keeps Fridays free.', MemoryVisibility.private));
+        () => memories.createMemory('Prefers morning meetings and keeps Fridays free.', MemoryVisibility.private),
+      );
       await a.pump(const MemoriesPage(), providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)]);
       await a.shot('Memories list with one saved memory', step: 'list');
       await a.tester.drag(find.byType(Dismissible).first, const Offset(-500, 0));
@@ -122,8 +123,10 @@ final memoriesScenarios = <AuditScenario>[
     state: 'Fixture-backed MemoriesProvider holding four memories; the graph request never answers',
     run: (a) async {
       final memories = await _seededMemories(a);
-      await a.pump(const MemoriesPage(loadGraph: _graphNeverLoads),
-          providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)]);
+      await a.pump(
+        const MemoriesPage(loadGraph: _graphNeverLoads),
+        providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)],
+      );
       // The list renders without waiting for the graph.
       expect(find.byKey(const ValueKey('memories_mind_map_loading')), findsOneWidget);
       expect(find.text(_listed.first), findsOneWidget);
@@ -137,8 +140,10 @@ final memoriesScenarios = <AuditScenario>[
     state: 'Fixture-backed MemoriesProvider holding four memories; the graph request throws',
     run: (a) async {
       final memories = await _seededMemories(a);
-      await a.pump(const MemoriesPage(loadGraph: _graphFails),
-          providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)]);
+      await a.pump(
+        const MemoriesPage(loadGraph: _graphFails),
+        providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)],
+      );
       expect(find.byKey(const ValueKey('memories_mind_map_retry')), findsOneWidget);
       expect(find.text(_listed.last), findsOneWidget);
       await a.shot('Open Memories when the graph fails; it collapses to one row with Try Again');
@@ -151,8 +156,10 @@ final memoriesScenarios = <AuditScenario>[
     state: 'Fixture-backed MemoriesProvider holding four memories; a seven-node graph fixture',
     run: (a) async {
       final memories = await _seededMemories(a);
-      await a.pump(const MemoriesPage(loadGraph: _graphLoaded),
-          providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)]);
+      await a.pump(
+        const MemoriesPage(loadGraph: _graphLoaded),
+        providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)],
+      );
       expect(find.byKey(const ValueKey('memories_mind_map_preview')), findsOneWidget);
       expect(find.byKey(const ValueKey('memories_mind_map_loading')), findsNothing);
       await a.shot('Open Memories with the graph loaded above the list');

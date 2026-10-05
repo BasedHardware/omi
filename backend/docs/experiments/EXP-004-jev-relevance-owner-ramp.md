@@ -7,7 +7,8 @@
 
 Model `typesafe/jev-1.13`, gateway `omi:auto:jev-decisions`, relevance question
 `relevance_b1` and owner question `owner_a1` are pinned. Discard is strictly
-P(discard) > 0.95; owner flip is P(user) >= 0.9. Changing wording, model or
+P(discard) > 0.80 (lowered from 0.95 on 2026-10-05, see "Threshold
+re-measure" below); owner flip is P(user) >= 0.9. Changing wording, model or
 threshold requires a new calibration and protocol.
 
 Keep-all selection uses a stable SHA256 bucket of conversation ID and salt
@@ -164,8 +165,9 @@ deliberately cannot enable TTL policies; this PR performs no cloud schema mutati
 
 Static-label metrics report `ok`, `jev_failed`, `http_429`, `timeout`, `deduped`,
 `cap`, `cohort`, `dropped`, `redis_unavailable`; latency includes queue time.
-Relevance score bins are 0.5, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99, with the
-nano verdict x Jev strict-discard agreement matrix (plus `none`). Owner P(user)
+Relevance score bins are 0.5, 0.7, 0.75, 0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99
+(0.7-0.8 added 2026-10-05 so the predicted discard rate at the current cutoff
+is readable from buckets), with the nano verdict x Jev strict-discard agreement matrix (plus `none`). Owner P(user)
 bins are 0.5, 0.7, 0.8, 0.9, 0.95. Drops and caps are part of coverage, not
 successful scores. Legacy owner records without `scoring_sha` use text-only
 identity; analyze them separately from this full-identity population. Capped/bounded 100% selection is not a census. At 100%, each unique eligible owner candidate has pre-admission inclusion
@@ -174,10 +176,36 @@ percentage-plus-cap selection probability and actual coverage separately. Check
 score and coverage by candidate_index/eligible_count for residual position bias.
 Report decision counts separately from unique conversations.
 
+## Threshold re-measure (2026-10-05)
+
+At 0.95 the live arm discarded about 3% of model-tier conversations against
+about 90% for nano, and on the owner's 2026-10 labels (60 cards in three
+waves; the random wave was 20 of 20 noise) almost all of Jev's extra keeps
+were noise. The threshold was re-measured offline on the owner's account only:
+
+- Tuned on 55 decided 2026-10 labels (9 kept); evaluated once on 77 decided
+  2026-09-23 labels (20 kept) that were never used for tuning.
+- Held-out: nano lost 15-17 of 20 kept conversations and kept 4-5 of 57 noise;
+  Jev `relevance_b1` at 0.70 lost 7 and kept 7; at 0.80 lost 3 and kept 10.
+  Jev AUC was about 0.85 on both sets. Reworded "own voice" questions and added
+  speaker metadata did not beat `relevance_b1` on the held-out set.
+- 0.80 was picked after seeing the held-out set (0.70 was the pre-declared
+  value), favouring fewer lost keeps. With 29 kept conversations in total the
+  loss rate is uncertain.
+- Population (shadow records since 2026-10-03, 30.8k decisions, 995 users):
+  Jev discards 62.9% at 0.80 against nano's 89.6%. Predicted incremental notes
+  spend at J=100 is about 5.2k conversations/day x $0.0024 = about $12/day,
+  inside the $25/day cap (0.95 would have been about $36/day).
+- Deviation from the acceptance bars below: fewer than 250 stratified owner
+  labels and the keep-all readout (due about 2026-10-15) is not in. The owner
+  approved shipping the re-measured threshold at the current J=10 stage; the
+  ramp's abort criteria still apply, with the shadow-predicted discard rate
+  now taken at 0.80.
+
 ## Acceptance bars
 
-Population and measurement: shadow scores all model-tier, transcript-only, <=100-word conversations (dedupe by conversation+transcript hash; note decisions != conversations because `SYNC_UPDATE`/`CLIENT_FINALIZE` re-assess). Ground truth is (a) David's labels on his OWN account only (no agent or human reads other users' transcripts), stratified on nano verdict x Jev verdict x score band {0.85-0.93, 0.93-0.95, 0.95-0.97, >0.97} and on source, reweighted by inclusion probability (Horvitz-Thompson), with a locked confirmation set that is never used for threshold tuning; (b) behavioral outcomes for the whole population from the randomized keep-all arm (opens, stars, shares, edits, chat citations, deletes within 7 days, restores; restores are heavily censored and used only for a monotonicity check).
-Discard GO requires all of: shadow >= 5,000 scored conversations over >= 300 users, Jev failure rate < 5%, p95 latency <= 2.5 s; share of Jev discards (P(discard) > 0.95) judged worth keeping <= 5% on >= 250 stratified David labels; predicted incremental paid-notes spend (conversations nano discards but Jev keeps x measured $0.0024 per kept conversation) <= $25/day or a higher threshold that meets the cap with the same safety bar; and in the production keep-all sample (2% of ambiguous model-tier conversations, starting 2026-10-01 and running for at least 14 days) the open rate of conversations nano would have discarded is >= 5%. At approximately 18,000 nano discards/day, the sample is expected to keep about 360 extra conversations/day, costing about $0.90/day uncached at $0.0024 each. Analyze these outcomes per conversation and account for within-user clustering. To stop the sample, set the production keep-all percentage back to 0 and redeploy; conversations already kept remain kept and are not retroactively discarded. If the open rate is below 5%, flipping discard is NO-GO (value of keeping is not visible in behavior) and nano stays.
+Population and measurement: shadow scores all model-tier, transcript-only, <=100-word conversations (dedupe by conversation+transcript hash; note decisions != conversations because `SYNC_UPDATE`/`CLIENT_FINALIZE` re-assess). Ground truth is (a) David's labels on his OWN account only (no agent or human reads other users' transcripts), stratified on nano verdict x Jev verdict x score band {0.80-0.85, 0.85-0.93, 0.93-0.95, 0.95-0.97, >0.97} (the 0.80-0.85 band added with the 2026-10-05 threshold change) and on source, reweighted by inclusion probability (Horvitz-Thompson), with a locked confirmation set that is never used for threshold tuning; (b) behavioral outcomes for the whole population from the randomized keep-all arm (opens, stars, shares, edits, chat citations, deletes within 7 days, restores; restores are heavily censored and used only for a monotonicity check).
+Discard GO requires all of: shadow >= 5,000 scored conversations over >= 300 users, Jev failure rate < 5%, p95 latency <= 2.5 s; share of Jev discards (P(discard) > the live threshold, 0.80 since 2026-10-05; 0.95 before) judged worth keeping <= 5% on >= 250 stratified David labels; predicted incremental paid-notes spend (conversations nano discards but Jev keeps x measured $0.0024 per kept conversation) <= $25/day or a higher threshold that meets the cap with the same safety bar; and in the production keep-all sample (2% of ambiguous model-tier conversations, starting 2026-10-01 and running for at least 14 days) the open rate of conversations nano would have discarded is >= 5%. At approximately 18,000 nano discards/day, the sample is expected to keep about 360 extra conversations/day, costing about $0.90/day uncached at $0.0024 each. Analyze these outcomes per conversation and account for within-user clustering. To stop the sample, set the production keep-all percentage back to 0 and redeploy; conversations already kept remain kept and are not retroactively discarded. If the open rate is below 5%, flipping discard is NO-GO (value of keeping is not visible in behavior) and nano stays.
 Owner flip GO requires all of: prod shadow P(user) >= 0.9 share among answered third-party candidates within 15-40% (benchmark ~25%; dev showed 74% and must be explained, e.g. by source, empty user name or prompt preamble, before any prod flip); >= 150 David labels stratified by source with Wilson 95% lower bound on precision >= 0.90; flips stay reversible via the stored `attribution_override` record.
 ## Live relevance ramp and coordinator runbook
 

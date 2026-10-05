@@ -9,13 +9,15 @@ import 'package:omi/pages/settings/device/device_info_groups.dart';
 /// hides those rows instead of listing "Unknown" four times.
 void main() {
   Future<AppLocalizations> pump(WidgetTester tester, BtDevice device) async {
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: const [Locale('en')],
-      home: Scaffold(
-        body: SingleChildScrollView(child: DeviceInfoGroups(pairedDevice: device, isDeviceConnected: false)),
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: Scaffold(
+          body: SingleChildScrollView(child: DeviceInfoGroups(pairedDevice: device, isDeviceConnected: false)),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     return AppLocalizations.of(tester.element(find.byType(DeviceInfoGroups)));
   }

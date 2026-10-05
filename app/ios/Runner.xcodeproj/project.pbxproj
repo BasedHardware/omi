@@ -81,6 +81,8 @@
 		7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000008 /* TtsPcmPlayer.swift */; };
 		7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000008 /* TtsPcmPlayer.swift */; };
 		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
+		D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
+		D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
 		7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
 		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
 		DE48ED224FF11175DA9FFC6A /* OmiHomeWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */; };
@@ -173,6 +175,17 @@
 		BDAE310219125E12BCD121BA /* SiriSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B586798536A270D779BECE19 /* SiriSnapshotStore.swift */; };
 		D988BCB88D5D696871753297 /* SiriSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037C2E4049E0EF06EF66231A /* SiriSession.swift */; };
 		F51480F9BEB79F68A8D7E013 /* SiriDebugProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */; };
+		261E5A36C62DAF7938874E94 /* OmiCaptureIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */; };
+		369B31A8217B2FEE8CEB4B22 /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
+		4177FE2DA51D5720F8F5D01E /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
+		5C1D4C59DAD0780D7B679D6D /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */; };
+		706F05FDF2E05DA66960E710 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */; };
+		728AD3B9CE56CAD614E49BC8 /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
+		8003A15D092653E251FDD8E5 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */; };
+		8BD6DEAF00C1D7FBA1706D20 /* OmiCaptureIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */; };
+		A64BDCA35736F648E69CBF74 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */; };
+		AFD5C0DF5AE115C934B37047 /* OmiCaptureLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B1B260455B26BF846102B80 /* OmiCaptureLiveActivity.swift */; };
+		ECDFF5DC9FC101351FF5730A /* OmiCaptureIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -287,6 +300,7 @@
 		7AA100000000000000000005 /* minimp3.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NativeVendor/minimp3.h; sourceTree = "<group>"; };
 		7AA100000000000000000008 /* TtsPcmPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TtsPcmPlayer.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
+		D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceToolsService.swift; sourceTree = "<group>"; };
 		79B00761CB247C7EC7C8983B /* devRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devRelease.xcconfig; path = Flutter/devRelease.xcconfig; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
@@ -346,6 +360,10 @@
 		EDFF6508A941E8259906DDE2 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
 		EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = devLaunchScreen.storyboard; path = Runner/devLaunchScreen.storyboard; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
+		1B1B260455B26BF846102B80 /* OmiCaptureLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureLiveActivity.swift; sourceTree = "<group>"; };
+		39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureAttributes.swift; sourceTree = "<group>"; };
+		643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
+		A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureIntents.swift; sourceTree = "<group>"; };
 		037C2E4049E0EF06EF66231A /* SiriSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriSession.swift; sourceTree = "<group>"; };
 		04725A34C6451C370260A182 /* SiriBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriBridge.swift; sourceTree = "<group>"; };
 		1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiSceneDelegate.swift; sourceTree = "<group>"; };
@@ -413,6 +431,7 @@
 				7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */,
 				A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */,
 				585D7D8307721A4D6595AA27 /* Assets.xcassets */,
+				1B1B260455B26BF846102B80 /* OmiCaptureLiveActivity.swift */,
 				9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */,
 				B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */,
 			);
@@ -530,6 +549,7 @@
 				EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */,
 				E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */,
 				0C49E6672202A57A856CB534 /* BatteryWidget */,
+				0875F1D562BFF0E543689BD5 /* LiveActivity */,
 			);
 			sourceTree = "<group>";
 		};
@@ -576,11 +596,13 @@
 				7AA100000000000000000005 /* minimp3.h */,
 				7AA100000000000000000008 /* TtsPcmPlayer.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
+				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
 				7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				6436409C27A31CD800820AF7 /* InfoPlist.strings */,
+				407DABA232BF4A9F3B36B206 /* LiveActivity */,
 				5C18084533C28B26479F7275 /* SiriIntegration */,
 				1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */,
 			);
@@ -649,6 +671,25 @@
 				BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */,
 			);
 			path = PhoneMic;
+			sourceTree = "<group>";
+		};
+		0875F1D562BFF0E543689BD5 /* LiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */,
+				A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */,
+			);
+			name = LiveActivity;
+			path = LiveActivity;
+			sourceTree = "<group>";
+		};
+		407DABA232BF4A9F3B36B206 /* LiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */,
+			);
+			name = LiveActivity;
+			path = LiveActivity;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -820,6 +861,7 @@
 				DD6F1E8CA4013B6A267D5DD2 /* prodLaunchScreen.storyboard in Resources */,
 				431C5CAEC909BB0043406A09 /* devLaunchScreen.storyboard in Resources */,
 				51EC531CFC451A317C883EBA /* GoogleService-Info.plist in Resources */,
+				5C1D4C59DAD0780D7B679D6D /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -853,6 +895,7 @@
 				CE7B938264FB7372447F8E21 /* prodLaunchScreen.storyboard in Resources */,
 				FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */,
 				16935068EFFE77C62C493C3C /* GoogleService-Info.plist in Resources */,
+				706F05FDF2E05DA66960E710 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1047,6 +1090,7 @@
 				CAD10002CAD10002CAD10002 /* OmiCaptureHealth.swift in Sources */,
 				E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */,
 				E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */,
+				D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */,
 				42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */,
@@ -1085,6 +1129,9 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */,
 				42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */,
+				369B31A8217B2FEE8CEB4B22 /* OmiCaptureAttributes.swift in Sources */,
+				261E5A36C62DAF7938874E94 /* OmiCaptureIntents.swift in Sources */,
+				8003A15D092653E251FDD8E5 /* LiveActivityManager.swift in Sources */,
 				431670FD4CC27AE9A43EB1EA /* SiriPigeon.g.swift in Sources */,
 				D988BCB88D5D696871753297 /* SiriSession.swift in Sources */,
 				89220BD57775CE7DEA3EFCA6 /* SiriEntities.swift in Sources */,
@@ -1112,6 +1159,7 @@
 				CAD10003CAD10003CAD10003 /* OmiCaptureHealth.swift in Sources */,
 				E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */,
 				E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */,
+				D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */,
 				99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */,
 				0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */,
 				BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */,
@@ -1150,6 +1198,9 @@
 				B07ABDD2736E2C87A59FB5E1 /* GeneratedPluginRegistrant.m in Sources */,
 				5B5A7C09B854EF0BFB2C4D18 /* RecorderHostApiImpl.swift in Sources */,
 				15BE32846414AB444D807D9B /* PigeonCommunicator.g.swift in Sources */,
+				4177FE2DA51D5720F8F5D01E /* OmiCaptureAttributes.swift in Sources */,
+				8BD6DEAF00C1D7FBA1706D20 /* OmiCaptureIntents.swift in Sources */,
+				A64BDCA35736F648E69CBF74 /* LiveActivityManager.swift in Sources */,
 				2A0DF503EBD959F1F386CE33 /* SiriPigeon.g.swift in Sources */,
 				056C8F8B6E91AEA3B8868E99 /* SiriSession.swift in Sources */,
 				1E4FA985AB866DBCBB524FFB /* SiriEntities.swift in Sources */,
@@ -1169,6 +1220,9 @@
 				A5F00003A5F00003A5F00003 /* SafeFoundationSinks.swift in Sources */,
 				A014F817EA8AFCDD9EECCEF5 /* BatteryWidgetBundle.swift in Sources */,
 				2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */,
+				728AD3B9CE56CAD614E49BC8 /* OmiCaptureAttributes.swift in Sources */,
+				ECDFF5DC9FC101351FF5730A /* OmiCaptureIntents.swift in Sources */,
+				AFD5C0DF5AE115C934B37047 /* OmiCaptureLiveActivity.swift in Sources */,
 				DE48ED224FF11175DA9FFC6A /* OmiHomeWidgets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

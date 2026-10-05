@@ -97,6 +97,23 @@ def clamp_conversation_search_pagination(page: Optional[int], per_page: Optional
     return max(1, page or 1), max(1, min(per_page or 10, 250))
 
 
+def parse_search_date_range(start_date: Optional[str], end_date: Optional[str]) -> tuple[Optional[int], Optional[int]]:
+    # Convert ISO datetime strings to Unix timestamps if provided
+    start_timestamp = None
+    end_timestamp = None
+    if start_date:
+        try:
+            start_timestamp = int(datetime.fromisoformat(start_date).timestamp())
+        except ValueError:
+            raise ValueError("Invalid start_date; expected an ISO 8601 datetime string")
+    if end_date:
+        try:
+            end_timestamp = int(datetime.fromisoformat(end_date).timestamp())
+        except ValueError:
+            raise ValueError("Invalid end_date; expected an ISO 8601 datetime string")
+    return start_timestamp, end_timestamp
+
+
 def conversation_matches_date_range(
     conversation: Dict[str, Any], start_date: Optional[float] = None, end_date: Optional[float] = None
 ) -> bool:

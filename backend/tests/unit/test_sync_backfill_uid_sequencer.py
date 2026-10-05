@@ -275,7 +275,7 @@ def test_sweeper_replaces_lost_dispatch_then_releases_terminal_job(db, monkeypat
     dispatched = []
     monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
-    monkeypatch.setattr(uid_sequencer, 'get_raw_sync_job', lambda _job_id: {'status': 'queued'})
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
     monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
     expired = NOW + timedelta(minutes=6)
     owner = registry.get_owner('a', firestore_client=db)
@@ -346,7 +346,7 @@ def test_pending_sweep_rotates_heavy_uid_and_reaches_light_uid(db, monkeypatch):
     calls = []
     monkeypatch.setattr(uid_sequencer, 'kick', lambda uid: calls.append(uid) or False)
     monkeypatch.setattr(registry, 'due_owners', lambda **_kwargs: [])
-    monkeypatch.setattr(uid_sequencer, 'get_raw_sync_job', lambda _job_id: None)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: None)
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
     # The first bounded page is dominated by the heavy UID. Deferred entries
     # leave the next page available to another UID on the next Scheduler tick.
@@ -371,7 +371,7 @@ def test_cutover_wake_uses_existing_sync_queue_and_oidc_route(monkeypatch):
     calls = []
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync')
-    monkeypatch.setattr(cloud_tasks, '_enqueue_named_task', lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', lambda *args, **kwargs: calls.append((args, kwargs)))
     cloud_tasks.enqueue_sync_uid_wake('private-uid', 'hash123', 12345)
     args, kwargs = calls[0]
     assert args[:3] == ('sync', 'https://backend-sync.example/v2/sync-backfill-sequencer/wake', 'sbu-hash123-12345')
@@ -387,8 +387,6 @@ def test_named_wake_task_is_scheduled_for_cutover_deadline(monkeypatch):
     monkeypatch.setenv('SYNC_TASKS_PROJECT', 'p')
     monkeypatch.setenv('SYNC_TASKS_LOCATION', 'l')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.test')
-    cloud_tasks._enqueue_named_task(
-        'sync', 'https://backend-sync.example/wake', 'wake', {'uid': 'u'}, schedule_at=12345
-    )
+    cloud_tasks.enqueue_named_task('sync', 'https://backend-sync.example/wake', 'wake', {'uid': 'u'}, schedule_at=12345)
     task = fake.create_task.call_args.kwargs['task']
     assert task.schedule_time.timestamp() == 12345

@@ -91,14 +91,43 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
+  - name: PROACTIVITY_REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: REDIS_DB_HOST
+  - name: PROACTIVITY_REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: PROACTIVITY_REDIS_PORT
+    value: "13151"
+  - name: MENTOR_PIPELINE
+    value: cohort
+  - name: POSTHOG_HOST
+    value: https://us.posthog.com
   - name: MENTOR_GATE_DEBOUNCE_ENABLED
     value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
+  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
+    value: "shadow"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
+  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+    value: "true"
+  - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "shadow"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -406,6 +435,8 @@ env:
     value: "true"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
+  - name: STT_FAILOVER_RECOVERY_ENABLED
+    value: "true"
   - name: STT_ROUTING_MODE
     value: "shadow"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
@@ -534,6 +565,26 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
+  - name: AUDIO_TIMELINE_SPANS
+    value: "true"
+  - name: LIVE_SPEAKER_SPAN_RESOLUTION
+    value: "true"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
+    value: 'true'
+  - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "true"
+  - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
+    value: "true"
+  # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
+  # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
+  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
+    value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

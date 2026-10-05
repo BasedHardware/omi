@@ -81,10 +81,7 @@ class MobileFeedbackReceipt {
   /// Parses the server's durable-write receipt. A 201 alone is insufficient:
   /// callers may only complete the product journey after the ledger confirms
   /// persistence and returns its bounded event coordinate.
-  static MobileFeedbackReceipt? fromJson(
-    Map<String, dynamic> payload, {
-    required String expectedFeedbackId,
-  }) {
+  static MobileFeedbackReceipt? fromJson(Map<String, dynamic> payload, {required String expectedFeedbackId}) {
     try {
       // The generated model applies OpenAPI defaults for these fields. Keep
       // the receipt gate strict: both markers must be present on the wire so
@@ -596,16 +593,10 @@ Future<String?> getUsageDeviceTimeZone() async {
 }
 
 Future<UserUsageResponse?> getUserUsage({required String period, required String? timeZone}) async {
-  final url = Uri.parse('${Env.apiBaseUrl}v1/users/me/usage').replace(queryParameters: {
-    'period': period,
-    if (timeZone != null) 'time_zone': timeZone,
-  });
-  var response = await makeApiCall(
-    url: url.toString(),
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  final url = Uri.parse(
+    '${Env.apiBaseUrl}v1/users/me/usage',
+  ).replace(queryParameters: {'period': period, if (timeZone != null) 'time_zone': timeZone});
+  var response = await makeApiCall(url: url.toString(), headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('getUserUsage response: ${response.body}');
   if (response.statusCode == 200) {

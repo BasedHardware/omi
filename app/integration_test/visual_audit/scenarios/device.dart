@@ -25,9 +25,10 @@ final deviceScenarios = <AuditScenario>[
     page: 'lib/pages/home/device.dart (ConnectedDevice)',
     state: 'A device reported connected with no BLE behind it',
     run: (a) async {
-      await a.pump(const ConnectedDevice(), providers: [
-        ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true)),
-      ]);
+      await a.pump(
+        const ConnectedDevice(),
+        providers: [ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true))],
+      );
       await a.shot('Open the connected device page', step: 'page');
       final forget = find.byKey(const Key('forget_device_button'));
       await a.tester.scrollUntilVisible(forget, 200, scrollable: find.byType(Scrollable).first);
@@ -43,28 +44,41 @@ final deviceScenarios = <AuditScenario>[
     state: 'Omi device on firmware 2.0.10 at 8% battery, not charging; the fixture backend offers firmware 3.0.1',
     run: (a) async {
       PackageInfo.setMockInitialValues(
-          appName: 'Omi', packageName: 'com.friend.ios', version: '1.0.0', buildNumber: '1', buildSignature: '');
+        appName: 'Omi',
+        packageName: 'com.friend.ios',
+        version: '1.0.0',
+        buildNumber: '1',
+        buildSignature: '',
+      );
       // One canned 200 for the version check; failNext serves any status and body once.
-      a.server.failNext('GET', '/v2/firmware/latest',
-          status: 200,
-          body: jsonEncode({
-            'version': '3.0.1',
-            'min_version': '2.0.0',
-            'changelog': ['Faster sync', 'Longer battery life'],
-            'zip_url': 'http://127.0.0.1:9/firmware.zip',
-            'draft': false,
-          }));
+      a.server.failNext(
+        'GET',
+        '/v2/firmware/latest',
+        status: 200,
+        body: jsonEncode({
+          'version': '3.0.1',
+          'min_version': '2.0.0',
+          'changelog': ['Faster sync', 'Longer battery life'],
+          'zip_url': 'http://127.0.0.1:9/firmware.zip',
+          'draft': false,
+        }),
+      );
       final device = BtDevice(
-          id: 'd1',
-          name: 'Omi Device',
-          type: DeviceType.omi,
-          rssi: -50,
-          modelNumber: 'Omi',
-          firmwareRevision: '2.0.10');
-      await a.pump(FirmwareUpdate(device: device), providers: [
-        ChangeNotifierProvider<DeviceProvider>.value(
-            value: AuditDeviceProvider(connected: true, battery: 8, device: device)),
-      ]);
+        id: 'd1',
+        name: 'Omi Device',
+        type: DeviceType.omi,
+        rssi: -50,
+        modelNumber: 'Omi',
+        firmwareRevision: '2.0.10',
+      );
+      await a.pump(
+        FirmwareUpdate(device: device),
+        providers: [
+          ChangeNotifierProvider<DeviceProvider>.value(
+            value: AuditDeviceProvider(connected: true, battery: 8, device: device),
+          ),
+        ],
+      );
       await a.shot('Open firmware update with an update available at 8% battery');
     },
   ),
@@ -143,13 +157,19 @@ Future<void> _pumpDiagnostics(AuditRun a, {required int battery, required int rs
   for (final entry in replies.entries) {
     final channel = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.${entry.key}';
     messenger.setMockMessageHandler(
-        channel, (_) async => BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[entry.value]));
+      channel,
+      (_) async => BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[entry.value]),
+    );
     addTearDown(() => messenger.setMockMessageHandler(channel, null));
   }
 
-  await a.pump(const DeviceDiagnostics(deviceId: _diagnosticsDeviceId), scaffold: false, providers: [
-    ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true, battery: battery)),
-  ]);
+  await a.pump(
+    const DeviceDiagnostics(deviceId: _diagnosticsDeviceId),
+    scaffold: false,
+    providers: [
+      ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true, battery: battery)),
+    ],
+  );
   for (var i = 0; i < 60; i++) {
     BleBridge.instance.onRssiUpdate(_diagnosticsDeviceId, rssi + const [2, -1, 3, 0, -3, 1, -2, 2, 0, -1][i % 10]);
     await a.tester.pump(const Duration(seconds: 1));

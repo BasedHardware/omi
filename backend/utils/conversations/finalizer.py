@@ -27,7 +27,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
-from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -37,14 +37,12 @@ from utils.conversations.process_conversation import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage
-from utils.log_sanitizer import sanitize_pii
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
     classify_finalization_failure,
     finalization_diagnostic_id,
     record_finalization_failure,
 )
-from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
@@ -328,7 +326,7 @@ async def finalize_persisted_conversation(
         stage = 'meeting_receipt'
         await run_blocking(
             db_executor,
-            record_and_persist_finalized_meeting_receipt,
+            record_finalized_meeting_receipt,
             uid,
             conversation,
             finalization_job_id=finalization_job_id,
@@ -358,22 +356,6 @@ async def finalize_persisted_conversation(
                         device_id=device_id,
                         account_generation=decision.account_generation,
                     )
-        stage = 'capture_arrival'
-        source = getattr(conversation, 'source', None)
-        source_value = getattr(source, 'value', source)
-        if source_value == 'omi' and not getattr(conversation, 'discarded', False):
-            try:
-                structured = getattr(conversation, 'structured', None)
-                summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                await run_blocking(
-                    db_executor, persist_capture_arrival_intent, uid, conversation_id=conversation_id, summary=summary
-                )
-            except Exception as error:
-                logger.warning(
-                    'chat-first capture arrival intent failed during finalization uid=%s error=%s',
-                    sanitize_pii(uid),
-                    type(error).__name__,
-                )
         stage = 'fanout_completion'
         fanout_completed = await run_blocking(
             db_executor,
