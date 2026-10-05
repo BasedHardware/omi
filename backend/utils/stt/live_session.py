@@ -25,12 +25,14 @@ from utils.stt.live_router import connecting_target, target_circuit, TargetEngin
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
 from config.live_stt_replay import ReplayLimits
+from config.audio_timeline import live_capture_window_translator_sends_enabled
 from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
+from utils.stt.replay_capture_accounting import note_observed_spans
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
 
 if TYPE_CHECKING:
@@ -814,6 +816,7 @@ class LiveLegSocket(STTSocket):
                 sent_spans = ((start_sample, len(data) // 2),)
             else:
                 sent_spans = tuple(output.send_spans) if output is not None else ()
+        record_before_finalize = live_capture_window_translator_sends_enabled()
         try:
             if audio:
                 try:
@@ -837,6 +840,8 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     self._dead = True
                     return False
+            if record_before_finalize and self._send_tracker is not None:
+                note_observed_spans(self._send_tracker, sent_spans, 'managed_chain')
             if output is not None and output.should_finalize:
                 if self.window and isinstance(self.raw, WindowedParakeetSocket):
                     self.raw.finalize(vad_pause=True)
@@ -848,7 +853,7 @@ class LiveLegSocket(STTSocket):
             self._finish_transport()
             return False
         self._idle_send_spans = sent_spans
-        if sent_spans and self._send_tracker is not None:
+        if sent_spans and self._send_tracker is not None and not record_before_finalize:
             self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
