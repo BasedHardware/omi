@@ -36,6 +36,14 @@ public protocol NativePolicyBridge: Sendable {
     func normalizePacket(_ raw: [UInt8]) -> (status: Int32, payload: [UInt8])
     /// Native host capability JSON.
     func nativeCapabilities() -> String?
+    /// SHA-256 digest (`omi_auth_sha256`).
+    func authSHA256(_ data: [UInt8]) -> [UInt8]?
+    /// Bytes from the OS CSPRNG (`omi_auth_random_bytes`).
+    func authRandomBytes(_ count: Int) -> [UInt8]?
+    /// The validated OAuth callback code (`omi_auth_callback_code`).
+    func authCallbackCode(
+        _ callback: String, redirectURI: String, expectedState: String
+    ) -> String?
 
     // Portable BLE device logic (`omi_device`): naming, energy rule,
     // device-info parsing, packet assembly, capture machine. Handles are
@@ -177,6 +185,18 @@ public enum Policy {
     }
     public static func nativeCapabilities() -> String? {
         bridge.nativeCapabilities()
+    }
+    public static func authSHA256(_ data: [UInt8]) -> [UInt8]? {
+        bridge.authSHA256(data)
+    }
+    public static func authRandomBytes(_ count: Int) -> [UInt8]? {
+        bridge.authRandomBytes(count)
+    }
+    public static func authCallbackCode(
+        _ callback: String, redirectURI: String, expectedState: String
+    ) -> String? {
+        bridge.authCallbackCode(
+            callback, redirectURI: redirectURI, expectedState: expectedState)
     }
 
     // MARK: Portable BLE device logic (omi_device)
@@ -365,6 +385,41 @@ struct DefaultPolicyBridge: NativePolicyBridge {
         let status = omi_get_native_capabilities(&buffer, buffer.count)
         guard status == OMI_STATUS_OK else { return nil }
         return String(cString: buffer)
+    }
+
+    // MARK: omi_auth
+
+    func authSHA256(_ data: [UInt8]) -> [UInt8]? {
+        var digest = [UInt8](repeating: 0, count: Int(OMI_AUTH_SHA256_LENGTH))
+        let status = data.withUnsafeBufferPointer { buffer in
+            omi_auth_sha256(buffer.baseAddress, buffer.count, &digest)
+        }
+        return status == 0 ? digest : nil
+    }
+
+    func authRandomBytes(_ count: Int) -> [UInt8]? {
+        guard count >= 0 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: count)
+        let status = bytes.withUnsafeMutableBufferPointer { buffer in
+            omi_auth_random_bytes(buffer.baseAddress, buffer.count)
+        }
+        return status == 0 ? bytes : nil
+    }
+
+    func authCallbackCode(
+        _ callback: String, redirectURI: String, expectedState: String
+    ) -> String? {
+        var buffer = [CChar](repeating: 0, count: callback.utf8.count + 1)
+        let status = callback.withCString { callbackPointer in
+            redirectURI.withCString { redirectPointer in
+                expectedState.withCString { statePointer in
+                    omi_auth_callback_code(
+                        callbackPointer, redirectPointer, statePointer, &buffer,
+                        buffer.count)
+                }
+            }
+        }
+        return status == 1 ? String(cString: buffer) : nil
     }
 
     // MARK: omi_device (portable BLE device logic)

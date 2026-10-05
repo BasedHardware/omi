@@ -27,6 +27,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/skiptools/skip.git", from: "1.9.11"),
         .package(url: "https://github.com/skiptools/skip-lib.git", from: "1.4.3"),
+        .package(url: "https://github.com/skiptools/skip-foundation.git", from: "1.4.6"),
         .package(url: "https://github.com/skiptools/skip-ui.git", from: "1.60.0"),
         // OnboardingKit (danielsaidi, MIT) powers the onboarding cards on
         // Apple platforms. Skip cannot transpile it, so OmiUI imports it
@@ -51,14 +52,17 @@ let package = Package(
                 "src/omi_backend_http.cpp",
                 "src/omi_backend_recording.cpp",
                 "src/omi_device.cpp",
+                "src/omi_auth.cpp",
             ],
-            publicHeadersPath: "include"
+            publicHeadersPath: "include",
+            linkerSettings: [.linkedLibrary("bcrypt", .when(platforms: [.windows]))]
         ),
         .target(
             name: "OmiKit",
             dependencies: [
                 "CNativeCore",
                 .product(name: "SkipLib", package: "skip-lib"),
+                .product(name: "SkipFoundation", package: "skip-foundation"),
             ],
             path: "app/Sources/OmiKit",
             plugins: [skipStone]

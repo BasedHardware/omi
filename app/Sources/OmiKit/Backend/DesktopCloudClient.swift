@@ -203,7 +203,7 @@ func settledError(_ error: Error) -> String {
 
 func readOptional<Value>(
     _ load: () async throws -> Value
-) async -> (value: Value?, error: String?) {
+) async -> (loaded: Value?, error: String?) {
     do {
         return (try await load(), nil)
     } catch {
@@ -220,7 +220,7 @@ public func loadConnectors(
                 .body,
             "Apps response")
     }
-    guard let apps = appsResult.value else { throw CloudClientError.malformed(appsResult.error ?? "") }
+    guard let apps = appsResult.loaded else { throw CloudClientError.malformed(appsResult.error ?? "") }
     let owner = await readOptional {
         try parseCloudProfile(
             try await cloudRequest(
@@ -237,10 +237,10 @@ public func loadConnectors(
             ).body,
             "Enabled apps response")
     }
-    guard let enabledIds = enabledResult.value else {
+    guard let enabledIds = enabledResult.loaded else {
         return ConnectorsSnapshot(
             apps: apps, enabledIds: nil, enabledError: enabledResult.error,
-            ownerUid: owner.value?.uid)
+            ownerUid: owner.loaded?.uid)
     }
     let enabled = Set(enabledIds)
     return ConnectorsSnapshot(
@@ -249,7 +249,7 @@ public func loadConnectors(
             app.enabled = app.enabled || enabled.contains(app.id)
             return app
         },
-        enabledIds: enabledIds, enabledError: nil, ownerUid: owner.value?.uid)
+        enabledIds: enabledIds, enabledError: nil, ownerUid: owner.loaded?.uid)
 }
 
 public func loadAccountSettings(
@@ -304,13 +304,13 @@ public func loadAccountSettings(
             "Webhooks response")
     }
     return AccountSettingsSnapshot(
-        profile: profile.value, profileError: profile.error,
-        subscription: subscription.value, subscriptionError: subscription.error,
-        storeRecordingPermission: recording.value,
-        storeRecordingError: recording.error, trainingOptedIn: training.value,
-        trainingError: training.error, privateCloudSync: privateCloudSync.value,
+        profile: profile.loaded, profileError: profile.error,
+        subscription: subscription.loaded, subscriptionError: subscription.error,
+        storeRecordingPermission: recording.loaded,
+        storeRecordingError: recording.error, trainingOptedIn: training.loaded,
+        trainingError: training.error, privateCloudSync: privateCloudSync.loaded,
         privateCloudSyncError: privateCloudSync.error,
-        webhooks: webhooks.value, webhooksError: webhooks.error)
+        webhooks: webhooks.loaded, webhooksError: webhooks.error)
 }
 
 func expectOk(

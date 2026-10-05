@@ -400,11 +400,9 @@ public actor HTTPBackendTransport: BackendTransport {
     // MARK: Write identity
 
     public func createWriteId() async throws -> String {
-        var entropy = [UInt8](repeating: 0, count: WRITE_ID_ENTROPY_BYTES)
-        for index in entropy.indices {
-            entropy[index] = UInt8.random(in: 0...255)
-        }
-        guard let writeId = mintWriteId(entropy) else {
+        guard let entropy = Policy.authRandomBytes(WRITE_ID_ENTROPY_BYTES),
+            let writeId = mintWriteId(entropy)
+        else {
             throw TransportFailure.unconfigured
         }
         return writeId

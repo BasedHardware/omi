@@ -1,11 +1,4 @@
 import Foundation
-#if !SKIP
-#if canImport(Crypto)
-import Crypto
-#else
-import CommonCrypto
-#endif
-#endif
 
 // Session/auth flows that are transport-level, ported from the native auth
 // modules (see docs/auth-and-sessions.md):
@@ -113,28 +106,9 @@ public struct AuthSessionConfig: Sendable {
 /// SHA-256 → base64url, shared by PKCE and the desktop handoff.
 public enum AuthCrypto {
     public static func sha256Base64URL(_ value: String) -> String? {
-        #if !SKIP
-        let digest = sha256(Array(value.utf8))
+        guard let digest = Policy.authSHA256(Array(value.utf8)) else { return nil }
         return Base64Codec.encodeURL(digest)
-        #else
-        return nil
-        #endif
     }
-
-    #if !SKIP
-    static func sha256(_ bytes: [UInt8]) -> [UInt8] {
-        #if canImport(Crypto)
-        let digest = SHA256.hash(data: Data(bytes))
-        return digest.map { $0 }
-        #else
-        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
-        bytes.withUnsafeBufferPointer { buffer in
-            _ = CC_SHA256(buffer.baseAddress, CC_LONG(bytes.count), &digest)
-        }
-        return digest
-        #endif
-    }
-    #endif
 
     /// `sha256url(challenge + "\0" + confirmationChallenge)` — mirrors the
     /// Worker's `deriveSessionId`.
@@ -147,18 +121,18 @@ public enum AuthCrypto {
     /// Six decimal digits, rejection-sampled over 000000-999999.
     public static func confirmationCode() -> String? {
         for _ in 0..<16 {
-            let raw = UInt32.random(in: 0...UInt32.max)
-            if raw < 4_294_000_000 {
+            guard let bytes = Policy.authRandomBytes(4), bytes.count == 4 else { return nil }
+            let raw =
+                (UInt32(bytes[0]) << 24) | (UInt32(bytes[1]) << 16)
+                | (UInt32(bytes[2]) << 8) | UInt32(bytes[3])
+            if raw < UInt32(4_294_000_000) {
                 return String(format: "%06d", raw % 1_000_000)
             }
         }
         return nil
     }
     public static func randomValue() -> String? {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        for index in bytes.indices {
-            bytes[index] = UInt8.random(in: 0...255)
-        }
+        guard let bytes = Policy.authRandomBytes(32), bytes.count == 32 else { return nil }
         return Base64Codec.encodeURL(bytes)
     }
 }
@@ -190,34 +164,7 @@ public func legacyAuthorizeURL(
 public func authCallbackCode(
     _ callback: String, redirectURI: String, expectedState: String
 ) -> String? {
-    guard
-        let callbackComponents = URLComponents(string: callback),
-        let redirect = URLComponents(string: redirectURI),
-        !expectedState.isEmpty,
-        callbackComponents.user == nil,
-        callbackComponents.password == nil,
-        callbackComponents.fragment == nil,
-        (callbackComponents.scheme ?? "").lowercased()
-            == (redirect.scheme ?? "").lowercased(),
-        (callbackComponents.host ?? "").lowercased()
-            == (redirect.host ?? "").lowercased(),
-        callbackComponents.percentEncodedPath == redirect.percentEncodedPath,
-        !redirect.path.isEmpty,
-        callbackComponents.port == redirect.port
-    else {
-        return nil
-    }
-    var values: [String: String] = [:]
-    for item in callbackComponents.queryItems ?? [] {
-        guard let value = item.value, values[item.name] == nil else { return nil }
-        values[item.name] = value
-    }
-    guard values["error"] == nil, values["state"] == expectedState,
-        let code = values["code"], !code.isEmpty
-    else {
-        return nil
-    }
-    return code
+    Policy.authCallbackCode(callback, redirectURI: redirectURI, expectedState: expectedState)
 }
 
 /// Collect one bounded HTTP header block from a fragmented loopback callback.
@@ -232,7 +179,7 @@ public struct AuthHTTPRequestHeaderAccumulator: Sendable {
     }
 
     private let maximumBytes: Int
-    private var bytes = Data()
+    private var bytes: [UInt8] = []
 
     public init(maximumBytes: Int = 16 * 1024) {
         self.maximumBytes = max(1, maximumBytes)
@@ -240,27 +187,36 @@ public struct AuthHTTPRequestHeaderAccumulator: Sendable {
 
     public mutating func append(_ chunk: Data) -> AppendResult {
         guard chunk.count <= maximumBytes - bytes.count else { return .tooLarge }
-        bytes.append(chunk)
-
-        let headerEnd: Data.Index?
-        if let range = bytes.range(of: Data([13, 10, 13, 10])) {
-            headerEnd = range.upperBound
-        } else if let range = bytes.range(of: Data([10, 10])) {
-            headerEnd = range.upperBound
-        } else {
-            headerEnd = nil
+        for index in 0..<chunk.count {
+            bytes.append(chunk[index])
         }
+
+        let headerEnd =
+            Self.terminatorEnd(bytes, [13, 10, 13, 10]) ?? Self.terminatorEnd(bytes, [10, 10])
 
         if let headerEnd {
             guard
                 let request = String(
-                    data: bytes[..<headerEnd], encoding: String.Encoding.utf8)
+                    data: Data(Array(bytes[0..<headerEnd])), encoding: String.Encoding.utf8)
             else {
                 return .invalidEncoding
             }
             return .complete(request)
         }
         return bytes.count == maximumBytes ? .tooLarge : .incomplete
+    }
+
+    private static func terminatorEnd(_ bytes: [UInt8], _ terminator: [UInt8]) -> Int? {
+        guard bytes.count >= terminator.count else { return nil }
+        for start in 0...(bytes.count - terminator.count) {
+            var matches = true
+            for offset in 0..<terminator.count where bytes[start + offset] != terminator[offset] {
+                matches = false
+                break
+            }
+            if matches { return start + terminator.count }
+        }
+        return nil
     }
 }
 
