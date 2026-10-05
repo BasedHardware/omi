@@ -1275,8 +1275,8 @@ def get_conversation_notes(
             evidence_block=import_module('utils.conversations.episode_evidence').render_episode_evidence(
                 evidence_items
             ),
-            capture_finished_local_iso=(
-                episode_finished_at.astimezone(user_tz).isoformat() if episode_finished_at else None
+            capture_finished_local_iso=import_module('utils.llm.episode_writer').episode_finish_local_iso(
+                episode_finished_at, user_tz
             ),
         )
     elif rich_mode:

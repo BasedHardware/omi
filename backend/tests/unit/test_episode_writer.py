@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import replace
+import pytest
 
 from config.episode_writer import EpisodeWriterSettings, episode_writer_settings
 from testing.episode_notes.cache import cached_call
@@ -260,3 +261,33 @@ def test_budget_route_reuses_baseline_generation_and_both_judges(tmp_path):
     routed = [case for case in report['cases'] if case['arm'] == 'episode']
     assert len(routed) == 2 and all(case['thinking_fallback'] for case in routed)
     assert all(case['writer_arm'] == 'baseline' for case in routed)
+
+
+def test_effort_preserves_known_byok_models_outside_the_supported_family(monkeypatch):
+    from types import SimpleNamespace
+    from utils.llm.episode_writer import bind_episode_effort
+    from utils.observability import fallback
+
+    monkeypatch.setattr(fallback, 'record_fallback', lambda **kwargs: None)
+    model = SimpleNamespace(
+        model_name='vendor/non-reasoning-model', bind=lambda **_: pytest.fail('unsupported override')
+    )
+    assert bind_episode_effort(SimpleNamespace(bound=model), 'xhigh').bound is model
+    bindings = []
+    supported = SimpleNamespace(model_name='openai/gpt-6-luna', bind=lambda **kwargs: bindings.append(kwargs))
+    bind_episode_effort(SimpleNamespace(bound=supported, bind=supported.bind), 'xhigh')
+    assert bindings == [{'reasoning_effort': 'xhigh'}]
+
+
+def test_capture_finish_matches_start_convention_for_naive_utc():
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from utils.llm.episode_writer import episode_finish_local_iso
+
+    captured = datetime(2026, 1, 1, 10)
+    local = ZoneInfo('Asia/Ho_Chi_Minh')
+    assert episode_finish_local_iso(captured, local) == '2026-01-01T17:00:00+07:00'
+    assert episode_finish_local_iso(captured.replace(tzinfo=timezone.utc), local) == episode_finish_local_iso(
+        captured, local
+    )
+    assert episode_finish_local_iso(None, local) is None

@@ -155,3 +155,7 @@ Requested/actual effort and byte ceiling/size are logged. Default effort is xhig
 with this guard; invalid effort uses no override. The 60s deadline stays unchanged.
 A cache-only fixed-candidate DEV policy replay meets both samples; held-out
 acceptance and operational completion are still required before any ramp.
+
+Known BYOK models outside the supported reasoning family keep their own options,
+with a fixed effort-downgrade violation. Naive capture-end timestamps use UTC,
+matching the existing capture-start convention. Neither changes source text.

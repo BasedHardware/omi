@@ -47,7 +47,9 @@ missing usage is unknown, not zero. Existing fallback counters retain each viola
 Receipts also record reasoning tokens, effort, selection mode/effort/deadline,
 claims enabled, selection calls, requested/actual effort, estimated input bytes,
 configured byte ceiling and model errors. Retry count excludes selection.
-Recoverable selector/repair errors are separate from processing errors.
+Recoverable selector/repair errors are separate from processing errors. Known
+BYOK models outside the supported reasoning family retain their own options;
+`effort_unsupported_model` records the downgrade without model/key/content logs.
 Count retrieval reads with the existing Firestore read-site instrumentation. Billing,
 LLM gateway routing, cache writes and physical attempts need separate dashboards;
 these receipts count model invocations, not gateway/direct transport hops.

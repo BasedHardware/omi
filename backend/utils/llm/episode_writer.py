@@ -1,6 +1,7 @@
 """Bounded optional selection pass; writer receives only original selected evidence."""
 
 import json
+from datetime import timezone
 from typing import Any
 
 from config.episode_writer import EpisodeWriterSettings
@@ -15,7 +16,31 @@ from utils.conversations.episode_selection import (
 
 
 def bind_episode_effort(model: Any, effort: str) -> Any:
-    return model if effort == 'default' else model.bind(reasoning_effort=effort)
+    if effort == 'default':
+        return model
+    underlying = getattr(model, 'bound', model)
+    name = getattr(underlying, 'model_name', None) or getattr(underlying, 'model', None)
+    if isinstance(name, str) and not (
+        name.rsplit('/', 1)[-1].startswith(('gpt-5.6', 'gpt-6'))
+        or type(underlying).__module__ == 'utils.llm.gateway_client'
+    ):
+        # BYOK can resolve this feature to another provider/model. Keep its own options.
+        from utils.llm.notes_observability import current_run
+        from utils.observability.fallback import record_fallback
+
+        run = current_run()
+        if run is not None:
+            run.effort = 'default'
+            run.violations.add('effort_unsupported_model')
+        record_fallback(
+            component='conversation_notes',
+            from_mode='episode_effort',
+            to_mode='model_default',
+            reason='local_heal',
+            outcome='degraded',
+        )
+        return model
+    return model.bind(reasoning_effort=effort)
 
 
 def episode_input_bytes(messages) -> int:
@@ -30,6 +55,13 @@ def episode_input_bytes(messages) -> int:
             text = block if isinstance(block, str) else json.dumps(block, ensure_ascii=False)
             total += len(text.encode('utf-8'))
     return total
+
+
+def episode_finish_local_iso(finished_at, user_tz):
+    if finished_at is None:
+        return None
+    aware = finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)
+    return aware.astimezone(user_tz).isoformat()
 
 
 def episode_budget_exceeded(messages, settings, run) -> bool:
