@@ -261,7 +261,8 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_UNION", "value": "false"},\n'
-        '        {"name": "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS", "value": "false"},',
+        '        {"name": "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS", "value": "false"},\n'
+        '        {"name": "SONIOX_CAPTURE_AXIS_DIAGNOSTICS", "value": "false"},',
     )
 
 

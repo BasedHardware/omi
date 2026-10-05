@@ -436,7 +436,7 @@ env:
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_FAILOVER_RECOVERY_ENABLED
-    value: "false"
+    value: "true"
   - name: STT_ROUTING_MODE
     value: "shadow"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
@@ -578,6 +578,8 @@ env:
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'true'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "true"
+  - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
   # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
