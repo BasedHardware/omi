@@ -38,7 +38,11 @@ class SystemOneEndpoint:
             validated = _validated_answers(result, body['questions'])
             if validated is None:
                 raise ValueError('malformed')
-            return LLMResult(content={'scores': {q: validated.noul(q) for q in body['questions']}}, **receipt.cost())
+            scores = {
+                q: (dict(validated.answers[q]['probabilities']) if question['type'] == 'choice' else validated.noul(q))
+                for q, question in body['questions'].items()
+            }
+            return LLMResult(content={'scores': scores}, **receipt.cost())
         except Exception as exc:
             raise LLMCallError(
                 type(exc).__name__,

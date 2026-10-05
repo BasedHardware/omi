@@ -125,8 +125,29 @@ def evaluate(
     judge_model: str = SCORING_MODEL,
     settings: EpisodeWriterSettings | None = None,
     judge_samples: int = 1,
+    experiment: str = 'none',
+    experiment_cutoff: float = 0.3,
 ) -> dict:
     settings = settings or EpisodeWriterSettings(selection='compact', claims=True)
+    if experiment != 'none' and split != 'dev':
+        raise ValueError('generation/selection experiments are DEV only')
+    if (
+        experiment
+        not in {
+            'none',
+            'verify',
+            'fact_check',
+            'facts_first',
+            'best_two',
+            'jev_veto',
+            'jev_per_source',
+            'jev_rank',
+            'jev_discussed',
+            'jev_choice',
+        }
+        or not 0 <= experiment_cutoff <= 1
+    ):
+        raise ValueError('invalid experiment')
     if judge_samples not in (1, 2):
         raise ValueError('judge samples must be 1 or 2')
     if split == 'held_out' and not frozen:
@@ -191,6 +212,7 @@ def evaluate(
             tier, route_reason, tier_fallback, failed_writer = 'none', 'none', False, None
             result, judged = None, None
             selection_result, selection_fallback = None, None
+            helper_result, experiment_receipt = None, {}
             selected_items = fixture_evidence_items(episode)
             phase = 'candidate'
             try:
@@ -198,7 +220,18 @@ def evaluate(
                     result = LLMResult(content=stored[episode.id])
                     prompt_hash = None
                 else:
-                    if arm == 'episode' and settings.selection == 'deterministic':
+                    if arm == 'episode' and experiment.startswith('jev_'):
+                        from testing.episode_notes.selection_experiments import experiment_selection
+
+                        selected_items, selection_result, selection_fallback = experiment_selection(
+                            selected_items,
+                            episode,
+                            mode=experiment,
+                            cutoff=experiment_cutoff,
+                            cache_dir=cache_dir,
+                            llm=llm,
+                        )
+                    elif arm == 'episode' and settings.selection == 'deterministic':
                         selected_items = deterministic_episode_selection(
                             selected_items, finished_at=episode.evidence.finished_at
                         )
@@ -216,6 +249,12 @@ def evaluate(
                             selected_items, episode, cache_dir=cache_dir, llm=llm, settings=settings
                         )
                     phase = 'candidate'
+                    if arm == 'episode' and experiment == 'facts_first':
+                        from testing.episode_notes.generation_experiments import extract_facts
+
+                        selected_items, helper_result = extract_facts(
+                            selected_items, llm=llm, cache_dir=cache_dir, model=candidate_model
+                        )
                     prompt, payload, writer_arm = routed_candidate_request(
                         episode, arm, settings, selected_items, candidate_prompt
                     )
@@ -245,6 +284,40 @@ def evaluate(
                         result = cached_call(cache_dir, writer_arm, candidate_model, prompt, payload, llm)
                         tier_fallback = True
                     prompt_hash = fingerprint(prompt)
+                    if arm == 'episode' and experiment in {'verify', 'fact_check', 'best_two'}:
+                        from testing.episode_notes.generation_experiments import verify_draft, fact_check, best_of_two
+
+                        try:
+                            if experiment == 'verify':
+                                remaining = settings.writer_timeout - (result.latency_seconds or 0)
+                                if remaining >= 15:
+                                    result, helper_result, experiment_receipt = verify_draft(
+                                        result,
+                                        selected_items,
+                                        llm=llm,
+                                        cache_dir=cache_dir,
+                                        model=candidate_model,
+                                        timeout=remaining,
+                                    )
+                                else:
+                                    experiment_receipt = {'helper_fallback': 'insufficient_headroom'}
+                            elif experiment == 'fact_check':
+                                result, helper_result, experiment_receipt = fact_check(
+                                    result, selected_items, llm=llm, cache_dir=cache_dir, cutoff=experiment_cutoff
+                                )
+                            else:
+                                result, helper_result, experiment_receipt = best_of_two(
+                                    result,
+                                    prompt,
+                                    payload,
+                                    selected_items,
+                                    llm=llm,
+                                    cache_dir=cache_dir,
+                                    model=candidate_model,
+                                )
+                        except Exception as exc:
+                            helper_result = exc.result if isinstance(exc, LLMCallError) else None
+                            experiment_receipt = {'helper_fallback': type(exc).__name__}
                 if writer_arm == 'episode':
                     result.content['note_claims'] = [
                         claim.model_dump()
@@ -286,6 +359,9 @@ def evaluate(
                             'route_reason': route_reason,
                             'tier_fallback': tier_fallback,
                             'failed_writer_cost': failed_writer.cost() if failed_writer else None,
+                            'experiment': experiment,
+                            'experiment_receipt': experiment_receipt,
+                            'helper_cost': helper_result.cost() if helper_result else None,
                             'stratum': episode.stratum,
                             'arm': arm,
                             'writer_arm': writer_arm,
@@ -298,7 +374,11 @@ def evaluate(
                                     if failed_writer
                                     else result
                                 ),
-                                selection_result,
+                                (
+                                    LLMResult(content={}, **combined_cost(helper_result, selection_result))
+                                    if helper_result
+                                    else selection_result
+                                ),
                             ),
                             'generation_performed': arm != 'stored',
                             'candidate_reasoning_tokens': result.reasoning_tokens,
@@ -356,6 +436,8 @@ def evaluate(
             'apply_deadlines': settings.apply_deadlines,
             'writer_timeout': settings.writer_timeout,
             'c6_timeout': settings.c6_timeout,
+            'experiment': experiment,
+            'experiment_cutoff': experiment_cutoff,
         },
         'samples': {
             str(sample): {

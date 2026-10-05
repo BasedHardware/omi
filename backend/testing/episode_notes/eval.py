@@ -115,6 +115,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--episode-id', action='append', default=[])
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--cache-dir', type=Path)
+    parser.add_argument('--spend-log', type=Path, help='Append aggregate-safe receipts for fresh endpoint calls only')
     parser.add_argument('--concurrency', type=int, default=4, choices=range(1, 9))
     parser.add_argument('--max-tokens', type=int, default=32000)
     parser.add_argument('--timeout', type=float, default=300)
@@ -133,6 +134,23 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--c6-timeout', type=float, default=115)
     parser.add_argument('--no-claims', action='store_true')
     parser.add_argument('--judge-samples', type=int, choices=(1, 2), default=1)
+    parser.add_argument(
+        '--experiment',
+        choices=(
+            'none',
+            'verify',
+            'fact_check',
+            'facts_first',
+            'best_two',
+            'jev_veto',
+            'jev_per_source',
+            'jev_rank',
+            'jev_discussed',
+            'jev_choice',
+        ),
+        default='none',
+    )
+    parser.add_argument('--experiment-cutoff', type=float, default=0.3)
     parser.add_argument('--reference-model', default=os.getenv('EPISODE_EVAL_REFERENCE_MODEL', SCORING_MODEL))
     parser.add_argument('--judge-model', default=os.getenv('EPISODE_EVAL_JUDGE_MODEL', SCORING_MODEL))
     args = parser.parse_args(argv)
@@ -149,6 +167,8 @@ def main(argv: list[str] | None = None) -> None:
     try:
         validate_output_path(output, synthetic=fixtures.synthetic)
         validate_output_path(cache, synthetic=fixtures.synthetic)
+        if args.spend_log:
+            validate_output_path(args.spend_log.expanduser(), synthetic=fixtures.synthetic)
         if output.resolve() == args.fixtures.expanduser().resolve():
             raise ValueError('output cannot overwrite fixtures')
     except ValueError as exc:
@@ -168,17 +188,40 @@ def main(argv: list[str] | None = None) -> None:
     from utils.conversations.episode_jev import JEV_SELECTOR_PROMPT
 
     jev = None
+    from threading import Lock
+
+    spend_lock = Lock()
 
     def llm(prompt, payload):
         nonlocal jev
-        if prompt == JEV_SELECTOR_PROMPT:
-            if jev is None:
-                from testing.episode_notes.systemone import SystemOneEndpoint
-
-                jev = SystemOneEndpoint(key=key, base_url=base_url)
-            return jev(prompt, payload)
         role = 'reference' if prompt == REFERENCE_PROMPT else 'judge' if prompt == JUDGE_PROMPT else 'candidate'
-        return endpoints[role](prompt, payload)
+        result = None
+        try:
+            if prompt == JEV_SELECTOR_PROMPT:
+                role = 'jev'
+                if jev is None:
+                    from testing.episode_notes.systemone import SystemOneEndpoint
+
+                    jev = SystemOneEndpoint(key=key, base_url=base_url)
+                result = jev(prompt, payload)
+            else:
+                result = endpoints[role](prompt, payload)
+            return result
+        except LLMCallError as exc:
+            result = exc.result
+            raise
+        finally:
+            if args.spend_log and result is not None:
+                receipt = {
+                    'role': role,
+                    'effort': (payload.get('_request_options') or {}).get('effort', 'default'),
+                    **result.cost(),
+                }
+                path = args.spend_log.expanduser()
+                with spend_lock:
+                    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                    with path.open('a') as handle:
+                        handle.write(json.dumps(receipt) + '\n')
 
     try:
         report = evaluate(
@@ -205,6 +248,8 @@ def main(argv: list[str] | None = None) -> None:
                 c6_timeout=args.c6_timeout,
             ),
             judge_samples=args.judge_samples,
+            experiment=args.experiment,
+            experiment_cutoff=args.experiment_cutoff,
         )
         write_json(output, report)
     except Exception as exc:
