@@ -32,10 +32,17 @@ SPEC.loader.exec_module(renderer)
 IMAGE = 'gcr.io/based-hardware-dev/backend@sha256:' + 'a' * 64
 
 
-def test_stable_recovery_flag_is_scoped_to_prod_listen():
+@pytest.mark.parametrize('runtime_source', ['committed', 'composed'])
+def test_stable_recovery_flag_is_scoped_to_prod_listen(runtime_source):
     flag = 'STT_FAILOVER_RECOVERY_ENABLED'
-    committed = yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())
-    composed = compose_manifest()
+    # Use the equivalent safe C parser for the large committed manifest so
+    # this scope contract fits the fast-unit CPU budget on CI runners.
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    manifest = (
+        yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
+        if runtime_source == 'committed'
+        else compose_manifest()
+    )
 
     def declarations(node, path=()):
         if isinstance(node, dict):
@@ -50,15 +57,15 @@ def test_stable_recovery_flag_is_scoped_to_prod_listen():
 
     # Exhaustive paths also reject declarations (even false/secret-backed) on
     # pusher, sync, desktop-backend, jobs, shared config or any future service.
-    for manifest in (committed, composed):
-        assert dict(declarations(manifest)) == {
-            ('environments', 'prod', 'gke', 'backend-listen', 'env'): {'value': 'true', 'category': 'rollout'},
-            ('environments', 'dev', 'gke', 'backend-listen', 'env'): {'value': 'false', 'category': 'rollout'},
-        }
+    assert dict(declarations(manifest)) == {
+        ('environments', 'prod', 'gke', 'backend-listen', 'env'): {'value': 'true', 'category': 'rollout'},
+        ('environments', 'dev', 'gke', 'backend-listen', 'env'): {'value': 'false', 'category': 'rollout'},
+    }
 
     for environment, expected in (('prod', 'true'), ('dev', 'false')):
-        values = yaml.safe_load(
-            (ROOT / f'backend/charts/backend-listen/{environment}_omi_backend_listen_values.yaml').read_text()
+        values = yaml.load(
+            (ROOT / f'backend/charts/backend-listen/{environment}_omi_backend_listen_values.yaml').read_text(),
+            Loader=loader,
         )
         assert [entry for entry in values['env'] if entry['name'] == flag] == [{'name': flag, 'value': expected}]
 
