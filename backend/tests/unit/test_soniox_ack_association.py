@@ -21,14 +21,15 @@ from utils.stt.soniox_idle import IdleSonioxSocket
 async def barrier(raw, wire):
     """Exact local write completion, bounded by turns rather than host wall time."""
     marker = '{"type":"keepalive","r12_barrier":true}'
+    turns = 20 * (raw._send_queue.qsize() + 1)
     raw._send_queue.put_nowait(marker)
-    for _ in range(20):
+    for _ in range(turns):
         await asyncio.sleep(0)
         while not wire.writes.empty():
             if wire.writes.get_nowait() == marker:
                 await asyncio.sleep(0)
                 return
-    pytest.fail('Local FIFO writer did not complete the barrier in 20 turns')
+    pytest.fail(f'Local FIFO writer did not complete the barrier in {turns} turns')
 
 
 def gate_values(mode):
