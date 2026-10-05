@@ -129,7 +129,7 @@ async def test_push_wakeup_obeys_admission_and_never_counts_exposure(monkeypatch
     dispatch.assert_not_called()
 
 
-def test_feed_and_outcome_reuse_legacy_flag_key_without_v2_redis(store, monkeypatch):
+def test_feed_and_outcome_use_dedicated_flag_token_without_v2_redis(store, monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import Mock
 
@@ -139,10 +139,12 @@ def test_feed_and_outcome_reuse_legacy_flag_key_without_v2_redis(store, monkeypa
 
     flags = routes.proactivity_flags
     flags.flag_client.cache_clear()
-    monkeypatch.delenv('POSTHOG_PROJECT_API_KEY', raising=False)
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'disabled')
+    monkeypatch.setenv('PROACTIVITY_V2_POSTHOG_TOKEN', 'phc_dedicated-v2-token')
     monkeypatch.setenv('POSTHOG_API_KEY', 'test-existing-posthog-key')
     monkeypatch.setenv('POSTHOG_EVENTS_API_KEY', 'test-events-key-must-not-select-flags')
-    monkeypatch.setenv('POSTHOG_HOST', 'https://us.posthog.com')
+    monkeypatch.setenv('POSTHOG_HOST', 'https://shared-host.invalid')
+    monkeypatch.setenv('PROACTIVITY_V2_POSTHOG_HOST', 'https://us.posthog.com')
     monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
     for key in ('HOST', 'PORT', 'PASSWORD'):
         monkeypatch.delenv(f'PROACTIVITY_REDIS_{key}', raising=False)
@@ -175,7 +177,7 @@ def test_feed_and_outcome_reuse_legacy_flag_key_without_v2_redis(store, monkeypa
             assert response.status_code == 200 and response.json()['recorded'] is True
         assert flags.mentor_pipeline('u') == 'v2'
         factory.assert_called_once_with(
-            project_api_key='test-existing-posthog-key',
+            project_api_key='phc_dedicated-v2-token',
             host='https://us.posthog.com',
             send=False,
             sync_mode=True,

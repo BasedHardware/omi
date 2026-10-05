@@ -28,6 +28,13 @@ READINESS_PROPOSAL_ARGS = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _fast_safe_yaml_for_contract_fixtures(monkeypatch):
+    # Keep the same safe YAML schema and every validator assertion, without
+    # spending the call-phase budget on Python tokenization of large manifests.
+    monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
+
+
 def load_validator():
     spec = importlib.util.spec_from_file_location('validate_backend_runtime_env', SCRIPT)
     module = importlib.util.module_from_spec(spec)
@@ -251,7 +258,9 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "AUDIO_TIMELINE_SPANS", "value": "false"},\n'
         '        {"name": "LIVE_SPEAKER_SPAN_RESOLUTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},\n'
-        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},',
+        '        {"name": "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION", "value": "false"},\n'
+        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},\n'
+        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_UNION", "value": "false"},',
     )
 
 
@@ -481,6 +490,44 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
+    # Unrelated failure fixtures still need the explicit ledger bindings on
+    # each host declared by the runtime manifest.
+    payload = re.sub(
+        r'("(?P<service>backend(?:-sync|-sync-backfill|-integration)?)":\s*\{.*?"env":\s*\[)',
+        lambda match: match.group(1)
+        + '\n        '
+        + json.dumps({'name': 'FIRESTORE_READ_LEDGER', 'value': '1'})
+        + ',\n        '
+        + json.dumps({'name': 'FIRESTORE_READ_LEDGER_SERVICE', 'value': match.group('service')})
+        + ',',
+        payload,
+        flags=re.DOTALL,
+    )
+    payload = re.sub(
+        r'("backend-sync(?:-backfill)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "SYNC_PHASE_METRICS_EXPORT_ENABLED", "value": "true"},'
+        r'\n        {"name": "SYNC_PHASE_METRICS_PROJECT", "value": "based-hardware-dev"},',
+        payload,
+        flags=re.DOTALL,
+    )
+    # These gateway/secret fixtures still need the dedicated public v2 binding.
+    public_token = re.search(
+        r'apiKey = "(phc_[^"]+)"',
+        (ROOT.parent / 'desktop/macos/Desktop/Sources/PostHogManager.swift').read_text(),
+    )[1]
+    entries = ',\n'.join(
+        '        ' + json.dumps({'name': name, 'value': value})
+        for name, value in {
+            'PROACTIVITY_V2_POSTHOG_TOKEN': public_token,
+            'PROACTIVITY_V2_POSTHOG_HOST': 'https://us.posthog.com',
+        }.items()
+    )
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        lambda match: match.group(1) + '\n' + entries + ',',
+        payload,
+        flags=re.DOTALL,
+    )
     return with_backend_integration_events_secret(payload)
 
 
@@ -554,18 +601,16 @@ def test_repo_prod_gke_values_match_manifest():
     assert errors == []
 
 
-def test_conversation_finalization_capability_inventory_explicitly_covers_pusher_in_every_environment():
-    validator = load_validator()
-    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
-
+def test_conversation_finalization_capability_inventory_explicitly_covers_pusher_in_every_environment(cap_env):
     for env in ('dev', 'prod'):
-        pusher = manifest['environments'][env]['gke']['pusher']
+        validator, env_config = cap_env(env)
+        pusher = env_config['gke']['pusher']
         assert set(pusher['capabilities']) == {
             'conversation.finalize.persisted',
             'memory.canonical.mutate',
         }
         assert pusher['env']['MEMORY_ENABLED']['value'] == 'on'
-        assert validator.validate_conversation_finalization_capabilities(env, manifest['environments'][env]) == []
+        assert validator.validate_conversation_finalization_capabilities(env, env_config) == []
 
 
 @pytest.fixture(scope='module')

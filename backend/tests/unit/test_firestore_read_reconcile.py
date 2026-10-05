@@ -106,12 +106,8 @@ def test_day_rollover_emits_previous_day(monkeypatch):
     assert probe._ledger_counts["query"] == 1
 
 
-def _records(include_all=True, instrumented=97, timestamps=None):
-    services = (
-        sorted(reconcile_module.REQUIRED_SERVICES)
-        if include_all
-        else sorted(reconcile_module.REQUIRED_SERVICES - {"pusher"})
-    )
+def _records(instrumented=97, timestamps=None, services=None):
+    services = sorted(services or reconcile_module.REQUIRED_SERVICES)
     stamps = timestamps or {}
     result = []
     for index, service in enumerate(services):
@@ -139,7 +135,8 @@ def test_reconcile_deduplicates_duplicate_delivery():
 
 
 def test_reconcile_outcomes():
-    assert reconcile_module.reconcile(DAY, 100, _records(False, 97))["outcome"] == "incomplete"
+    missing = _records(instrumented=97, services=reconcile_module.REQUIRED_SERVICES - {"desktop-backend"})
+    assert reconcile_module.reconcile(DAY, 100, missing)["outcome"] == "incomplete"
     assert reconcile_module.reconcile(DAY, 100, _records(instrumented=97))["outcome"] == "audit_required"
     assert reconcile_module.reconcile(DAY, 100, _records(instrumented=103))["outcome"] == "accounting_failure"
     stale = _records(instrumented=99, timestamps={"backend": "2026-10-02T20:00:00+00:00"})
@@ -161,3 +158,32 @@ def test_reconcile_outcomes():
     )
     fresh = reconcile_module.reconcile(DAY, 100, fresh_records)
     assert fresh["outcome"] == "healthy"
+    assert fresh["completeness_excluded"] == ["pusher"]
+
+
+def test_missing_pusher_snapshot_stays_quiet_and_present_rows_still_count():
+    assert reconcile_module.COMPLETENESS_EXCLUDED == frozenset({"pusher"})
+    assert "pusher" in reconcile_module.SHIPPED_SERVICES
+    assert "pusher" not in reconcile_module.REQUIRED_SERVICES
+    assert "pusher" not in reconcile_module.HOT_SERVICES
+    quiet = reconcile_module.reconcile(DAY, 100, _records(instrumented=99))
+    assert quiet["outcome"] == "healthy"
+    assert quiet["completeness_excluded"] == ["pusher"]
+    counted = _records(instrumented=90)
+    counted.append(
+        {
+            "event": "firestore_read_ledger",
+            "day": DAY,
+            "service": "pusher",
+            "epoch": "pusher",
+            "seq": 2,
+            "lookup": 9,
+            "not_found": 0,
+            "query": 0,
+            "unscoped": 0,
+            "emitted_at": "2026-10-02T12:00:00+00:00",
+        }
+    )
+    result = reconcile_module.reconcile(DAY, 100, counted)
+    assert result["instrumented"] == 99
+    assert result["outcome"] == "healthy"

@@ -26,12 +26,14 @@ from __future__ import annotations
 import logging
 import math
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 # Pure span helpers live in the database-layer module (stdlib only) so
 # database/ can share them without importing utils/.
-from config.audio_timeline import capture_anchor_limit, capture_send_span_limit
+from config.audio_timeline import capture_anchor_limit, capture_send_span_limit, live_capture_window_merge_union_enabled
+from models.capture_window_proof import CaptureWindowProof
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
 from utils.stt.committed_words import (
     CAPTURE_WORD_RANGES_KEY,
@@ -300,6 +302,31 @@ class CaptureTimeline:
             return None
         return self.wall(sample)
 
+    def project_window(self, start: int, end: int, *, strict: bool = True) -> Optional[Tuple[float, float]]:
+        """Project [start, end), refusing any positive wall discontinuity.
+
+        An exclusive end at an anchor belongs to the preceding interval.
+        The legacy rollback mode preserves the former endpoint projection.
+        """
+        if not strict:
+            first, last = self.wall_strict(start), self.wall_strict(end)
+            return (first, last) if first is not None and last is not None else None
+        if end <= start or not self.anchors:
+            return None
+        first = self.wall_strict(start)
+        if first is None:
+            return None
+        previous_sample, previous_wall = self.anchors[0]
+        end_anchor = (previous_sample, previous_wall)
+        for sample, wall in self.anchors[1:]:
+            if start < sample < end and wall > previous_wall + (sample - previous_sample) / self.sample_rate:
+                return None
+            if sample < end:
+                end_anchor = (sample, wall)
+            previous_sample, previous_wall = sample, wall
+        last = end_anchor[1] + (end - end_anchor[0]) / self.sample_rate
+        return first, last
+
 
 class SendMap:
     """Accepted provider-audio spans for one provider connection (epoch).
@@ -341,6 +368,13 @@ class SendMap:
     def accepted_samples_in_capture_range(self, first: int, end: int) -> int:
         """Count accepted VAD output in a capture interval, excluding gated gaps."""
         return sum(max(0, min(end, start + length) - max(first, start)) for _, start, length in self._spans)
+
+    def capture_run_containing(self, first: int, end: int) -> Optional[Tuple[int, int]]:
+        """One coalesced accepted span covering [first, end), without edge tolerance."""
+        for _, start, length in self._spans:
+            if start <= first < end <= start + length:
+                return start, start + length
+        return None
 
     def point_interval(self, provider_sample: int) -> Optional[Tuple[int, int]]:
         """A one-sample interval for an in-span zero-duration provider point.
@@ -528,6 +562,7 @@ class ProviderEpochTranslator:
         self.timeline = timeline
         self.provider_sample_rate = provider_sample_rate
         self.send_map = SendMap(provider_sample_rate)
+        self._capture_merge_epoch = str(uuid.uuid4())
         self.rejected_segments = 0
         self._on_reject = on_reject
         self._on_mapped = on_mapped
@@ -538,6 +573,7 @@ class ProviderEpochTranslator:
         self._project_times = project_times
         self.provider_label = 'unknown'
         self.send_path = 'unknown'
+        self.last_send_provider_start = 0
         self._last_accepted_wall_end: Optional[float] = None
         # The elapsed Soniox axis is unverified. Shadow computes it without
         # changing the compact map used for placement or owner resolution.
@@ -554,6 +590,30 @@ class ProviderEpochTranslator:
         # timestamp axis at zero; replayed segments must use their original
         # capture positions instead.
         self.replay_origin_sample: Optional[int] = None
+
+    def capture_merge_proof(self, first: int, end: int) -> Optional[CaptureWindowProof]:
+        """Snapshot one accepted run, split at strict half-open wall hiatuses.
+
+        Coalesced send spans require adjacency on BOTH provider and capture
+        axes. Failed/missing sends, VAD skips and elapsed-axis holes break them.
+        No translator edge tolerance is used to extend this proof.
+        """
+        accepted = self.send_map.capture_run_containing(first, end)
+        if accepted is None:
+            return None
+        start, last = accepted
+        start = max(start, self.timeline.compacted_below_sample or start)
+        for sample, _ in self.timeline.anchors[1:]:
+            if sample <= first:
+                start = max(start, sample)
+            elif sample < last:
+                last = sample
+                break
+        window = self.timeline.project_window(first, end)
+        run = self.timeline.project_window(start, last)
+        if window is not None and run is not None:
+            return CaptureWindowProof(self._capture_merge_epoch, window, run)
+        return None
 
     def stitch_replayed_timestamps(self, segments: Sequence[Dict[str, Any]]) -> None:
         """Place replay-epoch segments on the original capture-relative axis.
@@ -584,12 +644,16 @@ class ProviderEpochTranslator:
         return self._project_times
 
     def note_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
+        first_span = True
         for capture_start, length in spans:
             if length <= 0:
                 continue
             start = self.send_map.last_provider_sample or 0
             if self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'on':
                 start = self._note_elapsed_span(capture_start, length)
+            if first_span:
+                self.last_send_provider_start = start
+                first_span = False
             self.send_map.add_accepted(start, capture_start, length)
             end = start + length
             owner = self._owner_at_send(capture_start, length) if self._owner_at_send is not None else None
@@ -763,20 +827,29 @@ class ProviderEpochTranslator:
                         translated.append(segment)
                     continue
             if self._project_times:
-                start_wall = self.timeline.wall_strict(interval[0])
-                end_wall = self.timeline.wall_strict(interval[1])
-                if start_wall is None or end_wall is None:
+                window = self.timeline.project_window(*interval)
+                if window is None:
                     # The anchors describing this sample range were compacted
                     # away; projecting would invent a position. Fail closed.
-                    self._reject(segment, 'evicted_interval')
+                    self._reject(
+                        segment,
+                        (
+                            'evicted_interval'
+                            if self.timeline.wall_strict(interval[0]) is None
+                            else 'discontinuous_interval'
+                        ),
+                    )
                     self._append_unplaced(translated, segment)
                     continue
-                segment['start'] = start_wall
-                segment['end'] = max(segment['start'], end_wall)
+                segment['start'], segment['end'] = window
             # Private capture interval for owner resolution; the receiver pops
             # these keys before the segment enters any buffer.
             segment['_capture_start_sample'] = interval[0]
             segment['_capture_end_sample'] = interval[1]
+            if live_capture_window_merge_union_enabled():
+                proof = self.capture_merge_proof(*interval)
+                if proof is not None:
+                    segment['_capture_merge_proof'] = proof
             if word_ranges_supplied:
                 segment[CAPTURE_WORD_RANGES_KEY] = word_ranges
             if self._project_times:

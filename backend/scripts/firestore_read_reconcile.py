@@ -12,7 +12,9 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 TABLE = "based-hardware.gcp_billing_export.gcp_billing_export_resource_v1_01B287_9348DC_02D256"
-REQUIRED_SERVICES = frozenset(
+# Services we ship that read Firestore. A ledger row from any of them,
+# including pusher, still sums into the scaled sample.
+SHIPPED_SERVICES = frozenset(
     {
         "backend",
         "backend-sync",
@@ -23,15 +25,29 @@ REQUIRED_SERVICES = frozenset(
         "pusher",
     }
 )
+# Prod pusher is still the pre-ledger image. Its ledger promotion was
+# refused because main had moved, and this measurement card must not
+# qualify or ship a later main to drag pusher onto the ledger. Until a
+# normal promotion is serving pusher on a ledger SHA, a missing pusher
+# snapshot is a known exclusion: it does not make the day incomplete, and
+# pusher is not part of the hot tail.
+# Rollback: set this to an empty frozenset once that promotion is live.
+# Pusher then returns to the required set and the hot tail, and a missing
+# snapshot exits loud again.
+COMPLETENESS_EXCLUDED = frozenset({"pusher"})
+REQUIRED_SERVICES = SHIPPED_SERVICES - COMPLETENESS_EXCLUDED
 # Always-on services that receive traffic through the end of a UTC day.
 # Idle or cron processes flush their own final snapshot and are not required
 # to emit again in the last minutes of the day.
-HOT_SERVICES = frozenset({"backend", "backend-listen", "pusher"})
+HOT_SERVICES = frozenset({"backend", "backend-listen", "pusher"}) - COMPLETENESS_EXCLUDED
 HOT_TAIL = dt.timedelta(minutes=15)
 COUNTERS = ("lookup", "not_found", "query")
 ERROR_BAR = {
     "sampling": "0 (p=1)",
-    "tail": "bounded for backend, backend-listen, and pusher when a snapshot exists in the last 15 minutes of the UTC day; otherwise unknown",
+    "tail": (
+        "bounded for backend and backend-listen when a snapshot exists in the last 15 minutes of the UTC day; "
+        "pusher is a recorded completeness exclusion until a normal promotion serves a ledger SHA; otherwise unknown"
+    ),
     "bias": "index-entry and other billing-model bias is not quantified; ±2% is an operational allowance, not proof bias is under 2%",
 }
 
@@ -121,6 +137,7 @@ def reconcile(day: str, billed: float, records: Iterable[Mapping[str, Any]]) -> 
         "residual": residual,
         "residual_pct": residual_pct,
         "outcome": outcome,
+        "completeness_excluded": sorted(COMPLETENESS_EXCLUDED),
         "error_bar": error_bar,
     }
 
@@ -227,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
                 "residual": 0,
                 "residual_pct": None,
                 "outcome": "incomplete",
+                "completeness_excluded": sorted(COMPLETENESS_EXCLUDED),
                 "error_bar": dict(ERROR_BAR),
             }
         print(json.dumps(result, separators=(",", ":"), sort_keys=True))

@@ -25,6 +25,7 @@ def counters():
 
 async def test_off_payload_and_existing_metric_parity(monkeypatch):
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'false')
+    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', 'false')
     output = []
     before = counters()
     for provider in ('deepgram', 'soniox', 'modulate'):
@@ -43,6 +44,7 @@ async def test_off_payload_and_existing_metric_parity(monkeypatch):
                 dict(id='d', text='yes. Another sentence.', speaker='SPEAKER_02', is_user=False, start=69.4, end=69.9),
                 dict(id='e', text='Delayed final.', speaker='SPEAKER_03', is_user=False, start=0.1, end=0.9),
                 dict(id='f', text='Outside sends.', speaker='SPEAKER_04', is_user=False, start=99, end=100),
+                dict(id='g', text='Crossing hiatus.', speaker='SPEAKER_05', is_user=False, start=67.9, end=68.1),
             ]
         )
         output.append(await drain(monkeypatch, receiver))

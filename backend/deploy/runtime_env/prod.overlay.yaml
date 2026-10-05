@@ -5,6 +5,13 @@ data_plane_project: based-hardware
 overlay:
   llm_gateway:
     env:
+      # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+      PROACTIVITY_V2_POSTHOG_TOKEN:
+        value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+        category: rollout
+      PROACTIVITY_V2_POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: rollout
       PROACTIVITY_REDIS_HOST:
         config_map:
           name: prod-omi-backend-config
@@ -32,6 +39,13 @@ overlay:
   gke:
     backend-listen:
       env:
+        # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         POSTHOG_PROJECT_API_KEY:
           secret:
             name: prod-omi-backend-secrets
@@ -56,7 +70,9 @@ overlay:
         AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -239,6 +255,13 @@ overlay:
           category: rollout
     pusher:
       env:
+        # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         POSTHOG_PROJECT_API_KEY:
           secret:
             name: prod-omi-backend-secrets
@@ -263,7 +286,9 @@ overlay:
         AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -395,6 +420,13 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
+      # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+      PROACTIVITY_V2_POSTHOG_TOKEN:
+        value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+        category: rollout
+      PROACTIVITY_V2_POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: rollout
       OMI_CUSTOMER_DATA_PROJECT:
         value: based-hardware
         category: service_discovery
@@ -430,8 +462,8 @@ overlay:
         --subnet:
           env_var: CLOUD_RUN_VPC_SUBNET
     # Keep Cloud Run secret mounts identical to main. V2 reuses each host's
-    # existing REDIS_DB_* client and POSTHOG_PROJECT_API_KEY / POSTHOG_API_KEY
-    # environment; provider admission leases remain on the GKE gateway.
+    # existing REDIS_DB_* client. V2 cohort reads use only the dedicated public
+    # token above; provider admission leases remain on the GKE gateway.
     services:
       backend:
         # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
@@ -450,6 +482,13 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
@@ -459,7 +498,9 @@ overlay:
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -619,6 +660,15 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
+          SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
+          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
@@ -628,7 +678,9 @@ overlay:
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
@@ -759,6 +811,15 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
+          SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
+          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
@@ -768,7 +829,9 @@ overlay:
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
@@ -878,6 +941,13 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
@@ -887,7 +957,9 @@ overlay:
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'

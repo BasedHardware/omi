@@ -48,7 +48,6 @@ from utils.notifications import (
     sync_action_item_reminder,
 )
 from utils.task_sync import auto_sync_action_item
-from utils.task_intelligence.proactive_engine import run_task_changed_wake
 from pydantic import BaseModel, Field, ValidationError
 from models.action_item import (
     ActionItemCreateRequest,
@@ -147,13 +146,6 @@ def _safe_action_item_responses(items, *, uid: str = '', context: str = '') -> L
     return responses
 
 
-def _wake_task_changes(uid: str, task_ids: List[str], mutation_key: object) -> None:
-    """Notify proactive Chat-first after the route's persistence has committed."""
-
-    for task_id in task_ids:
-        run_task_changed_wake(uid, task_id=task_id, mutation_key=mutation_key)
-
-
 def _schedule_action_item_reminder(uid: str, action_item_id: str, description: str, due_at: datetime) -> None:
     send_action_item_data_message(
         user_id=uid, action_item_id=action_item_id, description=description, due_at=due_at.isoformat()
@@ -195,7 +187,6 @@ class BatchUpdateActionItemsRequest(BaseModel):
 def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Batch update sort_order and indent_level for multiple action items."""
     result = action_items_db.batch_update_action_items(uid, request.items)
-    _wake_task_changes(uid, result.updated_ids, datetime.now(timezone.utc))
     return _batch_mutation_response(result)
 
 
@@ -279,7 +270,6 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             updates.append({'id': item.id, 'data': update_data})
 
     result = action_items_db.batch_sync_update_action_items(uid, updates)
-    _wake_task_changes(uid, result.updated_ids, datetime.now(timezone.utc))
 
     updated_ids = set(result.updated_ids)
     desc_updates = [u for u in updates if u['id'] in updated_ids and 'description' in u['data']]
@@ -360,7 +350,6 @@ def create_action_item(
     if not action_item:
         raise HTTPException(status_code=500, detail="Failed to create action item")
     response = ActionItemResponse(**action_item)
-    _wake_task_changes(uid, [action_item_id], action_item.get('updated_at'))
 
     # A keyed retry can return a task edited or completed since the original POST.
     # Project its saved state, never re-arm reminders or export the stale request.
@@ -741,7 +730,6 @@ def update_action_item(
                     'field_changed': 'owner',
                 },
             )
-    _wake_task_changes(uid, [action_item_id], updated_item.get('updated_at'))
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final
     # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
@@ -781,7 +769,6 @@ def toggle_action_item_completion(
     updated_item = action_items_db.get_action_item(uid, action_item_id)
     if updated_item is None:
         raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
-    _wake_task_changes(uid, [action_item_id], updated_item.get('updated_at'))
 
     # Cancel the scheduled client reminder on completion, or re-schedule it when un-completing an
     # item that still has a future due date (#5085).
@@ -822,7 +809,6 @@ def delete_action_item(
     success = action_items_db.delete_action_item(uid, action_item_id)
     if not success:
         raise HTTPException(status_code=404, detail="Action item not found")
-    _wake_task_changes(uid, [action_item_id], datetime.now(timezone.utc))
 
     delete_action_item_vector(uid, action_item_id)
 
@@ -858,7 +844,6 @@ def batch_delete_action_items(
     deleted_ids = action_items_db.delete_action_items_batch(uid, request.ids)
 
     if deleted_ids:
-        _wake_task_changes(uid, deleted_ids, datetime.now(timezone.utc))
         delete_action_item_vectors_batch(uid, deleted_ids)
         send_action_items_batch_deletion_message(user_id=uid, action_item_ids=deleted_ids)
 
@@ -983,7 +968,6 @@ def create_action_items_batch(
             for aid, data in zip(created_ids, action_items_data)
         ],
     )
-    _wake_task_changes(uid, created_ids, datetime.now(timezone.utc))
 
     if created_ids:
         record_product_event('action_item_created', request=http_request, count=len(created_ids))
@@ -1131,7 +1115,5 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
         upsert_action_item_vector(uid, new_id, new_item['description'])
         if isinstance(new_item['due_at'], datetime):
             _schedule_action_item_reminder(uid, new_id, new_item['description'], new_item['due_at'])
-
-    _wake_task_changes(uid, created_ids, datetime.now(timezone.utc))
 
     return {"created": created_ids, "count": len(created_ids)}
