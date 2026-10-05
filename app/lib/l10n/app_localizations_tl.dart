@@ -10006,6 +10006,15 @@ class AppLocalizationsTl extends AppLocalizations {
       'Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
 
   @override
+  String get pendantLostConnection => 'Nawalan ng koneksyon ang iyong pendant sa teleponong ito.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant.';
+
+  @override
+  String get pendantRecordingSafe => 'Ligtas ang lahat ng na-record bago nito.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
 
@@ -11345,10 +11354,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Halos puno na ang storage';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
 
   @override
   String get capturePendantDisconnectedShort => 'Kusang kokonekta muli ang Omi';

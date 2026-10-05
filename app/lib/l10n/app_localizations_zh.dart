@@ -9736,6 +9736,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pendantRecordingSyncBlocked => 'Pendant 仍在录音，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
 
   @override
+  String get pendantLostConnection => '吊坠与这部手机的连接已断开。';
+
+  @override
+  String get pendantReconnectsOnItsOwn => '吊坠开机并在附近时，Omi 会自动重新连接。';
+
+  @override
+  String get pendantRecordingSafe => '此前录下的内容都已保存。';
+
+  @override
   String get pendantFullSyncBlocked => 'Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
 
   @override
@@ -11050,9 +11059,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '存储空间即将用完';
-
-  @override
-  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi 会自动重新连接';

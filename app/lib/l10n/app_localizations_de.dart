@@ -10000,6 +10000,16 @@ class AppLocalizationsDe extends AppLocalizations {
       'Dein Pendant nimmt noch auf, daher kann das gespeicherte Audio nicht übertragen werden. Drücke die Taste am Pendant, um die Aufnahme zu stoppen, und synchronisiere dann erneut.';
 
   @override
+  String get pendantLostConnection => 'Dein Anhänger hat die Verbindung zu diesem Telefon verloren.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist.';
+
+  @override
+  String get pendantRecordingSafe => 'Alles bisher Aufgenommene ist sicher.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Der Speicher deines Pendants ist voll und es befindet sich noch im Aufnahmemodus, daher kann das gespeicherte Audio nicht übertragen werden. Drücke die Taste am Pendant, um die Aufnahme zu stoppen, und synchronisiere dann erneut.';
 
@@ -11340,10 +11350,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Speicher fast voll';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi verbindet sich von selbst neu';

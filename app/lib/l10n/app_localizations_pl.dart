@@ -9950,6 +9950,15 @@ class AppLocalizationsPl extends AppLocalizations {
       'Pendant wciąż nagrywa, więc zapisany dźwięk nie może zostać przesłany. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.';
 
   @override
+  String get pendantLostConnection => 'Wisiorek utracił połączenie z tym telefonem.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu.';
+
+  @override
+  String get pendantRecordingSafe => 'Wszystko nagrane wcześniej jest bezpieczne.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Pamięć Pendanta jest pełna i wciąż jest on w trybie nagrywania, więc zapisanego dźwięku nie można przenieść. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.';
 
@@ -11287,10 +11296,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Pamięć prawie pełna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi połączy się ponownie samo';

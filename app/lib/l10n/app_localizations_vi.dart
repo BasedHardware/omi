@@ -9913,6 +9913,15 @@ class AppLocalizationsVi extends AppLocalizations {
       'Pendant vẫn đang ghi âm nên không thể chuyển âm thanh đã lưu. Nhấn nút trên Pendant để dừng ghi âm, sau đó đồng bộ lại.';
 
   @override
+  String get pendantLostConnection => 'Mặt dây chuyền đã mất kết nối với điện thoại này.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần.';
+
+  @override
+  String get pendantRecordingSafe => 'Mọi thứ đã ghi trước đó vẫn an toàn.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại.';
 
@@ -11246,10 +11255,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Bộ nhớ gần đầy';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi sẽ tự kết nối lại';

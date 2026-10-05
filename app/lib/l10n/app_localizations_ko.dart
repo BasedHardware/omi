@@ -9756,6 +9756,15 @@ class AppLocalizationsKo extends AppLocalizations {
       'Pendant가 아직 녹음 중이어서 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 후 다시 동기화하세요.';
 
   @override
+  String get pendantLostConnection => '펜던트와 이 휴대폰의 연결이 끊겼어요.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => '펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요.';
+
+  @override
+  String get pendantRecordingSafe => '그 전에 녹음된 내용은 안전하게 보관돼요.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Pendant의 저장 공간이 가득 찼고 아직 녹음 모드이므로 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 다음 다시 동기화하세요.';
 
@@ -11075,10 +11084,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '저장 공간 거의 참';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi가 자동으로 다시 연결해요';

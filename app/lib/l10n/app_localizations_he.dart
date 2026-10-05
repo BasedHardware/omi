@@ -9838,6 +9838,15 @@ class AppLocalizationsHe extends AppLocalizations {
       'ה-Pendant עדיין מקליט, ולכן לא ניתן להעביר את השמע השמור בו. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ואז סנכרנו שוב.';
 
   @override
+  String get pendantLostConnection => 'התליון איבד את החיבור לטלפון הזה.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב.';
+
+  @override
+  String get pendantRecordingSafe => 'כל מה שהוקלט עד עכשיו שמור.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'האחסון של ה-Pendant מלא והוא עדיין במצב הקלטה, ולכן לא ניתן להעביר את השמע השמור. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ולאחר מכן סנכרנו שוב.';
 
@@ -11164,10 +11173,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'האחסון כמעט מלא';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi יתחבר מחדש מעצמו';

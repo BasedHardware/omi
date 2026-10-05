@@ -743,7 +743,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               });
             }
           }
-          return child!;
+          // Home and Tasks paint the canvas: a white page in light mode, set in Instrument Sans like
+          // Settings.
+          return OmiCanvas(child: OmiTypeface(child: child!));
         },
         child: Selector<HomeProvider, int>(
           selector: (_, homeProvider) => homeProvider.selectedIndex,
@@ -759,7 +761,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 _schedulePageInitialization(HomeProvider.homeTab);
               },
               child: Scaffold(
-                backgroundColor: OmiColors.surface0,
+                backgroundColor: OmiColors.canvas,
                 resizeToAvoidBottomInset: false,
                 appBar: _buildAppBar(context, onHome),
                 body: GestureDetector(
@@ -820,6 +822,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           child: Stack(
                             children: [
                               const HomeChatBarBackdrop(),
+                              const HomeWarmBlend(),
                               Positioned(
                                 left: 16,
                                 right: 16,
@@ -973,7 +976,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   PreferredSizeWidget _buildAppBar(BuildContext context, bool onHome) {
     return AppBar(
       automaticallyImplyLeading: false,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: OmiColors.canvas,
       // The trailing buttons paint 36pt circles inside 44pt touch targets, so the
       // title gives up the 4pt the last target overhangs by. The circles stay on
       // the 16pt margin the rest of the screen uses.
@@ -1013,13 +1016,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               HeaderCircleButton(
                 key: const ValueKey('home_search_button'),
                 semanticLabel: context.l10n.search,
-                icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
+                icon: OmiLineIcon(OmiLineGlyph.search, size: 20, color: OmiColors.textSecondary),
                 onTap: () => unawaited(_openSearch()),
               ),
               // Settings button - always visible
               HeaderCircleButton(
                 semanticLabel: context.l10n.settings,
-                icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+                icon: OmiLineIcon(OmiLineGlyph.settings, size: 20, color: OmiColors.textSecondary),
                 onTap: () {
                   OmiHaptics.selection();
                   PlatformManager.instance.analytics.pageOpened('Settings');
@@ -1095,12 +1098,12 @@ class _TabLoadingSkeleton extends StatelessWidget {
         itemBuilder: (context, index) => Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: ShimmerWithTimeout(
-            baseColor: OmiColors.surface1,
+            baseColor: OmiColors.canvasCard,
             highlightColor: OmiColors.surface2,
             child: Container(
               height: index == 0 ? 34 : 76,
               width: double.infinity,
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              decoration: BoxDecoration(color: OmiColors.canvasCard, borderRadius: OmiRadius.lgAll),
             ),
           ),
         ),

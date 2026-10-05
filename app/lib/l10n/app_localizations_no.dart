@@ -9916,6 +9916,15 @@ class AppLocalizationsNo extends AppLocalizations {
       'Pendant tar fortsatt opp, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
 
   @override
+  String get pendantLostConnection => 'Anhenget mistet forbindelsen til denne telefonen.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi kobler til igjen av seg selv når anhenget er på og i nærheten.';
+
+  @override
+  String get pendantRecordingSafe => 'Alt som ble tatt opp før dette, er trygt.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
 
@@ -11250,10 +11259,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lagringen er nesten full';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi kobler til igjen av seg selv';

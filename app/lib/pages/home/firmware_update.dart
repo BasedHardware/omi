@@ -460,14 +460,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     final failure = updateFailure;
     return PopScope(
       canPop: !busy,
-      child: Scaffold(
-        backgroundColor: OmiColors.surface0,
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          // No way back while the device is being written; the PopScope blocks system back too.
-          leading: busy ? null : const OmiBackButton(),
-          title: Text(widget.isRollback ? context.l10n.stableFirmware : context.l10n.firmwareUpdate),
-        ),
+      child: OmiGroupedPage(
+        // No way back while the device is being written; the PopScope blocks system back too.
+        leading: busy ? const SizedBox.shrink() : null,
+        title: widget.isRollback ? context.l10n.stableFirmware : context.l10n.firmwareUpdate,
         body: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
