@@ -4054,3 +4054,97 @@ async def test_sparse_normal_pauses_post_before_rescue_without_forced_timer(monk
         assert replayed == [] and callbacks == []
     finally:
         await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('successor_text', [False, True])
+async def test_bounded_no_text_rescue_returns_to_window_without_paid_loop(monkeypatch, successor_text):
+    monkeypatch.setenv('STT_NO_TEXT_RESCUE_ENABLED', 'true')
+    client = RacingTextClient()
+    actual, base, previous, pcm, replayed, callbacks = await _receiver_with_racing_window(monkeypatch, client)
+    rescue = actual._managed_live_chain.no_text_rescue
+    now = [100.0]
+    rescue.clock = lambda: now[0]
+    previous.raw._expire_first_text()
+    assert await actual._failover_stt_socket()
+    paid = actual.stt_socket
+    assert paid.service == st.STTService.soniox and rescue.active
+    assert b''.join(replayed) == pcm
+    assert rescue.admitted_seconds == pytest.approx(len(pcm) / 32000)
+    if successor_text:
+        callbacks[0]([{'speaker': 'speaker_0', 'text': 'Recovered.', 'start': 0, 'end': 4}])
+        assert rescue.text
+    now[0] += 60
+    paid._expire_rescue()
+    assert paid.typed_death_reason == 'no_text_rescue_complete'
+    assert await actual._failover_stt_socket()
+    cheap = actual.stt_socket
+    assert cheap.window and cheap is not previous
+    assert rescue.completed and not rescue.active
+    assert cheap.raw.allow_no_text_rescue() is False
+    # Paid policy retirement does not bench the provider. A second ambiguous
+    # window deadline cannot send the session back to paid processing.
+    assert 'soniox' not in actual._stt_failed_providers
+    cheap.raw._deadline_speech_at = now[0]
+    cheap.raw._expire_first_text()
+    assert not cheap.is_connection_dead and len(callbacks) == 1
+    assert [s['text'] for s in base.emitted] == (['Recovered.'] if successor_text else [])
+    client.release.set()
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_no_text_rescue_audio_budget_counts_replay_and_preserves_rejected_packet(monkeypatch):
+    monkeypatch.setenv('STT_NO_TEXT_RESCUE_ENABLED', 'true')
+    monkeypatch.setenv('STT_NO_TEXT_RESCUE_SECONDS', '5')
+    client = RacingTextClient()
+    actual, _base, previous, pcm, replayed, callbacks = await _receiver_with_racing_window(
+        monkeypatch, client, speech_seconds=6
+    )
+    previous.raw._expire_first_text()
+    # The six-second prefix itself exhausts the five-second paid budget.
+    # The ordinary candidate rejection path retains the capture and fails
+    # back; rapid replay cannot turn a wall-time lease into unlimited billing.
+    assert await actual._failover_stt_socket()
+    assert actual.stt_socket.window
+    assert actual._managed_live_chain.no_text_rescue.admitted_seconds <= 5
+    assert len(callbacks) == 1
+    assert len(b''.join(replayed)) <= 5 * 32000
+    assert actual._window_ring().buffered_bytes == len(pcm)
+    client.release.set()
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_gated_progress_deadline_rearms_after_text(monkeypatch):
+    client = SeqClient([{'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]}, {'text': ''}])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    sock.progress_deadline_enabled = True
+    sock.mark_speech()
+    assert sock.send(b'\x01\x00' * 16000 * 6)
+    await sock._run_job(sock._next_job())
+    assert sock._first_text_recorded and sock._first_text_timer is None
+    sock.mark_speech()
+    assert sock.send(b'\x01\x00' * 16000)
+    assert sock._first_text_timer is not None
+    sock._expire_first_text()
+    assert sock.death_reason == 'first_text_deadline'
+    sock.finish()
+
+
+@pytest.mark.asyncio
+async def test_expired_rescue_with_no_cheap_capacity_never_extends_paid(monkeypatch):
+    monkeypatch.setenv('STT_NO_TEXT_RESCUE_ENABLED', 'true')
+    client = RacingTextClient()
+    actual, _base, previous, _pcm, _replayed, callbacks = await _receiver_with_racing_window(monkeypatch, client)
+    previous.raw._expire_first_text()
+    assert await actual._failover_stt_socket()
+    paid = actual.stt_socket
+    monkeypatch.setattr(window.admission, 'available', lambda: False)
+    paid._expire_rescue()
+    assert not await actual._failover_stt_socket()
+    assert actual.recovery.exhausted and paid.is_connection_dead
+    assert len(callbacks) == 1
+    client.release.set()
+    await actual._drain_stt_sockets()

@@ -69,9 +69,12 @@ struct ActionItemRowMetadata: Equatable {
 
   init(_ item: ActionItem, now: Date = Date(), calendar: Calendar = .autoupdatingCurrent) {
     let name = item.ownerName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    // Email-shaped owner values are suppressed; a plain handle like "@alex" is a
+    // name and stays visible, matching the Flutter and web adapters.
+    let emailShaped = name.range(of: #"[^\s@]+@[^\s@]+\.[^\s@]+"#, options: .regularExpression) != nil
     if item.captureOwner == "user" {
       owner = "You"
-    } else if name.isEmpty || name.contains("@") {
+    } else if name.isEmpty || emailShaped {
       owner = nil
     } else {
       owner = name

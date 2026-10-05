@@ -21,6 +21,7 @@ LIVE_STT_FAILURE_REASONS = frozenset(
         'allocation_rejected',
         'capability_mismatch',
         'first_text_deadline',
+        'no_text_rescue_complete',
         'empty_streak',
         'soniox_invalid_hint',
         'vad_failed',

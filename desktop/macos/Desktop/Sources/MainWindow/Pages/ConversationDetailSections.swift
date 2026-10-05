@@ -14,37 +14,42 @@ import SwiftUI
 struct ConversationActionItemsSection: View {
   let conversation: ServerConversation
   var onOpenLinkedTask: ((String) -> Void)?
+  let onTaskAdded: (OmiAPI.SummaryTaskReference, String) -> Void
+  @StateObject private var promoter = ConversationSummaryTaskPromoter()
 
-  /// Items the reader has added from this summary, those in flight, and those whose last attempt
-  /// failed (offered again as "Try Again").
+  /// Completion-toggle state for items promoted in this view; Add-to-Tasks flight and
+  /// failure states live on the canonical promoter (index-keyed).
   @State private var addedActionItemIDs: Set<String> = []
-  @State private var addingActionItemIDs: Set<String> = []
   @State private var failedActionItemIDs: Set<String> = []
   @State private var completedOverrides: [String: Bool] = [:]
   @State private var createdTasks: [String: TaskActionItem] = [:]
   @State private var createdTaskCompletion: [String: Bool] = [:]
   @State private var togglingActionItemIDs: Set<String> = []
 
-  private var activeItems: [ActionItem] {
-    conversation.structured.actionItems.filter { !$0.deleted }
+  private var activeIndices: [Int] {
+    conversation.structured.actionItems.indices.filter { !conversation.structured.actionItems[$0].deleted }
   }
 
   var body: some View {
-    if !activeItems.isEmpty {
+    if !activeIndices.isEmpty {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        DetailSectionHeader(title: "Action items", systemImage: "checklist", count: activeItems.count)
+        DetailSectionHeader(title: "Action items", systemImage: "checklist", count: activeIndices.count)
 
         VStack(alignment: .leading, spacing: 0) {
-          ForEach(
-            Array(conversation.structured.actionItems.enumerated().filter { !$0.element.deleted }), id: \.element.id
-          ) { index, item in
-            if index > 0 {
+          ForEach(Array(activeIndices.enumerated()), id: \.element) { offset, index in
+            if offset > 0 {
               GlassSeparator().padding(.leading, 36)
             }
-            row(item, index: index)
+            row(index)
           }
         }
         .glassCard(cornerRadius: PageGlass.rowRadius)
+        if let error = promoter.error {
+          Text(error)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.errorRed)
+            .accessibilityIdentifier("summary-task-promotion-error")
+        }
       }
       // `conversation_detail_prompt prompt=add_task index=N` presses item N's task control.
       .onReceive(
@@ -52,36 +57,26 @@ struct ConversationActionItemsSection: View {
       ) { notification in
         guard notification.userInfo?["conversationId"] as? String == conversation.id,
           notification.userInfo?["prompt"] as? String == "add_task",
-          let index = notification.userInfo?["index"] as? Int, activeItems.indices.contains(index)
+          let visibleIndex = notification.userInfo?["index"] as? Int, activeIndices.indices.contains(visibleIndex)
         else { return }
-        let item = activeItems[index]
-        if let linkedTaskID = item.targetTaskID {
-          onOpenLinkedTask?(linkedTaskID)
-        } else {
-          addActionItemToTasks(item)
-        }
+        let index = activeIndices[visibleIndex]
+        taskAction(index)
       }
     }
   }
 
-  private func row(_ sourceItem: ActionItem, index: Int) -> some View {
-    var item = sourceItem
-    item.completed = completedOverrides[item.id] ?? sourceItem.completed
-    let identity = actionItemIdentity(sourceItem)
+  private func row(_ index: Int) -> some View {
+    var item = conversation.structured.actionItems[index]
+    item.completed = completedOverrides[item.id] ?? item.completed
+    let identity = actionItemIdentity(item)
     let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
       item.sourceSegmentIDs, segments: conversation.transcriptSegments)
     let linkedTaskID = item.targetTaskID
     return ConversationActionItemRow(
       item: item,
-      taskState: taskState(for: item, identity: identity, linkedTaskID: linkedTaskID),
+      taskState: taskState(index: index, identity: identity, linkedTaskID: linkedTaskID),
       transcriptTitle: sourceIDs.isEmpty ? "Transcript" : "Source",
-      onTaskAction: {
-        if let linkedTaskID {
-          onOpenLinkedTask?(linkedTaskID)
-        } else {
-          addActionItemToTasks(item)
-        }
-      },
+      onTaskAction: { taskAction(index) },
       onOpenTranscript: {
         ConversationDetailAutomationState.shared.requestOpen(
           conversationId: conversation.id,
@@ -93,11 +88,11 @@ struct ConversationActionItemsSection: View {
     )
   }
 
-  private func taskState(for item: ActionItem, identity: String, linkedTaskID: String?) -> ActionItemTaskState {
-    if linkedTaskID != nil { return .linked }
+  private func taskState(index: Int, identity: String, linkedTaskID: String?) -> ActionItemTaskState {
+    if linkedTaskID != nil { return onOpenLinkedTask == nil ? .added : .linked }
     if addedActionItemIDs.contains(identity) { return .added }
-    if addingActionItemIDs.contains(identity) { return .adding }
-    if failedActionItemIDs.contains(identity) { return .failed }
+    if promoter.adding.contains(index) { return .adding }
+    if promoter.failed.contains(index) || failedActionItemIDs.contains(identity) { return .failed }
     return .idle
   }
 
@@ -110,26 +105,21 @@ struct ConversationActionItemsSection: View {
   }
 
   /// Explicit, per-item promotion of a summary action item into the task list.
-  /// This gesture is the only way an extracted item becomes a task.
-  private func addActionItemToTasks(_ item: ActionItem) {
-    let identity = actionItemIdentity(item)
-    guard !addedActionItemIDs.contains(identity), !addingActionItemIDs.contains(identity) else { return }
-    addingActionItemIDs.insert(identity)
-    failedActionItemIDs.remove(identity)
+  /// This gesture is the only way an extracted item becomes a task; the canonical
+  /// candidate path persists the link (targetTaskID) server-side.
+  private func taskAction(_ index: Int) {
+    let item = conversation.structured.actionItems[index]
+    if let taskID = item.targetTaskID {
+      onOpenLinkedTask?(taskID)
+      return
+    }
+    let selected = OmiAPI.SummaryTaskReference(
+      actionItemIndex: index, conversationId: conversation.id, expectedDescription: item.description)
     Task { @MainActor in
-      let created = await TasksStore.shared.createTask(
-        description: item.description,
-        dueAt: item.dueAt,
-        priority: nil
-      )
-      addingActionItemIDs.remove(identity)
-      if created != nil {
-        addedActionItemIDs.insert(identity)
-        createdTasks[identity] = created
-        createdTaskCompletion[identity] = created?.completed ?? false
-      } else {
-        failedActionItemIDs.insert(identity)
-      }
+      guard let taskID = await promoter.promote(selected) else { return }
+      onTaskAdded(selected, taskID)
+      await SuggestedTasksStore.shared.load()
+      await TasksStore.shared.refreshDashboardTasksFromServer()
     }
   }
 
@@ -141,6 +131,16 @@ struct ConversationActionItemsSection: View {
       defer { togglingActionItemIDs.remove(identity) }
       var task = createdTasks[identity]
       var taskIsCompleted = createdTaskCompletion[identity]
+      if let cached = task {
+        // createTask returns the row's local id (local_<rowid>); the background
+        // create-sync replaces it with the backend id in SQLite. Re-read the row
+        // so a toggle in the same view addresses the backend task, never the
+        // stale local-only id (whose toggle would silently skip the server).
+        if let synced = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: cached.id) {
+          task = synced
+          taskIsCompleted = synced.completed
+        }
+      }
       if task == nil, let targetTaskID = item.targetTaskID {
         task = try? await APIClient.shared.getActionItem(id: targetTaskID)
         guard task != nil else {

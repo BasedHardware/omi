@@ -120,6 +120,8 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
+  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
+    value: "shadow"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
@@ -195,6 +197,8 @@ env:
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
+    value: "true"
+  - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
@@ -576,6 +580,8 @@ env:
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'true'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "true"
+  - name: SONIOX_WIRE_LEDGER
     value: "true"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"

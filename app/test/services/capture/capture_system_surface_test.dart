@@ -241,17 +241,19 @@ void main() {
   });
 
   test('Finish processes phone conversation and stops its native capture', () async {
-    world.controller.segments.add(TranscriptSegment(
-      id: 'segment',
-      text: 'A recording to finish',
-      speaker: 'SPEAKER_00',
-      speakerId: 0,
-      isUser: false,
-      personId: null,
-      start: 0,
-      end: 1,
-      translations: [],
-    ));
+    world.controller.segments.add(
+      TranscriptSegment(
+        id: 'segment',
+        text: 'A recording to finish',
+        speaker: 'SPEAKER_00',
+        speakerId: 0,
+        isUser: false,
+        personId: null,
+        start: 0,
+        end: 1,
+        translations: [],
+      ),
+    );
     final finish = request('finish');
     await sink.action(finish);
     await world.settle();

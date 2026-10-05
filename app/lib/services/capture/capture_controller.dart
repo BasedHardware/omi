@@ -525,8 +525,11 @@ class CaptureController extends ChangeNotifier
   /// coordinator decides what pause, resume and finish do for the source that
   /// owns capture. A tap from a card for an older recording or conversation fails,
   /// including one that queued behind the stop, handoff or finish that replaced it.
-  Future<void> performSystemSurfaceAction(String action,
-      {required String recordingId, required int conversationRevision}) async {
+  Future<void> performSystemSurfaceAction(
+    String action, {
+    required String recordingId,
+    required int conversationRevision,
+  }) async {
     if (lifetime.isClosed ||
         activeRecordingId != recordingId ||
         _systemSurfaceConversationRevision != conversationRevision) {

@@ -149,6 +149,8 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
+  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
+    value: "shadow"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
@@ -203,6 +205,8 @@ env:
     value: 'true'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "true"
+  - name: SONIOX_WIRE_LEDGER
+    value: "true"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
@@ -229,6 +233,8 @@ env:
     value: "false"
   # Shared process_conversation rollout flags. Must match backend-listen in this
   # environment — pusher hosts the same finalizer after 2026-08-30.
+  - name: SPEAKER_MATCH_SCORES_ENABLED
+    value: "true"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED

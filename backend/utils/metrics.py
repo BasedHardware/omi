@@ -649,11 +649,14 @@ from utils.metrics_smart_merge import (  # noqa: E402
     CONVERSATION_SMART_MERGE_SCORE as CONVERSATION_SMART_MERGE_SCORE,
     CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS as CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS,
     CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL as CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL,
+    CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL as CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL,
+    CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS as CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS,
     OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL as OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL,
     record_conversation_smart_merge as record_conversation_smart_merge,
     record_conversation_smart_merge_audit as record_conversation_smart_merge_audit,
     record_conversation_smart_merge_refresh as record_conversation_smart_merge_refresh,
     record_conversation_smart_merge_survivor_deleted as record_conversation_smart_merge_survivor_deleted,
+    record_conversation_smart_merge_wallclock_shadow as record_conversation_smart_merge_wallclock_shadow,
     record_smart_merge_flatten as record_smart_merge_flatten,
 )
 
