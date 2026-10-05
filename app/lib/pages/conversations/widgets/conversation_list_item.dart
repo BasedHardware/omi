@@ -15,6 +15,7 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/conversations/widgets/list_row_retry_button.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -27,7 +28,16 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/widgets/capture_sources.dart';
+import 'package:omi/widgets/device_tile.dart';
 import 'package:omi/widgets/extensions/string.dart';
+
+/// The conversation list's text runs 5% larger than the app's type scale: row titles, the time
+/// line and snippets, and the day headers.
+const double kConversationListTextScale = 1.05;
+
+/// [style] at the conversation list's size.
+TextStyle conversationListText(TextStyle style) =>
+    style.copyWith(fontSize: style.fontSize! * kConversationListTextScale);
 
 /// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
 /// rows the server left untitled), a recording date/time when neither exists, and
@@ -146,28 +156,22 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Widget _buildSummaryRetry(BuildContext context) {
     return Row(
       children: [
-        Flexible(
+        Expanded(
           child: Text(
             context.l10n.conversationSummaryFailed,
             key: const Key('conversation_summary_failed_indicator'),
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+            style: conversationListText(OmiType.footnote)
+                .copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        GestureDetector(
-          onTap: () {}, // absorb so the card's open-on-tap does not fire
-          child: TextButton(
-            key: const Key('conversation_summary_retry_button'),
-            onPressed: _reprocessing ? null : _onReprocess,
-            style: TextButton.styleFrom(
-              foregroundColor: OmiColors.textPrimary,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              minimumSize: const Size(44, 44),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: _reprocessing ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.retry),
-          ),
+        // At the row's end, level with "Summary failed".
+        ListRowRetryButton(
+          key: const Key('conversation_summary_retry_button'),
+          label: context.l10n.retry,
+          busy: _reprocessing,
+          onPressed: _onReprocess,
         ),
       ],
     );
@@ -379,11 +383,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           duration: const Duration(milliseconds: 200),
                           width: double.maxFinite,
                           decoration: BoxDecoration(
+                            // A flat row on the page; its fill hides the swipe's delete button.
                             color: isSelected
                                 ? OmiColors.surface3
                                 : (isSelectionMode && !isEligible)
                                     ? OmiColors.surface2
-                                    : OmiColors.surface1,
+                                    : OmiCanvas.pageOf(context),
                             borderRadius: OmiRadius.xlAll,
                             border: isSelected
                                 ? Border.all(color: OmiColors.accent, width: 2)
@@ -410,18 +415,22 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
+  /// The row's highlight (selected, merging) stands this far into the page gutter; its content
+  /// keeps to the gutter, in line with the day labels.
+  static const double _rowInset = OmiSpacing.xxs;
+
   /// A row inside a [LockedConversationRun] takes its outer spacing from the run.
   EdgeInsets get _cardPadding {
     if (widget.inLockedRun) return EdgeInsets.zero;
-    final side = widget.isFromOnboarding ? 0.0 : 16.0;
-    return EdgeInsets.only(top: 8, left: side, right: side);
+    return EdgeInsets.symmetric(horizontal: widget.isFromOnboarding ? 0 : _rowInset);
   }
 
-  static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+  static TextStyle get _metaStyle => conversationListText(OmiType.footnote).copyWith(color: OmiColors.textSecondary);
 
   Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
     final content = Padding(
-      padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+      padding:
+          const EdgeInsetsDirectional.symmetric(horizontal: OmiSpacing.md - _rowInset, vertical: DeviceTile.rowPadding),
       child: _buildMobileLayout(context),
     );
     // A run frosts its rows together under one action.
@@ -429,9 +438,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return OmiLockedPreview(label: context.l10n.upgradeToUnlimited, onPressed: onTap, child: content);
   }
 
-  /// Time and length, with the New badge beside them (hub audit #16) and the star.
+  /// The time, with the New badge beside it (hub audit #16) and the star. The length is on the
+  /// conversation page.
   Widget _buildMetaRow(BuildContext context) {
-    final duration = _getConversationDuration(context);
     return Row(
       children: [
         Text(
@@ -439,7 +448,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
           style: _metaStyle,
           maxLines: 1,
         ),
-        if (duration.isNotEmpty) ...[Text(' • ', style: _metaStyle), Text(duration, style: _metaStyle, maxLines: 1)],
         // One row stands for an event several devices recorded.
         if (_captureSources.length > 1) ...[
           Text(' • ', style: _metaStyle),
@@ -470,29 +478,19 @@ class _ConversationListItemState extends State<ConversationListItem> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Emoji + Title row
+            // The device it was recorded on, then the title.
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!discarded)
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                    alignment: Alignment.center,
-                    child: Text(
-                      widget.conversation.structured.getEmoji(),
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                if (!discarded) const SizedBox(width: 12),
+                DeviceTile(source: widget.conversation.source?.name),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         conversationRowTitle(context, widget.conversation),
-                        style: Theme.of(context).textTheme.titleMedium,
+                        style: conversationListText(OmiType.callout).copyWith(fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -500,7 +498,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         const SizedBox(height: 4),
                         Text(
                           discardedSnippet,
-                          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
+                          style: conversationListText(OmiType.footnote)
+                              .copyWith(color: OmiColors.textSecondary, height: 1.35),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -524,7 +523,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             Expanded(
                               child: Text(
                                 _searchSnippetText()!,
-                                style: OmiType.footnote.copyWith(
+                                style: conversationListText(OmiType.footnote).copyWith(
                                   color: OmiColors.textSecondary,
                                   height: 1.35,
                                   fontStyle: FontStyle.italic,
@@ -564,13 +563,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
       decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: OmiRadius.xlAll),
       child: const MergingIndicator(),
     );
-  }
-
-  /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
-  String _getConversationDuration(BuildContext context) {
-    int durationSeconds = widget.conversation.getDurationInSeconds();
-    if (durationSeconds <= 0) return '';
-    return OmiDuration.compact(durationSeconds, context.l10n);
   }
 }
 

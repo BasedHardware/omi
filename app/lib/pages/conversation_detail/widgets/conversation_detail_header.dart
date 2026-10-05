@@ -27,14 +27,18 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// The conversation page's header (v3), shared by both tabs so switching between Summary and
 /// Transcript never loses the title or the facts.
 ///
-/// The title in large type (tap to rename), then one row of outlined chips: when it started and how
-/// long it ran, and — when they apply — its folder, who spoke and the event's recordings. Visibility
+/// The title in large type (tap to rename), then outlined chips: when it started and how long it
+/// ran with its folder (only a filed conversation shows one; Move to Folder is in the ⋯ menu), on
+/// one line, and below them — when they apply — who spoke and the event's recordings. Visibility
 /// lives in the ⋯ menu ([ConversationVisibilitySheet]).
 class ConversationDetailHeader extends StatelessWidget {
   const ConversationDetailHeader({super.key, required this.onOpenRecordings});
 
   /// Opens the recordings sheet for an event several devices recorded.
   final void Function(List<CaptureRecording> recordings) onOpenRecordings;
+
+  /// The most of the when/folder row a folder name may take before it is cut short.
+  static const double folderShare = 0.45;
 
   @override
   Widget build(BuildContext context) {
@@ -61,32 +65,38 @@ class ConversationDetailHeader extends StatelessWidget {
                 summary: (first, others) => context.l10n.participantsSummary(first, others),
                 uncountedSummary: context.l10n.participantsSummaryUncounted,
               );
-              return Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              final more = [
+                if (peopleLabel != null)
+                  _peopleChip(
+                    context,
+                    conversation,
+                    peopleLabel,
+                    ConversationDetailMeta.avatars(people.named, people.unnamed, uncounted: people.uncounted),
+                  ),
+                if (recordings.isNotEmpty)
+                  CaptureRecordingsChip(
+                    recordings: recordings,
+                    onTap: () {
+                      trackConversationAction(
+                        ConversationActionAction.recordingsOpen,
+                        ConversationActionSurface.detailBody,
+                      );
+                      onOpenRecordings(recordings);
+                    },
+                  ),
+              ];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _whenChip(context, conversation),
-                  // Only a filed conversation shows its folder; Move to Folder is in the ⋯ menu.
-                  if (folder != null) _FolderChip(conversation: conversation, folder: folder),
-                  if (peopleLabel != null)
-                    _peopleChip(
-                      context,
-                      conversation,
-                      peopleLabel,
-                      ConversationDetailMeta.avatars(people.named, people.unnamed, uncounted: people.uncounted),
-                    ),
-                  if (recordings.isNotEmpty)
-                    CaptureRecordingsChip(
-                      recordings: recordings,
-                      onTap: () {
-                        trackConversationAction(
-                          ConversationActionAction.recordingsOpen,
-                          ConversationActionSurface.detailBody,
-                        );
-                        onOpenRecordings(recordings);
-                      },
-                    ),
+                  _OneLineChips(
+                    when: _whenChip(context, conversation),
+                    // Only a filed conversation shows its folder; Move to Folder is in the ⋯ menu.
+                    folder: folder == null ? null : _FolderChip(conversation: conversation, folder: folder),
+                  ),
+                  if (more.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: more),
+                  ],
                 ],
               );
             },
@@ -184,6 +194,40 @@ class ConversationDetailHeader extends StatelessWidget {
   }
 }
 
+/// When it started and the folder, always on one line: a long folder name ends in an ellipsis,
+/// and if the pair still does not fit (large text on a small phone) both shrink together.
+class _OneLineChips extends StatelessWidget {
+  const _OneLineChips({required this.when, this.folder});
+
+  final Widget when;
+  final Widget? folder;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return FittedBox(
+          key: const Key('conversation_when_folder_row'),
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ConstrainedBox(constraints: BoxConstraints(maxWidth: width), child: when),
+              if (folder != null) ...[
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: width * ConversationDetailHeader.folderShare), child: folder),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Overlapping 22 pt circles, the first on top: the first person in the primary ink with a ring of
 /// the page colour, the rest in a quieter grey.
 class _PeopleAvatars extends StatelessWidget {
@@ -209,7 +253,7 @@ class _PeopleAvatars extends StatelessWidget {
             shape: BoxShape.circle,
             color: first ? OmiColors.accent : OmiColors.textPrimary.withValues(alpha: 0.32),
             border: first
-                ? Border.all(color: OmiColors.surface0, width: 2, strokeAlign: BorderSide.strokeAlignOutside)
+                ? Border.all(color: OmiCanvas.pageOf(context), width: 2, strokeAlign: BorderSide.strokeAlignOutside)
                 : null,
           ),
           child: Text(

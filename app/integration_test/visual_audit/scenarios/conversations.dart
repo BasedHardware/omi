@@ -1,5 +1,7 @@
 // The Conversations tab: rows, the row menu, swipe to delete, grouped capture rows, Daily Recaps
 // and Offline Sync.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
@@ -14,6 +16,8 @@ import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/date_list_item.dart';
+import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 
@@ -102,6 +106,42 @@ final conversationsScenarios = <AuditScenario>[
       await a.settle();
       expect(find.text('Delete Conversation'), findsOneWidget);
       await a.shot('Swipe the first row to delete: the confirm menu from its delete button', step: 'swipe-delete');
+    },
+  ),
+  AuditScenario(
+    id: 'conversations-processing-slow',
+    title: 'A processing row taking too long: Try again, then retrying',
+    page: 'lib/pages/conversations/widgets/processing_capture.dart (ProcessingConversationWidget)',
+    state: 'One conversation still processing past the timeout, above a finished one; the retry never returns',
+    run: (a) async {
+      final day = DateTime(2026, 9, 20);
+      final processing = ServerConversation(
+        id: 'p',
+        createdAt: DateTime(2026, 9, 20, 1, 1),
+        startedAt: DateTime(2026, 9, 20, 1, 1),
+        finishedAt: DateTime(2026, 9, 20, 1, 5),
+        structured: Structured('', ''),
+        status: ConversationStatus.processing,
+      );
+      final done = auditConversation('a', title: 'Black Clover');
+      final retry = Completer<ServerConversation?>();
+      await a.pump(
+        ListView(
+          children: [
+            DateListItem(date: day, isFirst: true),
+            ProcessingConversationWidget(
+              conversation: processing,
+              now: () => DateTime(2026, 9, 20, 2),
+              reprocess: (_) => retry.future,
+            ),
+            ConversationListItem(conversation: done, conversationIdx: 0, date: day),
+          ],
+        ),
+        providers: _listProviders([done]),
+      );
+      await a.shot('A processing row past the timeout: Try again level with "Processing"', step: 'try-again');
+      await a.tap(find.byKey(const Key('processing_conversation_retry_button')));
+      await a.shot('Tap Try again: the loader takes its place, nothing moves', step: 'retrying');
     },
   ),
   AuditScenario(

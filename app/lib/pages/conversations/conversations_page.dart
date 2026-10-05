@@ -461,12 +461,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         children: [
           // Date header shimmer
           ShimmerWithTimeout(
-            baseColor: OmiColors.surface1,
+            baseColor: OmiColors.canvasCard,
             highlightColor: OmiColors.surface3,
             child: Container(
               width: 100,
               height: 16,
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: OmiColors.canvasCard, borderRadius: BorderRadius.circular(8)),
             ),
           ),
           const SizedBox(height: 12),
@@ -476,11 +476,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             (index) => Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: ShimmerWithTimeout(
-                baseColor: OmiColors.surface1,
+                baseColor: OmiColors.canvasCard,
                 highlightColor: OmiColors.surface3,
                 child: Container(
                   height: 80,
-                  decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(color: OmiColors.canvasCard, borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
@@ -516,12 +516,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return Padding(
       padding: const EdgeInsets.only(top: 16.0),
       child: ShimmerWithTimeout(
-        baseColor: OmiColors.surface1,
+        baseColor: OmiColors.canvasCard,
         highlightColor: OmiColors.surface3,
         child: Container(
           height: 60,
           margin: const EdgeInsets.symmetric(horizontal: 16.0),
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: OmiColors.canvasCard, borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
