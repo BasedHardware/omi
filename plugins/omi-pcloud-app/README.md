@@ -8,9 +8,9 @@ Addresses [BasedHardware/omi #20213](https://github.com/BasedHardware/omi/issues
 
 ## Features
 
-- **Extensible Architecture**: Implements `CloudBackupProvider` protocol
-  to allow modular storage plugins (pCloud, Dropbox, S3, WebDAV) under a
-  unified interface.
+- **Extensible Architecture**: Implements `CloudBackupProvider` protocol,
+  designed to establish a unified interface for modular cloud storage
+  destinations (with pCloud provided as the first implementation).
 - **Multi-Region Routing**:
   - Global / US: `https://api.pcloud.com` (`location_id: 1`)
   - European Union: `https://eapi.pcloud.com` (`location_id: 2`)
@@ -19,3 +19,4 @@ Addresses [BasedHardware/omi #20213](https://github.com/BasedHardware/omi/issues
 - **Idempotent Storage**: Prevents duplicate uploads on network retry.
 - **Hermetic Test Suite**: 100% mocked unit tests with zero external
   network dependencies.
+
