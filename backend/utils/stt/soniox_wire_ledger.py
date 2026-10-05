@@ -161,14 +161,25 @@ class SonioxProviderClock:
         uncontested = single and not (self._audio_after_finalize or self._audio_inflight)
         self._pending = max(0, self._pending - acknowledgments)
         self._uncertain = True
+        total, final = message.get('total_audio_proc_ms'), message.get('final_audio_proc_ms')
+        position = None
+        if type(total) is int and type(final) is int and total == final and total >= 0:
+            numerator = total * self.sample_rate
+            if numerator % 1000 == 0:
+                position = numerator // 1000
         if self._association_lost or self._checkpoints_closed:
             self._settle_controls('unverified', settled)
             self._update_state()
-            return self._raced(settled)
-        total, final = message.get('total_audio_proc_ms'), message.get('final_audio_proc_ms')
-        exact = type(total) is int and type(final) is int and total == final and total >= 0
-        exact = exact and total * self.sample_rate % 1000 == 0
-        position = total * self.sample_rate // 1000 if exact else None
+            self._raced(settled)
+            # Preserve the reported-only display/reopen cursor used on main.
+            # This bookkeeping is never capture authorization: uncertainty
+            # stays latched and every subsequent send lacks capture spans.
+            if self.mode == 'reported' and not self._checkpoints_closed and uncontested:
+                if position is not None and position >= self.samples:
+                    hole = position - self.samples
+                    self.samples = position
+                    return hole
+            return 0
         repeated = position is not None and self._last_ack_position is not None and position <= self._last_ack_position
         if not single or position is None or repeated or (uncontested and position < self.samples):
             self._lose_association()

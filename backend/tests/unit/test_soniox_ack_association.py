@@ -14,7 +14,7 @@ from tests.unit.test_soniox_finalize_padding import setup_peer, send_observed, c
 from tests.unit.test_soniox_capture_axis_r10 import close, managed, soniox_capture_uuid
 from tests.unit.test_soniox_wire_ledger import barrier
 from tests.unit.test_capture_window_merge_union_r5 import tick, known
-from tests.unit.test_audio_timeline_round3 import RATE
+from tests.unit.test_audio_timeline_round3 import RATE, T0
 from utils.stt import soniox, soniox_wire_metrics
 from utils.stt.soniox_idle import IdleSonioxSocket
 
@@ -253,6 +253,7 @@ async def test_r16_parity_receipt(monkeypatch):
     """Stable entire frames/payloads/metric deltas for source-pinned comparison."""
     wire_on = os.getenv('R16_WIRE', 'false') == 'true'
     adversarial = os.getenv('R16_ADVERSARIAL', 'false') == 'true'
+    idle_reopen = os.getenv('R16_IDLE', 'false') == 'true'
     monkeypatch.setenv('SONIOX_WIRE_LEDGER', str(wire_on).lower())
     monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'false')
     monkeypatch.setattr(soniox.time, 'monotonic', lambda: 100.0)
@@ -268,10 +269,11 @@ async def test_r16_parity_receipt(monkeypatch):
         }
 
     before = values()
-    receiver, _, processor, store, leg, peer, _ = await managed(monkeypatch, True)
+    receiver, epoch, processor, store, leg, peer, _ = await managed(monkeypatch, True)
     leg.gate = None
     peer.__class__ = PaddingPeer
     peer.samples = peer.finalizes = 0
+    peers = [peer]
     try:
         send_observed(receiver, leg, 42732)
         await barrier(leg.raw, peer)
@@ -293,6 +295,34 @@ async def test_r16_parity_receipt(monkeypatch):
         await barrier(leg.raw, peer)
         await final(peer, speaker=2)
         rows = await tick(receiver, processor, store)
+        if idle_reopen:
+
+            async def connect(callback):
+                fresh_peer = PaddingPeer()
+                peers.append(fresh_peer)
+                return soniox.SafeSonioxSocket(fresh_peer, callback, asyncio.get_running_loop())
+
+            idle = IdleSonioxSocket(leg.raw, connect, leg.raw._stream_transcript, RATE, 20)
+            if wire_on:
+                idle.set_wire_ledger(epoch)
+            peer.__class__ = ClosingPeer
+            leg.raw._planned_close = True
+            idle._idle_since = 1
+            idle._close_task = asyncio.ensure_future(idle._close_idle())
+            leg.raw = idle
+            send_observed(receiver, leg, RATE)
+            assert await leg.complete_send()
+            await barrier(idle._transport, peers[-1])
+            send_observed(receiver, leg, RATE)
+            await barrier(idle._transport, peers[-1])
+            await final(peers[-1], speaker=3)
+            rows = await tick(receiver, processor, store)
+            if wire_on:
+                # Main's display origin survives the capture-only refusal fix.
+                assert rows[-1]['start'] - rows[0]['start'] == pytest.approx(
+                    peer.samples / RATE + 1.2 - 1.871, abs=2 / RATE, rel=0
+                )
+                assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 42732 / RATE + 2.2, abs=2 / RATE, rel=0)
         leg.finish()
         for _ in range(8):
             await asyncio.sleep(0)
@@ -300,7 +330,9 @@ async def test_r16_parity_receipt(monkeypatch):
         after = values()
         receipt = dict(
             rows=rows,
-            wire=[dict(binary=v.hex()) if isinstance(v, bytes) else dict(text=v) for v in peer.sent],
+            wire=[
+                dict(binary=v.hex()) if isinstance(v, bytes) else dict(text=v) for socket in peers for v in socket.sent
+            ],
             counters=sorted(
                 [name, list(labels), value - before.get((name, labels), 0)]
                 for (name, labels), value in after.items()
@@ -334,3 +366,11 @@ async def test_both_off_do_not_touch_warmed_gate(monkeypatch):
         for sample in metric.samples
     ]
     assert after == before
+
+
+@pytest.mark.asyncio
+async def test_reported_idle_reopen_receipt_after_ambiguous_ack(monkeypatch):
+    monkeypatch.setenv('R16_WIRE', 'true')
+    monkeypatch.setenv('R16_ADVERSARIAL', 'true')
+    monkeypatch.setenv('R16_IDLE', 'true')
+    await test_r16_parity_receipt(monkeypatch)
