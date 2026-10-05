@@ -18,6 +18,13 @@ from utils.conversations.summary_selection import select_primary_summary
 logger = logging.getLogger(__name__)
 
 
+def _omit_list_note_claims(conv: Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(conv.get('structured'), dict) and 'note_claims' in conv['structured']:
+        conv['structured'] = dict(conv['structured'])
+        conv['structured'].pop('note_claims', None)
+    return conv
+
+
 def resolve_display_tz(tz: Optional[str]) -> Any:
     """Return ``(tzinfo, label)`` for rendering timestamps in a user's local timezone.
 
@@ -130,11 +137,8 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
 # every member of this set.
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
-    if isinstance(conv.get('structured'), dict) and 'note_claims' in conv['structured']:
-        conv['structured'] = dict(conv['structured'])
-        conv['structured'].pop('note_claims', None)
     if not conv.get('is_locked', False):
-        return conv
+        return _omit_list_note_claims(conv)
     if 'structured' in conv:
         conv['structured'] = (
             dict(conv['structured']) if not isinstance(conv['structured'], dict) else conv['structured']
@@ -147,7 +151,7 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv['transcript_segments'] = []
     # Search may attach transcript match_snippets before list redaction; never leak evidence for locked rows.
     conv['match_snippets'] = []
-    return conv
+    return _omit_list_note_claims(conv)
 
 
 def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:

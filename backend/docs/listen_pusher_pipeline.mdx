@@ -1400,20 +1400,23 @@ best-effort and appended only to the notes volatile suffix as BACKGROUND
 CONTEXT; it never enters the shared prefix, the memory extractor, or app
 prompts, and no single source failure can block the note.
 
-`MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` (default off) selects the episode
-notes schema and one typed evidence block for notes v2. Speech, calendar, roster,
-prior context, related tasks, capture state and flag-gated screen observations
-retain source IDs and timestamps. The existing bounded OCR read retains private
-message text only on this path, marking all OCR and screenshot-derived claims
-private. The flag enables notes rich inputs independently of the rich-context
-switch; memory and app prompts retain their existing flag behavior. Collected
-screen observations retain a capture that the speech-only relevance tier would
-discard. Metadata alone does not establish attendance or a substantive episode.
-One episode retry addresses vacuity or invalid claim provenance; unresolved
-violations fail extraction. Existing presentation revision remains separately
-bounded. See `utils/conversations/EPISODE_EVIDENCE.md` for mapping and later
-retrieval/audience work. Shared recap prose is not filtered by claim tags yet;
-this flag is an offline evaluation switch, not an audience-privacy rollout.
+The default-off `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` switch also requires
+sticky percentage admission (default0). Kept captures gather the existing rich
+inputs only after relevance; discard behavior and consent gates stay unchanged.
+Typed speech, screen/OCR, messages and background evidence share source IDs,
+times and actors. Connected non-speech evidence can explain the episode but
+must never be presented as speech; unrelated screen content stays excluded.
+Claims are optional and default off; sharing is the owner's whole-note decision.
+David locked deterministic selection with C7/no effort override and C6/xhigh at
+1500 speech words and two admitted source kinds. One bounded repair addresses
+vacuity/provenance/presentation; residual violations retain the best usable note.
+Detail reads filter stale claim spans; list/search omit the metadata. Memory and
+app prompts retain their existing gates. See `utils/conversations/EPISODE_EVIDENCE.md`
+and `utils/conversations/EPISODE_ROLLOUT.md` for mapping, acceptance and ramp.
+Extended writer budgets apply only in existing leased finalizers; synchronous
+requests keep their prior bound. C6 is clamped115s by the shared gateway, with
+one C7 fallback. No outer lifecycle, lease or request deadline changes; see
+[`EPISODE_DEADLINES.md`](../utils/conversations/EPISODE_DEADLINES.md).
 
 Approved meeting screenshots feed the same pass. The Mac adjudicates frames
 before it finalizes (admission accepts an in_progress/processing conversation
@@ -3119,10 +3122,3 @@ Completed conversations retain meeting-treatment audit receipts and notes on the
 conversation surface. Finalization, reprocessing, and receipt backfill do not post
 capture or meeting-note cards into Chat; rich conversation links remain available
 in agent replies to a user message.
-
-Episode notes receive extended writer budgets only inside the existing leased
-finalizer, using `episode_runtime.process_with_episode_budget`. Synchronous
-request processing retains its prior writer bound. The episode gateway ceiling,
-tier fallback and shutdown/retry limitations are audited in
-[`EPISODE_DEADLINES.md`](../utils/conversations/EPISODE_DEADLINES.md); no listen,
-pusher, job lease, request deadline or lifecycle write path changes.
