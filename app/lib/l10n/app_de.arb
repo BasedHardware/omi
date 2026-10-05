@@ -3840,7 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Auf dem Sperrbildschirm anzeigen",
-"singlePress": "Einfaches Drücken",
+    "singlePress": "Einfaches Drücken",
     "singlePressAction": "Einfaches Drücken Aktion",
     "triplePress": "Dreifaches Drücken",
     "triplePressAction": "Dreifaches Drücken Aktion",

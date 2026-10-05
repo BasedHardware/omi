@@ -3840,7 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "ロック画面に表示",
-"singlePress": "シングルプレス",
+    "singlePress": "シングルプレス",
     "singlePressAction": "シングルプレスアクション",
     "triplePress": "トリプルプレス",
     "triplePressAction": "トリプルプレスアクション",

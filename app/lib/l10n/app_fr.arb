@@ -3875,7 +3875,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Afficher sur l’écran verrouillé",
-"singlePress": "Simple appui",
+    "singlePress": "Simple appui",
     "singlePressAction": "Action simple appui",
     "triplePress": "Triple appui",
     "triplePressAction": "Action triple appui",

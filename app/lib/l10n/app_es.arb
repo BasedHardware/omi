@@ -3840,7 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Mostrar en la pantalla de bloqueo",
-"singlePress": "Pulsación única",
+    "singlePress": "Pulsación única",
     "singlePressAction": "Acción de pulsación única",
     "triplePress": "Triple pulsación",
     "triplePressAction": "Acción de triple pulsación",

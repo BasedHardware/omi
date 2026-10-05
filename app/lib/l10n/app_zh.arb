@@ -3840,7 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "在锁定屏幕上显示",
-"singlePress": "单击",
+    "singlePress": "单击",
     "singlePressAction": "单击操作",
     "triplePress": "三击",
     "triplePressAction": "三击操作",
