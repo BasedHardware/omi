@@ -471,7 +471,7 @@ class SafeSonioxSocket(STTSocket):
                 if self._wire_epoch is not None:
                     if isinstance(provider_clock, OrderedSonioxProviderClock):
                         # A mismatch may arrive inside this audio send await.
-                        placeable = placeable and not provider_clock._uncertain
+                        placeable = placeable and provider_clock.placeable
                     self._wire_epoch.note_wire_audio(
                         length, getattr(data, 'spans', ()) if placeable else (), unplaceable_by_race=not placeable
                     )
@@ -480,7 +480,7 @@ class SafeSonioxSocket(STTSocket):
             if not written and provider_clock is not None and isinstance(data, bytes):
                 provider_clock.end_audio(0)
             if not written and isinstance(provider_clock, OrderedSonioxProviderClock):
-                provider_clock._invalidate()
+                provider_clock.invalidate()
                 self._sync_ordered_clock()
             self._diagnostic(lambda diagnostic: setattr(diagnostic, 'inflight', False))
 

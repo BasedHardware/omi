@@ -142,6 +142,10 @@ class OrderedSonioxProviderClock(SonioxProviderClock):
     def pending_from(self) -> int | None:
         return self._predictions[0][0] if self._predictions else None
 
+    @property
+    def placeable(self) -> bool:
+        return not self._uncertain
+
     def begin_audio(self) -> bool:
         if not self._modeled:
             return super().begin_audio()
@@ -157,12 +161,12 @@ class OrderedSonioxProviderClock(SonioxProviderClock):
     def begin_finalize(self) -> int:
         super().begin_finalize()
         if self._checkpoints_closed:
-            self._invalidate()
+            self.invalidate()
             return 0
         if not self._modeled:
             return 0
         if len(self._predictions) >= 64:
-            self._invalidate()
+            self.invalidate()
             self._ordered_metrics.labels(outcome='unverified').inc()
             return 0
         before = self.samples
@@ -171,7 +175,7 @@ class OrderedSonioxProviderClock(SonioxProviderClock):
         self._predictions.append((before, self.samples, self._emitted))
         return self.samples - before
 
-    def _invalidate(self) -> None:
+    def invalidate(self) -> None:
         self.invalid_from = self.pending_from if self.pending_from is not None else self.samples
         self._predictions.clear()
         self._modeled = False
@@ -212,7 +216,7 @@ class OrderedSonioxProviderClock(SonioxProviderClock):
         )
         if not valid:
             settled = min(self._pending, acknowledgments)
-            self._invalidate()
+            self.invalidate()
             self._pending = max(0, self._pending - acknowledgments)
             self._ordered_metrics.labels(outcome='mismatch').inc()
             return self._raced(settled)
@@ -227,5 +231,5 @@ class OrderedSonioxProviderClock(SonioxProviderClock):
     def close(self) -> None:
         if self._predictions:
             self._ordered_metrics.labels(outcome='unverified').inc(len(self._predictions))
-            self._invalidate()
+            self.invalidate()
         super().close()
