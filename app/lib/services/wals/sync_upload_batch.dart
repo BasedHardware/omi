@@ -32,7 +32,7 @@ Map<String, dynamic>? _captureEvidenceClaim(Wal wal, String name) {
       wal.totalFrames <= 0 ||
       wal.sampleRate <= 0 ||
       wal.channel != 1 ||
-      (wal.codec != BleAudioCodec.opus && wal.codec != BleAudioCodec.pcm16) ||
+      (!wal.codec.isOpusSupported() && wal.codec != BleAudioCodec.pcm16) ||
       !_captureClaimNamePattern.hasMatch(name)) {
     return null;
   }
@@ -43,7 +43,7 @@ Map<String, dynamic>? _captureEvidenceClaim(Wal wal, String name) {
     'source_frame_start': start,
     'frame_count': wal.totalFrames,
     'rate_hz': wal.sampleRate,
-    'codec': wal.codec.name,
+    'codec': wal.codec == BleAudioCodec.pcm16 ? 'pcm16' : 'opus',
     'channel': 'mono',
   };
 }
