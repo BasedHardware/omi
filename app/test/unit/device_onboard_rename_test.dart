@@ -233,6 +233,10 @@ void main() {
       final updatedDevice = await baseDevice.getDeviceInfo(connection);
       expect(updatedDevice.name, onboardName);
       expect(updatedDevice.name, isNot(equals(inputName)));
+
+      // Assert connection.getDeviceName() directly returns the onboard cached value
+      final cachedOnboard = await connection.getDeviceName();
+      expect(cachedOnboard, onboardName);
     });
   });
 }

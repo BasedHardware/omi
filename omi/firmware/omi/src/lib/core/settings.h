@@ -98,7 +98,7 @@ int app_settings_get_lsm6dsl_time_base(uint64_t *epoch_s, uint32_t *imu_timestam
 /**
  * @brief Save the device name setting to onboard persistent storage.
  *
- * @param name The new device name (null-terminated string, up to 25 chars payload).
+ * @param name The new device name (null-terminated string, up to 25 UTF-8 bytes payload).
  * @return 0 on success, negative error code otherwise.
  */
 int app_settings_save_device_name(const char *name);

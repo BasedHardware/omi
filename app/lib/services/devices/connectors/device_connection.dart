@@ -742,7 +742,9 @@ abstract class DeviceConnection {
     }
   }
 
-  Future<void> performSetDeviceName(String name) async {}
+  Future<void> performSetDeviceName(String name) async {
+    throw UnsupportedError('$runtimeType does not support setting custom device name');
+  }
 
   Future<String?> getDeviceName() async {
     if (await isConnected()) {

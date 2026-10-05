@@ -537,7 +537,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
                           setDialogState(() => isSaving = true);
                           try {
-                            final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+                            final connection =
+                                await ServiceManager.instance().device.ensureConnection(device.id, force: true);
                             if (connection == null) {
                               if (dialogContext.mounted) {
                                 setDialogState(() => isSaving = false);
@@ -550,10 +551,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                             await connection.setDeviceName(newName);
                             await provider.refreshDeviceInfo();
                             final confirmedName = provider.pairedDevice?.name ?? newName;
-                            provider.pairedDevice = provider.pairedDevice?.copyWith(name: confirmedName);
-                            if (provider.connectedDevice?.id == device.id) {
-                              provider.connectedDevice = provider.connectedDevice?.copyWith(name: confirmedName);
-                            }
                             if (dialogContext.mounted) {
                               Navigator.of(dialogContext).pop();
                             }

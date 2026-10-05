@@ -1269,6 +1269,12 @@ class OmiDeviceConnection extends DeviceConnection {
         settingsDeviceNameCharacteristicUuid,
         clampedBytes,
       );
+      if (clampedBytes.isNotEmpty) {
+        final readBack = await performGetDeviceName();
+        if (readBack == null) {
+          throw UnsupportedError('Device firmware does not support custom device name');
+        }
+      }
       Logger.debug('OmiDeviceConnection: Successfully set device name to "$name"');
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error setting device name: $e');

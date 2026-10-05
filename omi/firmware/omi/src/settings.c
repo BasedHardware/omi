@@ -275,25 +275,29 @@ uint8_t app_settings_get_mic_gain(void)
 
 int app_settings_save_device_name(const char *name)
 {
+    char staged_name[sizeof(device_name)];
     if (name == NULL) {
-        device_name[0] = '\0';
+        staged_name[0] = '\0';
     } else {
         if (strlen(name) > MAX_DEVICE_NAME_PAYLOAD_LEN) {
             LOG_WRN("Device name exceeds max length: %zu (max %u)", strlen(name), MAX_DEVICE_NAME_PAYLOAD_LEN);
             return -EINVAL;
         }
-        strncpy(device_name, name, sizeof(device_name) - 1);
-        device_name[sizeof(device_name) - 1] = '\0';
+        strncpy(staged_name, name, sizeof(staged_name) - 1);
+        staged_name[sizeof(staged_name) - 1] = '\0';
     }
 
-    size_t name_len = strlen(device_name);
-    int err = settings_save_one("omi/device_name", device_name, name_len);
+    size_t name_len = strlen(staged_name);
+    int err = settings_save_one("omi/device_name", staged_name, name_len);
     if (err) {
         LOG_ERR("Failed to save device_name (err %d)", err);
-    } else {
-        LOG_INF("Saved device_name: %s", device_name);
+        return err;
     }
-    return err;
+
+    strncpy(device_name, staged_name, sizeof(device_name) - 1);
+    device_name[sizeof(device_name) - 1] = '\0';
+    LOG_INF("Saved device_name: %s", device_name);
+    return 0;
 }
 
 const char *app_settings_get_device_name(void)
