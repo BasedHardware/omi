@@ -68,10 +68,13 @@ def select_candidates(
     by_key: dict[int, list[dict]] = {}
     by_id: dict[str, dict] = {}
     for segment in segments:
-        by_key.setdefault(segment.get('speaker_id'), []).append(segment)
-        if segment.get('id') in by_id:
+        speaker_id, segment_id = segment.get('speaker_id'), segment.get('id')
+        if not isinstance(speaker_id, int) or isinstance(speaker_id, bool) or not isinstance(segment_id, str):
+            return []
+        by_key.setdefault(speaker_id, []).append(segment)
+        if segment_id in by_id:
             return []  # ambiguous evidence identity
-        by_id[segment.get('id')] = segment
+        by_id[segment_id] = segment
     owner_names = {normalized_name(e.display_name) for e in roster.entries if e.kind == 'owner' and e.display_name}
     human_entries = [e for e in roster.entries if e.kind == 'human' and e.display_name]
     agent_names = {normalized_name(e.display_name) for e in roster.entries if e.kind == 'ai_agent' and e.display_name}
@@ -99,7 +102,7 @@ def select_candidates(
             or name in {'speaker', 'unknown', 'user', 'owner', 'candidate', 'participant', 'guest'}
         ):
             continue
-        named_entries = [e for e in human_entries if normalized_name(e.display_name) == name]
+        named_entries = [e for e in human_entries if normalized_name(e.display_name or '') == name]
         linked = {e.person_id for e in named_entries if e.person_id}
         if len(linked) > 1:
             continue
@@ -128,6 +131,7 @@ def select_candidates(
             ):
                 admitted = []
                 break
+            evidence = [s for s in evidence if s is not None]
             introductions = [detect_speaker_introduction(s['text']) for s in evidence]
             explicit_name = any(introduction_matches(d, s['text'], name) for d, s in zip(introductions, evidence))
             # Contrary self-introductions anywhere in the key invalidate the

@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Tuple, Type
+from typing import Any, Dict, Generic, List, Literal, Optional, Tuple, Type, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
@@ -331,7 +331,10 @@ class StructuredExtraction(BaseModel):
         )
 
 
-class RichStructuredExtraction(StructuredExtraction):
+ParticipantT = TypeVar('ParticipantT', bound=ExtractedParticipant)
+
+
+class RichStructuredExtraction(StructuredExtraction, Generic[ParticipantT]):
     """Notes-v2 schema extension parsed only when rich meeting context is on.
 
     The base ``StructuredExtraction`` format instructions are embedded in the
@@ -346,7 +349,7 @@ class RichStructuredExtraction(StructuredExtraction):
     meeting_type: Optional[MeetingType] = Field(
         default=None, description='The kind of meeting, when the capture is a meeting'
     )
-    participants: List[ExtractedParticipant] = Field(
+    participants: List[ParticipantT] = Field(
         default_factory=list,
         description='People and AI agents evidenced by the meeting roster or the transcript; never the account owner',
     )

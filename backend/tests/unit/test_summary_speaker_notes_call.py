@@ -111,6 +111,10 @@ def test_one_notes_call_retains_private_candidates_and_off_uses_original_schema(
     assert on._summary_speaker_roster.entries[0].kind == 'owner'
     assert on._summary_speaker_candidates[0].bindings[0].speaker_id == 1
     assert 'speaker_bindings' not in on.model_dump_json()
+    copied = on.model_copy(deep=True)
+    assert len(copied._summary_speaker_candidates) == 2
+    assert copied._summary_speaker_roster.entries[0].kind == 'owner'
+    assert '_summary_speaker' not in copied.model_dump_json()
     off, off_calls = run_notes(monkeypatch, enabled=False, payload=base)
     assert len(off_calls) == 1
     assert not hasattr(off, '_summary_speaker_candidates')

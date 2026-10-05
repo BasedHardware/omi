@@ -2,11 +2,9 @@
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, PrivateAttr, StrictInt, StrictStr, model_validator
+from pydantic import BaseModel, Field, StrictInt, StrictStr, model_validator
 
-from models.structured import Structured
 from models.structured_extraction import ExtractedParticipant, RichStructuredExtraction
-from utils.conversations.meeting_participants import MeetingRoster
 
 
 class SpeakerBinding(BaseModel):
@@ -42,20 +40,13 @@ class SpeakerCandidate(BaseModel):
     bindings: list[SpeakerBinding] = Field(default_factory=list)
 
 
-class NotesWithSpeakerCandidates(Structured):
-    # Private attributes survive deterministic presentation repair but never enter
-    # the client schema, JSON, external app payload, or persisted note document.
-    _summary_speaker_candidates: list[SpeakerCandidate] = PrivateAttr(default_factory=list)
-    _summary_speaker_roster: Optional[MeetingRoster] = PrivateAttr(default=None)
-
-
-class SpeakerLabeledExtraction(RichStructuredExtraction):
+class SpeakerLabeledExtraction(RichStructuredExtraction[LabeledParticipant]):
     participants: list[LabeledParticipant] = Field(default_factory=list)
     owner: Optional[LabeledParticipant] = Field(default=None, description='Account owner only; omit when unknown')
 
     @model_validator(mode='before')
     @classmethod
-    def keep_usable_rich_content(cls, value):
+    def keep_labeled_participants(cls, value):
         if isinstance(value, dict) and isinstance(value.get('participants'), list):
             participants = []
             for item in value['participants']:
@@ -64,7 +55,7 @@ class SpeakerLabeledExtraction(RichStructuredExtraction):
                 except (ValueError, TypeError):
                     continue
             value = {**value, 'participants': participants}
-        return RichStructuredExtraction.keep_usable_rich_content(value)
+        return value
 
     @model_validator(mode='before')
     @classmethod
@@ -79,10 +70,11 @@ class SpeakerLabeledExtraction(RichStructuredExtraction):
                 value['owner'] = None
         return value
 
-    def to_structured(self) -> Structured:
-        base = super().to_structured()
-        result = NotesWithSpeakerCandidates.model_validate(base.model_dump(exclude_unset=True))
-        result._summary_speaker_candidates = [
+    def to_structured(self):
+        result = super().to_structured()
+        # Underscore attributes survive model_copy but stay outside declared
+        # fields, JSON, persisted notes, and the shared client schema.
+        candidates = [
             SpeakerCandidate(
                 name=participant.name or '',
                 is_owner=is_owner,
@@ -92,4 +84,6 @@ class SpeakerLabeledExtraction(RichStructuredExtraction):
             for participant, is_owner in [*((p, False) for p in self.participants), (self.owner, True)]
             if isinstance(participant, LabeledParticipant)
         ]
+        setattr(result, '_summary_speaker_candidates', candidates)
+        setattr(result, '_summary_speaker_roster', None)
         return result
