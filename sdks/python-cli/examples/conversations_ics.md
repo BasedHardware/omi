@@ -18,7 +18,7 @@ Check that the command succeeded before converting the file. This is one page,
 not a complete-account backup; to retrieve another page, increase `--offset` by
 200 and use a different filename.
 
-Save the following as `conversations_to_ics.py`:
+Save the following as `conversations_to_ics.py` (or run [`conversations_to_ics.py`](conversations_to_ics.py) directly):
 
 ```python
 import json
@@ -39,8 +39,14 @@ def ics_text(value):
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    return (value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
-            .replace("\r\n", "\\n").replace("\n", "\\n"))
+    return (
+        value.replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\r", "\\n")
+        .replace("\n", "\\n")
+    )
 
 
 def ics_datetime(value):
@@ -82,8 +88,14 @@ def convert(source, destination):
     if not isinstance(items, list):
         raise ValueError("Expected the JSON array from omi --json conversation list")
     now = stamp(datetime.now(timezone.utc))
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//omi-cli examples//conversations_to_ics//EN",
-             "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Omi conversations"]
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//omi-cli examples//conversations_to_ics//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "X-WR-CALNAME:Omi conversations",
+    ]
     skipped = 0
     for item in items:
         if not isinstance(item, dict):
@@ -108,9 +120,18 @@ def convert(source, destination):
                 notes.append(f"{label}: {ics_text(structured.get(key))}")
         if item.get("source"):
             notes.append(f"Source: {ics_text(item.get('source'))}")
-        lines += ["BEGIN:VEVENT", f"UID:omi-conversation-{item_id}@omi-cli", f"DTSTAMP:{now}",
-                  f"DTSTART:{stamp(start)}", f"DTEND:{stamp(end)}", f"SUMMARY:{title}",
-                  "DESCRIPTION:" + "\\n".join(notes), "STATUS:CONFIRMED", "CATEGORIES:Omi", "END:VEVENT"]
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:omi-conversation-{item_id}@omi-cli",
+            f"DTSTAMP:{now}",
+            f"DTSTART:{stamp(start)}",
+            f"DTEND:{stamp(end)}",
+            f"SUMMARY:{title}",
+            "DESCRIPTION:" + "\\n".join(notes),
+            "STATUS:CONFIRMED",
+            "CATEGORIES:Omi",
+            "END:VEVENT",
+        ]
     lines.append("END:VCALENDAR")
     folded = [part for line in lines for part in fold(line)]
     payload = ("\r\n".join(folded) + "\r\n").encode("utf-8")
