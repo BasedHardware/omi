@@ -21,14 +21,37 @@ interface LocalCallsNative {
   ): { remove(): void }
 }
 
-const native = requireNativeModule<LocalCallsNative>('LocalCalls')
+// requireNativeModule THROWS when the module is absent, so it cannot be called
+// unguarded at module scope: a bare import of this file would then take down
+// anything that touches it -- Expo Go, iOS, and every Jest test, which has no
+// native modules at all. Probe inside a try instead, and let the functions below
+// refuse rather than crash when native is null.
+function probe(): LocalCallsNative | null {
+  try {
+    return requireNativeModule<LocalCallsNative>('LocalCalls')
+  } catch {
+    return null
+  }
+}
+
+const native = probe()
 
 export const isCallDetectionAvailable = native != null
 export const isSupportedPlatform = Platform.OS === 'android'
 
+/** Nothing granted. The honest answer when the module is not linked at all. */
+const NO_PERMISSIONS: CallPermissionState = {
+  READ_PHONE_STATE: false,
+  ANSWER_PHONE_CALLS: false,
+  canDetect: false,
+  canAnswer: false,
+}
+
 /** What the OS currently permits. Not a prompt. */
 export function getCallPermissions(): Promise<CallPermissionState> {
-  return native.permissionState()
+  // Informational, so it reports rather than throws when unavailable: the caller
+  // renders a state, it does not handle an exception.
+  return native ? native.permissionState() : Promise.resolve(NO_PERMISSIONS)
 }
 
 /**
@@ -38,14 +61,7 @@ export function getCallPermissions(): Promise<CallPermissionState> {
  * this reports the state after prompting rather than assuming success.
  */
 export async function requestCallPermissions(): Promise<CallPermissionState> {
-  if (!isSupportedPlatform) {
-    return {
-      READ_PHONE_STATE: false,
-      ANSWER_PHONE_CALLS: false,
-      canDetect: false,
-      canAnswer: false,
-    }
-  }
+  if (!isSupportedPlatform || !native) return { ...NO_PERMISSIONS }
   await PermissionsAndroid.requestMultiple([
     PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE as never,
     PermissionsAndroid.PERMISSIONS.ANSWER_PHONE_CALLS as never,
@@ -62,7 +78,7 @@ export async function requestCallPermissions(): Promise<CallPermissionState> {
 export async function startCallDetection(
   onState: (state: CallState, caller: string | null) => void
 ): Promise<boolean> {
-  if (!isSupportedPlatform) return false
+  if (!isSupportedPlatform || !native) return false
   const sub = native.addListener((_e, state, caller) => onState(state, caller))
   try {
     await native.start()
@@ -74,7 +90,7 @@ export async function startCallDetection(
 }
 
 export const stopCallDetection = async (): Promise<void> => {
-  if (isSupportedPlatform) await native.stop()
+  if (isSupportedPlatform && native) await native.stop()
 }
 
 /**
@@ -84,7 +100,7 @@ export const stopCallDetection = async (): Promise<void> => {
  * Android exposes no API for a third-party app to add a stream to it.
  */
 export async function answerCall(): Promise<boolean> {
-  if (!isSupportedPlatform) return false
+  if (!isSupportedPlatform || !native) return false
   try {
     await native.answer()
     return true
@@ -94,7 +110,7 @@ export async function answerCall(): Promise<boolean> {
 }
 
 export async function hangUp(): Promise<boolean> {
-  if (!isSupportedPlatform) return false
+  if (!isSupportedPlatform || !native) return false
   try {
     await native.endCall()
     return true
