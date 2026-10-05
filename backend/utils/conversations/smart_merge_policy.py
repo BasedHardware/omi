@@ -14,6 +14,8 @@ device partition and a user-managed row are.
 
 from __future__ import annotations
 
+import config.speaker_match_scores as match_scores
+
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
@@ -360,6 +362,9 @@ def absorb_payloads(
         'sync_merged_from': sorted({*(survivor.get('sync_merged_from') or []), str(donor['id'])}),
         SMART_MERGE_FIELD: state,
     }
+    score_union = match_scores.aggregate([survivor, donor])
+    if score_union is not None:
+        survivor_update[match_scores.FIELD] = score_union
     # The processor's existing transcript fence is sync_content_revision. Stamp
     # live survivors too: a processor started before this absorb must not write
     # its old transcript or summary over the newly joined occasion.

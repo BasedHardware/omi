@@ -3218,10 +3218,18 @@ growth is at most 8,224 bytes. Encoding failures
 omit scores while committing content, with shared fallback telemetry. Partial
 trims report `scores_trimmed`; only complete omission reports `scores_omitted`.
 Score exceptions also cannot interrupt model construction or speaker assignment.
+Diagnostics import shared telemetry only at call time, preserving package-stub
+import isolation. Invalid decoded shapes are discarded before model validation.
+Capacity guards on existing documents delete an old score blob to reclaim space.
 Processing transactions merge the current stored capture/sync rows ahead of stale
 snapshot rows, while replacing resolution rows with a fresh result. Sync bridges
-aggregate decoded donor score lists before the existing encoding/write. Manual
-capture decisions retain the already computed comparison with the manual outcome. Existing
+aggregate decoded donor score lists before the existing encoding/write; manual
+and smart merges do the same. Unscoped donor keys receive their source conversation
+scope so equal speaker IDs do not collapse. Identity-merged resolution rows sum
+constituent evidence, use minimum constituent distances, and record merged/scored
+cluster counts and aggregation tags; the margin remains the representative decision. Manual
+capture decisions retain the already computed comparison with the manual outcome,
+including `manual_rejected` with no accepted identity. Existing
 write snapshots also omit scores above the 900 KiB document budget, avoiding
 new reads or score-triggered size-limit failures. Protection migration deletes
 old optional scores if re-encryption fails rather than retaining plaintext.

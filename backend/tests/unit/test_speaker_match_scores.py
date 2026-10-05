@@ -118,7 +118,7 @@ def test_model_storage_roundtrip_and_client_exclusion(monkeypatch, level):
     decoded = db.prepare_conversation_for_read(dict(encoded, data_protection_level=level), 'u')
     restored = conversation(
         **{k: v for k, v in decoded.items() if k not in ('id', 'created_at', 'transcript_segments')},
-        segments=decoded['transcript_segments']
+        segments=decoded['transcript_segments'],
     )
     assert restored.speaker_match_scores == [row()]
     assert scores.FIELD not in decoded['transcript_segments'][0]
@@ -186,7 +186,18 @@ def anyio_backend():
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize('case', ['automatic', 'score_fault', 'manual', 'manual_other', 'manual_score_fault'])
+@pytest.mark.parametrize(
+    'case',
+    [
+        'automatic',
+        'score_fault',
+        'manual',
+        'manual_other',
+        'manual_score_fault',
+        'manual_rejected',
+        'manual_rejected_fault',
+    ],
+)
 async def test_capture_computation_and_clear(monkeypatch, caplog, case):
     import routers.listen.speakers as live
     import utils.audio as audio
@@ -214,6 +225,7 @@ async def test_capture_computation_and_clear(monkeypatch, caplog, case):
                         'is_user': case != 'manual_other',
                         'person_id': 'p' if case == 'manual_other' else None,
                         'source': 'manual',
+                        'rejection': case.startswith('manual_rejected'),
                     }
                 }
             }
@@ -229,6 +241,17 @@ async def test_capture_computation_and_clear(monkeypatch, caplog, case):
     await matcher.match(
         1, dict(id='s', conversation_id='c', abs_start=100.0, abs_end=110.0, duration=10.0, speaker_id_scope='live:c')
     )
+    if case.startswith('manual_rejected'):
+        assert 1 not in matcher.speaker_to_person
+        assert matcher.voice_identity_status[1] == 'no_match'
+        assert host.state.speaker_map_dirty
+        if 'fault' in case:
+            assert matcher.match_scores == []
+        else:
+            assert matcher.match_scores[0]['decision'] == 'manual_rejected'
+            assert matcher.match_scores[0]['accepted_person_id'] is None
+            assert matcher.match_scores[0]['owner_distance'] == 0.412
+        return
     assert matcher.speaker_to_person.get(1, (None,))[0] == ('p' if case == 'manual_other' else 'user'), caplog.text
     assert matcher.voice_identity_status[1] == ('not_user' if case == 'manual_other' else 'user')
     assert host.state.speaker_map_dirty
@@ -693,3 +716,183 @@ def test_bad_embedding_seconds_does_not_change_resolved_voice():
     )
     assert after.speaker_ids == before.speaker_ids
     assert after.voice_identities == before.voice_identities
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('bad', [{}, [42], [row(), None], [{'stage': 'capture'}]])
+def test_invalid_decoded_score_shape_cannot_break_conversation(level, bad):
+    import database.conversations as db
+
+    raw = db.encode_conversation_for_write('u', dict(transcript_segments=[], data_protection_level=level), level)
+    raw[scores.FIELD] = db._protect_json_value(bad, 'u', level)
+    decoded = db.prepare_conversation_for_read(raw, 'u')
+    assert scores.FIELD not in decoded
+    assert conversation(segments=decoded['transcript_segments']).speaker_match_scores is None
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('new_scores', [True, False])
+def test_capacity_guard_deletes_existing_score_blob_on_update(monkeypatch, level, new_scores):
+    import database.conversations as db
+    import tests.unit.fixtures.strict_firestore_transaction as fixture
+
+    store = fixture.StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c')
+    segment = dict(id='s', text='before', speaker_id=1, is_user=False, start=0, end=6)
+    store.rows[path] = db.encode_conversation_for_write(
+        'u',
+        dict(
+            id='c',
+            data_protection_level=level,
+            transcript_segments=[segment],
+            speaker_match_scores=[row()],
+            other_metadata='x' * (898 * 1024),
+        ),
+        level,
+    )
+    assert scores.FIELD in store.rows[path]
+    store.rows[path]['other_metadata'] = 'x' * (900 * 1024)
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
+    update = dict(segment, text='after')
+    if new_scores:
+        update[scores.FIELD] = row(2)
+    db.update_conversation_segments('u', 'c', [update])
+    assert store.rows[path][scores.FIELD] is db.firestore.DELETE_FIELD
+    # The strict fake retains sentinels; verify the real SDK expresses deletion.
+    from google.cloud.firestore_v1 import _helpers
+
+    writes = _helpers.pbs_for_update(
+        'projects/test/databases/(default)/documents/c/c', {scores.FIELD: store.rows[path][scores.FIELD]}, None
+    )
+    assert scores.FIELD in writes[0].update_mask.field_paths
+    assert scores.FIELD not in writes[0].update.fields
+    assert db.prepare_conversation_for_read(store.rows[path], 'u')['transcript_segments'][0]['text'] == 'after'
+
+
+@pytest.fixture
+def score_merge_modules():
+    import utils.conversations.merge_conversations as merge
+    import utils.conversations.process_conversation
+    import utils.notifications as notifications
+
+    return merge, notifications
+
+
+@pytest.mark.parametrize('malformed_donor', [False, True])
+def test_manual_merge_retains_bounded_donor_scores(monkeypatch, score_merge_modules, malformed_donor):
+    from datetime import timedelta
+
+    merge, notifications = score_merge_modules
+    now = datetime(2026, 10, 5, tzinfo=timezone.utc)
+    sources = {
+        cid: dict(
+            id=cid,
+            created_at=now + timedelta(minutes=i),
+            started_at=now + timedelta(minutes=i),
+            finished_at=now + timedelta(minutes=i + 1),
+            transcript_segments=[],
+            source='omi',
+            speaker_match_scores=[row(1, scope=cid)],
+        )
+        for i, cid in enumerate(['a', 'b'])
+    }
+    if malformed_donor:
+        sources['b'][scores.FIELD] = [42]
+    captured = []
+    failures = []
+    monkeypatch.setattr(merge.conversations_db, 'get_conversation', lambda uid, cid: sources[cid])
+    monkeypatch.setattr(merge, '_collect_all_photos', lambda *a: [])
+    monkeypatch.setattr(merge, '_copy_audio_chunks_for_merge', lambda *a: [])
+    monkeypatch.setattr(
+        merge.lifecycle_service, 'create_processing_conversation', lambda uid, data: captured.append(data)
+    )
+    monkeypatch.setattr(merge.lifecycle_service, 'complete', lambda *a: None)
+    monkeypatch.setattr(merge, '_delete_conversation_and_related_data', lambda *a, **k: None)
+    monkeypatch.setattr(merge, 'canonical_intake_is_fenced', lambda: False)
+    monkeypatch.setattr(merge, 'record_capture_outcome', lambda *a: None)
+    monkeypatch.setattr(merge, '_handle_merge_failure', lambda *a, **k: failures.append(a))
+    monkeypatch.setattr(notifications, 'send_merge_completed_message', lambda *a: None)
+    merge.perform_merge_async('u', ['a', 'b'], reprocess=False)
+    assert len(captured) == 1 and failures == []
+    if malformed_donor:
+        assert scores.FIELD not in captured[0]
+    else:
+        assert {r['speaker_id_scope'] for r in captured[0][scores.FIELD]} == {'a', 'b'}
+
+
+@pytest.fixture
+def score_smart_world(monkeypatch):
+    import tests.unit.test_conversation_smart_merge as fixture
+
+    return fixture.world.__wrapped__(monkeypatch)
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('omit_scores', [False, True])
+def test_smart_merge_transaction_retains_decoded_donor_scores(monkeypatch, score_smart_world, level, omit_scores):
+    import database.conversations as db
+    import database.smart_merge as smart_db
+    import utils.conversations.smart_merge_policy as policy
+    import tests.unit.test_conversation_smart_merge as fixture
+
+    world = score_smart_world
+    for cid, start in [('s', 0), ('d', 6)]:
+        protection = 'enhanced' if cid == 'd' and omit_scores else level
+        raw = world.add(cid, start, 4, speaker_match_scores=[row(1, scope=cid)], data_protection_level=protection)
+        world.store.rows[fixture._path(cid)] = db.encode_conversation_for_write(fixture.UID, raw, protection)
+
+    if omit_scores:
+        monkeypatch.setattr(scores, 'aggregate', lambda *a: None)
+
+    def plan(s, ss, d, ds, ancestors):
+        update, tombstone = policy.absorb_payloads(s, ss, d, ds, merged_at=fixture.T0, decision={})
+        return None, update, tombstone, {}
+
+    result = smart_db.absorb_conversation(
+        fixture.UID, 's', 'd', expected_revision=0, plan=plan, firestore_client=world.store
+    )
+    assert result.outcome == 'absorbed'
+    decoded = db.prepare_conversation_for_read(world.raw('s'), fixture.UID)
+    if omit_scores:
+        if level == 'standard':
+            assert world.raw('s')[scores.FIELD] is db.firestore.DELETE_FIELD
+            assert scores.FIELD not in decoded
+        else:
+            assert {r['speaker_id_scope'] for r in decoded[scores.FIELD]} == {'s'}
+    else:
+        assert {r['speaker_id_scope'] for r in decoded[scores.FIELD]} == {'s', 'd'}
+        assert isinstance(world.raw('s')[scores.FIELD], str if level == 'enhanced' else bytes)
+
+
+def test_identity_cluster_score_aggregates_all_constituents():
+    import utils.stt.conversation_speakers as resolver
+
+    segments = [
+        dict(id=f's{i}', speaker_id=i, speaker_id_scope=f'sync:{i}', start=i * 6, end=(i + 1) * 6, is_user=False)
+        for i in range(4)
+    ]
+    embeddings = {f's{i}': np.array([1.0, 0.0]) if i < 2 else np.array([0.0, 1.0]) for i in range(4)}
+    result = resolver.resolve_conversation_speakers(
+        segments,
+        embeddings,
+        voiceprints={'p': np.array([0.8, 0.6])},
+        embedding_seconds={f's{i}': 3.0 for i in range(4)},
+    )
+    assert len(set(result.speaker_ids.values())) == 1
+    assert len(result.match_scores) == 1
+    summary = result.match_scores[0]
+    assert summary['merged_cluster_count'] == 2
+    assert summary['evidence_seconds'] == 12.0
+    assert summary['person_distance'] == 0.2
+    assert summary['distance_aggregation'] == 'min_constituent_v1'
+    assert summary['accepted_person_id'] == 'p'
+
+
+def test_merge_score_union_preserves_unscoped_donor_keys_and_cap():
+    union = scores.aggregate(
+        [{'id': 'a', scores.FIELD: [row(1, 'resolution')]}, {'id': 'b', scores.FIELD: [row(1, 'resolution')]}]
+    )
+    assert len(union) == 2
+    assert {r['speaker_id_scope'] for r in union} == {'conversation:a', 'conversation:b'}
+    capped = scores.aggregate([{'id': str(i), scores.FIELD: [row(1, 'resolution')]} for i in range(30)])
+    assert len(capped) == 16

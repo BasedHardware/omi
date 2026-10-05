@@ -133,6 +133,7 @@ def _decode_row(uid: str, raw: Mapping[str, Any]) -> tuple[dict[str, Any], list[
     segments = conversations_db._decode_transcript_segments_strict(  # pyright: ignore[reportPrivateUsage]
         uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
     )
+    conversations_db._reveal_match_scores_for_read(row, uid)  # pyright: ignore[reportPrivateUsage]
     row.pop('transcript_segments', None)
     return row, list(segments)
 
@@ -226,6 +227,15 @@ def absorb_conversation(
         audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
+        conversations_db._guard_match_score_size(payload, survivor_raw)  # pyright: ignore[reportPrivateUsage]
+        if (
+            'speaker_match_scores' in survivor_raw
+            and 'speaker_match_scores' not in payload
+            and survivor_raw.get('data_protection_level') != level
+        ):
+            # An omitted optional merge must not retain an old standard blob
+            # when a mixed-protection absorb upgrades the survivor.
+            payload['speaker_match_scores'] = firestore.DELETE_FIELD
         # The survivor transcript changed: a stored client projection described the old one.
         conversations_db._invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
         if flatten:

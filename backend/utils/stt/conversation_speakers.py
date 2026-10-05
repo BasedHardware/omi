@@ -278,14 +278,8 @@ def resolve_conversation_speakers(
     voice_identity: Dict[int, Identity] = {}
     distances = {}
     decisions = {}
-    score_seconds = {}
+    score_seconds: Dict[int, Optional[float]] = {}
     for index, cluster in enumerate(clusters):
-        if identities_of(cluster):
-            continue
-        evidence = sum(_duration(s) for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors)
-        vector = centroid(cluster)
-        if vector is None or not prints or evidence < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
-            continue
         evidence_ids = [_seg(s, 'id') for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors]
         try:
             score_seconds[index] = (
@@ -296,6 +290,12 @@ def resolve_conversation_speakers(
         except Exception:
             score_seconds[index] = None
             match_scores.record_failure(None, reason='malformed_doc')
+        if identities_of(cluster):
+            continue
+        evidence = sum(_duration(s) for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors)
+        vector = centroid(cluster)
+        if vector is None or not prints or evidence < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
+            continue
         distances[index] = {key: _cosine(vector, p) for key, p in prints.items()}
         decisions[index] = select_speaker_match(distances[index], threshold=VOICE_MATCH_THRESHOLD)
     decisions = arbitrate_owner_matches(
@@ -321,12 +321,14 @@ def resolve_conversation_speakers(
 
     merged: Dict[str, int] = {}
     keep: List[int] = []
+    score_members = {index: [index] for index in range(len(clusters))}
     for index in range(len(clusters)):
         token = cluster_token(index)
         if token is None:
             keep.append(index)
         elif token in merged:
             clusters[merged[token]].extend(clusters[index])
+            score_members[merged[token]].extend(score_members[index])
         else:
             merged[token] = index
             keep.append(index)
@@ -439,26 +441,33 @@ def resolve_conversation_speakers(
     )
     score_rows = []
     try:
-        score_rows = (
-            match_scores.merge(
-                None,
-                [
-                    match_scores.summarize(
-                        new_id_of[position],
-                        distances[index],
-                        decisions[index],
-                        score_seconds[index],
-                        'resolution',
-                        threshold=VOICE_MATCH_THRESHOLD,
-                        margin_threshold=SPEAKER_MATCH_MARGIN,
-                    )
-                    for position, index in enumerate(keep)
-                    if position in new_id_of and index in decisions
-                ],
-            )
-            if match_scores.enabled()
-            else []
-        )
+        if match_scores.enabled():
+            for position, root in enumerate(keep):
+                parts = [i for i in score_members[root] if i in decisions]
+                if position not in new_id_of or not parts:
+                    continue
+                combined_distances = {
+                    pid: min(distances[i][pid] for i in parts if pid in distances[i])
+                    for pid in {pid for i in parts for pid in distances[i]}
+                }
+                representative = root if root in decisions else parts[0]
+                known_seconds = [seconds for i in score_members[root] if (seconds := score_seconds[i]) is not None]
+                combined_seconds = sum(known_seconds) if len(known_seconds) == len(score_members[root]) else None
+                row = match_scores.summarize(
+                    new_id_of[position],
+                    combined_distances,
+                    decisions[representative],
+                    combined_seconds,
+                    'resolution',
+                    threshold=VOICE_MATCH_THRESHOLD,
+                    margin_threshold=SPEAKER_MATCH_MARGIN,
+                )
+                row['merged_cluster_count'] = len(score_members[root])
+                row['scored_cluster_count'] = len(parts)
+                row['distance_aggregation'] = 'min_constituent_v1'
+                row['margin_aggregation'] = 'representative_v1'
+                score_rows.append(row)
+            score_rows = match_scores.merge(None, score_rows)
     except Exception:
         match_scores.record_failure(None)
     return SpeakerResolution(

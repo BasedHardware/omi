@@ -226,7 +226,7 @@ def _reveal_match_scores_for_read(data: Dict[str, Any], uid: str) -> None:
     if match_scores.FIELD not in data:
         return
     try:
-        data[match_scores.FIELD] = _reveal_json_value(data[match_scores.FIELD], uid, True)
+        data[match_scores.FIELD] = match_scores.normalize(_reveal_json_value(data[match_scores.FIELD], uid, True))
     except Exception:
         if current_portability_read() is not None:
             raise
@@ -244,15 +244,19 @@ def _guard_match_score_size(data: dict, existing: Optional[dict] = None, path: O
     Uses only the snapshot already read by the write owner. The 124 KiB
     headroom matches sync's existing budget and covers unknown SDK types.
     """
-    if match_scores.FIELD not in data:
+    if match_scores.FIELD not in data and match_scores.FIELD not in (existing or {}):
         return
     try:
         stored = {**(existing or {}), **data}
+        if stored.get(match_scores.FIELD) is firestore.DELETE_FIELD:
+            stored.pop(match_scores.FIELD, None)
         if (
             document_size.estimate_firestore_document_bytes(stored, path if isinstance(path, str) else None)
             > 900 * 1024
         ):
             _drop_match_scores(data, 'capacity_full')
+            if existing is not None and match_scores.FIELD in existing:
+                data[match_scores.FIELD] = firestore.DELETE_FIELD
     except Exception:
         _drop_match_scores(data)
 
@@ -2980,8 +2984,11 @@ def update_conversation_segments(
             update_payload['sync_content_revision'] = current['sync_content_revision'] + 1
         if score_updates and match_scores.enabled():
             try:
-                _reveal_match_scores_for_read(current, uid)
-                update_payload[match_scores.FIELD] = match_scores.merge(current.get(match_scores.FIELD), score_updates)
+                score_current = dict(current)
+                _reveal_match_scores_for_read(score_current, uid)
+                update_payload[match_scores.FIELD] = match_scores.merge(
+                    score_current.get(match_scores.FIELD), score_updates
+                )
             except Exception:
                 _drop_match_scores(update_payload)
         if capture_evidence is not None:
@@ -3497,7 +3504,11 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
+    score_snapshots: dict = {}
+
     def decode(raw):
+        if raw.get('id'):
+            score_snapshots[raw['id']] = raw
         # Never turn a corrupt/encrypted transcript into [] and overwrite it.
         result = copy.deepcopy(raw)
         result['transcript_segments'] = _decode_transcript_segments_strict(
@@ -3516,8 +3527,20 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
 
     @firestore.transactional
     def assign(transaction, full_ids=frozenset()):
+        score_snapshots.clear()
+
         def encode(payload):
-            return _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
+            encoded = _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
+            current = score_snapshots.get(payload.get('id'))
+            _guard_match_score_size(encoded, current)
+            if (
+                current
+                and match_scores.FIELD in current
+                and match_scores.FIELD not in encoded
+                and current.get('data_protection_level') != payload.get('data_protection_level')
+            ):
+                encoded[match_scores.FIELD] = firestore.DELETE_FIELD
+            return encoded
 
         planned = assign_in_transaction(
             transaction,

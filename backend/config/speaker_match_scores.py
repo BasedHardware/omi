@@ -111,6 +111,33 @@ def merge(existing: list | None, updates: list) -> list:
     ]
 
 
+def normalize(value: Any) -> list:
+    """Validate decoded shape before a typed conversation can observe it."""
+    if not isinstance(value, list):
+        raise ValueError('speaker scores must be a list')
+    for row in value:
+        if not isinstance(row, dict) or row.get('stage') not in STAGES:
+            raise ValueError('invalid speaker score row')
+        if type(row.get('speaker_id')) is not int or not isinstance(row.get('speaker_id_scope', ''), str):
+            raise ValueError('invalid speaker score key')
+    return merge(None, [dict(row, speaker_id_scope=row.get('speaker_id_scope', '')[:128]) for row in value])
+
+
+def aggregate(conversations) -> list | None:
+    """Best-effort union of already decoded conversation metadata at merge seams."""
+    try:
+        rows = []
+        for conversation in conversations:
+            for row in normalize(conversation.get(FIELD, [])):
+                if not row['speaker_id_scope'] and conversation.get('id'):
+                    row['speaker_id_scope'] = f"conversation:{conversation['id']}"[:128]
+                rows.append(row)
+        return merge(None, rows) or None
+    except Exception:
+        record_failure(None, reason='malformed_doc')
+        return None
+
+
 def from_segments(segments: list) -> list:
     return merge(None, [row for segment in segments if (row := segment.get(FIELD))])
 

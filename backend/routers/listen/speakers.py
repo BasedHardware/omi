@@ -488,6 +488,7 @@ class SpeakerMatcher:
                 for voice in rejected:
                     self._retract_rejected_voice(voice, self._voice_segments.get(voice))
                 self.host.state.speaker_map_dirty = True
+                self._record_match_score(speaker_id, self._voice_decisions[speaker_id], 'manual_rejected')
                 self._record_exit('rejected', speaker_id)
                 return
             manual = self._manual_voice_decision(receipt, speaker_id)
@@ -631,6 +632,9 @@ class SpeakerMatcher:
                     scope=self._voice_scopes.get(voice, ''),
                     outcome=outcome,
                 )
+                if outcome == 'manual_rejected':
+                    row['accepted_person_id'] = None
+                    row['status'] = 'no_match'
                 if manual is not None:
                     row['accepted_person_id'] = (
                         USER_SELF_PERSON_ID if manual.get('is_user') else manual.get('person_id')
