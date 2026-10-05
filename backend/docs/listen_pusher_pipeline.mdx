@@ -948,16 +948,17 @@ breakers, and `omi_stt_provider_retired{provider}` exporting the deployment's
 
 The new live-STT recovery behavior described below — enlarged replay retention,
 paced prefix replay, the recovery controller, and its metrics — is gated by
-`STT_FAILOVER_RECOVERY_ENABLED`, which defaults to `false` in code, chart, dev,
-and prod values. The mode is pinned once at session start; in-flight sessions
+`STT_FAILOVER_RECOVERY_ENABLED`, which defaults to `false` in code and remains
+`false` for dev listen; prod listen chart/runtime values set it to `true`.
+The mode is pinned once at session start; in-flight sessions
 and successor legs keep it even if the environment changes, so toggling the
 variable only affects new sessions (or replacement pods). When off, sessions
 run the pre-recovery paths: the 135-second capture cap and legacy reconnect
 budgets, plain `asyncio.Queue` provider send queues without writer pacing, the
 legacy finalize/EOS order, and legacy circuit rejection semantics; the new
-recovery metrics register but stay at zero. When on — intended only for the
-separately enabled canary Deployment — the recovery paths below apply. No
-deployment or enablement is performed by this change. See the rollout gate in
+recovery metrics register but stay at zero. When on, including prod listen
+after the stable Helm rollout, the recovery paths below apply. See the rollout
+gate in
 `backend/docs/operational/windowed-live-stt.md`.
 
 Recovery-armed initial paid legs and recovered successors use the independent

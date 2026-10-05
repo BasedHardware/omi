@@ -2560,7 +2560,7 @@ environments:
             value: 'false'
             category: rollout
           STT_FAILOVER_RECOVERY_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           STT_ROUTING_MODE:
             value: shadow
