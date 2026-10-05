@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 from enum import Enum
 
 from fastapi import HTTPException
 
 from database import conversations as conversations_db
+from database import conversation_finalization_jobs as finalization_jobs_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.redis_db import get_cached_user_geolocation
 from models.conversation_enums import ConversationStatus
@@ -22,7 +24,10 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.conversations.smart_merge import smart_merge_step
+from utils.conversations.smart_merge_policy import is_donor
+from utils.conversations.meeting_evidence_admission import await_meeting_evidence
+from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -32,14 +37,13 @@ from utils.conversations.process_conversation import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage
-from utils.log_sanitizer import sanitize_pii
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
     classify_finalization_failure,
     finalization_diagnostic_id,
     record_finalization_failure,
 )
-from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
+from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
@@ -96,46 +100,73 @@ async def finalize_persisted_conversation(
     integration delivery is dropped rather than dead-lettering the whole
     conversation for a third-party endpoint that is down.
     """
-    conversation_data = await run_blocking(
-        db_executor,
-        conversations_db.get_conversation,
-        uid,
-        conversation_id,
-        read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+    fenced, conversation_data, conversation = await _load_admitted_conversation(
+        uid, conversation_id, finalization_job_id, dispatch_generation, lease_epoch, trigger
     )
-    if not conversation_data:
-        # A prior delivery can have durably completed fanout just before the
-        # worker crashes.  Preserve that acknowledgement even if the row is
-        # deleted before replay, so the caller can close its current lease.
-        fanout = await run_blocking(
-            db_executor,
-            lifecycle_service.claim_finalization_fanout,
-            finalization_job_id,
-            dispatch_generation,
-            lease_epoch,
-        )
-        if fanout['status'] == 'completed':
-            return ConversationFinalizationDisposition.completed
-        if fanout['status'] != 'fenced':
-            raise ConversationFinalizationError('missing_conversation_fanout_claim_conflict')
-        # A deleted conversation is a successful no-fanout outcome. Retrying
-        # its lease would only risk resurrecting a stale processor result.
-        logger.info(
-            'persisted conversation finalization fenced because row is missing uid=%s conversation=%s',
-            uid,
-            conversation_id,
-        )
-        return ConversationFinalizationDisposition.fenced
+    if fenced is not None:
+        return fenced
 
-    conversation = deserialize_conversation(conversation_data)
-    if conversation.status != ConversationStatus.completed and conversation.status != ConversationStatus.processing:
-        admitted = await run_blocking(db_executor, lifecycle_service.ensure_processing, uid, conversation.id)
-        if not admitted:
-            return ConversationFinalizationDisposition.fenced
-        conversation.status = ConversationStatus.processing
+    if conversation.status != ConversationStatus.completed:
+        outcome = await await_meeting_evidence(uid, conversation_id, conversation_data, trigger=trigger)
+        if outcome != 'not_applicable':
+            # Transcript tail segments can land during the wait. Process the durable row as it
+            # is now, never the pre-wait snapshot: stale segments would be summarized and could
+            # overwrite the newer live transcript on persist.
+            fenced, conversation_data, conversation = await _load_admitted_conversation(
+                uid, conversation_id, finalization_job_id, dispatch_generation, lease_epoch, trigger
+            )
+            if fenced is not None:
+                return fenced
 
     stage = 'geolocation'
     try:
+        if is_donor(conversation_data):
+            # Resume precedes the fanout fence, but never the job ownership fence.
+            # A worker can wake after expiry/reclaim or after the job terminalizes.
+            stage = 'donor_resume_admission'
+            job = await run_blocking(db_executor, finalization_jobs_db.get_finalization_job, finalization_job_id)
+            if not job or (
+                job.get('status') != 'leased'
+                or job.get('dispatch_generation') != dispatch_generation
+                or job.get('lease_epoch') != lease_epoch
+                or job.get('uid') != uid
+                or job.get('conversation_id') != conversation_id
+                or conversation_data.get('finalization_job_id') != finalization_job_id
+                or conversation_data.get('finalization_revision') != job.get('finalization_revision')
+            ):
+                return ConversationFinalizationDisposition.fenced
+            if job.get('fanout_status') == 'completed':
+                return ConversationFinalizationDisposition.completed
+            # A retry of a committed smart-merge absorb whose cleanup or survivor
+            # refresh failed. The donor is discarded, so the fanout claim fences it;
+            # finish the absorb first. A failure raises and stays retryable. Only
+            # the claim transaction closes a job whose earlier attempt leased fanout.
+            stage = 'smart_merge'
+            await smart_merge_step(uid, conversation_id, conversation_data, trigger=trigger, owner=finalization_job_id)
+            stage = 'fanout_claim'
+            fanout = await run_blocking(
+                db_executor,
+                lifecycle_service.claim_finalization_fanout,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+            )
+            if fanout['status'] == 'claimed':
+                # Not admitted for a discarded row; close as the absorbing attempt does.
+                stage = 'fanout_completion'
+                if not await run_blocking(
+                    db_executor,
+                    lifecycle_service.complete_finalization_fanout,
+                    finalization_job_id,
+                    dispatch_generation,
+                    lease_epoch,
+                ):
+                    raise ConversationFinalizationError('fanout_completion_conflict')
+                return ConversationFinalizationDisposition.completed
+            if fanout['status'] in {'completed', 'fenced'}:
+                return ConversationFinalizationDisposition(fanout['status'])
+            raise ConversationFinalizationError('fanout_lease_conflict')
+
         # A location persisted with the recording session or WAL is the
         # canonical start-time snapshot. Redis remains only a compatibility
         # fallback for clients released before that contract.
@@ -153,8 +184,11 @@ async def finalize_persisted_conversation(
                     outcome='degraded',
                     log=logger,
                 )
-                geolocation = Geolocation(**geolocation)
-                conversation.geolocation = await async_resolve_geolocation(geolocation)
+                cached_geo = Geolocation.deserialize_safe(geolocation)
+                if cached_geo:
+                    conversation.geolocation = await async_resolve_geolocation(cached_geo)
+                else:
+                    logger.warning('Skipping malformed cached user geolocation for uid=%s', uid)
 
         # The post-processing bulkhead preserves request context (including
         # validated live BYOK keys) while isolating this expensive sync path
@@ -176,6 +210,8 @@ async def finalize_persisted_conversation(
                 resolved_language,
                 conversation,
                 trigger=trigger,
+                user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
+                recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
                 defer_derived_effects=True,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
@@ -215,10 +251,28 @@ async def finalize_persisted_conversation(
             dispatch_generation,
             lease_epoch,
         )
+        if fanout['status'] == 'claimed':
+            # Folding into the preceding conversation happens behind the claim and
+            # before any derived effect of this one; a donor skips all of them.
+            stage = 'smart_merge'
+            if await smart_merge_step(
+                uid, conversation_id, conversation_data, trigger=trigger, owner=finalization_job_id
+            ):
+                stage = 'fanout_completion'
+                if not await run_blocking(
+                    db_executor,
+                    lifecycle_service.complete_finalization_fanout,
+                    finalization_job_id,
+                    dispatch_generation,
+                    lease_epoch,
+                ):
+                    raise ConversationFinalizationError('fanout_completion_conflict')
+                return ConversationFinalizationDisposition.completed
         stage = 'duplicate_capture'
         if fanout['status'] in {'claimed', 'completed'}:
             await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
         if fanout['status'] == 'completed':
+            schedule_person_voice_learning_retry(uid, conversation_id)
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
             logger.info(
@@ -272,7 +326,7 @@ async def finalize_persisted_conversation(
         stage = 'meeting_receipt'
         await run_blocking(
             db_executor,
-            record_and_persist_finalized_meeting_receipt,
+            record_finalized_meeting_receipt,
             uid,
             conversation,
             finalization_job_id=finalization_job_id,
@@ -302,22 +356,6 @@ async def finalize_persisted_conversation(
                         device_id=device_id,
                         account_generation=decision.account_generation,
                     )
-        stage = 'capture_arrival'
-        source = getattr(conversation, 'source', None)
-        source_value = getattr(source, 'value', source)
-        if source_value == 'omi' and not getattr(conversation, 'discarded', False):
-            try:
-                structured = getattr(conversation, 'structured', None)
-                summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                await run_blocking(
-                    db_executor, persist_capture_arrival_intent, uid, conversation_id=conversation_id, summary=summary
-                )
-            except Exception as error:
-                logger.warning(
-                    'chat-first capture arrival intent failed during finalization uid=%s error=%s',
-                    sanitize_pii(uid),
-                    type(error).__name__,
-                )
         stage = 'fanout_completion'
         fanout_completed = await run_blocking(
             db_executor,
@@ -328,6 +366,7 @@ async def finalize_persisted_conversation(
         )
         if not fanout_completed:
             raise ConversationFinalizationError('fanout_completion_conflict')
+        schedule_person_voice_learning_retry(uid, conversation_id)
         return ConversationFinalizationDisposition.completed
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.
@@ -366,3 +405,57 @@ async def finalize_persisted_conversation(
             dispatch_generation,
         )
         raise ConversationFinalizationError('processing_failed') from error
+
+
+async def _load_admitted_conversation(
+    uid: str,
+    conversation_id: str,
+    finalization_job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    trigger: ProcessingTrigger,
+) -> tuple[ConversationFinalizationDisposition | None, Any, Any]:
+    """Read the durable conversation and admit it to processing.
+
+    Returns ``(disposition, data, conversation)``; a non-None disposition ends
+    finalization (a deleted row, or a row another owner moved on).
+    """
+    conversation_data = await run_blocking(
+        db_executor,
+        conversations_db.get_conversation,
+        uid,
+        conversation_id,
+        read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+        include_transcript_decode_status=trigger is ProcessingTrigger.SERVER_RECOVERY,
+    )
+    if not conversation_data:
+        # A prior delivery can have durably completed fanout just before the
+        # worker crashes.  Preserve that acknowledgement even if the row is
+        # deleted before replay, so the caller can close its current lease.
+        fanout = await run_blocking(
+            db_executor,
+            lifecycle_service.claim_finalization_fanout,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+        )
+        if fanout['status'] == 'completed':
+            return ConversationFinalizationDisposition.completed, None, None
+        if fanout['status'] != 'fenced':
+            raise ConversationFinalizationError('missing_conversation_fanout_claim_conflict')
+        # A deleted conversation is a successful no-fanout outcome. Retrying
+        # its lease would only risk resurrecting a stale processor result.
+        logger.info(
+            'persisted conversation finalization fenced because row is missing uid=%s conversation=%s',
+            uid,
+            conversation_id,
+        )
+        return ConversationFinalizationDisposition.fenced, None, None
+
+    conversation = deserialize_conversation(conversation_data)
+    if conversation.status != ConversationStatus.completed and conversation.status != ConversationStatus.processing:
+        admitted = await run_blocking(db_executor, lifecycle_service.ensure_processing, uid, conversation.id)
+        if not admitted:
+            return ConversationFinalizationDisposition.fenced, None, None
+        conversation.status = ConversationStatus.processing
+    return None, conversation_data, conversation

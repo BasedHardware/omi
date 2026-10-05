@@ -25,8 +25,9 @@ from routers import (
     desktop_deprecated,
     desktop_experiments,
     desktop_proxy,
+    desktop_task_gate,
     metrics,
-    desktop_proactivity,
+    retired_desktop_proactivity,
     jit_ledger_snapshot,
     jit_rollout,
     desktop_realtime,
@@ -35,6 +36,7 @@ from routers import (
     memory_use,
 )
 from utils.http_client import close_all_clients
+from utils.llm.vertex_reservation_state import reservation_state
 from utils.jit_rollout import close_posthog_control_plane
 from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
@@ -83,6 +85,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await shutdown_managed_spend_ledger()
+        await reservation_state.aclose()
         await close_all_clients()
         close_posthog_control_plane()
         close_free_tier_control_plane()
@@ -124,7 +127,8 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_agent_vm.router)
     app.include_router(desktop_chat.router)
     app.include_router(desktop_proxy.router)
-    app.include_router(desktop_proactivity.router)
+    app.include_router(desktop_task_gate.router)
+    app.include_router(retired_desktop_proactivity.router)
     app.include_router(desktop_experiments.router)
     app.include_router(jit_ledger_snapshot.router)
     app.include_router(jit_rollout.router)

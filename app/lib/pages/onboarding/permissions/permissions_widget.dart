@@ -5,8 +5,8 @@ import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// First-run permissions step. Each permission is allowed from its own row; Continue only moves
-/// on, whatever the reader allowed (docs/ux-contract.md §15).
+/// First-run permissions step. Each row can allow its own permission; Continue asks for whatever is
+/// still missing, then moves on whatever the reader chose (docs/ux-contract.md §15).
 class PermissionsWidget extends StatelessWidget {
   final VoidCallback goNext;
   final OnboardingPermissionsSource? source;
@@ -21,7 +21,7 @@ class PermissionsWidget extends StatelessWidget {
           Text(context.l10n.grantPermissions, style: OmiType.title1, textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.xs),
           Text(
-            context.l10n.permissionsSetupDescription,
+            context.l10n.permissionsChangeAnytime,
             style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
             textAlign: TextAlign.center,
           ),
@@ -34,8 +34,9 @@ class PermissionsWidget extends StatelessWidget {
             key: const Key('onboarding_permissions_continue'),
             label: context.l10n.continueButton,
             expand: true,
-            onPressed: () {
+            onPressed: () async {
               OmiHaptics.selection();
+              await requestMissingOnboardingPermissions(resolveOnboardingPermissionsSource(context, source));
               goNext();
             },
           ),

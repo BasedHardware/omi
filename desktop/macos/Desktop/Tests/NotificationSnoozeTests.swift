@@ -79,11 +79,6 @@ final class NotificationSnoozeTests: XCTestCase {
       SuggestionAssistantTelemetry.DeliveryOutcome.suppressedSnoozed, .suppressedPresenting)
   }
 
-  func testSnoozeReasonIsRepresentableInDeliveryTelemetry() {
-    XCTAssertEqual(InsightAssistantTelemetry.Reason.userSnoozed.rawValue, "user_snoozed")
-    XCTAssertTrue(InsightAssistantTelemetry.Reason.allCases.contains(.userSnoozed))
-  }
-
   /// "Until tomorrow" is a wall-clock boundary, not an offset, so the interesting cases are
   /// the ones either side of the resume hour.
   func testUntilTomorrowResumesAtTheNextWorkdayStart() throws {

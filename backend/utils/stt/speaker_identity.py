@@ -21,7 +21,7 @@ def _read(record: Any, field: str) -> Any:
     return getattr(record, field, None)
 
 
-def _canonical_speaker_label(label: str) -> str:
+def canonical_speaker_label(label: str) -> str:
     """Fold ``SPEAKER_02`` and ``SPEAKER_2`` into one allocator key.
 
     Providers disagree on zero padding (Deepgram/Modulate emit ``SPEAKER_02``,
@@ -42,6 +42,7 @@ class SpeakerProviderEpoch:
         self._connection_scope = connection_scope or uuid.uuid4().hex
         self._provider: Optional[str] = None
         self._epoch = -1
+        self._provider_socket_epoch: Optional[int] = None
 
     def stamp(self, segments: Iterable[MutableMapping[str, Any]], provider: Optional[str]) -> None:
         """Scope each segment by the provider that actually served it.
@@ -56,11 +57,18 @@ class SpeakerProviderEpoch:
         fallback = provider or 'unknown'
         for segment in segments:
             provider_name = segment.get('stt_provider') or fallback
-            if provider_name != self._provider:
+            socket_epoch = segment.pop('_provider_socket_epoch', None)
+            if provider_name != self._provider or socket_epoch != self._provider_socket_epoch:
                 self._provider = provider_name
+                self._provider_socket_epoch = socket_epoch
                 self._epoch += 1
             segment['stt_provider'] = provider_name
             segment['speaker_id_scope'] = f'{self._connection_scope}:{self._epoch}'
+
+    @property
+    def current_scope(self) -> Optional[str]:
+        """The scope a freshly stamped segment carries, or None before any provider segment."""
+        return f'{self._connection_scope}:{self._epoch}' if self._epoch >= 0 else None
 
 
 class ConversationSpeakerIdAllocator:
@@ -79,7 +87,19 @@ class ConversationSpeakerIdAllocator:
             scope = _read(segment, 'speaker_id_scope')
             speaker = _read(segment, 'speaker')
             if scope and speaker and isinstance(speaker_id, int):
-                self._speaker_ids.setdefault((str(scope), _canonical_speaker_label(str(speaker))), speaker_id)
+                self._speaker_ids.setdefault((str(scope), canonical_speaker_label(str(speaker))), speaker_id)
+
+    def hydrate_receipt(self, receipt: Any) -> None:
+        """Reserve ids a carried/manual receipt already owns, binding no (scope, label) key."""
+        if not isinstance(receipt, Mapping):
+            return
+        for key in receipt.get('speakers') or {}:
+            try:
+                speaker_id = int(key)
+            except (TypeError, ValueError):
+                continue
+            if speaker_id != OMI_SPEAKER_ID_SENTINEL:
+                self._next_id = max(self._next_id, speaker_id + 1)
 
     def _allocate(self) -> int:
         speaker_id = self._next_id
@@ -96,7 +116,7 @@ class ConversationSpeakerIdAllocator:
         speaker = segment.get('speaker')
         if not speaker and isinstance(segment.get('speaker_id'), int):
             speaker = f'SPEAKER_{segment["speaker_id"]}'
-        speaker = _canonical_speaker_label(str(speaker or 'SPEAKER_00'))
+        speaker = canonical_speaker_label(str(speaker or 'SPEAKER_00'))
         key = (str(scope), speaker)
         speaker_id = self._speaker_ids.get(key)
         if speaker_id is None:

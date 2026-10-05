@@ -7,6 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -24,7 +25,15 @@ import 'widgets/memory_management_sheet.dart';
 import 'widgets/memories_load_error.dart';
 
 class MemoriesPage extends StatefulWidget {
-  const MemoriesPage({super.key});
+  const MemoriesPage({super.key, this.showMindMap = true, this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph});
+
+  /// The live graph preview at the top. The graph needs a real canvas and network, so harnesses
+  /// that pump the page without them turn it off.
+  final bool showMindMap;
+
+  /// Where the graph preview loads from; harnesses pass a fixture.
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function() loadGraph;
 
   @override
   State<MemoriesPage> createState() => MemoriesPageState();
@@ -105,12 +114,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           ),
           const SizedBox(width: OmiSpacing.xxs),
           OmiIconButton.filled(
-            icon: const FaIcon(FontAwesomeIcons.brain, size: 16),
-            label: context.l10n.memoryGraph,
-            diameter: 40,
-            onPressed: loading ? null : () => routeToPage(context, const MemoryGraphPage()),
-          ),
-          OmiIconButton.filled(
             icon: const FaIcon(FontAwesomeIcons.sliders, size: 16),
             label: context.l10n.memoryManagement,
             diameter: 40,
@@ -120,6 +123,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       ),
     );
   }
+
+  /// The account has no memories at all (not a search or filter with no matches).
+  bool _showsFirstMemoryAction(MemoriesProvider provider) =>
+      !(provider.loading && _isInitialLoad) &&
+      !provider.showLoadError &&
+      provider.memories.isEmpty &&
+      provider.searchQuery.isEmpty &&
+      !provider.filterThisDeviceOnly;
 
   Widget _buildEmptyState(MemoriesProvider provider) {
     final l10n = context.l10n;
@@ -167,10 +178,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       builder: (context, provider, _) {
         return Scaffold(
           backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
-            leading: const OmiBackButton(),
-            title: Text(context.l10n.memories),
-          ),
+          appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.memories)),
           body: Stack(
             children: [
               RefreshIndicator(
@@ -190,7 +198,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
+                          // The mind map leads the page (it moved here from Home); tap to expand.
+                          if (widget.showMindMap && provider.searchQuery.isEmpty && provider.memories.isNotEmpty)
+                            SliverToBoxAdapter(child: MemoryMindMapPreview(loadGraph: widget.loadGraph)),
                           SliverToBoxAdapter(child: _buildHeader(provider, loading: false)),
+                          if (provider.showPartialLoadError)
+                            SliverToBoxAdapter(
+                              child: MemoriesPartialLoadBanner(onRetry: () => provider.loadMemories()),
+                            ),
                           if (provider.memoryBeliefEnabled &&
                               provider.showHistory &&
                               (provider.ledgerHistoryTruncated || provider.ledgerHistoryHasMore))
@@ -233,27 +248,30 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                         ],
                       ),
               ),
-              Positioned(
-                right: 20,
-                bottom: 100,
-                // One named node: FloatingActionButton's tooltip names a wrapper, not the button.
-                child: Semantics(
-                  button: true,
-                  label: context.l10n.createMemoryTooltip,
-                  excludeSemantics: true,
-                  onTap: () => _createMemory(provider),
-                  child: FloatingActionButton(
-                    heroTag: 'memories_fab',
-                    onPressed: () {
-                      _createMemory(provider);
-                      PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
-                    },
-                    backgroundColor: OmiColors.accent,
-                    foregroundColor: OmiColors.onAccent,
-                    child: const Icon(Icons.add),
+              // The empty state's "Add your first memory" is how the page gets its first row (ux-contract
+              // §13: one action), so the add button joins once there is a memory.
+              if (!_showsFirstMemoryAction(provider))
+                Positioned(
+                  right: 20,
+                  bottom: 100,
+                  // One named node: FloatingActionButton's tooltip names a wrapper, not the button.
+                  child: Semantics(
+                    button: true,
+                    label: context.l10n.createMemoryTooltip,
+                    excludeSemantics: true,
+                    onTap: () => _createMemory(provider),
+                    child: FloatingActionButton(
+                      heroTag: 'memories_fab',
+                      onPressed: () {
+                        _createMemory(provider);
+                        PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
+                      },
+                      backgroundColor: OmiColors.accent,
+                      foregroundColor: OmiColors.onAccent,
+                      child: const Icon(Icons.add),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         );
@@ -273,10 +291,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
             child: Container(
               margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
               height: 88, // Approximate height of a memory item
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                borderRadius: OmiRadius.mdAll,
-              ),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             ),
           );
         },
@@ -301,6 +316,32 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       title: context.l10n.memoryManagement,
       padding: EdgeInsets.zero,
       builder: (context) => MemoryManagementSheet(provider: provider),
+    );
+  }
+}
+
+/// The mind map preview at the top of Memories: a compact skeleton while the graph loads, a
+/// zoomed-out, non-interactive graph that opens the full graph on tap, or one Try Again row when
+/// it fails. It loads on its own; the list below never waits on it.
+class MemoryMindMapPreview extends StatelessWidget {
+  const MemoryMindMapPreview({super.key, this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph});
+
+  final Future<Map<String, dynamic>> Function() loadGraph;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: MemoryGraphPage(
+        embedded: true,
+        preview: true,
+        showAppBar: false,
+        showShareButton: false,
+        trackOpenEvent: false,
+        initialZoom: 0.6,
+        loadGraph: loadGraph,
+        onOpen: () => routeToPage(context, const MemoryGraphPage(trackOpenEvent: false)),
+      ),
     );
   }
 }

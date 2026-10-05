@@ -18,11 +18,19 @@ from config.stt_provider_policy import (
     SONIOX_PROVIDER,
     provider_for_service,
 )
-from routers.listen.receiver import MAX_STT_FAILOVERS, ListenReceiver
+from routers.listen.receiver import ListenReceiver
 from utils.metrics import OMI_LIVE_STT_ACCEPTED_TOTAL
 from utils.observability.transcription import _deployment_environment
+from utils.stt.live_failure import MAX_STT_FAILOVERS
+from utils.stt.replay_delivery import ReplayTailSocket
+from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
 from utils.stt.streaming import STTService, get_stt_service_for_language
 from utils.stt.language_policy import LiveLanguageProfile
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 class FakeSocket:
@@ -127,11 +135,61 @@ async def test_a_dead_primary_moves_the_session_to_the_next_provider(monkeypatch
     ):
         assert await receiver._failover_stt_socket() is True
 
-    assert receiver.stt_socket is healthy
+    assert isinstance(receiver.stt_socket, ReplayTailSocket)
+    assert receiver.stt_socket.connection is healthy
     assert receiver.host.stt_service == STTService.soniox
     # The dead socket is released rather than leaked for the session's lifetime.
     assert dead.finished is True
     assert MODULATE_PROVIDER in receiver._stt_failed_providers
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('primary', [STTService.modulate, STTService.soniox])
+async def test_control_late_rejection_continues_without_a_window_replay_ring(monkeypatch, caplog, primary):
+    rejected_service = STTService.soniox if primary == STTService.modulate else STTService.modulate
+    rejected = FakeSocket()
+    healthy = FakeSocket()
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=rejected)
+    receiver.host.stt_service = primary
+    receiver.host.stt_model = 'soniox' if primary == STTService.soniox else 'modulate-velma-2'
+    receiver._create_stt_socket.side_effect = [rejected, healthy]
+    assert receiver._window_ring() is None
+    checked = []
+
+    async def serving(socket):
+        checked.append(socket)
+        if socket is rejected:
+            rejected._dead = True
+            rejected.typed_death_reason = 'connection_lost'
+            return False
+        return True
+
+    monkeypatch.setattr('routers.listen.receiver.fallback_socket_is_serving', serving)
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        side_effect=[(rejected_service, 'en', rejected_service.value), (STTService.deepgram, 'en', 'dg-nova-3')],
+    ) as select:
+        assert await receiver._failover_stt_socket()
+    assert checked == [rejected, healthy]
+    assert receiver._create_stt_socket.await_count == 2
+    assert select.call_count == 2
+    assert select.call_args_list[0].kwargs['exclude'] == frozenset({provider_for_service(primary)})
+    assert select.call_args_list[1].kwargs['exclude'] == frozenset(
+        {provider_for_service(primary), provider_for_service(rejected_service)}
+    )
+    assert rejected.finished
+    assert isinstance(receiver.stt_socket, ReplayTailSocket)
+    assert receiver.stt_socket.connection is healthy
+    assert receiver.host.stt_service == STTService.deepgram
+    assert receiver.host.state.active
+    assert not receiver.host.state.stt_terminal_failure
+    assert receiver._window_ring() is None
+    assert healthy.sent == []
+    receiver.host.request.websocket.close.assert_not_called()
+    assert [r.message for r in caplog.records if 'component=stt_live_session' in r.message] == [
+        f'omi_fallback_event component=stt_live_session from={primary.value} to={rejected_service.value} '
+        'reason=connection_lost outcome=degraded'
+    ]
 
 
 @pytest.mark.asyncio
@@ -229,6 +287,7 @@ async def test_multi_channel_sessions_do_not_failover(monkeypatch):
 async def test_failover_is_bounded_so_a_flapping_chain_cannot_loop(monkeypatch):
     receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
     receiver._stt_failed_providers = {f'p{i}' for i in range(MAX_STT_FAILOVERS + 1)}
+    receiver.recovery.attempted_targets = {f't{i}' for i in range(MAX_RECOVERY_TARGETS)}
 
     with patch(
         'routers.listen.receiver.get_stt_service_for_language',
@@ -279,7 +338,8 @@ async def test_a_death_observed_by_the_audio_send_path_fails_over_not_terminates
     ):
         await receiver._flush_stt_buffer(buffer, force=True)
 
-    assert receiver.stt_socket is healthy
+    assert isinstance(receiver.stt_socket, ReplayTailSocket)
+    assert receiver.stt_socket.connection is healthy
     assert healthy.sent == [b'synthetic-pcm']
     assert len(buffer) == 0
     assert receiver.host.state.stt_terminal_failure is False
@@ -334,7 +394,7 @@ async def test_connect_then_vendor_close_is_not_recovered(monkeypatch):
             'component': 'stt_live_session',
             'from_mode': MODULATE_PROVIDER,
             'to_mode': 'soniox',
-            'reason': 'quota',
+            'reason': 'connection_lost',
             'outcome': 'exhausted',
         }
     ]
@@ -361,7 +421,7 @@ async def test_connect_then_delayed_vendor_close_is_exhausted_not_recovered(monk
     live = [event for event in events if event.get('component') == 'stt_live_session']
     assert live, events
     assert live[0]['outcome'] == 'exhausted'
-    assert live[0]['reason'] == 'quota'
+    assert live[0]['reason'] == 'connection_lost'  # Source Modulate death, not successor Soniox's quota.
     assert live[0]['to_mode'] == 'soniox'
     assert all(event['outcome'] != 'recovered' for event in events)
 

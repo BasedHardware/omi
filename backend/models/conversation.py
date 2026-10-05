@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
@@ -62,6 +63,7 @@ __all__ = [
     'SharedParticipant',
     'SharedPerson',
     'SharedPluginResult',
+    'SharedSection',
     'SharedStructured',
     'SharedTranscriptSegment',
     'project_shared_conversation',
@@ -118,6 +120,9 @@ class SharedConversationChatResponse(BaseModel):
     remaining_free_questions: int | None = Field(default=None, ge=0)
 
 
+_EMAIL_RE = re.compile(r'[^\s@]+@[^\s@]+\.[^\s@]+')
+
+
 class SharedActionItem(BaseModel):
     """Public share projection of an action item."""
 
@@ -125,6 +130,27 @@ class SharedActionItem(BaseModel):
 
     description: str
     completed: bool = False
+    owner_name: Optional[str] = None
+    due_at: Optional[datetime] = None
+    context: Optional[str] = None
+
+    @field_validator('owner_name', mode='before')
+    @classmethod
+    def drop_email_shaped_owner(cls, value):
+        # owner_name is a display name. An address here is not a public name.
+        if isinstance(value, str) and _EMAIL_RE.search(value):
+            return None
+        return value
+
+
+class SharedSection(BaseModel):
+    """Public note content, without internal transcript evidence IDs."""
+
+    model_config = {'extra': 'ignore'}
+
+    heading: str
+    body_markdown: str
+    kind: Literal['main', 'side_notes'] = 'main'
 
 
 class SharedEvent(BaseModel):
@@ -160,6 +186,7 @@ class SharedStructured(BaseModel):
     overview: str = ''
     emoji: str = '🧠'
     category: CategoryEnum = CategoryEnum.other
+    sections: List[SharedSection] = Field(default_factory=list)
     action_items: List[SharedActionItem] = Field(default_factory=list)
     events: List[SharedEvent] = Field(default_factory=list)
     meeting_type: Optional[MeetingType] = None
@@ -429,6 +456,14 @@ class Conversation(BaseModel):
     # enriched summary. Server-authored; absent on every enriched conversation.
     # Clients read `client_processing` first — see the enum's docstring.
     processing_state: Optional[ConversationProcessingState] = None
+    # Server-authored. True only when durable finalization exhausted its retry
+    # budget on a transient provider/parser/worker failure and the row has
+    # transcript or photos, so ``POST /v1/conversations/{id}/reprocess`` can
+    # still produce a summary. ``structured.title`` then holds the
+    # deterministic title. Never set when the model ran and found nothing to
+    # summarize. Successful enrichment clears it. A separate field rather than
+    # a ``processing_state`` value: released clients decode that enum strictly.
+    summary_retryable: Optional[bool] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None

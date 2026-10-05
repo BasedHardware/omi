@@ -91,6 +91,9 @@ class ListenRequest:
     # onboarding — see runtime.py's _bootstrap. Appended last so a positional
     # caller can't silently mis-bind an existing argument.
     speech_profile_redo: bool = False
+    # The client (desktop, meeting role only) declared it runs a pre-notes
+    # screen-evidence pass; persisted to external_data['screen_evidence_pass'].
+    screen_evidence_pass: bool = False
 
 
 @dataclass
@@ -116,6 +119,7 @@ class ListenSessionState:
     capture_timeline: Any = None
     source_position_map: Any = None
     capture_timeline_v2: bool = False
+    capture_timeline_spans: bool = False
     conversation_capture_origins: Dict[str, 'ConversationCaptureOrigin'] = field(default_factory=dict)
     conversations_awaiting_capture_origin: set = field(default_factory=set)
     # Rows resumed with an unparseable started_at: their origin is unknowable,

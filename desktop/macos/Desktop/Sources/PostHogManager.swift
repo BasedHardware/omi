@@ -114,7 +114,7 @@ class PostHogManager {
 
   /// EXP-002: attach `experiment_id` + `variant` to every captured event as
   /// super-properties, so all product events (`question_asked`/`question_answered`,
-  /// `desktop_daily_summary`, PTT lifecycle, Interject teach) are sliceable by
+  /// `desktop_daily_summary`, PTT lifecycle) are sliceable by
   /// arm without per-event plumbing. Distinct id stays the uid — the variant is
   /// a property, never an identity. Called once the launch's arm resolves.
   func setExperimentContext(experimentId: String, variant: String, forced: Bool) {
@@ -235,6 +235,49 @@ class PostHogManager {
   /// initial preload and after every reload) — re-exported so observers get a
   /// compile-checked symbol instead of a raw notification-name string.
   static var featureFlagsDidLoad: Notification.Name { PostHogSDK.didReceiveFeatureFlags }
+
+  func screenTaskFrameTerminal(ownerID: String?, properties: [String: Any]) {
+    guard isInitialized else { return }
+    // A revocation outcome still belongs to its capture owner, never the account current at terminal time.
+    PostHogSDK.shared.capture(
+      "Screen Task Frame Terminal", distinctId: ownerID ?? "screen-task-unowned", properties: properties)
+  }
+
+  func screenTaskDeliveryCompleted(ownerID: String, completion: ScreenTaskDeliveryCompletion, deferred: Bool) {
+    guard isInitialized else { return }
+    PostHogSDK.shared.capture(
+      "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
+  }
+
+  /// Fresh admission for the screen-task kill switch. SDK reload callbacks may
+  /// return cached values on quota/failure, so they cannot renew an upload lease.
+  func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {
+    guard isInitialized, !PostHogSDK.shared.isOptOut(), RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
+      let url = URL(string: host + "/flags/?v=2")
+    else { throw ScreenTaskFailure.stopped }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 5
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONSerialization.data(withJSONObject: [
+      "token": apiKey, "distinct_id": authorization.ownerID,
+      "person_properties": [
+        "platform": "macos",
+        "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+        "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
+        "update_channel": AppBuild.currentUpdateChannel,
+      ],
+    ])
+    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+    guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
+      throw ScreenTaskFailure.stopped
+    }
+    return try ScreenTaskFreshFlagResponse.enabled(data)
+  }
 
   /// Reload feature flags
   func reloadFeatureFlags() {
@@ -886,12 +929,18 @@ extension PostHogManager {
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
-  func taskExtracted(taskCount: Int) {
-    track(
-      "Task Extracted",
-      properties: [
-        "task_count": taskCount
-      ])
+  func taskExtracted(
+    taskCount: Int, gateOutcome: String? = nil, auditSample: Bool = false, candidateCount: Int = 0,
+    extractor: String? = nil
+  ) {
+    var properties: [String: Any] = ["task_count": taskCount]
+    if let gateOutcome {
+      properties["gate_outcome"] = ["passed", "rejected", "fail_open"].contains(gateOutcome) ? gateOutcome : "none"
+      properties["audit_sample"] = auditSample
+      properties["extracted_candidate_count"] = max(0, min(candidateCount, 8))
+    }
+    if let extractor { properties["extractor"] = ["gemini_3_8", "legacy"].contains(extractor) ? extractor : "none" }
+    track("Task Extracted", properties: properties)
   }
 
   func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {
@@ -1045,31 +1094,6 @@ extension PostHogManager {
     )
   }
 
-  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
-    var properties: [String: Any] = [:]
-    if let cat = InsightAssistantTelemetry.boundedCategory(category) { properties["category"] = cat }
-    if let deliveryID { properties["delivery_id"] = deliveryID.uuidString }
-    track("Advice Generated", properties: properties.isEmpty ? nil : properties)
-  }
-
-  func insightAssistantDeliveryOutcome(
-    _ outcome: InsightAssistantTelemetry.Outcome,
-    reason: InsightAssistantTelemetry.Reason,
-    deliveryID: UUID,
-    surface: InsightAssistantTelemetry.Surface? = nil
-  ) {
-    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
-    track(
-      InsightAssistantTelemetry.deliveryOutcomeEventName,
-      properties: InsightAssistantTelemetry.deliveryOutcomePayload(
-        outcome,
-        reason: reason,
-        identity: identity,
-        surface: surface
-      )
-    )
-  }
-
   // MARK: - Apps Events
 
   func appEnabled(appId: String, appName: String) {
@@ -1199,8 +1223,7 @@ extension PostHogManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    attention: InterjectAttention? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     var properties = notificationProperties(
       notificationId: notificationId,
@@ -1209,45 +1232,10 @@ extension PostHogManager {
       surface: surface
     )
     properties["dismissal_kind"] = dismissalKind.rawValue
-    if let attention {
-      properties["attention"] = attention.rawValue
-    }
     appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",
       properties: properties)
-  }
-
-  func notificationHovered(
-    notificationId: String,
-    assistantId: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
-  ) {
-    var properties: [String: Any] = [
-      "notification_id": notificationId,
-      "assistant_id": assistantId,
-    ]
-    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
-    track("Notification Hovered", properties: properties)
-  }
-
-  func suggestionFeedbackRecorded(
-    verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    provenance: InterjectFeedbackProvenance? = nil
-  ) {
-    var properties: [String: Any] = ["verb": verb]
-    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
-    if let provenance {
-      // Keep account identity out of event properties; PostHog already binds
-      // events to the authenticated installation. These opaque joins are
-      // sufficient for receipt correlation without copying owner IDs.
-      properties["feedback_lane"] = provenance.lane
-      properties["feedback_delivery_id"] = provenance.deliveryID
-      properties["feedback_candidate_id"] = provenance.candidateID
-      properties["feedback_account_generation"] = provenance.accountGeneration
-    }
-    track("Suggestion Feedback Recorded", properties: properties)
   }
 
   private func notificationProperties(

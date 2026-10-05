@@ -283,7 +283,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reportMessage => 'செய்திக்கு புகாரளிக்கவும்';
 
   @override
-  String get reportMessageConfirm => 'இந்த செய்தியைப் புகாரளிக்க விரும்புகிறீர்களா?';
+  String get reportMessageConfirm => 'இந்தச் செய்தியைப் புகாரளிக்கவா?';
 
   @override
   String get messageReported => 'செய்தி வெற்றிகரமாக புகாரளிக்கப்பட்டது.';
@@ -295,7 +295,8 @@ class AppLocalizationsTa extends AppLocalizations {
   String get clearChat => 'சாட் துடைக்கவும்';
 
   @override
-  String get clearChatConfirm => 'சாட்டைத் துடைக்கவெண்டுமா? இந்த நடவடிக்கையை மாற்ற முடியாது.';
+  String get clearChatConfirm =>
+      'இந்த அரட்டையில் உள்ள அனைத்து செய்திகளும் நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String get maxFilesLimit => 'ஒரு முறையில் 4 கோப்புகளை மட்டுமே பதிவேற்றலாம்';
@@ -359,10 +360,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get cannotBeUndone => 'இதை மாற்ற முடியாது.';
 
   @override
-  String get allDataErased => 'உங்கள் அனைத்து நினைவுகள் மற்றும் உரையாடல்கள் நிரந்தரமாக நீக்கப்படும்.';
+  String get allDataErased => 'உங்கள் நினைவுகளும் உரையாடல்களும் அழிக்கப்படும்.';
 
   @override
-  String get appsDisconnected => 'உங்கள் பயன்பாடுகள் மற்றும் ஒருங்கிணைப்புகள் உடனடியாக துண்டிக்கப்படும்.';
+  String get appsDisconnected => 'உங்கள் ஆப்ஸ் மற்றும் ஒருங்கிணைப்புகள் துண்டிக்கப்படும்.';
 
   @override
   String get exportBeforeDelete =>
@@ -1042,7 +1043,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return '$appName இலிருந்து இணைப்பை நீக்க விரும்புகிறீர்களா? நீங்கள் எப்போதும் மீண்டும் இணைக்கலாம்.';
+    return 'நீங்கள் எப்போது வேண்டுமானாலும் $appName ஐ மீண்டும் இணைக்கலாம்.';
   }
 
   @override
@@ -1991,14 +1992,14 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deleteActionItemTitle => 'பணியை நீக்கவும்';
 
   @override
-  String get deleteActionItemMessage => 'இந்த பணியை நீக்க விரும்புகிறீர்களா?';
+  String get deleteActionItemMessage => 'இந்தப் பணியை நீக்கவா?';
 
   @override
   String get deleteSelectedItemsTitle => 'தேர்ந்தெடுக்கப்பட்ட பணிகளை நீக்கவும்';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return '$count தேர்ந்தெடுக்கப்பட்ட பணி$s நீக்க விரும்புகிறீர்களா?';
+    return '$count தேர்ந்தெடுக்கப்பட்ட பணி$s நீக்கவா?';
   }
 
   @override
@@ -2067,7 +2068,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get undo => 'மறுசெய்க';
 
   @override
-  String get noMemoriesYet => '🧠 இன்னும் பதிவுகள் இல்லை';
+  String get noMemoriesYet => 'இன்னும் பதிவுகள் இல்லை';
 
   @override
   String get noAutoMemories => 'இன்னும் தானாக எழுப்பப்பட்ட பதிவுகள் இல்லை';
@@ -2079,7 +2080,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get noMemoriesInCategories => 'இந்த வகைகளில் பதிவுகள் இல்லை';
 
   @override
-  String get noMemoriesFound => '🔍 பதிவுகள் கிடைக்கவில்லை';
+  String get noMemoriesFound => 'பதிவுகள் கிடைக்கவில்லை';
 
   @override
   String get addFirstMemory => 'உங்கள் முதல் பதிவைச் சேர்க்கவும்';
@@ -2088,7 +2089,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get clearMemoryTitle => 'Omi இன் பதிவை அழிக்கவும்';
 
   @override
-  String get clearMemoryMessage => 'Omi இன் உங்கள் பற்றிய பதிவை அழிக்க விரும்புகிறீர்களா? இந்தச் செயல் மாற்றமுடியாது.';
+  String get clearMemoryMessage => 'உங்கள் அனைத்து நினைவுகளும் நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String get clearMemoryButton => 'பதிவு அழிக்கவும்';
@@ -2234,7 +2235,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'பணியை நீக்கவும்';
 
   @override
-  String get deleteActionItemConfirmMessage => 'இந்த பணியை நீக்க விரும்புகிறீர்களா?';
+  String get deleteActionItemConfirmMessage => 'இந்தப் பணியை நீக்கவா?';
 
   @override
   String get appLanguage => 'பயன்பாட்டு மொழி';
@@ -2247,7 +2248,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get languageSettingsHelperText =>
-      'பயன்பாட்டு மொழி மெனுக்கள் மற்றும் பொத்தான்கள் மாற்றுகிறது. பேச்சு மொழி உங்கள் பதிவுகளை எவ்வாறு தட்டச்சு செய்யப்படுகிறது என்பதைப் பாதிக்கிறது.';
+      'பயன்பாட்டு மொழி மெனுக்களையும் பொத்தான்களையும் மாற்றுகிறது. முதன்மை மொழி உங்கள் பதிவுகள் எவ்வாறு எழுத்துப்படியாக்கப்படுகின்றன என்பதைப் பாதிக்கிறது.';
 
   @override
   String get translationNotice => 'மொழிபெயர்ப்பு குறிப்பு';
@@ -2337,7 +2338,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deleteMemory => 'நினைவகத்தை நீக்கு';
 
   @override
-  String get thisActionCannotBeUndone => 'இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.';
+  String get thisActionCannotBeUndone => 'இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String memoriesCount(int count) {
@@ -2779,8 +2780,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deleteActionItem => 'பணியை நீக்கு';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'இந்த பணியை நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.';
+  String get deleteActionItemConfirmation => 'இந்தப் பணியை நீக்கவா? இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String get enterActionItemDescription => 'பணி விளக்கத்தை உள்ளிடவும்';
@@ -3123,7 +3123,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ செய்தி வெற்றிகரமாக புகாரளிக்கப்பட்டது';
 
   @override
-  String get confirmReportMessage => 'இந்த செய்தியை புகாரளிக்க விரும்புகிறீர்களா?';
+  String get confirmReportMessage => 'இந்தச் செய்தியைப் புகாரளிக்கவா?';
 
   @override
   String get selectChatAssistant => 'சட்ட உதவிக்கார் தேர்ந்தெடுக்கவும்';
@@ -3138,7 +3138,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get clearChatTitle => 'சட்டம் தெளிவு செய்யவுமா?';
 
   @override
-  String get confirmClearChat => 'சட்டத்தைத் தெளிவு செய்ய விரும்புகிறீர்களா? இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.';
+  String get confirmClearChat => 'இந்த அரட்டையை அழிக்கவா? இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String get copy => 'நকல்';
@@ -3310,7 +3310,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get createMemory => 'நினைவு உருவாக்கு';
 
   @override
-  String get deleteMemoryConfirmation => 'இந்த நினைவை நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.';
+  String get deleteMemoryConfirmation => 'இந்த நினைவை நீக்கவா? இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String get makePrivate => 'தனிப்பட்ட செய்க';
@@ -3347,7 +3347,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Omi ன் நினைவகம் தெளிவு செய்ய விரும்புகிறீர்களா? இந்த செயல் செயல்நீக்கம் செய்ய முடியாது மற்றும் அனைத்து $count நினைவுகளை நிரந்தரமாக நீக்கும்.';
+    return 'அனைத்து $count நினைவுகளும் நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.';
   }
 
   @override
@@ -3642,8 +3642,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Omi சிறந்த பயன்பாட்டைத் தானாக தேர்ந்தெடுக்க அனுமதிக்கவும்';
 
   @override
-  String get deleteConversationConfirmation =>
-      'இந்த உரையாடலை நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்தவிர்க்க முடியாது.';
+  String get deleteConversationConfirmation => 'இந்த உரையாடலை நீக்கவா? இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String get conversationDeleted => 'உரையாடல் நீக்கப்பட்டது';
@@ -3970,8 +3969,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get updateAppQuestion => 'பயன்பாட்டை புதுப்பிக்கவா?';
 
   @override
-  String get updateAppConfirmation =>
-      'உங்கள் பயன்பாட்டை புதுப்பிக்க விரும்புகிறீர்களா? நமது குழு மதிப்பாய்வு செய்த பிறகு மாற்றங்கள் பிரதிபலிக்கும்.';
+  String get updateAppConfirmation => 'எங்கள் குழு மதிப்பாய்வு செய்த பிறகு மாற்றங்கள் வெளியிடப்படும்.';
 
   @override
   String get updateApp => 'பயன்பாட்டை புதுப்பிக்கவும்';
@@ -3993,9 +3991,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'பொதுப் பயன்பாடுகள் ($count)';
   }
-
-  @override
-  String get newVersionAvailable => 'புதிய பதிப்பு கிடைக்கிறது';
 
   @override
   String get no => 'இல்லை';
@@ -4039,7 +4034,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'உங்கள் சந்தாவை ரத்து செய்ய விரும்புகிறீர்களா? உங்கள் தற்போதைய பில்லிங் காலத்தின் முடிவு வரை நீங்கள் அணுக்கத்தைப் பெற்றிருப்பீர்கள்.';
+      'உங்கள் தற்போதைய பில்லிங் காலத்தின் முடிவு வரை நீங்கள் அணுக்கத்தைப் பெற்றிருப்பீர்கள்.';
 
   @override
   String get cancelSubscriptionButton => 'சந்தாவை ரத்து செய்யவும்';
@@ -4227,7 +4222,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'இந்த செயலை செயல்தவிர்க்க முடியாது. இந்த விசையைப் பயன்படுத்தும் எந்த பயன்பாடுகளும் API க்கு மீண்டும் அணுக முடியாது.';
+      'இந்த விசையைப் பயன்படுத்தும் ஆப்ஸ் API அணுகலை இழக்கும். இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String get revoke => 'மறுக்கவும்';
@@ -4284,7 +4279,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'இந்த $item ஐ நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்தவிர்க்க முடியாது.';
+    return 'இந்த $item ஐ நீக்குவதைச் செயல்தவிர்க்க முடியாது.';
   }
 
   @override
@@ -4292,7 +4287,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return '\"$keyName\" விசையை மறுக்க விரும்புகிறீர்களா? இந்த செயலை செயல்தவிர்க்க முடியாது.';
+    return '\"$keyName\" ஐப் பயன்படுத்தும் அனைத்தும் அணுகலை இழக்கும். இதை செயல்ரத்து செய்ய முடியாது.';
   }
 
   @override
@@ -4471,7 +4466,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'உங்கள் திட்டம் $date வரை சக்திய நிலையில் இருக்கும். அதன் பிறகு, நீங்கள் உங்கள் வரம்பற்ற அம்சங்களுக்கான அணுக்கம் இழக்கும். நீங்கள் உறுதியாக உள்ளீர்களா?';
+    return 'உங்கள் திட்டம் $date வரை சக்திய நிலையில் இருக்கும். அதன் பிறகு, நீங்கள் உங்கள் வரம்பற்ற அம்சங்களுக்கான அணுக்கம் இழக்கும்.';
   }
 
   @override
@@ -4564,7 +4559,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get askOmiAnything => 'உங்கள் வாழ்க்கையைப் பற்றி Omi-ஐ எதையும் கேளுங்கள்';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Omi இன் எல்லையற்ற நினைவை திறக்கவும்';
+  String get unlockOmiInfiniteMemory => 'வரம்பற்ற நினைவுகள்';
 
   @override
   String get youreOnAnnualPlan => 'நீங்கள் ஆண்டு திட்டத்தில் இருக்கிறீர்கள்';
@@ -4576,7 +4571,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get unableToLoadPlans => 'திட்டங்களை ஏற்ற முடியவில்லை';
 
   @override
-  String get checkConnectionTryAgain => 'இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்';
+  String get checkConnectionTryAgain => 'உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.';
 
   @override
   String get useFreePlan => 'இலவச திட்டத்தைப் பயன்படுத்தவும்';
@@ -4759,7 +4754,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'இது Limitless இலிருந்து ஏற்றுமதி செய்யப்பட்ட அனைத்து உரையாடல்களையும் நிரந்தரமாக நீக்கும். இந்த வினை செய்ய முடியாது.';
+      'Limitless இலிருந்து இறக்குமதி செய்யப்பட்ட அனைத்து உரையாடல்களும் நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4800,7 +4795,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return '$name இன் மாதிரியை நீக்க விரும்பிறீர்களா?';
+    return '$name இன் குரல் மாதிரி நீக்கப்படும். இதை செயல்ரத்து செய்ய முடியாது.';
   }
 
   @override
@@ -4808,7 +4803,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return '$name ஐ நீக்க விரும்பிறீர்களா? இது அனைத்து தொடர்புடைய பேச்சு மாதிரிகளையும் அகற்றும்.';
+    return 'இது $name இன் குரல் மாதிரிகளை நீக்கும்; இதைச் செயல்தவிர்க்க முடியாது. கடந்த உரையாடல்களில் அவர்களின் பேச்சு பெயரற்ற பேச்சாளர்களாக மாறும்.';
   }
 
   @override
@@ -5089,8 +5084,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'தொடர்வதன் மூலம், உங்கள் உரையாடல்கள், பதிவுகள் மற்றும் தனிப்பட்ட தகவல்கள் எங்கள் சேவையகங்களில் பாதுகாப்பாக சேமிக்கப்படும். உங்கள் ஆடியோ பதிவுகள் மற்றும் படியெடுப்புகள் மூன்றாம் தரப்பு AI சேவைகளால் செயலாக்கப்படுகின்றன (படியெடுப்பிற்கு Deepgram மற்றும் பகுப்பாய்விற்கு OpenAI உட்பட) AI இயக்கும் நுண்ணறிவுகளை உங்களுக்கு வழங்கவும் அனைத்து பயன்பாட்டு அம்சங்களையும் இயக்கவும்.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।';
+  String get tasksEmptyStateMessage => 'ஒரு பணியை உருவாக்க உரையாடலைத் தொடங்குங்கள்.';
 
   @override
   String get clearChatAction => 'உரையாடலைத் தெளிக்கவும்';
@@ -5168,7 +5162,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get finishedConversation => 'உரையாடலை முடித்துவிட்டீர்களா?';
 
   @override
-  String get stopRecordingConfirmation => 'பதிவை நிறுத்தி உரையாடலைத் தொகுக்க விரும்பிறீர்களா?';
+  String get stopRecordingConfirmation => 'பதிவை நிறுத்தி இப்போதே உரையாடலைச் சுருக்கவா?';
 
   @override
   String get conversationEndsManually => 'உரையாடல் கைமுறையாக மட்டுமே முடிந்துவிடும்।';
@@ -6017,7 +6011,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாதத்திற்கு 300 பிரீமியம் நிமிடங்கள். வரம்பற்ற இலவச எழுத்துப்படியாக்கத்திற்கு \"சாதனத்தில்\" என்பதைத் தேர்ந்தெடுக்கவும்.';
 
   @override
   String get viewUsage => 'பயன்பாட்டைக் கவனிக்கவும்';
@@ -6099,7 +6093,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாதத்திற்கு 300 பிரீமியம் நிமிடங்கள். வரம்பற்ற இலவச எழுத்துப்படியாக்கத்திற்கு \"சாதனத்தில்\" என்பதைத் தேர்ந்தெடுக்கவும். ';
 
   @override
   String get audioProcessedLocally =>
@@ -6154,7 +6148,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omi இன் உள்ளமைந்த நேரடி உபாய கேட்டுபேரல் உரையாடல் பற்றிய ஒத்திசைப்பு மற்றும் தற்போதைய பேச்சாளர் கண்டறிதலுக்கு தெளிவு செய்யப்பட்டுள்ளது।';
+      'Omi நேரலை எழுத்துப்படியாக்கம் நிகழ்நேர உரையாடல்களுக்காக உருவாக்கப்பட்டது, யார் என்ன சொன்னார்கள் என்பதைக் குறிக்கிறது.';
 
   @override
   String get reset => 'மீட்டமைக்கவும்';
@@ -6691,8 +6685,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get shareRecording => 'பதிவை பகிரவும்';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'இந்த பதிவை நிரந்தரமாக நீக்க விரும்புகிறீர்களா? இதை செயல்தவிர்க்க முடியாது.';
+  String get deleteRecordingConfirmation => 'இதை செயல்ரத்து செய்ய முடியாது.';
 
   @override
   String get recordingIdLabel => 'பதிவு ID';
@@ -7070,7 +7063,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'நீங்கள் உங்கள் எல்லையற்ற திட்டத்தை $title ஆக மாற்றுகிறீர்கள். நீங்கள் தொடர்ந்து செல்ல விரும்புகிறீர்களா?';
+    return 'நீங்கள் உங்கள் எல்லையற்ற திட்டத்தை $title ஆக மாற்றுகிறீர்கள்.';
   }
 
   @override
@@ -8969,10 +8962,10 @@ class AppLocalizationsTa extends AppLocalizations {
       'விருப்பத்தேர்வு — உங்கள் எண்ணங்கள் சிறந்த தயாரிப்பை உருவாக்க எங்களுக்கு உதவுகின்றன.';
 
   @override
-  String get deleteFlowConfirmTitle => 'இது நிரந்தரமானது';
+  String get deleteFlowConfirmTitle => 'உங்கள் கணக்கை நீக்கவா?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'கணக்கை நீக்கியதும், அதை மீட்க வழி இல்லை.';
+  String get deleteFlowConfirmSubtitle => 'இதைச் செயல்தவிர்க்க முடியாது, ஆதரவுக் குழுவாலும் முடியாது.';
 
   @override
   String get deleteConsequenceSubscription => 'செயலில் உள்ள சந்தா ரத்து செய்யப்படும்.';
@@ -9334,6 +9327,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncCardDownloadingTitle => 'உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$total-இல் $current';
   }
@@ -9415,7 +9418,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'இப்போது ஆடியோவைப் பதிவுசெய்து, நேரலையாக அல்லாமல் தேவைப்படும்போது எழுத்தாக்கம் செய்யுங்கள். பதிவுகள் உங்கள் தொலைபேசியில் சேமிக்கப்படும்; பிறகு அவற்றைப் பதிவேற்றி உரையாடல்களை உருவாக்கலாம்.';
+      'இப்போது பதிவு செய்து, விரும்பும்போது எழுத்துப்படியாக்குங்கள். அதுவரை ஆடியோ உங்கள் ஃபோனிலேயே இருக்கும்.';
 
   @override
   String get transcribeLaterNote =>
@@ -9699,7 +9702,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deleteOnDeviceModel => 'மாதிரியை நீக்கு';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'இந்த மாதிரியை நீக்க விரும்புகிறீர்களா?';
+  String get deleteOnDeviceModelConfirm => 'இந்த மாடலை நீக்கவா?';
 
   @override
   String get onDeviceModelDownloaded => 'பதிவிறக்கப்பட்டது';
@@ -9856,7 +9859,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncStatusTooOld => 'ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது';
 
   @override
-  String get planSheetChooseYourPlan => 'வரம்பற்ற Omi-ஐ திறக்க உங்கள் திட்டத்தைத் தேர்ந்தெடுக்கவும்.';
+  String get planSheetChooseYourPlan => 'உங்களுக்குப் பொருத்தமான திட்டத்தைத் தேர்ந்தெடுக்கவும்.';
 
   @override
   String get availableOnMacMobileWeb => 'Mac, மொபைல் மற்றும் வலையில் கிடைக்கிறது';
@@ -10104,24 +10107,23 @@ class AppLocalizationsTa extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
         'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
         'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
@@ -10134,13 +10136,13 @@ class AppLocalizationsTa extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10170,12 +10172,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது';
-
-  @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
 
   @override
   String chatStarterPrompt(String kind) {
@@ -10528,8 +10524,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'சாதனத்தை மறக்கவா?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi இந்தச் சாதனத்துடன் இணைவதை நிறுத்தும். மீண்டும் பயன்படுத்த, அதை மீண்டும் இணைக்க வேண்டும்.';
+  String get forgetDeviceConfirmMessage => 'Omi இந்தச் சாதனத்துடன் இணைவதை நிறுத்தும்.';
 
   @override
   String get deviceForgottenMessage => 'சாதனம் மறக்கப்பட்டது';
@@ -11340,6 +11335,9 @@ class AppLocalizationsTa extends AppLocalizations {
       'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi தானாகவே மீண்டும் இணையும்';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name மற்றும் மற்றவர்கள்';
   }
@@ -11564,4 +11562,941 @@ class AppLocalizationsTa extends AppLocalizations {
   String showAllPeople(int count) {
     return 'அனைத்து ($count) நபர்களையும் காட்டு';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'வணக்கம் $name, எதையும் கேளுங்கள்';
+  }
+
+  @override
+  String get activity => 'செயல்பாடு';
+
+  @override
+  String get places => 'இடங்கள்';
+
+  @override
+  String get recaps => 'சுருக்கங்கள்';
+
+  @override
+  String get recent => 'சமீபத்தியவை';
+
+  @override
+  String get searchPartialFailure => 'சில முடிவுகளை ஏற்ற முடியவில்லை';
+
+  @override
+  String get peopleSearchPlaceholder => 'நபர்களைத் தேடு';
+
+  @override
+  String get peopleNotHeardYet => 'இன்னும் கேட்கப்படவில்லை';
+
+  @override
+  String get peopleRecent => 'சமீபத்தியவை';
+
+  @override
+  String get deletePeopleMessage =>
+      'இது அவர்களின் குரல் மாதிரிகளை நீக்கும்; இதைச் செயல்தவிர்க்க முடியாது. கடந்த உரையாடல்களில் அவர்களின் பேச்சு பெயரற்ற பேச்சாளர்களாக மாறும்.';
+
+  @override
+  String get personTalkTime => 'பேசிய நேரம்';
+
+  @override
+  String get personLastHeard => 'கடைசியாகக் கேட்டது';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்களை நீக்கவா?',
+      one: '1 நபரை நீக்கவா?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'குரல் தேவை';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்கள்',
+      one: '1 நபர்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'பொருந்தும் நபர்கள் இல்லை';
+
+  @override
+  String get deselectAll => 'அனைத்தையும் தேர்வுநீக்கு';
+
+  @override
+  String get voiceRecognitionSettings => 'குரல் அடையாளம்';
+
+  @override
+  String get greetingMorning => 'காலை வணக்கம்';
+
+  @override
+  String get greetingAfternoon => 'மதிய வணக்கம்';
+
+  @override
+  String get greetingEvening => 'மாலை வணக்கம்';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'நீங்கள் என்ன தெரிந்துகொள்ள விரும்புகிறீர்கள்?';
+
+  @override
+  String get askSuggestDecide => 'இன்று நான் என்ன முடிவு செய்தேன்?';
+
+  @override
+  String get askSuggestOwe => 'இன்னும் மக்களுக்கு நான் என்ன செய்ய வேண்டும்?';
+
+  @override
+  String get askSuggestNotice => 'Omi என்ன கவனித்தது?';
+
+  @override
+  String get pastChats => 'முந்தைய அரட்டைகள்';
+
+  @override
+  String get newChat => 'புதிய அரட்டை';
+
+  @override
+  String get startFresh => 'புதிதாகத் தொடங்குங்கள்';
+
+  @override
+  String get noPastChats => 'Omi உடனான உங்கள் அரட்டைகள் இங்கே தோன்றும்.';
+
+  @override
+  String get deleteChatQuestion => 'இந்த அரட்டையை நீக்கவா?';
+
+  @override
+  String get deleteChatMessage => 'இது முந்தைய அரட்டைகளிலிருந்து நிரந்தரமாக நீங்கும்.';
+
+  @override
+  String get deleteChat => 'அரட்டையை நீக்கு';
+
+  @override
+  String get appsAskWith => 'இதனுடன் Omi-யிடம் கேளுங்கள்';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'இன்று $count உரையாடல்கள்.',
+      one: 'இன்று 1 உரையாடல்.',
+      zero: 'இன்று உரையாடல்கள் இல்லை.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'திரையில் இருந்தவை';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'இந்தக் கூட்டத்தின் திரைப்பிடிப்பு';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'திரைப்பிடிப்பை நீக்கவா?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'இது இந்தக் கூட்டத்தின் குறிப்பிலிருந்து திரைப்பிடிப்பை நீக்கும். இதைச் செயல்தவிர்க்க முடியாது.';
+
+  @override
+  String get conversationSummaryFailed => 'சுருக்கம் தோல்வியடைந்தது';
+
+  @override
+  String get reconnectionsRecent => 'மீண்டும் இணைப்புகள் (கடந்த 7 நாட்கள்)';
+
+  @override
+  String get failedConnections => 'தோல்வியுற்ற இணைப்புகள்';
+
+  @override
+  String get failedConnectionsRecent => 'தோல்வியுற்ற இணைப்புகள் (கடந்த 7 நாட்கள்)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return 'இணைத்ததிலிருந்து $count';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'குறைந்த நம்பகத்தன்மை';
+
+  @override
+  String get peopleFilterPinned => 'பின் செய்தவை';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'பின் செய்தவை $count',
+      one: 'பின் செய்தது 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'உறுதிசெய்யப்பட்டது';
+
+  @override
+  String get confidenceLikely => 'வாய்ப்புள்ளது';
+
+  @override
+  String get confidenceUnverified => 'சரிபார்க்கப்படவில்லை';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'நம்பகத்தன்மை: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'நீங்கள் $count முறை லேபிள் செய்தீர்கள்',
+      one: 'நீங்கள் ஒருமுறை லேபிள் செய்தீர்கள்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பரிந்துரைகளில் தேர்ந்தெடுக்கப்பட்டது',
+      one: '1 பரிந்துரையில் தேர்ந்தெடுக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பொருத்தங்களை உறுதிசெய்தீர்கள்',
+      one: '1 பொருத்தத்தை உறுதிசெய்தீர்கள்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'தானாகப் பொருத்தப்பட்டது மட்டும், உறுதிசெய்யப்படவில்லை';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'ஒருபோதும் உறுதிசெய்யப்படவில்லை';
+
+  @override
+  String get confidenceReasonCorrected => 'அதன் பொருத்தத்தை நீங்கள் திருத்தினீர்கள்';
+
+  @override
+  String get confidenceReasonVoiceReady => 'குரல் தயார்';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'குரல் தேவை';
+
+  @override
+  String get confidenceReasonNotHeard => 'இன்னும் கேட்கப்படவில்லை';
+
+  @override
+  String get confidenceSheetTitle => 'நம்பகத்தன்மை';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return '$name அவர்களின் குரலை Omi அடையாளம் காண்கிறது, நீங்களும் அதை உறுதிசெய்துள்ளீர்கள்.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return '$name அவர்களின் குரலை Omi பொதுவாக அடையாளம் காண்கிறது, ஆனால் நீங்கள் சில முறை மட்டுமே உறுதிசெய்துள்ளீர்கள்.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return '$name தொடர்பாக நீங்கள் செய்த எதுவும் இன்னும் ஆதரவாக இல்லை.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'ஆதாரம்';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்களில் நீங்கள் லேபிள் செய்தீர்கள்',
+      one: '1 உரையாடலில் நீங்கள் லேபிள் செய்தீர்கள்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பரிந்துரைகளில் ஆம்',
+      one: '1 பரிந்துரையில் ஆம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பரிந்துரைகளில் தேர்ந்தெடுக்கப்பட்டது',
+      one: '1 பரிந்துரையில் தேர்ந்தெடுக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count தானியங்கி பொருத்தங்கள் உறுதிசெய்யப்பட்டன',
+      one: '1 தானியங்கி பொருத்தம் உறுதிசெய்யப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பொருத்தங்கள் வேறொருவருக்கு மாற்றப்பட்டன',
+      one: '1 பொருத்தம் வேறொருவருக்கு மாற்றப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'யாரும் உறுதிசெய்யாத $count தானியங்கி பொருத்தங்கள்',
+      one: 'யாரும் உறுதிசெய்யாத 1 தானியங்கி பொருத்தம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'குரல் மாதிரி தயார்';
+
+  @override
+  String get evidenceNoVoice => 'இன்னும் குரல் மாதிரி இல்லை';
+
+  @override
+  String get evidenceNotHeard => 'இன்னும் எந்த உரையாடலிலும் கேட்கப்படவில்லை';
+
+  @override
+  String get evidenceNothing => 'நீங்கள் இன்னும் லேபிள் செய்யவில்லை அல்லது உறுதிசெய்யவில்லை';
+
+  @override
+  String get effectCountsALot => 'மிகவும் உதவும்';
+
+  @override
+  String get effectCounts => 'உதவும்';
+
+  @override
+  String get effectCountsALittle => 'சிறிது உதவும்';
+
+  @override
+  String get effectBarelyCounts => 'கிட்டத்தட்ட உதவாது';
+
+  @override
+  String get effectCountsAgainst => 'பாதிக்கும்';
+
+  @override
+  String get effectNeeded => 'உறுதிசெய்யப்பட்டது நிலைக்குத் தேவை';
+
+  @override
+  String get confidenceToReachConfirmed => 'உறுதிசெய்யப்பட்டது நிலையை அடைய';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return '$name அவர்களின் குரல் மாதிரியும் Omi-க்குத் தேவை. “குரல்களை நினைவில் வை” இயக்கத்தில் இருக்கும்போது அவரை லேபிள் செய்யுங்கள்.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name: உறுதிசெய்யப்பட்டது. ஒவ்வொரு லேபிளிலிருந்தும் Omi தொடர்ந்து கற்றுக்கொள்கிறது.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'உங்கள் பதில்கள் மட்டுமே நம்பகத்தன்மையை அதிகம் மாற்றும். தானியங்கி பொருத்தங்கள் தனியாக கிட்டத்தட்ட உதவாது.';
+
+  @override
+  String get personWhyConfidence => 'ஏன்?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '$name-ஐ பின் செய்';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name-ஐ வைத்திருங்கள், உங்கள் உரையாடல்களில் அவர்களை எதிர்பாருங்கள்';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'ஒத்த குரல்களைப் பொருத்தும் முன் Omi கேட்கும்.';
+
+  @override
+  String get pinAction => 'பின் செய்';
+
+  @override
+  String get unpinAction => 'பின்னை நீக்கு';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name பின் செய்யப்பட்டார்';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name பின்னிலிருந்து நீக்கப்பட்டார்';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'ஏன் $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return '$name-ஐ நீக்கவா?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name பின் செய்யப்பட்டுள்ளார். அவர்களின் குரல் மாதிரிகள் அகற்றப்படும், Omi அவர்களை இனி அடையாளம் காணாது, பழைய டிரான்ஸ்கிரிப்ட்களில் பெயரில்லாத பேச்சாளராகக் காட்டப்படுவார்கள். இதை மீட்டெடுக்க முடியாது.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '$name-ஐ நீக்கு';
+  }
+
+  @override
+  String get selectPeople => 'நபர்களைத் தேர்ந்தெடு';
+
+  @override
+  String get cleanUpEllipsis => 'சுத்தம் செய்…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi-க்கு உறுதியில்லாத $count நபர்கள்',
+      one: 'Omi-க்கு உறுதியில்லாத 1 நபர்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'பெரும்பாலும் தவறாகக் கேட்ட பெயர்கள். அவற்றைப் பார்த்து, உண்மையில்லாதவற்றை நீக்குங்கள்.';
+
+  @override
+  String get reviewAction => 'பார்க்க';
+
+  @override
+  String get cleanUpTitle => 'சுத்தம் செய்';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'இந்த $count நபர்களைப் பற்றி Omi-க்கு உறுதியில்லை. பெரும்பாலானவை டிரான்ஸ்கிரிப்ட்களில் தவறாகக் கேட்ட பெயர்கள். வைத்திருக்க விரும்புபவர்களின் தேர்வை நீக்குங்கள்.',
+      one: 'இந்த நபரைப் பற்றி Omi-க்கு உறுதியில்லை. வைத்திருக்க விரும்பினால் தேர்வை நீக்குங்கள்.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'பின் செய்யப்பட்டவர்கள் சுத்தம் செய்தலில் சேர்க்கப்படமாட்டார்கள்.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்களை நீக்கு',
+      one: '1 நபரை நீக்கு',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்கள் நீக்கப்பட்டனர்',
+      one: '1 நபர் நீக்கப்பட்டார்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'சுத்தம் செய்ய எதுவுமில்லை';
+
+  @override
+  String get cleanUpNothingMessage => 'இப்போது யாரைப் பற்றியும் Omi-க்கு உறுதியின்மை இல்லை.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'அனைத்தையும் தேர்ந்தெடு பின் செய்யப்பட்டவர்களைத் தவிர்க்கும். அவர்களை அவர்களின் பக்கத்திலிருந்து ஒவ்வொருவராக நீக்குங்கள்.';
+
+  @override
+  String get pinnedNotSelectable => 'பின் செய்யப்பட்டது, தேர்ந்தெடுக்க முடியாது';
+
+  @override
+  String get ignoredVoicesTitle => 'புறக்கணித்த குரல்கள்';
+
+  @override
+  String get ignoredVoicesSubtitle => 'டிவி, பாட்காஸ்ட்கள் மற்றும் நீங்கள் நபர் இல்லை எனக் குறித்த பிற குரல்கள்';
+
+  @override
+  String get ignoredVoicesEmpty => 'புறக்கணித்த குரல்கள் இல்லை';
+
+  @override
+  String get restoreAction => 'மீட்டமை';
+
+  @override
+  String get voiceRestoredToast => 'இந்தக் குரலைப் பற்றி Omi மீண்டும் கேட்கலாம்';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'வேறொருவர்…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'நபர் இல்லை';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'தெரியவில்லை';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'நான்தான்';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'நெருக்கமான குரல்கள்';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'சமீபத்தில் நீங்கள் பேசியவர்கள்';
+
+  @override
+  String get voiceMatchClose => 'நெருங்கிய பொருத்தம்';
+
+  @override
+  String get voiceMatchPossible => 'சாத்தியமான பொருத்தம்';
+
+  @override
+  String get voiceMatchWeak => 'பலவீனமான பொருத்தம்';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'குரல் பொருத்தம்: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'ஒவ்வொரு பதிலும் Omi-க்கு ஒரு குரலைக் கற்றுத்தந்து, அந்த நபரின் நம்பகத்தன்மையை உயர்த்துகிறது.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'ஆம் என்றால் $name நம்பகத்தன்மை உயரும்.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'உங்கள் சொந்தக் குரல் சுயவிவரத்தைத் துல்லியமாக வைத்திருக்கும், அதனால் Omi உங்களை வேறொருவராகப் பெயரிடாது.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return '$name ஆகச் சேமிக்கப்பட்டது';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'நீங்களாகச் சேமிக்கப்பட்டது';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'இந்தக் குரலைப் பற்றி Omi மீண்டும் கேட்காது';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return '$name என லேபிள் செய்யப்பட்டது';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'நீங்கள் என லேபிள் செய்யப்பட்டது';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'நபர் இல்லை எனக் குறிக்கப்பட்டது';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'லேபிள் நீக்கப்பட்டது';
+
+  @override
+  String get whoIsItTitle => 'இது யார்?';
+
+  @override
+  String get newPersonEllipsis => 'புதிய நபர்…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return '“$name” ஐச் சேர்';
+  }
+
+  @override
+  String get everyoneHeader => 'அனைவரும்';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'இந்தப் பேச்சாளரின் எல்லா வரிகளுக்கும் பொருந்தும்';
+
+  @override
+  String get collapseAction => 'சுருக்கு';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'நான் இல்லை';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'இன்னும் $count உரையாடல்களில் அவர்களுக்கு லேபிள் இடுங்கள்.',
+      one: 'இன்னும் 1 உரையாடலில் அவர்களுக்கு லேபிள் இடுங்கள்.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'ஷார்ட்கட்ஸ் → Siri-இல் Omi-ஐ இயக்கவும். “$askPhrase” அல்லது “$questionPhrase” என்று சொல்லி, பிறகு உங்கள் கேள்வியைக் கேளுங்கள்.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' நீங்கள் “$searchPhrase for what I did today” என்றும் சொல்லலாம்.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'புதுப்பிப்பு கிடைக்கிறது';
+
+  @override
+  String get updateAvailableMessage => 'Omi-இன் புதிய பதிப்பு தயார், திருத்தங்களும் மேம்பாடுகளும் உடன்.';
+
+  @override
+  String get updateRequiredTitle => 'புதுப்பிப்பு தேவை';
+
+  @override
+  String get updateRequiredMessage =>
+      'Omi-இன் இந்தப் பதிப்பு இனி ஆதரிக்கப்படாது. பதிவுசெய்வதையும் ஒத்திசைப்பதையும் தொடர புதுப்பிக்கவும்.';
+
+  @override
+  String get exportingAllData =>
+      'உங்கள் தரவு ஏற்றுமதி செய்யப்படுகிறது… Omi-ஐ திறந்தே வைக்கவும்; பெரிய கணக்குகளுக்கு பல நிமிடங்கள் ஆகலாம்.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பேச்சாளர்கள்',
+      one: '1 பேச்சாளர்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'ஒத்திசைக்கப்பட்ட நகல்களை தானாக அகற்று';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'ஒத்திசைக்கப்பட்ட நகல்கள் $days நாட்களுக்குப் பிறகு நீக்கப்படும்';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'ஒத்திசைத்த $days நாட்களுக்குப் பிறகு உள்ளூர் நகல்களை நீக்கும். கிளவுட் நகல்கள் வைக்கப்படும்.';
+  }
+
+  @override
+  String get localCopiesSection => 'உள்ளூர் நகல்கள்';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count வரிகளுக்கு லேபிளிடப்பட்டது',
+      one: '1 வரிக்கு லேபிளிடப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'குரல் கற்றுக்கொள்ளப்பட்டது',
+        'pending': 'குரலைக் கற்றுக்கொள்கிறது…',
+        'disabled': 'குரல் சேமிப்பு முடக்கப்பட்டுள்ளது',
+        'other': 'குரல் இன்னும் கற்றுக்கொள்ளப்படவில்லை',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'அடுத்த முறை Omi $name அவர்களை அடையாளம் காணும்.',
+        'pending': 'இதற்கு சில விநாடிகள் ஆகும்.',
+        'disabled': 'Omi $name அவர்களை அடையாளம் காண, அமைப்புகளில் குரல் சேமிப்பை இயக்கவும்.',
+        'other': 'Omi-க்கு $name அவர்களின் இன்னும் தெளிவான பேச்சு தேவை; அது தொடர்ந்து முயற்சிக்கும்.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'முந்தைய $count உரையாடல்களில் கண்டறியப்பட்டது',
+      one: 'முந்தைய 1 உரையாடலில் கண்டறியப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'சாத்தியம்',
+        'soundsLike': '$name போல ஒலிக்கிறது',
+        'notPerson': '$name இல்லை',
+        'carried': 'இன்னும் $name. உங்கள் கடைசி உரையாடலில் இருந்து தொடர்கிறது.',
+        'change': 'மாற்று',
+        'alsoTitle': 'இதுவும் $name தானா?',
+        'alsoBody': 'முந்தைய உரையாடல்களில் Omi இதே குரலைக் கண்டறிந்தது.',
+        'confirmed': 'இந்த லேபிளை உறுதிப்படுத்தினீர்கள்',
+        'other': 'மதிப்பாய்வு',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'இந்தக் குரலின் $duration';
+  }
+
+  @override
+  String get findDeviceNoneTitle => 'Omi எதுவும் கிடைக்கவில்லை';
+
+  @override
+  String get findDeviceNoneMessage => 'அதை இயக்கி, உங்கள் ஃபோனுக்கு அருகில் வைத்திருங்கள்.';
+
+  @override
+  String get startupFailedDetails => 'விவரங்கள்';
+
+  @override
+  String get couldNotLoadApiKeys => 'API விசைகளை ஏற்ற முடியவில்லை.';
+
+  @override
+  String get speakerTagPromptNoAction => 'இல்லை…';
+
+  @override
+  String get diagnosticsRightNow => 'இப்போது';
+
+  @override
+  String get diagnosticsLast7Days => 'கடந்த 7 நாட்கள்';
+
+  @override
+  String get diagnosticsConnectedFor => 'இணைந்திருக்கும் நேரம்';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'தானாகவே மீண்டும் இணைகிறது';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'சிறிய துண்டிப்புகள், ஒவ்வொரு முறையும் சுமார் $duration இல் மீண்டும் இணைகிறது';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'இந்த வாரம் துண்டிப்புகள் இல்லை';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'இணைப்பதில் சிக்கல்';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'கடந்த 24 மணிநேரத்தில் தோல்வியுற்ற இணைப்புகள்: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'துண்டிப்புகள்';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'மணிக்கு சுமார் $count';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'நீண்ட இடைவெளி';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'இணைத்ததிலிருந்து: $drops துண்டிப்புகள், $failed தோல்வியுற்ற இணைப்புகள்.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'கடந்த $duration';
+  }
+
+  @override
+  String get chatReplyOffline => 'இணைக்க முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get chatReplyServerError => 'எங்கள் பக்கத்தில் ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get chatReplyTimeout => 'பதில் அதிக நேரம் எடுத்தது. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get chatReplyNotSignedIn => 'நீங்கள் உள்நுழையவில்லை. உள்நுழைந்து மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get chatAppsLoadFailed => 'அரட்டை செயலிகளை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'குரல்';
+
+  @override
+  String get assistantVoice => 'உதவியாளர் குரல்';
+
+  @override
+  String get voiceSharedAcrossDevices => 'நீங்கள் தேர்ந்தெடுத்த குரல் மொபைல் மற்றும் டெஸ்க்டாப்பில் பகிரப்படும்.';
+
+  @override
+  String get readChatRepliesAloud => 'அரட்டை பதில்களை சத்தமாக வாசி';
+
+  @override
+  String get readChatRepliesAloudDescription => '\"குரல் பதில்\" அனுமதிக்கும்போது மட்டுமே பேசும்.';
+
+  @override
+  String get voicePreviewSample => 'ஹாய், நான் Omi. இது என் குரல்.';
+
+  @override
+  String get peopleStatsIncomplete => 'எண்ணிக்கைகள் முழுமையற்றதாக இருக்கலாம்.';
+
+  @override
+  String get previousDay => 'முந்தைய நாள்';
+
+  @override
+  String get nextDay => 'அடுத்த நாள்';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date அன்று பணிகள் இல்லை';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'உரையாடல் மீண்டும் செயலாக்கப்படுகிறது…';
+
+  @override
+  String get conversationReprocessed => 'உரையாடல் புதுப்பிக்கப்பட்டது';
+
+  @override
+  String get loadingTranscript => 'டிரான்ஸ்கிரிப்ட் ஏற்றப்படுகிறது…';
+
+  @override
+  String get transcriptLoadFailed => 'டிரான்ஸ்கிரிப்டை ஏற்ற முடியவில்லை.';
+
+  @override
+  String get processingConversationProgress => 'உரையாடல் செயலாக்கப்படுகிறது…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'இந்த உரையாடலைச் செயலாக்க முடியவில்லை.';
+
+  @override
+  String get waitForReprocessing => 'மீண்டும் செயலாக்கம் முடியும் வரை காத்திருக்கவும்.';
+
+  @override
+  String get unnamedSpeakerLabel => 'பேச்சாளர்';
+
+  @override
+  String get unresolvedSpeakersNotice => 'பதிவுகளில் பேசுபவர்கள் பிரிக்கப்படவில்லை.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'பேச்சாளர் லேபிள்கள் பற்றி';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'பதிவுகளில் மற்ற குரல்களை Omi வேறுபடுத்த முடியவில்லை. யார் பேசுகிறார்கள் எனப் பெயரிட பேச்சாளர் லேபிளைத் தட்டவும்.';
+
+  @override
+  String get nameSpeakerTitle => 'பேச்சாளருக்கு பெயரிடவும்';
+
+  @override
+  String get playbackPreparingAudio => 'ஆடியோ தயாராகிறது…';
+
+  @override
+  String get playbackBackToCurrent => 'தற்போதையதற்குத் திரும்பு';
+
+  @override
+  String get playbackAudioUnavailable => 'ஆடியோ கிடைக்கவில்லை';
+
+  @override
+  String get playbackAudioLoadFailed => 'ஆடியோவை ஏற்ற முடியவில்லை';
+
+  @override
+  String get playbackAudioNetworkFailed => 'இணைப்பைச் சரிபார்க்கவும்';
+
+  @override
+  String get forYou => 'உங்களுக்காக';
+
+  @override
+  String get stopThese => 'இவற்றை நிறுத்து';
+
+  @override
+  String get dismiss => 'மறை';
+
+  @override
+  String get showOnLockScreen => 'பூட்டுத் திரையில் காட்டு';
 }

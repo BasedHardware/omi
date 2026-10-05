@@ -505,7 +505,7 @@ struct ProactiveNotificationBadge: Equatable {
       (label, systemImage) = ("Memory", "brain.head.profile")
     case .integration:
       (label, systemImage) = ("Integration", "sparkles.rectangle.stack")
-    case .functional:
+    case .functional, .proactivityV2:
       (label, systemImage) = ("Omi", "bell")
     case .general:
       // Decode-only: rows journaled before proactive kinds were part of the

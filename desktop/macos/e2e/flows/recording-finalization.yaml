@@ -31,6 +31,9 @@ covers:
   # Without it the produced summary is stored and never shown, which is what this
   # flow's S5/S6 steps would see as a placeholder title on a free-tier account.
   - desktop/macos/Desktop/Sources/Services/APIClient/ConversationProjectionRendering.swift
+  # Retry schedule and failure classification for from-segments uploads; the
+  # finalizer consults it on every failure. XCTest is the behavioral proof.
+  - desktop/macos/Desktop/Sources/Rewind/Core/FinalizationRetryPolicy.swift
   - desktop/Desktop/Sources/AppState.swift
   - desktop/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift

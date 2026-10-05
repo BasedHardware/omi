@@ -1,6 +1,9 @@
 import json
 import os
 
+import pytest
+from fastapi import HTTPException
+
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "test-openai-key-not-real")
 os.environ.setdefault("PINECONE_API_KEY", "test-pinecone-key-not-real")
@@ -130,3 +133,54 @@ def test_patch_does_not_poison_stored_app_model(monkeypatch):
     assert app.category == 'productivity'
     assert app.author == 'Original Author'
     assert app.description == 'Original Description'
+
+
+def test_patch_explicit_null_external_integration_clears_stored_value(monkeypatch):
+    """Explicit null on external_integration must clear the stored integration instead of returning 500."""
+    stored = {
+        'id': 'app-1',
+        'uid': 'owner',
+        'name': 'Original Name',
+        'category': 'productivity',
+        'author': 'Original Author',
+        'description': 'Original Description',
+        'image': 'https://example.com/logo.png',
+        'capabilities': ['external_integration'],
+        'approved': False,
+        'private': True,
+        'external_integration': {
+            'triggers_on': 'memory_creation',
+            'webhook_url': 'https://example.com/webhook',
+            'app_home_url': 'https://example.com',
+        },
+    }
+    written = _run_update(monkeypatch, {'external_integration': None}, stored=stored)
+
+    assert 'external_integration' in written
+    assert written['external_integration'] is None
+
+
+def test_patch_non_object_external_integration_is_rejected_with_422(monkeypatch):
+    """A non-object external_integration must fail validation with 422, not crash the helpers."""
+    with pytest.raises(HTTPException) as exc_info:
+        _run_update(monkeypatch, {'external_integration': 'not-an-object'})
+
+    assert exc_info.value.status_code == 422
+
+
+def test_patch_external_integration_object_still_backfills_home_url(monkeypatch):
+    """A dict external_integration still runs the app_home_url backfill and instructions-url flag."""
+    payload = {
+        'external_integration': {
+            'triggers_on': 'memory_creation',
+            'webhook_url': 'https://example.com/webhook',
+            'auth_steps': [{'name': 'Connect', 'url': 'https://example.com/auth'}],
+            'setup_instructions_file_path': ' https://example.com/setup ',
+        },
+    }
+    written = _run_update(monkeypatch, payload)
+
+    integration = written['external_integration']
+    assert integration['app_home_url'] == 'https://example.com/auth'
+    assert integration['setup_instructions_file_path'] == 'https://example.com/setup'
+    assert integration['is_instructions_url'] is True

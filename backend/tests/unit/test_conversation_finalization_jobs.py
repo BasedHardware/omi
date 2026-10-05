@@ -1088,7 +1088,9 @@ def test_worker_budget_survives_failed_write_and_crashed_lease_replay():
     assert conversation_ref.data['discarded'] is False
     assert conversation_ref.data['transcript_segments'] == [{'text': 'persisted'}]
     assert conversation_ref.data['finalization_status'] == 'dead_letter'
-    assert conversation_ref.data['structured'] == {'title': '', 'overview': ''}
+    # A kept row never lands untitled: the deterministic first-sentence title.
+    assert conversation_ref.data['structured'] == {'title': 'persisted', 'overview': ''}
+    assert conversation_ref.data['summary_retryable'] is True
     api_row = Conversation.model_validate(
         {
             'id': 'conversation-1',
@@ -1099,7 +1101,8 @@ def test_worker_budget_survives_failed_write_and_crashed_lease_replay():
             'transcript_segments': [{'text': 'persisted', 'is_user': False, 'start': 0, 'end': 1}],
         }
     )
-    assert api_row.structured.title == ''
+    assert api_row.structured.title == 'persisted'
+    assert api_row.summary_retryable is True
     assert api_row.discarded is False
 
 
@@ -1694,6 +1697,32 @@ def test_complete_orphan_completes_only_an_unchanged_orphan_generation():
 
     assert completed is True
     assert transaction.updates == [(orphan, {'status': 'completed'})]
+
+
+def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
+    transaction = _Transaction()
+    now = _now()
+    admitted = now - timedelta(seconds=1000)
+    orphan = _Ref(
+        'orphan',
+        {
+            'status': 'processing',
+            'processing_admitted_at': admitted,
+            'structured': {'title': '', 'overview': '', 'category': 'other'},
+            'transcript_segments': [{'text': 'Call the plumber tomorrow. Also groceries.'}],
+        },
+    )
+
+    assert jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, now, 'uid-1') is True
+    assert transaction.updates == [
+        (
+            orphan,
+            {
+                'status': 'completed',
+                'structured': {'title': 'Call the plumber tomorrow.', 'overview': '', 'category': 'other'},
+            },
+        )
+    ]
 
 
 def test_complete_orphan_fences_a_row_a_finalizer_claimed_after_discovery():

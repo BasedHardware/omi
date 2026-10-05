@@ -196,10 +196,29 @@ class PrePushCiPredictionTests(unittest.TestCase):
         for path in ("app/android/app/build.gradle", "app/lib/pigeon_interfaces.dart", "app/pubspec.lock"):
             with self.subTest(path=path):
                 self.assertEqual(github_outputs(self.plan([path]))["has_app_android_pr"], "true")
-        for path in ("app/integration_test/journeys/j2_chat_send_assistant_reply_test.dart",
-                     "app/lib/services/capture/capture_service.dart"):
+        for path in (
+            "app/integration_test/journeys/j2_chat_send_assistant_reply_test.dart",
+            "app/lib/services/capture/capture_service.dart",
+        ):
             with self.subTest(path=path):
                 self.assertEqual(github_outputs(self.plan([path]))["has_app_journeys_pr"], "true")
+
+    def test_startup_wal_and_emulator_owner_inputs_select_android_acceptance(self):
+        for path in (
+            "app/lib/main.dart",
+            "app/lib/startup/startup_controller.dart",
+            "app/lib/services/wals/local_wal_sync.dart",
+            "app/lib/services/capture/capture_controller.dart",
+            "app/scripts/android_emulator.py",
+            "app/scripts/android_startup_smoke.py",
+            "app/scripts/android_fgs_probe.py",
+            "app/integration_test/android_fgs_probe/build.gradle",
+            ".github/workflows/mobile-app-checks.yml",
+        ):
+            with self.subTest(path=path):
+                outputs = github_outputs(self.plan([path]))
+                self.assertEqual(outputs["has_app_android_pr"], "true")
+                self.assertEqual(outputs["has_app_compile_smoke"], "true")
 
     def test_generated_dart_and_l10n_do_not_wake_journeys(self) -> None:
         plan = self.plan(["app/lib/models/task.g.dart", "app/lib/l10n/app_fr.arb"])
@@ -294,6 +313,26 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertEqual(outputs["has_flutter_generated"], "true")
         self.assertEqual(outputs["has_app_codegen"], "true")
         self.assertEqual(outputs["has_app_l10n"], "true")
+
+    def test_unrelated_detect_changes_routing_does_not_wake_flutter_regeneration(self) -> None:
+        path = ".github/actions/detect-changes/action.yml"
+        base = "has_admin=$(echo $FILES | grep -q '^web/admin/' && echo true)\nhas_dart=$FILES\nhas_arb=$FILES\n"
+        current = base.replace("^web/admin/", "^web/admin/|^firestore.indexes.json$")
+
+        plan = self.plan([path], contents={path: current}, base_contents={path: base})
+
+        self.assertFalse(plan.includes("flutter-codegen"))
+        self.assertFalse(plan.includes("flutter-l10n"))
+
+    def test_flutter_routing_definition_change_wakes_flutter_regeneration(self) -> None:
+        path = ".github/actions/detect-changes/action.yml"
+        base = "has_dart=$(echo $FILES | grep -q '\\.dart$')\nhas_arb=$FILES\n"
+        current = base.replace("\\.dart$", "\\.(dart|g.dart)$")
+
+        plan = self.plan([path], contents={path: current}, base_contents={path: base})
+
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertTrue(plan.includes("flutter-l10n"))
 
     def test_real_generator_inputs_still_wake_flutter_regeneration(self) -> None:
         codegen = self.plan(["app/build.yaml"])

@@ -10,7 +10,10 @@ import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
 import 'package:omi/backend/http/api/users.dart'
     show deleteDailySummary, getDailySummary, regenerateDailySummary, setDailySummaryVisibility;
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/pages/action_items/day_tasks_page.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
+import 'package:omi/pages/conversations/day_conversations_page.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart' show parseRecapDate;
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -25,7 +28,16 @@ class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
   final DailySummary? summary; // Can pass directly if already loaded
 
-  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary});
+  final DayConversationsFetcher? dayConversationsFetcher;
+  final DayTasksFetcher? dayTasksFetcher;
+
+  const DailySummaryDetailPage({
+    super.key,
+    required this.summaryId,
+    this.summary,
+    this.dayConversationsFetcher,
+    this.dayTasksFetcher,
+  });
 
   @override
   State<DailySummaryDetailPage> createState() => _DailySummaryDetailPageState();
@@ -433,10 +445,33 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildStatsRow(DailySummary summary) {
+    final l10n = context.l10n;
+    final recapDay = parseRecapDate(summary.date);
     final items = <Widget>[
-      _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
-      _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
-      _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
+      _buildStatItem(
+        FontAwesomeIcons.message,
+        '${summary.stats.totalConversations}',
+        key: const ValueKey('recap_conversations_stat'),
+        semanticsLabel: l10n.conversationCount(summary.stats.totalConversations),
+        onTap: recapDay == null
+            ? null
+            : () => routeToPage(
+                context, DayConversationsPage(date: recapDay, fetchConversations: widget.dayConversationsFetcher)),
+      ),
+      _buildStatItem(
+        FontAwesomeIcons.clock,
+        summary.stats.formattedDuration,
+        semanticsLabel: '${l10n.durationLabel}, ${summary.stats.formattedDuration}',
+      ),
+      _buildStatItem(
+        FontAwesomeIcons.circleCheck,
+        '${summary.stats.actionItemsCount}',
+        key: const ValueKey('recap_tasks_stat'),
+        semanticsLabel: l10n.tasksCountLabel(summary.stats.actionItemsCount),
+        onTap: recapDay == null
+            ? null
+            : () => routeToPage(context, DayTasksPage(date: recapDay, fetchTasks: widget.dayTasksFetcher)),
+      ),
     ];
     if ((summary.stats.watchingMinutes ?? 0) > 0) {
       items.add(_buildStatItem(FontAwesomeIcons.eye, summary.stats.formattedWatchingDuration!));
@@ -457,10 +492,11 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
-  Widget _buildStatItem(FaIconData icon, String value) {
-    return Container(
+  Widget _buildStatItem(FaIconData icon, String value, {Key? key, VoidCallback? onTap, String? semanticsLabel}) {
+    final tile = Container(
+      constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -470,7 +506,24 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             value,
             style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
           ),
+          if (onTap != null) ...[
+            const SizedBox(width: OmiSpacing.xxs),
+            Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 14),
+          ],
         ],
+      ),
+    );
+    if (onTap == null) {
+      return KeyedSubtree(key: key, child: tile);
+    }
+    return Semantics(
+      key: key,
+      button: true,
+      label: semanticsLabel,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: OmiRadius.lgAll,
+        child: InkWell(borderRadius: OmiRadius.lgAll, onTap: onTap, child: tile),
       ),
     );
   }

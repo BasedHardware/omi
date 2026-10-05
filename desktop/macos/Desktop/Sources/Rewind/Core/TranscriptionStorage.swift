@@ -656,6 +656,28 @@ actor TranscriptionStorage {
       return updatedRows
     }
   }
+
+  @discardableResult
+  func updateLiveSpeakerAssignment(
+    sessionId: Int64,
+    speakerId: Int,
+    personId: String
+  ) async throws -> Int {
+    let db = try await ensureInitialized()
+
+    return try await db.write { database -> Int in
+      try database.execute(
+        sql: """
+          UPDATE transcription_segments
+          SET isUser = ?, personId = ?
+          WHERE sessionId = ? AND speaker = ?
+          """,
+        arguments: [false, personId, sessionId, speakerId]
+      )
+      return database.changesCount
+    }
+  }
+
   /// Get all segments for a session ordered by segmentOrder
   func getSegments(sessionId: Int64) async throws -> [TranscriptionSegmentRecord] {
     let db = try await ensureInitialized()
@@ -732,6 +754,8 @@ actor TranscriptionStorage {
   }
 
   /// Get all unfinished sessions that should be finalized or retried by the canonical finalizer.
+  /// Failed local-segment sessions never exhaust (see `FinalizationRetryPolicy`), including rows an
+  /// older build stranded at `retryCount >= maxRetries`.
   func getSessionsNeedingFinalization(maxRetries: Int = 5, uploadingStaleAfter seconds: TimeInterval = 300) async throws
     -> [TranscriptionSessionRecord]
   {
@@ -742,10 +766,31 @@ actor TranscriptionStorage {
       try TranscriptionSessionRecord
         .filter(Column("backendSynced") == false)
         .filter(
-          Column("status") == TranscriptionSessionStatus.pendingUpload.rawValue
-            || (Column("status") == TranscriptionSessionStatus.uploading.rawValue
-              && Column("updatedAt") < uploadingCutoff)
-            || (Column("status") == TranscriptionSessionStatus.failed.rawValue && Column("retryCount") < maxRetries)
+          sql: """
+            status = ?
+            OR (status = ? AND updatedAt < ?)
+            OR (
+                status = ?
+                AND (
+                    retryCount < ?
+                    OR finalizationStrategy = ?
+                    OR (
+                        finalizationStrategy IS NULL
+                        AND (backendId IS NULL OR backendId = '')
+                        AND source = ?
+                    )
+                )
+            )
+            """,
+          arguments: [
+            TranscriptionSessionStatus.pendingUpload.rawValue,
+            TranscriptionSessionStatus.uploading.rawValue,
+            uploadingCutoff,
+            TranscriptionSessionStatus.failed.rawValue,
+            maxRetries,
+            TranscriptionFinalizationStrategy.localSegments.rawValue,
+            ConversationSource.desktop.rawValue,
+          ]
         )
         .order(Column("createdAt").asc)
         .fetchAll(database)

@@ -117,13 +117,6 @@ final class PresenceAwareNotificationSuppressionTests: XCTestCase {
       "You said you'd send Maya the spec.")
   }
 
-  /// The suppression must be attributable in delivery telemetry rather than looking like a
-  /// silent drop, which is the failure mode that made the wake word undiagnosable.
-  func testSuppressionReasonIsRepresentable() {
-    XCTAssertEqual(InsightAssistantTelemetry.Reason.presenceActive.rawValue, "presence_active")
-    XCTAssertTrue(InsightAssistantTelemetry.Reason.allCases.contains(.presenceActive))
-  }
-
   /// The reason a withheld suggestion must not be written into the dedup window.
   ///
   /// `SuggestionAssistant` remembers a suggestion immediately before delivering it, and the

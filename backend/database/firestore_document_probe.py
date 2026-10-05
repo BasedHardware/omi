@@ -55,11 +55,17 @@ label. Recording never raises.
 
 from __future__ import annotations
 
+import atexit
+import datetime as dt
 import inspect
+import json
 import logging
 import math
+import os
 import re
+import secrets
 import threading
+import time
 from typing import Any, Callable
 
 from prometheus_client import Counter
@@ -159,6 +165,117 @@ _PLUMBING_PREFIXES = ('google.', 'concurrent.', 'asyncio.', 'threading.', 'conte
 _PLUMBING_EXACT = frozenset({'asyncio', 'threading', 'contextlib'})
 _known_callers: set[str] = set()
 _caller_lock = threading.Lock()
+
+
+# The in-process bill ledger is deliberately independent of caller attribution.
+# It reuses _record's already-computed amount and never walks the stack.
+def _ledger_service_name() -> str:
+    """Name this process on the bill.
+
+    An explicit setting wins. Cloud Run injects ``K_SERVICE`` or
+    ``CLOUD_RUN_JOB``. GKE listen and pusher already publish different
+    ``DD_SERVICE`` values, and the co-host gate allows that split, so the
+    ledger reuses it instead of adding a second name that would have to differ.
+    """
+
+    raw = (
+        os.environ.get('FIRESTORE_READ_LEDGER_SERVICE', '').strip()
+        or os.environ.get('K_SERVICE', '').strip()
+        or os.environ.get('CLOUD_RUN_JOB', '').strip()
+        or os.environ.get('DD_SERVICE', '').strip()
+    )
+    if re.fullmatch(r'[a-z0-9-]{1,64}', raw):
+        return raw
+    return 'other'
+
+
+_LEDGER_ENABLED = os.environ.get('FIRESTORE_READ_LEDGER') == '1'
+_LEDGER_EPOCH = secrets.token_hex(8)
+_LEDGER_SERVICE = _ledger_service_name()
+_LEDGER_LOCK = threading.Lock()
+_ledger_day: str | None = None
+_ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
+_ledger_unscoped = 0
+_ledger_seq = 0
+_ledger_last_emit = 0.0
+
+
+def _ledger_emit_locked(day: str) -> None:
+    global _ledger_seq, _ledger_last_emit
+    _ledger_seq += 1
+    payload = {
+        'event': 'firestore_read_ledger',
+        'schema': 1,
+        'service': _LEDGER_SERVICE,
+        'epoch': _LEDGER_EPOCH,
+        'seq': _ledger_seq,
+        'day': day,
+        'lookup': _ledger_counts['lookup'],
+        'not_found': _ledger_counts['not_found'],
+        'query': _ledger_counts['query'],
+        'unscoped': _ledger_unscoped,
+    }
+    try:
+        logger.info('%s', json.dumps(payload, separators=(',', ':'), sort_keys=True))
+    except Exception:
+        pass
+    _ledger_last_emit = time.monotonic()
+
+
+def _ledger_record(amount: float, kind: str, project: str | None) -> None:
+    global _ledger_day, _ledger_counts, _ledger_unscoped
+    if not _LEDGER_ENABLED:
+        return
+    try:
+        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        with _LEDGER_LOCK:
+            now = time.monotonic()
+            if _ledger_day is None:
+                _ledger_day = today
+            elif today != _ledger_day:
+                _ledger_emit_locked(_ledger_day)
+                _ledger_day = today
+                _ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
+            if project is not None and project != 'based-hardware':
+                return
+            if project is None:
+                _ledger_unscoped = 1
+            _ledger_counts[kind if kind in _ledger_counts else 'query'] += int(amount)
+            if now - _ledger_last_emit >= 60:
+                _ledger_emit_locked(_ledger_day)
+    except Exception:
+        # Ledger failures may never affect the Firestore caller.
+        return
+
+
+def _sdk_project(obj: Any) -> str | None:
+    """Read the project's SDK client field; None means identity was unavailable."""
+    try:
+        client = getattr(obj, '_client', None)
+        if client is None:
+            parent = getattr(obj, '_parent', None)
+            client = getattr(parent, '_client', None)
+        if client is None:
+            client = obj
+        project = getattr(client, 'project')
+        return project if isinstance(project, str) and project else None
+    except Exception:
+        return None
+
+
+def _ledger_atexit() -> None:
+    if not _LEDGER_ENABLED:
+        return
+    try:
+        with _LEDGER_LOCK:
+            if _ledger_day is not None:
+                _ledger_emit_locked(_ledger_day)
+    except Exception:
+        return
+
+
+if _LEDGER_ENABLED:
+    atexit.register(_ledger_atexit)
 
 # (qualified class, method, sync|async, wrapped|funnel|builder|unimplemented|absent)
 # Funnel methods delegate to a wrapped method on google-cloud-firestore 2.20.0.
@@ -339,6 +456,7 @@ def _record(
     kind: str | None = None,
     caller: str | None = None,
     outcome: str | None = None,
+    sdk_object: Any = None,
 ) -> None:
     """Count billed reads on every counter. Never raises."""
     if outcome is None:
@@ -347,6 +465,8 @@ def _record(
         kind = 'not_found' if outcome == 'miss' else 'lookup'
     if caller is None:
         caller = 'unattributed'
+    if _LEDGER_ENABLED:
+        _ledger_record(amount, kind, _sdk_project(sdk_object))
     pattern = collection_pattern(path_parts)
     tier = current_tier()
     try:
@@ -405,14 +525,14 @@ def _snapshot_path(snapshot: Any, fallback: Any) -> Any:
     return path or fallback
 
 
-def _finish_query(path: Any, caller: str, yielded: int, offset: int) -> None:
+def _finish_query(path: Any, caller: str, yielded: int, offset: int, query: Any = None) -> None:
     # Offset skips are billed even when the client stops reading. Zero documents
     # and a zero offset still bill the one-read query minimum.
     extra = offset if offset > 0 else 0
     if yielded + extra == 0:
         extra = 1
     if extra:
-        _record(path, False, amount=extra, kind='query', caller=caller, outcome='floor')
+        _record(path, False, amount=extra, kind='query', caller=caller, outcome='floor', sdk_object=query)
     _record_operation(path)
 
 
@@ -487,7 +607,7 @@ def _wrap_lookup_get(original: Any) -> Any:
     def get(self: Any, *args: Any, **kwargs: Any) -> Any:
         caller = call_site()
         snapshot = original(self, *args, **kwargs)
-        _record(getattr(self, '_path', ()), bool(getattr(snapshot, 'exists', False)), caller=caller)
+        _record(getattr(self, '_path', ()), bool(getattr(snapshot, 'exists', False)), caller=caller, sdk_object=self)
         return snapshot
 
     return get
@@ -497,7 +617,7 @@ def _wrap_async_lookup_get(original: Any) -> Any:
     async def get(self: Any, *args: Any, **kwargs: Any) -> Any:
         caller = call_site()
         snapshot = await original(self, *args, **kwargs)
-        _record(getattr(self, '_path', ()), bool(getattr(snapshot, 'exists', False)), caller=caller)
+        _record(getattr(self, '_path', ()), bool(getattr(snapshot, 'exists', False)), caller=caller, sdk_object=self)
         return snapshot
 
     return get
@@ -508,7 +628,12 @@ def _wrap_get_all(original: Any) -> Any:
         caller = call_site()
         for snapshot in original(self, references, *args, **kwargs):
             reference = getattr(snapshot, 'reference', None)
-            _record(getattr(reference, '_path', ()), bool(getattr(snapshot, 'exists', False)), caller=caller)
+            _record(
+                getattr(reference, '_path', ()),
+                bool(getattr(snapshot, 'exists', False)),
+                caller=caller,
+                sdk_object=reference or self,
+            )
             yield snapshot
 
     return get_all
@@ -519,7 +644,12 @@ def _wrap_async_get_all(original: Any) -> Any:
         caller = call_site()
         async for snapshot in original(self, references, *args, **kwargs):
             reference = getattr(snapshot, 'reference', None)
-            _record(getattr(reference, '_path', ()), bool(getattr(snapshot, 'exists', False)), caller=caller)
+            _record(
+                getattr(reference, '_path', ()),
+                bool(getattr(snapshot, 'exists', False)),
+                caller=caller,
+                sdk_object=reference or self,
+            )
             yield snapshot
 
     return get_all
@@ -630,10 +760,10 @@ def _wrap_query_stream(original: Any) -> Any:
             nonlocal yielded
             if _counts_as_document(snapshot):
                 yielded += 1
-                _record(_snapshot_path(snapshot, path), True, kind='query', caller=caller)
+                _record(_snapshot_path(snapshot, path), True, kind='query', caller=caller, sdk_object=self)
 
         def on_finish() -> None:
-            _finish_query(path, caller, yielded, offset)
+            _finish_query(path, caller, yielded, offset, self)
 
         return _ObservedSync(inner, on_item, on_finish)
 
@@ -652,10 +782,10 @@ def _wrap_async_query_stream(original: Any) -> Any:
             nonlocal yielded
             if _counts_as_document(snapshot):
                 yielded += 1
-                _record(_snapshot_path(snapshot, path), True, kind='query', caller=caller)
+                _record(_snapshot_path(snapshot, path), True, kind='query', caller=caller, sdk_object=self)
 
         def on_finish() -> None:
-            _finish_query(path, caller, yielded, offset)
+            _finish_query(path, caller, yielded, offset, self)
 
         return _ObservedAsync(inner, on_item, on_finish)
 
@@ -676,13 +806,13 @@ def _wrap_aggregation_stream(original: Any) -> Any:
             saw_result = True
             try:
                 for matched, billed in _aggregation_amount(self, result):
-                    _record(path, matched > 0, amount=billed, kind='query', caller=caller)
+                    _record(path, matched > 0, amount=billed, kind='query', caller=caller, sdk_object=self)
             except Exception:
                 logger.warning('firestore document read probe failed to record', exc_info=True)
 
         def on_finish() -> None:
             if not saw_result:
-                _record(path, False, kind='query', caller=caller, outcome='floor')
+                _record(path, False, kind='query', caller=caller, outcome='floor', sdk_object=self)
 
         return _ObservedSync(inner, on_item, on_finish)
 
@@ -703,13 +833,13 @@ def _wrap_async_aggregation_stream(original: Any) -> Any:
             saw_result = True
             try:
                 for matched, billed in _aggregation_amount(self, result):
-                    _record(path, matched > 0, amount=billed, kind='query', caller=caller)
+                    _record(path, matched > 0, amount=billed, kind='query', caller=caller, sdk_object=self)
             except Exception:
                 logger.warning('firestore document read probe failed to record', exc_info=True)
 
         def on_finish() -> None:
             if not saw_result:
-                _record(path, False, kind='query', caller=caller, outcome='floor')
+                _record(path, False, kind='query', caller=caller, outcome='floor', sdk_object=self)
 
         return _ObservedAsync(inner, on_item, on_finish)
 
@@ -726,11 +856,11 @@ def _wrap_list_documents(original: Any) -> Any:
         def on_item(ref: Any) -> None:
             nonlocal yielded
             yielded += 1
-            _record(getattr(ref, '_path', None) or path, True, kind='query', caller=caller)
+            _record(getattr(ref, '_path', None) or path, True, kind='query', caller=caller, sdk_object=self)
 
         def on_finish() -> None:
             if yielded == 0:
-                _record(path, False, kind='query', caller=caller, outcome='floor')
+                _record(path, False, kind='query', caller=caller, outcome='floor', sdk_object=self)
 
         return _ObservedSync(inner, on_item, on_finish)
 
@@ -747,11 +877,11 @@ def _wrap_async_list_documents(original: Any) -> Any:
         def on_item(ref: Any) -> None:
             nonlocal yielded
             yielded += 1
-            _record(getattr(ref, '_path', None) or path, True, kind='query', caller=caller)
+            _record(getattr(ref, '_path', None) or path, True, kind='query', caller=caller, sdk_object=self)
 
         def on_finish() -> None:
             if yielded == 0:
-                _record(path, False, kind='query', caller=caller, outcome='floor')
+                _record(path, False, kind='query', caller=caller, outcome='floor', sdk_object=self)
 
         return _ObservedAsync(inner, on_item, on_finish)
 
@@ -766,7 +896,7 @@ def _wrap_collections(original: Any) -> Any:
         inner = original(self, *args, **kwargs)
 
         def on_finish() -> None:
-            _record(path, False, kind='query', caller=caller, outcome='floor')
+            _record(path, False, kind='query', caller=caller, outcome='floor', sdk_object=self)
 
         return _ObservedSync(inner, lambda _item: None, on_finish)
 
@@ -780,7 +910,7 @@ def _wrap_async_collections(original: Any) -> Any:
         inner = original(self, *args, **kwargs)
 
         def on_finish() -> None:
-            _record(path, False, kind='query', caller=caller, outcome='floor')
+            _record(path, False, kind='query', caller=caller, outcome='floor', sdk_object=self)
 
         return _ObservedAsync(inner, lambda _item: None, on_finish)
 
@@ -799,11 +929,11 @@ def _wrap_partitions(original: Any) -> Any:
         def on_item(_part: Any) -> None:
             nonlocal yielded
             yielded += 1
-            _record(path, True, kind='query', caller=caller)
+            _record(path, True, kind='query', caller=caller, sdk_object=self)
 
         def on_finish() -> None:
             if yielded == 0:
-                _record(path, False, kind='query', caller=caller, outcome='floor')
+                _record(path, False, kind='query', caller=caller, outcome='floor', sdk_object=self)
 
         return _ObservedSync(inner, on_item, on_finish)
 
@@ -820,11 +950,11 @@ def _wrap_async_partitions(original: Any) -> Any:
         def on_item(_part: Any) -> None:
             nonlocal yielded
             yielded += 1
-            _record(path, True, kind='query', caller=caller)
+            _record(path, True, kind='query', caller=caller, sdk_object=self)
 
         def on_finish() -> None:
             if yielded == 0:
-                _record(path, False, kind='query', caller=caller, outcome='floor')
+                _record(path, False, kind='query', caller=caller, outcome='floor', sdk_object=self)
 
         return _ObservedAsync(inner, on_item, on_finish)
 
@@ -840,9 +970,9 @@ def _wrap_on_snapshot(original: Any, path_of: Callable[[Any], Any]) -> Any:
             try:
                 amount = _listen_documents(payload)
                 if amount <= 0:
-                    _record(path, False, kind='query', caller=caller, outcome='floor')
+                    _record(path, False, kind='query', caller=caller, outcome='floor', sdk_object=self)
                 else:
-                    _record(path, True, amount=amount, kind='query', caller=caller)
+                    _record(path, True, amount=amount, kind='query', caller=caller, sdk_object=self)
             except Exception:
                 logger.warning('firestore document read probe failed to record', exc_info=True)
             return callback(payload, changes, read_time)

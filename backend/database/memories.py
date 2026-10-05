@@ -32,6 +32,7 @@ from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
 from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_stream_list
+from utils.other.portability_read import current_portability_read, verified_encrypted_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
 
@@ -174,17 +175,21 @@ def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
 def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(memory_data)
 
+    in_portability_export = current_portability_read() is not None
     if 'content' in data and isinstance(data['content'], str):
+        raw_content = data['content']
         try:
-            data['content'] = encryption.decrypt(data['content'], uid)
+            data['content'] = encryption.decrypt(raw_content, uid)
         except Exception:
             pass
+        data['content'] = verified_encrypted_read(raw_content, data['content'])
     if 'evidence' in data and isinstance(data['evidence'], str):
         try:
-            decrypted = encryption.decrypt(data['evidence'], uid)
+            decrypted = verified_encrypted_read(data['evidence'], encryption.decrypt(data['evidence'], uid))
             data['evidence'] = json.loads(decrypted)
         except Exception:
-            pass
+            if in_portability_export:
+                raise
     return data
 
 
@@ -552,6 +557,35 @@ def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *
         counted = _aggregation_count(legacy_query)
         return counted if counted is not None else 0
     return 0
+
+
+def count_default_visible_memories(uid: str, *, firestore_client: Any = None) -> int:
+    """Cheap approximation of how many memories the default ``/v3/memories`` list shows.
+
+    Uses at most two single-field ``count()`` aggregations and no new index:
+
+    * Canonical store first: ``memory_items`` with ``status == 'active'``. This
+      drops superseded, hidden, and tombstoned items like the default list, but
+      still counts Archive-tier items (hidden unless ``include_archive``) and does
+      not apply short-term expiry or device-scope filtering, which only run in
+      Python after the read.
+    * An account with no active canonical item falls back to the whole legacy
+      ``memories`` collection. User-rejected or invalidated legacy rows cannot be
+      excluded server-side (see ``_memory_passes_list_visibility``), so they are
+      counted.
+
+    The two stores are never summed: dual-store ids would be double-counted
+    (see ``count_memories_created``).
+    """
+    database = _get_db(firestore_client)
+    canonical_collection = database.collection(MemoryCollections(uid=uid).memory_items)
+    canonical_active = canonical_collection.where(filter=FieldFilter('status', '==', 'active')).count().get()
+    canonical_count = int(canonical_active[0][0].value or 0)
+    if canonical_count:
+        return canonical_count
+    legacy_collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    legacy_count = legacy_collection.count().get()
+    return int(legacy_count[0][0].value or 0)
 
 
 _HISTORICAL_SCAN_PAGE_MAX = 500

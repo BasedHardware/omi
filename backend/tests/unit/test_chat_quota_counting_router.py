@@ -368,3 +368,103 @@ def test_voice_message_sse_decode_failure_is_typed_and_cleans_staged_input():
         cleanup.assert_called_once_with(['/tmp/test-uid_stream.opus'], 'test-uid')
     finally:
         _cleanup(saved)
+
+
+_QUOTA_DETAIL = {
+    'error': 'quota_exceeded',
+    'plan': 'Free',
+    'unit': 'questions',
+    'used': 30,
+    'limit': 30,
+}
+
+_QUOTA_ERROR_FRAME = 'error: {"error":"quota_exceeded","message":"quota_exceeded"}'
+_ACCOUNTING_ERROR_FRAME = 'error: {"error":"server_error","message":"quota_accounting_unavailable"}'
+_PROTOCOL_HEADER = {'X-Omi-Chat-Failure-Protocol': '1'}
+
+
+def _post_message(client, **headers):
+    return client.post(
+        '/v2/messages',
+        json={'text': 'hello', 'file_ids': []},
+        headers={'X-App-Platform': 'ios', **headers},
+    )
+
+
+def test_quota_exceeded_emits_typed_error_frame_before_done_for_protocol_clients():
+    client, module, saved = _make_chat_client()
+    try:
+        module.enforce_chat_quota.side_effect = module.HTTPException(status_code=402, detail=dict(_QUOTA_DETAIL))
+        module.execute_chat_stream = MagicMock()
+
+        response = _post_message(client, **_PROTOCOL_HEADER)
+
+        assert response.status_code == 200
+        assert _QUOTA_ERROR_FRAME in response.text
+        assert 'done: ' in response.text
+        assert response.text.index(_QUOTA_ERROR_FRAME) < response.text.index('done: ')
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
+        module.execute_chat_stream.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_quota_exceeded_keeps_legacy_done_only_contract_without_protocol():
+    client, module, saved = _make_chat_client()
+    try:
+        module.enforce_chat_quota.side_effect = module.HTTPException(status_code=402, detail=dict(_QUOTA_DETAIL))
+        module.execute_chat_stream = MagicMock()
+
+        for headers in ({}, {'X-Omi-Chat-Failure-Protocol': '2'}):
+            response = _post_message(client, **headers)
+
+            assert response.status_code == 200, headers
+            assert 'error: ' not in response.text
+            assert response.text.count('done: ') == 1
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
+        module.execute_chat_stream.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_quota_accounting_unavailable_emits_typed_error_frame_before_done_for_protocol_clients():
+    client, module, saved = _make_chat_client()
+    try:
+        stream_calls = {'n': 0}
+
+        async def tracking_stream(*args, **kwargs):
+            stream_calls['n'] += 1
+            kwargs['callback_data']['answer'] = 'should not run'
+            yield ''
+
+        module.execute_chat_stream = tracking_stream
+        module.llm_usage_db.record_chat_quota_question.side_effect = RuntimeError('firestore unavailable')
+
+        response = _post_message(client, **_PROTOCOL_HEADER)
+
+        assert response.status_code == 200
+        assert _ACCOUNTING_ERROR_FRAME in response.text
+        assert 'done: ' in response.text
+        assert response.text.index(_ACCOUNTING_ERROR_FRAME) < response.text.index('done: ')
+        assert stream_calls['n'] == 0
+        module.chat_db.add_message.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_quota_accounting_unavailable_keeps_legacy_done_only_contract_without_protocol():
+    client, module, saved = _make_chat_client()
+    try:
+        module.llm_usage_db.record_chat_quota_question.side_effect = RuntimeError('firestore unavailable')
+        module.execute_chat_stream = MagicMock()
+
+        for headers in ({}, {'X-Omi-Chat-Failure-Protocol': '2'}):
+            response = _post_message(client, **headers)
+
+            assert response.status_code == 200, headers
+            assert 'error: ' not in response.text
+            assert response.text.count('done: ') == 1
+        module.chat_db.add_message.assert_not_called()
+        module.execute_chat_stream.assert_not_called()
+    finally:
+        _cleanup(saved)

@@ -728,6 +728,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void onDeviceDisconnected() async {
     final generation = _sessionGeneration;
+    // Capture before setConnectedDevice(null) clears both device references.
+    final disconnectedDeviceId = pairedDevice?.id ?? connectedDevice?.id;
     Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
@@ -739,7 +741,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsConnected(false);
     updateConnectingStatus(false);
 
-    captureProvider?.updateRecordingDevice(null);
+    // Recovery changes the link, not the user's capture intent. Retain the
+    // session (and Resume control) while native reports the physical link down.
+    if (disconnectedDeviceId == null || !BleBridge.instance.preservesCaptureIntent(disconnectedDeviceId)) {
+      captureProvider?.updateRecordingDevice(null);
+    }
 
     // Batch mode: the native writer finalizes the in-progress recording on
     // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes
@@ -761,7 +767,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
 
-    PlatformManager.instance.analytics.deviceDisconnected();
+    unawaited(_trackDeviceDisconnected(disconnectedDeviceId, generation));
     BatteryWidgetService().updateBatteryInfo(
       deviceName: SharedPreferencesUtil().deviceName,
       batteryLevel: -1,
@@ -775,6 +781,32 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
+  }
+
+  /// Emits the enriched Device Disconnected analytics event with the reason
+  /// native persisted for this disconnect. Both platforms persist the event
+  /// before notifying Dart, so the freshest history entry is the one that
+  /// triggered this callback; diagnostics are best-effort and degrade to
+  /// `unknown` when the read fails (non-BLE devices, early teardown).
+  Future<void> _trackDeviceDisconnected(String? deviceId, int generation) async {
+    BleDisconnectEvent? latest;
+    if (deviceId != null && deviceId.isNotEmpty) {
+      try {
+        final diagnostics = await _bleDiagnosticsLoader(deviceId);
+        if (!_isCurrent(generation)) return;
+        final history = diagnostics.disconnectHistory;
+        if (history.isNotEmpty) latest = history.last;
+      } catch (_) {
+        if (!_isCurrent(generation)) return;
+        // Native diagnostics are best-effort; emit without reason detail.
+      }
+    }
+    if (!_isCurrent(generation)) return;
+    PlatformManager.instance.analytics.deviceDisconnected(
+      reason: latest?.reason,
+      reasonCode: latest?.reasonCode,
+      appState: latest?.appState,
+    );
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
@@ -941,15 +973,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (WalSyncs.isRingBufferFirmware(fwVersion)) {
         final ringStatus = await connection.getRingStatus();
         if (!_isCurrent(generation)) return;
-        if (ringStatus != null) {
-          _ringStatus = ringStatus;
+        final info = connection.lastRingInfo;
+        final coherent = _coherentRingStatus(ringStatus, info);
+        if (coherent != null) {
+          _ringStatus = coherent;
           notifyListeners();
         }
-        if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
+        if (coherent == null || coherent.unreadPackets <= 0) return;
         Logger.debug(
-          'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
+          'DeviceProvider: Ring auto-sync detected ${coherent.unreadPackets} unread packets (${coherent.usedBytes} bytes)',
         );
-        onOfflineDataDetected?.call(device, ringStatus.unreadPackets, ringStatus.usedBytes);
+        onOfflineDataDetected?.call(device, coherent.unreadPackets, coherent.usedBytes);
         return;
       }
 
@@ -978,16 +1012,36 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       if (!_isCurrent(generation)) return;
       if (connection == null) return;
+      final info = await connection.getRingInfo();
+      if (!_isCurrent(generation)) return;
       final status = await connection.getRingStatus();
       if (!_isCurrent(generation)) return;
-      if (status != null) {
-        _ringStatus = status;
+      final coherent = _coherentRingStatus(status, info ?? connection.lastRingInfo);
+      if (coherent != null) {
+        _ringStatus = coherent;
         notifyListeners();
       }
     } catch (e) {
       if (!_isCurrent(generation)) return;
       Logger.debug('DeviceProvider: refreshRingStorageStatus failed: $e');
     }
+  }
+
+  static RingStatus? _coherentRingStatus(RingStatus? status, RingInfo? info) {
+    if (info == null) return status;
+    final pkt = info.packetSize > 0 ? info.packetSize : 444;
+    final infoUnread = info.unreadPackets;
+    final infoFree = (info.capacityPackets - infoUnread).clamp(0, info.capacityPackets) * pkt;
+    if (status == null) {
+      return RingStatus(usedBytes: infoUnread * pkt, unreadPackets: infoUnread, freeBytes: infoFree, rtcValid: 0);
+    }
+    final free = status.freeBytes > 0 ? status.freeBytes : infoFree;
+    return RingStatus(
+      usedBytes: status.usedBytes,
+      unreadPackets: status.unreadPackets,
+      freeBytes: free,
+      rtcValid: status.rtcValid,
+    );
   }
 
   Future<void> _ensureCompanionAssociation(BtDevice device, int generation) async {

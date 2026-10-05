@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
+from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
@@ -15,11 +16,14 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
+from utils.live_speaker_carry import carried_receipt
+from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.live_continuation import resolve_live_continuation
 from utils.conversation_continuity import resumable_continuation
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.transcribe_decisions import (
@@ -327,9 +331,18 @@ class LiveConversationController:
             latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos'))
         ) and await self.schedule_finalization(conversation_id)
 
+    def _active_speaker_scope(self) -> Optional[str]:
+        epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
+        return getattr(epoch, 'current_scope', None)
+
     async def create_new_in_progress_conversation(self, *, rollover: bool = False) -> None:
         request = self.host.request
+        carry_from: Optional[tuple[str, str]] = None
         if rollover:
+            previous_id = self.host.state.current_conversation_id
+            active_scope = self._active_speaker_scope()
+            if previous_id and active_scope:
+                carry_from = (previous_id, active_scope)
             continuation = await self._continuation()
             if continuation and await self._resume_continuation(continuation):
                 return
@@ -431,6 +444,12 @@ class LiveConversationController:
             'conversation_role': request.conversation_role,
             'recording_session_id': self.host.recording_session_id,
         }
+        if self.host.client_conversation_id and sync_lineage_resolve_enabled():
+            # Every rollover generation names the client's recording, which the
+            # phone also stamps on its WALs, so sync can find them all.
+            external_data['recording_origin_id'] = self.host.client_conversation_id
+        if getattr(request, 'screen_evidence_pass', False):
+            external_data['screen_evidence_pass'] = True
         onboarding_session_id = resolve_onboarding_provenance_marker(self.host)
         if onboarding_session_id:
             # This marker reflects the backend's own onboarding-admission
@@ -456,13 +475,36 @@ class LiveConversationController:
             external_data=external_data,
             geolocation=request.geolocation,
         )
+        carry = {}
+        if carry_from:
+            try:
+                previous = await self.host.persistence.call(
+                    conversations_db.get_conversation,
+                    request.uid,
+                    carry_from[0],
+                    read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
+                )
+            except Exception as error:
+                logger.warning('Speaker carry lookup failed type=%s', type(error).__name__)
+                previous = None
+            if (
+                previous
+                and not previous.get('deleted')
+                and not previous.get('discarded')
+                and not previous.get('is_locked')
+                and self._active_speaker_scope() == carry_from[1]
+            ):
+                carry = carried_receipt(previous, carry_from[1])
+        # The modeled field's None default is omitted, never stamped:
+        # persist is merge=True, so a dumped None would become an
+        # explicit Firestore key on every fresh recording.
+        payload = omit_null_processing_state(conversation.model_dump())
+        if carry:
+            payload['manual_speaker_assignments'] = carry
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
-            # The modeled field's None default is omitted, never stamped:
-            # persist is merge=True, so a dumped None would become an
-            # explicit Firestore key on every fresh recording.
-            omit_null_processing_state(conversation.model_dump()),
+            payload,
             idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
         )
         if rollover:
@@ -591,13 +633,88 @@ class LiveConversationController:
         # work. Returning here dropped both (pre-split this was an unconditional sleep).
         await self.host.wait(7)
         if timed_out_id:
-            await self.process_conversation(timed_out_id)
+            await self._finalize_isolated(self.process_conversation, timed_out_id, stage='timed_out')
         processing = await self.host.persistence.call(
             conversations_db.get_processing_conversations, self.host.request.uid
         )
         for conversation in processing or []:
-            await self.schedule_finalization(conversation['id'])
+            await self._finalize_isolated(self.schedule_finalization, conversation['id'], stage='processing')
         await self.recover_stale_in_progress()
+
+    async def _finalize_isolated(
+        self, finalize: Callable[[str], Awaitable[bool]], conversation_id: str, *, stage: str
+    ) -> None:
+        """Finalize one earlier conversation without letting its failure end the live session.
+
+        process_pending runs as a supervised finite task, so an exception escaping it is a
+        supervisor crash that tears down the socket. A conversation whose finalization write
+        fails every time (a document already at Firestore's 1 MiB limit) was retried by each
+        reconnect and ended each session seconds after it started, so the client reconnected
+        in a loop and its live transcription never ran. A transient failure (contention, an
+        expired transaction) keeps the row's status for the next session's sweep; unrelated rows
+        in the same sweep still run. A rejection at the 1 MiB ceiling is permanent, so that row
+        goes to ``_close_oversized`` instead of being retried by every reconnect.
+        """
+        try:
+            await finalize(conversation_id)
+        except Exception as error:
+            failure = classify_finalization_failure(error, conversation_id)
+            if failure.conversation_at_size_limit:
+                await self._close_oversized(conversation_id, stage=stage)
+                return
+            # Bounded tokens, never the message: Firestore names the rejected
+            # document by its path, which carries the uid.
+            logger.error(
+                'Listen pending finalization failed stage=%s conversation=%s type=%s reason=%s document=%s',
+                stage,
+                conversation_id,
+                type(error).__name__,
+                failure.reason,
+                failure.document,
+            )
+
+    async def _close_oversized(self, conversation_id: str, *, stage: str) -> None:
+        """Terminalize a row whose finalization can never commit because it is at the 1 MiB ceiling.
+
+        Retrying is pointless (the binding write grows the document) and the row
+        would stay ``in_progress``, invisible to the user, while every reconnect
+        retried it. The lifecycle owner closes it as a kept, completed
+        conversation with its transcript intact; its own fences decide, and any
+        refusal leaves the row exactly as it was.
+        """
+        try:
+            outcome = await self.host.persistence.call(
+                lifecycle_service.close_oversized_in_progress_conversation,
+                self.host.request.uid,
+                conversation_id,
+                quiet_for=timedelta(seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS),
+            )
+        except Exception as error:
+            logger.error(
+                'Listen oversized conversation close failed stage=%s conversation=%s type=%s reason=%s',
+                stage,
+                conversation_id,
+                type(error).__name__,
+                classify_finalization_failure(error, conversation_id).reason,
+            )
+            return
+        logger.warning(
+            'Listen pending finalization hit the document size limit stage=%s conversation=%s close=%s',
+            stage,
+            conversation_id,
+            outcome,
+        )
+        if outcome != 'closed':
+            return
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='listen_finalization',
+            to_mode='oversized_terminal',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        self.on_conversation_processed(conversation_id)
 
     async def recover_stale_in_progress(self) -> None:
         """Route orphaned `in_progress` conversations through normal finalization (#9809).
@@ -624,7 +741,7 @@ class LiveConversationController:
                 conversation['id'],
                 conversation.get('finished_at'),
             )
-            await self.process_conversation(conversation['id'])
+            await self._finalize_isolated(self.process_conversation, conversation['id'], stage='stale_in_progress')
 
     async def lifecycle_loop(self) -> None:
         while self.host.state.active:
@@ -654,7 +771,7 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
             elif action == ConversationLifecycleAction.process_and_create_new:
                 await self.host.transcripts.flush_speaker_assignments(conversation_id)
-                await self.process_conversation(conversation_id)
+                await self._finalize_isolated(self.process_conversation, conversation_id, stage='lifecycle_rollover')
                 await self.create_new_in_progress_conversation(rollover=True)
 
     async def send_last_conversation(self) -> None:

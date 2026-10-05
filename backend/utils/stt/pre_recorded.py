@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import observe_sync_call, sync_phase_timer
 import logging
 import os
 import time
@@ -34,9 +35,11 @@ from config.stt_provider_policy import (
 )
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
+from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
+from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 
@@ -822,11 +825,13 @@ def parakeet_prerecorded_from_bytes(
             data = {}
 
         with httpx.Client(timeout=_verification_timeout(_PARAKEET_TIMEOUT)) as client:
-            response = client.post(url, files=files, data=data if data else None)
+            response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
                 client.timeout = _verification_timeout(_PARAKEET_TIMEOUT)
-                response = client.post(url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')})
+                response = observe_sync_call(
+                    'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+                )
                 use_v2 = False
         response.raise_for_status()
         payload: Any = response.json()
@@ -902,7 +907,7 @@ def parakeet_prerecorded(
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(f'parakeet_prerecorded url_len={len(audio_url)} {speakers_count} {attempts}')
     try:
-        with httpx.Client(timeout=_PARAKEET_URL_DOWNLOAD_TIMEOUT) as client:
+        with sync_phase_timer('gcs'), httpx.Client(timeout=_PARAKEET_URL_DOWNLOAD_TIMEOUT) as client:
             with client.stream('GET', audio_url) as resp:
                 resp.raise_for_status()
                 content_length = resp.headers.get('content-length')
@@ -979,7 +984,7 @@ def _parakeet_assign_speaker_sync(
         counts.append(1)
         return f'SPEAKER_{best_i:02d}'
     except Exception as e:
-        logger.warning(f'Parakeet batch diarization failed, defaulting to SPEAKER_00: {e}')
+        logger.warning('Parakeet batch diarization failed, defaulting to SPEAKER_00: %s', sanitize_provider_error(e))
         return 'SPEAKER_00'
 
 
@@ -1243,7 +1248,7 @@ def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegme
     starts_at = segments[0]['start']
     return [
         TranscriptSegment(
-            text=str(segment['text']).strip().capitalize(),
+            text=normalize_brand_terms(str(segment['text']).strip().capitalize()),
             speaker=segment['speaker'],
             is_user=segment['is_user'],
             person_id=None,

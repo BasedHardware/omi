@@ -12,13 +12,19 @@ actor MemoryExportService {
 
   private let defaults: UserDefaults
   private let apiClient: APIClient
+  private let createMCPKey: @Sendable () async throws -> String
   private let notionVersion = "2026-03-11"
   private let notionBaseURL = URL(string: "https://api.notion.com/v1")!
-  private var mcpKeyWarmTask: (ownerUserId: String, id: UUID, task: Task<String, Error>)?
+  private var mcpKeyCreationTask: (ownerUserId: String, id: UUID, task: Task<String, Error>)?
 
-  init(apiClient: APIClient = .shared, defaults: UserDefaults = .standard) {
+  init(
+    apiClient: APIClient = .shared,
+    defaults: UserDefaults = .standard,
+    createMCPKey: (@Sendable () async throws -> String)? = nil
+  ) {
     self.apiClient = apiClient
     self.defaults = defaults
+    self.createMCPKey = createMCPKey ?? { try await apiClient.createMCPKey(name: "Omi Desktop") }
   }
 
   private struct OAuthGrant: Decodable {
@@ -224,16 +230,8 @@ actor MemoryExportService {
 
   // MARK: - MCP key
 
-  nonisolated var hasStoredMCPKey: Bool {
-    let defaults = UserDefaults.standard
-    guard
-      let userId = Self.normalizedDefaultsString(defaults.string(forKey: Self.authUserIDDefaultsKey)),
-      let ownerUserId = Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyOwnerDefaultsKey)),
-      ownerUserId == userId
-    else {
-      return false
-    }
-    return Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyDefaultsKey)) != nil
+  var hasStoredMCPKey: Bool {
+    storedMCPKey() != nil
   }
 
   func storedMCPKey() -> String? {
@@ -247,57 +245,43 @@ actor MemoryExportService {
     return Self.normalizedDefaultsString(defaults.string(forKey: Self.mcpKeyDefaultsKey))
   }
 
-  /// Returns the cached MCP key, minting a fresh one via the backend on first use.
+  /// User-triggered setup only: reuse the owner-bound key or mint one on demand.
   func ensureMCPKey() async throws -> String {
     if let existing = storedMCPKey() {
       return existing
     }
     let ownerUserId = try requireCurrentAuthUserId()
-    if let inFlight = mcpKeyWarmTask {
+    if let inFlight = mcpKeyCreationTask {
       if inFlight.ownerUserId == ownerUserId {
         return try await finishMCPKeyTask(inFlight.task, id: inFlight.id, ownerUserId: ownerUserId)
       }
       inFlight.task.cancel()
-      mcpKeyWarmTask = nil
+      mcpKeyCreationTask = nil
     }
 
     let task = Task<String, Error> {
-      try await APIClient.shared.createMCPKey(name: "Omi Desktop")
+      try await createMCPKey()
     }
     let id = UUID()
-    mcpKeyWarmTask = (ownerUserId, id, task)
+    mcpKeyCreationTask = (ownerUserId, id, task)
     return try await finishMCPKeyTask(task, id: id, ownerUserId: ownerUserId)
   }
 
-  /// Returns the key for a user-triggered local connector setup. Uses an
-  /// existing cached key or in-flight warmup first, and mints only when warmup
-  /// did not prepare a key in time.
+  /// Reuses the cached key or shares an in-flight user-triggered creation.
   func mcpKeyForLocalConnectorSetup() async throws -> String {
-    if let existing = storedMCPKey() {
-      return existing
-    }
-    let ownerUserId = try requireCurrentAuthUserId()
-    if let inFlight = mcpKeyWarmTask, inFlight.ownerUserId == ownerUserId {
-      return try await finishMCPKeyTask(inFlight.task, id: inFlight.id, ownerUserId: ownerUserId)
-    }
-    return try await ensureMCPKey()
-  }
-
-  func warmMCPKeyForCurrentUser() async {
-    do {
-      _ = try await ensureMCPKey()
-      log("MemoryExportService: hosted MCP key ready for current user")
-    } catch {
-      log("MemoryExportService: hosted MCP key warmup failed: \(error.localizedDescription)")
-    }
+    try await ensureMCPKey()
   }
 
   /// Mint a fresh hosted MCP key and make future setup prompts use it.
   func createNewMCPKey() async throws -> String {
     let ownerUserId = try requireCurrentAuthUserId()
-    mcpKeyWarmTask?.task.cancel()
-    mcpKeyWarmTask = nil
-    let key = try await APIClient.shared.createMCPKey(name: "Omi Desktop")
+    mcpKeyCreationTask?.task.cancel()
+    mcpKeyCreationTask = nil
+    let key = try await createMCPKey()
+    guard currentAuthUserId() == ownerUserId else {
+      throw MemoryExportError.requestFailed(
+        "Signed-in Omi account changed while preparing the connection key.")
+    }
     storeMCPKey(key, ownerUserId: ownerUserId)
     return key
   }
@@ -314,13 +298,13 @@ actor MemoryExportService {
           "Signed-in Omi account changed while preparing the connection key.")
       }
       storeMCPKey(key, ownerUserId: ownerUserId)
-      if mcpKeyWarmTask?.id == id {
-        mcpKeyWarmTask = nil
+      if mcpKeyCreationTask?.id == id {
+        mcpKeyCreationTask = nil
       }
       return key
     } catch {
-      if mcpKeyWarmTask?.id == id {
-        mcpKeyWarmTask = nil
+      if mcpKeyCreationTask?.id == id {
+        mcpKeyCreationTask = nil
       }
       throw error
     }

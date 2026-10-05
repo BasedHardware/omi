@@ -403,6 +403,7 @@ def send_message(
     # raw 402 (which older mobile clients render as a generic server error).
     # Catalog overage plans return normally. Desktop pre-checks via
     # /v1/users/me/usage-quota and never reaches this path when over.
+    typed_failures = request.headers.get('X-Omi-Chat-Failure-Protocol') == '1'
     try:
         enforce_chat_quota(uid, platform=x_app_platform, required_llm_provider=_required_chat_quota_provider())
     except HTTPException as exc:
@@ -426,6 +427,8 @@ def send_message(
         )
 
         def _quota_exceeded_stream():
+            if typed_failures:
+                yield 'error: {"error":"quota_exceeded","message":"quota_exceeded"}\n\n'
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
             yield f"done: {encoded}\n\n"
 
@@ -493,6 +496,8 @@ def send_message(
         response_msg = _build_quota_accounting_unavailable_reply(compat_app_id)
 
         def _quota_accounting_unavailable_stream():
+            if typed_failures:
+                yield 'error: {"error":"server_error","message":"quota_accounting_unavailable"}\n\n'
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
             yield f"done: {encoded}\n\n"
 
@@ -509,7 +514,7 @@ def send_message(
         llm_executor.submit(extract_and_update_goal_progress, uid, data.text)
 
     app = get_available_app_by_id(compat_app_id, uid)
-    app = App(**app) if app else None
+    app = App.deserialize_safe(app) if app else None
 
     app_id_from_app = app.id if app else None
 
@@ -856,9 +861,7 @@ def get_messages(
             logger.info(f"  - Message {m.get('id')}: rating={m.get('rating')}")
 
     if not messages:
-        # The greeting belongs to the session that was read, not to whatever
-        # session `acquire_chat_session` would pick for the app.
-        return [] if offset > 0 else [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
+        return []
     # FastAPI validates the response against Message, so one malformed/legacy stored row would
     # 500 the whole page; skip bad rows the same way the send path does.
     return Message.deserialize_many_safe(
@@ -1604,7 +1607,7 @@ async def transcribe_voice_message_stream(
             # The second check also covers a selector that ignores ``exclude``
             # and re-offers a provider this session already marked dead.
             return False
-        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
+        hop = PendingLiveFailover.from_socket(dg_socket, dead_provider or 'unknown', service.value)
         try:
             if service == STTService.parakeet:
                 # A provider is never offered its own failure as a fallback, so
@@ -1653,7 +1656,7 @@ async def transcribe_voice_message_stream(
         dg_socket = socket
         stt_service, stt_language, stt_model = actual_service, next_language, next_model
         if actual_service.value != hop.to_mode:
-            hop = PendingLiveFailover(from_mode=hop.from_mode, to_mode=actual_service.value)
+            hop.to_mode = actual_service.value
         pending_live_failover = hop
         logger.info(f'STT failover mid-session: {dead_provider} -> {actual_service.value}')
         if previous_socket is not None:

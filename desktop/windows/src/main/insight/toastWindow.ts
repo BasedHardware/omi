@@ -15,10 +15,13 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import iconPath from '../../../resources/icon.png?asset'
 import type { InsightPayload, MeetingToastPayload, WhatsNewPayload } from '../../shared/types'
+import type { ToastDeliveryHooks } from './deliveryHooks'
 import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
 const HEIGHT = 168
+// V2 adds a source-opening action below bounded title/body previews.
+const PROACTIVITY_HEIGHT = 236
 // The what's-new card carries more copy (a 3-item changelog + a button) than an
 // insight/meeting toast, so it gets a taller window sized to its content — three
 // changes each wrapping to two lines, the headline, and the release-notes button
@@ -32,6 +35,12 @@ const MEETING_ASK_DISMISS_MS = 30_000
 // longer than an insight so it isn't gone before it's read.
 const WHATS_NEW_DISMISS_MS = 20_000
 
+let activeDelivery: {
+  itemID: string
+  hooks: ToastDeliveryHooks
+  payload: InsightPayload
+  rendered: boolean
+} | null = null
 let toastWindow: BrowserWindow | null = null
 let dismissTimer: ReturnType<typeof setTimeout> | null = null
 // Dismiss duration of the toast currently shown — hover-resume must re-arm
@@ -41,7 +50,7 @@ let currentDismissMs = AUTO_DISMISS_MS
 function armDismiss(ms: number): void {
   currentDismissMs = ms
   if (dismissTimer) clearTimeout(dismissTimer)
-  dismissTimer = setTimeout(hideInsightToast, ms)
+  dismissTimer = setTimeout(() => dismissInsightToast('timeout'), ms)
 }
 // The meeting payload currently on screen. Kept so the toast renderer can PULL
 // it on mount ('meeting:getToast'): a push sent between the window's
@@ -137,18 +146,26 @@ function position(win: BrowserWindow, height: number = HEIGHT): void {
   })
 }
 
-export function showInsightToast(payload: InsightPayload): void {
+export function showInsightToast(payload: InsightPayload, hooks?: ToastDeliveryHooks): void {
+  if (hooks && !hooks.isCurrent()) return
+  activeDelivery =
+    hooks && payload.proactivityItemID
+      ? { itemID: payload.proactivityItemID, hooks, payload, rendered: false }
+      : null
   const win = ensureWindow()
-  position(win)
+  position(win, payload.proactivityItemID ? PROACTIVITY_HEIGHT : HEIGHT)
   // An insight replaces whatever is on the shared toast — clear any meeting /
   // what's-new payload so a later toast-window reload can't resurface a stale card
   // via meeting:getToast / whatsnew:getPending.
   currentMeetingToast = null
   currentWhatsNew = null
   // showInactive: appear on top without taking focus from the user's current app.
-  win.showInactive()
+  if (!hooks) win.showInactive()
   const send = (): void => {
-    if (!win.isDestroyed()) win.webContents.send('insight:payload', payload)
+    if (win.isDestroyed() || (hooks && (!hooks.isCurrent() || activeDelivery?.hooks !== hooks)))
+      return
+    if (hooks) win.showInactive()
+    win.webContents.send('insight:payload', payload)
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
@@ -159,6 +176,7 @@ export function showInsightToast(payload: InsightPayload): void {
  *  linger longer (a decision prompt); capture notices use the standard timeout.
  *  Never silent capture: every auto-start goes through here. */
 export function showMeetingToast(payload: MeetingToastPayload): void {
+  activeDelivery = null
   const win = ensureWindow()
   position(win)
   win.showInactive()
@@ -177,6 +195,7 @@ export function showMeetingToast(payload: MeetingToastPayload): void {
 /** Show the post-update what's-new card in the shared toast window (Phase 8).
  *  Informational, so it uses a longer dismiss and never steals focus. */
 export function showWhatsNewToast(payload: WhatsNewPayload): void {
+  activeDelivery = null
   const win = ensureWindow()
   position(win, WHATS_NEW_HEIGHT)
   win.showInactive()
@@ -196,6 +215,7 @@ export function hideMeetingToast(): void {
 }
 
 export function hideInsightToast(): void {
+  activeDelivery = null
   currentMeetingToast = null
   currentWhatsNew = null
   if (dismissTimer) {
@@ -223,4 +243,52 @@ export function resumeInsightDismiss(): void {
 /** Pre-create the (hidden) toast window so the first insight shows instantly. */
 export function createInsightToastWindow(): void {
   ensureWindow()
+}
+
+/** IPC cannot supply a target or report outcomes for another toast/owner. */
+export function isInsightToastSender(senderID: number): boolean {
+  return !!toastWindow && !toastWindow.isDestroyed() && toastWindow.webContents.id === senderID
+}
+
+export function openProactivityToast(itemID: string): void {
+  const delivery = activeDelivery
+  if (!delivery || delivery.itemID !== itemID || !delivery.rendered || !delivery.hooks.isCurrent()) return
+  delivery.hooks.onOpened()
+  hideInsightToast()
+}
+
+export function dismissInsightToast(reason: 'dismissed' | 'timeout'): void {
+  const delivery = activeDelivery
+  if (delivery?.rendered && delivery.hooks.isCurrent()) delivery.hooks.onDismissed(reason)
+  hideInsightToast()
+}
+
+export function getCurrentProactivityToast(): InsightPayload | null {
+  return activeDelivery?.hooks.isCurrent() ? activeDelivery.payload : null
+}
+export function acknowledgeProactivityRender(itemID: string): void {
+  const delivery = activeDelivery
+  if (
+    !delivery ||
+    delivery.itemID !== itemID ||
+    delivery.rendered ||
+    !delivery.hooks.isCurrent() ||
+    !toastWindow?.isVisible()
+  )
+    return
+  delivery.rendered = true
+  delivery.hooks.onPresented()
+}
+export function feedbackProactivityToast(
+  itemID: string,
+  action: 'thumbs_up' | 'thumbs_down'
+): void {
+  const delivery = activeDelivery
+  if (delivery?.itemID === itemID && delivery.rendered && delivery.hooks.isCurrent())
+    delivery.hooks.onFeedback?.(action)
+}
+
+/** Session refresh only revokes the v2 delivery owned by this consumer. */
+export function hideProactivityToast(): void {
+  if (activeDelivery) hideInsightToast()
 }

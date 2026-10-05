@@ -36,13 +36,14 @@ ACTION_SOURCE_RELATIVE_PATHS = _bridge_action_sources() + (
     "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift",
     "Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift",
     "Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift",
-    "Desktop/Sources/ProactiveAssistants/ContextBucketDirectorProbeRegistration.swift",
+    "Desktop/Sources/ProactiveAssistants/ProactiveCaptureStatusSnapshotRegistration.swift",
     "Desktop/Sources/Automation/DesktopAutomationHomeStageActions.swift",
     "Desktop/Sources/Automation/DesktopAutomationActivationActions.swift",
     "Desktop/Sources/Automation/DesktopAutomationAskOmiActions.swift",
     "Desktop/Sources/Automation/DesktopAutomationPTTRecoveryActions.swift",
     "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
+    "Desktop/Sources/MainWindow/Pages/Settings/DataExport/AccountDataExportModel.swift",
 )
 
 FLOW_LINT_INPUTS = frozenset(

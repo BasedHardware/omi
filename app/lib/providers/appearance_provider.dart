@@ -8,7 +8,8 @@ Brightness resolveAppearanceBrightness(ThemeMode mode, Brightness systemBrightne
       ThemeMode.system => systemBrightness,
     };
 
-/// Persists the user's appearance choice; unknown stored values follow the system.
+/// Persists the user's appearance choice. Preference initialization preserves
+/// System for existing installs and pins Light for new ones; unknown values use Light.
 class AppearanceProvider extends ChangeNotifier {
   AppearanceProvider({String Function()? read, Future<void> Function(String)? write})
       : _read = read ?? (() => SharedPreferencesUtil().appearanceMode),
@@ -23,15 +24,16 @@ class AppearanceProvider extends ChangeNotifier {
   ThemeMode get mode => _mode;
 
   static ThemeMode parse(String? value) => switch (value) {
-        'light' => ThemeMode.light,
         'dark' => ThemeMode.dark,
-        _ => ThemeMode.system,
+        'system' => ThemeMode.system,
+        _ => ThemeMode.light,
       };
 
   Future<void> setMode(ThemeMode mode) async {
-    if (_mode == mode) return;
-    _mode = mode;
-    notifyListeners();
+    if (_mode != mode) {
+      _mode = mode;
+      notifyListeners();
+    }
     await _write(mode.name);
   }
 }

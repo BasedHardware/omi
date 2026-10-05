@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -255,11 +256,28 @@ def _is_app_l10n_input(path: str) -> bool:
     return (path.startswith("app/lib/l10n/") and path.endswith(".arb")) or path == "app/l10n.yaml"
 
 
-def _defines_flutter_generation(path: str) -> bool:
+def _defines_flutter_generation(
+    path: str,
+    source: str | None = None,
+    base_source: str | None = None,
+) -> bool:
     # Routing metadata cannot make a committed generated file stale, but the
     # files that define the regeneration commands or forward their outputs can:
     # they must keep waking the regeneration lanes they own.
-    return path in FLUTTER_GENERATION_DEFINITION_INPUTS or path.startswith(FLUTTER_GENERATION_DEFINITION_PREFIXES)
+    if path in FLUTTER_GENERATION_DEFINITION_INPUTS:
+        return True
+    if not path.startswith(FLUTTER_GENERATION_DEFINITION_PREFIXES):
+        return False
+    if source is None or base_source is None:
+        return True
+
+    # detect-changes also routes web/admin, backend, and other unrelated work.
+    # Only edits to its Dart/ARB change classification can affect Flutter
+    # generated-output selection; an admin path-filter edit must not run l10n.
+    flutter_routing_lines = re.compile(r"\b(?:has_dart|has_arb)\b")
+    current = tuple(line.strip() for line in source.splitlines() if flutter_routing_lines.search(line))
+    base = tuple(line.strip() for line in base_source.splitlines() if flutter_routing_lines.search(line))
+    return current != base
 
 
 def _is_app_compile_smoke_input(path: str) -> bool:
@@ -274,6 +292,7 @@ def _is_app_compile_smoke_input(path: str) -> bool:
             "app/setup/scripts/",
             "app/config/",
             "app/assets/",
+            "app/integration_test/android_fgs_probe/",
         )
     ) or path in {
         "app/pubspec.yaml",
@@ -282,24 +301,52 @@ def _is_app_compile_smoke_input(path: str) -> bool:
         "app/analysis_options.yaml",
         "app/l10n.yaml",
         "app/flavorizr.yaml",
+        "app/scripts/android_emulator.py",
+        "app/scripts/android_startup_smoke.py",
+        "app/scripts/android_fgs_probe.py",
     }
 
 
 def _is_app_android_pr_input(path: str) -> bool:
     """Inputs that can change Android's build graph or native interface on a PR."""
-    return path.startswith(("app/android/", "app/setup/prebuilt/", "app/setup/scripts/")) or path in {
-        "app/lib/pigeon_interfaces.dart", "app/lib/phone_mic_interface.dart",
-        "app/pubspec.yaml", "app/pubspec.lock", "app/build.yaml",
+    return path.startswith(
+        (
+            "app/android/",
+            "app/setup/prebuilt/",
+            "app/setup/scripts/",
+            "app/integration_test/android_fgs_probe/",
+            "app/lib/startup/",
+            "app/lib/services/wals/",
+            "app/lib/services/capture/",
+        )
+    ) or path in {
+        "app/lib/pigeon_interfaces.dart",
+        "app/lib/phone_mic_interface.dart",
+        "app/lib/main.dart",
+        "app/lib/startup_auth.dart",
+        "app/lib/startup_firebase.dart",
+        "app/lib/startup_routing.dart",
+        "app/lib/flavors.dart",
+        "app/scripts/android_emulator.py",
+        "app/scripts/android_startup_smoke.py",
+        "app/scripts/android_fgs_probe.py",
+        "app/pubspec.yaml",
+        "app/pubspec.lock",
+        "app/build.yaml",
         ".github/workflows/mobile-app-checks.yml",
     }
 
 
 def _is_app_journeys_pr_input(path: str) -> bool:
     """Journey definitions, their harness, and direct capture/dev-control inputs."""
-    return path.startswith((
-        "app/integration_test/journeys/", "app/test/support/capture/",
-        "app/lib/services/dev_controls/", "app/lib/services/capture/",
-    )) or path in {
+    return path.startswith(
+        (
+            "app/integration_test/journeys/",
+            "app/test/support/capture/",
+            "app/lib/services/dev_controls/",
+            "app/lib/services/capture/",
+        )
+    ) or path in {
         "contracts/session/session-evidence-v1.schema.json",
         "scripts/dev-harness/mobile-verify.sh",
         "scripts/dev-harness/dev_harness/mobile_verify.py",
@@ -325,7 +372,8 @@ def _is_app_ios_compile_input(path: str) -> bool:
         path.startswith("app/ios/")
         or path.startswith(".github/actions/detect-changes/")
         or path in IOS_PIGEON_DEFINITIONS
-        or path in {
+        or path
+        in {
             "app/pubspec.yaml",
             "app/pubspec.lock",
             ".github/workflows/mobile-app-checks.yml",
@@ -483,9 +531,7 @@ def resolve_impact(
                 selected.add("desktop-swift-tests")
             # The full main/health lane compiles the complete release test
             # target. PRs reserve that build for release-specific inputs.
-            if _is_desktop_release_test_input(path) and (
-                event != "pull_request" or _is_desktop_release_pr_input(path)
-            ):
+            if _is_desktop_release_test_input(path) and (event != "pull_request" or _is_desktop_release_pr_input(path)):
                 selected.add("desktop-swift-release-test-compile")
             if _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
@@ -497,7 +543,7 @@ def resolve_impact(
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
 
-    if any(_defines_flutter_generation(path) for path in normalized_paths):
+    if any(_defines_flutter_generation(path, read_text(path), read_base_text(path)) for path in normalized_paths):
         selected.update({"flutter-codegen", "flutter-l10n"})
 
     if selector_changed:

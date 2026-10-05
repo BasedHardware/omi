@@ -64,23 +64,10 @@ def test_memory_l2_gateway_lane_resolves_to_luna():
     assert route.primary.provider == 'openai'
 
 
-def test_desktop_proactive_lanes_are_pinned_and_structured():
+def test_retired_desktop_proactive_lanes_are_absent():
     config = load_gateway_config(prod_mode=True)
-
-    extraction = config.lanes['omi:auto:desktop-proactive-extraction']
-    reasoning = config.lanes['omi:auto:desktop-proactive-reasoning']
-    extraction_route = config.route_artifacts[extraction.active_route]
-    reasoning_route = config.route_artifacts[reasoning.active_route]
-
-    assert extraction.capabilities.structured_output == StructuredOutputMode.JSON_SCHEMA
-    assert reasoning.capabilities.structured_output == StructuredOutputMode.JSON_SCHEMA
-    assert extraction_route.primary.model == 'gpt-5-nano'
-    assert extraction_route.provider_options == {
-        'extra_body': {'prompt_cache_retention': '24h'},
-        'reasoning_effort': 'minimal',
-    }
-    assert reasoning_route.primary.model == LUNA_MODEL
-    assert reasoning_route.provider_options == {'reasoning_effort': 'low'}
+    assert 'omi:auto:desktop-proactive-extraction' not in config.lanes
+    assert 'omi:auto:desktop-proactive-reasoning' not in config.lanes
 
 
 def test_translation_uses_the_gateway_translation_capability():

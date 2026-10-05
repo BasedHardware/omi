@@ -6,7 +6,7 @@ import XCTest
 @MainActor
 final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
 
-  /// The system voice honors the user's Voice Speed multiplier the same way the OpenAI
+  /// The system voice honors the user's Voice Speed multiplier the same way the cloud
   /// audio path does — a hardcoded utterance rate made spoken notifications crawl at ~1×
   /// while push-to-talk answers played at the default 1.4×.
   func testSystemSpeechRateScalesWithVoiceSpeed() {
@@ -24,43 +24,6 @@ final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
       AVSpeechUtteranceMinimumSpeechRate)
   }
 
-  func testDefaultVoiceIsShimmerOpenAIHumanVoice() {
-    XCTAssertEqual(ShortcutSettings.defaultVoiceID, ShortcutSettings.openAIShimmerVoiceID)
-
-    let voice = ShortcutSettings.voiceOption(for: ShortcutSettings.defaultVoiceID)
-    XCTAssertEqual(voice.name, "Shimmer")
-    XCTAssertEqual(voice.gender, .female)
-    XCTAssertTrue(voice.isOpenAI)
-    XCTAssertEqual(voice.provider, .openAI)
-    XCTAssertEqual(voice.openAIVoice, "shimmer")
-  }
-
-  func testShimmerVoiceHasNeutralDisplayName() {
-    let voice = ShortcutSettings.voiceOption(for: ShortcutSettings.openAIShimmerVoiceID)
-    XCTAssertEqual(voice.name, "Shimmer")
-    XCTAssertEqual(voice.openAIVoice, "shimmer")
-  }
-
-  func testOnlyOpenAIVoicesAreAvailableInPicker() {
-    XCTAssertFalse(ShortcutSettings.availableVoices.contains { $0.isLocalSystem })
-  }
-
-  func testLegacyProxyVoicesAreNotAvailableInPicker() {
-    XCTAssertFalse(
-      ShortcutSettings.availableVoices.contains {
-        $0.name.localizedCaseInsensitiveContains("Sloane")
-          || $0.id == "BAMYoBHLZM7lJgJAmFz0"
-      }
-    )
-  }
-
-  func testInvalidVoiceFallsBackToDefaultOpenAIVoice() {
-    let voice = ShortcutSettings.voiceOption(for: "missing")
-    XCTAssertEqual(voice.id, ShortcutSettings.defaultVoiceID)
-    XCTAssertTrue(voice.isOpenAI)
-    XCTAssertEqual(voice.openAIVoice, "shimmer")
-  }
-
   func testVoiceQueryAlwaysSpeaksAndTypedQueryUsesToggle() {
     let settings = ShortcutSettings.shared
     let originalTypedSetting = settings.floatingBarTypedQuestionVoiceAnswersEnabled
@@ -76,5 +39,20 @@ final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
     settings.floatingBarTypedQuestionVoiceAnswersEnabled = true
     XCTAssertTrue(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: true))
     XCTAssertTrue(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: false))
+  }
+
+  func testLegacyOpenAIVoiceDefaultsKeyIsIgnored() throws {
+    let suite = try XCTUnwrap(UserDefaults(suiteName: "AssistantVoiceStoreTests.legacy"))
+    defer { suite.removePersistentDomain(forName: "AssistantVoiceStoreTests.legacy") }
+    suite.set("openai:shimmer", forKey: ScopedDefaultsKey.legacyShortcutSelectedVoiceID)
+    suite.set("Puck", forKey: ScopedDefaultsKey.assistantVoiceID(ownerID: "owner-1"))
+    let store = AssistantVoiceStore(
+      fetchCatalog: { _ in AssistantVoiceCatalogResponse(voices: [], defaultVoiceId: "Charon") },
+      fetchPreference: { _ in throw APIError.invalidResponse },
+      ownerIDProvider: { "owner-1" },
+      defaults: suite,
+      notificationCenter: NotificationCenter(),
+      observeOwnerChanges: false)
+    XCTAssertEqual(store.selectedVoiceID, "Puck")
   }
 }

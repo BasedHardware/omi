@@ -29,6 +29,7 @@ prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
 from routers import (
+    proactivity,
     chat,
     firmware,
     static_map,
@@ -38,8 +39,11 @@ from routers import (
     notifications,
     speech_profile,
     speaker_tag_prompts,
+    speaker_labels,
+    people,
     agents,
     users,
+    support,
     trends,
     sync,
     apps,
@@ -65,6 +69,7 @@ from routers import (
     x_connector,
     other,
     developer,
+    developer_key,
     updates,
     calendar_meetings,
     google_calendar,
@@ -73,6 +78,7 @@ from routers import (
     knowledge_graph,
     wrapped,
     folders,
+    search,
     goals,
     workstreams,
     announcements,
@@ -92,6 +98,7 @@ from routers import (
     desktop_core,
     desktop_prompts,
     desktop_proxy,
+    desktop_task_gate,
     desktop_realtime,
     desktop_screen_crisp,
     frame_requests,
@@ -104,6 +111,7 @@ from routers import (
     memory_product,
     task_recommendations,
     conversation_finalization,
+    commitment_followup,
     public_shared_conversation_chat,
     screen_frames,
     jit_ledger_snapshot,
@@ -122,6 +130,7 @@ from utils.http_client import close_all_clients
 from utils.jit_rollout import close_posthog_control_plane
 from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
+from utils.observability.sync_phases import shutdown_sync_metrics
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -204,6 +213,7 @@ app.add_middleware(
     ],
 )
 
+app.include_router(proactivity.router)
 app.include_router(transcribe.router)
 app.include_router(static_map.router)
 app.include_router(omni_relay.router)
@@ -231,10 +241,13 @@ app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
 app.include_router(speaker_tag_prompts.router)
+app.include_router(speaker_labels.router)
+app.include_router(people.router)
 app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(support.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
@@ -243,6 +256,7 @@ app.include_router(mobile_feedback.router)
 app.include_router(device_diagnostics.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
+app.include_router(commitment_followup.router)
 app.include_router(trends.router)
 
 app.include_router(other.router)
@@ -265,9 +279,11 @@ app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
 app.include_router(api_key_management.developer_router)
 app.include_router(developer.router)
+app.include_router(developer_key.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
+app.include_router(search.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
 app.include_router(workstreams.router)
@@ -294,6 +310,7 @@ app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
+app.include_router(desktop_task_gate.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(frame_requests.router)
@@ -514,6 +531,7 @@ async def shutdown_event():
     await batch_pressure.stop()
     await drain_background_tasks(timeout=10.0)
     await shutdown_managed_spend_ledger()
+    await shutdown_sync_metrics()
     await close_all_clients()
     close_posthog_control_plane()
     close_free_tier_control_plane()

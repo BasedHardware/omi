@@ -172,7 +172,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   }
                 },
                 children: [
-                  Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
+                  // The asset is white; tint it so it shows on the light pill too.
+                  Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16, color: OmiColors.textPrimary),
                   // Home has room for the word; the other tabs keep the logo alone (it still has a
                   // spoken label).
                   if (isMemoriesPage) ...[
@@ -282,7 +283,9 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     OmiHaptics.light();
     showOmiSheet<void>(
       context: context,
-      title: context.l10n.pendantIsListeningTitle,
+      title: context.read<CaptureProvider>().pendantCaptureVerified
+          ? context.l10n.pendantIsListeningTitle
+          : CaptureSources.label(context, 'omi'),
       builder: (sheetContext) => PendantListeningSheet(
         onRecordWithPhone: () {
           Navigator.pop(sheetContext);

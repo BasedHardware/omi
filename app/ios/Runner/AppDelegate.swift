@@ -81,6 +81,7 @@ final class QuickActionsIconPatcher: NSObject {
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var liveActivityManager: Any?
   private static let unusedForegroundTaskRefreshIdentifier = "com.pravera.flutter_foreground_task.refresh"
   private var methodChannel: FlutterMethodChannel?
   private var capturePolicyChannel: FlutterMethodChannel?
@@ -146,6 +147,15 @@ final class QuickActionsIconPatcher: NSObject {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
     SiriBridge.shared.attach(messenger: messenger)
+    if #available(iOS 16.1, *) {
+      liveActivityManager = LiveActivityManager(messenger: messenger)
+    }
+    #if compiler(>=6.4)
+    if #available(iOS 16.0, *),
+       let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiShortcutsButton") {
+      registrar.register(OmiShortcutsButtonFactory(), withId: "omi/shortcuts_button")
+    }
+    #endif
 
     ttsMp3DecoderChannel = FlutterMethodChannel(
       name: "com.omi/tts_mp3_decoder",
@@ -624,6 +634,9 @@ final class QuickActionsIconPatcher: NSObject {
   override func applicationWillTerminate(_ application: UIApplication) {
     QuickActionsIconPatcher.shared.stopObserving()
     OmiBleManager.shared.disconnectAllPeripherals()
+    if #available(iOS 16.1, *) {
+      LiveActivityManager.endAllBeforeTermination()
+    }
 
     // If title and body are nil, then we don't need to show notification.
     guard let title = notificationTitleOnKill, let body = notificationBodyOnKill else { return }

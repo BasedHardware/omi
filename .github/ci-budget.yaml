@@ -1,10 +1,10 @@
 {
   "caps": {
     "internal_time_to_signal_minutes": 46,
-    "pr_linux_minutes_per_day": 11900,
+    "pr_linux_minutes_per_day": 12100,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "Ratchet: post-#19593 budgeted totals (10799 Linux, 1437 macOS min/day, 41 min critical path) + 10% headroom. Lower after each weekly re-seed; raising needs a rationale change.",
+  "caps_rationale": "Reviewed Android prevention after #20437: prior inventory totals 11674.0 Linux and 1437.0 macOS minutes/day; candidate totals 12000.2 Linux and 1438.9 macOS. New emulator acceptance adds 240 Linux minutes/day, broader startup/WAL compile/JVM selection adds 80, and manual-run allowances account for the remainder. Raise Linux cap from 11900 to 12100 (1.7%); macOS and 46-minute signal caps stay unchanged. Re-seed from actual executions in the next weekly audit.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -201,13 +201,13 @@
       "budget_p50_minutes": 3,
       "display_name": "Backend unit guardrails",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 65,
+      "expected_runs_per_day": 72,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "PR M workflow/action coverage widening: forecast ceil(65 * 1.10) = 72 daily executions from the prior sample; the 3-minute p50 budget and CI-tier condition are unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -219,7 +219,7 @@
       "budget_p50_minutes": 9,
       "display_name": "Backend unit shard ${{ matrix.shard }}/4",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 107,
+      "expected_runs_per_day": 118,
       "if": null,
       "matrix": {
         "shard": [
@@ -232,7 +232,7 @@
       "matrix_size": 4,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "PR M workflow/action coverage widening: forecast ceil(107 * 1.10) = 118 daily executions from the prior sample; four shards and the 9-minute p50 budget are unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -244,7 +244,7 @@
       "budget_p50_minutes": 1,
       "display_name": "Backend unit suite",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 105,
+      "expected_runs_per_day": 116,
       "if": "${{ always() && !cancelled() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -254,7 +254,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "PR M workflow/action coverage widening: forecast ceil(105 * 1.10) = 116 daily executions from the prior sample; the 1-minute aggregate-job budget and success dependency are unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -266,13 +266,13 @@
       "budget_p50_minutes": 1,
       "display_name": "Resolve CI Tier",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 107,
+      "expected_runs_per_day": 118,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "New in #19593: one label read; 2026-09-28 PR run took 23s",
+      "rationale": "PR M workflow/action coverage widening: forecast ceil(107 * 1.10) = 118 daily executions from the prior sample; the 1-minute tier-resolution budget is unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -489,13 +489,13 @@
       "budget_p50_minutes": 9,
       "display_name": "Linux package \u00b7 helper smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 9-minute p50 budget are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -507,13 +507,13 @@
       "budget_p50_minutes": 8,
       "display_name": "Windows build smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 8-minute p50 budget are unchanged.",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -525,13 +525,13 @@
       "budget_p50_minutes": 7,
       "display_name": "Typecheck \u00b7 Lint \u00b7 Test",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 7-minute p50 budget are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -876,6 +876,24 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "firestore_read_reconcile.yml/reconcile": {
+      "budget_p50_minutes": 5,
+      "display_name": "reconcile",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Once-daily read-only Firestore bill reconcile. Five minutes covers one BigQuery query and 24 hourly log reads. Not a pull-request job.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1607,24 +1625,6 @@
       },
       "runs_on": "ubuntu-latest"
     },
-    "guardrail-baseline-pulse.yml/pulse": {
-      "budget_p50_minutes": 5,
-      "display_name": "pulse",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
     "jit_qa_cloud_run.yml/admit": {
       "budget_p50_minutes": 5,
       "display_name": "Admit exact proven main source",
@@ -1748,7 +1748,7 @@
       "runs_on": "ubuntu-latest"
     },
     "jit_qa_manual_operator.yml/operate": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 15,
       "display_name": "Run isolated JIT QA operator",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1757,7 +1757,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual-only unsampled placeholder, not a measured p50: retain 5 minutes for setup and reserve 10 for the oracle's default 540-second query budget plus live inventory reads; PR frequency and global caps unchanged",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1906,13 +1906,13 @@
       "budget_p50_minutes": 17,
       "display_name": "Dart Analyze & Tests",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 25,
+      "expected_runs_per_day": 25.1,
       "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_dart == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1924,13 +1924,31 @@
       "budget_p50_minutes": 13,
       "display_name": "Android Compile Smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 8,
+      "expected_runs_per_day": 12,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Expand PR selection from native build inputs to startup/capture/WAL and acceptance runners after #20437. Forecast four extra runs/day over the prior eight-run budget; retain duration budgets and re-seed next weekly audit.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/android-emulator-checks": {
+      "budget_p50_minutes": 20,
+      "display_name": "Android Emulator Acceptance",
+      "expected_runs_class": "forecast-selected-pr",
+      "expected_runs_per_day": 12,
+      "if": "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "Mobile maintainers",
+      "rationale": "PR #20437 reproduced a native Android 16 startup cancellation race missed by host tests. Add native stress plus one-ABI minified AOT startup acceptance on Linux; forecast 12 selected full-tier PR runs/day including startup/WAL inputs. Re-seed after first weekly sample.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1942,13 +1960,13 @@
       "budget_p50_minutes": 7,
       "display_name": "Android JVM Unit Tests",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 8,
+      "expected_runs_per_day": 12,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Expand PR selection from native build inputs to startup/capture/WAL and acceptance runners after #20437. Forecast four extra runs/day over the prior eight-run budget; retain duration budgets and re-seed next weekly audit.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1960,13 +1978,13 @@
       "budget_p50_minutes": 1,
       "display_name": "Detect Changes",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 216,
+      "expected_runs_per_day": 216.1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1978,13 +1996,13 @@
       "budget_p50_minutes": 25,
       "display_name": "Dart Tests (Pacific/Kiritimati)",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 1.1,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1996,13 +2014,13 @@
       "budget_p50_minutes": 4,
       "display_name": "Generated Files",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 21,
+      "expected_runs_per_day": 21.1,
       "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_flutter_generated == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2014,13 +2032,13 @@
       "budget_p50_minutes": 19,
       "display_name": "iOS Compile Check",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 24,
+      "expected_runs_per_day": 24.1,
       "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_ios_compile == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {
@@ -2032,13 +2050,13 @@
       "budget_p50_minutes": 9,
       "display_name": "Seeded Journeys (hermetic)",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 5.1,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_journeys == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_journeys_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2050,7 +2068,7 @@
       "budget_p50_minutes": 1,
       "display_name": "Mobile Release Eligibility",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 216,
+      "expected_runs_per_day": 216.1,
       "if": "${{ always() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -2061,11 +2079,12 @@
         "journeys-hermetic",
         "android-compile-smoke",
         "android-unit-tests",
+        "android-emulator-checks",
         "ios-compile-check",
         "dart-tests-kiritimati"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up Include required native/AOT emulator acceptance; reject an unexpectedly skipped selected lane.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2077,7 +2096,7 @@
       "budget_p50_minutes": 5,
       "display_name": "Post-merge mobile failure issues",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 1.1,
       "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
       "matrix": {},
       "matrix_size": 1,
@@ -2086,10 +2105,11 @@
         "journeys-hermetic",
         "android-compile-smoke",
         "android-unit-tests",
+        "android-emulator-checks",
         "dart-tests-kiritimati"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder Include Android emulator acceptance in the existing main/nightly failure issue aggregation.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2350,7 +2370,7 @@
       "runs_on": "windows-latest"
     },
     "release-eligibility.yml/release-eligibility": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 7,
       "display_name": "Release Eligibility",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -2359,7 +2379,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2404,7 +2424,7 @@
       "runs_on": "ubuntu-latest"
     },
     "repo-checks.yml/hygiene": {
-      "budget_p50_minutes": 3,
+      "budget_p50_minutes": 5,
       "display_name": "Hygiene",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 210,
@@ -2413,7 +2433,7 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. 2026-09-26 PR sample p50 x 1.25, rounded up",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2759,7 +2779,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "PR M widens workflow/action path coverage so a new backend-image shipment cannot omit Firestore readiness. Forecast 10% more selected job executions than the existing September sample, rounded upward; job duration budgets and global caps remain unchanged. Re-seed from the next weekly audit.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -2773,6 +2793,7 @@
             ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
             ".github/actions/sync-backfill-lifecycle/**",
+            ".github/actions/firestore-readiness/**",
             ".github/actions/release-eligibility/action.yml",
             ".github/actions/transcription-release-candidate-probe/**",
             ".github/workflows/backend-checks.yml",
@@ -2803,6 +2824,7 @@
             ".github/scripts/verify_backend_release_admission.py",
             ".github/scripts/verify_release_eligibility.py",
             ".github/workflows/sync_ledger_fence_cutover.yml",
+            ".github/workflows/**",
             "scripts/changed-files",
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
@@ -2826,6 +2848,7 @@
             ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
             ".github/actions/sync-backfill-lifecycle/**",
+            ".github/actions/firestore-readiness/**",
             ".github/actions/release-eligibility/action.yml",
             ".github/actions/transcription-release-candidate-probe/**",
             ".github/workflows/backend-checks.yml",
@@ -2856,6 +2879,7 @@
             ".github/scripts/verify_backend_release_admission.py",
             ".github/scripts/verify_release_eligibility.py",
             ".github/workflows/sync_ledger_fence_cutover.yml",
+            ".github/workflows/**",
             "scripts/changed-files",
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
@@ -2945,7 +2969,7 @@
     "desktop-windows-ci.yml": {
       "name": "Desktop Windows CI",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Refresh pre-existing inventory drift: the current upstream workflow already triggers for desktop_windows_release.yml. This PR does not edit that workflow; forecast one additional execution per day per job for the existing release path, with duration budgets and global caps unchanged.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -2953,7 +2977,8 @@
           ],
           "paths": [
             "desktop/windows/**",
-            ".github/workflows/desktop-windows-ci.yml"
+            ".github/workflows/desktop-windows-ci.yml",
+            ".github/workflows/desktop_windows_release.yml"
           ]
         },
         "push": {
@@ -2962,7 +2987,8 @@
           ],
           "paths": [
             "desktop/windows/**",
-            ".github/workflows/desktop-windows-ci.yml"
+            ".github/workflows/desktop-windows-ci.yml",
+            ".github/workflows/desktop_windows_release.yml"
           ]
         }
       }
@@ -3374,6 +3400,27 @@
         }
       }
     },
+    "firestore_read_reconcile.yml": {
+      "name": "Firestore read ledger reconcile",
+      "owner": "CI maintainers",
+      "rationale": "Daily read-only reconcile of billed Firestore read ops against the in-process ledger. Schedule plus manual dispatch. Does not deploy or change audit config.",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "30 16 * * *"
+          }
+        ],
+        "workflow_dispatch": {
+          "inputs": {
+            "day": {
+              "description": "Closed UTC day to reconcile (YYYY-MM-DD; blank uses yesterday UTC)",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "firmware_release.yml": {
       "name": "Firmware Build & Release (Omi CV1)",
       "owner": "CI maintainers",
@@ -3469,24 +3516,8 @@
     "gcp_app.yml": {
       "name": "Deploy App to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "David's 2026-09-29 CI cleanup removed push triggers because main pushes queued rejected prod deploys; retain manual dispatch.",
       "triggers": {
-        "push": {
-          "branches": [
-            "main",
-            "development"
-          ],
-          "paths": [
-            "web/app/**",
-            "config/public-build-*.json",
-            ".github/actions/deploy-public-build/**",
-            ".github/actions/prepare-public-build/**",
-            ".github/actions/public-build-candidate-promotion/**",
-            ".github/scripts/preflight_public_build_config.py",
-            ".github/scripts/preflight_public_build_runtime.py",
-            ".github/scripts/smoke_public_build_browser.py"
-          ]
-        },
         "workflow_dispatch": {
           "inputs": {
             "environment": {
@@ -4297,24 +4328,8 @@
     "gcp_personas.yml": {
       "name": "Deploy Personas to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "David's 2026-09-29 CI cleanup removed push triggers because main pushes queued rejected prod deploys; retain manual dispatch.",
       "triggers": {
-        "push": {
-          "branches": [
-            "main",
-            "development"
-          ],
-          "paths": [
-            "web/personas-open-source/**",
-            "config/public-build-*.json",
-            ".github/actions/deploy-public-build/**",
-            ".github/actions/prepare-public-build/**",
-            ".github/actions/public-build-candidate-promotion/**",
-            ".github/scripts/preflight_public_build_config.py",
-            ".github/scripts/preflight_public_build_runtime.py",
-            ".github/scripts/smoke_public_build_browser.py"
-          ]
-        },
         "workflow_dispatch": {
           "inputs": {
             "environment": {
@@ -4450,19 +4465,6 @@
         }
       }
     },
-    "guardrail-baseline-pulse.yml": {
-      "name": "Guardrail baseline pulse",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "schedule": [
-          {
-            "cron": "0 15 * * 1"
-          }
-        ],
-        "workflow_dispatch": ""
-      }
-    },
     "jit_qa_cloud_run.yml": {
       "name": "JIT isolated QA Cloud Run plane",
       "owner": "CI maintainers",
@@ -4494,7 +4496,7 @@
     "jit_qa_manual_operator.yml": {
       "name": "Operate isolated JIT QA data plane",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Add a read-only index-oracle choice to the existing manual dispatch; no new events, jobs, or automatic runs",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4516,6 +4518,7 @@
                 "ensure-infrastructure-api",
                 "indexes-plan",
                 "indexes-apply",
+                "index-oracle",
                 "prepare",
                 "inspect",
                 "drain-verify",
@@ -4626,7 +4629,7 @@
     "mobile-app-checks.yml": {
       "name": "Mobile App Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory Add manual exact-source Android acceptance before tags when path selection skipped it; emulator only is forced, other jobs retain their path conditions.",
       "triggers": {
         "pull_request": "",
         "push": {
@@ -4636,7 +4639,8 @@
           {
             "cron": "41 4 * * *"
           }
-        ]
+        ],
+        "workflow_dispatch": ""
       }
     },
     "mobile_internal_build.yml": {

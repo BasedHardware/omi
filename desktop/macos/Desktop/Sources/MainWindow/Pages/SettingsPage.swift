@@ -165,6 +165,7 @@ struct SettingsContentView: View {
   // ChatProvider for browser extension setup
   var chatProvider: ChatProvider? = nil
   @StateObject var viewModel = SettingsViewModel()
+  @StateObject var dataExportModel = AccountDataExportModel()
 
   // Updater view model
   @ObservedObject var updaterViewModel = UpdaterViewModel.shared
@@ -214,17 +215,13 @@ struct SettingsContentView: View {
   @State var taskAgentWorkingDirectory: String
   @State var taskExtractionInterval: Double
   @State var taskMinConfidence: Double
+  @State var goalReminderNotificationsEnabled = NotificationService.goalReminderNotificationsEnabled
   @State var taskNotificationsEnabled: Bool
   @State var taskAllowedApps: Set<String>
   @State var taskBrowserKeywords: [String]
   @State var isRescoringTasks = false
 
   // Advice Assistant states
-  @State var insightEnabled: Bool
-  @State var insightExtractionInterval: Double
-  @State var insightMinConfidence: Double
-  @State var insightNotificationsEnabled: Bool
-  @State var insightExcludedApps: Set<String>
 
   // Meeting summary share notification
   @State var meetingSummaryNotificationsEnabled: Bool
@@ -490,7 +487,6 @@ struct SettingsContentView: View {
     case stats = "Your Stats"
     case focusAssistant = "Focus Assistant"
     case taskAssistant = "Task Assistant"
-    case insightAssistant = "Insight Assistant"
     case memoryAssistant = "Memory Assistant"
     case analysisThrottle = "Analysis Throttle"
     case goals = "Goals"
@@ -507,7 +503,6 @@ struct SettingsContentView: View {
       case .stats: return "chart.bar"
       case .focusAssistant: return "eye.fill"
       case .taskAssistant: return "checklist"
-      case .insightAssistant: return ProactiveNotificationBadge.insightSystemImage
       case .memoryAssistant: return "brain.head.profile"
       case .analysisThrottle: return "clock.arrow.2.circlepath"
       case .goals: return "target"
@@ -587,13 +582,7 @@ struct SettingsContentView: View {
       initialValue: TaskAssistantSettings.shared.notificationsEnabled)
     _taskAllowedApps = State(initialValue: TaskAssistantSettings.shared.allowedApps)
     _taskBrowserKeywords = State(initialValue: TaskAssistantSettings.shared.browserKeywords)
-    _insightEnabled = State(initialValue: InsightAssistantSettings.shared.isEnabled)
-    _insightExtractionInterval = State(
-      initialValue: InsightAssistantSettings.shared.extractionInterval)
-    _insightMinConfidence = State(initialValue: InsightAssistantSettings.shared.minConfidence)
-    _insightNotificationsEnabled = State(
-      initialValue: InsightAssistantSettings.shared.notificationsEnabled)
-    _insightExcludedApps = State(initialValue: InsightAssistantSettings.shared.excludedApps)
+
     _memoryEnabled = State(initialValue: MemoryAssistantSettings.shared.isEnabled)
     _memoryExtractionInterval = State(
       initialValue: MemoryAssistantSettings.shared.extractionInterval)

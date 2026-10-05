@@ -250,6 +250,7 @@ langchain_prompts = _stub_module("langchain_core.prompts")
 langchain_prompts.ChatPromptTemplate = MagicMock()
 langchain_messages = _stub_module("langchain_core.messages")
 langchain_messages.SystemMessage = MagicMock()
+langchain_messages.HumanMessage = MagicMock()
 
 # Stub pydantic (already installed, just need BaseModel/Field accessible)
 # pydantic is real, no stub needed

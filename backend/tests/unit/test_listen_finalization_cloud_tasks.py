@@ -193,7 +193,7 @@ def _mock_lifecycle_conversation(monkeypatch, *, status: str = 'in_progress'):
 
 
 def test_enqueue_uses_only_opaque_job_routing_fields():
-    with patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+    with patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
         cloud_tasks.enqueue_listen_finalization_job('9ee6f9ce-d6dc-4b5d-bf13-f80eb4fabd36', 7)
 
     queue, url, task_id, payload = enqueue.call_args.args
@@ -1503,7 +1503,6 @@ async def test_a_webhook_stuck_on_5xx_only_strands_the_conversation_while_retrie
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
@@ -1641,10 +1640,8 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
     completed = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', completed)
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
-    capture_arrival = MagicMock()
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', capture_arrival)
     receipt_writer = MagicMock(return_value=None)
-    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', receipt_writer)
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', receipt_writer)
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -1668,10 +1665,6 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
     assert disposition == ConversationFinalizationDisposition.completed
     completed.assert_called_once_with('job-1', 2, 3)
     receipt_writer.assert_called_once_with('uid-1', conversation, finalization_job_id='job-1')
-    if source != 'omi' or expected_intent_kwargs is None:
-        capture_arrival.assert_not_called()
-    else:
-        capture_arrival.assert_called_once_with('uid-1', **expected_intent_kwargs)
 
 
 @pytest.mark.anyio

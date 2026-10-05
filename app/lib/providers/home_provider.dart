@@ -6,14 +6,20 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
 
 class HomeProvider extends ChangeNotifier {
+  /// The two pages of the Home shell, switched at the top of the screen.
+  static const int homeTab = 0;
+  static const int tasksTab = 1;
+  static const int tabCount = 2;
+
   int _sessionGeneration = 0;
-  int selectedIndex = 0;
+  int selectedIndex = homeTab;
   Function(int idx)? onSelectedIndexChanged;
   final FocusNode chatFieldFocusNode = FocusNode();
   final FocusNode appsSearchFieldFocusNode = FocusNode();
@@ -155,7 +161,7 @@ class HomeProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
-    selectedIndex = 0;
+    selectedIndex = homeTab;
     isAppsSearchFieldFocused = false;
     isChatFieldFocused = false;
     isConvoSearchFieldFocused = false;
@@ -330,9 +336,10 @@ class HomeProvider extends ChangeNotifier {
   }
 
   Future setUserPeople() async {
-    final people = await getAllPeople();
-    if (people != null) {
-      SharedPreferencesUtil().cachedPeople = people;
+    final response = await getAllPeople();
+    if (response != null) {
+      SharedPreferencesUtil().cachedPeople =
+          preserveCachedPeopleStats(response.people, SharedPreferencesUtil().cachedPeople);
     }
     notifyListeners();
   }

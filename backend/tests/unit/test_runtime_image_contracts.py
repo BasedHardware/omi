@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -433,3 +434,65 @@ def test_pusher_installs_typesense_because_finalization_indexes_conversations():
     assert _requirement_pin(pusher, 'typesense') == _requirement_pin(backend, 'typesense')
     pylock = (BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8')
     assert 'name = "typesense"' in pylock
+
+
+def test_pusher_posthog_pin_matches_backend_cohort_flag_client():
+    """PR #20533 enabled cohort dispatch, but pusher lacked the lazy PostHog SDK."""
+    pusher = (BACKEND_DIR / 'pusher' / 'requirements.txt').read_text(encoding='utf-8')
+    backend = (BACKEND_DIR / 'requirements.txt').read_text(encoding='utf-8')
+    pin = _requirement_pin(backend, 'posthog')
+    assert _requirement_pin(pusher, 'posthog') == pin
+    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
+    packages = {package['name']: package['version'] for package in lock['packages']}
+    assert packages['posthog'] == pin.split('==', 1)[1]
+
+
+def test_pusher_lock_covers_mentor_v2_lazy_imports():
+    """Packages audited in the pusher-only venv, including function-local imports.
+
+    PR #20533's cohort dispatch exposed a missing lazy PostHog import that the
+    static entrypoint smoke did not see. Keep this audited package contract
+    independent of the full backend environment, where PostHog was installed.
+    Jev dedupe/usefulness use gateway_client's httpx transport, not another SDK.
+    """
+    module_distributions = {
+        'anthropic': 'anthropic',
+        'cachetools': 'cachetools',
+        'cryptography': 'cryptography',
+        'fastapi': 'fastapi',
+        'firebase_admin': 'firebase-admin',
+        'google.api_core': 'google-api-core',
+        'google.auth': 'google-auth',
+        'google.oauth2': 'google-auth',
+        'google.protobuf': 'protobuf',
+        'google.cloud.exceptions': 'google-cloud-core',
+        'google.cloud.firestore': 'google-cloud-firestore',
+        'google.cloud.firestore_v1': 'google-cloud-firestore',
+        'google.cloud.storage': 'google-cloud-storage',
+        'google.cloud.tasks_v2': 'google-cloud-tasks',
+        'httpx': 'httpx',
+        'jsonschema': 'jsonschema',
+        'langchain_anthropic': 'langchain-anthropic',
+        'langchain_core': 'langchain-core',
+        'langchain_google_genai': 'langchain-google-genai',
+        'langchain_openai': 'langchain-openai',
+        'numpy': 'numpy',
+        'openai': 'openai',
+        'opuslib': 'opuslib',
+        'pinecone': 'pinecone',
+        'posthog': 'posthog',
+        'prometheus_client': 'prometheus-client',
+        'pycountry': 'pycountry',
+        'pydantic': 'pydantic',
+        'pytz': 'pytz',
+        'redis': 'redis',
+        'starlette': 'starlette',
+        'stripe': 'stripe',
+        'tiktoken': 'tiktoken',
+        'typesense': 'typesense',
+        'ulid': 'python-ulid',
+    }
+    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
+    installed_packages = {package['name'] for package in lock['packages']}
+    missing = {module: package for module, package in module_distributions.items() if package not in installed_packages}
+    assert not missing, f'Mentor v2 modules missing from pusher lock: {missing}'

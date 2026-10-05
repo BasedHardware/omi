@@ -320,9 +320,9 @@ class AppCreate(BaseModel):
 
 
 class AppUpdate(BaseModel):
+    # No `uid`: ownership is set at creation and an update must never move it.
     id: str
     name: Optional[str] = None
-    uid: Optional[str] = None
     private: Optional[bool] = None
     category: Optional[str] = None
     email: Optional[str] = None

@@ -496,10 +496,10 @@ class TestMergeTranscriptSegments:
         assert len(merged) == 2
         assert merged[0]["start"] == 0.0
         assert merged[0]["end"] == 5.0
-        # Cumulative offset = 5.0 (max end of c1); gap = 60-30 = 30s.
-        # c2's seg starts at 0.0 → offset 35.0.
-        assert merged[1]["start"] == 35.0
-        assert merged[1]["end"] == 40.0
+        # Wall-clock offset = c2.started_at - c1.started_at = 60s.
+        # c2's seg starts at 0.0 → offset 60.0.
+        assert merged[1]["start"] == 60.0
+        assert merged[1]["end"] == 65.0
 
     def test_inputs_post_normalisation_string_origin_does_not_crash(self, merge):
         # Simulates the exact path perform_merge_async takes: it now calls
@@ -522,8 +522,8 @@ class TestMergeTranscriptSegments:
         normalized = merge._normalize_conversation_timestamps(raw)
         merged = merge._merge_transcript_segments(normalized)
         assert len(merged) == 2
-        assert merged[1]["start"] == 35.0
-        assert merged[1]["end"] == 40.0
+        assert merged[1]["start"] == 60.0
+        assert merged[1]["end"] == 65.0
 
     def test_first_conv_with_no_segments_uses_finished_minus_started(self, merge):
         # When the first conversation has no segments, cumulative_offset is
