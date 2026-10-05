@@ -576,6 +576,8 @@ env:
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "false"
+  - name: SONIOX_WIRE_LEDGER
+    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "false"
   # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from

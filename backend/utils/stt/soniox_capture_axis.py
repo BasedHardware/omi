@@ -100,6 +100,11 @@ class CaptureAxisDiagnostics:
         self.ledger, self.origin, self.phase = ledger, origin, phase
 
     def sent(self, data: bytes | str) -> None:
+        """Count actual binary frames, including unknown-provenance PCM.
+
+        Provider-internal finalize padding is not a wire byte and must never
+        inflate written PCM or acquire a synthetic capture origin.
+        """
         if isinstance(data, bytes):
             self.written += len(data) // 2
             if self.first_write_at is None:
@@ -161,7 +166,8 @@ class CaptureAxisDiagnostics:
                 # All numeric, same-response evidence; no audio/text/identity.
                 logger.info(
                     'soniox_capture_axis_sample phase=%s rate=%d token_end=%.6f queued=%d written=%d '
-                    'ledger=%s origin=%d connected_elapsed=%.6f first_write_elapsed=%s keepalives=%d finalizes=%d',
+                    'ledger=%s origin=%d connected_elapsed=%.6f first_write_elapsed=%s keepalives=%d finalizes=%d '
+                    'total_audio_proc_ms=%s final_audio_proc_ms=%s',
                     self.phase,
                     self.rate,
                     end,
@@ -173,6 +179,8 @@ class CaptureAxisDiagnostics:
                     None if self.first_write_at is None else now - self.first_write_at,
                     self.keepalives,
                     self.finalizes,
+                    None if msg.get('total_audio_proc_ms') is None else float(msg['total_audio_proc_ms']),
+                    None if msg.get('final_audio_proc_ms') is None else float(msg['final_audio_proc_ms']),
                 )
         for key in ('total_audio_proc_ms', 'final_audio_proc_ms'):
             if msg.get(key) is not None:
