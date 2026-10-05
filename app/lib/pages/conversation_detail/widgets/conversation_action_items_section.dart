@@ -79,9 +79,12 @@ class ConversationActionItemTaskSession {
   final Map<String, String> _idempotencyKeys = {};
   final Set<String> _pending = {};
 
-  static String identity(ActionItem item) => item.sourceSegmentIds.isNotEmpty
-      ? item.sourceSegmentIds.join('|')
-      : '${item.description}|${item.dueAt?.toIso8601String() ?? ''}';
+  /// Content-stable identity for one extracted row. Segment IDs are evidence
+  /// references, not identities: one segment can carry several commitments, and
+  /// the backend allows multiple identical items in a conversation, so the
+  /// item's own description and due date disambiguate rows that share evidence.
+  static String identity(ActionItem item) =>
+      '${item.sourceSegmentIds.join('|')}|${item.description}|${item.dueAt?.millisecondsSinceEpoch ?? ''}';
 
   String? taskIdFor(ActionItem item) => item.targetTaskId ?? _taskIds[identity(item)];
   bool get pending => _pending.isNotEmpty;
@@ -162,9 +165,7 @@ class _ConversationActionItemsSectionState extends State<ConversationActionItems
         setConversationActionItemState(widget.conversationId, [index], [value]),
   );
 
-  String _identity(ActionItem item) => item.sourceSegmentIds.isNotEmpty
-      ? item.sourceSegmentIds.join('|')
-      : '${item.description}|${item.dueAt?.toIso8601String() ?? ''}';
+  String _identity(ActionItem item) => ConversationActionItemTaskSession.identity(item);
 
   Future<void> _setCompleted(ActionItem item, int index, bool value) async {
     final identity = _identity(item);

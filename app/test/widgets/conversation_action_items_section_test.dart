@@ -184,5 +184,35 @@ void main() {
       expect(await session.addToTasks(item), isTrue);
       expect(createdStates, [false]);
     });
+
+    test('two commitments sharing one segment keep separate task identities', () async {
+      // One transcript segment can carry several commitments; segment IDs are
+      // evidence, not identity. Rows that share evidence must not collide.
+      final a = ActionItem('Send the proposal', sourceSegmentIds: const ['seg-1']);
+      final b = ActionItem('Follow up with Eddie', sourceSegmentIds: const ['seg-1']);
+      expect(ConversationActionItemTaskSession.identity(a), isNot(ConversationActionItemTaskSession.identity(b)));
+
+      // Identical twins are still one item: identity stays stable across calls.
+      expect(
+          ConversationActionItemTaskSession.identity(a),
+          ConversationActionItemTaskSession.identity(ActionItem(
+            'Send the proposal',
+            sourceSegmentIds: const ['seg-1'],
+          )));
+    });
+
+    test('check-off failures do not mark the summary item complete', () async {
+      final session = ConversationActionItemTaskSession(
+        newIdempotencyKey: () => 'stable-key',
+        createTask: (item, {required completed, required idempotencyKey}) async => null,
+        updateTask: (_, __) async => true,
+        updateConversationItem: (index, completed) async {
+          fail('summary must not update when the task create failed');
+        },
+      );
+      final item = ActionItem('Send the proposal', sourceSegmentIds: const ['segment-1']);
+
+      expect(await session.setCompleted(item, 0, true), isFalse);
+    });
   });
 }

@@ -2802,23 +2802,28 @@ class TasksStore: ObservableObject {
     }
   }
 
+  /// - Returns: whether the completion mutation took effect. `false` covers the
+  ///   no-op bails (no owner lease, local update failure, missing readback) and
+  ///   backend failures that were rolled back. Callers that mirror conversation
+  ///   summary state off this toggle must not proceed on `false`.
+  @discardableResult
   func toggleTask(
     _ task: TaskActionItem,
     expectedOwnerID: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     beforeLocalMutation: (() async -> Void)? = nil,
     operationOverrides: ToggleOperationOverrides? = nil
-  ) async {
+  ) async -> Bool {
     let isDirectUIOperation = expectedOwnerID == nil
     guard
       let lease = captureOwnerLease(
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot
       )
-    else { return }
+    else { return false }
     let ownerID = lease.ownerID
     if let beforeLocalMutation { await beforeLocalMutation() }
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return false }
     let newCompleted = !task.completed
 
     // 1. Local-first: update SQLite immediately so auto-refresh reads correct state
@@ -2840,17 +2845,17 @@ class TasksStore: ObservableObject {
           )
         else {
           logError("TasksStore: Failed to read back toggled task", error: nil)
-          return
+          return false
         }
         updatedTask = storedTask
       }
     } catch {
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return false }
       logError("TasksStore: Failed to update task locally", error: error)
       self.error = error.localizedDescription
-      return
+      return false
     }
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return false }
 
     // 2. The local commit (and readback on the production path) completed
     // under the captured owner lease.
@@ -2873,7 +2878,7 @@ class TasksStore: ObservableObject {
             snapshot: lease.authorizationSnapshot
           )
         )
-        guard isCurrent(lease) else { return }
+        guard isCurrent(lease) else { return false }
         if isDirectUIOperation {
           Task { @MainActor [weak self] in
             await self?.syncScoresToBackend(lease: lease)
@@ -2902,7 +2907,7 @@ class TasksStore: ObservableObject {
     }
 
     // 5. Refresh dashboard arrays immediately (SQLite was already updated in step 1)
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return false }
     if let operationOverrides {
       await operationOverrides.refreshDashboard(ownerID)
     } else {
@@ -2911,14 +2916,14 @@ class TasksStore: ObservableObject {
         authorizationSnapshot: lease.authorizationSnapshot
       )
     }
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return false }
 
     // 6. Call API in background, revert on failure. An unsynced local-only
     // task has no backend row — the call would 404 and wrongly revert the
     // local toggle; the pending create-sync will push current row state.
     if operationOverrides == nil, ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
       log("TasksStore: Skipped backend toggle for unsynced local task \(task.id)")
-      return
+      return true
     }
     do {
       let apiResult: TaskActionItem
@@ -2932,7 +2937,7 @@ class TasksStore: ObservableObject {
           authorizationSnapshot: lease.authorizationSnapshot
         )
       }
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return false }
       // Sync API result to store server-side timestamps
       if let operationOverrides {
         try await operationOverrides.syncRemote(apiResult, ownerID)
@@ -2944,7 +2949,7 @@ class TasksStore: ObservableObject {
           )
         )
       }
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return false }
       // Spawn next recurring instance when completing a recurring task
       if newCompleted, operationOverrides == nil, #available(macOS 27, *) { SiriDonations.taskCompleted(task.id) }
       if newCompleted, let rule = task.recurrenceRule, !rule.isEmpty {
@@ -2962,14 +2967,14 @@ class TasksStore: ObservableObject {
             expectedOwnerId: ownerID,
             authorizationSnapshot: lease.authorizationSnapshot
           ) {
-            guard isCurrent(lease) else { return }
+            guard isCurrent(lease) else { return false }
             try? await ActionItemStorage.shared.syncTaskActionItems(
               [spawned],
               authorization: Self.localMutationAuthorization(
                 snapshot: lease.authorizationSnapshot
               )
             )
-            guard isCurrent(lease) else { return }
+            guard isCurrent(lease) else { return false }
             incompleteTasks.insert(spawned, at: 0)
             log("TasksStore: Spawned recurring task \(spawned.id) due \(nextDue)")
           }
@@ -2984,9 +2989,9 @@ class TasksStore: ObservableObject {
           authorizationSnapshot: lease.authorizationSnapshot
         )
       }
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return false }
     } catch {
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return false }
       logError("TasksStore: Failed to toggle task on backend, reverting", error: error)
       await rollbackToggleAfterBackendFailure(
         task: task,
@@ -2996,7 +3001,9 @@ class TasksStore: ObservableObject {
         authorizationSnapshot: lease.authorizationSnapshot,
         rollbackStorage: operationOverrides?.rollbackLocal
       )
+      return false
     }
+    return true
   }
 
   /// Roll back one optimistic toggle only while the initiating owner remains
@@ -3121,7 +3128,11 @@ class TasksStore: ObservableObject {
       AnalyticsManager.shared.taskAdded()
 
       // Instant UI update
-      incompleteTasks.insert(localTask, at: 0)
+      if completed {
+        completedTasks.insert(localTask, at: 0)
+      } else {
+        incompleteTasks.insert(localTask, at: 0)
+      }
 
       // Sync to backend in background
       Task { @MainActor [weak self] in
@@ -3139,6 +3150,7 @@ class TasksStore: ObservableObject {
             priority: priority,
             category: tags?.first,
             metadata: metadata,
+            completed: completed,
             recurrenceRule: recurrenceRule,
             expectedOwnerId: lease.ownerID,
             authorizationSnapshot: lease.authorizationSnapshot
@@ -3157,6 +3169,8 @@ class TasksStore: ObservableObject {
           // Replace local_ entry with real backend-synced task
           if let idx = self.incompleteTasks.firstIndex(where: { $0.id == localTask.id }) {
             self.incompleteTasks[idx] = created
+          } else if let idx = self.completedTasks.firstIndex(where: { $0.id == localTask.id }) {
+            self.completedTasks[idx] = created
           }
           log("TasksStore: Task synced to backend (local \(localId) → \(created.id))")
         } catch {

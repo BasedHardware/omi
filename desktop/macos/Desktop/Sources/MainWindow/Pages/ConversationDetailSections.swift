@@ -102,7 +102,11 @@ struct ConversationActionItemsSection: View {
   }
 
   private func actionItemIdentity(_ item: ActionItem) -> String {
-    item.sourceSegmentIDs.isEmpty ? item.description : item.sourceSegmentIDs.joined(separator: "|")
+    // Segment IDs are evidence references, not identities: one segment can carry
+    // several commitments, and the backend allows multiple identical items in a
+    // conversation. Bind the item's own content so distinct rows stay distinct.
+    let due = item.dueAt.map { "\($0.timeIntervalSince1970)" } ?? ""
+    return "\(item.sourceSegmentIDs.joined(separator: "|"))|\(item.description)|\(due)"
   }
 
   /// Explicit, per-item promotion of a summary action item into the task list.
@@ -148,18 +152,27 @@ struct ConversationActionItemsSection: View {
       if task == nil && next {
         task = await TasksStore.shared.createTask(
           description: item.description, dueAt: item.dueAt, priority: nil, completed: true)
-        taskIsCompleted = task?.completed
-        if let task {
-          createdTasks[identity] = task
-          createdTaskCompletion[identity] = task.completed
-          addedActionItemIDs.insert(identity)
+        guard let created = task else {
+          // The summary must not show completed when no completed task exists.
+          failedActionItemIDs.insert(identity)
+          return
         }
+        taskIsCompleted = created.completed
+        createdTasks[identity] = created
+        createdTaskCompletion[identity] = created.completed
+        addedActionItemIDs.insert(identity)
       }
       if let task, let taskIsCompleted, taskIsCompleted != next {
         let toggleInput = TaskActionItem(
           id: task.id, description: task.description, completed: taskIsCompleted, createdAt: task.createdAt,
           dueAt: task.dueAt, conversationId: task.conversationId, source: task.source, priority: task.priority)
-        await TasksStore.shared.toggleTask(toggleInput)
+        // Only the summary reflects a task mutation that actually took effect;
+        // TasksStore reports false when the toggle failed and rolled back.
+        let toggled = await TasksStore.shared.toggleTask(toggleInput)
+        guard toggled else {
+          failedActionItemIDs.insert(identity)
+          return
+        }
         createdTaskCompletion[identity] = next
       }
       do {
