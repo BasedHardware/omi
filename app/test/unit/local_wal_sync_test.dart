@@ -2004,4 +2004,384 @@ void main() {
     expect(fresh, isNotEmpty, reason: 'the colliding chunk becomes a distinct WAL, not an in-place append');
     expect(fresh.every((w) => w.filePath != 'old_disk.bin'), isTrue);
   });
+
+  group('capture evidence batch partition', () {
+    const darkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
+    const root = '12345678-1234-4234-8234-123456789abc';
+    const now = 2000000000;
+
+    Wal claimWal(
+      int timerStart, {
+      String? filePath,
+      String? conversationId = 'c1',
+      String? recordingSessionId = 's1',
+      String? captureRoot = root,
+      int? sourceFrameStart = 0,
+      int? sourceClockEpoch = 7,
+      int totalFrames = 6000,
+      int sampleRate = 16000,
+      int channel = 1,
+      BleAudioCodec codec = BleAudioCodec.opus,
+    }) =>
+        Wal(
+          timerStart: timerStart,
+          codec: codec,
+          seconds: 60,
+          totalFrames: totalFrames,
+          sampleRate: sampleRate,
+          channel: channel,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+          conversationId: conversationId,
+          recordingSessionId: recordingSessionId,
+          filePath: filePath,
+          captureRoot: captureRoot,
+          sourceFrameStart: sourceFrameStart,
+          sourceClockEpoch: sourceClockEpoch,
+        );
+
+    Wal legacyWal(
+      int timerStart, {
+      String? filePath,
+      String? conversationId = 'c1',
+      String? recordingSessionId = 's1',
+    }) =>
+        Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          totalFrames: 6000,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+          conversationId: conversationId,
+          recordingSessionId: recordingSessionId,
+          filePath: filePath,
+        );
+
+    test('a claimable-newest mixed group uploads only the claimable files', () {
+      final claimableNew = claimWal(100, filePath: 'claim_new.bin');
+      final legacyMid = legacyWal(90, filePath: 'legacy_mid.bin');
+      final claimableOld = claimWal(80, filePath: 'claim_old.bin');
+      final legacyOld = legacyWal(70, filePath: 'legacy_old.bin');
+
+      final batch = nextSyncUploadBatch([claimableNew, legacyMid, claimableOld, legacyOld], now);
+
+      if (darkWrite) {
+        expect(batch, [claimableNew, claimableOld]);
+        expect(
+          captureEvidenceUploadHeader(batch, [File('claim_new.bin'), File('claim_old.bin')]),
+          isNotNull,
+        );
+      } else {
+        expect(batch, [claimableNew, legacyMid, claimableOld, legacyOld]);
+        expect(
+          captureEvidenceUploadHeader(batch, [for (final _ in batch) File('x.bin')]),
+          isNull,
+        );
+      }
+    });
+
+    test('a legacy-newest group drains legacy first, then claimable siblings', () {
+      final legacyNew = legacyWal(100, filePath: 'legacy_new.bin');
+      final claimableMid = claimWal(90, filePath: 'claim_mid.bin');
+      final claimableOld = claimWal(80, filePath: 'claim_old.bin');
+      final pending = [legacyNew, claimableMid, claimableOld];
+
+      final first = nextSyncUploadBatch(pending, now);
+      if (darkWrite) {
+        expect(first, [legacyNew]);
+        expect(captureEvidenceUploadHeader(first, [File('legacy_new.bin')]), isNull);
+
+        final remainder = pending.where((wal) => !first.contains(wal)).toList();
+        final second = nextSyncUploadBatch(remainder, now);
+        expect(second, [claimableMid, claimableOld]);
+        expect(
+          captureEvidenceUploadHeader(second, [File('claim_mid.bin'), File('claim_old.bin')]),
+          isNotNull,
+        );
+      } else {
+        expect(first, pending);
+      }
+    });
+
+    test('equal timestamps keep their original input order', () {
+      final first = legacyWal(100, filePath: 'tie_a.bin');
+      final second = legacyWal(100, filePath: 'tie_b.bin');
+      final third = legacyWal(50, filePath: 'tie_c.bin');
+
+      expect(nextSyncUploadBatch([first, second, third], now), [first, second, third]);
+      expect(nextSyncUploadBatch([second, first, third], now), [second, first, third]);
+    });
+
+    test('a group tied past the batch limit matches the pre-partition recipe', () {
+      final wals = [for (var i = 0; i < 8; i++) legacyWal(100, filePath: 'tie_$i.bin')];
+
+      final batch = nextSyncUploadBatch(wals, now);
+      final original = List<Wal>.from(wals)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
+
+      expect(batch.length, 5);
+      expect(batch.map((wal) => wal.filePath), original.take(5).map((wal) => wal.filePath));
+    });
+
+    test('header rejects invalid fields, mismatched lengths, and empty input', () {
+      if (!darkWrite) return;
+      final file = File('ok.bin');
+      expect(captureEvidenceUploadHeader([], []), isNull);
+      expect(captureEvidenceUploadHeader([claimWal(100, filePath: 'ok.bin')], []), isNull);
+      expect(
+        captureEvidenceUploadHeader([claimWal(100, filePath: 'ok.bin')], [file, File('extra.bin')]),
+        isNull,
+      );
+      final invalid = <Wal>[
+        claimWal(100, filePath: 'ok.bin', sampleRate: 0),
+        claimWal(100, filePath: 'ok.bin', sampleRate: -16000),
+        claimWal(100, filePath: 'ok.bin', captureRoot: null),
+        claimWal(100, filePath: 'ok.bin', sourceFrameStart: null),
+        claimWal(100, filePath: 'ok.bin', sourceClockEpoch: null),
+      ];
+      for (final wal in invalid) {
+        expect(captureEvidenceUploadHeader([wal], [file]), isNull);
+      }
+    });
+
+    test('the five-file batch limit still holds for claimable groups', () {
+      final wals = [for (var i = 0; i < 7; i++) claimWal(100 - i, filePath: 'claim_$i.bin')];
+
+      final batch = nextSyncUploadBatch(wals, now);
+
+      expect(batch.length, 5);
+      expect(batch.map((wal) => wal.timerStart), [100, 99, 98, 97, 96]);
+    });
+
+    test('a legacy member between claimables does not suppress them', () {
+      final claimableNew = claimWal(100, filePath: 'c_new.bin');
+      final legacy = legacyWal(90, filePath: 'l_mid.bin');
+      final claimableOld = claimWal(80, filePath: 'c_old.bin');
+
+      final batch = nextSyncUploadBatch([claimableNew, legacy, claimableOld], now);
+
+      if (darkWrite) {
+        expect(batch, [claimableNew, claimableOld]);
+      } else {
+        expect(batch, [claimableNew, legacy, claimableOld]);
+      }
+    });
+
+    test('a duplicated file basename stops the claimable batch before it', () {
+      final first = claimWal(100, filePath: 'dup.bin');
+      final second = claimWal(90, filePath: 'dup.bin');
+      final third = claimWal(80, filePath: 'other.bin');
+
+      final batch = nextSyncUploadBatch([first, second, third], now);
+
+      if (darkWrite) {
+        expect(batch, [first]);
+      } else {
+        expect(batch, [first, second, third]);
+      }
+    });
+
+    test('single-file invalid claims keep the whole file in the legacy class', () {
+      final cases = <Wal>[
+        claimWal(100, filePath: 'bad_root.bin', captureRoot: 'not-a-uuid'),
+        claimWal(100, filePath: 'neg_start.bin', sourceFrameStart: -1),
+        claimWal(100, filePath: 'neg_epoch.bin', sourceClockEpoch: -5),
+        claimWal(100, filePath: 'no_frames.bin', totalFrames: 0),
+        claimWal(100, filePath: 'stereo.bin', channel: 2),
+        claimWal(100, filePath: 'pcm8.bin', codec: BleAudioCodec.pcm8),
+        claimWal(100, filePath: 'bad name.bin'),
+      ];
+
+      for (final invalid in cases) {
+        final claimable = claimWal(90, filePath: 'sibling.bin');
+        final batch = nextSyncUploadBatch([invalid, claimable], now);
+        if (darkWrite) {
+          expect(batch, [invalid], reason: 'invalid claim stays a single-file legacy batch');
+          expect(
+            captureEvidenceUploadHeader(batch, [File(invalid.filePath!)]),
+            isNull,
+          );
+        } else {
+          expect(batch, [invalid, claimable]);
+        }
+      }
+    });
+
+    test('a name over 255 bytes or without a file name is legacy', () {
+      final tooLong = claimWal(100, filePath: 'a' * 256);
+      final claimable = claimWal(90, filePath: 'ok.bin');
+
+      final batch = nextSyncUploadBatch([tooLong, claimable], now);
+
+      if (darkWrite) {
+        expect(batch, [tooLong]);
+      } else {
+        expect(batch, [tooLong, claimable]);
+      }
+    });
+
+    test('worst-case claims stay inside the 4096-byte header budget', () {
+      const maxInt = 0x7FFFFFFFFFFFFFFF;
+      final wals = [
+        for (var i = 0; i < 5; i++)
+          claimWal(
+            100 - i,
+            filePath: '${'a' * (251 - i)}${'b' * i}.bin',
+            sourceFrameStart: maxInt - i,
+            sourceClockEpoch: maxInt,
+            totalFrames: maxInt,
+            sampleRate: maxInt,
+          ),
+      ];
+
+      if (darkWrite) {
+        final batch = nextSyncUploadBatch(wals, now);
+        expect(batch.length, 5);
+        final header = captureEvidenceUploadHeader(batch, [for (final wal in batch) File(wal.filePath!)]);
+        expect(header, isNotNull);
+        expect(utf8.encode(header!).length, lessThanOrEqualTo(4096));
+      }
+    });
+
+    test('an oversized claim list still falls back to an unclaimed upload', () {
+      if (!darkWrite) return;
+      final wals = [for (var i = 0; i < 20; i++) claimWal(200 - i, filePath: '${'a' * 243}_cap_$i.bin')];
+      expect(
+        captureEvidenceUploadHeader(wals, [for (final wal in wals) File(wal.filePath!)]),
+        isNull,
+      );
+    });
+  });
+
+  group('syncAll capture evidence partition', () {
+    const darkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
+    const root = '12345678-1234-4234-8234-123456789abc';
+    late Directory directory;
+    late List<(List<String> names, String? evidence)> uploads;
+
+    setUp(() async {
+      directory = await Directory.systemTemp.createTemp('wal_s1_partition_');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall call) async {
+          if (call.method == 'getApplicationDocumentsDirectory') return directory.path;
+          return null;
+        },
+      );
+      uploads = [];
+      SyncRateLimiter.instance.clear();
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      SyncRateLimiter.instance.clear();
+      if (directory.existsSync()) directory.deleteSync(recursive: true);
+    });
+
+    Wal diskWal(
+      int timerStart,
+      String name, {
+      bool claimable = false,
+      String? conversationId = 'c1',
+      String? recordingSessionId = 's1',
+    }) {
+      File('${directory.path}/$name').writeAsBytesSync([1, 2, 3]);
+      return Wal(
+        timerStart: timerStart,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        totalFrames: 6000,
+        sampleRate: 16000,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        conversationId: conversationId,
+        recordingSessionId: recordingSessionId,
+        filePath: name,
+        captureRoot: claimable ? root : null,
+        sourceFrameStart: claimable ? 0 : null,
+        sourceClockEpoch: claimable ? 7 : null,
+      );
+    }
+
+    LocalWalSyncImpl buildSync() => LocalWalSyncImpl(
+          listener,
+          now: () => DateTime.fromMillisecondsSinceEpoch(2000000000 * 1000),
+          persistWals: (wals) async {},
+          loadWals: () async => <Wal>[],
+          uploadGate: SyncUploadGate(
+            limiter: SyncRateLimiter.instance,
+            uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async {
+              uploads.add((
+                files.map((file) => file.uri.pathSegments.last).toList(),
+                captureEvidence,
+              ));
+              return UploadFilesResult.queued('job-${uploads.length}');
+            },
+            fairUseStatusLoader: () async => null,
+          ),
+        );
+
+    test('a claimable-newest mixed drain sends claims, then the legacy batch goes unclaimed', () async {
+      final local = buildSync();
+      local.testWals = [
+        diskWal(100, 'claim_a.bin', claimable: true),
+        diskWal(90, 'legacy_b.bin'),
+        diskWal(80, 'claim_c.bin', claimable: true),
+      ];
+
+      await local.syncAll();
+
+      if (darkWrite) {
+        expect(uploads.length, 2);
+        expect(uploads[0].$1, ['claim_a.bin', 'claim_c.bin']);
+        final parsed = jsonDecode(uploads[0].$2!) as Map<String, dynamic>;
+        expect(
+          (parsed['files'] as List).map((claim) => claim['name']),
+          uploads[0].$1,
+          reason: 'each claim names the exact uploaded file basename',
+        );
+        expect(uploads[1].$1, ['legacy_b.bin']);
+        expect(uploads[1].$2, isNull);
+      } else {
+        expect(uploads.length, 1);
+        expect(uploads.single.$1, ['claim_a.bin', 'legacy_b.bin', 'claim_c.bin']);
+        expect(uploads.single.$2, isNull);
+      }
+    });
+
+    test('a legacy-newest mixed drain goes unclaimed first, then claimable siblings drain', () async {
+      final local = buildSync();
+      local.testWals = [
+        diskWal(100, 'legacy_a.bin'),
+        diskWal(90, 'claim_b.bin', claimable: true),
+        diskWal(80, 'claim_c.bin', claimable: true),
+      ];
+
+      await local.syncAll();
+
+      if (darkWrite) {
+        expect(uploads.length, 2);
+        expect(uploads[0].$1, ['legacy_a.bin']);
+        expect(uploads[0].$2, isNull);
+        expect(uploads[1].$1, ['claim_b.bin', 'claim_c.bin']);
+        final parsed = jsonDecode(uploads[1].$2!) as Map<String, dynamic>;
+        expect((parsed['files'] as List).map((claim) => claim['name']), uploads[1].$1);
+      } else {
+        expect(uploads.length, 1);
+        expect(uploads.single.$1, ['legacy_a.bin', 'claim_b.bin', 'claim_c.bin']);
+        expect(uploads.single.$2, isNull);
+      }
+    });
+  });
 }

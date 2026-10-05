@@ -66,37 +66,65 @@ class WalRetentionRisk {
 /// backend's 600s stale guard (backend/database/sync_jobs.py).
 const _syncUploadBatchLimit = 5;
 
+const _captureEvidenceV1DarkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
+
+const _captureEvidenceHeaderMaxBytes = 4096;
+
+final _captureClaimRootPattern =
+    RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+final _captureClaimNamePattern = RegExp(r'^[A-Za-z0-9_.\-]{1,255}$');
+
+String _walUploadFileName(Wal wal) =>
+    (wal.filePath != null && wal.filePath!.isNotEmpty) ? wal.filePath!.split('/').last : wal.getFileName();
+
+Map<String, dynamic>? _captureEvidenceClaim(Wal wal, String name) {
+  final root = wal.captureRoot;
+  final start = wal.sourceFrameStart;
+  final epoch = wal.sourceClockEpoch;
+  if (root == null ||
+      !_captureClaimRootPattern.hasMatch(root) ||
+      start == null ||
+      start < 0 ||
+      epoch == null ||
+      epoch < 0 ||
+      wal.totalFrames <= 0 ||
+      wal.sampleRate <= 0 ||
+      wal.channel != 1 ||
+      (wal.codec != BleAudioCodec.opus && wal.codec != BleAudioCodec.pcm16) ||
+      !_captureClaimNamePattern.hasMatch(name)) {
+    return null;
+  }
+  return {
+    'name': name,
+    'capture_root': root,
+    'clock_epoch': epoch,
+    'source_frame_start': start,
+    'frame_count': wal.totalFrames,
+    'rate_hz': wal.sampleRate,
+    'codec': wal.codec.name,
+    'channel': 'mono',
+  };
+}
+
+String? _encodeCaptureEvidenceClaims(List<Map<String, dynamic>> claims) {
+  final encoded = jsonEncode({'version': 1, 'files': claims});
+  return utf8.encode(encoded).length <= _captureEvidenceHeaderMaxBytes ? encoded : null;
+}
+
 /// Optional S1 file-position claim. The upload remains valid when a legacy or
 /// mixed batch cannot make a single bounded claim; the server then records
 /// unknown coverage instead of inventing positions from timestamps.
 String? captureEvidenceUploadHeader(List<Wal> wals, List<File> files) {
-  if (!const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE') || wals.length != files.length || wals.isEmpty) {
+  if (!_captureEvidenceV1DarkWrite || wals.length != files.length || wals.isEmpty) {
     return null;
   }
   final claims = <Map<String, dynamic>>[];
   for (var i = 0; i < wals.length; i++) {
-    final wal = wals[i];
-    if (wal.captureRoot == null ||
-        wal.sourceFrameStart == null ||
-        wal.sourceClockEpoch == null ||
-        wal.totalFrames <= 0 ||
-        wal.channel != 1 ||
-        (wal.codec != BleAudioCodec.opus && wal.codec != BleAudioCodec.pcm16)) {
-      return null;
-    }
-    claims.add({
-      'name': files[i].uri.pathSegments.last,
-      'capture_root': wal.captureRoot,
-      'clock_epoch': wal.sourceClockEpoch,
-      'source_frame_start': wal.sourceFrameStart,
-      'frame_count': wal.totalFrames,
-      'rate_hz': wal.sampleRate,
-      'codec': wal.codec.name,
-      'channel': 'mono',
-    });
+    final claim = _captureEvidenceClaim(wals[i], files[i].uri.pathSegments.last);
+    if (claim == null) return null;
+    claims.add(claim);
   }
-  final encoded = jsonEncode({'version': 1, 'files': claims});
-  return utf8.encode(encoded).length <= 4096 ? encoded : null;
+  return _encodeCaptureEvidenceClaims(claims);
 }
 
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
@@ -218,20 +246,60 @@ bool isDefinitiveUploadRefusal(Object error) =>
     error is SyncUploadHttpException && _kDefinitiveUploadRefusalStatusCodes.contains(error.statusCode);
 
 List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
-  final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
-  if (ordered.isEmpty) return const [];
+  if (!_captureEvidenceV1DarkWrite) {
+    final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
+    if (ordered.isEmpty) return const [];
+    final conversationId = ordered.first.conversationId;
+    final recordingSessionId = ordered.first.recordingSessionId;
+    final locationKey = _walLocationBatchKey(ordered.first);
+    return ordered
+        .where(
+          (wal) =>
+              wal.conversationId == conversationId &&
+              wal.recordingSessionId == recordingSessionId &&
+              _walLocationBatchKey(wal) == locationKey,
+        )
+        .take(_syncUploadBatchLimit)
+        .toList();
+  }
+  final indexed = [for (var i = 0; i < pending.length; i++) (pending[i], i)]..sort((a, b) {
+      final byStart = b.$1.timerStart.compareTo(a.$1.timerStart);
+      return byStart != 0 ? byStart : a.$2.compareTo(b.$2);
+    });
+  if (indexed.isEmpty) return const [];
+  final ordered = [for (final entry in indexed) entry.$1];
   final conversationId = ordered.first.conversationId;
   final recordingSessionId = ordered.first.recordingSessionId;
   final locationKey = _walLocationBatchKey(ordered.first);
-  return ordered
+  final group = ordered
       .where(
         (wal) =>
             wal.conversationId == conversationId &&
             wal.recordingSessionId == recordingSessionId &&
             _walLocationBatchKey(wal) == locationKey,
       )
-      .take(_syncUploadBatchLimit)
       .toList();
+  if (_captureEvidenceClaim(group.first, _walUploadFileName(group.first)) == null) {
+    return group
+        .where((wal) => _captureEvidenceClaim(wal, _walUploadFileName(wal)) == null)
+        .take(_syncUploadBatchLimit)
+        .toList();
+  }
+  final batch = <Wal>[];
+  final claims = <Map<String, dynamic>>[];
+  final names = <String>{};
+  for (final wal in group) {
+    if (batch.length >= _syncUploadBatchLimit) break;
+    final name = _walUploadFileName(wal);
+    final claim = _captureEvidenceClaim(wal, name);
+    if (claim == null) continue;
+    if (names.contains(name)) break;
+    if (_encodeCaptureEvidenceClaims([...claims, claim]) == null) break;
+    claims.add(claim);
+    names.add(name);
+    batch.add(wal);
+  }
+  return batch;
 }
 
 typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields);
