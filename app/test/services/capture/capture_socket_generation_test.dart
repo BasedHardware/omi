@@ -355,6 +355,9 @@ void main() {
       expect(p.pendantCaptureVerified, isFalse);
       expect(card.snapshot['status'], 'unverified');
       expect(card.snapshot['canPause'], isTrue, reason: 'Pause stays on the card, as in the app');
+      // Audio takes a while to arrive; that wait is not capture time.
+      world.clock.advanceTo(world.clock.now().add(const Duration(seconds: 12)));
+      expect(card.snapshot['status'], 'unverified');
 
       ble.health = CaptureIngressHealth(
         phase: 'flowing',
