@@ -3334,3 +3334,10 @@ Completed conversations retain meeting-treatment audit receipts and notes on the
 conversation surface. Finalization, reprocessing, and receipt backfill do not post
 capture or meeting-note cards into Chat; rich conversation links remain available
 in agent replies to a user message.
+
+Malformed allocation values encountered by the configured live-STT chain's
+hard-permission pass produce `ProviderChainUnavailable` with a bounded five-second
+retry in ON, SHADOW and OFF modes. No provider is dialed and no provider-failure
+vote is written when permission cannot be established. The selection seam emits
+`router_error` and `config_incomplete` diagnostics without the raw configuration
+value. The kill switch retains the same permission checks.

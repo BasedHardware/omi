@@ -214,17 +214,30 @@ async def connect_configured_chain(
         return pseudo, {service.value: pseudo.id}
 
     configured_candidates = []
-    for service in candidates:
-        target, engine_models = route_target(service)
-        if permitted_target(
-            target,
-            routing_uid,
-            routing_language,
-            routing_languages,
-            engine_models,
-            account_states,
-        ):
-            configured_candidates.append(service)
+    try:
+        for service in candidates:
+            target, engine_models = route_target(service)
+            if permitted_target(
+                target,
+                routing_uid,
+                routing_language,
+                routing_languages,
+                engine_models,
+                account_states,
+            ):
+                configured_candidates.append(service)
+    except (ValueError, TypeError):
+        # Permissions apply even in shadow/off. A malformed allocation cannot
+        # prove permission for a dial, and is not a provider transport failure.
+        COST_FAIL_OPEN.labels(reason='router_error').inc()
+        record_fallback(
+            component='stt_selection',
+            from_mode=primary_service.value,
+            to_mode=primary_service.value,
+            reason='config_incomplete',
+            outcome='degraded',
+        )
+        raise ProviderChainUnavailable(5) from None
     routes = [(service, None) for service in configured_candidates]
 
     def fallback_routes(states: dict[str, GateState]) -> tuple[list[tuple[STTService, Target | None]], bool]:
