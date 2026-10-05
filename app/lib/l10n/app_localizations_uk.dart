@@ -3775,6 +3775,18 @@ class AppLocalizationsUk extends AppLocalizations {
   String get settingsHeader => 'НАЛАШТУВАННЯ';
 
   @override
+  String get settingsSectionRecording => 'Запис';
+
+  @override
+  String get settingsSectionSupport => 'Підтримка';
+
+  @override
+  String get settingsSectionPersonalization => 'Персоналізація';
+
+  @override
+  String get settingsSectionConnectedApps => 'Підключені застосунки';
+
+  @override
   String get plansAndBilling => 'Плани та Оплата';
 
   @override

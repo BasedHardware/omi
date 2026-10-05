@@ -505,7 +505,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   /// Opens Settings, and once the reader is back on Home restarts capture if they changed the
-  /// language, speech profile or transcription model (onboarding-home #25: compare after the sheet
+  /// language, speech profile or transcription model (onboarding-home #25: compare after Settings
   /// closes, not the moment it opens).
   Future<void> _openSettings() async {
     final prefs = SharedPreferencesUtil();

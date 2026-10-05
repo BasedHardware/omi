@@ -3772,6 +3772,18 @@ class AppLocalizationsFi extends AppLocalizations {
   String get settingsHeader => 'ASETUKSET';
 
   @override
+  String get settingsSectionRecording => 'Tallennus';
+
+  @override
+  String get settingsSectionSupport => 'Tuki';
+
+  @override
+  String get settingsSectionPersonalization => 'Personointi';
+
+  @override
+  String get settingsSectionConnectedApps => 'Yhdistetyt sovellukset';
+
+  @override
   String get plansAndBilling => 'Suunnitelmat ja Laskutus';
 
   @override

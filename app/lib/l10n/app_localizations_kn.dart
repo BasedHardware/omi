@@ -3783,6 +3783,18 @@ class AppLocalizationsKn extends AppLocalizations {
   String get settingsHeader => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override
+  String get settingsSectionRecording => 'ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get settingsSectionSupport => 'ಬೆಂಬಲ';
+
+  @override
+  String get settingsSectionPersonalization => 'ವೈಯಕ್ತೀಕರಣ';
+
+  @override
+  String get settingsSectionConnectedApps => 'ಸಂಪರ್ಕಿತ ಆ್ಯಪ್‌ಗಳು';
+
+  @override
   String get plansAndBilling => 'ಯೋಜನೆಗಳು ಮತ್ತು ಬಿಲ್ಲಿಂಗ್';
 
   @override

@@ -3746,6 +3746,18 @@ class AppLocalizationsHe extends AppLocalizations {
   String get settingsHeader => 'הגדרות';
 
   @override
+  String get settingsSectionRecording => 'הקלטה';
+
+  @override
+  String get settingsSectionSupport => 'תמיכה';
+
+  @override
+  String get settingsSectionPersonalization => 'התאמה אישית';
+
+  @override
+  String get settingsSectionConnectedApps => 'אפליקציות מחוברות';
+
+  @override
   String get plansAndBilling => 'תוכניות וחיוב';
 
   @override

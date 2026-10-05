@@ -1,4 +1,5 @@
-// The Settings sheet, the Account page, each settings group page and settings search.
+// The Settings page (scenario ids keep the old "settings-sheet" name), the Account page, each
+// settings group page and settings search.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -16,14 +17,14 @@ const _account = 'Signed-in fixture account; no device connected';
 final settingsScenarios = <AuditScenario>[
   AuditScenario(
     id: 'settings-sheet',
-    title: 'Settings sheet, every row',
+    title: 'Settings page, every row',
     page: 'lib/pages/settings/settings_drawer.dart (SettingsDrawer)',
     state: 'Signed-in fixture account; a device connected',
     run: (a) async {
       await a.pump(const SettingsDrawer(), providers: [
         ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true)),
       ]);
-      await a.scrollSeries('Open the Settings sheet');
+      await a.scrollSeries('Open Settings');
     },
   ),
   AuditScenario(
@@ -76,6 +77,8 @@ final settingsScenarios = <AuditScenario>[
     run: (a) async {
       await a.pump(const NotificationsDisplayGroupPage());
       await a.scrollSeries('Open Notifications & Display');
+      await a.tap(find.byKey(const ValueKey('settings_row_appearance')));
+      await a.shot('Tap Appearance', step: 'appearance');
     },
   ),
   AuditScenario(

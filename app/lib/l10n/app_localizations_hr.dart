@@ -3780,6 +3780,18 @@ class AppLocalizationsHr extends AppLocalizations {
   String get settingsHeader => 'POSTAVKE';
 
   @override
+  String get settingsSectionRecording => 'Snimanje';
+
+  @override
+  String get settingsSectionSupport => 'Podrška';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizacija';
+
+  @override
+  String get settingsSectionConnectedApps => 'Povezane aplikacije';
+
+  @override
   String get plansAndBilling => 'Planovi i naplate';
 
   @override

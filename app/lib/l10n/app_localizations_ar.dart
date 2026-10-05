@@ -3742,6 +3742,18 @@ class AppLocalizationsAr extends AppLocalizations {
   String get settingsHeader => 'الإعدادات';
 
   @override
+  String get settingsSectionRecording => 'التسجيل';
+
+  @override
+  String get settingsSectionSupport => 'الدعم';
+
+  @override
+  String get settingsSectionPersonalization => 'التخصيص';
+
+  @override
+  String get settingsSectionConnectedApps => 'التطبيقات المتصلة';
+
+  @override
   String get plansAndBilling => 'الخطط والفواتير';
 
   @override

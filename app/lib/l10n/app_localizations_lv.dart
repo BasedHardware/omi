@@ -3778,6 +3778,18 @@ class AppLocalizationsLv extends AppLocalizations {
   String get settingsHeader => 'IESTATĪJUMI';
 
   @override
+  String get settingsSectionRecording => 'Ierakstīšana';
+
+  @override
+  String get settingsSectionSupport => 'Atbalsts';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizācija';
+
+  @override
+  String get settingsSectionConnectedApps => 'Pievienotās lietotnes';
+
+  @override
   String get plansAndBilling => 'Plāni un Norēķini';
 
   @override

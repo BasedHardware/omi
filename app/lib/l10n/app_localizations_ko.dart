@@ -3710,6 +3710,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsHeader => '설정';
 
   @override
+  String get settingsSectionRecording => '녹음';
+
+  @override
+  String get settingsSectionSupport => '지원';
+
+  @override
+  String get settingsSectionPersonalization => '맞춤 설정';
+
+  @override
+  String get settingsSectionConnectedApps => '연결된 앱';
+
+  @override
   String get plansAndBilling => '플랜 및 결제';
 
   @override

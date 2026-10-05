@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
@@ -43,30 +41,42 @@ class _ProfilePageState extends State<ProfilePage> {
     final uid = _prefs.uid;
     final truncatedUid = uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
 
-    return Scaffold(
+    return OmiGroupedPage(
       key: const ValueKey('settings_page_account'),
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.account)),
+      title: l10n.account,
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxl),
+        padding: OmiGroupedPage.padding,
         children: [
+          // Who is signed in, as on the Settings profile card.
+          Column(
+            children: [
+              OmiSettingsAvatar(name: _prefs.givenName, size: 80),
+              const SizedBox(height: OmiSpacing.sm),
+              if (_prefs.givenName.isNotEmpty)
+                Text(_prefs.givenName, style: OmiType.title2, textAlign: TextAlign.center),
+              if (_prefs.email.isNotEmpty) ...[
+                const SizedBox(height: OmiSpacing.xxs),
+                Text(_prefs.email,
+                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
+              ],
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.xl),
           OmiSettingsGroup(
             children: [
               OmiSettingsRow(
                 key: const ValueKey('settings_row_name'),
-                leading: const FaIcon(FontAwesomeIcons.solidUser),
                 title: l10n.name,
                 value: _prefs.givenName.isEmpty ? l10n.notSet : _prefs.givenName,
                 onTap: _editName,
               ),
               OmiSettingsRow(
                 key: const ValueKey('settings_row_email'),
-                leading: const FaIcon(FontAwesomeIcons.solidEnvelope),
                 title: l10n.email,
                 value: _prefs.email.isEmpty ? l10n.notSet : _prefs.email,
               ),
               OmiSettingsRow(
                 key: const ValueKey('settings_row_userId'),
-                leading: const FaIcon(FontAwesomeIcons.solidClipboard),
                 title: l10n.userId,
                 value: truncatedUid,
                 showChevron: false,
@@ -79,7 +89,6 @@ class _ProfilePageState extends State<ProfilePage> {
             children: [
               OmiSettingsRow(
                 key: settingsRowKey(SettingsDestination.signOut),
-                leading: const FaIcon(FontAwesomeIcons.rightFromBracket),
                 title: l10n.signOut,
                 isDestructive: true,
                 showChevron: false,
@@ -87,7 +96,6 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               OmiSettingsRow(
                 key: settingsRowKey(SettingsDestination.deleteAccount),
-                leading: const FaIcon(FontAwesomeIcons.triangleExclamation),
                 title: l10n.deleteAccountTitle,
                 isDestructive: true,
                 showChevron: true,

@@ -3797,6 +3797,18 @@ class AppLocalizationsTa extends AppLocalizations {
   String get settingsHeader => 'அமைப்புகள்';
 
   @override
+  String get settingsSectionRecording => 'பதிவு';
+
+  @override
+  String get settingsSectionSupport => 'ஆதரவு';
+
+  @override
+  String get settingsSectionPersonalization => 'தனிப்பயனாக்கம்';
+
+  @override
+  String get settingsSectionConnectedApps => 'இணைக்கப்பட்ட ஆப்ஸ்';
+
+  @override
   String get plansAndBilling => 'திட்டங்கள் மற்றும் பில்லிங்';
 
   @override

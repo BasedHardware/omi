@@ -220,12 +220,16 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
     }
   }
 
-  Future<void> _showModeSheet() async {
+  /// [rowContext] is the row's own, inside the page's typeface, so the sheet is set in it too; the
+  /// sheet is drawn like the page under it.
+  Future<void> _showModeSheet(BuildContext rowContext) async {
     final current = _prefs.voiceResponseMode;
     final picked = await showOmiSheet<int>(
-      context: context,
+      context: rowContext,
       title: context.l10n.voiceResponseModeTitle,
+      surface: () => OmiColors.groupedPage,
       builder: (sheetContext) => OmiSettingsGroup(
+        style: OmiSettingsGroupStyle.outlined,
         children: [
           for (final mode in const [0, 1, 2])
             OmiSettingsRow(
@@ -243,14 +247,17 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
     PlatformManager.instance.analytics.voiceResponseModeChanged(picked);
   }
 
-  Future<void> _showVoicePicker() async {
+  /// [rowContext] as for [_showModeSheet].
+  Future<void> _showVoicePicker(BuildContext rowContext) async {
     final selected = _selectedVoiceId;
     try {
       final picked = await showOmiSheet<String>(
-        context: context,
+        context: rowContext,
         title: context.l10n.assistantVoice,
+        surface: () => OmiColors.groupedPage,
         builder: (sheetContext) => SingleChildScrollView(
           child: OmiSettingsGroup(
+            style: OmiSettingsGroupStyle.outlined,
             children: [
               for (final voice in _voices)
                 OmiSettingsRow(
@@ -292,54 +299,61 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
+    return OmiGroupedPage(
       key: const ValueKey('settings_page_voice'),
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.assistantVoiceSettingsTitle)),
+      title: l10n.assistantVoiceSettingsTitle,
       body: _loading
           ? const OmiLoadingState()
           : _error != null
               ? OmiErrorState(message: l10n.somethingWentWrong, onRetry: _load)
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxl),
+                  padding: OmiGroupedPage.padding,
                   children: [
                     OmiSettingsGroup(
                       footer: l10n.voiceSharedAcrossDevices,
                       children: [
-                        OmiSettingsRow(
-                          key: const ValueKey('settings_row_assistantVoice'),
-                          leading: const FaIcon(FontAwesomeIcons.waveSquare),
-                          title: l10n.assistantVoice,
-                          subtitle: _selectedVoice?.name ?? _selectedVoiceId ?? _defaultVoiceId,
-                          trailing: _selectedVoiceId == null
-                              ? null
-                              : ValueListenableBuilder<String?>(
-                                  valueListenable: _previewing,
-                                  builder: (_, previewing, __) => OmiIconButton(
-                                    key: const ValueKey('settings_voice_preview_selected'),
-                                    icon: previewing == _selectedVoiceId
-                                        ? const OmiSpinner(size: OmiSpinnerSize.small)
-                                        : const Icon(Icons.play_arrow, size: 18),
-                                    label: l10n.preview,
-                                    onPressed: previewing == null ? () => _preview(_selectedVoiceId!) : null,
+                        Builder(
+                          builder: (rowContext) => OmiSettingsRow(
+                            key: const ValueKey('settings_row_assistantVoice'),
+                            leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.waveSquare)),
+                            title: l10n.assistantVoice,
+                            subtitle: _selectedVoice?.name ?? _selectedVoiceId ?? _defaultVoiceId,
+                            trailing: _selectedVoiceId == null
+                                ? null
+                                : ValueListenableBuilder<String?>(
+                                    valueListenable: _previewing,
+                                    builder: (_, previewing, __) => OmiIconButton(
+                                      key: const ValueKey('settings_voice_preview_selected'),
+                                      icon: previewing == _selectedVoiceId
+                                          ? const OmiSpinner(size: OmiSpinnerSize.small)
+                                          : const Icon(Icons.play_arrow, size: 18),
+                                      label: l10n.preview,
+                                      onPressed: previewing == null ? () => _preview(_selectedVoiceId!) : null,
+                                    ),
                                   ),
-                                ),
-                          onTap: _saving ? null : _showVoicePicker,
+                            onTap: _saving ? null : () => _showVoicePicker(rowContext),
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: OmiSpacing.xl),
                     OmiSettingsGroup(
                       children: [
-                        OmiSettingsRow(
-                          key: const ValueKey('settings_row_voiceResponseMode'),
-                          leading: const FaIcon(FontAwesomeIcons.volumeHigh),
-                          title: l10n.voiceResponseMode,
-                          value: _voiceResponseModeLabel(_prefs.voiceResponseMode),
-                          onTap: _showModeSheet,
+                        Builder(
+                          builder: (rowContext) => OmiSettingsRow(
+                            key: const ValueKey('settings_row_voiceResponseMode'),
+                            leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.volumeHigh)),
+                            title: l10n.voiceResponseMode,
+                            // A subtitle, not a trailing value: "Headphones only" beside the tile would wrap
+                            // the title.
+                            subtitle: _voiceResponseModeLabel(_prefs.voiceResponseMode),
+                            showChevron: true,
+                            onTap: () => _showModeSheet(rowContext),
+                          ),
                         ),
                         OmiSettingsRow.toggle(
                           key: const ValueKey('settings_row_readChatRepliesAloud'),
-                          leading: const FaIcon(FontAwesomeIcons.commentDots),
+                          leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.commentDots)),
                           title: l10n.readChatRepliesAloud,
                           subtitle: l10n.readChatRepliesAloudDescription,
                           value: _prefs.readChatRepliesAloud,
