@@ -9,6 +9,9 @@
 // ignore_for_file: deprecated_member_use,directives_ordering,implicit_dynamic_list_literal,unnecessary_import
 
 abstract final class FontFamily {
+  /// Font family: Instrument Sans
+  static const String instrumentSans = 'Instrument Sans';
+
   /// Font family: SF Pro Display
   static const String sFProDisplay = 'SF Pro Display';
 }
