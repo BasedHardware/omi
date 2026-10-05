@@ -18,6 +18,7 @@ entry like "1.0.531" matches every build of that semantic version.
 import logging
 from typing import Any, Optional, cast
 
+from database._client import db
 from database.announcements import compare_versions
 from database.cache import get_memory_cache
 
@@ -30,12 +31,7 @@ _SUPPORTED_PLATFORMS = {"ios", "macos", "android"}
 
 def _fetch_review_config(platform: str, firestore_client: Any = None) -> dict[str, Any]:
     try:
-        if firestore_client is not None:
-            client = firestore_client
-        else:
-            from database._client import db
-
-            client = db
+        client = firestore_client if firestore_client is not None else db
         doc = client.collection("app_review_config").document(platform).get()
         if not getattr(doc, "exists", False):
             return {}
