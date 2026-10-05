@@ -280,8 +280,19 @@ def test_ambiguous_people_and_catalog_overflow_decline(world):
     before = deepcopy(store.rows)
     assert stage.apply_summary_speaker_labels('u', conv) == 0
     assert store.rows == before
+
     for index in range(stage.CATALOG_LIMIT + 1):
         store.rows[('users', 'u', 'people', str(index))] = dict(name=f'Person {index}')
+    before = deepcopy(store.rows)
+    assert stage.apply_summary_speaker_labels('u', conv) == 0
+    assert store.rows == before
+
+
+def test_malformed_stored_segment_declines_before_any_write(world):
+    stage, db, store, path, conv = world
+    store.rows[path].update(
+        db.encode_conversation_for_write('u', {'transcript_segments': [{**segment(), 'start': 'malformed'}]})
+    )
     before = deepcopy(store.rows)
     assert stage.apply_summary_speaker_labels('u', conv) == 0
     assert store.rows == before

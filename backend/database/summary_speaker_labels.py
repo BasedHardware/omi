@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 from config.summary_speaker_labels import summary_speaker_labels_enabled
+from database.read_boundary import parse_payload_strict
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.summary_speaker_labels import normalized_name, select_candidates, transcript_identity
 from utils.speaker_permissions import named_speaker_prompts_allowed
@@ -158,7 +159,14 @@ def apply_summary_speaker_labels(uid: str, conversation, *, firestore_client=Non
                     },
                 )
             # Encode before staging any write: a codec error cannot leave people.
-            validated = [TranscriptSegment.model_validate(s) for s in updated]
+            validated = [
+                parse_payload_strict(
+                    TranscriptSegment,
+                    s,
+                    document_path=f'users/{uid}/conversations/{conversation.id}/segments/{s.get("id", "unknown")}',
+                )
+                for s in updated
+            ]
             payload = conversations_db.encode_conversation_for_write(
                 uid, {'transcript_segments': updated}, current.get('data_protection_level', 'standard')
             )
