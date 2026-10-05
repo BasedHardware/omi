@@ -8,7 +8,7 @@ from uuid import NAMESPACE_URL, uuid5
 import httpx
 import pytest
 
-from config.proactivity_v2 import ProactivityDenied
+from config.proactivity_v2 import ProactivityDenied, producer_for
 from database import proactivity as ledger
 from database import proactivity_budget as money
 from database.llm_gateway_accounting import ATTEMPTS_COLLECTION, record_llm_gateway_attempt
@@ -92,6 +92,7 @@ async def wire(lane, store, monkeypatch):
             try:
                 yield SimpleNamespace(
                     lane=lane,
+                    client=client,
                     calls=calls,
                     store=store,
                     responses=responses,
@@ -152,7 +153,10 @@ async def test_mentor_large_context_requests_reserve_and_settle(wire, field, mon
     assert await producers.produce_mentor('u', 'c', messages, wire.lane.context), wire.responses
     assert [ctx.step for ctx, _ in wire.calls] == ['prefilter', 'gate', 'generate', 'critic', 'usefulness', 'dedupe']
     for ctx, payload in wire.calls:
-        assert len(json.dumps(payload, separators=(',', ':'), ensure_ascii=False).encode()) <= 32768
+        assert (
+            len(json.dumps(payload, separators=(',', ':'), ensure_ascii=False).encode())
+            <= producer_for(ctx.producer).max_request_bytes
+        )
         row = wire.store.rows[('users', 'u', ledger.ITEMS, ctx.item_id)]
         assert row['attempts'][ctx.call_id]['state'] == 'settled'
     assert len(wire.events) == 6
@@ -170,7 +174,10 @@ async def test_followup_unicode_description_reserves_and_settles(wire, monkeypat
     assert len(wire.calls) == 1, wire.responses
     ctx, payload = wire.calls[0]
     assert ctx.step == 'phrase' and payload['stream'] is False and payload['max_completion_tokens'] == 512
-    assert len(json.dumps(payload, separators=(',', ':'), ensure_ascii=False).encode()) <= 8192
+    assert (
+        len(json.dumps(payload, separators=(',', ':'), ensure_ascii=False).encode())
+        <= producer_for(ctx.producer).max_request_bytes
+    )
     row = wire.store.rows[('users', 'u', ledger.ITEMS, ctx.item_id)]
     assert row['state'] == 'ready' and row['attempts'][ctx.call_id]['state'] == 'settled'
 
@@ -191,7 +198,7 @@ async def test_provider_failure_keeps_one_reservation_without_retry(wire):
 @pytest.mark.parametrize(
     'fault,reason', [('context', 'input_bound'), ('output', 'invalid_output_bound'), ('stream', None)]
 )
-async def test_invalid_wire_fails_closed_before_reservation(wire, fault, reason):
+async def test_invalid_wire_fails_closed_before_reservation(wire, fault, reason, caplog):
     item = await claim_item(
         uid='u',
         producer='conversation_mentor_v2',
@@ -224,3 +231,139 @@ async def test_invalid_wire_fails_closed_before_reservation(wire, fault, reason)
     row = wire.store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
     assert row['attempts'] == {} and row['reserved_micro_usd'] == row['charged_micro_usd'] == 0
     assert not wire.calls and not wire.events
+    code = f'proactivity_admission.{reason}' if reason else 'proactivity_streaming'
+    assert f'rejection_reason={code}' in caplog.text
+
+
+@pytest.mark.parametrize(
+    'field', ['current_conversation', 'goals_text', 'user_facts', 'past_conversations', 'recent_notifications']
+)
+def test_context_trims_whole_items_in_priority_order(field):
+    item = {'producer': 'conversation_mentor_v2'}
+    limit = producer_for(item['producer']).max_request_bytes
+    entries = [f'BEGIN_{i} ' + 'x' * (limit // 3) + f' END_{i}' for i in range(4)]
+    fields = {field: producers.ContextItems(entries, lambda items: '\n'.join(items))}
+
+    def request(data):
+        return {'messages': [{'role': 'user', 'content': producers._render_fields(data)[field]}]}
+
+    first = producers._fit_context(item, request, fields, (field,))
+    assert first == producers._fit_context(item, request, fields, (field,))
+    text = first['messages'][0]['content']
+    expected = entries[-2:] if field == 'current_conversation' else entries[:2]
+    assert text == '\n'.join(expected)
+    assert fields[field].values == entries  # No caller mutation across steps.
+
+
+@pytest.mark.parametrize('field', ['current_conversation', 'goals_text', 'recent_conversation', 'user_goals'])
+def test_single_oversized_item_retains_text_with_marker(field):
+    item = {'producer': 'conversation_mentor_v2'}
+    limit = producer_for(item['producer']).max_request_bytes
+    oversized = {'text': 'START ' + '日本語😀"\\\n' * limit + ' NEWEST END', 'is_user': True}
+    values = [oversized]
+    fields = {
+        field: values if field in {'recent_conversation', 'user_goals'} else producers.ContextItems(values, json.dumps)
+    }
+
+    def request(data):
+        return {'state': json.dumps(producers._render_fields(data), ensure_ascii=False), 'questions': {}}
+
+    fitted = producers._fit_context(item, request, fields, (field,), jev=True)
+    assert (
+        len(json.dumps(dict(fitted, model=producers.JEV_MODEL), separators=(',', ':'), ensure_ascii=False).encode())
+        <= limit
+    )
+    assert '[Context truncated]' in fitted['state']
+    assert ('NEWEST END' if field in {'current_conversation', 'recent_conversation'} else 'START') in fitted['state']
+    assert oversized['text'].startswith('START') and '[Context truncated]' not in oversized['text']
+
+
+def test_multiline_facts_keep_continuations_with_whole_fact():
+    text = 'Known facts:\n- Highest priority\nwith a continuation\n- Lower priority\n'
+    entries = producers._fact_items(text)
+    assert entries.render(entries.values) == text
+    assert entries.values[0] == 'Known facts:\n- Highest priority\nwith a continuation\n'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'header,value,code',
+    [
+        ('x-omi-proactivity-call', None, 'proactivity_identity'),
+        ('x-omi-proactivity-call', 'PRIVATE_SECRET_CALL', 'proactivity_identity'),
+        ('x-omi-proactivity-item', 'PRIVATE_USER_CONTENT', 'proactivity_item'),
+        ('x-omi-llm-feature', 'proactivity_v2_wrong', 'proactivity_attribution'),
+        ('x-omi-proactivity-step', 'PRIVATE_SECRET_STEP', 'proactivity_attribution'),
+    ],
+)
+async def test_producer_identity_rejection_terminal_has_safe_reason_and_no_spend(wire, header, value, code, caplog):
+    async def corrupt(request):
+        if value is None:
+            request.headers.pop(header)
+        else:
+            request.headers[header] = value
+
+    wire.client.event_hooks['request'].append(corrupt)
+    assert await mentor(wire.lane) is None
+    assert wire.responses[-1][0] == 400
+    assert not wire.calls and not wire.events
+    assert f'rejection_reason={code}' in caplog.text
+    assert 'PRIVATE' not in caplog.text
+    rows = [row for key, row in wire.store.rows.items() if len(key) == 4 and key[2] == ledger.ITEMS]
+    assert len(rows) == 1
+    assert rows[0]['attempts'] == {} and rows[0]['reserved_micro_usd'] == 0
+
+
+@pytest.mark.asyncio
+async def test_validator_rejection_has_safe_parameter_without_reservation(wire, caplog):
+    item = await claim_item(
+        uid='u',
+        producer='conversation_mentor_v2',
+        source={'source_kind': 'conversation', 'source_id': 'c', 'source_revision': '1', 'source_event_id': 'eligible'},
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        await run_proactivity_model(
+            item=item,
+            step='gate',
+            request={'messages': [{'role': 'user'}], 'max_completion_tokens': 2048},
+        )
+    assert wire.responses[-1][0] == 400
+    assert 'rejection_reason=parameter_messages' in caplog.text
+    assert not wire.calls and not wire.events
+    assert wire.store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]['attempts'] == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('field', ['conversation', 'goals', 'user_facts', 'past_conversations', 'notifications'])
+async def test_real_producer_preserves_whole_context_items_through_gateway(wire, field):
+    limit = producer_for('conversation_mentor_v2').max_request_bytes
+    entries = [f'BEGIN_{i} ' + 'x' * (limit // 4) + f' END_{i}' for i in range(4)]
+    messages = [{'text': 'Recent decision', 'is_user': True}]
+    if field == 'conversation':
+        messages = [{'text': text, 'is_user': True} for text in entries]
+    elif field == 'goals':
+        wire.lane.context['goals'] = [{'title': text} for text in entries]
+    elif field == 'notifications':
+        wire.lane.context['recent_notifications'] = [{'text': text} for text in entries]
+    elif field == 'user_facts':
+        wire.lane.context[field] = '\n'.join('- ' + text for text in entries)
+    else:
+        wire.lane.context[field] = entries
+    assert await producers.produce_mentor('u', 'c', messages, wire.lane.context), wire.responses
+    for ctx, payload in wire.calls:
+        prompt = payload['messages'][0]['content'] if 'messages' in payload else payload['state']
+        for i, text in enumerate(entries):
+            if f'BEGIN_{i}' in prompt or f'END_{i}' in prompt:
+                assert text in prompt  # A retained entry is complete, never a fragment.
+        prompt_field = {
+            'conversation': 'current_conversation',
+            'goals': 'goals_text',
+            'notifications': 'recent_notifications',
+        }.get(field, field)
+        if 'messages' in payload and '{' + prompt_field + '}' in wire.lane.prompts[ctx.step]:
+            if field == 'conversation':
+                assert entries[-1] in prompt and entries[0] not in prompt
+            else:
+                assert entries[0] in prompt and entries[-1] not in prompt
+            assert '[Context truncated]' not in prompt
+        assert wire.store.rows[('users', 'u', ledger.ITEMS, ctx.item_id)]['attempts'][ctx.call_id]['state'] == 'settled'
