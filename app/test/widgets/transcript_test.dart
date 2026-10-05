@@ -777,6 +777,21 @@ void main() {
           ),
         );
 
+    testWidgets('a line that continues a turn starts at the left edge, full width like the first', (tester) async {
+      await setupSharedPreferences();
+      await pumpDetail(tester, voicesFixture(), onSegmentTap: (_) {});
+      await tester.pumpAndSettle();
+
+      final first = find.text('First thing they said.', findRichText: true);
+      final continued = find.text('Still the same voice.', findRichText: true);
+      expect(tester.getTopLeft(continued).dx, tester.getTopLeft(first).dx);
+      // The row is the tap target and the playing highlight, so it spans the list, not the words.
+      expect(
+        tester.getSize(find.byKey(const ValueKey('transcript_seek_a2'))).width,
+        tester.getSize(find.byKey(const ValueKey('transcript_seek_a1'))).width,
+      );
+    });
+
     group('unresolved', () {
       testWidgets('render a name row once per turn, not once per line', (tester) async {
         await setupSharedPreferences();

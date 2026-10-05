@@ -873,7 +873,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                     ? _buildSegmentItem(segmentIndex, people, names, askSegmentIds)
                     : Container(key: _segmentKeys[segment.id], child: customSegment);
                 if (widget.separator && segmentIndex > 0) {
-                  child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
+                  // Stretch: a line without a name row is only as wide as its words and would centre.
+                  child = Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [const SizedBox(height: 4), child],
+                  );
                 }
                 return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
               },
