@@ -7,12 +7,17 @@ Unsupported expressions fail rather than silently evaluating a different query.
 """
 
 import json
+import math
 import re
 from pathlib import Path
 
 import pytest
 
 MONITORING = Path(__file__).resolve().parents[2] / 'charts' / 'monitoring'
+ALERT_RULES_BY_EXPORT = {
+    export: {rule['uid']: rule for rule in json.loads((MONITORING / export).read_text())}
+    for export in ('alerts/live-stt.json', 'alert-rules.json')
+}
 
 
 def _sum_increase(expression, series):
@@ -73,9 +78,7 @@ def test_recovery_alert_evaluates_all_listen_traffic(
     expected_ratio,
     fires,
 ):
-    rule = next(
-        rule for rule in json.loads((MONITORING / export).read_text()) if rule['uid'] == 'omi-stt-terminal-after-text'
-    )
+    rule = ALERT_RULES_BY_EXPORT[export]['omi-stt-terminal-after-text']
     transcribed_metric = 'omi_live_session_transcript_outcome_total'
     accepted_metric = 'omi_listen_accepted_total'
     failure_metric = 'omi_live_session_terminal_after_text_total'
@@ -94,15 +97,13 @@ def test_recovery_alert_evaluates_all_listen_traffic(
     ]
     transcribed, ratio, actual_fires = _evaluate(rule, series)
     assert transcribed == expected_transcribed
-    assert ratio == pytest.approx(expected_ratio)
+    assert math.isclose(ratio, expected_ratio, rel_tol=1e-12, abs_tol=1e-12)
     assert actual_fires is fires
 
 
 @pytest.mark.parametrize('export', ['alerts/live-stt.json', 'alert-rules.json'])
 def test_recovery_alert_no_series_stays_below_floor(export):
-    rule = next(
-        rule for rule in json.loads((MONITORING / export).read_text()) if rule['uid'] == 'omi-stt-terminal-after-text'
-    )
+    rule = ALERT_RULES_BY_EXPORT[export]['omi-stt-terminal-after-text']
     # Grafana noDataState=OK is the deployed empty-vector policy.
     assert rule['noDataState'] == 'OK'
     assert _evaluate(rule, []) == (0, 0, False)
