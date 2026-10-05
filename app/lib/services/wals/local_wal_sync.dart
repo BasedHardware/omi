@@ -179,14 +179,6 @@ bool isDefinitiveUploadRefusal(Object error) =>
 
 typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields);
 
-double _walAudioSeconds(Wal wal) {
-  if (wal.totalFrames > 0) {
-    final framesPerSecond = wal.codec.getFramesPerSecond();
-    if (framesPerSecond > 0) return wal.totalFrames / framesPerSecond;
-  }
-  return max(0, wal.seconds).toDouble();
-}
-
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   List<Wal> _wals = [];
 
@@ -831,24 +823,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _notifyUpdated(generation);
   }
 
-  ({int? start, int? end, int? ringId, int? epoch}) _liveEvidenceFor(List<WalFrame> frames) {
-    const none = (start: null, end: null, ringId: null, epoch: null);
-    if (frames.isEmpty ||
-        !frames.every((f) => f.liveOrdinal != null && f.connectionEpoch != null && f.liveRingId != null)) {
-      return none;
-    }
-    final first = frames.first.liveOrdinal!;
-    final ordered = frames.asMap().entries.every((e) => e.value.liveOrdinal == first + e.key);
-    final epochs = frames.map((f) => f.connectionEpoch).toSet();
-    final ringIds = frames.map((f) => f.liveRingId).toSet();
-    if (!ordered || epochs.length != 1 || ringIds.length != 1) return none;
-    final deviceId = _deviceId;
-    if (deviceId == null) return none;
-    final ringId = _custody.currentRingId(deviceId);
-    if (ringId == null || ringIds.first != ringId) return none;
-    if (frames.first.connectionEpoch != _custody.latestEpoch(deviceId)) return none;
-    return (start: first, end: first + frames.length, ringId: ringId, epoch: frames.first.connectionEpoch);
-  }
+  ({int? start, int? end, int? ringId, int? epoch}) _liveEvidenceFor(List<WalFrame> frames) =>
+      stableLiveWalEvidence(frames, _deviceId, _custody);
 
   void _removeFrameIndices(List<int> indices) {
     for (var i = indices.length - 1; i >= 0; i--) {
@@ -1366,7 +1342,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     String? failClosedReason,
   }) {
     if (!_isCurrent(generation)) return;
-    double audioSeconds(List<Wal> wals) => wals.fold(0.0, (sum, wal) => sum + _walAudioSeconds(wal));
+    double audioSeconds(List<Wal> wals) => wals.fold(0.0, (sum, wal) => sum + walAudioSeconds(wal));
     final fields = <String, Object?>{
       'policy': 'retain_covered_upload_gaps',
       'phase': phase,

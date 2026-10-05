@@ -1,8 +1,19 @@
+import 'dart:math';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
 
 typedef WalEvidenceRun = ({int start, int end, bool claimable});
+
+double walAudioSeconds(Wal wal) {
+  if (wal.totalFrames > 0) {
+    final framesPerSecond = wal.codec.getFramesPerSecond();
+    if (framesPerSecond > 0) return wal.totalFrames / framesPerSecond;
+  }
+  return max(0, wal.seconds).toDouble();
+}
 
 bool partitionsEvidenceRuns(bool darkWrite, BleAudioCodec codec, List<WalFrame> frames) =>
     darkWrite && (codec.isOpusSupported() || codec == BleAudioCodec.pcm16) && hasCaptureEvidence(frames);
@@ -62,6 +73,25 @@ bool _evidenceContinues(WalFrame prev, WalFrame next) =>
                 entry.value.sourceFramePosition == start + entry.key,
           );
   return stable ? (root: root, start: start, epoch: epoch) : (root: null, start: null, epoch: null);
+}
+
+({int? start, int? end, int? ringId, int? epoch}) stableLiveWalEvidence(
+    List<WalFrame> frames, String? deviceId, PendantRingCustody custody) {
+  const none = (start: null, end: null, ringId: null, epoch: null);
+  if (frames.isEmpty ||
+      !frames.every((f) => f.liveOrdinal != null && f.connectionEpoch != null && f.liveRingId != null)) {
+    return none;
+  }
+  final first = frames.first.liveOrdinal!;
+  final ordered = frames.asMap().entries.every((e) => e.value.liveOrdinal == first + e.key);
+  final epochs = frames.map((f) => f.connectionEpoch).toSet();
+  final ringIds = frames.map((f) => f.liveRingId).toSet();
+  if (!ordered || epochs.length != 1 || ringIds.length != 1) return none;
+  if (deviceId == null) return none;
+  final ringId = custody.currentRingId(deviceId);
+  if (ringId == null || ringIds.first != ringId) return none;
+  if (frames.first.connectionEpoch != custody.latestEpoch(deviceId)) return none;
+  return (start: first, end: first + frames.length, ringId: ringId, epoch: frames.first.connectionEpoch);
 }
 
 int syncedPrefixCount(List<bool> synced) {
