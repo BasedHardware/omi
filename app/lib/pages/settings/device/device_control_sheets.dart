@@ -53,6 +53,42 @@ Future<int?> showDoubleTapActionSheet(BuildContext context, {required int curren
   );
 }
 
+/// Hardware button action picker (3 ask question, 1 mute/unmute, 0 end and process, 2 star, 4 none).
+Future<int?> showButtonActionSheet(
+  BuildContext context, {
+  required String title,
+  required int current,
+}) {
+  final l10n = context.l10n;
+  final options = [
+    (3, l10n.deviceOnboardingAskQuestionTitle),
+    (1, l10n.deviceOnboardingMuteUnmute),
+    (0, l10n.endAndProcess),
+    (2, l10n.starOngoing),
+    (4, 'None'),
+  ];
+  return showOmiSheet<int>(
+    context: context,
+    title: title,
+    padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+    builder: (sheetContext) => Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final opt in options)
+          Semantics(
+            selected: opt.$1 == current,
+            child: OmiSettingsRow(
+              title: opt.$2,
+              showChevron: false,
+              trailing: opt.$1 == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+              onTap: () => Navigator.of(sheetContext).pop(opt.$1),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
 /// LED brightness (0–100 %). [onChanged] fires while dragging, [onChangeEnd] when released.
 Future<void> showLedBrightnessSheet(
   BuildContext context, {
