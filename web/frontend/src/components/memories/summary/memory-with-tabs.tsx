@@ -66,6 +66,7 @@ export default function MemoryWithTabs({
             transcript={memory.transcript_segments}
             externalData={memory.external_data}
             people={memory.people}
+            participants={memory.structured.participants}
           />
         </div>
         <div

@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
 import logging
@@ -1885,6 +1886,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     return response
 
 
+@sync_attempt
 async def _run_sync_job_body(request: Request, task_retry_count: int):
     """Cloud Tasks handler: runs one sync job inside the request.
 
@@ -1931,6 +1933,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         if not isinstance(capture_claims, dict) or len(capture_claims) > 20:
             capture_claims = {}
         sync_lane = payload.get('lane') if payload.get('lane') in ('fresh', 'backfill') else SyncLane.FRESH.value
+        set_sync_metrics_lane(sync_lane)
         content_id = payload.get('content_id') if isinstance(payload.get('content_id'), str) else None
         payload_uses_fence = payload.get('ledger_fence_mode') == SyncLedgerFenceMode.ACTIVE.value
         enqueued_at = payload.get('enqueued_at')

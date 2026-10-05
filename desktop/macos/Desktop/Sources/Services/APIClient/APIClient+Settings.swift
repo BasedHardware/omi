@@ -506,6 +506,17 @@ struct SubscriptionPlanOption: Codable, Identifiable {
   }
 }
 
+struct TranscriptionAllowanceSnapshot: Codable {
+  let mode: String
+  let remainingSeconds: Int?
+  let reason: String
+
+  enum CodingKeys: String, CodingKey {
+    case mode, reason
+    case remainingSeconds = "remaining_seconds"
+  }
+}
+
 struct UserSubscriptionResponse: Codable {
   let subscription: UserSubscriptionInfo
   let transcriptionSecondsUsed: Int
@@ -518,6 +529,9 @@ struct UserSubscriptionResponse: Codable {
   let memoriesCreatedLimit: Int
   let availablePlans: [SubscriptionPlanOption]
   let showSubscriptionUI: Bool
+  /// Server-resolved allowance for this request, including its validated BYOK headers.
+  /// Nil on older backends; the UI must not infer unlimited STT from a BYOK plan.
+  let transcriptionAllowance: TranscriptionAllowanceSnapshot?
   // Set for Neo subscribers whose current billing period started before the
   // policy change in #7496 — they retain desktop access until this unix-seconds
   // timestamp (their `current_period_end`). Null for everyone else.
@@ -535,6 +549,7 @@ struct UserSubscriptionResponse: Codable {
     case memoriesCreatedLimit = "memories_created_limit"
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
+    case transcriptionAllowance = "transcription_allowance"
     case desktopGrandfatherUntil = "desktop_grandfather_until"
   }
 
@@ -555,6 +570,8 @@ struct UserSubscriptionResponse: Codable {
     memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
     availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
     showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
+    transcriptionAllowance = try? c.decodeIfPresent(
+      TranscriptionAllowanceSnapshot.self, forKey: .transcriptionAllowance)
     desktopGrandfatherUntil = try c.decodeIfPresent(Int.self, forKey: .desktopGrandfatherUntil)
   }
 }

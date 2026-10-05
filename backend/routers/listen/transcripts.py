@@ -15,6 +15,9 @@ from fastapi.websockets import WebSocketDisconnect
 
 from config.capture_evidence import capture_evidence_dark_write_enabled, listen_committed_capture_coverage_enabled
 from config.translation import resolve_ondemand_config
+from routers.listen.capture_merges import snapshot_proofs, acknowledge_proofs
+from models.capture_window_proof import CaptureWindowProof
+from config.live_capture import capture_window_reason
 from utils.capture_evidence import unknown_envelope
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 
@@ -38,7 +41,11 @@ from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
 from utils.audio_timeline import UNPLACED_SEGMENT_OFFSET
 from utils.conversations.factory import deserialize_conversation
-from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL, OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL
+from utils.metrics import (
+    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
+    OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL,
+    OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL,
+)
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
@@ -105,6 +112,7 @@ class TranscriptProcessor:
         self.photo_buffer: deque[ConversationPhoto] = deque(maxlen=host.limits.max_photo_buffer_size)
         self.cache = ConversationCache(self._load_conversation)
         self.current_session_segments: Dict[str, bool] = {}
+        self._capture_merge_tails: Dict[str, Dict[str, CaptureWindowProof]] = {}
         self.suggested_segments: set[str] = set()
         self.speaker_id_allocator = ConversationSpeakerIdAllocator()
         self.language_cache = TranscriptSegmentLanguageCache()
@@ -414,6 +422,7 @@ class TranscriptProcessor:
             process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
             self._apply_speaker_identity_statuses(targets)
             fresh = [segment.model_dump() for segment in segments]
+            self._capture_merge_tails = getattr(self, "_capture_merge_tails", {})
             source_map = self.host.state.source_position_map if capture_evidence_dark_write_enabled() else None
             capture_evidence = None
             if capture_evidence_dark_write_enabled():
@@ -439,6 +448,8 @@ class TranscriptProcessor:
                 conversation.id,
                 [segment.model_dump() for segment in targets],
                 live_segments=fresh,
+                live_capture_reasons={str(s.id): s.capture_window_reason for s in segments},
+                **snapshot_proofs(self._capture_merge_tails, conversation.id, segments),
                 started_at=started_at,
                 audio_timeline=audio_timeline,
                 **({'capture_evidence': capture_evidence} if capture_evidence_dark_write_enabled() else {}),
@@ -458,6 +469,7 @@ class TranscriptProcessor:
                 return None
             if getattr(self.host.state, 'capture_timeline_v2', False):
                 self._v2_committed_ids.update(str(segment.id) for segment in segments)
+            acknowledge_proofs(self._capture_merge_tails, conversation.id, written.capture_proofs)
             serialised = written.segments
             by_id = {s['id']: TranscriptSegment(**s) for s in serialised}
             if not getattr(self.host.state, 'capture_timeline_v2', False):
@@ -473,6 +485,10 @@ class TranscriptProcessor:
                     OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL.labels(
                         outcome='persisted' if known else 'unavailable', reason=reason
                     ).inc()
+                    attribution = 'known_window' if known else capture_window_reason(written.capture_reasons.get(sid))
+                    OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='version', reason=attribution).inc()
+                    if sid in written.created_ids:
+                        OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='segment', reason=attribution).inc()
             if source_map is not None:
                 source_map.acknowledge(conversation.id, capture_evidence)
             conversation.transcript_segments = list(by_id.values())
@@ -917,7 +933,16 @@ class TranscriptProcessor:
                     self.speaker_id_allocator.assign(raw)
                     raw['start'] += offset
                     raw['end'] += offset
+                    attribution = raw.pop('_capture_window_reason', None)
+                    if getattr(self.host, 'use_custom_stt', False):
+                        attribution = 'custom_stt'
+                    elif getattr(self.host, 'is_multi_channel', False):
+                        attribution = 'multi_channel'
+                    proof = raw.pop('_capture_merge_proof', None)
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
+                    if isinstance(proof, CaptureWindowProof) and proof.matches(segment.capture_window_bounds()):
+                        segment.capture_merge_proof = proof
+                    segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
@@ -1167,7 +1192,16 @@ class TranscriptProcessor:
                         # V2 capture spans begin at >=0, so this offset cannot
                         # resolve to audio even when the marker is invisible.
                         raw['start'] = raw['end'] = UNPLACED_SEGMENT_OFFSET
+                    attribution = raw.pop('_capture_window_reason', None)
+                    if getattr(self.host, 'use_custom_stt', False):
+                        attribution = 'custom_stt'
+                    elif getattr(self.host, 'is_multi_channel', False):
+                        attribution = 'multi_channel'
+                    proof = raw.pop('_capture_merge_proof', None)
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
+                    if isinstance(proof, CaptureWindowProof) and proof.matches(segment.capture_window_bounds()):
+                        segment.capture_merge_proof = proof
+                    segment.capture_window_reason = capture_window_reason(attribution)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id

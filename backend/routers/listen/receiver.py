@@ -21,6 +21,7 @@ from config.capture_evidence import (
 )
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+from utils.stt.replay_capture_accounting import record_replay_sends
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
 from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
@@ -69,6 +70,7 @@ from utils.stt.live_failure import (
 from utils.stt.live_chain import LiveChainExhausted, ProviderChainUnavailable
 from utils.stt.live_recovery import select_live_replacement
 from config.live_stt_recovery import current_recovery_enabled, session_recovery_enabled
+from utils.stt.soniox_idle import SonioxIdleBudget
 from routers.listen import legacy_recovery
 from utils.stt import legacy_replay
 from utils.stt.recovery_state import (
@@ -122,7 +124,7 @@ from utils.stt.streaming import (
     process_audio_soniox,
     process_audio_parakeet,
 )
-from routers.listen.stt_callbacks import build_stt_callbacks
+from routers.listen.stt_callbacks import attach_legacy_capture_window, build_stt_callbacks
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.transcribe_decisions import (
@@ -239,6 +241,7 @@ def _strip_capture_word_ranges(segments: List[Dict[str, Any]]) -> None:
 
 class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
+        self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
         self.translation_demand = TranslationDemand()
         self._translation_expiry_task: asyncio.Task[Any] | None = None
@@ -528,19 +531,11 @@ class ListenReceiver(ReplayFilterMixin):
                 segment.pop('_capture_start_sample', None)
                 segment.pop('_capture_end_sample', None)
                 segment['_capture_window_unavailable'] = True
+                segment['_capture_window_reason'] = 'kill_switch'
             self._enqueue_stt_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
             return
         for segment in segments:
-            start_sample = segment.pop('_capture_start_sample', None)
-            end_sample = segment.pop('_capture_end_sample', None)
-            if start_sample is not None and end_sample is not None and end_sample >= start_sample:
-                abs_start = self.capture_timeline.wall_strict(start_sample)
-                abs_end = self.capture_timeline.wall_strict(end_sample)
-                if abs_start is not None and abs_end is not None:
-                    segment['_capture_abs_start'] = abs_start
-                    segment['_capture_abs_end'] = abs_end
-                    continue
-            segment['_capture_window_unavailable'] = True
+            attach_legacy_capture_window(segment, self.capture_timeline)
         self._enqueue_stt_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
 
     def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
@@ -774,7 +769,13 @@ class ListenReceiver(ReplayFilterMixin):
                 and (pending is None or provider is None or provider == pending.to_mode),
                 candidate=speaker_epoch if speaker_epoch is not None else self._candidate_token,
             )
-        self._capture('capture_inbound_stt', segments)
+        # Accepted-send proof belongs only to live transport. Diagnostic cassettes
+        # serialize raw dictionaries (including dataclasses), so omit it from their
+        # copy while retaining the original for transcript merging.
+        self._capture(
+            'capture_inbound_stt',
+            [{key: value for key, value in segment.items() if key != '_capture_merge_proof'} for segment in segments],
+        )
         (speaker_epoch or self.speaker_provider_epoch).stamp(segments, provider or self._serving_provider())
         self.host.transcripts.enqueue(segments)
 
@@ -963,6 +964,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self.host.stt_language,
                     profile=self.host.language_profile,
                     keywords=keywords,
+                    idle_budget=self.soniox_idle_budget,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
             # they inherit the same chain a Modulate primary uses.
@@ -988,6 +990,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self.host.stt_language,
                     profile=self.host.language_profile,
                     keywords=keywords,
+                    idle_budget=self.soniox_idle_budget,
                 ),
                 connect_modulate=(
                     (
@@ -1420,7 +1423,7 @@ class ListenReceiver(ReplayFilterMixin):
             prefix_deadline = min(prefix_deadline, self.shutdown_deadline)
         try:
             rejected_sample = await replay_chunks(
-                raw,
+                record_replay_sends(raw, epoch),
                 replay,
                 source=meter_source if meter_source is not None else ring,
                 provider=dead_provider or 'parakeet',
@@ -1446,9 +1449,12 @@ class ListenReceiver(ReplayFilterMixin):
             await self._reject_candidate(raw, epoch, hop, previous)
             return False
         delivery.connection = self._wrap_legacy_stt_socket(raw, epoch)
-        self.stt_socket = delivery if replay or self._replay_live_tail else delivery.connection
-        # Transfer this bounded tail to the adopted socket; the next failed leg
-        # snapshots the capture ring, never this queue's already accepted prefix.
+        # Empty prefixes still need the independent paced tail for subsequent
+        # capture; exposing the raw paced writer stalls receive/disconnect
+        # observation behind a buffered client burst.
+        self.stt_socket = delivery
+        # Transfer this bounded tail to the adopted socket. A later failover
+        # uses the capture ring, or takes the unwritten tail when no ring exists.
         self._replay_live_tail = deque()
         self._replay_tail_bytes = 0
         delivery.start_tail(draining=self.client_closing)
@@ -1609,10 +1615,13 @@ class ListenReceiver(ReplayFilterMixin):
             )
             for packet in self._replay_live_tail:
                 self._live_birth.note(packet.start, packet.start + len(packet.data) // 2, packet.received)
-            self._replay_live_tail.clear()
-            self._replay_tail_bytes = 0
             if window_ring is not None:
+                self._replay_live_tail.clear()
+                self._replay_tail_bytes = 0
                 self._window_replay_cutoff_sample = window_ring.finalized_sample
+            elif isinstance(previous, ReplayTailSocket):
+                self._replay_live_tail.extendleft(reversed(previous.take_tail()))
+                self._replay_tail_bytes = sum(len(packet.data) for packet in self._replay_live_tail)
             retire = getattr(previous, 'retire_for_replay', None)
             if window_ring is not None and callable(retire):
                 retire()
@@ -1819,6 +1828,24 @@ class ListenReceiver(ReplayFilterMixin):
                 # cursor and those samples simply have no provider mapping.
                 self._stt_buffer_start_sample = None
                 return
+            socket = self.stt_socket
+            if socket is not None and not isinstance(socket, ReplayTailSocket) and not socket_is_finishing(socket):
+                # Reuse the bounded tail on initial paid legs too. Capacity
+                # waits belong to its supervised pump, so receive_data can
+                # keep reading audio and observe disconnect immediately.
+                wait_capacity = getattr(replay_delivery.raw_transport(socket), 'wait_send_capacity', None)
+                if callable(wait_capacity) and self._serving_provider() in {'soniox', 'modulate', 'deepgram'}:
+                    self.stt_socket = ReplayTailSocket(
+                        socket,
+                        ReplayPacer(request.sample_rate, self.host.stt_service.value, socket),
+                        deque(),
+                        self.host,
+                        source=self._serving_provider(),
+                        birth=self._live_birth,
+                        retire_interval=(lambda end: ring.finalize_through(end) if ring is not None else 0),
+                        write_wait_seconds=socket_replay_limits(socket).queue_wait_seconds,
+                    )
+                    self.stt_socket.start_tail(draining=self.client_closing)
             outbound_audio = bytes(buffer)
             outbound_start_sample = self._stt_buffer_start_sample
             window_ring = self._window_ring()

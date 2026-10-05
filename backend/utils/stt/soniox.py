@@ -24,6 +24,8 @@ from utils.stt.committed_words import remember_provider_word
 from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
+from config.soniox_idle import idle_close_seconds
+from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
@@ -47,7 +49,9 @@ SONIOX_KEEPALIVE_SECONDS: Final = 10.0
 SONIOX_CONNECT_RETRY_DEADLINE_SECONDS: Final = 5.0
 SONIOX_CONNECT_RETRY_DELAYS: Final = (0.35, 0.8, 1.6)
 SONIOX_RATE_LIMIT_ERROR_LOG_SECONDS: Final = 300.0
-_last_rate_limit_error_log = 0.0
+# Compared against time.monotonic(), which counts from boot: a 0.0 start would mute the
+# first escalation on any host up for less than one window.
+_last_rate_limit_error_log = float('-inf')
 _rate_limit_events: list[float] = []
 _rate_limit_log_lock = threading.Lock()
 
@@ -188,6 +192,7 @@ class SafeSonioxSocket(STTSocket):
         self._dead = False
         self._closed = False
         self._finishing = False
+        self._planned_close = False
         self._audio_sent = False
         self._death_reason: Optional[str] = None
         # Typed, bounded death reason (e.g. PROVIDER_BUDGET_EXHAUSTED) for the
@@ -225,6 +230,8 @@ class SafeSonioxSocket(STTSocket):
 
     def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
         with self._lock:
+            if self._planned_close and reason.startswith(('ws send closed:', 'ws recv closed:')):
+                return
             if not self._dead:
                 self._death_reason = reason
                 self._typed_death_reason = typed_reason
@@ -430,7 +437,8 @@ class SafeSonioxSocket(STTSocket):
                         and str(msg.get('error_code')) == '400'
                         and 'no audio received' in str(msg.get('error_message') or '').lower()
                     ):
-                        record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason='soniox_no_audio_teardown')
+                        if not self._planned_close:
+                            record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason='soniox_no_audio_teardown')
                         self._done_event.set()
                         break
                     record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason=typed)
@@ -568,7 +576,8 @@ async def process_audio_soniox(
     *,
     profile: LiveLanguageProfile | None = None,
     keywords: list[str] | None = None,
-) -> SafeSonioxSocket:
+    idle_budget: SonioxIdleBudget | None = None,
+) -> STTSocket:
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
         raise ValueError('SONIOX_API_KEY environment variable is not set')
@@ -625,7 +634,21 @@ async def process_audio_soniox(
             rejected,
         )
 
-    logger.info(f'Connecting to Soniox streaming sample_rate={sample_rate} language={language}')
+    url = SONIOX_WS_URL
+
+    async def connect(callback: Any) -> SafeSonioxSocket:
+        return await _open_soniox(config, url, callback, preseconds)
+
+    sock = await connect(stream_transcript)
+    seconds = idle_close_seconds()
+    if seconds:
+        return IdleSonioxSocket(sock, connect, stream_transcript, sample_rate, seconds, idle_budget=idle_budget)
+    return sock
+
+
+async def _open_soniox(config: Dict[str, Any], url: str, stream_transcript: Any, preseconds: int) -> SafeSonioxSocket:
+    sample_rate = config['sample_rate']
+    logger.info('Connecting to Soniox streaming sample_rate=%s', sample_rate)
     deadline = time.monotonic() + SONIOX_CONNECT_RETRY_DEADLINE_SECONDS
     ws = None
     last_rate_limit: BaseException | None = None
@@ -635,7 +658,7 @@ async def process_audio_soniox(
             break
         try:
             ws = await asyncio.wait_for(
-                websockets.connect(SONIOX_WS_URL, ping_timeout=15, ping_interval=15, open_timeout=remaining),
+                websockets.connect(url, ping_timeout=15, ping_interval=15, open_timeout=remaining),
                 timeout=remaining,
             )
             break

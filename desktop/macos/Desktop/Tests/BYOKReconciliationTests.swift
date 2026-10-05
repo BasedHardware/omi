@@ -2,32 +2,17 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// The developer-keys section hints which BYOK keys are still missing while
-/// only some of the four are entered, so someone who pastes a single key
-/// learns the free plan needs all four at the same time.
-final class BYOKIncompleteHintTests: XCTestCase {
-  func testHintOnlyForPartiallyFilledKeySet() {
-    let hint = byokMissingKeysHint(["sk-test", "", "", ""])
-    XCTAssertEqual(
-      hint,
-      "Still missing: OpenAI, Anthropic, Gemini. All 4 keys must be entered at the same time to activate the free plan."
-    )
-    XCTAssertNil(byokMissingKeysHint(["", "", "", ""]), "blank form shows no hint")
-    XCTAssertNil(byokMissingKeysHint(["a", "b", "c", "d"]), "complete form shows no hint")
-  }
-}
-
 /// The developer-keys fields are `SecureField`s bound straight to `@AppStorage`,
 /// so the binding is written on every character. Reconciling on each of those
-/// writes sent half-typed keys to four provider auth endpoints and flapped the
+/// writes sent half-typed keys to provider auth endpoints and flapped the
 /// backend free-plan flag once per keystroke; simply opening the pane with no
 /// keys at all still spent a `deactivateBYOK` + plan refetch. These pin the
 /// decision the settled key set drives, separately from performing it.
 final class BYOKReconciliationTests: XCTestCase {
-  func testCompleteKeySetIsValidatedBeforeActivation() {
+  func testSelectedLLMKeyIsValidatedBeforeActivationWithoutDeepgram() {
     XCTAssertEqual(
       BYOKReconciliation.action(
-        forKeys: ["sk-a", "sk-b", "sk-c", "sk-d"],
+        forKeys: ["sk-a"],
         hasCheckedStatuses: false,
         hasActivationError: false),
       .validateAndActivate)
@@ -36,7 +21,7 @@ final class BYOKReconciliationTests: XCTestCase {
   func testUntouchedEmptyFormNeverReachesTheNetwork() {
     XCTAssertEqual(
       BYOKReconciliation.action(
-        forKeys: ["", "", "", ""],
+        forKeys: [""],
         hasCheckedStatuses: false,
         hasActivationError: false),
       .none,
@@ -46,7 +31,7 @@ final class BYOKReconciliationTests: XCTestCase {
   func testClearingKeysStillDeactivates() {
     XCTAssertEqual(
       BYOKReconciliation.action(
-        forKeys: ["", "", "", ""],
+        forKeys: [""],
         hasCheckedStatuses: true,
         hasActivationError: false),
       .deactivate,
@@ -54,27 +39,18 @@ final class BYOKReconciliationTests: XCTestCase {
 
     XCTAssertEqual(
       BYOKReconciliation.action(
-        forKeys: ["", "", "", ""],
+        forKeys: [""],
         hasCheckedStatuses: false,
         hasActivationError: true),
       .deactivate,
       "a standing activation error is state to reconcile away")
   }
 
-  func testPartialKeySetCannotActivate() {
-    XCTAssertEqual(
-      BYOKReconciliation.action(
-        forKeys: ["sk-a", "", "", ""],
-        hasCheckedStatuses: false,
-        hasActivationError: false),
-      .deactivate)
-  }
-
   func testWhitespaceOnlyKeyDoesNotCount() {
     XCTAssertEqual(
       BYOKReconciliation.action(
-        forKeys: ["sk-a", "sk-b", "sk-c", "   \n"],
-        hasCheckedStatuses: false,
+        forKeys: ["   \n"],
+        hasCheckedStatuses: true,
         hasActivationError: false),
       .deactivate,
       "a field holding only whitespace is not a key — `APIKeyService.byokKey` trims it away too")

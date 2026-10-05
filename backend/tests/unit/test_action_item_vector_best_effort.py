@@ -68,7 +68,6 @@ def committed_description_edit(monkeypatch):
         action_items_router.action_items_db, 'get_action_item', lambda *args, **kwargs: updated, raising=False
     )
     monkeypatch.setattr(action_items_router, 'sync_action_item_reminder', lambda *args, **kwargs: None, raising=False)
-    monkeypatch.setattr(action_items_router, '_wake_task_changes', lambda *args, **kwargs: None, raising=False)
 
 
 def test_patch_action_item_succeeds_while_embeddings_are_down(embeddings_down, committed_description_edit):

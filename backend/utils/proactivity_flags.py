@@ -74,13 +74,14 @@ def _error_result(exc: Exception, expires_at: float) -> _FlagResult:
 
 @lru_cache(maxsize=1)
 def flag_client() -> Any:
-    # Secret-mounted tokens can carry a trailing newline: capture tolerates it, /decide returns 401.
-    key = (os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY') or '').strip()
-    if not key:
+    # The shared backend key is intentionally disabled. Only this public token
+    # grants v2 cohort lookup; never enable JIT flags or capture as a side effect.
+    key = os.getenv('PROACTIVITY_V2_POSTHOG_TOKEN', '').strip()
+    if not key.startswith('phc_'):
         raise ProactivityDenied('flag_unavailable')
     return importlib.import_module('posthog').Posthog(
         project_api_key=key,
-        host=(os.getenv('POSTHOG_HOST') or 'https://app.posthog.com').strip(),
+        host=os.getenv('PROACTIVITY_V2_POSTHOG_HOST', '').strip() or 'https://us.posthog.com',
         send=False,
         sync_mode=True,
         feature_flags_request_timeout_seconds=2,

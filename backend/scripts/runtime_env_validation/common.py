@@ -260,6 +260,7 @@ def _validate_env_entries(
     config_maps: set[str] | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = validate_mentor_pipeline(scope=scope, config=actual)
+    errors.extend(validate_proactivity_v2_posthog_token(scope=scope, env_entries=actual))
     for name, expected_entry in expected.items():
         if 'config_map' in expected_entry:
             config_map = _as_config_dict(expected_entry['config_map']) or {}
@@ -311,6 +312,24 @@ def _validate_forbidden_env_entries(
         ValidationError(scope, f'forbidden env {name} is present')
         for name in sorted(set(forbidden_names).intersection(actual))
     ]
+
+
+def validate_proactivity_v2_posthog_token(
+    *, scope: str, env_entries: ConfigDict, required: bool = False
+) -> list[ValidationError]:
+    """V2 uses a literal public client token, never a shared/secret binding."""
+    name = 'PROACTIVITY_V2_POSTHOG_TOKEN'
+    entry = _as_config_dict(env_entries.get(name))
+    if entry is None and not required and name not in env_entries:
+        return []
+    value = entry.get('value') if entry is not None else None
+    if (
+        not isinstance(value, str)
+        or not value.strip().startswith('phc_')
+        or any(key in (entry or {}) for key in ('secret', 'valueFrom', 'valueSource', 'env_var', 'config_map'))
+    ):
+        return [ValidationError(scope, f'{name} must be a plain public phc_ client token')]
+    return []
 
 
 def validate_mentor_pipeline(

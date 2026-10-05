@@ -4,12 +4,19 @@ The receipt authorizes best-effort teaching; it is not an enrollment job.
 Inference must never create or replace these explicit user decisions.
 """
 
-from dataclasses import dataclass
-from typing import Annotated, Mapping, Optional
+from dataclasses import dataclass, field, replace
+from typing import Annotated, Any, Mapping, Optional
 import uuid
 
 from pydantic import BaseModel, Field, StrictStr
 
+from config.live_capture import capture_window_reason
+from config.audio_timeline import (
+    live_capture_window_merge_preservation_enabled,
+    live_capture_window_merge_union_enabled,
+)
+from models.capture_window_proof import CaptureWindowProof
+from database.read_boundary import parse_payload_strict
 from models.speaker_label_provenance import project_source
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
@@ -368,10 +375,26 @@ class LiveTranscriptMerge:
     updated_ids: set[str]
     removed_ids: list[str]
     absorbed_into: dict[str, str]
+    capture_reasons: dict[str, str] = field(default_factory=dict)
+    created_ids: set[str] = field(default_factory=set)
+    capture_proofs: dict[str, CaptureWindowProof] = field(default_factory=dict)
+
+    def with_segments(self, segments: list[dict]) -> 'LiveTranscriptMerge':
+        return replace(self, segments=segments)
+
+
+def replay_receipt_commits(payload: Mapping[str, Any], document_path: str) -> list[list[str]]:
+    return parse_payload_strict(LiveTranscriptReplayReceipt, payload, document_path=document_path).commits
 
 
 def merge_live_segments(
-    persisted: list[dict], fresh: list[dict], receipt: dict, *, absorbed_ids: Optional[list[str]] = None
+    persisted: list[dict],
+    fresh: list[dict],
+    receipt: dict,
+    *,
+    absorbed_ids: Optional[list[str]] = None,
+    capture_reasons: Optional[dict[str, str]] = None,
+    capture_proofs: Optional[dict[str, CaptureWindowProof]] = None,
 ) -> LiveTranscriptMerge:
     """Plan only the mutable tail and fresh batch against the transaction's receipt.
 
@@ -400,6 +423,16 @@ def merge_live_segments(
     # speaker_match_source, and every word lands in its own segment.
     tail = [TranscriptSegment(**segment) for segment in apply_manual_assignments(persisted[-1:], receipt)]
     incoming = [TranscriptSegment(**segment) for segment in apply_manual_assignments(unique_fresh, receipt)]
+    for segment in tail:
+        if segment.audio_capture_start is None or segment.audio_capture_end is None:
+            segment.capture_window_reason = 'inherited_unknown'
+    for segment in incoming:
+        segment.capture_window_reason = capture_window_reason((capture_reasons or {}).get(str(segment.id)))
+    if live_capture_window_merge_union_enabled():
+        for segment in [*tail, *incoming]:
+            proof = (capture_proofs or {}).get(str(segment.id))
+            if proof and proof.matches(segment.capture_window_bounds()):
+                segment.capture_merge_proof = proof
     # Selected-segment decisions are keyed by ID, so those segments must keep it.
     # Speaker-wide decisions are keyed by speaker: same-speaker merges keep them.
     covered = set(_receipt_section(receipt, 'segments'))
@@ -414,7 +447,11 @@ def merge_live_segments(
     if replayed_commit or len(incoming) > LIVE_TRANSCRIPT_REPLAY_RECEIPT_BATCH_LIMIT:
         covered.update(s.id for s in [*tail, *incoming] if s.id)
     combined = TranscriptSegment.combine_segments(
-        tail, incoming, protected_segment_ids=covered, speaker_bound_ids=speaker_bound
+        tail,
+        incoming,
+        protected_segment_ids=covered,
+        speaker_bound_ids=speaker_bound,
+        preserve_capture_windows=live_capture_window_merge_preservation_enabled(),
     )
     result = persisted[:-1] + [segment.model_dump() for segment in combined.segments]
     result.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))
@@ -423,4 +460,11 @@ def merge_live_segments(
         {s.id for s in combined.joined if s.id},
         combined.removed_ids,
         combined.absorbed_into,
+        {str(s.id): s.capture_window_reason for s in combined.joined if s.id},
+        {str(s.id) for s in combined.segments if s.id and str(s.id) not in prior_ids},
+        {
+            str(s.id): s.capture_merge_proof
+            for s in combined.segments
+            if result and s.id == result[-1].get('id') and s.capture_merge_proof is not None
+        },
     )

@@ -4025,6 +4025,50 @@ routes:
         state: active
       owner: backend
   - route_type: http
+    method: GET
+    path: /v1/support/lookup
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms: [firebase_id_token]
+        placement: dependency
+        scopes: ['support:read']
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: internal_control_plane
+      visibility: internal
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/support/trace
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms: [firebase_id_token]
+        placement: dependency
+        scopes: ['support:read']
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: internal_control_plane
+      visibility: internal
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
     method: POST
     path: /v1/import/transcripts
     policy:
