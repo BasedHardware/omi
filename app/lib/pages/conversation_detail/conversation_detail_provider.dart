@@ -120,6 +120,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final target = conversationOrNull;
     if (target == null ||
         loadingReprocessConversation ||
+        loadingReprocessTranscription ||
         segmentIds.isEmpty ||
         (expectedConversationId != null && target.id != expectedConversationId)) {
       return null;
@@ -459,6 +460,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool isLoading = false;
   bool loadingReprocessConversation = false;
+  bool loadingReprocessTranscription = false;
   String reprocessConversationId = '';
 
   /// The last [refreshConversation] that the page asked to track ([trackLoad]).
@@ -709,6 +711,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  void updateReprocessTranscriptionLoadingState(bool loading) {
+    loadingReprocessTranscription = loading;
+    notifyListeners();
+  }
+
   void setSelectedAppForReprocessing(App app) {
     selectedAppForReprocessing = app;
     notifyListeners();
@@ -845,7 +852,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   Future<bool> reprocessConversation({String? appId}) async {
-    if (loadingReprocessConversation || _savingSpeaker) return false;
+    if (loadingReprocessConversation || loadingReprocessTranscription || _savingSpeaker) return false;
     _speakerSummaryRefreshTimer?.cancel();
     _speakerSummaryRefreshTimer = null;
     final target = conversation;
@@ -915,6 +922,46 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       lastFailedReprocessAppId = appId;
       notifyError('REPROCESS_FAILED');
       updateReprocessConversationLoadingState(false);
+      updateReprocessConversationId('');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> reprocessTranscription({
+    Future<TranscriptionReprocessResult> Function(String id)? client,
+  }) async {
+    if (loadingReprocessConversation || loadingReprocessTranscription || _savingSpeaker) return false;
+    final target = conversation;
+    updateReprocessTranscriptionLoadingState(true);
+    updateReprocessConversationId(target.id);
+    try {
+      final result = await (client ?? reProcessTranscriptionServer)(target.id);
+      if (_isDisposed) return false;
+      // Same event as summary reprocess: both replays are re-process actions
+      // from the user's perspective (analytics parity per review).
+      PlatformManager.instance.analytics.reProcessConversation(conversation);
+      updateReprocessTranscriptionLoadingState(false);
+      updateReprocessConversationId('');
+      if (result.conversation == null) {
+        notifyError(
+          result.errorCode == 'no_audio' ? 'REPROCESS_TRANSCRIPTION_NO_AUDIO' : 'REPROCESS_TRANSCRIPTION_FAILED',
+        );
+        notifyListeners();
+        return false;
+      }
+
+      conversationProvider?.updateConversation(result.conversation!);
+      SharedPreferencesUtil().modifiedConversationDetails = result.conversation;
+      if (conversationOrNull?.id == target.id) _cachedConversation = result.conversation;
+      notifyInfo('REPROCESS_TRANSCRIPTION_SUCCESS');
+      notifyListeners();
+      return true;
+    } catch (err, stacktrace) {
+      print(err);
+      await PlatformManager.instance.crashReporter.reportCrash(err, stacktrace);
+      notifyError('REPROCESS_TRANSCRIPTION_FAILED');
+      updateReprocessTranscriptionLoadingState(false);
       updateReprocessConversationId('');
       notifyListeners();
       return false;

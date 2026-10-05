@@ -562,12 +562,21 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
       case 'reprocess':
-        if (provider.loadingReprocessConversation) break;
+        if (provider.loadingReprocessConversation || provider.loadingReprocessTranscription) break;
         if (!context.read<ConnectivityProvider>().isConnected) {
           ConnectivityProvider.showNoInternetDialog(context);
           break;
         }
         await provider.reprocessConversation();
+        break;
+      case 'reprocess_transcription':
+        if (!context.read<ConnectivityProvider>().isConnected) {
+          ConnectivityProvider.showNoInternetDialog(context);
+          break;
+        }
+        if (!provider.loadingReprocessConversation && !provider.loadingReprocessTranscription) {
+          await provider.reprocessTranscription();
+        }
         break;
       case 'link_event':
         _handleLinkEvent(context, provider);
@@ -912,6 +921,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
           onTap: _isDownloadingAudio ? null : () => _handleMenuSelection(context, 'download_audio', provider),
         ),
+      if (provider.conversation.hasAudio())
+        PullDownMenuItem(
+          title: l10n.reprocessTranscription,
+          iconWidget: const FaIcon(FontAwesomeIcons.microphone, size: 16),
+          onTap: () => _handleMenuSelection(context, 'reprocess_transcription', provider),
+        ),
     ];
     final developerGroup = <PullDownMenuEntry>[
       if (showDeveloperTools) ...[
@@ -1077,6 +1092,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                 }
               },
             );
+          case 'REPROCESS_TRANSCRIPTION_FAILED':
+            OmiFeedback.error(context, context.l10n.errorReprocessingTranscription);
+          case 'REPROCESS_TRANSCRIPTION_NO_AUDIO':
+            OmiFeedback.error(context, context.l10n.errorNoStoredAudio);
           case 'SEGMENT_EDIT_FAILED':
           case 'SUMMARY_EDIT_FAILED':
             OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
