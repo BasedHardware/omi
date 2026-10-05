@@ -376,7 +376,7 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     // Create the on-device tool surface method channel
-    deviceToolsChannel = FlutterMethodChannel(name: "com.omi.device_tools", binaryMessenger: controller!.binaryMessenger)
+    deviceToolsChannel = FlutterMethodChannel(name: "com.omi.device_tools", binaryMessenger: messenger)
     deviceToolsChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.deviceToolsService.handleMethodCall(call, result: result)
     }
