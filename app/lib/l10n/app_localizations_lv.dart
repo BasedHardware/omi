@@ -9943,6 +9943,15 @@ class AppLocalizationsLv extends AppLocalizations {
       'Pendant joprojām ieraksta, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.';
 
   @override
+  String get pendantLostConnection => 'Kulons zaudēja savienojumu ar šo tālruni.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā.';
+
+  @override
+  String get pendantRecordingSafe => 'Viss, kas ierakstīts līdz šim, ir drošībā.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Pendant atmiņa ir pilna, un tas joprojām ir ierakstīšanas režīmā, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.';
 
@@ -11277,10 +11286,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi pats atjaunos savienojumu';

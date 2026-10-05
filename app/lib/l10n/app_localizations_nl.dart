@@ -9942,6 +9942,16 @@ class AppLocalizationsNl extends AppLocalizations {
       'Je Pendant is nog aan het opnemen, dus de opgeslagen audio kan niet worden overgezet. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer opnieuw.';
 
   @override
+  String get pendantLostConnection => 'Je hanger heeft de verbinding met deze telefoon verloren.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is.';
+
+  @override
+  String get pendantRecordingSafe => 'Alles wat eerder is opgenomen, is veilig.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw.';
 
@@ -11280,10 +11290,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Opslag bijna vol';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi maakt vanzelf opnieuw verbinding';

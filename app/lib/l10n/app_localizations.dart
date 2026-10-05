@@ -18453,6 +18453,24 @@ abstract class AppLocalizations {
   /// **'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
   String get pendantRecordingSyncBlocked;
 
+  /// Disconnected sheet: first line, what happened when the pendant dropped
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone.'**
+  String get pendantLostConnection;
+
+  /// Disconnected sheet: reassurance that reconnecting needs no action
+  ///
+  /// In en, this message translates to:
+  /// **'Omi reconnects on its own when the pendant is on and nearby.'**
+  String get pendantReconnectsOnItsOwn;
+
+  /// Disconnected sheet: reassurance that nothing recorded is lost
+  ///
+  /// In en, this message translates to:
+  /// **'Everything recorded before this is safe.'**
+  String get pendantRecordingSafe;
+
   /// Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped
   ///
   /// In en, this message translates to:
@@ -20504,12 +20522,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Storage almost full'**
   String get captureStorageAlmostFull;
-
-  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
-  ///
-  /// In en, this message translates to:
-  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
-  String get capturePendantDisconnectedDetail;
 
   /// Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation.
   ///

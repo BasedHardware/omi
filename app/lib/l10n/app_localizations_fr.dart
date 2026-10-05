@@ -10005,6 +10005,16 @@ class AppLocalizationsFr extends AppLocalizations {
       'Votre Pendant est encore en train d\'enregistrer, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
 
   @override
+  String get pendantLostConnection => 'Votre pendentif a perdu la connexion avec ce téléphone.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité.';
+
+  @override
+  String get pendantRecordingSafe => 'Tout ce qui a été enregistré avant est en sécurité.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Le stockage de votre Pendant est plein et il est encore en mode enregistrement, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
 
@@ -11345,10 +11355,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Stockage presque plein';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi se reconnectera tout seul';

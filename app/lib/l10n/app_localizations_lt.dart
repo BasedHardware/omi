@@ -9937,6 +9937,15 @@ class AppLocalizationsLt extends AppLocalizations {
       'Pendant vis dar įrašinėja, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite dar kartą.';
 
   @override
+  String get pendantLostConnection => 'Pakabukas prarado ryšį su šiuo telefonu.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese.';
+
+  @override
+  String get pendantRecordingSafe => 'Viskas, kas įrašyta iki šiol, išsaugota.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.';
 
@@ -11271,10 +11280,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Atmintis beveik pilna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi pats vėl prisijungs';

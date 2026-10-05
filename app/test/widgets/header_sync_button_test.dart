@@ -206,7 +206,9 @@ void main() {
     final badge = tester.widget<Container>(find.byKey(const ValueKey('header_count_badge')));
     expect((badge.decoration as BoxDecoration).color, OmiColors.accent);
     expect(tester.widget<Text>(find.text('2')).style!.color, OmiColors.onAccent);
-    expect(tester.widget<Icon>(find.byIcon(Icons.cloud_rounded)).color, OmiColors.textSecondary);
+    final cloud = tester.widget<OmiLineIcon>(find.byType(OmiLineIcon));
+    expect(cloud.glyph, OmiLineGlyph.cloud);
+    expect(cloud.color, OmiColors.textSecondary);
     expect(
       find.byWidgetPredicate(
         (w) =>

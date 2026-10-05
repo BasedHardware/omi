@@ -9965,6 +9965,16 @@ class AppLocalizationsTe extends AppLocalizations {
       'Pendant ఇంకా రికార్డ్ చేస్తోంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయలేము. రికార్డింగ్ ఆపడానికి Pendant బటన్ నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.';
 
   @override
+  String get pendantLostConnection => 'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది.';
+
+  @override
+  String get pendantRecordingSafe => 'దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.';
 
@@ -11298,10 +11308,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'స్టోరేజ్ దాదాపు నిండింది';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది';

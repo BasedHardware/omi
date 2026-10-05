@@ -25,8 +25,11 @@ import 'package:omi/utils/processing_timeout.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
+import 'package:omi/pages/conversations/widgets/pendant_dropped_sheet.dart';
+import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/device_tile.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key, this.showsCall = false});
@@ -96,9 +99,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         button: true,
         hint: l10n.openCall,
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => routeToPage(context, const ActiveCallPage()),
           child: _cardShell(
-            padding: _liveCardPadding,
             LiveCaptureCard(
               source: LiveCaptureCard.callSource,
               // Connecting and ringing say so, with no time: they are not listening yet.
@@ -107,6 +110,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 PhoneCallState.ringing => l10n.callStateRinging,
                 _ => captureStateLabel(l10n, CaptureDisplayState.listening),
               },
+              live: phoneCallState == PhoneCallState.active,
               elapsed: phoneCallState == PhoneCallState.active ? call.callDuration : null,
               lastLine: call.transcriptSegments.lastOrNull?.text,
             ),
@@ -126,7 +130,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         );
         final pendantDropped = _trackPendantDrop(provider, connected: pendantConnected, paired: pendantPaired);
         if (pendantDropped) {
-          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting), decorated: false);
+          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting));
         }
         final phoneLive = provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.initialising ||
@@ -138,6 +142,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         }
 
         return GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () async {
             // Offline/batch mode has no live transcript — the card is informational,
             // so swallow taps instead of opening the (empty) capturing page. Covers both
@@ -166,24 +171,17 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           child: Semantics(
             button: !batch,
             hint: batch ? null : context.l10n.liveTranscript,
-            child: _cardShell(_buildUnifiedRecordingUI(provider),
-                padding: batch ? _liveCardPadding : EdgeInsets.zero, decorated: batch),
+            child: _cardShell(_buildUnifiedRecordingUI(provider)),
           ),
         );
       },
     );
   }
 
-  /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
-  /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
-  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
-
-  Widget _cardShell(Widget child, {EdgeInsets? padding, bool decorated = true}) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+  /// A flat row on the page, its device tile on the gutter like the conversations below it.
+  Widget _cardShell(Widget child) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         width: double.maxFinite,
-        padding: decorated ? (padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16)) : EdgeInsets.zero,
-        decoration:
-            decorated ? BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)) : null,
         child: child,
       );
 
@@ -205,15 +203,21 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   Widget _buildPendantDroppedUI(CaptureProvider provider, {required bool reconnecting}) {
     final l10n = context.l10n;
+    final source = _droppedSource!;
+    // The Disconnected sheet speaks of a pendant; glasses and other wearables get the generic
+    // explanation with their own name.
+    final pendant = DeviceTile.isPendant(source);
     return LiveCaptureCard(
-      source: _droppedSource!,
+      source: source,
       status: l10n.disconnected,
       // Reconnecting is its own state; a drop that is not reconnecting yet still says what
       // happens next inline, instead of a bare "Disconnected" with the why only in the sheet.
       detail: reconnecting ? l10n.reconnecting : l10n.capturePendantDisconnectedShort,
-      explanation: l10n.capturePendantDisconnectedDetail,
+      explanation:
+          pendant ? l10n.pendantLostConnection : l10n.deviceDisconnectedBody(CaptureSources.label(context, source)),
       compact: true,
       lastLine: provider.segments.lastOrNull?.text,
+      onShowDetails: pendant ? () => showPendantDroppedSheet(context, source: source) : null,
     );
   }
 
@@ -316,13 +320,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         // Resume only when the status says Paused and the reader paused it; a degraded transcription
         // is still live, so its control is Pause.
         paused: isPaused,
+        live: !starting,
         // The session clock (how long the pendant has been connected) is not the conversation.
         compact: true,
         lastLine: provider.segments.lastOrNull?.text,
         note:
             isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
         // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
-        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
+        // Nothing to pause until the microphone has opened.
+        onPauseToggle: starting || !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
             ? null
             : () => _togglePause(provider),
       );
