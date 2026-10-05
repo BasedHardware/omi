@@ -75,6 +75,31 @@ void main() {
     expect(provider.hasPendingDoubleTapForTesting, isFalse);
   });
 
+  test('boundary: state 6 arriving after 350ms but inside 600ms window still suppresses double-tap', () async {
+    final clock = VirtualClock(DateTime.utc(2026));
+    final scheduler = ManualScheduler(clock: clock);
+    final provider = _provider(scheduler: scheduler, now: clock.now);
+    addTearDown(provider.dispose);
+
+    expect(provider.hasPendingDoubleTapForTesting, isFalse);
+
+    // Emit state 2 (double tap)
+    provider.handleButtonEventForTesting('test-device', 2);
+    expect(provider.hasPendingDoubleTapForTesting, isTrue);
+
+    // Advance 450ms: past the previous 350ms threshold, but within the 600ms firmware window
+    scheduler.elapse(const Duration(milliseconds: 450));
+    expect(provider.hasPendingDoubleTapForTesting, isTrue);
+
+    // Emit state 6 (triple tap) at 450ms — suppresses the pending double-tap
+    provider.handleButtonEventForTesting('test-device', 6);
+    expect(provider.hasPendingDoubleTapForTesting, isFalse);
+
+    // Advance beyond the remaining window duration; verify double-tap never executes
+    scheduler.elapse(const Duration(milliseconds: 300));
+    expect(provider.hasPendingDoubleTapForTesting, isFalse);
+  });
+
   test('double-tap debounce timer is cancelled on single tap or dispose', () async {
     final clock = VirtualClock(DateTime.utc(2026));
     final scheduler = ManualScheduler(clock: clock);

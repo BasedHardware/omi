@@ -743,6 +743,15 @@ class CaptureController extends ChangeNotifier
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
   Timer? _pendingDoubleTapTimer; // Debounce timer to suppress double tap when followed by triple tap
+
+  /// Multi-tap debounce window aligned with firmware's [DOUBLE_TAP_WINDOW] (600ms).
+  ///
+  /// In firmware (`omi/firmware/devkit/src/button.c` and `omi/firmware/omi/src/lib/core/button.c`),
+  /// DOUBLE_TAP_WINDOW is 600ms. State 6 (triple tap) is only emitted after the 3rd tap release
+  /// which can occur up to 600ms after the 2nd tap release (state 2). To prevent a triple tap
+  /// from firing both double-tap and triple-tap actions, pending double-tap execution is debounced
+  /// by this window.
+  static const Duration doubleTapDebounceWindow = Duration(milliseconds: 600);
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
 
   RecordingState recordingState = RecordingState.stop;
@@ -1850,11 +1859,12 @@ class CaptureController extends ChangeNotifier
     }
 
     // Double tap (buttonState == 2)
-    // Debounce by 350ms so that if a third tap arrives (state 6), the double-tap action is suppressed.
+    // Debounce by doubleTapDebounceWindow (600ms, matching firmware DOUBLE_TAP_WINDOW contract)
+    // so that if a third tap arrives (state 6), the double-tap action is suppressed.
     if (buttonState == 2) {
       Logger.debug("Double tap detected; debouncing to guard against triple tap");
       _pendingDoubleTapTimer?.cancel();
-      _pendingDoubleTapTimer = Timer(const Duration(milliseconds: 350), () {
+      _pendingDoubleTapTimer = _scheduling.once(doubleTapDebounceWindow, () {
         _pendingDoubleTapTimer = null;
         if (_captureControllerDisposed) return;
         handleAction(_preferences.doubleTapAction, gesture: 'double_tap');
