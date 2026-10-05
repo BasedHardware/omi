@@ -3,7 +3,9 @@ package omi.v5.host
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -18,6 +20,7 @@ import omi.kit.PreferenceValue
 import omi.kit.SettingsStore
 import omi.ui.AppServices
 import omi.ui.AppStore
+import omi.ui.DemoServices
 import omi.ui.RootView
 import skip.foundation.ProcessInfo
 import skip.ui.ColorScheme
@@ -52,11 +55,18 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         OmiPolicyJniBridge.installOnce(applicationContext)
         UIApplication.launch(this)
-        enableEdgeToEdge()
-
-        val services = AppServices(
-            settings = SettingsStore(SharedPreferencesKeyValueStore(applicationContext)),
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
         )
+
+        val services = if (BuildConfig.DEBUG && intent.getBooleanExtra("omi.demo", false)) {
+            DemoServices.makeServices()
+        } else {
+            AppServices(
+                settings = SettingsStore(SharedPreferencesKeyValueStore(applicationContext)),
+            )
+        }
         store = AppStore(services = services)
         applyIntent(intent)
 
