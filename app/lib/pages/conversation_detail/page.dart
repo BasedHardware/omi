@@ -401,7 +401,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     final provider = context.read<ConversationDetailProvider>();
     TranscriptSegment? target;
     for (final segment in provider.conversation.transcriptSegments) {
-      if (segment.id != null && sourceSegmentIds.contains(segment.id)) {
+      if (sourceSegmentIds.contains(segment.id)) {
         target = segment;
         break;
       }
