@@ -1119,8 +1119,8 @@ OMI_SYNC_INTAKE_TOTAL = Counter(
 OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
     'omi_sync_lineage_resolve_total',
     (
-        'Sync recording-lineage binding decisions. outcome is a closed set: bound|split_across_generations|'
-        'stamp_overridden|stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted'
+        'Sync lineage binding decisions. outcome is a closed set: bound|split_across_generations|stamp_overridden|'
+        'stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted|s1_refused'
     ),
     ['outcome'],
 )

@@ -195,7 +195,11 @@ def test_kill_switch_records_disabled_even_for_an_allowlisted_uid(monkeypatch, c
 @pytest.mark.parametrize('s1', [False, True])
 def test_admitted_upload_binds_per_segment_without_a_gate_decision(monkeypatch, caplog, name, s1):
     requested, outcomes, lines = _decision(monkeypatch, caplog, ACTIVE[name], s1=s1)
-    assert requested == s1 and outcomes == [] and lines == []
+    assert requested == s1
+    assert outcomes == ([] if s1 else ['s1_refused'])
+    assert len(lines) == (0 if s1 else 1)
+    if not s1:
+        assert 'outcome=s1_refused' in lines[0] and 'job_ref=none' in lines[0]
 
 
 def test_ineligible_upload_is_untouched_by_the_gate(monkeypatch, caplog):
