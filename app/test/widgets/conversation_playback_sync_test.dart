@@ -244,8 +244,7 @@ Future<_DetailHarness> _pumpDetail(
                           controller.isFollowing && (controller.isPlaying || controller.followRequest > 0),
                       playbackFollowRequest: controller.followRequest,
                       onUserScroll: controller.suspendFollowing,
-                      highlightedSegmentId:
-                          controller.isPlaying || controller.hasPlayPoint ? controller.markedSegmentId : null,
+                      highlightedSegmentId: controller.hasPlayPoint ? controller.markedSegmentId : null,
                       onReadingSegmentChanged: controller.readerMovedTo,
                       onSegmentTap: (segment) => harness.seekToSegment?.call(segment.start, segment.end),
                     );

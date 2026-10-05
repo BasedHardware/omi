@@ -48,10 +48,11 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
       (data.speakerId == omiSpeakerId && !data.isUser);
 
   /// Saved-conversation lines grouped into paragraphs. A speaker's turn reads as one paragraph, and a
-  /// long turn starts a new one under its clock time once [_paragraphTimeGap] has passed since the
-  /// paragraph began. A line with a translation, or with the "Yes / Not <name>" question under it,
-  /// ends its paragraph so the extra sits right below it, and no paragraph grows past
-  /// [_maxLinesPerParagraph] lines, which keeps a long monologue from becoming one huge text layout.
+  /// long turn starts a new one once [_paragraphTimeGap] has passed since the paragraph began, under
+  /// its clock time when times can be shown. A line with a translation, or with the "Yes / Not
+  /// <name>" question under it, ends its paragraph so the extra sits right below it, and no paragraph
+  /// grows past [_maxLinesPerParagraph] lines, which keeps a long monologue from becoming one huge
+  /// text layout.
   List<_DetailParagraph> _groupParagraphs(Set<String> askSegmentIds) {
     final segments = widget.segments;
     final paragraphs = <_DetailParagraph>[];
@@ -64,7 +65,7 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
         paragraphs.add(_DetailParagraph(first: i, last: i, startsTurn: true, showsTime: true));
         continue;
       }
-      final minuteLater = widget.canDisplaySeconds && data.start - segments[open.first].start >= _paragraphTimeGap;
+      final minuteLater = data.start - segments[open.first].start >= _paragraphTimeGap;
       final breaks = startsTurn ||
           minuteLater ||
           data.translations.isNotEmpty ||
@@ -94,9 +95,9 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
   /// turn's lines flowing together, with no bubble or avatar. The name and time are 13/600 in the
   /// tertiary ink (the owner's in the primary ink, a voice nobody has named underlined with dots); the
   /// words are 17 pt at a 1.5 line in 80 % ink (the owner's in the primary ink). The marked line
-  /// ([TranscriptWidget.highlightedSegmentId]) is full ink and every other line dims. Each line stays its own target: tapping
-  /// it plays the recording from there, double-tapping it edits it, and tapping the name names the
-  /// speaker.
+  /// ([TranscriptWidget.highlightedSegmentId]) is full ink and every other line dims. Each line stays
+  /// its own target: tapping it plays the recording from there, double-tapping it edits it, and
+  /// tapping the name names the speaker.
   Widget _buildParagraph(
     _DetailParagraph paragraph,
     List<Person> people,

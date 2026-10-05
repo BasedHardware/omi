@@ -753,6 +753,7 @@ void main() {
       WidgetTester tester,
       List<TranscriptSegment> segments, {
       bool unresolved = false,
+      bool canDisplaySeconds = true,
       List<String> tagging = const [],
       void Function(TranscriptSegment)? onSegmentTap,
       void Function(int)? onEditSegmentText,
@@ -768,6 +769,7 @@ void main() {
               body: TranscriptWidget(
                 segments: segments,
                 isConversationDetail: true,
+                canDisplaySeconds: canDisplaySeconds,
                 unresolvedSpeakers: unresolved,
                 taggingSegmentIds: tagging,
                 onSegmentTap: onSegmentTap,
@@ -826,6 +828,26 @@ void main() {
       expect(later.style?.color, OmiColors.textTertiary,
           reason: 'a time inside a turn, with no name before it, is quiet');
       expect(find.text('0:20'), findsNothing, reason: 'a line inside the first minute adds no time');
+    });
+
+    testWidgets('a long turn still breaks after a minute when times are hidden, with no time', (tester) async {
+      await setupSharedPreferences();
+      await pumpDetail(
+        tester,
+        [
+          line('m1', 0, 'We start with the numbers.', 0, isUser: true),
+          line('m2', 0, 'Then the plan.', 20, isUser: true),
+          line('m3', 0, 'A minute later, the follow-up.', 75, isUser: true),
+        ],
+        canDisplaySeconds: false,
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+          tester.widget<RichText>(paragraphOf('A minute later')).text.toPlainText(), isNot(contains('Then the plan')));
+      expect(find.text('You'), findsOneWidget);
+      expect(find.text('1:15'), findsNothing, reason: 'times that cannot be shown stay hidden');
+      expect(find.text('0:00'), findsNothing);
     });
 
     testWidgets('a paragraph holds at most twelve lines, and the next starts at the left edge', (tester) async {
