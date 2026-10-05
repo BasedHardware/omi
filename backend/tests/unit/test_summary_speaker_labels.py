@@ -19,7 +19,7 @@ START = datetime(2026, 10, 5, tzinfo=timezone.utc)
 @pytest.fixture(scope='module', autouse=True)
 def imports():
     with stub_modules({}):
-        import database.summary_speaker_labels
+        import utils.conversations.summary_speaker_labels
         import utils.llm.conversation_processing
         import utils.speaker_identification
 
@@ -295,7 +295,9 @@ def test_malformed_bindings_do_not_drop_note_or_participant(bad):
     )
     note = parsed.to_structured()
     assert note.title == 'Intro' and note.participants[0].name == 'Eddie Thai'
-    assert not note._summary_speaker_candidates[0].bindings
+    # Bindingless candidates can never be admitted; they are dropped here so the
+    # enabled stage skips entitlement and catalog reads for them entirely.
+    assert note._summary_speaker_candidates == []
     assert 'speaker_bindings' not in note.model_dump_json()
     assert 'owner' not in note.model_dump()
 
@@ -309,10 +311,22 @@ def make_note():
     return note
 
 
+def sync_note_digest(stage, store, path, conv):
+    """Re-stamp the persisted digest after a test edits the in-memory evidence.
+
+    Production stamps the digest at persist time from the same run's private
+    evidence; tests that swap candidates/roster after the world fixture must do
+    the same or the generation fence (correctly) declines.
+    """
+    store.rows[path]['summary_speaker_note_digest'] = stage.note_generation_digest(
+        conv.structured._summary_speaker_candidates, conv.structured._summary_speaker_roster
+    )
+
+
 @pytest.fixture
 def world(monkeypatch):
     from database import conversations as db
-    from database import summary_speaker_labels as stage
+    from utils.conversations import summary_speaker_labels as stage
     from database import _client
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreCollection
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument, StrictFirestoreSnapshot
@@ -331,6 +345,9 @@ def world(monkeypatch):
             status='completed',
             transcript_segments=[segment()],
             data_protection_level='standard',
+            summary_speaker_note_digest=stage.note_generation_digest(
+                note._summary_speaker_candidates, note._summary_speaker_roster
+            ),
         ),
     )
 
@@ -395,6 +412,7 @@ def test_padded_introduction_never_creates_a_person_or_labels_the_voice(world, n
             'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
         )
     )
+    sync_note_digest(stage, store, path, conv)
     before = deepcopy(store.rows)
     assert stage.apply_summary_speaker_labels('u', conv) == 0
     assert store.rows == before
@@ -404,7 +422,7 @@ def test_padded_introduction_never_creates_a_person_or_labels_the_voice(world, n
 
 @pytest.mark.parametrize('mode', ['normalized', 'alias', 'link'])
 def test_existing_people_resolved_without_duplicate(world, mode):
-    stage, _, store, _, conv = world
+    stage, _, store, path, conv = world
     person = dict(name='  EDDIE   THAI  ', aliases=[])
     if mode == 'alias':
         person.update(name='Edward Thai', aliases=['Eddie Thai'])
@@ -413,6 +431,7 @@ def test_existing_people_resolved_without_duplicate(world, mode):
         conv.structured._summary_speaker_roster = MeetingRoster(
             (entry('David', 'owner'), entry('Eddie Thai', person_id='p1')), 'Intro', False
         )
+        sync_note_digest(stage, store, path, conv)
     store.rows[('users', 'u', 'people', 'p1')] = person
     assert stage.apply_summary_speaker_labels('u', conv) == 1
     assert conv.transcript_segments[0].person_id == 'p1'
@@ -429,6 +448,7 @@ def test_short_alias_cannot_resolve_another_full_name(world, own_name, expected)
             'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
         )
     )
+    sync_note_digest(stage, store, path, conv)
     store.rows[('users', 'u', 'people', 'p1')] = dict(name=own_name, aliases=['Ann'])
     before = deepcopy(store.rows)
     assert stage.apply_summary_speaker_labels('u', conv) == expected
@@ -447,6 +467,7 @@ def test_unspaced_cjk_full_alias_resolves_existing_person_without_duplicate(worl
             'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
         )
     )
+    sync_note_digest(stage, store, path, conv)
     store.rows[('users', 'u', 'people', 'p1')] = dict(name='Taro Yamada', aliases=['山田太郎'])
     assert stage.apply_summary_speaker_labels('u', conv) == 1
     assert conv.transcript_segments[0].person_id == 'p1'
@@ -465,6 +486,7 @@ def test_two_character_cjk_alias_needs_the_same_full_stored_name(world, stored_n
             'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
         )
     )
+    sync_note_digest(stage, store, path, conv)
     store.rows[('users', 'u', 'people', 'p1')] = dict(name=stored_name, aliases=['太郎'])
     before = deepcopy(store.rows)
     assert stage.apply_summary_speaker_labels('u', conv) == expected
@@ -484,6 +506,7 @@ def test_contextual_identity_can_attach_an_existing_exact_person_without_a_roste
             'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
         )
     )
+    sync_note_digest(stage, store, path, conv)
     store.rows[('users', 'u', 'people', 'p1')] = dict(name='Maya Chen')
     assert stage.apply_summary_speaker_labels('u', conv) == 1
     assert conv.transcript_segments[0].person_id == 'p1'
@@ -501,6 +524,7 @@ def test_transaction_never_creates_a_context_only_mentioned_person(world):
             'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
         )
     )
+    sync_note_digest(stage, store, path, conv)
     before = deepcopy(store.rows)
     assert stage.apply_summary_speaker_labels('u', conv) == 0
     assert store.rows == before
@@ -585,6 +609,7 @@ def test_free_owner_is_labeled_without_person_creation(world, monkeypatch):
             'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
         )
     )
+    sync_note_digest(stage, store, path, conv)
     monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', lambda _: pytest.fail('owner entitlement read'))
     assert stage.apply_summary_speaker_labels('u', conv) == 1
     assert conv.transcript_segments[0].is_user
@@ -604,6 +629,7 @@ def test_free_owner_plus_guest_drops_guest_before_any_catalog_read_or_create(wor
             'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
         )
     )
+    sync_note_digest(stage, store, path, conv)
     monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', lambda _: False)
     monkeypatch.setattr(stage, 'read_summary_people_catalog', lambda *args, **kwargs: pytest.fail('guest catalog read'))
     monkeypatch.setattr(StrictFirestoreTransaction, 'create', lambda *args, **kwargs: pytest.fail('guest create'))

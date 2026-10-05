@@ -157,6 +157,10 @@ class TranscriptSegment(BaseModel):
         data = handler(self)
         if self.summary_speaker_evidence is None:
             data.pop('summary_speaker_evidence', None)
+        elif getattr(info, 'mode', 'python') == 'json':
+            # API responses never carry this internal receipt; Python-mode dumps
+            # (Firestore persistence) retain it.
+            data.pop('summary_speaker_evidence', None)
         data['speaker_label_source'] = project_source(data)
         for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
             value = getattr(self, key)

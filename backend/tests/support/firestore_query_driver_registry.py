@@ -122,23 +122,6 @@ def _stub(dotted: str, result: Any):
 _CACHE_MISS = SimpleNamespace(mode='MISS', data=None)
 
 
-def _summary_label_stage_patches(client):
-    module = importlib.import_module('database.summary_speaker_labels')
-    # Drive the paid, admitted branch through its real transactional catalog
-    # helper. Selection itself is independently exercised by the stage suite;
-    # it cannot alter the catalog's fixed unfiltered shape. No person write is
-    # necessary to capture that shape, so this plan resolves an absent person.
-    return unittest.mock.patch.multiple(
-        module,
-        summary_speaker_labels_enabled=lambda: True,
-        named_speaker_prompts_allowed=lambda uid: True,
-        select_candidates=lambda *args, **kwargs: [
-            SimpleNamespace(is_owner=False, name='Eddie Thai', person_id=None, may_create=False)
-        ],
-        firestore=SimpleNamespace(transactional=lambda function: function),
-    )
-
-
 _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
@@ -2286,34 +2269,6 @@ _add(
     DriverEntry(
         'database.summary_speaker_labels.read_summary_people_catalog',
         base={'uid': UID, 'transaction': ref_transaction()},
-    )
-)
-_add(
-    DriverEntry(
-        'database.summary_speaker_labels.apply_summary_speaker_labels',
-        base={
-            'uid': UID,
-            'conversation': SimpleNamespace(
-                id='summary-c',
-                discarded=False,
-                transcript_segments=[],
-                structured=SimpleNamespace(
-                    title='Planning',
-                    overview='A plan.',
-                    _summary_speaker_candidates=[SimpleNamespace(is_owner=False)],
-                    _summary_speaker_roster=True,
-                ),
-            ),
-        },
-        setup=_seed(
-            f'users/{UID}/conversations/summary-c',
-            {
-                'status': 'completed',
-                'transcript_segments': [],
-                'structured': {'title': 'Planning', 'overview': 'A plan.'},
-            },
-        ),
-        patchers=(_summary_label_stage_patches,),
     )
 )
 

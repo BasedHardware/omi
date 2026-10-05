@@ -36,7 +36,12 @@ from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
 from utils.llm.action_item_normalization import normalize_action_item_due_dates as _normalize_action_item_due_dates
-from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
+from utils.llm.meeting_notes_rich_prompts import (
+    SUMMARY_SPEAKER_RULES,
+    NotesFrameImage,
+    rich_static_instructions,
+    screen_frames_message,
+)
 from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
 from utils.llm.meeting_notes_presentation import enforce_conversation_note_presentation
 from utils.llm.meeting_notes_validation import (
@@ -1332,8 +1337,6 @@ def get_conversation_notes(
             extraction_parser.get_format_instructions(), _conversation_notes_static_instructions
         )
         if summary_speaker_labels_enabled():
-            from utils.llm.meeting_notes_rich_prompts import SUMMARY_SPEAKER_RULES
-
             static_instructions += '\n\n' + SUMMARY_SPEAKER_RULES
     else:
         static_instructions = _conversation_notes_static_instructions(extraction_parser.get_format_instructions())

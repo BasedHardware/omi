@@ -79,8 +79,10 @@ and actual participant rosters permit 2–6 characters; aliases use the stricter
 minimum of three characters unless the full stored name matches exactly.
 Thus a CJK alias can resolve the existing person instead of creating a duplicate.
 The bounded catalog reads at most 501 documents once per transaction attempt; a
-catalog exceeding 500 people declines named assignments because uniqueness
-cannot be established. Owner-only admission does not read this catalog.
+catalog exceeding 500 people declines the entire mixed transaction — named
+assignments because uniqueness cannot be established, and the owner label in
+that same transaction because the stage never partially applies. Owner-only
+admission does not read this catalog.
 People and labels commit atomically; encoding/model validation happens before
 any writes. Labels store `speaker_match_source=summary_inferred`, public source
 `auto`, and evidence/scope/version metadata. Manual corrections clear inferred metadata.

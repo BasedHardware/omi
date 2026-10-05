@@ -82,7 +82,10 @@ class SpeakerLabeledExtraction(RichStructuredExtraction[LabeledParticipant]):
                 bindings=participant.speaker_bindings,
             )
             for participant, is_owner in [*((p, False) for p in self.participants), (self.owner, True)]
-            if isinstance(participant, LabeledParticipant)
+            # A participant without bindings can never be admitted; dropping it
+            # here skips the entitlement and catalog reads its rejection would
+            # otherwise still perform.
+            if isinstance(participant, LabeledParticipant) and participant.speaker_bindings
         ]
         setattr(result, '_summary_speaker_candidates', candidates)
         setattr(result, '_summary_speaker_roster', None)

@@ -1954,6 +1954,36 @@ carry only closed-enum labels. `quality` turns answers into precision
 (`owner_missed`, `person_missed_known`) observations — biased toward what was
 asked, so compare trends per kind rather than reading absolute accuracy.
 
+### Note-inferred speaker labels (post-persistence stage)
+
+`SUMMARY_SPEAKER_LABELS_ENABLED` (server env switch, default off) adds one
+optional transaction after a rich meeting note has committed. The same
+`conv_structure` call that produced the note also returns private
+`speaker_bindings` evidence (numeric speaker key, confidence, one or two cited
+segment ids); those never enter the persisted note or the wire schema. The
+stage — orchestrated in `utils/conversations/summary_speaker_labels`, with
+persistence helpers in `database/summary_speaker_labels` — runs one Firestore
+transaction that reloads the conversation and declines on: missing note digest
+(stale generation), replaced note title/overview (a preserved `user_title` is
+honored), changed transcript identity (storage-canonicalized), deletion,
+discard, lock, merge, incomplete processing, reused speaker keys across scopes
+(including a sibling scope of the same numeric key already carrying an
+identity), duplicate claims, invalid evidence, owner-name variants of a
+first-name-only owner, ambiguous duplicate roster names, conflicting
+introductions, AI identities, and every existing assignment or manual
+positive/negative decision.
+
+Authority: the existing `named_speaker_prompts_allowed` entitlement runs before
+candidate admission — owner identification is free; other humans require paid
+eligibility. Admitted labels write `speaker_match_source=summary_inferred`,
+public source `auto`, and a private evidence receipt that JSON-mode (API)
+serialization omits. A later non-summary identity writer (manual assignment or
+`conversation_voice` resolution) supersedes the label and clears the receipt.
+The stage never creates learning jobs, stores audio, or updates embeddings, and
+the processing run snapshots the pre-stage label projection so canonical L1
+memory attribution is unchanged. Full behavioral detail lives in
+`backend/docs/summary-speaker-labels.md`.
+
 ### People-stats aggregate cache
 
 `GET /v1/users/people?include_stats=true` aggregates the newest conversations (locked/discarded excluded, `started_at` else `created_at`, per-segment `person_id`/`start`/`end`/`speaker_match_source`) into one `person_id -> {conversation_count, last_heard_at, talk_seconds, auto_conversation_count}` map per call. `database.people_stats_cache` caches only that map — Person rows and signed speech-sample URLs stay fresh reads. Entries live at `users/{uid}/people_stats/v1/{generation}/{scan_cap}` in the generic Redis cache (60 s TTL, 262144-byte serialized cap on read and write; oversize/corrupt/nonfinite payloads are misses). A per-uid generation token at `people_stats:v1:{uid}:generation` (86400 s TTL, fetch-or-create via `SET NX`) namespaces every entry: a writer-side bump retires all outstanding entries at once, so the 60 s entry TTL is only a safety cap for a failed invalidation — normal writes invalidate immediately. `collect_people_stats` resolves generation and entry before consuming the scan iterator, so a hit performs zero Firestore reads; it re-checks the generation before writing. If invalidation happens after that check, a fill may still be written under the retired key, which is unreachable. A `ListReadBudget`-truncated scan is never stored — only a full capped pass is cached. For N repeat loads within one unchanged 60 s generation, one capped scan serves all N: a fully populated first scan means a hit avoids all 1000 conversation reads (raw reads can reach 2000 because tombstones and invisible rows consume the document budget without yielding). Every operation fails open to the uncached scan; generation and invalidation failures log uid + error type and count `other`/`cached`->`uncached`/`connection_lost`/`recovered`.

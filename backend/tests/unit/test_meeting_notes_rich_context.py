@@ -1187,3 +1187,62 @@ def test_participant_names_corroborated_by_screen_background_are_kept():
         background_body=background,
     )
     assert [p.name for p in validated.participants] == ['Priya Raman']
+
+
+def test_uncorroborated_participants_are_removed_from_summary_speaker_candidates():
+    """A name the note dropped must not stay eligible for identity writes (T14)."""
+    from models.structured import Participant, Structured
+    from models.summary_speaker_labels import SpeakerBinding, SpeakerCandidate
+    from utils.llm.meeting_notes_validation import validate_rich_meeting_notes
+
+    roster = normalize_meeting_participants(
+        _context(
+            [MeetingParticipant(email='someone@duck.com'), MeetingParticipant(name='Boardy Boardman')],
+            title='Meet - abc-defg-hij',
+            source='screen_activity',
+            platform='Google Meet',
+        ),
+        ConversationSource.desktop,
+        owner_name='David Zhang',
+        owner_emails=['david@acme.com'],
+        people=[],
+    )
+    structured = Structured(
+        participants=[
+            Participant(name='Priya Raman', role='Founding-engineer candidate', source='roster'),
+            Participant(name='Invented Person', role='guess', source='transcript'),
+        ]
+    )
+    # Private candidates mirror the participants plus the owner; 'Invented Person'
+    # is corroborated nowhere and must be filtered with its participant.
+    setattr(
+        structured,
+        '_summary_speaker_candidates',
+        [
+            SpeakerCandidate(
+                name='Priya Raman',
+                bindings=[SpeakerBinding(speaker_id=1, confidence='high', evidence_segment_ids=['s1'])],
+            ),
+            SpeakerCandidate(
+                name='Invented Person',
+                bindings=[SpeakerBinding(speaker_id=2, confidence='high', evidence_segment_ids=['s2'])],
+            ),
+            SpeakerCandidate(
+                name='David Zhang',
+                is_owner=True,
+                bindings=[SpeakerBinding(speaker_id=0, confidence='high', evidence_segment_ids=['s0'])],
+            ),
+        ],
+    )
+    background = 'BACKGROUND CONTEXT\nSCREEN ACTIVITY\nWindows open during the meeting:\n- Google Chrome | Priya Raman | LinkedIn'
+    validated = validate_rich_meeting_notes(
+        structured,
+        transcript_body='hello there',
+        roster=roster,
+        has_background_context=True,
+        background_body=background,
+    )
+    assert [p.name for p in validated.participants] == ['Priya Raman']
+    remaining = getattr(validated, '_summary_speaker_candidates')
+    assert [c.name for c in remaining] == ['Priya Raman', 'David Zhang']
+    assert all(c.is_owner or c.name == 'Priya Raman' for c in remaining)

@@ -72,6 +72,8 @@ run_proof "direct-user ledger API writes / lifecycle / batch fence" \
 # and relies on backend/ staying the import root.
 run_proof "writer cutover / rollback / rollforward" \
   "$PYTHON" -m scripts.knowledge_ledger_writer_transition_emulator_test
+run_proof "summary speaker labels (transactional catalog / person create / fences)" \
+  "$PYTHON" scripts/summary_speaker_labels_emulator_test.py
 
 if (( ${#failures[@]} )); then
   echo

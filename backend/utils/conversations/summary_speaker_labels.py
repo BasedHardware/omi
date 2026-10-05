@@ -1,14 +1,39 @@
-"""Conservative, deterministic admission of evidence from the saved notes call."""
+"""Conservative, deterministic admission of evidence from the saved notes call.
 
+This module also owns the post-persistence assignment transaction. The database
+layer deliberately holds no ``utils/`` imports, so the orchestration lives here
+(same layer as the other ``firestore.transactional`` stages) and calls the thin
+persistence helpers in ``database/summary_speaker_labels``.
+"""
+
+import hashlib
+import json
+import logging
 import unicodedata
 import re
 from collections import Counter
 from dataclasses import dataclass
 from typing import Optional
 
+from google.cloud import firestore
+
+from config.summary_speaker_labels import summary_speaker_labels_enabled
+from database import _client
+from database import conversations as conversations_db
+from database import summary_speaker_labels as persistence
+from database.conversations import effective_user_title
 from models.summary_speaker_labels import SpeakerCandidate
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.conversations.meeting_participants import MeetingRoster, looks_like_ai_agent_name
+from utils.conversations.transcript_hash import canonicalize_segment_for_storage
+from utils.speaker_permissions import named_speaker_prompts_allowed
+
+logger = logging.getLogger(__name__)
+
+# The bounded catalog read stays in the database layer (its query shape is
+# registered there); re-export so callers and tests patch one stable name.
+read_summary_people_catalog = persistence.read_summary_people_catalog
+CATALOG_LIMIT = persistence.CATALOG_LIMIT
 
 _MEETING_ROSTER_SOURCES = frozenset(
     {'system_calendar', 'macos_calendar', 'google_calendar', 'outlook_calendar', 'google', 'outlook', 'screen_activity'}
@@ -164,6 +189,10 @@ def select_candidates(
         for scope in {by_id[sid].get('speaker_id_scope') for sid in b.evidence_segment_ids if sid in by_id}
     )
     owner_names = {normalized_name(e.display_name) for e in roster.entries if e.kind == 'owner' and e.display_name}
+    # A roster that knows the owner only by first name still owns full-name
+    # variants of it: admitting "David Nguyen" as another human while the owner
+    # is "David" mislabels the account owner's own voice.
+    owner_first_names = {next(iter(n.split()), '') for n in owner_names if len(n.split()) == 1}
     human_entries = [e for e in roster.entries if e.kind == 'human' and e.display_name]
     agent_names = {normalized_name(e.display_name) for e in roster.entries if e.kind == 'ai_agent' and e.display_name}
     result = []
@@ -183,6 +212,11 @@ def select_candidates(
                 continue
         elif not allow_named or name in owner_names:
             continue  # entitlement at selection, before person lookup/create
+        elif owner_first_names and name.split() and name.split()[0] in owner_first_names:
+            # The roster's owner entry is only a first name; a multi-token
+            # candidate starting with it is treated as an owner variant, not
+            # another human.
+            continue
         if (
             not name
             or len(name) > 80
@@ -196,6 +230,11 @@ def select_candidates(
         linked = {e.person_id for e in named_entries if e.person_id}
         if len(linked) > 1:
             continue
+        if len(named_entries) > 1 and not linked:
+            # Two distinct roster attendees share this display name and neither
+            # carries a resolved person: separate bindings for those voices could
+            # conflate them onto one person or one deterministic id. Decline.
+            continue
         admitted = []
         for binding in candidate.bindings:
             evidence = [by_id.get(sid) for sid in binding.evidence_segment_ids]
@@ -205,11 +244,22 @@ def select_candidates(
                 break
             scope = next(iter(scopes))
             cluster = [s for s in by_key.get(binding.speaker_id, []) if s.get('speaker_id_scope') == scope]
+            # The compact prompt's speaker map collapses clusters by numeric id,
+            # so a model citing this (unlabeled) scope may echo a name it only
+            # saw bound in a different scope. Decline when any sibling scope of
+            # this numeric key already carries an identity.
+            sibling_scope_identity = [
+                s
+                for s in by_key.get(binding.speaker_id, [])
+                if s.get('speaker_id_scope') != scope
+                and (s.get('person_id') or s.get('is_user') or s.get('speaker_label_source'))
+            ]
             if (
                 binding.confidence != 'high'
                 or not 1 <= len(binding.evidence_segment_ids) <= 2
                 or claims[(binding.speaker_id, scope)] != 1
                 or not cluster
+                or sibling_scope_identity
                 or any(s.get('person_id') or s.get('is_user') or s.get('speaker_label_source') for s in cluster)
                 or (
                     candidate.is_owner
@@ -259,3 +309,206 @@ def select_candidates(
     if len({a.name for a in result if a.is_owner}) > 1:
         result = [a for a in result if not a.is_owner]
     return result
+
+
+def note_generation_digest(candidates, roster) -> Optional[str]:
+    """Stable digest of the private note-identity evidence, or None without any.
+
+    ``speaker_bindings`` are private and never persisted, so two reprocessing
+    generations can share title/overview while carrying different candidates.
+    Persisting this digest beside the note lets the assignment transaction
+    decline a stale generation whose candidates no longer match the note.
+    """
+    candidates = list(candidates or [])
+    if not candidates or roster is None:
+        return None
+    payload = {
+        'candidates': [
+            {
+                'name': getattr(c, 'name', ''),
+                'is_owner': bool(getattr(c, 'is_owner', False)),
+                'is_ai_agent': bool(getattr(c, 'is_ai_agent', False)),
+                'bindings': [
+                    {
+                        'speaker_id': getattr(b, 'speaker_id', None),
+                        'confidence': getattr(b, 'confidence', None),
+                        'evidence_kind': getattr(b, 'evidence_kind', None),
+                        'evidence_segment_ids': list(getattr(b, 'evidence_segment_ids', []) or []),
+                    }
+                    for b in (getattr(c, 'bindings', None) or [])
+                ],
+            }
+            for c in (candidates or [])
+        ],
+        'roster': [
+            {
+                'name': getattr(e, 'display_name', None),
+                'kind': getattr(e, 'kind', None),
+                'source': getattr(e, 'source', None),
+                'person_id': getattr(e, 'person_id', None),
+            }
+            for e in (getattr(roster, 'entries', None) or [])
+        ],
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()
+
+
+def apply_summary_speaker_labels(uid: str, conversation, *, firestore_client=None) -> int:
+    """Apply note-inferred labels in one post-persistence Firestore transaction.
+
+    The note is already durable when this runs. The transaction re-checks source
+    text, manual authority and current labels; any failure preserves the saved
+    note, changes neither people nor labels, and never schedules teaching.
+    """
+    if not summary_speaker_labels_enabled():
+        return 0
+    candidates = getattr(conversation.structured, '_summary_speaker_candidates', [])
+    roster = getattr(conversation.structured, '_summary_speaker_roster', None)
+    if not candidates or not roster or conversation.discarded:
+        return 0
+    try:
+        # A subscription read failure declines the entire stage, including owner;
+        # never infer paid eligibility and never touch manual endpoints.
+        allow_named = named_speaker_prompts_allowed(uid) if any(not c.is_owner for c in candidates) else False
+        client = firestore_client if firestore_client is not None else _client.get_firestore_client()
+        user_ref = client.collection('users').document(uid)
+        conversation_ref = user_ref.collection('conversations').document(conversation.id)
+        # Compare against storage-canonicalized identity: the completed-conversation
+        # write path canonicalizes segment text (strips surrounding whitespace),
+        # so a raw in-memory tuple would decline every padded-STT input.
+        expected = transcript_identity(
+            [dict(canonicalize_segment_for_storage(s.model_dump())) for s in conversation.transcript_segments]
+        )
+        expected_generation = note_generation_digest(candidates, roster)
+
+        @firestore.transactional
+        def commit(transaction):
+            if not summary_speaker_labels_enabled():
+                return None
+            snapshot = conversation_ref.get(transaction=transaction)
+            if not snapshot.exists:
+                return None
+            current = snapshot.to_dict() or {}
+            if (
+                current.get('deleted')
+                or current.get('discarded')
+                or current.get('is_locked')
+                or current.get('status') != 'completed'
+                or current.get('merged_into')
+            ):
+                return None
+            note = current.get('structured') or {}
+            note_title = note.get('title')
+            if note_title is None:
+                note_title = conversation.structured.title
+            # ``persist_processing_result_with_lifecycle`` re-applies a preserved
+            # user title over the generated one; the in-memory generated title
+            # stays authoritative for the fence when the stored title is a
+            # user-owned override (``user_title`` present and non-blank).
+            if note_title != conversation.structured.title:
+                user_title = note_title if effective_user_title(current.get('user_title')) == note_title else None
+                if user_title is None:
+                    return None
+            if note.get('overview') != conversation.structured.overview:
+                return None
+            segments = conversations_db.decode_transcript_segments_verified(
+                uid, current.get('transcript_segments'), bool(current.get('transcript_segments_compressed'))
+            )
+            if transcript_identity(segments) != expected:
+                return None
+            if current.get('summary_speaker_note_digest') != expected_generation:
+                # The digest is stamped beside the note whenever this stage's
+                # candidates exist (the notes call only emits them flag-on, and
+                # the flag gates this stage too). A stored mismatch therefore
+                # means the persisted note belongs to a different generation —
+                # including a newer reprocess that replaced these private
+                # candidates — so decline rather than apply stale labels.
+                return None
+            receipt = conversations_db.decode_manual_speaker_assignments(
+                uid,
+                current.get('manual_speaker_assignments'),
+                bool(current.get('manual_speaker_assignments_compressed')),
+            )
+            selected = select_candidates(candidates, segments, receipt, roster, allow_named=allow_named)
+            if not selected:
+                return None
+            people_ref = user_ref.collection('people')
+            # Bounded catalog, no speech-profile/learning projection or N+1 reads.
+            # A truncated catalog cannot establish uniqueness, so decline all names.
+            people = []
+            if any(not s.is_owner for s in selected):
+                docs = read_summary_people_catalog(uid, transaction, firestore_client=client)
+                if len(docs) > CATALOG_LIMIT:
+                    return None
+                people = [{**d.to_dict(), 'id': d.id} for d in docs]
+            staged_people = {}
+            assignments = {}
+            for speaker in selected:
+                person_id = None
+                if not speaker.is_owner:
+                    proposed_name = normalized_name(speaker.name)
+                    matches = [
+                        p
+                        for p in people
+                        if normalized_name(p.get('name') or '') == proposed_name
+                        or (
+                            full_real_name(proposed_name, min_cjk_length=3)
+                            and proposed_name in [normalized_name(a) for a in p.get('aliases', [])]
+                        )
+                    ]
+                    if speaker.person_id:
+                        matches = [p for p in people if p['id'] == speaker.person_id]
+                    if len(matches) > 1:
+                        continue
+                    if matches:
+                        person = matches[0]
+                        if (
+                            person.get('deleted')
+                            or person.get('status') in {'merged', 'dismissed'}
+                            or person.get('is_ai_agent')
+                        ):
+                            continue
+                        person_id = person['id']
+                    elif speaker.person_id or not speaker.may_create:
+                        continue
+                    else:
+                        person_id = persistence.summary_inferred_person_id(speaker.name)
+                        staged_people[person_id] = speaker.name
+                for sid in speaker.segment_ids:
+                    assignments[sid] = (speaker, person_id)
+            if not assignments:
+                return None
+            validated, payload = persistence.apply_summary_segment_updates(
+                uid,
+                conversation.id,
+                segments,
+                assignments,
+                current.get('data_protection_level', 'standard'),
+                conversations_db.encode_conversation_for_write,
+            )
+            for pid, person_name in staged_people.items():
+                persistence.stage_summary_person_creation(transaction, people_ref, pid, person_name)
+            transaction.update(conversation_ref, payload)
+            return validated, len(assignments)
+
+        committed = commit(client.transaction())
+        if committed:
+            segments, count = committed
+            conversation.transcript_segments = segments
+            conversations_db.invalidate_people_stats_cache(uid)
+            logger.info('summary_speaker_labels outcome=applied segments=%d', count)
+            return count
+        logger.info('summary_speaker_labels outcome=declined')
+    except Exception as error:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='conversation_notes',
+            from_mode='summary_speaker_labels',
+            to_mode='saved_note',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.warning('summary_speaker_labels outcome=error exception_type=%s', type(error).__name__)
+    return 0

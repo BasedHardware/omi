@@ -312,6 +312,23 @@ def validate_rich_meeting_notes(
             participant.name = name
         validated_participants.append(participant)
     structured.participants = validated_participants
+    # Reconcile the private speaker-label candidates with the same corroboration
+    # result: a contextual name removed here (absent from roster, transcript and
+    # background) must not remain eligible for identity writes downstream. Owner
+    # candidates never come from ``participants``; their fence is the roster
+    # owner-name check at selection time.
+    summary_candidates = getattr(structured, '_summary_speaker_candidates', None)
+    if summary_candidates:
+        corroborated = {(p.name or '').strip().casefold() for p in validated_participants}
+        setattr(
+            structured,
+            '_summary_speaker_candidates',
+            [
+                candidate
+                for candidate in summary_candidates
+                if candidate.is_owner or (candidate.name or '').strip().casefold() in corroborated
+            ],
+        )
 
     if not has_background_context:
         structured.insights = []

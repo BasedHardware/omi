@@ -73,6 +73,7 @@ from utils.conversations.deterministic_minimum import (
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+from utils.conversations.summary_speaker_labels import note_generation_digest
 from utils.conversations.recovery import (
     RecoveryStructureUnavailableError,
     recovery_minimum_terminal_enabled,
@@ -2547,7 +2548,17 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
         payload.pop('processing_state', None)
     else:
         payload['processing_state'] = None
-    return clear_summary_retryable(strip_client_processing(payload))
+    payload = clear_summary_retryable(strip_client_processing(payload))
+    # Persist the note-generation digest beside the note it fences: the stage's
+    # transaction compares this value so a stale reprocessing generation (same
+    # title/overview, different private candidates) cannot apply older labels.
+    digest = note_generation_digest(
+        getattr(conversation.structured, '_summary_speaker_candidates', None),
+        getattr(conversation.structured, '_summary_speaker_roster', None),
+    )
+    if digest is not None:
+        payload['summary_speaker_note_digest'] = digest
+    return payload
 
 
 def _store_deterministic_minimum(
@@ -3168,11 +3179,15 @@ def process_conversation(
 
     # Notes have committed before this optional transaction. It rechecks source
     # text, manual authority and current labels; failures preserve the saved note.
+    # Snapshot the pre-stage label projection: inferred labels must not change
+    # what L1 memory extraction attributes (memory authority stays with capture
+    # and manual decisions), so the canonical path reads the snapshot instead.
+    segments_before_summary_labels = [segment.model_copy(deep=True) for segment in conversation.transcript_segments]
     if summary_speaker_labels_enabled():
         try:
-            from database.summary_speaker_labels import apply_summary_speaker_labels
+            from utils.conversations.summary_speaker_labels import apply_summary_speaker_labels
 
-            apply_summary_speaker_labels(uid, conversation)
+            applied = apply_summary_speaker_labels(uid, conversation)
         except Exception as error:
             # Include module loading in the optional stage's failure boundary.
             record_fallback(
@@ -3184,6 +3199,20 @@ def process_conversation(
                 log=logger,
             )
             logger.warning('summary_speaker_labels outcome=error exception_type=%s', type(error).__name__)
+            applied = 0
+        if applied:
+            # The in-memory people snapshot was loaded before note generation;
+            # renderers below resolve names through it, so append the people
+            # this stage just created before any derived effect reads it.
+            known_person_ids = {person.id for person in people}
+            created_ids = {
+                segment.person_id
+                for segment in conversation.transcript_segments
+                if segment.person_id and segment.person_id not in known_person_ids
+            }
+            if created_ids:
+                created_data = users_db.get_people_by_ids(uid, list(created_ids))
+                people.extend(Person.deserialize_many_safe(created_data))
 
     # Enrollment is resolved only from backend authority plus the persisted
     # conversation source. We create the durable obligation before omitting a
@@ -3315,7 +3344,15 @@ def process_conversation(
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
-                _extract_memories(uid, conversation)
+                # Memory authority stays with capture/manual decisions: extract
+                # from the pre-stage label snapshot so note-inferred labels
+                # cannot change L1 subject attribution.
+                restored_segments = conversation.transcript_segments
+                conversation.transcript_segments = segments_before_summary_labels
+                try:
+                    _extract_memories(uid, conversation)
+                finally:
+                    conversation.transcript_segments = restored_segments
             if is_reprocess:
                 # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess

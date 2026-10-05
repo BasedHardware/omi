@@ -768,6 +768,7 @@ def apply_speaker_resolution(
             )
             segment.speaker_match_source = MATCH_SOURCE
             segment.speaker_label_source = 'auto'
+            segment.summary_speaker_evidence = None
         elif new_id in identity_statuses:
             if (
                 identity_statuses[new_id] == SpeakerIdentityStatus.unknown
@@ -784,6 +785,7 @@ def apply_speaker_resolution(
             segment.speaker_identity_status = identity_statuses[new_id]
             segment.speaker_match_source = MATCH_SOURCE
             segment.speaker_label_source = None
+            segment.summary_speaker_evidence = None
 
 
 _IDENTITY_FIELDS = (
