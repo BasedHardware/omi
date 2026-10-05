@@ -673,25 +673,22 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(context.l10n.transcription),
-        actions: [
-          if (_useCustomStt) ...[
-            OmiIconButton(
-              icon: const Icon(Icons.file_download_outlined, size: 20),
-              label: context.l10n.importConfiguration,
-              onPressed: _importConfig,
-            ),
-            OmiIconButton(
-              icon: const Icon(Icons.file_upload_outlined, size: 20),
-              label: context.l10n.exportConfiguration,
-              onPressed: _exportConfig,
-            ),
-          ],
+    return OmiGroupedPage(
+      title: context.l10n.transcription,
+      actions: [
+        if (_useCustomStt) ...[
+          OmiIconButton(
+            icon: const Icon(Icons.file_download_outlined, size: 20),
+            label: context.l10n.importConfiguration,
+            onPressed: _importConfig,
+          ),
+          OmiIconButton(
+            icon: const Icon(Icons.file_upload_outlined, size: 20),
+            label: context.l10n.exportConfiguration,
+            onPressed: _exportConfig,
+          ),
         ],
-      ),
+      ],
       body: Column(
         children: [
           Expanded(
@@ -710,7 +707,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     OmiSettingsGroup(
                       children: [
                         OmiSettingsRow.toggle(
-                          leading: const Icon(Icons.cloud_upload_outlined),
+                          leading: const OmiSettingsIconTile(Icon(Icons.cloud_upload_outlined)),
                           title: context.l10n.sendRawAudioToOmi,
                           subtitle: context.l10n.sendRawAudioToOmiDescription,
                           value: _sendRawAudioToOmi,
@@ -1184,9 +1181,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Container(
             padding: const EdgeInsets.all(OmiSpacing.sm),
             decoration: BoxDecoration(
-              color: OmiColors.surface1,
+              color: OmiColors.groupedCard,
               borderRadius: OmiRadius.smAll,
-              border: Border.all(color: OmiColors.border),
+              border: Border.all(color: OmiColors.groupedBorder),
             ),
             child: Row(
               children: [

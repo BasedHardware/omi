@@ -1,7 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -19,7 +18,11 @@ class DeveloperApiKeysSection extends StatelessWidget {
 
   Widget _card(Widget child) {
     return DecoratedBox(
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(
+        color: OmiColors.groupedCard,
+        borderRadius: OmiRadius.xlAll,
+        border: Border.all(color: OmiColors.groupedBorder),
+      ),
       child: child,
     );
   }
@@ -48,7 +51,6 @@ class DeveloperApiKeysSection extends StatelessWidget {
                   const SizedBox(width: OmiSpacing.xs),
                   OmiButton.secondary(
                     label: context.l10n.createKey,
-                    leading: const FaIcon(FontAwesomeIcons.plus),
                     size: OmiButtonSize.compact,
                     onPressed: () {
                       final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
@@ -81,7 +83,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
                 if (provider.keys.isEmpty) {
                   return _card(
                     OmiEmptyState(
-                      glyph: const FaIcon(FontAwesomeIcons.key),
+                      glyph: const OmiLineIcon(OmiLineGlyph.key),
                       title: context.l10n.noApiKeys,
                       message: context.l10n.createAKeyToGetStarted,
                     ),

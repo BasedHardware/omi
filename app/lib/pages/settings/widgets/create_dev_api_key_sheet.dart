@@ -209,7 +209,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
 
   Widget _buildPermissionRow(String resource, String readScope, String writeScope, IconData icon) {
     return OmiSettingsRow(
-      leading: Icon(icon),
+      leading: OmiSettingsIconTile(Icon(icon)),
       title: resource,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

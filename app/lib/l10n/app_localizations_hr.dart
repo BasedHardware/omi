@@ -4380,7 +4380,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get saveKeyWarning => 'Spremi ovaj ključ sada! Nećete ga moći vidjeti ponovno.';
 
   @override
-  String get yourApiKey => 'VAŠ API KLJUČ';
+  String get yourApiKey => 'Vaš API ključ';
 
   @override
   String get tapToCopy => 'Dodirnite kako bi kopirali';
@@ -4395,13 +4395,13 @@ class AppLocalizationsHr extends AppLocalizations {
   String get accessDataProgrammatically => 'Pristupite podacima programski';
 
   @override
-  String get keyNameLabel => 'NAZIV KLJUČA';
+  String get keyNameLabel => 'Naziv ključa';
 
   @override
   String get keyNamePlaceholder => 'npr. Moja integracija aplikacije';
 
   @override
-  String get permissionsLabel => 'DOZVOLE';
+  String get permissionsLabel => 'Dozvole';
 
   @override
   String get permissionsInfoNote =>

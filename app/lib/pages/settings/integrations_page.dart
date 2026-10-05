@@ -350,10 +350,12 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
             child: Row(
               children: [
-                ExcludeSemantics(child: SizedBox(width: 40, height: 40, child: leading)),
+                ExcludeSemantics(
+                  child: SizedBox(width: kOmiSettingsIconTileSize, height: kOmiSettingsIconTileSize, child: leading),
+                ),
                 const SizedBox(width: OmiSpacing.md),
                 Expanded(child: Text(title, style: OmiType.body)),
                 trailing,
@@ -383,11 +385,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     return _buildRow(
       leading: app.logoPath != null
           ? ClipRRect(
-              borderRadius: OmiRadius.smAll,
+              borderRadius: OmiRadius.mdAll,
               child: Image.asset(
                 app.logoPath!,
-                width: 40,
-                height: 40,
+                width: kOmiSettingsIconTileSize,
+                height: kOmiSettingsIconTileSize,
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) => _fallbackIcon(app, isAvailable),
               ),
@@ -417,10 +419,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
   Widget _buildCreateYourOwnAppTile() {
     return _buildRow(
-      leading: Container(
-        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-        child: Icon(Icons.add_circle_outline, color: OmiColors.textPrimary, size: 24),
-      ),
+      leading: const OmiSettingsIconTile(Icon(Icons.add_circle_outline)),
       title: context.l10n.createYourOwnApp,
       trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
       onTap: () => routeToPage(context, const AddAppPage(presetExternalIntegration: true)),
@@ -429,10 +428,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
   Widget _buildAddMcpServerTile() {
     return _buildRow(
-      leading: Container(
-        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-        child: Icon(Icons.cable_rounded, color: OmiColors.textPrimary, size: 22),
-      ),
+      leading: const OmiSettingsIconTile(Icon(Icons.cable_rounded)),
       title: context.l10n.addMcpServer,
       trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
       onTap: () {
@@ -449,24 +445,23 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final provider = context.watch<IntegrationProvider>();
     final isLoading = provider.isLoading || !provider.hasLoaded;
 
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.integrations)),
+    return OmiGroupedPage(
+      title: context.l10n.integrations,
       body: SafeArea(
         bottom: false,
         child: ExploreInstallPage(
           leadingSlivers: [
             const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.sm)),
+            // Connected services and the two ways to build one, each an outlined Settings card.
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
               sliver: SliverList.list(
                 children: [
-                  ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
-                    child: Divider(color: OmiColors.border, thickness: 1),
+                  OmiSettingsGroup(
+                    children: [...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading))],
                   ),
-                  _buildCreateYourOwnAppTile(),
-                  _buildAddMcpServerTile(),
+                  const SizedBox(height: OmiSpacing.xl),
+                  OmiSettingsGroup(children: [_buildCreateYourOwnAppTile(), _buildAddMcpServerTile()]),
                 ],
               ),
             ),

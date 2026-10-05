@@ -4379,7 +4379,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get saveKeyWarning => 'Sla deze sleutel nu op! U kunt hem niet meer zien.';
 
   @override
-  String get yourApiKey => 'UW API-SLEUTEL';
+  String get yourApiKey => 'Uw API-sleutel';
 
   @override
   String get tapToCopy => 'Tik om te kopiëren';
@@ -4394,13 +4394,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get accessDataProgrammatically => 'Toegang tot uw gegevens via programmering';
 
   @override
-  String get keyNameLabel => 'SLEUTELNAAM';
+  String get keyNameLabel => 'Sleutelnaam';
 
   @override
   String get keyNamePlaceholder => 'bijv., Mijn app-integratie';
 
   @override
-  String get permissionsLabel => 'MACHTIGINGEN';
+  String get permissionsLabel => 'Machtigingen';
 
   @override
   String get permissionsInfoNote => 'R = Lezen, W = Schrijven. Standaard alleen lezen als niets is geselecteerd.';

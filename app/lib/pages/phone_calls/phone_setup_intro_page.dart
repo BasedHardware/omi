@@ -10,8 +10,7 @@ class PhoneSetupIntroPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton()),
+    return OmiGroupedPage(
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),

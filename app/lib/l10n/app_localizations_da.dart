@@ -4355,7 +4355,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get saveKeyWarning => 'Gem denne nøgle nu! Du vil ikke kunne se den igen.';
 
   @override
-  String get yourApiKey => 'DIN API-NØGLE';
+  String get yourApiKey => 'Din API-nøgle';
 
   @override
   String get tapToCopy => 'Tryk for at kopiere';
@@ -4370,13 +4370,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get accessDataProgrammatically => 'Få adgang til dine data programmatisk';
 
   @override
-  String get keyNameLabel => 'NØGLENAVN';
+  String get keyNameLabel => 'Nøglenavn';
 
   @override
   String get keyNamePlaceholder => 'f.eks. Min app-integration';
 
   @override
-  String get permissionsLabel => 'TILLADELSER';
+  String get permissionsLabel => 'Tilladelser';
 
   @override
   String get permissionsInfoNote => 'R = Læs, W = Skriv. Standard kun læsning, hvis intet er valgt.';
