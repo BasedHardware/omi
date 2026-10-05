@@ -769,9 +769,11 @@ or wall-clock pass — so planning and the transaction cannot disagree.
 Gaps of `0..3600` s are eligible, negative or malformed wall times get
 the bounded `wallclock_gap_negative`/`wallclock_time_invalid` reasons, and
 the 3 h span cap is measured on `created_at`/`finished_at`. The existing
-`event=smart_merge` decision lines carry `gap_path=legacy` or
-`gap_path=wallclock` under `on` (absent otherwise) to record which gate
-admitted the pair. `shadow` keeps
+`event=smart_merge` lines carry `gap_path=legacy` or `gap_path=wallclock`
+under `on` (absent otherwise): the decision-time keep line names the gate
+that admitted the pair at planning, while the absorb transaction's
+merged/kept lines name the gate that admitted it on the transaction's
+fresh rows. `shadow` keeps
 the legacy verdict but asks Jev once with corrected timing for proven pairs
 the legacy gate skipped, logging `event=smart_merge_wallclock_shadow` and
 counting `omi_conversation_smart_merge_wallclock_shadow_total`. The setting

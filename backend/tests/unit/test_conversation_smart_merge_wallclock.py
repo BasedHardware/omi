@@ -358,7 +358,7 @@ def test_union_recheck_lets_a_legacy_plan_survive_a_bad_wall_clock(world, post_p
     assert world.raw('n')['deleted'] is True and world.raw('n')['sync_merged_into'] == 'p'
 
 
-def test_union_recheck_lets_a_wall_plan_survive_a_fresh_legacy_pass(world):
+def test_union_recheck_lets_a_wall_plan_survive_a_fresh_legacy_pass(world, caplog):
     """A wall-admitted plan still commits when fresh rows would pass legacy,
     even though the same fresh rows make the wall gap negative."""
     _drifted_pair(world)
@@ -372,11 +372,15 @@ def test_union_recheck_lets_a_wall_plan_survive_a_fresh_legacy_pass(world):
     assert plan.admission_path == 'wallclock'
     world.raw('n')['started_at'] = T0 + timedelta(seconds=900)
     world.raw('n')['created_at'] = T0 + timedelta(seconds=599)
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
+    caplog.clear()
     assert smart_merge._absorb(UID, 'n', plan, mode=config.SmartMergeMode.MERGE, owner='job') is True
     assert world.raw('n')['deleted'] is True
+    merged = [r.getMessage() for r in caplog.records if 'decision=merged' in r.getMessage()]
+    assert len(merged) == 1 and 'gap_path=legacy' in merged[0]
 
 
-def test_union_recheck_rescues_a_legacy_plan_on_fresh_data(world):
+def test_union_recheck_rescues_a_legacy_plan_on_fresh_data(world, caplog):
     """A legacy-admitted on plan whose fresh rows now skip legacy is rescued
     by the wall-clock proof re-evaluated inside the transaction."""
     _add(world, 'p', 0, 0, 600)
@@ -389,8 +393,12 @@ def test_union_recheck_rescues_a_legacy_plan_on_fresh_data(world):
     assert plan is not None
     assert plan.wallclock_gap is True and plan.same_recording is False
     world.raw('n')['started_at'] = T0 + timedelta(seconds=400)
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
+    caplog.clear()
     assert smart_merge._absorb(UID, 'n', plan, mode=config.SmartMergeMode.MERGE, owner='job') is True
     assert world.raw('n')['deleted'] is True and world.raw('n')['sync_merged_into'] == 'p'
+    merged = [r.getMessage() for r in caplog.records if 'decision=merged' in r.getMessage()]
+    assert len(merged) == 1 and 'gap_path=wallclock' in merged[0]
 
 
 def _shadow_lines(caplog):

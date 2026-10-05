@@ -595,6 +595,7 @@ def _decide(
 def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMergeMode, owner: str) -> bool:
     merged_at = datetime.now(timezone.utc)
     flattened_count = 0
+    admission_path = plan.admission_path
 
     def payloads(
         survivor: Mapping[str, Any],
@@ -604,16 +605,20 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         ancestor_rows: Mapping[str, Optional[Mapping[str, Any]]],
         last_fragment_row: Optional[Mapping[str, Any]],
     ) -> tuple[Optional[str], Optional[dict], Optional[dict], Mapping[str, dict]]:
+        nonlocal admission_path
         reason = new_conversation_skip(donor, donor_segments, capture_end=True)
         if reason is None:
-            reason = check_pair(
+            check = check_pair(
                 survivor,
                 survivor_segments,
                 donor,
                 donor_segments,
                 wallclock_gap=plan.wallclock_gap,
                 last_fragment_row=last_fragment_row,
-            ).reason
+            )
+            reason = check.reason
+            if reason is None and plan.wallclock_gap:
+                admission_path = 'wallclock' if check.same_recording else 'legacy'
         if reason is not None:
             return reason, None, None, {}
         survivor_update, donor_update = absorb_payloads(
@@ -675,7 +680,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             conversation_id,
             plan.survivor_id,
             flattened_count,
-            f' gap_path={plan.admission_path}' if plan.admission_path else '',
+            f' gap_path={admission_path}' if admission_path else '',
         )
         return False
 
@@ -701,7 +706,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         conversation_id,
         plan.survivor_id,
         flattened_count,
-        f' gap_path={plan.admission_path}' if plan.admission_path else '',
+        f' gap_path={admission_path}' if admission_path else '',
     )
     finish_absorb(uid, conversation_id, owner=owner)
     return True
