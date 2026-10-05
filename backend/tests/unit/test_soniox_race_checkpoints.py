@@ -51,7 +51,7 @@ async def test_raced_fifo_checkpoints_place_observed_post_finalize_audio(monkeyp
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('bad', ['different', 'missing', 'fractional', 'combined'])
-async def test_mismatch_invalidates_interval_and_future_until_next_clean_ack(monkeypatch, bad):
+async def test_mismatch_invalidates_interval_and_future_on_same_socket(monkeypatch, bad):
     monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
     receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
     before = REGISTRY.get_sample_value('omi_soniox_ordered_finalize_checkpoints_total', {'outcome': 'mismatch'}) or 0
@@ -88,10 +88,10 @@ async def test_mismatch_invalidates_interval_and_future_until_next_clean_ack(mon
         send_observed(receiver, leg, RATE)
         await barrier(leg.raw, peer)
         await final(peer, speaker=3)
-        assert known(await tick(receiver, processor, store)) == 1
-        # The earlier invalidated interval stays refused after recovery.
+        assert known(await tick(receiver, processor, store)) == 0
+        # Later clean-looking reports cannot repair lost control association.
         await final(peer, first=first, end=end, speaker=4)
-        assert known(await tick(receiver, processor, store)) == 1
+        assert known(await tick(receiver, processor, store)) == 0
     finally:
         await close(leg)
 
@@ -159,7 +159,7 @@ async def test_missing_ack_teardown_invalidates_pending_map_and_late_writes(monk
 
 
 @pytest.mark.asyncio
-async def test_clean_recovery_can_reanchor_below_disproven_prediction(monkeypatch):
+async def test_clean_looking_report_cannot_reanchor_below_disproven_prediction(monkeypatch):
     monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'true')
     receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
     try:
@@ -180,13 +180,12 @@ async def test_clean_recovery_can_reanchor_below_disproven_prediction(monkeypatc
         peer.samples = 58736
         clean['total_audio_proc_ms'] = clean['final_audio_proc_ms'] = 3671
         await consume(peer, clean)
-        assert epoch.wire_provider_samples == peer.samples
+        assert leg.raw._provider_clock._association_lost
         send_observed(receiver, leg, RATE)
         await barrier(leg.raw, peer)
         await final(peer)
         rows = await tick(receiver, processor, store)
-        assert known(rows) == 1
-        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 42732 / RATE + 1.2, abs=2 / RATE, rel=0)
+        assert known(rows) == 0
     finally:
         await close(leg)
 

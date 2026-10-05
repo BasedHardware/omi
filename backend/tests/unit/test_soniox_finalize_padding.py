@@ -128,13 +128,14 @@ async def test_audio_before_finalize_ack_stays_unplaceable_until_clean_checkpoin
         acknowledgment = peer.acknowledgment()
         if inflight_ack:
             original = peer.send
+            remaining = [acknowledgment]
 
             async def send(value):
                 await original(value)
-                if isinstance(value, bytes):
+                if isinstance(value, bytes) and remaining:
                     # Ack inside the audio websocket await, before successful
                     # wire completion. Must not grant this in-flight packet.
-                    await consume(peer, acknowledgment)
+                    await consume(peer, remaining.pop())
 
             monkeypatch.setattr(peer, 'send', send)
         send_observed(receiver, leg, RATE)

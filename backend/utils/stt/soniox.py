@@ -197,7 +197,7 @@ class SafeSonioxSocket(STTSocket):
         self._wire_ledger_enabled = soniox_wire_ledger_enabled()
         self._wire_epoch: Any = None
         self._wire_samples = 0
-        self._provider_clock = SonioxProviderClock(sample_rate) if self._wire_ledger_enabled else None
+        self._provider_clock: SonioxProviderClock | None = None
         self._wire_provider_origin = 0
         if (
             self._wire_ledger_enabled
@@ -207,6 +207,8 @@ class SafeSonioxSocket(STTSocket):
             and SONIOX_WS_URL == 'wss://stt-rt.soniox.com/transcribe-websocket'
         ):
             self._provider_clock = OrderedSonioxProviderClock(sample_rate)
+        elif self._wire_ledger_enabled:
+            self._provider_clock = SonioxProviderClock(sample_rate)
         self._capture_axis: CaptureAxisDiagnostics | None = None
         self._capture_axis_failed = False
         try:
@@ -445,6 +447,7 @@ class SafeSonioxSocket(STTSocket):
         self._diagnostic(lambda diagnostic: setattr(diagnostic, 'inflight', True))
         provider_clock = self._provider_clock
         placeable = True
+        finalize = False
         # Fence before the websocket await: receive can run inside send(), and
         # acknowledgment before audio completion is already an ordering race.
         if provider_clock is not None:
@@ -456,6 +459,7 @@ class SafeSonioxSocket(STTSocket):
                 except (ValueError, TypeError):
                     control = None
                 if isinstance(control, dict) and control.get('type') == 'finalize':
+                    finalize = True
                     hole = provider_clock.begin_finalize()
                     if self._wire_epoch is not None:
                         self._wire_epoch.note_provider_hole(hole)
@@ -464,14 +468,15 @@ class SafeSonioxSocket(STTSocket):
         try:
             await self._ws.send(data)
             written = True
+            if provider_clock is not None and finalize:
+                provider_clock.finalize_written()
             if provider_clock is not None and isinstance(data, bytes):
                 length = len(data) // 2
                 self._wire_samples += length
                 provider_clock.end_audio(length)
                 if self._wire_epoch is not None:
-                    if isinstance(provider_clock, OrderedSonioxProviderClock):
-                        # A mismatch may arrive inside this audio send await.
-                        placeable = placeable and provider_clock.placeable
+                    # An ambiguous ack may arrive inside this audio send await.
+                    placeable = placeable and provider_clock.placeable
                     self._wire_epoch.note_wire_audio(
                         length, getattr(data, 'spans', ()) if placeable else (), unplaceable_by_race=not placeable
                     )
@@ -479,8 +484,8 @@ class SafeSonioxSocket(STTSocket):
         finally:
             if not written and provider_clock is not None and isinstance(data, bytes):
                 provider_clock.end_audio(0)
-            if not written and isinstance(provider_clock, OrderedSonioxProviderClock):
-                provider_clock.invalidate()
+            if not written and provider_clock is not None:
+                provider_clock.write_failed()
                 self._sync_ordered_clock()
             self._diagnostic(lambda diagnostic: setattr(diagnostic, 'inflight', False))
 
