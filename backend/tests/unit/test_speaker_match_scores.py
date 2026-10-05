@@ -18,6 +18,7 @@ def enabled(monkeypatch):
     # Import IO-ful dependencies in fixture setup, outside the per-test CPU budget.
     import database.conversations
     import routers.listen.speakers
+    import routers.listen.transcripts
     import utils.sync.speaker_identity
     import tests.unit.test_conversation_speaker_resolution_stage
 
@@ -149,7 +150,8 @@ def test_capture_summary_piggybacks_identity_only_transaction(monkeypatch):
     assert len(db.prepare_conversation_for_read(store.rows[path], 'u')[scores.FIELD]) == 2
 
 
-def test_sync_records_actual_evidence_without_extra_work(monkeypatch):
+@pytest.mark.parametrize('score_fails', [False, True])
+def test_sync_records_actual_evidence_without_extra_work(monkeypatch, score_fails):
     import models.transcript_segment as models
     import utils.sync.speaker_identity as sync
 
@@ -163,11 +165,16 @@ def test_sync_records_actual_evidence_without_extra_work(monkeypatch):
         compare_embeddings=lambda *args: 0.412345,
     )
     segment = models.TranscriptSegment(id='s', speaker_id=1, text='synthetic', is_user=False, start=0, end=8)
+    if score_fails:
+        monkeypatch.setattr(scores, 'summarize', lambda *a, **k: (_ for _ in ()).throw(ValueError('score fault')))
     sync.identify_speakers_for_segments(
         [segment], b'fake', {'user': {'embedding': np.ones((1, 2)), 'name': 'Owner'}}, 'u', dependencies=dependencies
     )
     assert len(calls) == 1
     assert segment.is_user and segment.speaker_identity_status == 'user'
+    if score_fails:
+        assert segment.speaker_match_scores is None
+        return
     assert segment.speaker_match_scores['stage'] == 'sync'
     assert segment.speaker_match_scores['evidence_seconds'] == 7.123
     assert conversation([segment]).speaker_match_scores == [segment.speaker_match_scores]
@@ -179,7 +186,8 @@ def anyio_backend():
 
 
 @pytest.mark.anyio
-async def test_capture_computation_and_clear(monkeypatch, caplog):
+@pytest.mark.parametrize('case', ['automatic', 'score_fault', 'manual', 'manual_other', 'manual_score_fault'])
+async def test_capture_computation_and_clear(monkeypatch, caplog, case):
     import routers.listen.speakers as live
     import utils.audio as audio
 
@@ -199,17 +207,38 @@ async def test_capture_computation_and_clear(monkeypatch, caplog):
         return np.ones((1, 2))
 
     async def receipt(*args):
-        return {}
+        return (
+            {
+                'speakers': {
+                    '1': {
+                        'is_user': case != 'manual_other',
+                        'person_id': 'p' if case == 'manual_other' else None,
+                        'source': 'manual',
+                    }
+                }
+            }
+            if case.startswith('manual')
+            else {}
+        )
 
     host.persistence = SimpleNamespace(call=receipt)
     monkeypatch.setattr(live, 'run_blocking', blocking)
     monkeypatch.setattr(live, 'compare_embeddings', lambda *args: 0.412345)
+    if 'fault' in case:
+        monkeypatch.setattr(scores, 'summarize', lambda *a, **k: (_ for _ in ()).throw(ValueError('score fault')))
     await matcher.match(
         1, dict(id='s', conversation_id='c', abs_start=100.0, abs_end=110.0, duration=10.0, speaker_id_scope='live:c')
     )
-    assert matcher.speaker_to_person.get(1, (None,))[0] == 'user', caplog.text
-    assert matcher.match_scores[0]['owner_distance'] == 0.412
-    assert matcher.match_scores[0]['evidence_seconds'] == 10
+    assert matcher.speaker_to_person.get(1, (None,))[0] == ('p' if case == 'manual_other' else 'user'), caplog.text
+    assert matcher.voice_identity_status[1] == ('not_user' if case == 'manual_other' else 'user')
+    assert host.state.speaker_map_dirty
+    if 'fault' in case:
+        assert matcher.match_scores == []
+    else:
+        assert matcher.match_scores[0]['owner_distance'] == 0.412
+        assert matcher.match_scores[0]['evidence_seconds'] == 10
+        assert matcher.match_scores[0]['accepted_person_id'] == ('p' if case == 'manual_other' else 'user')
+        assert matcher.match_scores[0]['decision'] == ('manual_decision' if case.startswith('manual') else 'accepted')
     matcher.clear()
     assert matcher.match_scores == []
 
@@ -483,3 +512,180 @@ def test_processing_snapshot_scores_follow_current_transaction_protection(monkey
     else:
         assert isinstance(write_data[scores.FIELD], str if target == 'enhanced' else bytes)
         assert db.prepare_conversation_for_read(write_data, 'u')[scores.FIELD] == [row()]
+
+
+@pytest.mark.parametrize('bad', [{'stage': 'capture'}, {'stage': 'capture', 'speaker_id': []}])
+def test_malformed_segment_score_does_not_abort_conversation(bad):
+    import models.transcript_segment as models
+
+    segment = models.TranscriptSegment(
+        id='s', text='kept', is_user=False, start=0, end=6, speaker_id=1, speaker_match_scores=bad
+    )
+    conv = conversation([segment], speaker_match_scores=[row()])
+    assert conv.speaker_match_scores is None
+    assert conv.transcript_segments[0].text == 'kept'
+    assert scores.FIELD not in conv.model_dump()
+
+
+def test_malformed_score_mutation_does_not_abort_model_serialization():
+    conv = conversation()
+    conv.speaker_match_scores = [{'stage': 'capture'}]
+    assert scores.FIELD not in conv.model_dump()
+    assert scores.FIELD not in conv.model_dump(mode='json')
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_processing_scores_keep_concurrent_rows_and_replace_resolution(level):
+    import database.conversations as db
+
+    latest = dict(row(1), owner_distance=0.2)
+    current_rows = [latest, row(2, 'sync'), row(7, 'resolution')]
+    snapshot_rows = [row(1), row(3, 'capture'), row(8, 'resolution')]
+    existing = db.encode_conversation_for_write('u', dict(speaker_match_scores=current_rows), level)
+    existing['data_protection_level'] = level
+    update = db.encode_conversation_for_write(
+        'u', dict(transcript_segments=[], speaker_match_scores=snapshot_rows), level
+    )
+    db._reapply_current_manual_assignments('u', update, existing)
+    decoded = db.prepare_conversation_for_read(update, 'u')[scores.FIELD]
+    assert latest in decoded
+    assert row(2, 'sync') in decoded
+    assert row(3, 'capture') in decoded
+    assert row(8, 'resolution') in decoded
+    assert row(7, 'resolution') not in decoded
+
+
+def test_processing_score_cap_prioritizes_current_capture_rows():
+    current = [row(i, 'capture') for i in range(16, 32)]
+    snapshot = [row(i, 'capture') for i in range(16)]
+    assert scores.merge_processing(current, snapshot) == current
+
+
+@pytest.mark.parametrize('fault', ['current_decode', 'merge'])
+def test_processing_optional_merge_failure_keeps_current_blob(monkeypatch, fault):
+    import database.conversations as db
+
+    existing = db.encode_conversation_for_write('u', dict(speaker_match_scores=[row(2, 'sync')]))
+    before = dict(existing)
+    update = db.encode_conversation_for_write('u', dict(transcript_segments=[], speaker_match_scores=[row()]))
+    if fault == 'current_decode':
+        existing[scores.FIELD] = b'corrupt'
+        before = dict(existing)
+    else:
+        monkeypatch.setattr(scores, 'merge_processing', lambda *a: (_ for _ in ()).throw(ValueError('merge fault')))
+    db._reapply_current_manual_assignments('u', update, existing)
+    assert scores.FIELD not in update
+    assert db.prepare_conversation_for_read(update, 'u')['transcript_segments'] == []
+    assert existing == before
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_sync_bridge_aggregates_decoded_donor_scores(monkeypatch, level):
+    import database.conversations as db
+    import tests.unit.fixtures.strict_firestore_transaction as fixture
+    import tests.unit.test_sync_cross_job_assignment as sync_fixtures
+
+    store = fixture.StrictFirestore()
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, '_delete_conversation_search_index', lambda *a: None)
+    for cid, start, stage in [('a', 1000, 'capture'), ('b', 1240, 'sync')]:
+        data = sync_fixtures.chunk(cid, start)
+        data.update(data_protection_level=level, speaker_match_scores=[row(1, stage, scope=cid)])
+        db.assign_sync_conversation('u', data, firestore_client=store)
+    incoming = sync_fixtures.chunk('bridge', 1120)
+    incoming['data_protection_level'] = level
+    result, _, _ = db.assign_sync_conversation('u', incoming, firestore_client=store)
+    stored = db.prepare_conversation_for_read(store.rows[('users', 'u', 'conversations', result['id'])], 'u')
+    assert {r['speaker_id_scope'] for r in stored[scores.FIELD]} == {'a', 'b'}
+    assert len(stored['transcript_segments']) == 3
+    assert isinstance(
+        store.rows[('users', 'u', 'conversations', result['id'])][scores.FIELD], str if level == 'enhanced' else bytes
+    )
+
+
+@pytest.mark.parametrize('retains_rows', [True, False])
+def test_trim_telemetry_distinguishes_partial_retention(monkeypatch, retains_rows):
+    import database.conversations as db
+
+    events = []
+    monkeypatch.setattr(db.fallback, 'record_fallback', lambda **kw: events.append(kw))
+    encoded = db._protect_json_value([row()], 'u', 'standard') if retains_rows else None
+    monkeypatch.setattr(scores, 'encode_bounded', lambda *a: (encoded, True))
+    result = db.encode_conversation_for_write('u', dict(transcript_segments=[], speaker_match_scores=[row()]))
+    assert (scores.FIELD in result) == retains_rows
+    assert events[-1]['to_mode'] == ('scores_trimmed' if retains_rows else 'scores_omitted')
+
+
+@pytest.mark.parametrize('fault', ['summarize', 'publish'])
+def test_optional_resolution_scores_never_block_voice_application(monkeypatch, fault):
+    import tests.unit.test_conversation_speaker_resolution_stage as fixtures
+    import utils.conversations.speaker_resolution as stage
+
+    fixtures.env.__wrapped__(monkeypatch)
+    monkeypatch.setattr(stage.conversations_db, 'get_manual_speaker_receipt', lambda *a: {})
+    monkeypatch.setattr(stage.users_db, 'get_user_speaker_embedding', lambda *a: fixtures.VOICES[0].tolist())
+    plan = [0, 1] * 4
+    fixtures._install_audio(monkeypatch, plan)
+    conv = fixtures._conversation(plan)
+    original = scores.merge
+    if fault == 'summarize':
+        monkeypatch.setattr(scores, 'summarize', lambda *a, **k: (_ for _ in ()).throw(ValueError('score fault')))
+    else:
+
+        def merge(existing, updates):
+            if existing is not None:
+                raise ValueError('score publication fault')
+            return original(existing, updates)
+
+        monkeypatch.setattr(scores, 'merge', merge)
+    stage.resolve_speakers_for_processing('u', conv)
+    assert conv.speaker_resolution.status == 'resolved'
+    assert any(s.is_user for s in conv.transcript_segments)
+
+
+def test_malformed_capture_score_does_not_abort_segment_identity_status():
+    import routers.listen.transcripts as transcripts
+    import models.transcript_segment as models
+
+    speaker = SimpleNamespace(
+        match_scores=[{'stage': 'capture'}],
+        segment_assignments={'s': 'user'},
+        speaker_to_person={},
+        voice_identity_status={},
+        segment_identity_status={},
+    )
+    processor = SimpleNamespace(host=SimpleNamespace(speakers=speaker))
+    segment = models.TranscriptSegment(id='s', text='kept', is_user=True, start=0, end=6, speaker_id=1)
+    transcripts.TranscriptProcessor._apply_speaker_identity_statuses(processor, [segment])
+    assert segment.speaker_identity_status == 'user'
+    assert segment.text == 'kept'
+
+
+def test_malformed_cache_evidence_keeps_embeddings():
+    import struct
+    import utils.conversations.speaker_resolution as stage
+
+    cache = {'s': (6.0, np.ones(3))}
+    raw = stage.encode_cache(cache, {'s': object()})
+    size = struct.unpack('>I', raw[:4])[0]
+    header = json.loads(raw[4 : 4 + size])
+    header['evidence_seconds'] = 42
+    encoded = json.dumps(header).encode()
+    raw = struct.pack('>I', len(encoded)) + encoded + raw[4 + size :]
+    decoded = stage.decode_cache(raw, {})
+    assert decoded['s'][0] == 6.0
+    np.testing.assert_array_equal(decoded['s'][1], cache['s'][1])
+
+
+def test_bad_embedding_seconds_does_not_change_resolved_voice():
+    import tests.unit.test_conversation_speakers as fixture
+    import utils.stt.conversation_speakers as resolver
+
+    segments, embeddings, voices = fixture._fragmented([0] * 4)
+    before = resolver.resolve_conversation_speakers(segments, embeddings, voiceprints={'user': voices[0]})
+    after = resolver.resolve_conversation_speakers(
+        segments, embeddings, voiceprints={'user': voices[0]}, embedding_seconds={s['id']: 'invalid' for s in segments}
+    )
+    assert after.speaker_ids == before.speaker_ids
+    assert after.voice_identities == before.voice_identities

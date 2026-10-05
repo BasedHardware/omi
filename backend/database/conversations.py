@@ -236,14 +236,7 @@ def _reveal_match_scores_for_read(data: Dict[str, Any], uid: str) -> None:
 
 def _drop_match_scores(data: dict, reason: str = 'other') -> None:
     data.pop(match_scores.FIELD, None)
-    fallback.record_fallback(
-        component='conversation_finalization',
-        from_mode='speaker_match_scores',
-        to_mode='scores_omitted',
-        reason=reason,
-        outcome='degraded',
-        log=logger,
-    )
+    match_scores.record_failure(fallback, logger, reason=reason)
 
 
 def _guard_match_score_size(data: dict, existing: Optional[dict] = None, path: Optional[str] = None) -> None:
@@ -289,12 +282,12 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
             encoded, trimmed = match_scores.encode_bounded(
                 data[match_scores.FIELD], lambda rows: _protect_json_value(rows, uid, level)
             )
-            if trimmed:
-                _drop_match_scores(data, 'capacity_full')
             if encoded is not None:
                 data[match_scores.FIELD] = encoded
+                if trimmed:
+                    match_scores.record_failure(fallback, logger, trimmed=True, reason='capacity_full')
             else:
-                data.pop(match_scores.FIELD, None)
+                _drop_match_scores(data, 'capacity_full')
         except Exception:
             # Never fall back to plaintext for enhanced protection.
             _drop_match_scores(data)
@@ -637,7 +630,17 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     if match_scores.FIELD in write_data:
         # A processing snapshot can predate a protection migration. Remove its
         # prepared blob first so a failed re-encode cannot retain old plaintext.
-        payload[match_scores.FIELD] = write_data.pop(match_scores.FIELD)
+        snapshot_scores = write_data.pop(match_scores.FIELD)
+        try:
+            current_scores = (
+                _reveal_json_value(existing[match_scores.FIELD], uid, True) if match_scores.FIELD in existing else []
+            )
+            payload[match_scores.FIELD] = match_scores.merge_processing(
+                current_scores, _reveal_json_value(snapshot_scores, uid, True)
+            )
+        except Exception:
+            # Omitting this optional update leaves the current stored blob intact.
+            match_scores.record_failure(fallback, logger, reason='malformed_doc')
     write_data.update(_prepare_conversation_for_write(payload, uid, level))
     write_data['data_protection_level'] = level
 

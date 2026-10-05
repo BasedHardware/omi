@@ -3215,7 +3215,13 @@ compression and encryption, is capped at 8 KiB; stage-order tail rows
 are omitted when needed. Its maximum Firestore field growth is 8,214 bytes
 (8,192-byte value plus field name and string terminator), and protobuf field
 growth is at most 8,224 bytes. Encoding failures
-omit scores while committing content, with shared fallback telemetry. Existing
+omit scores while committing content, with shared fallback telemetry. Partial
+trims report `scores_trimmed`; only complete omission reports `scores_omitted`.
+Score exceptions also cannot interrupt model construction or speaker assignment.
+Processing transactions merge the current stored capture/sync rows ahead of stale
+snapshot rows, while replacing resolution rows with a fresh result. Sync bridges
+aggregate decoded donor score lists before the existing encoding/write. Manual
+capture decisions retain the already computed comparison with the manual outcome. Existing
 write snapshots also omit scores above the 900 KiB document budget, avoiding
 new reads or score-triggered size-limit failures. Protection migration deletes
 old optional scores if re-encryption fails rather than retaining plaintext.

@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime
 from collections.abc import Mapping
@@ -6,6 +7,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 from pydantic.json_schema import SkipJsonSchema
 
 import config.speaker_match_scores as match_scores
+import utils.observability.fallback as score_fallback
 
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
@@ -485,9 +487,13 @@ class Conversation(BaseModel):
 
     @model_validator(mode='after')
     def _collect_match_scores(self):
-        updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
-        if updates and match_scores.enabled():
-            self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
+        try:
+            updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
+            if updates and match_scores.enabled():
+                self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
+        except Exception:
+            self.speaker_match_scores = None
+            match_scores.record_failure(score_fallback, logging.getLogger(__name__), reason='malformed_doc')
         return self
 
     @model_serializer(mode='wrap')
@@ -497,7 +503,10 @@ class Conversation(BaseModel):
             excluded = info.exclude or ()
             included = info.include
             if 'speaker_match_scores' not in excluded and (included is None or 'speaker_match_scores' in included):
-                data['speaker_match_scores'] = match_scores.merge(None, self.speaker_match_scores)
+                try:
+                    data['speaker_match_scores'] = match_scores.merge(None, self.speaker_match_scores)
+                except Exception:
+                    match_scores.record_failure(score_fallback, logging.getLogger(__name__), reason='malformed_doc')
         return data
 
     # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting

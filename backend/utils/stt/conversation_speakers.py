@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 import config.speaker_match_scores as match_scores
+import utils.observability.fallback as score_fallback
 
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
@@ -287,11 +288,15 @@ def resolve_conversation_speakers(
         if vector is None or not prints or evidence < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
             continue
         evidence_ids = [_seg(s, 'id') for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors]
-        score_seconds[index] = (
-            sum(embedding_seconds[sid] for sid in evidence_ids)
-            if embedding_seconds is not None and all(sid in embedding_seconds for sid in evidence_ids)
-            else None
-        )
+        try:
+            score_seconds[index] = (
+                sum(embedding_seconds[sid] for sid in evidence_ids)
+                if embedding_seconds is not None and all(sid in embedding_seconds for sid in evidence_ids)
+                else None
+            )
+        except Exception:
+            score_seconds[index] = None
+            match_scores.record_failure(score_fallback, None, reason='malformed_doc')
         distances[index] = {key: _cosine(vector, p) for key, p in prints.items()}
         decisions[index] = select_speaker_match(distances[index], threshold=VOICE_MATCH_THRESHOLD)
     decisions = arbitrate_owner_matches(
@@ -433,16 +438,9 @@ def resolve_conversation_speakers(
         or identities_of(clusters[position])
         or position in final_identity
     )
-    return SpeakerResolution(
-        speaker_ids=speaker_ids,
-        significant_speaker_ids=significant,
-        voice_identities={
-            new_id_of[position]: identity for position, identity in final_identity.items() if position in new_id_of
-        },
-        voice_identity_statuses={
-            new_id_of[position]: status for position, status in final_status.items() if position in new_id_of
-        },
-        match_scores=(
+    score_rows = []
+    try:
+        score_rows = (
             match_scores.merge(
                 None,
                 [
@@ -461,7 +459,19 @@ def resolve_conversation_speakers(
             )
             if match_scores.enabled()
             else []
-        ),
+        )
+    except Exception:
+        match_scores.record_failure(score_fallback, None)
+    return SpeakerResolution(
+        speaker_ids=speaker_ids,
+        significant_speaker_ids=significant,
+        voice_identities={
+            new_id_of[position]: identity for position, identity in final_identity.items() if position in new_id_of
+        },
+        voice_identity_statuses={
+            new_id_of[position]: status for position, status in final_status.items() if position in new_id_of
+        },
+        match_scores=score_rows,
         embedded_segments=len(vectors),
         input_speaker_ids=len({int(_seg(s, 'speaker_id')) for s in all_eligible}),
         coverage=_coverage(all_eligible, vectors, manual_speakers, abstained),

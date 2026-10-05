@@ -20,6 +20,36 @@ def enabled() -> bool:
     return os.getenv('SPEAKER_MATCH_SCORES_ENABLED', default).strip().lower() in ('true', '1', 'on', 'yes')
 
 
+def record_failure(reporter, log, *, trimmed: bool = False, reason: str = 'other') -> None:
+    """Optional instrumentation must not turn its own failure into a content failure."""
+    try:
+        reporter.record_fallback(
+            component='conversation_finalization',
+            from_mode=FIELD,
+            to_mode='scores_trimmed' if trimmed else 'scores_omitted',
+            reason=reason,
+            outcome='degraded',
+            log=log,
+        )
+    except Exception:
+        pass
+
+
+def merge_processing(current: list, snapshot: list) -> list:
+    """Current capture/sync wins; a fresh resolution replaces the old resolution."""
+    current = merge(None, current)
+    snapshot = merge(None, snapshot)
+    new_resolution = [r for r in snapshot if r['stage'] == 'resolution']
+    retained = [r for r in current if not new_resolution or r['stage'] != 'resolution']
+    keys = {(r['stage'], r.get('speaker_id_scope', ''), r['speaker_id']) for r in retained}
+    retained += [
+        r
+        for r in snapshot
+        if r['stage'] != 'resolution' and (r['stage'], r.get('speaker_id_scope', ''), r['speaker_id']) not in keys
+    ]
+    return merge(retained, new_resolution)
+
+
 def rounded(value: float | None) -> float | None:
     return round(float(value), 3) if value is not None and math.isfinite(value) else None
 

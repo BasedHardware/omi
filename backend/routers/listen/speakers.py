@@ -10,6 +10,7 @@ from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
 import av
 import config.speaker_match_scores as match_scores
+import utils.observability.fallback as score_fallback
 import utils.stt.speaker_match as match_policy
 import numpy as np
 from pydantic import ValidationError
@@ -518,6 +519,7 @@ class SpeakerMatcher:
                     self.voice_identity_status[speaker_id] = status
                     self.segment_identity_status[segment['id']] = status
                     self.host.state.speaker_map_dirty = True
+                self._record_match_score(speaker_id, self._voice_decisions[speaker_id], 'manual_decision', manual)
                 self._record_exit('manual_decision', speaker_id)
                 return
             voice_groups = self._provider_epoch_voice_groups()
@@ -580,22 +582,7 @@ class SpeakerMatcher:
                     )
                     if prior:
                         self._offer_pinned_suggestion(voice, result, pinned, segment_id, assigned)
-                if match_scores.enabled():
-                    self.match_scores = match_scores.merge(
-                        self.match_scores,
-                        [
-                            match_scores.summarize(
-                                voice,
-                                self._voice_distances[voice],
-                                result,
-                                sum(seconds for _, seconds in self.speaker_evidence[voice]),
-                                'capture',
-                                threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
-                                margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
-                                scope=self._voice_scopes.get(voice, ''),
-                            )
-                        ],
-                    )
+                self._record_match_score(voice, result)
                 self.voice_identity_status[voice] = status
                 self.segment_identity_status[segment_id] = status
             self.host.state.speaker_map_dirty = True
@@ -624,6 +611,35 @@ class SpeakerMatcher:
                     type(error).__name__,
                     self._session_log_id(),
                 )
+
+    def _record_match_score(
+        self,
+        voice: int,
+        decision: SpeakerMatchDecision,
+        outcome: Optional[str] = None,
+        manual: Optional[Mapping] = None,
+    ) -> None:
+        try:
+            if match_scores.enabled():
+                row = match_scores.summarize(
+                    voice,
+                    self._voice_distances[voice],
+                    decision,
+                    sum(seconds for _, seconds in self.speaker_evidence[voice]),
+                    'capture',
+                    threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
+                    margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
+                    scope=self._voice_scopes.get(voice, ''),
+                    outcome=outcome,
+                )
+                if manual is not None:
+                    row['accepted_person_id'] = (
+                        USER_SELF_PERSON_ID if manual.get('is_user') else manual.get('person_id')
+                    )
+                    row['status'] = 'user' if manual.get('is_user') else 'not_user'
+                self.match_scores = match_scores.merge(self.match_scores, [row])
+        except Exception:
+            match_scores.record_failure(score_fallback, logger)
 
     def _offer_pinned_suggestion(
         self, voice: int, result: SpeakerMatchDecision, pinned: set, segment_id: str, assigned: set
