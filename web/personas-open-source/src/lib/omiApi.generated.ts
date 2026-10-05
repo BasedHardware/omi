@@ -3285,7 +3285,6 @@ export interface NormalizedRect {
 export interface NoteClaim {
   evidence_ids: Array<string>;
   evidence_sources?: Array<NoteEvidenceRef> | null;
-  private?: boolean;
   provenance: "said" | "shown" | "written" | "inferred";
   target: string;
   text: string;
@@ -3295,7 +3294,6 @@ export interface NoteEvidenceRef {
   actor?: string | null;
   diarization_key?: string | null;
   id: string;
-  sensitivity?: "standard" | "private";
   source_kind: string;
   source_ref?: string | null;
   time?: string | null;

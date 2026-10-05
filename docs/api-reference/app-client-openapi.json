@@ -20582,12 +20582,6 @@
             "description": "Server-authored source metadata; model may omit",
             "title": "Evidence Sources"
           },
-          "private": {
-            "default": false,
-            "description": "Derived from private or sensitive evidence",
-            "title": "Private",
-            "type": "boolean"
-          },
           "provenance": {
             "enum": [
               "said",
@@ -20644,15 +20638,6 @@
           },
           "id": {
             "title": "Id",
-            "type": "string"
-          },
-          "sensitivity": {
-            "default": "standard",
-            "enum": [
-              "standard",
-              "private"
-            ],
-            "title": "Sensitivity",
             "type": "string"
           },
           "source_kind": {

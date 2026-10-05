@@ -3819,7 +3819,6 @@ public enum OmiAPI {
   public struct NoteClaim: Codable {
     public let evidenceIds: [String]
     public let evidenceSources: [NoteEvidenceRef]?
-    public let private_: Bool?
     public let provenance: String
     public let target: String
     public let text: String
@@ -3827,7 +3826,6 @@ public enum OmiAPI {
     private enum CodingKeys: String, CodingKey {
       case evidenceIds = "evidence_ids"
       case evidenceSources = "evidence_sources"
-      case private_ = "private"
       case provenance
       case target
       case text
@@ -3837,16 +3835,14 @@ public enum OmiAPI {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       evidenceIds = try c.decode([String].self, forKey: .evidenceIds)
       evidenceSources = try c.decodeIfPresent([NoteEvidenceRef].self, forKey: .evidenceSources)
-      private_ = try c.decodeIfPresent(Bool.self, forKey: .private_)
       provenance = try c.decode(String.self, forKey: .provenance)
       target = try c.decode(String.self, forKey: .target)
       text = try c.decode(String.self, forKey: .text)
     }
 
-    public init(evidenceIds: [String], evidenceSources: [NoteEvidenceRef]? = nil, private_: Bool? = nil, provenance: String, target: String, text: String) {
+    public init(evidenceIds: [String], evidenceSources: [NoteEvidenceRef]? = nil, provenance: String, target: String, text: String) {
       self.evidenceIds = evidenceIds
       self.evidenceSources = evidenceSources
-      self.private_ = private_
       self.provenance = provenance
       self.target = target
       self.text = text
@@ -3858,7 +3854,6 @@ public enum OmiAPI {
     public let actor: String?
     public let diarizationKey: String?
     public let id: String
-    public let sensitivity: String?
     public let sourceKind: String
     public let sourceRef: String?
     public let time: String?
@@ -3867,7 +3862,6 @@ public enum OmiAPI {
       case actor
       case diarizationKey = "diarization_key"
       case id
-      case sensitivity
       case sourceKind = "source_kind"
       case sourceRef = "source_ref"
       case time
@@ -3878,17 +3872,15 @@ public enum OmiAPI {
       actor = try c.decodeIfPresent(String.self, forKey: .actor)
       diarizationKey = try c.decodeIfPresent(String.self, forKey: .diarizationKey)
       id = try c.decode(String.self, forKey: .id)
-      sensitivity = try c.decodeIfPresent(String.self, forKey: .sensitivity)
       sourceKind = try c.decode(String.self, forKey: .sourceKind)
       sourceRef = try c.decodeIfPresent(String.self, forKey: .sourceRef)
       time = try c.decodeIfPresent(String.self, forKey: .time)
     }
 
-    public init(actor: String? = nil, diarizationKey: String? = nil, id: String, sensitivity: String? = nil, sourceKind: String, sourceRef: String? = nil, time: String? = nil) {
+    public init(actor: String? = nil, diarizationKey: String? = nil, id: String, sourceKind: String, sourceRef: String? = nil, time: String? = nil) {
       self.actor = actor
       self.diarizationKey = diarizationKey
       self.id = id
-      self.sensitivity = sensitivity
       self.sourceKind = sourceKind
       self.sourceRef = sourceRef
       self.time = time

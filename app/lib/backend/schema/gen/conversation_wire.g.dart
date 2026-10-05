@@ -362,7 +362,6 @@ class GeneratedNoteEvidenceRef {
   final String? actor;
   final String? diarizationKey;
   final String id;
-  final String sensitivity;
   final String sourceKind;
   final String? sourceRef;
   final String? time;
@@ -371,7 +370,6 @@ class GeneratedNoteEvidenceRef {
     this.actor,
     this.diarizationKey,
     required this.id,
-    this.sensitivity = "standard",
     required this.sourceKind,
     this.sourceRef,
     this.time,
@@ -382,7 +380,6 @@ class GeneratedNoteEvidenceRef {
       actor: _readFieldValue<String>(_readField(json, const ["actor"]), "actor", _readString, requiredField: false, nullable: true),
       diarizationKey: _readFieldValue<String>(_readField(json, const ["diarization_key"]), "diarization_key", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      sensitivity: _required(_readFieldValue<String>(_readField(json, const ["sensitivity"]), "sensitivity", _readString, requiredField: false, nullable: false, defaultValue: "standard"), "sensitivity"),
       sourceKind: _required(_readFieldValue<String>(_readField(json, const ["source_kind"]), "source_kind", _readString, requiredField: true, nullable: false), "source_kind"),
       sourceRef: _readFieldValue<String>(_readField(json, const ["source_ref"]), "source_ref", _readString, requiredField: false, nullable: true),
       time: _readFieldValue<String>(_readField(json, const ["time"]), "time", _readString, requiredField: false, nullable: true),
@@ -394,7 +391,6 @@ class GeneratedNoteEvidenceRef {
       'actor': actor,
       'diarization_key': diarizationKey,
       'id': id,
-      'sensitivity': sensitivity,
       'source_kind': sourceKind,
       'source_ref': sourceRef,
       'time': time,
@@ -405,7 +401,6 @@ class GeneratedNoteEvidenceRef {
 class GeneratedNoteClaim {
   final List<String> evidenceIds;
   final List<GeneratedNoteEvidenceRef>? evidenceSources;
-  final bool private;
   final String provenance;
   final String target;
   final String text;
@@ -413,7 +408,6 @@ class GeneratedNoteClaim {
   const GeneratedNoteClaim({
     required this.evidenceIds,
     this.evidenceSources,
-    this.private = false,
     required this.provenance,
     required this.target,
     required this.text,
@@ -423,7 +417,6 @@ class GeneratedNoteClaim {
     return GeneratedNoteClaim(
       evidenceIds: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence_ids"]), "evidence_ids", _readStringList, requiredField: true, nullable: false), "evidence_ids"),
       evidenceSources: _readFieldValue<List<GeneratedNoteEvidenceRef>>(_readField(json, const ["evidence_sources"]), "evidence_sources", (value) => _readObjectList(value, GeneratedNoteEvidenceRef.fromJson), requiredField: false, nullable: true),
-      private: _required(_readFieldValue<bool>(_readField(json, const ["private"]), "private", _readBool, requiredField: false, nullable: false, defaultValue: false), "private"),
       provenance: _required(_readFieldValue<String>(_readField(json, const ["provenance"]), "provenance", _readString, requiredField: true, nullable: false), "provenance"),
       target: _required(_readFieldValue<String>(_readField(json, const ["target"]), "target", _readString, requiredField: true, nullable: false), "target"),
       text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
@@ -434,7 +427,6 @@ class GeneratedNoteClaim {
     return {
       'evidence_ids': evidenceIds,
       'evidence_sources': evidenceSources?.map((value) => value.toJson()).toList(),
-      'private': private,
       'provenance': provenance,
       'target': target,
       'text': text,
