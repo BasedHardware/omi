@@ -12424,4 +12424,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dismiss => 'Gizle';
+
+  @override
+  String get showOnLockScreen => 'Kilit ekranında göster';
 }

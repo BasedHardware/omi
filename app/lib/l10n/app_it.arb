@@ -3838,5 +3838,6 @@
     "stopThese": "Interrompi questi",
     "dismiss": "Ignora",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Mostra sulla schermata di blocco"
 }

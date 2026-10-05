@@ -8,6 +8,8 @@ lifecycle fields directly.
 
 from __future__ import annotations
 
+from utils.observability.sync_phases import sync_phase
+
 import logging
 import os
 import threading
@@ -131,6 +133,7 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     return created
 
 
+@sync_phase('firestore')
 def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None):
     """Admit a retained deterministic sync row and atomically append later chunks.
 
@@ -147,6 +150,7 @@ def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id
     return assigned, created, survivors
 
 
+@sync_phase('firestore')
 def persist_processed_conversation(
     uid: str, conversation_data: dict[str, Any], *, smart_merge_refresh: tuple[int, str] | None = None
 ) -> bool:

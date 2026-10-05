@@ -134,6 +134,52 @@ sockets remain process-owned; there is no cross-image session transfer. Grace
 is bounded, not a promise that every long WebSocket ends naturally. Record
 disconnects in the rollback drill; abrupt process death can lose in-memory tail.
 
+## Comparable recovery gates
+
+Compare simultaneous, pinned-image canary and control **completed sockets** with
+`omi_live_session_transcript_outcome_total`: report `no_transcript` over
+`transcribed + no_transcript`, plus the `too_short` count. The attempt counter
+`omi_live_stt_terminal_total` finishes at first delivered text; its success
+cannot reveal later transcription loss. Teardown failures can also be runtime
+errors or idle/lifetime completion. Before the canary regression fix, recovery
+alone relabels abnormal client disconnects such as 1006 as attempt failures.
+Do not interpret that ratio as STT loss.
+
+For active sessions terminated by STT, count
+`omi_live_stt_terminal_failures_total` **plus**
+`omi_listen_stt_unavailable_total`: the former covers ordinary terminal failures
+(including after text), the latter covers the disjoint provider-unavailable or
+reconnect-budget close path. Show their counts beside completed sockets,
+including short/quiet sockets. Pre-admit reconnect-budget backoff exits before
+accepted-STT counting and session-end outcomes; in-runtime unavailable backoff
+does emit a session outcome. This sum is not a completed-socket loss fraction.
+Neither counter measures how much audio was lost. Failure/backoff label series
+are created lazily: first increments can be missed by `increase()`, especially
+on short-lived pods. Check series presence and scrape continuity; an absent
+series is not a measured zero.
+`omi_live_session_terminal_after_text_total` is emitted only with recovery on;
+its absent control series is not zero loss. Keep it as a canary zero-loss gate,
+not a canary/control rate comparison. No flag-off metrics change is required.
+
+Window first-text seconds start at the window socket's **first** VAD speech.
+A fully answered short fragment can cancel its 12s deadline, then later speech
+starts a fresh deadline while the histogram retains the earlier clock. A >30s
+sample can therefore contain long quiet gaps; it does not establish delayed
+recovery. Paid-successor text is not an observation in this histogram. Keep the
+window tail as an investigate/HOLD signal with its observation count, and
+cross-check window deadline/empty outcomes, POST latency, actual recovery dials,
+replay wall time, skipped audio and session outcomes before attributing harm.
+
+Fallback `capacity_full` on `stt_live_session` describes the **source leg**.
+Soniox/Modulate sources mean a local paid-adapter or replay delivery bound
+(including the wrapper's tail admission cap);
+Parakeet admission refusal is `stt_selection` with subtype `admission`.
+Provider cooling is a circuit/backoff decision, not that source capacity cause.
+This label does not establish why the successor path exhausted: cooling or
+admission may still prevent a successor. Cross-check selection and actual dial
+counters separately.
+`exhausted` can settle an unproven hop at close and is not a session-loss count.
+
 ## Monitoring prerequisite (coordinator only)
 
 Before any canary exists, **reconcile production adapter values with live and

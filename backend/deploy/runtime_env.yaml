@@ -36,6 +36,12 @@ environments:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -508,6 +514,12 @@ environments:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -933,6 +945,12 @@ environments:
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1267,6 +1285,12 @@ environments:
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1420,6 +1444,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: rollout
@@ -1563,6 +1593,12 @@ environments:
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1695,6 +1731,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: rollout
@@ -1810,6 +1852,12 @@ environments:
               value: 'false'
               category: rollout
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -2352,6 +2400,12 @@ environments:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'true'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'true'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -2857,6 +2911,12 @@ environments:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'true'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'true'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -3194,6 +3254,12 @@ environments:
               value: 'false'
               category: rollout
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -3550,6 +3616,12 @@ environments:
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3702,6 +3774,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: rollout
@@ -3839,6 +3917,12 @@ environments:
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3970,6 +4054,12 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: rollout
@@ -4100,6 +4190,12 @@ environments:
               value: 'false'
               category: rollout
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:

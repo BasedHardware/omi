@@ -215,6 +215,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "LIVE_CAPTURE_WINDOW_RETENTION": "false",
         "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION": "false",
         "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION": "false",
+        "LIVE_CAPTURE_WINDOW_MERGE_UNION": "false",
+        "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": "false",
         "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
         "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",

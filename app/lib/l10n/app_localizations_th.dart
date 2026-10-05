@@ -12346,4 +12346,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dismiss => 'ปิด';
+
+  @override
+  String get showOnLockScreen => 'แสดงบนหน้าจอล็อก';
 }

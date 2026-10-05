@@ -12451,4 +12451,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get dismiss => 'Ukryj';
+
+  @override
+  String get showOnLockScreen => 'Pokaż na ekranie blokady';
 }

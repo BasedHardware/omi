@@ -64,7 +64,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   /// The places Omi's own links open (see [openAppLink]).
-  static const Set<String> _appLinkRoutes = {'action-items', 'conversation', 'conversations', 'settings'};
+  static const Set<String> _appLinkRoutes = {'action-items', 'capture', 'conversation', 'conversations', 'settings'};
 
   void openAppLink(Uri uri) async {
     // Omi's own links (the Home Screen widgets): <scheme>://app/<route> opens that place in Home —

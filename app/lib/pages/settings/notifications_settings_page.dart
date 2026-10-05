@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/settings/widgets/live_activity_settings.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -223,20 +224,24 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
-      body: _isLoading
-          ? const NotificationsSettingsLoadingShimmer()
-          : ListView(
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              children: [
-                OmiSectionHeader(
-                  context.l10n.notificationFrequency,
-                  subtitle: context.l10n.notificationFrequencyDescription,
-                ),
-                _buildFrequencyCard(),
-                const SizedBox(height: OmiSpacing.xxl),
-                _buildDailySummaryGroup(),
-              ],
-            ),
+      body: Column(children: [
+        const LiveActivitySettings(),
+        Expanded(
+            child: _isLoading
+                ? const NotificationsSettingsLoadingShimmer()
+                : ListView(
+                    padding: const EdgeInsets.all(OmiSpacing.md),
+                    children: [
+                      OmiSectionHeader(
+                        context.l10n.notificationFrequency,
+                        subtitle: context.l10n.notificationFrequencyDescription,
+                      ),
+                      _buildFrequencyCard(),
+                      const SizedBox(height: OmiSpacing.xxl),
+                      _buildDailySummaryGroup(),
+                    ],
+                  )),
+      ]),
     );
   }
 

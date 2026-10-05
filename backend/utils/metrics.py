@@ -207,6 +207,20 @@ OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL = Counter(
 )
 
 
+AUDIO_TIMELINE_OUTSIDE_SUBREASONS = (
+    'empty_map',
+    'before_first_send',
+    'after_last_send',
+    'interior_hole',
+    'evicted',
+)
+OMI_AUDIO_TIMELINE_OUTSIDE_SENDS_TOTAL = Counter(
+    'omi_audio_timeline_outside_sends_total',
+    'Outside accepted-send refusals by bounded map geometry (not inferred cause)',
+    ['provider', 'send_path', 'subreason'],
+)
+
+
 def audio_timeline_past_send_bucket(seconds: float | None) -> str:
     if seconds is None:
         return 'no_send'

@@ -12408,4 +12408,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get dismiss => 'Skryť';
+
+  @override
+  String get showOnLockScreen => 'Zobraziť na zamknutej obrazovke';
 }

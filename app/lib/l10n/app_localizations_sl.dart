@@ -12442,4 +12442,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get dismiss => 'Skrij';
+
+  @override
+  String get showOnLockScreen => 'Prikaži na zaklenjenem zaslonu';
 }

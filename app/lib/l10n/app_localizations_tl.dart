@@ -12513,4 +12513,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get dismiss => 'Isara';
+
+  @override
+  String get showOnLockScreen => 'Ipakita sa lock screen';
 }

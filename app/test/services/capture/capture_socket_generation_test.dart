@@ -18,6 +18,7 @@ import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
+import 'package:omi/services/capture/capture_system_surface.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
@@ -100,6 +101,15 @@ CaptureDependencies _deps({
     telemetry:
         telemetry ?? RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
   );
+}
+
+class _NoCard implements CaptureSystemSurfaceSink {
+  @override
+  Future<void> start(Future<Map<String, Object?>> Function(Map<String, Object?>) action) async {}
+  @override
+  Future<void> publish(Map<String, Object?> snapshot) async {}
+  @override
+  Future<void> close() async {}
 }
 
 class _InertWal implements IWalService {
@@ -324,6 +334,69 @@ void main() {
       expect(p.liveCaptureStartedAt, isNull);
       await p.pauseCapture();
       expect(ble.authorizations.last, isFalse);
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('the Live Activity card claims neither Listening nor a time until pendant audio is verified', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-ingress-card-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final ble = _IngressBle();
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      final p = composeCaptureProvider(_deps(world: world, ble: ble));
+      addTearDown(p.dispose);
+      final card = CaptureSystemSurface(p, _NoCard(), now: world.clock.now);
+      await p.streamDeviceRecording(
+          device: BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50));
+      expect(p.pendantCaptureVerified, isFalse);
+      expect(card.snapshot['status'], 'unverified');
+      expect(card.snapshot['canPause'], isTrue, reason: 'Pause stays on the card, as in the app');
+      // Audio takes a while to arrive; that wait is not capture time.
+      world.clock.advanceTo(world.clock.now().add(const Duration(seconds: 12)));
+      expect(card.snapshot['status'], 'unverified');
+
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'fresh',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      );
+      ble.notifyListeners();
+      expect(p.pendantCaptureVerified, isTrue);
+      expect(card.snapshot['status'], isNot('unverified'));
+      expect(card.snapshot['paused'], isFalse);
+      expect(card.snapshot['elapsed'], 0, reason: 'waiting for audio was not capture time');
+
+      final verifiedAt = world.clock.now();
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 20)));
+      expect(card.snapshot['elapsed'], 20);
+
+      // A lapse hides the claim again and stops the clock until audio is verified again.
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 35)));
+      expect(p.pendantCaptureVerified, isFalse);
+      expect(card.snapshot['status'], 'unverified');
+      expect(card.snapshot['paused'], isTrue);
+      expect(card.snapshot['elapsed'], 35);
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 50)));
+      expect(card.snapshot['elapsed'], 35);
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'fresh',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      );
+      ble.notifyListeners();
+      expect(card.snapshot['paused'], isFalse);
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 55)));
+      expect(card.snapshot['elapsed'], 40);
     } finally {
       await world.dispose();
       await dir.delete(recursive: true);

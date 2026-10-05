@@ -63,6 +63,7 @@ from utils.product_telemetry import set_product_telemetry_client_for_tests
 from utils.stt.socket import STTSocket
 from utils.stt.streaming import STTService
 from utils.stt.vad_gate import GatedSTTSocket
+from utils.stt.replay_delivery import ReplayTailSocket
 from utils.transcribe_store import get_user_name as transcribe_get_user_name
 from utils.transcribe_store import user_db
 
@@ -475,6 +476,11 @@ class FailoverStack:
         self.websocket.feed(frames)
         self.websocket.queue.put_nowait({'_ack': ack})
         await ack.wait()
+        # Capture acceptance is independent of paced provider delivery after
+        # recovery. Emit fake provider text only after its audio has arrived.
+        tail_task = getattr(self.receiver.stt_socket, '_task', None)
+        if tail_task is not None:
+            await asyncio.wait_for(asyncio.shield(tail_task), timeout=30)
         return self.websocket
 
     def provider(self, index):
@@ -557,7 +563,8 @@ async def _run_failover_scenario(monkeypatch, caplog, *, v2: bool):
         assert len(stack.created_sockets) >= 2
         failover_index = len(stack.created_sockets) - 1
         socket2 = stack.receiver.stt_socket
-        assert socket2 is not socket1 and isinstance(socket2, GatedSTTSocket)
+        assert socket2 is not socket1 and isinstance(socket2, ReplayTailSocket)
+        assert isinstance(socket2.connection, GatedSTTSocket)
         assert socket2._send_tracker is not None, 'the rebuild must install send_tracker=epoch'
         assert socket2._send_tracker is not socket1._send_tracker, 'each epoch owns its own translator'
 
@@ -707,7 +714,8 @@ async def test_initialize_stt_installs_epoch_tracked_gated_socket(monkeypatch, c
         socket._conn.mark_dead()
         assert await stack.receiver._failover_stt_socket()
         rebuilt = stack.receiver.stt_socket
-        assert rebuilt is not socket and isinstance(rebuilt, GatedSTTSocket)
+        assert rebuilt is not socket and isinstance(rebuilt, ReplayTailSocket)
+        assert isinstance(rebuilt.connection, GatedSTTSocket)
         assert rebuilt._send_tracker is not None and rebuilt._send_tracker is not socket._send_tracker
     finally:
         stack.state.active = False

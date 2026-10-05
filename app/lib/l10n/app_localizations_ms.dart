@@ -12443,4 +12443,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dismiss => 'Tutup';
+
+  @override
+  String get showOnLockScreen => 'Tunjukkan pada skrin kunci';
 }
