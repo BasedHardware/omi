@@ -148,7 +148,7 @@ receipts. Source selection failure keeps the conservative evidence and continues
 
 Round 10 supersedes guarded C8. Base settings are C7: deterministic selection,
 claims off, no effort override, optional thinking byte guard disabled (0).
-Universal processing-time cost routing admits C6/xhigh for at least 250 speech
+The locked 2026-10-06 processing-time cost route admits C6/xhigh for at least 1500 speech
 words and two admitted source kinds; thresholds are configurable. No taxonomy or
 user allowlist participates. Long transcript prefixes (>240k bytes) still use rich
 baseline. The same downstream contract applies to every selector/tier.
@@ -171,6 +171,9 @@ paths retain 60s and route to C7. Baseline/legacy deadlines are unchanged. One C
 timeout/context-limit failure buys one C7 rewrite and disables further model
 repair. Repairs still require 15s remaining headroom. Telemetry records requested/
 effective deadline, tier, route reason, selector actually used and tier fallback.
+No request effort override on C7 inherits the configured gateway effort (currently
+low); explicit C6 xhigh overrides it. Offline candidate calls read that route
+policy by default, with `--provider-default-effort` only for non-parity experiments.
 
 Known BYOK models outside the supported reasoning family keep their own options,
 with a fixed effort-downgrade violation. Naive capture-end timestamps use UTC,

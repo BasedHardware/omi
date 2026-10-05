@@ -1,8 +1,11 @@
 """Synthetic gateway-policy parity checks; no provider or production clients."""
 
-from pathlib import Path
+import io
+import json
 
 import pytest
+
+from testing.episode_notes import eval as cli
 
 from testing.episode_notes.cache import cached_call
 from testing.episode_notes.gateway_parity import CandidateEffortParity, gateway_structure_effort
@@ -75,3 +78,22 @@ def test_reference_judge_and_jev_requests_receive_no_candidate_override():
         receipt = cached_call(None, prompt, 'model', prompt, {}, client)
         assert receipt.effective_effort == (None if prompt == 'jev' else 'default')
     assert seen == [('reference', {}), ('judge', {}), ('jev', {})]
+
+
+def test_effective_policy_effort_reaches_the_provider_request(monkeypatch):
+    import testing.episode_notes.gateway_parity as policy
+
+    monkeypatch.setattr(policy, 'gateway_structure_effort', lambda: 'medium')
+    requests = []
+
+    def respond(request, **kwargs):
+        requests.append(json.loads(request.data))
+        return io.StringIO(
+            json.dumps({'choices': [{'message': {'content': '{"title":"Synthetic"}'}, 'finish_reason': 'stop'}]})
+        )
+
+    monkeypatch.setattr(cli, 'urlopen', respond)
+    endpoint = cli.CompatibleEndpoint(key='fake', base_url='https://example.com/v1', model='luna')
+    receipt = cached_call(None, 'episode', 'luna', 'writer', {}, parity(endpoint))
+    assert requests[0]['reasoning'] == {'effort': 'medium'}
+    assert receipt.effective_effort == 'medium'

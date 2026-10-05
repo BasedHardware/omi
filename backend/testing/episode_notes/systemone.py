@@ -8,8 +8,6 @@ from config.jev_decisions import JEV_MODEL, JEV_CLIENT_TIMEOUT_SECONDS
 from testing.episode_notes.schema import LLMCallError, LLMResult
 from utils.llm.jev_client import _validated_answers
 
-from utils.conversations.episode_jev import JEV_SELECTOR_PROMPT
-
 
 class SystemOneEndpoint:
     def __init__(self, *, key, base_url):

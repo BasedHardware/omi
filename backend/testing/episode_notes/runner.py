@@ -12,7 +12,6 @@ from testing.episode_notes.prompts import (
     CANDIDATE_MODEL,
     CANDIDATE_PROMPT,
     SCORING_MODEL,
-    candidate_request,
     SOURCE_FIELDS,
 )
 from testing.episode_notes.reporting import arm_reports, paired_reports
@@ -21,14 +20,10 @@ from testing.episode_notes.schema import FixtureSet, JudgeScore, LLMCallError, L
 from config.episode_writer import EpisodeWriterSettings
 from testing.episode_notes.prompts import fixture_evidence_items
 from utils.conversations.episode_selection import (
-    SELECTION_PROMPT,
     deterministic_episode_selection,
-    selected_episode_items,
-    selection_payload,
 )
 from models.episode_extraction import EpisodeStructuredExtraction
-from utils.conversations.episode_compaction import compact_episode_items
-from utils.conversations.episode_evidence import EvidenceItem, restore_episode_claim_ids
+from utils.conversations.episode_evidence import restore_episode_claim_ids
 from utils.conversations.episode_vacuity import is_vacuous_note
 from utils.llm.episode_policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
 

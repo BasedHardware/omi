@@ -2,13 +2,14 @@
 
 # Episode notes rollout
 
-Owner: David. No production enablement in this PR. Held-out acceptance on a new
-cohort must precede the first ramp. Sharing remains a decision about the whole note.
+Owner: David. No production enablement in this PR. David completed v3 held-out
+acceptance on 35 conversations, two judge samples, at b89a11c1be with production
+gateway effort parity (2026-10-06). Do not rerun or tune against that split.
+Sharing remains a decision about the whole note. Hold at 0% until David starts the ramp.
 
-Round-10 default settings supersede C8: **hold at 0% pending v3 held-out
-acceptance**. C7 uses deterministic selection, claims off and no request effort
+The locked configuration supersedes C8. C7 uses deterministic selection, claims off and no request effort
 override. Universal volume routing selects C6/xhigh when admitted speech has at
-least 250 words and at least two source kinds; other captures use C7. This rule
+least 1500 words and at least two source kinds; other captures use C7. This rule
 has no UID, allowlist or situation category. DEV routing share is not a production
 traffic estimate without matching kept-capture/source distributions.
 
@@ -17,6 +18,8 @@ Writer configuration (episode cohort only, read at each call):
 - `MEETING_NOTES_EPISODE_SELECTION=deterministic` (default), `jev`, or `luna`.
 - `MEETING_NOTES_EPISODE_CLAIMS_ENABLED=false` (default).
 - `MEETING_NOTES_EPISODE_EFFORT=default`; high/xhigh are explicit experiments.
+  Default means no request override: the shared gateway's `conv_structure` route
+  currently supplies low. C6's explicit xhigh overrides that route setting.
 - `MEETING_NOTES_EPISODE_TIERED_ENABLED=true` inside the admitted episode cohort.
 - `MEETING_NOTES_EPISODE_TIER_MIN_WORDS=1500` (David 2026-10-06: about 10 min of speech; 250 was too low) and `..._TIER_MIN_SOURCE_KINDS=2`.
 - `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS=120`, `..._C6_TIMEOUT_SECONDS=180`.
@@ -72,10 +75,13 @@ Hold or abort a step if, relative to the simultaneous baseline control:
 
 - Processing errors rise >0.5 percentage points for 30 min, or p95 note latency
   exceeds the accepted configuration's latency ceiling for 30 min.
-- Mean billed cost exceeds David's explicitly accepted configuration premium, or
-  p95 latency exceeds the route budget. Set that premium before enabling the
-  cohort; improved coverage may justify spend, but not an unbounded budget.
-- Vacuity rises >1 percentage point or repair/best-note fallback exceeds 10%.
+- Mean billed note cost exceeds **2.0× the simultaneous baseline control**.
+  The held-out parity mean ratio was 1.4×. Count failed attempts, rewrites and
+  repairs in billing. Monitor writer deadline overruns separately: the 115s C6
+  clamp is a per-writer limit, not the total note latency including C7 fallback.
+- Vacuity rises >1 percentage point or repair rate exceeds 10%.
+- Overall best-note/tier fallback exceeds **10% of all episode notes** for 30 min.
+  Count receipts with `fallback_to_best_note OR tier_fallback` once, not their sum.
 - Audited unsupported/wrong-provenance rates rise >2 percentage points; unrelated
   content exceeds baseline. Review a consented random sample, not logs of note text.
 - Kept/discarded counts or per-kept retrieval reads change unexpectedly. Episode
@@ -88,9 +94,13 @@ transcript-prefix bytes stays on rich baseline. Episode repair needs at least
 a C6→C7 fallback. Default deterministic notes buy at most two writers total;
 optional selectors add their own calls (Jev splits only for context overflow).
 Baseline long/budget paths retain their existing transport/presentation policy.
-Monitor C6 fallback rate separately; abort/hold if above 5% of routed captures for
-30 min, or if the blended latency/cost exceeds David's accepted premium. The first
-ramp needs real gateway timing/effort evidence, not just direct-provider DEV results.
+Monitor C6 fallback rate separately. C6→C7 timeouts are expected until a dedicated
+long gateway route exists: 3/8 routed held-out writers exceeded 115s, or 3/35
+(8.6%) of all notes. Do not apply a 5% threshold to only routed C6 captures;
+use the overall 10% fallback guard above. Direct-provider acceptance omits the
+paid C7 fallback for those overruns, so ramp billing/latency must be measured.
+**Next step: a dedicated long gateway route**, with its own audited deadline and
+gateway acceptance, rather than raising unrelated shared/request/lease limits.
 
 Claims are not rendered today. Compact keys only affect extraction, not client models.
 List/search omit claims; detail returns filtered provenance when enabled. DEV

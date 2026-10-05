@@ -27,9 +27,15 @@ the judge. Original stored generation cost is unknown (null), not invented zero.
 Candidate model is fixed to `openai/gpt-6-luna`. Production `conv_structure`
 uses `LUNA_MODEL` with provider openai in `utils/llm/model_config.py`; route options
 and `clients.get_llm` add no reasoning-effort override unless episode writer
-configuration explicitly requests one. The harness's default effort likewise sends
-no reasoning override; `--candidate-effort high|xhigh` applies only to the episode
-writer. Baseline/reference/judge receive no effort or temperature override. Reference/judge default
+configuration explicitly requests one. The gateway route still supplies its own
+effort: the harness reads `conv_structure` in
+`llm_gateway/config/generated_route_overrides.yaml` and applies it to candidate
+Luna requests lacking an explicit override (currently low), including baseline
+and C7. Explicit helper low and C6 xhigh are preserved. `--provider-default-effort`
+opts out for historical non-parity experiments. Reference/judge receive no effort
+or temperature override. Effective effort is stored per call, in report rows and
+fresh-call receipts; it enters the candidate cache key before lookup. References
+and explicit-effort candidates keep their shared identities. Reference/judge default
 to `openai/gpt-6-sol`, configurable with `--reference-model` / `--judge-model` or
 `EPISODE_EVAL_REFERENCE_MODEL` / `EPISODE_EVAL_JUDGE_MODEL`. Live use requires an
 explicit key and HTTPS base URL. Requests default to a configurable 32000-token output cap (`--max-tokens`) and
@@ -144,7 +150,8 @@ not measure generation variance. Never include held-out inputs in an iteration.
 
 Round-9 configurations use `--selection compact|deterministic|model`,
 `--no-claims`, and `--candidate-effort default|high|xhigh`. Only the writer's
-Luna request receives the selected thinking effort; default sends no override.
+Luna request receives the selected thinking effort; default inherits the gateway
+policy in eval, while production sends no request override.
 The optional Luna selector uses low effort, a 30-second deadline and the same
 production large-input guard/fallback. It returns exact source IDs and short
 connection reasons; the writer sees selected original evidence, not the reasons.
@@ -172,7 +179,7 @@ durable tier comparison. Synchronous production paths retain C7/60s. A socket
 timeout is not a hard total wall-clock limit. Record deadline exceedances
 separately from eval errors before interpreting ramp readiness.
 
-`--thinking-max-input-bytes` defaults to 24000 and reuses the production byte
+`--thinking-max-input-bytes` defaults to 0; positive values reuse the production byte
 measurement and baseline routing before generation for high/xhigh inputs.
 `0` disables this optional byte guard; it is also the current production default.
 The existing long-transcript baseline guard remains independent. Baseline fallback

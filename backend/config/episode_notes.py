@@ -14,5 +14,8 @@ def episode_notes_cohort(uid: object) -> bool:
         return False
     if not math.isfinite(share) or not 0 <= share <= 100:
         return False
-    bucket = int.from_bytes(hashlib.sha256(f'episode-notes-v1:{uid}'.encode()).digest()[:8], 'big')
+    try:
+        bucket = int.from_bytes(hashlib.sha256(f'episode-notes-v1:{uid}'.encode()).digest()[:8], 'big')
+    except UnicodeError:
+        return False
     return bucket / 2**64 * 100 < share
