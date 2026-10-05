@@ -14,6 +14,23 @@ remains for the follow-on retirement PR. Merged PR #20434 supplies the shared
 paid-only admission helper and default-on debounce; its former EXP-005 transcript
 shadow was removed before merge. V2 additionally enforces strict spine admission,
 with draft usefulness measured only by its own budgeted shadow judge.
+
+All v2 model steps bound the serialized provider request to the producer registry's
+byte ceiling before sending it. Gate, draft and critic retain the prompt template
+and response schema, reduce optional history/facts first, and retain the newest
+conversation tail when dialogue alone exceeds the ceiling. Truncated text is marked.
+Jev prefilter, dedupe and usefulness requests obey the same ceiling, including
+JSON escaping and UTF-8 bytes; follow-up copy obeys its smaller 8 KiB ceiling.
+Luna calls explicitly send `stream=false` and `max_completion_tokens` (mentor 2048,
+follow-up 512). Fixed instructions/schema that cannot fit still fail closed.
+The gateway's byte, output, attribution, call and dollar checks remain authoritative.
+`tests/unit/test_proactivity_v2_request_contract.py` drives the real producers,
+gateway client, HTTP authentication/correlation, validators, executors and budget
+reserve/settle with synthetic storage and only the provider HTTP transport faked
+within the model-call path. It covers all six mentor steps, follow-up copy,
+oversized Unicode/escaped context, pre-reservation rejection and retained unknown
+spend without retry.
+
 Shared legacy formatting/admission and Cloud Tasks enqueue/OIDC helpers expose
 public Python APIs. In-tree callers migrate together; their implementation and
 legacy dispatch behavior are unchanged.
