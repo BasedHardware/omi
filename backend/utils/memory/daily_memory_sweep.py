@@ -5805,7 +5805,7 @@ def produce_completed_day_daily_summary_sources(
         from utils.llm.memories import run_daily_sweep_summary_agent
 
         runner = run_daily_sweep_summary_agent
-    from utils.llm.daily_sweep_budget import daily_sweep_phase_b_overhead_characters
+    from utils.llm.memories import daily_sweep_phase_b_overhead_characters
 
     spine_characters = sum(len(row.summary_text) for row in conversation_rows)
     # Conservative ceiling: the spine is sent in phase A, and a verification
