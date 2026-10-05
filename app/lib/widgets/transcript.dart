@@ -3,7 +3,8 @@ import 'dart:math';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, RenderParagraph, ScrollDirection;
+import 'package:flutter/rendering.dart'
+    show RenderAbstractViewport, RenderBox, RenderParagraph, ScrollDirection, SelectedContent;
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent, TapGestureRecognizer;
 

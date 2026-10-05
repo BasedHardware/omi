@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:ui' show SemanticsFlag;
 
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MethodCall, SystemChannels;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -754,6 +756,7 @@ void main() {
       List<TranscriptSegment> segments, {
       bool unresolved = false,
       bool canDisplaySeconds = true,
+      String searchQuery = '',
       List<String> tagging = const [],
       void Function(TranscriptSegment)? onSegmentTap,
       void Function(int)? onEditSegmentText,
@@ -770,6 +773,7 @@ void main() {
                 segments: segments,
                 isConversationDetail: true,
                 canDisplaySeconds: canDisplaySeconds,
+                searchQuery: searchQuery,
                 unresolvedSpeakers: unresolved,
                 taggingSegmentIds: tagging,
                 onSegmentTap: onSegmentTap,
@@ -869,7 +873,8 @@ void main() {
       Color? inkOf(String text) {
         Color? ink;
         tester.widget<RichText>(paragraphOf(text)).text.visitChildren((span) {
-          if (span is TextSpan && span.text == text) ink = span.style?.color;
+          // A line's span also holds the word joiner before its words and the space after them.
+          if (span is TextSpan && span.text?.replaceAll('\u2060', '').trim() == text) ink = span.style?.color;
           return ink == null;
         });
         return ink;
@@ -1199,6 +1204,78 @@ void main() {
       expect(omi.hint, isEmpty, reason: "Omi's name is read, with no naming action");
       expect(omi.flagsCollection.isButton, isFalse);
       semantics.dispose();
+    });
+
+    testWidgets('a screen reader stops once per line, on its words', (tester) async {
+      await setupSharedPreferences();
+      final semantics = tester.ensureSemantics();
+      final lines = [line('s1', 3, 'First line.', 0), line('s2', 3, 'Second line.', 10)];
+      List<String> stops() => [
+            for (final node in find.semantics.byFlag(SemanticsFlag.isLink).evaluate())
+              node.label.replaceAll('\u2060', '').trim(),
+          ];
+      await pumpDetail(tester, lines, onSegmentTap: (_) {});
+      await tester.pumpAndSettle();
+      expect(stops(), ['First line.', 'Second line.'], reason: 'no stop for the space between lines or the joiner');
+
+      await pumpDetail(tester, lines, onSegmentTap: (_) {}, searchQuery: 'First');
+      await tester.pumpAndSettle();
+      expect(stops(), ['line.', 'Second line.'], reason: 'a line opening on a search match adds no empty stop');
+      semantics.dispose();
+    });
+
+    testWidgets('a long press selects the words, and a copy leaves out the word joiners', (tester) async {
+      await setupSharedPreferences();
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (MethodCall call) async {
+        if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      final played = <TranscriptSegment>[];
+      await pumpDetail(tester, [line('s1', 3, 'First line here.', 0), line('s2', 3, 'Second line here.', 10)],
+          onSegmentTap: played.add);
+      await tester.pumpAndSettle();
+
+      await tester.longPressAt(lineStart(tester, 's2') + const Offset(20, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Select all'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Copy'));
+      await tester.pumpAndSettle();
+
+      expect(copied, 'First line here. Second line here.');
+      expect(played, isEmpty, reason: 'selecting does not play');
+    });
+
+    testWidgets('a paragraph follows the system text size, and a search match scales once', (tester) async {
+      await setupSharedPreferences();
+      Future<void> pumpScaled({String searchQuery = ''}) => tester.pumpWidget(
+            MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: MediaQuery(
+                data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+                child: Scaffold(
+                  body: TranscriptWidget(
+                    segments: [line('s1', 3, 'Bigger words.', 0)],
+                    isConversationDetail: true,
+                    searchQuery: searchQuery,
+                  ),
+                ),
+              ),
+            ),
+          );
+
+      await pumpScaled();
+      await tester.pumpAndSettle();
+      expect(tester.widget<RichText>(paragraphOf('Bigger words.')).textScaler, const TextScaler.linear(1.5));
+
+      await pumpScaled(searchQuery: 'Bigger');
+      await tester.pumpAndSettle();
+      final match = find.byWidgetPredicate((widget) => widget is RichText && widget.text.toPlainText() == 'Bigger');
+      expect(tester.widget<RichText>(match).textScaler, TextScaler.noScaling,
+          reason: 'the paragraph scales the match; its own text must not scale again');
     });
 
     testWidgets('the live bubble transcript still names every line', (tester) async {

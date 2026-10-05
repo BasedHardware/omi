@@ -33,6 +33,10 @@ class _DetailParagraph {
   final bool showsBadge;
 }
 
+/// Glues each line's zero-size marker to the line's first word, so a line break never falls between
+/// them. Invisible, and dropped from copied text.
+const String _wordJoiner = '\u2060';
+
 /// What [SpeakerLabelBadge] draws for [source]: a check, "Likely", or nothing (null).
 String? _badgeKind(String? source) =>
     SpeakerLabelSource.isConfirmed(source) ? 'confirmed' : (source == SpeakerLabelSource.auto ? 'likely' : null);
@@ -204,22 +208,35 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
           : (data.isUser ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8));
       final style = TextStyle(color: ink);
       final recognizer = seek == null ? null : _lineTapRecognizer(data, seek);
-      lineSpans.add(TextSpan(
-        children: [
-          if (i > paragraph.first) TextSpan(text: ' ', style: style, recognizer: recognizer),
-          WidgetSpan(
-            alignment: PlaceholderAlignment.top,
-            child: _lineMarker(data, isCurrent: isCurrent, seekable: seek != null),
-          ),
-          // The word joiner keeps the marker on the same text line as the first word it marks.
-          TextSpan(text: '⁠', style: style, recognizer: recognizer),
-          for (final span in _lineWords(data, i))
-            span is TextSpan ? TextSpan(text: span.text, style: style, recognizer: recognizer) : span,
-        ],
-      ));
+      // The line's text is one span (the joiner, its words, then the space before the next line), so
+      // assistive tech stops once per line; only a search match splits it.
+      final children = <InlineSpan>[
+        WidgetSpan(
+          alignment: PlaceholderAlignment.top,
+          child: _lineMarker(data, isCurrent: isCurrent, seekable: seek != null),
+        ),
+      ];
+      var run = _wordJoiner;
+      for (final span in _lineWords(data, i)) {
+        if (span is TextSpan) {
+          run += span.text ?? '';
+          continue;
+        }
+        if (run == _wordJoiner) {
+          // A line that opens on a search match: the joiner still glues the marker to it, unannounced.
+          children.add(const TextSpan(text: _wordJoiner, semanticsLabel: ''));
+        } else if (run.isNotEmpty) {
+          children.add(TextSpan(text: run, style: style, recognizer: recognizer));
+        }
+        children.add(span);
+        run = '';
+      }
+      if (i < paragraph.last) run += ' ';
+      if (run.isNotEmpty) children.add(TextSpan(text: run, style: style, recognizer: recognizer));
+      lineSpans.add(TextSpan(children: children));
     }
     // Character lengths of the lines, placeholders included, to map a text position back to its line.
-    final lineLengths = [for (final span in lineSpans) span.toPlainText().length];
+    final lineLengths = [for (final span in lineSpans) span.toPlainText(includeSemanticsLabels: false).length];
     final textKey = _paragraphTextKeys.putIfAbsent(head.id, GlobalKey.new);
 
     int lineAt(Offset globalPosition) {
@@ -258,10 +275,19 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            RichText(
-              key: textKey,
-              textAlign: TextAlign.left,
-              text: TextSpan(style: OmiType.body.copyWith(letterSpacing: 0.0, height: 1.5), children: lineSpans),
+            // Under the selection area, so a long press selects the words, and at the system text size.
+            _JoinerFreeSelection(
+              child: Builder(
+                builder: (context) => RichText(
+                  key: textKey,
+                  textAlign: TextAlign.left,
+                  textScaler: MediaQuery.textScalerOf(context),
+                  selectionRegistrar: SelectionContainer.maybeOf(context),
+                  selectionColor:
+                      DefaultSelectionStyle.of(context).selectionColor ?? DefaultSelectionStyle.defaultColor,
+                  text: TextSpan(style: OmiType.body.copyWith(letterSpacing: 0.0, height: 1.5), children: lineSpans),
+                ),
+              ),
             ),
             // A line with translations is a paragraph of its own, so they sit right under it.
             if (head.translations.isNotEmpty) ...[
@@ -354,10 +380,52 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
     return recognizer;
   }
 
-  /// A line's words, with the current search's matches marked.
+  /// A line's words, with the current search's matches marked. The paragraph already scales a match
+  /// to the system text size, so the match's own text does not scale a second time.
   List<InlineSpan> _lineWords(TranscriptSegment data, int segmentIndex) {
     final text = _getDecodedText(data.text);
     if (widget.searchQuery.isEmpty) return [TextSpan(text: text)];
-    return _highlightSearchMatchesWithKeys(text, widget.searchQuery, segmentIndex);
+    return [
+      for (final span in _highlightSearchMatchesWithKeys(text, widget.searchQuery, segmentIndex))
+        span is WidgetSpan
+            ? WidgetSpan(
+                alignment: span.alignment,
+                baseline: span.baseline,
+                style: span.style,
+                child: MediaQuery.withNoTextScaling(child: span.child),
+              )
+            : span,
+    ];
+  }
+}
+
+/// A paragraph's selectable words: copying them leaves out the [_wordJoiner]s.
+class _JoinerFreeSelection extends StatefulWidget {
+  const _JoinerFreeSelection({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_JoinerFreeSelection> createState() => _JoinerFreeSelectionState();
+}
+
+class _JoinerFreeSelectionState extends State<_JoinerFreeSelection> {
+  final _delegate = _JoinerFreeSelectionDelegate();
+
+  @override
+  void dispose() {
+    _delegate.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SelectionContainer(delegate: _delegate, child: widget.child);
+}
+
+class _JoinerFreeSelectionDelegate extends StaticSelectionContainerDelegate {
+  @override
+  SelectedContent? getSelectedContent() {
+    final content = super.getSelectedContent();
+    return content == null ? null : SelectedContent(plainText: content.plainText.replaceAll(_wordJoiner, ''));
   }
 }

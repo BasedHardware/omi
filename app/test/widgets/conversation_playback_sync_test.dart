@@ -338,7 +338,8 @@ Color? _inkOf(WidgetTester tester, String text) {
   Color? ink;
   for (final paragraph in tester.widgetList<RichText>(find.byType(RichText))) {
     paragraph.text.visitChildren((span) {
-      if (span is TextSpan && span.text == text) ink = span.style?.color;
+      // A line's span also holds the word joiner before its words and the space after them.
+      if (span is TextSpan && span.text?.replaceAll('\u2060', '').trim() == text) ink = span.style?.color;
       return ink == null;
     });
     if (ink != null) break;
@@ -663,6 +664,22 @@ void main() {
     addTearDown(played.dispose);
     played.reportPlayback(wallSeconds: 1, playing: true, loaded: true);
     expect(played.hasPlayPoint, isTrue, reason: 'Play gives playback a point');
+  });
+
+  test('without a wall mapping, a scrub or a reader scroll marks no line', () {
+    final segments = [_segment('seg0', 0, 8), _segment('seg1', 10, 18)];
+    final controller = ConversationPlaybackController(segments: segments);
+    addTearDown(controller.dispose);
+    controller.reportPlayback(wallSeconds: 2, playing: false, loaded: true, mapped: false);
+
+    controller.seek(12);
+    expect(controller.markedSegmentId, isNull, reason: 'a scrub claims no line while unmapped');
+    expect(controller.currentSegmentId, isNull);
+    controller.readerMovedTo(segments[1]);
+    expect(controller.markedSegmentId, isNull, reason: 'a reader scroll claims no line while unmapped');
+
+    controller.reportPlayback(wallSeconds: 12, playing: false, loaded: true);
+    expect(controller.markedSegmentId, 'seg1', reason: 'a mapped report marks the line again');
   });
 
   test('through silence the marked line is the last spoken one, and the first before anyone speaks', () {

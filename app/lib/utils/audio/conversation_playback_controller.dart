@@ -95,11 +95,7 @@ class ConversationPlaybackController extends ChangeNotifier {
     // build. If the target ids move, the next reportPlayback picks it up.
     // While the player has no wall mapping, no line may be claimed current —
     // a rebuild must not re-mark one.
-    if (_mapped) {
-      _recomputeTargets();
-    } else {
-      _clearTargets();
-    }
+    _retarget();
   }
 
   void attachSeekHandler(ConversationPlaybackSeekHandler handler) {
@@ -120,7 +116,7 @@ class ConversationPlaybackController extends ChangeNotifier {
     if (_isDisposed) return;
     wallPosition.value = wallSeconds;
     _mapped = mapped;
-    var changed = mapped ? _recomputeTargets() : _clearTargets();
+    var changed = _retarget();
     if (loaded != _isLoaded) {
       _isLoaded = loaded;
       changed = true;
@@ -185,7 +181,7 @@ class ConversationPlaybackController extends ChangeNotifier {
     _pendingWall = segment.start;
     _pendingStrict = false;
     wallPosition.value = segment.start;
-    _recomputeTargets();
+    _retarget();
     notifyListeners();
     // An unloaded reader scroll moves the read point without loading audio;
     // a loaded one repositions the paused player without starting playback.
@@ -208,7 +204,7 @@ class ConversationPlaybackController extends ChangeNotifier {
     _pendingWall = wallSeconds;
     _pendingStrict = strict;
     wallPosition.value = wallSeconds;
-    _recomputeTargets();
+    _retarget();
     _isFollowing = true;
     _followRequest++;
     notifyListeners();
@@ -219,6 +215,10 @@ class ConversationPlaybackController extends ChangeNotifier {
 
   Future<void> _invokeSeek(double wallSeconds, {required bool play, required bool strict}) =>
       _seekHandler?.call(wallSeconds, play: play, strict: strict) ?? Future<void>.value();
+
+  /// Moves the targets to the wall playhead, or clears them while the player has no wall mapping:
+  /// a seek, a reader scroll or a rebuild then claims no line.
+  bool _retarget() => _mapped ? _recomputeTargets() : _clearTargets();
 
   bool _clearTargets() {
     if (_currentSegmentId == null && _followTargetSegmentId == null && _markedSegmentId == null) return false;
