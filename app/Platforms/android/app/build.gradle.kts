@@ -20,13 +20,17 @@ plugins {
 // <repo>/app/Platforms/android/app → repo root is four levels up.
 val repoRoot: File = file("../../../..")
 val skipstoneOutput: File = repoRoot.resolve(".build/scratch-platforms/plugins/outputs")
+val omiPackageOutput: String = skipstoneOutput.listFiles()
+    ?.firstOrNull { it.resolve("OmiKit/destination/skipstone/OmiKit").isDirectory }
+    ?.name
+    ?: throw GradleException("Skipstone output missing under $skipstoneOutput; run `swift build --scratch-path .build/scratch-platforms` from the repo root first.")
 
 android {
     namespace = "omi.v5.host"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "org.reactjs.native.omi-v5-android" // mirrors the RN `com.rnruntime` slot with the v5 namespace
+        applicationId = "org.reactjs.native.omi_v5_android" // mirrors the RN `com.rnruntime` slot with the v5 namespace
         minSdk = 26          // Skip requires java.time + API 26+ surfaces
         targetSdk = 35
         versionCode = 1
@@ -55,15 +59,15 @@ android {
             // it depends on (all generated, never committed). Each entry is
             // the `src/main` tree of the transpiled module.
             val modules = listOf(
-                "omi-v5-v5-swift/OmiKit/destination/skipstone/OmiKit",
-                "omi-v5-v5-swift/OmiUI/destination/skipstone/OmiUI",
+                "$omiPackageOutput/OmiKit/destination/skipstone/OmiKit",
+                "$omiPackageOutput/OmiUI/destination/skipstone/OmiUI",
                 "skip-model/SkipModel/destination/skipstone/SkipModel",
                 "skip-lib/SkipLib/destination/skipstone/SkipLib",
                 "skip-foundation/SkipFoundation/destination/skipstone/SkipFoundation",
                 "skip-ui/SkipUI/destination/skipstone/SkipUI",
             )
             for (module in modules) {
-                kotlin.srcDir(skipstoneOutput.resolve(module).resolve("src/main"))
+                kotlin.srcDir(skipstoneOutput.resolve(module).resolve("src/main/kotlin"))
             }
         }
     }
@@ -95,7 +99,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.lifecycle:lifecycle-runtime-kotlin:2.8.6")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
 
     // skip-lib / skip-foundation / skip-ui Kotlin sources expect these.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")

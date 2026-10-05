@@ -58,7 +58,9 @@ public actor HTTPBackendTransport: BackendTransport {
     public init(
         session: URLSession = {
             let configuration = URLSessionConfiguration.ephemeral
+            #if !SKIP
             configuration.httpCookieStorage = nil
+            #endif
             return URLSession(configuration: configuration)
         }(),
         credentials: CredentialStoring,
