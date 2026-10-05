@@ -30,6 +30,7 @@ android {
         targetSdk = libs.versions.android.sdk.compile.get().toInt()
         versionCode = 1
         versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -60,4 +61,6 @@ android {
 
 dependencies {
     implementation("omi.ui:OmiUI")
+    androidTestImplementation(testLibs.androidx.test.runner)
+    androidTestImplementation(testLibs.androidx.test.ext.junit)
 }
