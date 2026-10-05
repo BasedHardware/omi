@@ -159,3 +159,7 @@ acceptance and operational completion are still required before any ramp.
 Known BYOK models outside the supported reasoning family keep their own options,
 with a fixed effort-downgrade violation. Naive capture-end timestamps use UTC,
 matching the existing capture-start convention. Neither changes source text.
+
+Calendar scheduled times and task due times are expectations, not observation
+clocks; the post-capture observation filter does not discard them. They never
+establish attendance or a new commitment.

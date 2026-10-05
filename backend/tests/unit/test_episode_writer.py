@@ -291,3 +291,17 @@ def test_capture_finish_matches_start_convention_for_naive_utc():
         captured, local
     )
     assert episode_finish_local_iso(None, local) is None
+
+
+def test_future_expectations_are_distinct_from_post_capture_observations():
+    future = '2026-01-02T10:00:00Z'
+    items = [
+        EvidenceItem(id='s', source_kind='speech', content='Review the cobalt widget prototype.'),
+        EvidenceItem(id='cal', source_kind='calendar', time=future, content='Scheduled workshop'),
+        EvidenceItem(
+            id='task', source_kind='open_task', time=future, content='Cobalt widget prototype is due tomorrow.'
+        ),
+        EvidenceItem(id='screen', source_kind='screen_ocr', time=future, content='Google Meet cobalt widget prototype'),
+    ]
+    selected = deterministic_episode_selection(items, finished_at='2026-01-01T10:00:00Z')
+    assert [item.id for item in selected] == ['s', 'cal', 'task']

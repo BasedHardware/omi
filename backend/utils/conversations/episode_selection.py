@@ -49,6 +49,8 @@ def _datetime(value: str | None) -> datetime | None:
 
 
 def after_capture(item: Any, finished_at: str | None) -> bool:
+    if item.source_kind in {'calendar', 'open_task'}:
+        return False  # Scheduled/due times are expectations, not observation clocks.
     observed, finish = _datetime(item.time), _datetime(finished_at)
     return bool(observed and finish and observed > finish)
 
