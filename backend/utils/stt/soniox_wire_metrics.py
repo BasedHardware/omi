@@ -16,6 +16,22 @@ class SonioxWireMetrics(NamedTuple):
 
 _metrics: SonioxWireMetrics | None = None
 _lock = threading.Lock()
+_ordered_metrics: Counter | None = None
+
+
+def ordered_finalize_metrics() -> Counter:
+    """One bounded family, registered only by the new enabled clock."""
+    global _ordered_metrics
+    with _lock:
+        if _ordered_metrics is None:
+            _ordered_metrics = Counter(
+                'omi_soniox_ordered_finalize_checkpoints_total',
+                'FIFO finalize predictions verified, mismatched or left unverified',
+                ['outcome'],
+            )
+            for outcome in ('verified', 'mismatch', 'unverified'):
+                _ordered_metrics.labels(outcome=outcome)
+    return _ordered_metrics
 
 
 def wire_metrics() -> SonioxWireMetrics:

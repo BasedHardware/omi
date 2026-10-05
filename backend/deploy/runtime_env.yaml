@@ -410,6 +410,9 @@ environments:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -604,6 +607,9 @@ environments:
             category: rollout
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
+            category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
             category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -1179,6 +1185,9 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST:
               value: https://us.posthog.com
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -1492,6 +1501,9 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST:
               value: https://us.posthog.com
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             BUCKET_SCREEN_FRAMES:
               value: based-hardware-dev-screen-frames
               category: storage_retention
@@ -1788,6 +1800,9 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST:
               value: https://us.posthog.com
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2022,6 +2037,9 @@ environments:
               category: rollout
             PROACTIVITY_V2_POSTHOG_HOST:
               value: https://us.posthog.com
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -2843,6 +2861,9 @@ environments:
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -3074,6 +3095,9 @@ environments:
             category: telemetry
           MENTOR_PIPELINE:
             value: cohort
+            category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
             category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -3546,6 +3570,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -3879,6 +3906,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
               value: 'true'
               category: rollout
@@ -4168,6 +4198,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -4416,6 +4449,9 @@ environments:
               category: rollout
             MENTOR_PIPELINE:
               value: cohort
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware

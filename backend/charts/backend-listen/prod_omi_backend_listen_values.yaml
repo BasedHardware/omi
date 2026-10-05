@@ -581,6 +581,8 @@ env:
     value: "true"
   - name: SONIOX_WIRE_LEDGER
     value: "true"
+  - name: SONIOX_ORDERED_FINALIZE
+    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from

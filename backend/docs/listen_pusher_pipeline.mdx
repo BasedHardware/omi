@@ -2067,7 +2067,8 @@ and collapsed candidates; `vad_uncovered` includes decisions evicted from the
 supplied production `unknown` aggregate. None of these metrics changes capture
 placement or enables the elapsed hypothesis.
 
-`SONIOX_WIRE_LEDGER` defaults to `false` in code and every deployment. New
+`SONIOX_WIRE_LEDGER` defaults to `false` in code. Production listen and pusher
+declarations are enabled; other services and dev stay off. New
 managed Soniox transports snapshot it. ON carries receiver-observed capture
 spans through the VAD output, replay and idle-onset queues, and registers them
 only after the actual binary WebSocket write succeeds. Every emitted sample
@@ -2078,12 +2079,14 @@ slide backward across that interval. Failed writes grant no capture proof.
 Repeated manual finalization advances Soniox's processed-audio axis without
 wire PCM. Synthetic probes at the production 16 kHz configuration measured
 strict advancement to the next 120 ms boundary, including a further 120 ms for
-an exact-boundary or no-audio finalize. This measured quantum is not a runtime
-assumption. ON sends every audio and control frame exactly as OFF does,
+an exact-boundary or no-audio finalize. The base wire ledger uses reported
+positions; the separately gated ordered-finalize path below verifies the measured
+quantum. ON sends every audio and control frame exactly as OFF does,
 including VAD-pause finalize, keepalive, terminal end and planned idle drain.
 No acknowledgment wait, altered pacing or transcription latency policy is added.
 
-The provider cursor is separate from the emitted-PCM ledger. Only a final
+The provider cursor is separate from the emitted-PCM ledger. With
+`SONIOX_ORDERED_FINALIZE=false`, only a final
 `<fin>` response to the sole outstanding finalize, received before any subsequent
 audio write begins, may anchor the cursor. Both `total_audio_proc_ms` and
 `final_audio_proc_ms` must report the same nonnegative integer position, exactly
@@ -2097,6 +2100,57 @@ Every successful binary write still counts as emitted PCM regardless of origin.
 The switch selects the compact-with-reported-holes axis over the experimental
 elapsed axis and retains strict observed-send containment. Unknown text persists
 without an audio window. OFF retains the admission-time ledger exactly.
+
+`SONIOX_ORDERED_FINALIZE` is one additional default-off switch, effective only
+with the wire ledger, production Soniox endpoint/model (`stt-rt-v5`) and mono
+pcm_s16le at 16 kHz. Controlled synthetic probes covered sub-boundary offsets,
+back-to-back finalizes and five finalizes in flight: all 28 individual `<fin>`
+reports and 18 post-finalize speech starts matched the ordered padding model.
+For local provider cursor P, sending a finalize reserves the provider-only hole
+through `(floor(P / 1920) + 1) * 1920`, including another full quantum at an
+exact boundary. PCM/control bytes, FIFO ordering, pacing and finalize policy
+stay unchanged. No transport or transcript wait is introduced.
+
+A queue of at most 64 predictions matches each subsequent single `<fin>` to its
+own sent control. Both integer progress fields must equal that predicted
+position; current PCM count at acknowledgement time is irrelevant. Capture maps
+for subsequent successful writes use the predicted origin, but intervals after
+the earliest unverified checkpoint remain unplaced until verification. This
+prevents persisting a speculative window before a later mismatch. Tokens already
+emitted while unverified retain text without a window; no historical repair is
+attempted. A mismatch discards the mapped suffix starting at that checkpoint,
+including coalesced-span tails, and refuses subsequent sends until the next
+uncontested exact checkpoint. Its fresh reported origin can be below the rejected
+prediction while conserving PCM since the last verified checkpoint. A report
+outside the measured 120 ms grid stays on the conservative reported-only path.
+Missing acknowledgements, failed writes, queue overflow, duplicate/unsolicited
+acknowledgements and multi-`<fin>` responses also fail closed; the latter cannot
+associate multiple controls with a single shared progress position. Ordinary
+progress frames and token times never authorize padding. Teardown invalidates
+pending capture maps before flushing tokens; idle reopen uses a fresh clock.
+
+`omi_soniox_ordered_finalize_checkpoints_total{outcome="verified|mismatch|unverified"}`
+is registered only when the new switch is effective. Verified counts matched
+FIFO reports, mismatch counts contradictory/unassociable acknowledgement frames,
+and unverified counts pending predictions at teardown or the overflow event.
+The existing clean/raced/missing-ack family still describes wire ordering;
+a raced checkpoint can now be verified and produce known windows. Positive holes
+are reserved at send time on this path, so their existing counters include
+predictions (which may subsequently be disproven); they are never PCM or capture.
+Feature OFF has exact existing ledger behavior and no new counter deltas.
+
+`other_refused` counts refused translator candidates outside retained raced-PCM
+attribution, not a single causal cohort. It includes nonnumeric/nonfinite and
+zero/reversed intervals, missing/unknown send origins, padding holes or outside
+accepted sends (including early token-edge jitter), provider/capture or wall gaps,
+collapsed intervals and compacted/evicted proof. Historical races outside the
+bounded diagnostic history also land here. On the new path, unverified predictions
+can temporarily land here. Existing capture-window attribution and outside-send
+geometry counters further describe these reasons; this aggregate alone cannot
+split a production count into causes. A whole continuous capture window across
+a hole/gap, or without receiver evidence, is not provable. Race verification can
+recover some candidates even when this label obscured their race attribution;
+zero-duration source text does not prove an audio duration in clock-only mode.
 
 Idle reopen freezes its provider offset after the old writer and receiver drain,
 including any acknowledged provider-only padding. The replacement transport starts

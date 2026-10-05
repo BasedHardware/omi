@@ -6,6 +6,7 @@ Unknown sends still consume compact provider time at the wire boundary.
 """
 
 from contextvars import ContextVar
+from collections import deque
 from typing import Any
 
 capture_spans: ContextVar[tuple[tuple[int, int], ...]] = ContextVar('soniox_capture_spans', default=())
@@ -62,11 +63,12 @@ class SonioxProviderClock:
         self._audio_inflight -= 1
         self.samples += length
 
-    def begin_finalize(self) -> None:
+    def begin_finalize(self) -> int:
         self._pending += 1
         self._audio_after_finalize = False
         if self._checkpoints_closed:
             self._metrics.checkpoints.labels(outcome='missing_ack').inc()
+        return 0
 
     def response(self, message: dict[str, Any]) -> int:
         acknowledgments = sum(
@@ -113,3 +115,117 @@ class SonioxProviderClock:
         # This is telemetry settlement, never a provider-clock reset. Writes
         # already queued may still begin after receive termination; a pending
         # finalize must keep those writes unplaceable just as before metrics.
+
+
+class OrderedSonioxProviderClock(SonioxProviderClock):
+    """FIFO padding predictions, verified before downstream capture admission.
+
+    Only the production 16 kHz PCM configuration has been probed. A bounded
+    prediction queue cannot grant capture while its checkpoint is unverified.
+    A failed prediction falls back to the original clean-checkpoint recovery.
+    """
+
+    def __init__(self, sample_rate: int) -> None:
+        super().__init__(sample_rate)
+        from utils.stt.soniox_wire_metrics import ordered_finalize_metrics
+
+        self._ordered_metrics = ordered_finalize_metrics()
+        self._predictions: deque[tuple[int, int, int]] = deque()
+        self._modeled = True
+        self.invalid_from: int | None = None
+        self.reanchor: int | None = None
+        self._emitted = 0
+        self._verified_position = 0
+        self._verified_audio = 0
+
+    @property
+    def pending_from(self) -> int | None:
+        return self._predictions[0][0] if self._predictions else None
+
+    def begin_audio(self) -> bool:
+        if not self._modeled:
+            return super().begin_audio()
+        self._audio_inflight += 1
+        if self._pending:
+            self._audio_after_finalize = True
+        return not self._uncertain
+
+    def end_audio(self, length: int) -> None:
+        super().end_audio(length)
+        self._emitted += length
+
+    def begin_finalize(self) -> int:
+        super().begin_finalize()
+        if self._checkpoints_closed:
+            self._invalidate()
+            return 0
+        if not self._modeled:
+            return 0
+        if len(self._predictions) >= 64:
+            self._invalidate()
+            self._ordered_metrics.labels(outcome='unverified').inc()
+            return 0
+        before = self.samples
+        quantum = 1920  # Probed stt-rt-v5 mono pcm_s16le / 16 kHz only.
+        self.samples = (before // quantum + 1) * quantum
+        self._predictions.append((before, self.samples, self._emitted))
+        return self.samples - before
+
+    def _invalidate(self) -> None:
+        self.invalid_from = self.pending_from if self.pending_from is not None else self.samples
+        self._predictions.clear()
+        self._modeled = False
+        self._uncertain = True
+
+    def response(self, message: dict[str, Any]) -> int:
+        acknowledgments = sum(
+            isinstance(token, dict) and token.get('is_final') is True and token.get('text') == '<fin>'
+            for token in message.get('tokens') or []
+        )
+        if not acknowledgments:
+            return 0
+        if not self._modeled:
+            previous = self.samples
+            # A disproven padding model may overestimate the cursor. The next
+            # uncontested report needs only conserve PCM after the last verified
+            # checkpoint; its position need not exceed the rejected prediction.
+            if self._pending == acknowledgments == 1 and not (self._audio_after_finalize or self._audio_inflight):
+                self.samples = self._verified_position + self._emitted - self._verified_audio
+            super().response(message)
+            if not self._uncertain:
+                self._modeled = self.samples % 1920 == 0
+                self.reanchor = self.samples
+                self._verified_position, self._verified_audio = self.samples, self._emitted
+                return max(0, self.samples - previous)
+            self.samples = previous
+            return 0
+        # Multiple <fin>s in one response have only one progress position.
+        # Missing, duplicate or unsolicited acks cannot prove FIFO association.
+        total, final = message.get('total_audio_proc_ms'), message.get('final_audio_proc_ms')
+        valid = (
+            acknowledgments == 1
+            and bool(self._predictions)
+            and type(total) is int
+            and type(final) is int
+            and total == final
+            and total * self.sample_rate == self._predictions[0][1] * 1000
+        )
+        if not valid:
+            settled = min(self._pending, acknowledgments)
+            self._invalidate()
+            self._pending = max(0, self._pending - acknowledgments)
+            self._ordered_metrics.labels(outcome='mismatch').inc()
+            return self._raced(settled)
+        uncontested = self._pending == 1 and not (self._audio_after_finalize or self._audio_inflight)
+        _, self._verified_position, self._verified_audio = self._predictions.popleft()
+        self._pending -= 1
+        self._ordered_metrics.labels(outcome='verified').inc()
+        if not self._checkpoints_closed:
+            self._metrics.checkpoints.labels(outcome='clean' if uncontested else 'raced').inc()
+        return 0  # Hole already reserved at the ordered wire boundary.
+
+    def close(self) -> None:
+        if self._predictions:
+            self._ordered_metrics.labels(outcome='unverified').inc(len(self._predictions))
+            self._invalidate()
+        super().close()
