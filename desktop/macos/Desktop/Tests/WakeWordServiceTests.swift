@@ -163,4 +163,14 @@ final class WakeWordServiceTests: XCTestCase {
         providerText: "provider heard this", wakeWordInputTranscript: "show my tasks"),
       "provider heard this")
   }
+
+  /// A deferred commit replays buffered audio only, so the wake word command must go back to
+  /// the caller for the chat fallback instead of being reported as handed off.
+  func testOnlyAnOwnedCommitHandsOffTheWakeWordCommand() {
+    XCTAssertTrue(RealtimeHubCommitResult.accepted.handsOffWakeWordCommand)
+    XCTAssertTrue(RealtimeHubCommitResult.alreadyOwned.handsOffWakeWordCommand)
+    XCTAssertFalse(RealtimeHubCommitResult.deferredForReplacement.handsOffWakeWordCommand)
+    XCTAssertFalse(RealtimeHubCommitResult.deferredForReconnect.handsOffWakeWordCommand)
+    XCTAssertFalse(RealtimeHubCommitResult.rejectedNoSession.handsOffWakeWordCommand)
+  }
 }

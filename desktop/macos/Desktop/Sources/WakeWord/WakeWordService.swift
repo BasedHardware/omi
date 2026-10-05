@@ -134,3 +134,14 @@ final class WakeWordService {
     return false
   }
 }
+
+extension RealtimeHubCommitResult {
+  /// Whether the realtime session now owns a wake word command. A deferred commit replays
+  /// buffered audio only, so the command text sent to the old transport does not survive.
+  var handsOffWakeWordCommand: Bool {
+    switch self {
+    case .accepted, .alreadyOwned: return true
+    case .deferredForReplacement, .deferredForReconnect, .rejectedNoSession: return false
+    }
+  }
+}

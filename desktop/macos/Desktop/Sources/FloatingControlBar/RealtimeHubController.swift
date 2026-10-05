@@ -1105,13 +1105,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // path instead — observed live as the third of three commands answering in a text box
     // while the first two spoke. Warm it and wait briefly before minting a turn, so a turn
     // is never created that cannot be used.
-    if session == nil { ensureWarm() }
-    let warmDeadline = Date().addingTimeInterval(5)
-    while session == nil, Date() < warmDeadline {
-      try? await Task.sleep(nanoseconds: 100_000_000)
-    }
-    guard session != nil else {
-      log("RealtimeHub: no realtime session available for the wake word")
+    // A session can outlive its transport while reconnecting, so wait for the transport itself.
+    guard await waitUntilActive(timeout: 5) else {
+      log("RealtimeHub: no realtime transport available for the wake word")
       return false
     }
 
@@ -1152,9 +1148,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return false
     }
 
-    log("RealtimeHub: wake word turn '\(trimmed)' committed to the realtime session")
     VoiceTurnCoordinator.shared.publish(.finalize(turnID: turnID))
-    _ = commitTurn()
+    guard commitTurn().handsOffWakeWordCommand else {
+      log("RealtimeHub: wake word commit not accepted — handing back to the caller")
+      _ = cancelTurn(turnID: turnID)
+      return false
+    }
+    log("RealtimeHub: wake word turn '\(trimmed)' committed to the realtime session")
     return true
   }
 
