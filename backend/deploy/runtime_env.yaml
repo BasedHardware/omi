@@ -2425,7 +2425,7 @@ environments:
             value: 'true'
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-            value: 'false'
+            value: 'true'
             category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
@@ -2939,7 +2939,7 @@ environments:
             value: 'true'
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-            value: 'false'
+            value: 'true'
             category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
