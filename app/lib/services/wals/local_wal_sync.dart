@@ -784,6 +784,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           liveOrdinalEnd: live.end,
         );
         wal.liveConnectionEpoch = live.epoch;
+        if (run.claimable) {
+          wal.filePath = walEvidenceRunFileName(wal, selectionTimerStart, run.start, _framesPerSecond);
+        }
         _wals.add(wal);
       } else {
         wal = _wals[walIdx];
@@ -904,13 +907,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   int _storageFileSeq = 0;
 
   Future<String> _uniqueStorageFileName(Wal wal) async {
-    var name = wal.getFileName();
+    final claimable = captureEvidenceWalClaimable(wal);
+    final planned = wal.filePath;
+    var name = claimable && planned != null && planned.isNotEmpty ? planned.split('/').last : wal.getFileName();
     if (!_fileReferencedByOtherWal(wal, name) && !await _localFileExistsByName(name)) return name;
-    final dot = name.lastIndexOf('.');
-    final stem = dot > 0 ? name.substring(0, dot) : name;
-    final ext = dot > 0 ? name.substring(dot) : '';
     for (;;) {
-      final candidate = '${stem}_u${_storageFileSeq++}$ext';
+      final candidate = walCollisionName(name, _storageFileSeq++, claimable);
       if (!_fileReferencedByOtherWal(wal, candidate) && !await _localFileExistsByName(candidate)) {
         return candidate;
       }
@@ -1922,7 +1924,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final totalFilesToUpload = wals.length;
 
     final attemptedWalIds = <String>{};
-    String walAttemptKey(Wal wal) => _captureEvidenceV1DarkWrite && wal.captureRoot != null ? _durableKey(wal) : wal.id;
+    String walAttemptKey(Wal wal) => captureEvidenceWalClaimable(wal) ? _durableKey(wal) : wal.id;
     // A conversation whose first batch uploaded unclaimed stays unclaimable for
     // the rest of the drain: the manifest is immutable per conversation, so a
     // later remainder must not claim one covering only part of it.
@@ -2040,14 +2042,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         // wait for server-side processing here; the reconciler resolves the
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
+        final audioBounds = syncUploadAudioBounds(batchWals);
         final result = await _uploadGate.upload(
           files,
           conversationId: batchWals.first.conversationId,
           captureEvidence: captureEvidenceUploadHeader(batchWals, files),
           recordingSessionId: batchWals.first.recordingSessionId,
-          audioStartSeconds: batchWals.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b).toDouble(),
-          audioEndSeconds:
-              batchWals.map((wal) => wal.timerStart + wal.seconds).reduce((a, b) => a > b ? a : b).toDouble(),
+          audioStartSeconds: audioBounds.start,
+          audioEndSeconds: audioBounds.end,
           claimLiveCapture: claimLiveCapture,
           geolocation: batchWals.first.geolocation,
         );
@@ -2282,13 +2284,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             .toList(),
         _now().millisecondsSinceEpoch ~/ 1000,
       );
+      final audioBounds = syncUploadAudioBounds([walToSync]);
       final result = await _uploadGate.upload(
         [walFile],
         conversationId: walToSync.conversationId,
         captureEvidence: captureEvidenceUploadHeader([walToSync], [walFile]),
         recordingSessionId: walToSync.recordingSessionId,
-        audioStartSeconds: walToSync.timerStart.toDouble(),
-        audioEndSeconds: (walToSync.timerStart + walToSync.seconds).toDouble(),
+        audioStartSeconds: audioBounds.start,
+        audioEndSeconds: audioBounds.end,
         claimLiveCapture: claimLiveCapture,
         geolocation: walToSync.geolocation,
       );

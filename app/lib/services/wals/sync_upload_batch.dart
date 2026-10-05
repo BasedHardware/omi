@@ -48,6 +48,35 @@ Map<String, dynamic>? _captureEvidenceClaim(Wal wal, String name) {
   };
 }
 
+bool captureEvidenceWalClaimable(Wal wal) =>
+    _captureEvidenceV1DarkWrite && _captureEvidenceClaim(wal, _walUploadFileName(wal)) != null;
+
+final _syncTimestampTokenPattern = RegExp(r'_([0-9]+(?:\.[0-9]+)?)\.bin$');
+
+double _syncWalAudioStart(Wal wal) {
+  if (captureEvidenceWalClaimable(wal)) {
+    final match = _syncTimestampTokenPattern.firstMatch(_walUploadFileName(wal));
+    final parsed = match == null ? null : double.tryParse(match.group(1)!);
+    if (parsed != null && parsed.isFinite) return parsed;
+  }
+  return wal.timerStart.toDouble();
+}
+
+({double start, double end}) syncUploadAudioBounds(List<Wal> wals) {
+  assert(wals.isNotEmpty);
+  var start = double.infinity;
+  var end = double.negativeInfinity;
+  for (final wal in wals) {
+    final walStart = _syncWalAudioStart(wal);
+    final walEnd = captureEvidenceWalClaimable(wal)
+        ? walStart + wal.totalFrames / wal.codec.getFramesPerSecond()
+        : (wal.timerStart + wal.seconds).toDouble();
+    if (walStart < start) start = walStart;
+    if (walEnd > end) end = walEnd;
+  }
+  return (start: start, end: end);
+}
+
 String? _encodeCaptureEvidenceClaims(List<Map<String, dynamic>> claims) {
   final encoded = jsonEncode({'version': 1, 'files': claims});
   return utf8.encode(encoded).length <= _captureEvidenceHeaderMaxBytes ? encoded : null;

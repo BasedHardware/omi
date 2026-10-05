@@ -2420,6 +2420,23 @@ void main() {
         expect(uploads.length, 1, reason: 'wal.id attempted membership suppresses the same-id sibling');
       }
     });
+
+    test('root-marked but unclaimable WALs keep legacy wal.id attempted membership', () async {
+      final first = diskWal(100, 'partial_a.bin', recordingSessionId: 's1');
+      first.captureRoot = root;
+      final second = diskWal(100, 'partial_b.bin', recordingSessionId: 's2');
+      second.captureRoot = root;
+      final local = buildSync();
+      local.testWals = [first, second];
+
+      await local.syncAll();
+
+      expect(
+        uploads.length,
+        1,
+        reason: 'a root without the full evidence triple is not claimable, so wal.id suppression is unchanged',
+      );
+    });
   });
 
   group('capture evidence run construction', () {
@@ -2893,6 +2910,168 @@ void main() {
         expect(walA.captureRoot, isNull);
         expect(walA.totalFrames, 100);
       }
+    });
+
+    test('a subsecond rooted split keeps fractional names and fractional upload bounds', () async {
+      const timerStart = 1735689600;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final bounds = <(List<String>, double?, double?)>[];
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 1) * 1000),
+        persistWals: (wals) async {},
+        loadWals: () async => <Wal>[],
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            bounds.add((files.map((file) => file.uri.pathSegments.last).toList(), audioStartSeconds, audioEndSeconds));
+            return UploadFilesResult.queued('job-${bounds.length}');
+          },
+          fairUseStatusLoader: () async => null,
+        ),
+      );
+      local.start();
+      await local.walReady;
+
+      WalFrame positioned(int position, String root) => WalFrame(
+            payload: [position & 0xFF],
+            syncKey: FrameSyncKey.fromIndex(position),
+            captureRoot: root,
+            sourceFramePosition: position,
+            sourceClockEpoch: 0,
+          );
+      local.testFrames.addAll([for (var i = 0; i < 100; i++) positioned(i, i < 60 ? rootA : rootB)]);
+      local.testFrameSynced.addAll(List.filled(100, false));
+
+      await local.finalizeCurrentSession();
+
+      if (!darkWrite) {
+        expect(local.testWals, hasLength(1));
+        expect(local.testWals.single.captureRoot, isNull);
+        return;
+      }
+
+      expect(local.testWals, hasLength(2));
+      final first = local.testWals[0];
+      final second = local.testWals[1];
+      expect(first.timerStart, timerStart);
+      expect(second.timerStart, timerStart);
+      expect(first.filePath, endsWith('_$timerStart.bin'));
+      expect(second.filePath, endsWith('_$timerStart.6.bin'),
+          reason: 'the second run keeps its 0.6s offset in the persisted name');
+
+      final reloaded = Wal.fromJson(second.toJson());
+      expect(reloaded.filePath, second.filePath, reason: 'the fractional name survives serialization');
+
+      await local.syncAll();
+      expect(bounds, hasLength(1));
+      expect(bounds.single.$1, unorderedEquals([first.filePath, second.filePath]));
+      expect(bounds.single.$2, timerStart.toDouble());
+      expect(bounds.single.$3, (timerStart + 1).toDouble(),
+          reason: 'run durations sum through the fractional start, not integer seconds');
+
+      final solo = LocalWalSyncImpl(
+        _MockListener(),
+        now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 1) * 1000),
+        persistWals: (wals) async {},
+        loadWals: () async => <Wal>[],
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            bounds.add((files.map((file) => file.uri.pathSegments.last).toList(), audioStartSeconds, audioEndSeconds));
+            return UploadFilesResult.queued('job-${bounds.length}');
+          },
+          fairUseStatusLoader: () async => null,
+        ),
+      );
+      solo.start();
+      await solo.walReady;
+      solo.testWals = [reloaded];
+      await solo.syncWal(wal: solo.testWals.single);
+
+      expect(bounds.last.$2, timerStart + 0.6, reason: 'syncWal derives the fractional start from the filename');
+      expect(bounds.last.$3, (timerStart + 1).toDouble());
+    });
+
+    test('a claimable filename collision inserts the discriminator before the timestamp token', () async {
+      const timerStart = 1735689600;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final uploaded = <(List<String>, String?)>[];
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 1) * 1000),
+        persistWals: (wals) async {},
+        loadWals: () async => <Wal>[],
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            uploaded.add((files.map((file) => file.uri.pathSegments.last).toList(), captureEvidence));
+            return UploadFilesResult.queued('job-1');
+          },
+          fairUseStatusLoader: () async => null,
+        ),
+      );
+      local.start();
+      await local.walReady;
+
+      for (var round = 0; round < 2; round++) {
+        local.testFrames.addAll([
+          for (var i = 0; i < 100; i++)
+            WalFrame(
+              payload: [i & 0xFF],
+              syncKey: FrameSyncKey.fromIndex(i),
+              captureRoot: rootA,
+              sourceFramePosition: i,
+              sourceClockEpoch: round,
+            ),
+        ]);
+        local.testFrameSynced.addAll(List.filled(100, false));
+        await local.finalizeCurrentSession();
+      }
+
+      if (!darkWrite) {
+        return;
+      }
+      expect(local.testWals, hasLength(2));
+      final wal = local.testWals.last;
+      expect(
+        wal.filePath,
+        matches(RegExp(r'_u\d+_\d+\.bin$')),
+        reason: 'the _u<seq> discriminator stays ahead of the terminal timestamp token',
+      );
+      await local.syncAll();
+      final names = uploaded.expand((upload) => upload.$1).toList();
+      expect(names, contains(wal.filePath));
+      final parsed = jsonDecode(uploaded.single.$2!) as Map<String, dynamic>;
+      expect(
+        (parsed['files'] as List).map((f) => f['name']).toSet(),
+        containsAll(names),
+        reason: 'claim names match the collision-safe filenames actually uploaded',
+      );
     });
   });
 }

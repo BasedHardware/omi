@@ -14,6 +14,25 @@ bool walExtendsRun(Wal wal, WalEvidenceRun run, WalFrame first) => run.claimable
         wal.sourceFrameStart! + wal.totalFrames == first.sourceFramePosition
     : wal.captureRoot == null;
 
+String walEvidenceRunFileName(Wal wal, int timerStart, int frameOffset, int framesPerSecond) {
+  final name = wal.getFileName();
+  if (frameOffset <= 0 || framesPerSecond <= 0) return name;
+  var token = (timerStart + frameOffset / framesPerSecond).toStringAsFixed(6);
+  if (token.contains('.')) {
+    token = token.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+  }
+  return name.replaceAll(RegExp(r'_\d+\.bin$'), '_$token.bin');
+}
+
+String walCollisionName(String name, int sequence, bool beforeTimestamp) {
+  final dot = name.lastIndexOf('.');
+  final stem = dot > 0 ? name.substring(0, dot) : name;
+  final ext = dot > 0 ? name.substring(dot) : '';
+  final lastUnderscore = beforeTimestamp ? stem.lastIndexOf('_') : -1;
+  if (lastUnderscore < 0) return '${stem}_u$sequence$ext';
+  return '${stem.substring(0, lastUnderscore)}_u$sequence${stem.substring(lastUnderscore)}$ext';
+}
+
 bool _hasCaptureTriple(WalFrame frame) =>
     frame.captureRoot != null && frame.sourceFramePosition != null && frame.sourceClockEpoch != null;
 
