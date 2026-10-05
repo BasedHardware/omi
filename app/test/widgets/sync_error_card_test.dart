@@ -19,11 +19,14 @@ Future<void> _pump(WidgetTester tester, {required double textScale}) async {
       home: Scaffold(
         body: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
-          // A realistic phone content width so a long message genuinely wraps.
-          child: Center(
-            child: SizedBox(
-              width: 360,
-              child: SyncErrorCard(message: _longMessage, onRetry: () {}),
+          // A realistic phone content width so a long message genuinely wraps, in a scroll view as
+          // on the sync pages: at 2x the full message is taller than the test screen.
+          child: SingleChildScrollView(
+            child: Center(
+              child: SizedBox(
+                width: 360,
+                child: SyncErrorCard(message: _longMessage, onRetry: () {}),
+              ),
             ),
           ),
         ),

@@ -1,4 +1,6 @@
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 
 import 'package:provider/provider.dart';
 
@@ -58,135 +60,68 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
       memorizedAt = conversation.finishedAt!;
     }
 
-    return GestureDetector(
-      onTap: () async {
-        context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
-        Provider.of<ConversationProvider>(context, listen: false).onConversationTap(widget.conversation.id);
-        routeToPage(context, ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: false));
-      },
-      child: Padding(
-        padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
-        child: Container(
-          width: double.maxFinite,
-          decoration: BoxDecoration(color: OmiColors.conversationCard, borderRadius: BorderRadius.circular(24.0)),
-          child: Padding(
-            padding: const EdgeInsetsDirectional.all(16),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _getConversationHeader(),
-                      const SizedBox(height: 16),
-                      conversation.discarded
-                          ? Text(
-                              conversation.transcriptSegments.first.text.decodeString,
-                              style: Theme.of(context).textTheme.titleLarge,
-                              maxLines: 1,
-                            )
-                          : Text(
-                              conversation.structured.title.decodeString,
-                              style: Theme.of(context).textTheme.titleLarge,
-                              maxLines: 1,
-                            ),
-                      conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
-                    ],
-                  ),
-                ),
-                widget.showReprocess || conversation.discarded
-                    ? GestureDetector(
-                        onTap: () async {
-                          setReprocessing(true);
-                          var mem = await reProcessConversationServer(conversation.id);
-                          if (!context.mounted) return;
-                          if (mem != null) {
-                            setState(() {
-                              conversation = mem;
-                            });
-                            context.read<ConversationProvider>().updateSyncedConversation(mem);
-                          }
-                          setReprocessing(false);
-                        },
-                        child: isReprocessing
-                            ? const Center(
-                                child: Padding(
-                                    padding: EdgeInsets.all(8.0), child: OmiSpinner(size: OmiSpinnerSize.small)),
-                              )
-                            : Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Icon(Icons.refresh_outlined, color: OmiColors.textTertiary),
-                              ),
-                      )
-                    : const SizedBox.shrink(),
-              ],
-            ),
+    final raw = conversation.discarded
+        ? (conversation.transcriptSegments.isEmpty ? '' : conversation.transcriptSegments.first.text.decodeString)
+        : conversation.structured.title.decodeString;
+    final title = raw.trim().isEmpty ? context.l10n.untitledConversation : raw;
+    final time = OmiDateFormat.of(context).time(conversation.startedAt ?? conversation.createdAt);
+    final duration = _getConversationDuration(context);
+    // The category a processed conversation was filed under, ahead of its time.
+    final tag = !conversation.discarded && conversation.structured.category.isNotEmpty ? conversation.getTag() : '';
+    final subtitle = [tag, time, duration].where((part) => part.isNotEmpty).join(' \u00b7 ');
+
+    return OmiSettingsGroup(
+      children: [
+        OmiSettingsRow(
+          leading: OmiSettingsIconTile(
+            conversation.discarded
+                ? const FaIcon(FontAwesomeIcons.waveSquare)
+                : Text(conversation.structured.getEmoji(), style: OmiType.title3),
           ),
+          title: title,
+          subtitle: subtitle,
+          trailing: widget.showReprocess || conversation.discarded
+              ? (isReprocessing
+                  ? const Padding(padding: EdgeInsets.all(OmiSpacing.sm), child: OmiSpinner(size: OmiSpinnerSize.small))
+                  // The row merges into one button that opens the conversation, so a screen reader
+                  // reaches Reprocess as an action on that button, not as a second tap target.
+                  : Semantics(
+                      customSemanticsActions: {
+                        CustomSemanticsAction(label: context.l10n.reprocessConversation): _reprocess,
+                      },
+                      child: ExcludeSemantics(
+                        child: OmiIconButton(
+                          icon: const OmiLineIcon(OmiLineGlyph.refresh),
+                          label: context.l10n.reprocessConversation,
+                          color: OmiColors.textSecondary,
+                          onPressed: _reprocess,
+                        ),
+                      ),
+                    ))
+              : null,
+          onTap: () async {
+            context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
+            Provider.of<ConversationProvider>(context, listen: false).onConversationTap(widget.conversation.id);
+            routeToPage(context, ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: false));
+          },
         ),
-      ),
+      ],
     );
   }
 
-  _getConversationHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          conversation.discarded
-              ? const SizedBox.shrink()
-              : Text(
-                  conversation.structured.getEmoji(),
-                  style: TextStyle(color: OmiColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w500),
-                ),
-          conversation.structured.category.isNotEmpty && !conversation.discarded
-              ? const SizedBox(width: 12)
-              : const SizedBox.shrink(),
-          conversation.structured.category.isNotEmpty
-              ? Container(
-                  decoration: BoxDecoration(color: conversation.getTagColor(), borderRadius: BorderRadius.circular(16)),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Text(
-                    conversation.getTag(),
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: conversation.getTagTextColor()),
-                    maxLines: 1,
-                  ),
-                )
-              : const SizedBox.shrink(),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  OmiDateFormat.of(context).time(conversation.startedAt ?? conversation.createdAt),
-                  style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
-                  maxLines: 1,
-                  textAlign: TextAlign.end,
-                ),
-                if (conversation.transcriptSegments.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2.0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration:
-                          BoxDecoration(color: OmiColors.categorySurface, borderRadius: BorderRadius.circular(4)),
-                      child: Text(
-                        _getConversationDuration(context),
-                        style: TextStyle(color: OmiColors.textPrimary, fontSize: 11),
-                        maxLines: 1,
-                        textAlign: TextAlign.end,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  Future<void> _reprocess() async {
+    setReprocessing(true);
+    // A failed request says so and the row returns to idle; it never keeps spinning.
+    try {
+      final mem = await reProcessConversationServer(conversation.id);
+      if (!mounted || mem == null) return;
+      setState(() => conversation = mem);
+      context.read<ConversationProvider>().updateSyncedConversation(mem);
+    } catch (_) {
+      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    } finally {
+      setReprocessing(false);
+    }
   }
 
   String _getConversationDuration(BuildContext context) {

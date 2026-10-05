@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 const int _mb = 1024 * 1024;
@@ -55,7 +54,7 @@ void main() {
     // 400 / 469 = 0.853
     await tester.pumpWidget(_app(DeviceStorageCard(status: _status(usedMb: 400, freeMb: 69))));
     await tester.pump();
-    expect(_barColor(tester), ResponsiveHelper.warningColor);
+    expect(_barColor(tester), OmiColors.warning);
     expect(find.text('Device nearly full — sync to free space.'), findsNothing);
   });
 
@@ -64,7 +63,7 @@ void main() {
     await tester.pumpWidget(_app(DeviceStorageCard(status: _status(usedMb: 460, freeMb: 9))));
     await tester.pump();
     expect(find.text('98% full'), findsOneWidget);
-    expect(_barColor(tester), ResponsiveHelper.errorColor);
+    expect(_barColor(tester), OmiColors.danger);
     expect(find.text('Device nearly full — sync to free space.'), findsOneWidget);
   });
 
