@@ -110,8 +110,8 @@ async def test_repeated_finalize_holes_preserve_late_capture_and_all_controls(mo
         await final(peer)
         rows = await tick(receiver, processor, store)
         assert known(rows) == 1
-        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 32.049 + 0.2)
-        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 32.049 + 0.8)
+        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 32.049 + 0.2, abs=2 / RATE, rel=0)
+        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 32.049 + 0.8, abs=2 / RATE, rel=0)
         assert leg.raw._capture_axis.written == leg.raw._capture_axis.ledger() == epoch.wire_audio_samples
     finally:
         await close(leg)
@@ -163,8 +163,8 @@ async def test_audio_before_finalize_ack_stays_unplaceable_until_clean_checkpoin
         await final(peer, speaker=3)
         rows = await tick(receiver, processor, store)
         assert known(rows) == 1
-        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 4.87075)
-        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 5.47075)
+        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 4.87075, abs=2 / RATE, rel=0)
+        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 5.47075, abs=2 / RATE, rel=0)
     finally:
         await close(leg)
 
@@ -255,8 +255,8 @@ async def test_idle_reopen_freezes_provider_origin_with_padding_and_separate_pcm
         await final(current._ws)
         rows = await tick(receiver, processor, store)
         assert known(rows) == 1
-        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 2.87075)
-        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 3.47075)
+        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 2.87075, abs=2 / RATE, rel=0)
+        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 3.47075, abs=2 / RATE, rel=0)
         assert current._capture_axis.origin == 42732  # PCM diagnostic origin.
         assert epoch.wire_audio_samples == 42732 + RATE
         assert epoch.wire_provider_samples == 44160 + RATE
@@ -324,7 +324,7 @@ async def test_nonquantized_report_is_authority_and_progress_is_not(monkeypatch)
         await final(peer)
         rows = await tick(receiver, processor, store)
         assert known(rows) == 1
-        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 2.87075)
+        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 2.87075, abs=2 / RATE, rel=0)
         # Spanning any provider-only gap cannot yield a continuous capture window.
         segment = dict(text='Across padding.', start=2.6, end=2.9)
         assert known(epoch.translate([segment])) == 0
@@ -364,8 +364,8 @@ async def test_prebind_finalize_padding_and_no_audio_finalizes_grant_no_capture(
         await final(peer)
         rows = await tick(receiver, processor, store)
         assert known(rows) == 1
-        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 0.2)
-        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 0.8)
+        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 0.2, abs=2 / RATE, rel=0)
+        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 0.8, abs=2 / RATE, rel=0)
     finally:
         await close(leg)
 

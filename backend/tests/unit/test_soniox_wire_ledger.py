@@ -79,8 +79,8 @@ async def test_unknown_pcm_consumes_provider_time_without_granting_capture(monke
         samples = await byte_derived_final(leg.raw, wire, speaker=2)
         rows = await tick(receiver, processor, store)
         assert known(rows) == 1
-        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 0.2)
-        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 0.8)
+        assert rows[-1]['audio_capture_start'] == pytest.approx(T0 + 0.2, abs=2 / RATE, rel=0)
+        assert rows[-1]['audio_capture_end'] == pytest.approx(T0 + 0.8, abs=2 / RATE, rel=0)
         assert epoch.send_map.map_interval(len(unknown) // 2 + RATE // 5, samples - RATE // 5) == (
             RATE // 5,
             RATE * 4 // 5,
@@ -173,7 +173,7 @@ async def test_idle_reopen_retains_observed_onset_provenance(monkeypatch, pendin
         await byte_derived_final(current, current._ws)
         rows = await tick(receiver, processor, store)
         assert known(rows) == 1
-        assert rows[0]['audio_capture_start'] == pytest.approx(T0 + 1.2)
+        assert rows[0]['audio_capture_start'] == pytest.approx(T0 + 1.2, abs=2 / RATE, rel=0)
         assert epoch.wire_audio_samples == 2 * RATE
         assert current._capture_axis.origin == RATE
         assert current._capture_axis.written == RATE
