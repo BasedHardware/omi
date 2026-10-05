@@ -1173,6 +1173,25 @@ void main() {
       });
     });
 
+    testWidgets('a screen reader hears each speaker name, with naming as the hint', (tester) async {
+      await setupSharedPreferences();
+      final semantics = tester.ensureSemantics();
+      await pumpDetail(tester, [
+        line('s1', 3, 'A voice.', 0),
+        line('o1', omiSpeakerId, 'Omi replies.', 10),
+      ]);
+      await tester.pumpAndSettle();
+
+      // A paragraph is one node: the name, the time, then the words.
+      final speaker = tester.getSemantics(find.bySemanticsLabel(RegExp(r'^Speaker 1\n')));
+      expect(speaker.hint, 'Identify speaker');
+      expect(speaker.flagsCollection.isButton, isTrue);
+      final omi = tester.getSemantics(find.bySemanticsLabel(RegExp(r'^Omi\n')));
+      expect(omi.hint, isEmpty, reason: "Omi's name is read, with no naming action");
+      expect(omi.flagsCollection.isButton, isFalse);
+      semantics.dispose();
+    });
+
     testWidgets('the live bubble transcript still names every line', (tester) async {
       await setupSharedPreferences();
       await tester.pumpWidget(

@@ -114,6 +114,7 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
     final unnamed = !head.isUser && !isOmi && (person == null || person.name.trim().isEmpty);
     final labelColor = head.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;
     final label = OmiType.footnote.copyWith(color: labelColor, fontWeight: FontWeight.w600, height: 1.3);
+    final name = names.forSegment(head, person: person);
     final time = paragraph.showsTime ? _lineTime(head) : null;
     final timeStyle = label.copyWith(
       fontWeight: FontWeight.w400,
@@ -131,8 +132,9 @@ extension _TranscriptParagraphs on _TranscriptWidgetState {
           Flexible(
             child: _speakerTarget(
               head,
+              name: name,
               Text(
-                names.forSegment(head, person: person),
+                name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: label.copyWith(

@@ -219,10 +219,12 @@ participant lists, the speaker filter and every copied, shared or exported trans
   as one paragraph: its lines flow together. A long turn starts a new paragraph once a minute has
   passed, under its time when times are shown, and no paragraph holds more than 12 lines (that split
   adds no time). Each line stays its own tap target. Once playback has a point (Play, a
-  line tap, a scrub or a scroll), the line at the playhead is full ink and the rest dims; following
-  keeps it a third of the way down, and a paused scroll moves the play point to the line there.
-  Through silence the last spoken line stays marked (the first line before anyone speaks), so the
-  mark never drops out between lines. A transcript just opened marks no line.
+  line tap, a scrub or a scroll) and the audio maps onto the transcript, the line at the playhead
+  is full ink and the rest dims. Through silence the marked line is the last spoken one (the first
+  line before anyone speaks), so the mark never drops out between lines, while following already
+  scrolls to the next line. Following keeps its line a third of the way down, and a paused scroll
+  moves the play point to the line there. A transcript just opened, or audio that does not map onto
+  the transcript, marks no line.
 - The speaker filter is "Filter by speaker" (`l10n.filterBySpeaker`), never the loudspeaker string
   `phoneSpeaker`.
 

@@ -987,9 +987,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return null;
   }
 
-  /// The avatar (and name) of a speaker other than Omi opens the sheet that names them.
-  Widget _speakerTarget(TranscriptSegment data, Widget child) {
-    if (data.speakerId == omiSpeakerId && !data.isUser) return ExcludeSemantics(child: child);
+  /// The avatar (and name) of a speaker other than Omi opens the sheet that names them. Given the
+  /// visible [name], assistive tech reads it with "Identify speaker" as the hint (Omi's name is read
+  /// with no action); an avatar alone is only the action.
+  Widget _speakerTarget(TranscriptSegment data, Widget child, {String? name}) {
+    if (data.speakerId == omiSpeakerId && !data.isUser) return name == null ? ExcludeSemantics(child: child) : child;
     void open() {
       widget.editSegment?.call(data.id, data.speakerId);
       PlatformManager.instance.analytics.tagSheetOpened();
@@ -997,7 +999,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     return Semantics(
       button: true,
-      label: context.l10n.identifySpeaker,
+      label: name ?? context.l10n.identifySpeaker,
+      hint: name == null ? null : context.l10n.identifySpeaker,
       onTap: open,
       excludeSemantics: true,
       child: GestureDetector(onTap: open, child: child),
