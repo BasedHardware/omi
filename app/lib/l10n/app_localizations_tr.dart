@@ -4387,7 +4387,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get saveKeyWarning => 'Bu anahtarı şimdi kaydedin! Tekrar göremeyeceksiniz.';
 
   @override
-  String get yourApiKey => 'API ANAHTARINIZ';
+  String get yourApiKey => 'API anahtarınız';
 
   @override
   String get tapToCopy => 'Kopyalamak için dokunun';
@@ -4402,13 +4402,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get accessDataProgrammatically => 'Verilerinize programatik olarak erişin';
 
   @override
-  String get keyNameLabel => 'ANAHTAR ADI';
+  String get keyNameLabel => 'Anahtar adı';
 
   @override
   String get keyNamePlaceholder => 'ör., Uygulama Entegrasyonum';
 
   @override
-  String get permissionsLabel => 'İZİNLER';
+  String get permissionsLabel => 'İzinler';
 
   @override
   String get permissionsInfoNote => 'R = Okuma, W = Yazma. Hiçbir şey seçilmezse varsayılan salt okunur.';

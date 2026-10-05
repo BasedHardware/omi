@@ -4405,7 +4405,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get saveKeyWarning => 'Desa aquesta clau ara! No la podràs veure de nou.';
 
   @override
-  String get yourApiKey => 'LA TEVA CLAU API';
+  String get yourApiKey => 'La teva clau API';
 
   @override
   String get tapToCopy => 'Toca per copiar';
@@ -4420,13 +4420,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get accessDataProgrammatically => 'Accedeix a les teves dades programàticament';
 
   @override
-  String get keyNameLabel => 'NOM DE LA CLAU';
+  String get keyNameLabel => 'Nom de la clau';
 
   @override
   String get keyNamePlaceholder => 'p. ex., La meva integració';
 
   @override
-  String get permissionsLabel => 'PERMISOS';
+  String get permissionsLabel => 'Permisos';
 
   @override
   String get permissionsInfoNote => 'R = Lectura, W = Escriptura. Per defecte només lectura si no es selecciona res.';

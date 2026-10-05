@@ -222,34 +222,29 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
-      body: Column(children: [
-        const LiveActivitySettings(),
-        Expanded(
-            child: _isLoading
-                ? const NotificationsSettingsLoadingShimmer()
-                : ListView(
-                    padding: const EdgeInsets.all(OmiSpacing.md),
-                    children: [
-                      OmiSectionHeader(
-                        context.l10n.notificationFrequency,
-                        subtitle: context.l10n.notificationFrequencyDescription,
-                      ),
-                      _buildFrequencyCard(),
-                      const SizedBox(height: OmiSpacing.xxl),
-                      _buildDailySummaryGroup(),
-                    ],
-                  )),
-      ]),
+    return OmiGroupedPage(
+      title: context.l10n.notifications,
+      body: _isLoading
+          ? const NotificationsSettingsLoadingShimmer()
+          : ListView(
+              padding: OmiGroupedPage.padding,
+              children: [
+                const LiveActivitySettings(),
+                OmiSectionHeader(
+                  context.l10n.notificationFrequency,
+                  subtitle: context.l10n.notificationFrequencyDescription,
+                ),
+                _buildFrequencyCard(),
+                const SizedBox(height: OmiSpacing.xl),
+                _buildDailySummaryGroup(),
+              ],
+            ),
     );
   }
 
   Widget _buildFrequencyCard() {
     final isOff = _notificationFrequency == 0;
-    return Container(
-      padding: const EdgeInsets.all(OmiSpacing.lg),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+    return OmiGroupedCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -293,7 +288,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
       children: [
         OmiSettingsRow.toggle(
           key: const Key('daily_summary_toggle'),
-          leading: const FaIcon(FontAwesomeIcons.bell),
+          leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.bell)),
           title: context.l10n.dailySummary,
           value: _dailySummaryEnabled,
           onChanged: _updateDailySummaryEnabled,
@@ -302,7 +297,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
           opacity: _dailySummaryEnabled ? 1.0 : 0.4,
           duration: OmiMotion.of(context).standard,
           child: OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.clock),
+            leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.clock)),
             title: context.l10n.deliveryTime,
             value: _formatHourDisplay(context, _dailySummaryHour),
             showChevron: true,

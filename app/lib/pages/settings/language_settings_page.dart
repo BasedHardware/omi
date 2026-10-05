@@ -1,7 +1,7 @@
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/transcription/stt_language.dart';
@@ -27,7 +27,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
       header: context.l10n.appInterfaceSectionTitle,
       children: [
         OmiSettingsRow(
-          leading: const FaIcon(FontAwesomeIcons.textHeight, size: 16),
+          leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.textHeight)),
           title: context.l10n.appLanguage,
           value: localeProvider.locale != null
               ? LocaleProvider.getDisplayName(localeProvider.locale!)
@@ -54,14 +54,13 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
 
     final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;
     final isAutoTranslationEnabled = !userProvider.singleLanguageMode;
-    const translationIcon = FaIcon(FontAwesomeIcons.language, size: 16);
 
     return OmiSettingsGroup(
       header: context.l10n.speechTranscriptionSectionTitle,
       footer: context.l10n.languageSettingsHelperText,
       children: [
         OmiSettingsRow(
-          leading: const FaIcon(FontAwesomeIcons.microphone, size: 16),
+          leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.microphone)),
           title: context.l10n.primaryLanguage,
           value: languageName,
           trailing: _isUpdatingLanguage ? const OmiSpinner(size: OmiSpinnerSize.small) : null,
@@ -70,14 +69,14 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
         ),
         if (isUpdatingTranslation)
           OmiSettingsRow(
-            leading: translationIcon,
+            leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.language)),
             title: context.l10n.automaticTranslation,
             subtitle: context.l10n.detectLanguages,
             trailing: const OmiSpinner(size: OmiSpinnerSize.small),
           )
         else
           OmiSettingsRow.toggle(
-            leading: translationIcon,
+            leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.language)),
             title: context.l10n.automaticTranslation,
             subtitle: context.l10n.detectLanguages,
             value: isAutoTranslationEnabled,
@@ -158,12 +157,12 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
   Widget build(BuildContext context) {
     PlatformManager.instance.analytics.pageOpened('Language Settings');
 
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.languageTitle)),
+    return OmiGroupedPage(
+      title: context.l10n.languageTitle,
       body: Consumer4<HomeProvider, UserProvider, CaptureProvider, LocaleProvider>(
         builder: (context, homeProvider, userProvider, captureProvider, localeProvider, _) {
           return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
+            padding: OmiGroupedPage.padding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

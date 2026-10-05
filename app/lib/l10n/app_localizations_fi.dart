@@ -4381,7 +4381,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get saveKeyWarning => 'Tallenna tämä avain nyt! Et näe sitä enää uudelleen.';
 
   @override
-  String get yourApiKey => 'API-AVAIMESI';
+  String get yourApiKey => 'API-avaimesi';
 
   @override
   String get tapToCopy => 'Kopioi napauttamalla';
@@ -4396,13 +4396,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get accessDataProgrammatically => 'Käytä tietojasi ohjelmallisesti';
 
   @override
-  String get keyNameLabel => 'AVAIMEN NIMI';
+  String get keyNameLabel => 'Avaimen nimi';
 
   @override
   String get keyNamePlaceholder => 'esim. Oma sovellus';
 
   @override
-  String get permissionsLabel => 'OIKEUDET';
+  String get permissionsLabel => 'Oikeudet';
 
   @override
   String get permissionsInfoNote => 'R = Luku, W = Kirjoitus. Oletuksena vain luku, jos mitään ei ole valittu.';

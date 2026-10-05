@@ -83,9 +83,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
           onPopInvokedWithResult: (_, __) async {
             provider.stopStripePolling();
           },
-          child: Scaffold(
-            backgroundColor: OmiColors.surface0,
-            appBar: AppBar(leading: const OmiBackButton()),
+          child: OmiGroupedPage(
             body: SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {

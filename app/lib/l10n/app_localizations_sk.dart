@@ -4378,7 +4378,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get saveKeyWarning => 'Uložte si tento kľúč teraz! Znovu ho neuvidíte.';
 
   @override
-  String get yourApiKey => 'VÁŠ API KĽÚČ';
+  String get yourApiKey => 'Váš API kľúč';
 
   @override
   String get tapToCopy => 'Klepnutím skopírujete';
@@ -4393,13 +4393,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get accessDataProgrammatically => 'Programovo pristupujte k svojim údajom';
 
   @override
-  String get keyNameLabel => 'NÁZOV KĽÚČA';
+  String get keyNameLabel => 'Názov kľúča';
 
   @override
   String get keyNamePlaceholder => 'napr., Moja integrácia aplikácie';
 
   @override
-  String get permissionsLabel => 'OPRÁVNENIA';
+  String get permissionsLabel => 'Oprávnenia';
 
   @override
   String get permissionsInfoNote => 'R = Čítanie, W = Zápis. Predvolené je iba na čítanie, ak nie je nič vybrané.';

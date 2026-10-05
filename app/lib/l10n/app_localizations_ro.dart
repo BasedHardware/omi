@@ -4401,7 +4401,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get saveKeyWarning => 'Salvați această cheie acum! Nu o veți mai putea vedea.';
 
   @override
-  String get yourApiKey => 'CHEIA DVS. API';
+  String get yourApiKey => 'Cheia dvs. API';
 
   @override
   String get tapToCopy => 'Atingeți pentru a copia';
@@ -4416,13 +4416,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get accessDataProgrammatically => 'Accesați datele dvs. programatic';
 
   @override
-  String get keyNameLabel => 'NUMELE CHEII';
+  String get keyNameLabel => 'Numele cheii';
 
   @override
   String get keyNamePlaceholder => 'ex., Integrarea mea';
 
   @override
-  String get permissionsLabel => 'PERMISIUNI';
+  String get permissionsLabel => 'Permisiuni';
 
   @override
   String get permissionsInfoNote => 'R = Citire, W = Scriere. Implicit doar citire dacă nu este selectat nimic.';

@@ -1,7 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/conversation_provider.dart';
@@ -50,19 +49,18 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.conversationDisplay)),
+    return OmiGroupedPage(
+      title: context.l10n.conversationDisplay,
       body: Consumer<ConversationProvider>(
         builder: (context, provider, child) {
           return ListView(
-            padding: const EdgeInsets.all(OmiSpacing.md),
+            padding: OmiGroupedPage.padding,
             children: [
               OmiSettingsGroup(
                 header: context.l10n.visibility,
                 headerSubtitle: context.l10n.visibilitySubtitle,
                 children: [
                   OmiSettingsRow.toggle(
-                    leading: const FaIcon(FontAwesomeIcons.clock),
                     title: context.l10n.showShortConversations,
                     subtitle: context.l10n.showShortConversationsDesc,
                     value: provider.showShortConversations,
@@ -74,7 +72,6 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                     },
                   ),
                   OmiSettingsRow.toggle(
-                    leading: const FaIcon(FontAwesomeIcons.trash),
                     title: context.l10n.showDiscardedConversations,
                     subtitle: context.l10n.showDiscardedConversationsDesc,
                     value: provider.showDiscardedConversations,
@@ -96,7 +93,6 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       OmiSettingsRow(
-                        leading: const FaIcon(FontAwesomeIcons.clock),
                         title: context.l10n.durationThreshold,
                         subtitle: context.l10n.durationThresholdDesc,
                         value: context.l10n.minLabel(provider.shortConversationThreshold ~/ 60),
@@ -129,7 +125,7 @@ class _ThresholdSegment extends StatelessWidget {
       button: true,
       selected: selected,
       child: Material(
-        color: selected ? OmiColors.accent : OmiColors.surface2,
+        color: selected ? OmiColors.accent : OmiColors.iconTile,
         borderRadius: OmiRadius.smAll,
         child: InkWell(
           borderRadius: OmiRadius.smAll,

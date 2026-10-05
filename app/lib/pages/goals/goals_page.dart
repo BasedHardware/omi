@@ -30,19 +30,16 @@ class _GoalsPageState extends State<GoalsPage> {
   @override
   Widget build(BuildContext context) {
     final goals = context.watch<GoalsProvider>();
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(context.l10n.goals),
-        actions: [
-          OmiIconButton(
-            key: const Key('goals_add'),
-            icon: const Icon(Icons.add),
-            label: context.l10n.addGoal,
-            onPressed: () => _goalsKey.currentState?.addGoal(),
-          ),
-        ],
-      ),
+    return OmiGroupedPage(
+      title: context.l10n.goals,
+      actions: [
+        OmiIconButton.filled(
+          key: const Key('goals_add'),
+          icon: const OmiLineIcon(OmiLineGlyph.plus, size: 20),
+          label: context.l10n.addGoal,
+          onPressed: () => _goalsKey.currentState?.addGoal(),
+        ),
+      ],
       body: RefreshIndicator(
         onRefresh: () => context.read<GoalsProvider>().refresh(),
         child: ListView(

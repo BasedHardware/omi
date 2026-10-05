@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:omi/ui/ui.dart';
 
 class UsageStatTile extends StatelessWidget {
-  const UsageStatTile(
-      {super.key, required this.label, required this.value, required this.exactValue, required this.color});
+  const UsageStatTile({super.key, required this.label, required this.value, required this.exactValue});
   final String label;
   final String value;
   final String exactValue;
-  final Color color;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -17,21 +15,17 @@ class UsageStatTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(OmiSpacing.md),
             decoration: BoxDecoration(
-                color: OmiColors.surface1, borderRadius: OmiRadius.lgAll, border: Border.all(color: OmiColors.border)),
+                color: OmiColors.groupedCard,
+                borderRadius: OmiRadius.xlAll,
+                border: Border.all(color: OmiColors.groupedBorder)),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Row(children: [
-                    Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                    const SizedBox(width: 6),
-                    Expanded(
-                        child: Text(label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: OmiType.footnote
-                                .copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500))),
-                  ]),
+                  Text(label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,

@@ -5062,7 +5062,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "YOUR API KEY",
+    "yourApiKey": "Your API Key",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5085,7 +5085,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "KEY NAME",
+    "keyNameLabel": "Key Name",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5093,7 +5093,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "PERMISSIONS",
+    "permissionsLabel": "Permissions",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },

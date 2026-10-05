@@ -4377,7 +4377,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get saveKeyWarning => 'Salvesta see võti kohe! Sa ei näe seda enam kunagi.';
 
   @override
-  String get yourApiKey => 'TEIE API VÕTI';
+  String get yourApiKey => 'Teie API võti';
 
   @override
   String get tapToCopy => 'Puudutage kopeerimiseks';
@@ -4392,13 +4392,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get accessDataProgrammatically => 'Pääsete oma andmetele programmiliselt juurde';
 
   @override
-  String get keyNameLabel => 'VÕTME NIMI';
+  String get keyNameLabel => 'Võtme nimi';
 
   @override
   String get keyNamePlaceholder => 'nt. Minu rakenduse integratsioon';
 
   @override
-  String get permissionsLabel => 'ÕIGUSED';
+  String get permissionsLabel => 'Õigused';
 
   @override
   String get permissionsInfoNote =>

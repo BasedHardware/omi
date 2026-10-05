@@ -18,7 +18,8 @@ class DevicePageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final isConnected = connectedDevice != null;
-    final stateColor = isConnected ? OmiColors.success : OmiColors.textSecondary;
+    // Black and white like the rest of Settings: connected is the ink dot, not green.
+    final stateColor = isConnected ? OmiColors.textPrimary : OmiColors.textSecondary;
     return Column(
       children: [
         Semantics(
@@ -27,13 +28,17 @@ class DevicePageHeader extends StatelessWidget {
             _displayName(pairedDevice?.name, l10n.omiAppName),
             style: OmiType.title1,
             textAlign: TextAlign.center,
+            // A long user-given name stays a title, not a paragraph; the full name is in Device Information.
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         const SizedBox(height: OmiSpacing.sm),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
           decoration: BoxDecoration(
-            color: isConnected ? OmiColors.successSurface : OmiColors.surface2,
+            color: OmiColors.iconTile,
+            border: Border.all(color: OmiColors.groupedBorder),
             borderRadius: OmiRadius.pillAll,
           ),
           child: Row(
@@ -73,7 +78,7 @@ class DevicePageHeader extends StatelessWidget {
   }
 }
 
-/// The battery row: level (or "Charging") with a level-coloured icon.
+/// The battery row: level (or "Charging") with a battery drawn to that level.
 class DeviceBatteryGroup extends StatelessWidget {
   const DeviceBatteryGroup({super.key, required this.batteryLevel, required this.isCharging});
 
@@ -88,20 +93,16 @@ class DeviceBatteryGroup extends StatelessWidget {
     return FontAwesomeIcons.batteryEmpty;
   }
 
-  Color get _color {
-    if (batteryLevel > 75) return OmiColors.success;
-    if (batteryLevel > 20) return OmiColors.warning;
-    return OmiColors.danger;
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Neutral until the battery is low; low is the only state worth a colour.
+    final low = !isCharging && batteryLevel <= 20;
     return OmiSettingsGroup(
       children: [
         OmiSettingsRow(
-          leading: isCharging
-              ? FaIcon(FontAwesomeIcons.chargingStation, color: OmiColors.success)
-              : FaIcon(_icon, color: _color),
+          leading: OmiSettingsIconTile(
+            FaIcon(isCharging ? FontAwesomeIcons.chargingStation : _icon, color: low ? OmiColors.danger : null),
+          ),
           title: isCharging ? context.l10n.charging : context.l10n.batteryLevel,
           value: '$batteryLevel%',
         ),
@@ -116,18 +117,22 @@ class DeviceDisconnectedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
+    return OmiGroupedCard(
       padding: const EdgeInsets.all(OmiSpacing.xxl),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 64,
             height: 64,
-            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-            child: Center(child: FaIcon(FontAwesomeIcons.linkSlash, color: OmiColors.textTertiary, size: 24)),
+            decoration: BoxDecoration(
+              color: OmiColors.iconTile,
+              borderRadius: OmiRadius.lgAll,
+              border: Border.all(color: OmiColors.groupedBorder),
+            ),
+            child: Center(
+              child: FaIcon(FontAwesomeIcons.linkSlash, color: OmiColors.textTertiary, size: 24),
+            ),
           ),
           const SizedBox(height: OmiSpacing.lg),
           Text(context.l10n.deviceNotConnected, style: OmiType.headline, textAlign: TextAlign.center),

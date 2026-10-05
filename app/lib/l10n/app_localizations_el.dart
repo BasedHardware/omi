@@ -4413,7 +4413,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get saveKeyWarning => 'Αποθηκεύστε αυτό το κλειδί τώρα! Δεν θα μπορείτε να το δείτε ξανά.';
 
   @override
-  String get yourApiKey => 'ΤΟ ΚΛΕΙΔΙ API ΣΑΣ';
+  String get yourApiKey => 'Το κλειδί API σας';
 
   @override
   String get tapToCopy => 'Πατήστε για αντιγραφή';
@@ -4428,13 +4428,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get accessDataProgrammatically => 'Πρόσβαση στα δεδομένα σας μέσω προγραμματισμού';
 
   @override
-  String get keyNameLabel => 'ΟΝΟΜΑ ΚΛΕΙΔΙΟΥ';
+  String get keyNameLabel => 'Όνομα κλειδιού';
 
   @override
   String get keyNamePlaceholder => 'π.χ., Η ενσωμάτωσή μου';
 
   @override
-  String get permissionsLabel => 'ΔΙΚΑΙΩΜΑΤΑ';
+  String get permissionsLabel => 'Δικαιώματα';
 
   @override
   String get permissionsInfoNote => 'R = Ανάγνωση, W = Εγγραφή. Προεπιλογή μόνο ανάγνωση αν δεν επιλεγεί τίποτα.';

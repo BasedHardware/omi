@@ -5000,7 +5000,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "ТВОЈ API КЛУЧ",
+    "yourApiKey": "Твој API клуч",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5023,7 +5023,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "ИМЕ НА КЛУЧ",
+    "keyNameLabel": "Име на клуч",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5031,7 +5031,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "ДОЗВОЛИ",
+    "permissionsLabel": "Дозволи",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },

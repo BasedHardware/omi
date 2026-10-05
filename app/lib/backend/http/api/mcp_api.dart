@@ -5,7 +5,8 @@ import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/env/env.dart';
 
 class McpApi {
-  static final String _baseUrl = '${Env.apiBaseUrl}v1/mcp';
+  // Read per call: the base URL can be overridden after this class is first used (tests, local dev).
+  static String get _baseUrl => '${Env.apiBaseUrl}v1/mcp';
 
   static Future<List<McpApiKey>> getMcpApiKeys() async {
     final response = await makeApiCall(url: '$_baseUrl/keys', headers: {}, body: '{}', method: 'GET');

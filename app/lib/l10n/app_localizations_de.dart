@@ -4414,7 +4414,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get saveKeyWarning => 'Speichern Sie diesen Schlüssel jetzt! Sie werden ihn nicht mehr sehen können.';
 
   @override
-  String get yourApiKey => 'IHR API-SCHLÜSSEL';
+  String get yourApiKey => 'Ihr API-Schlüssel';
 
   @override
   String get tapToCopy => 'Zum Kopieren tippen';
@@ -4429,13 +4429,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get accessDataProgrammatically => 'Greifen Sie programmgesteuert auf Ihre Daten zu';
 
   @override
-  String get keyNameLabel => 'SCHLÜSSELNAME';
+  String get keyNameLabel => 'Schlüsselname';
 
   @override
   String get keyNamePlaceholder => 'z.B. Meine App-Integration';
 
   @override
-  String get permissionsLabel => 'BERECHTIGUNGEN';
+  String get permissionsLabel => 'Berechtigungen';
 
   @override
   String get permissionsInfoNote => 'R = Lesen, W = Schreiben. Standardmäßig nur Lesen, wenn nichts ausgewählt.';

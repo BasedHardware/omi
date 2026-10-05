@@ -361,21 +361,11 @@ class _PeopleListState extends State<PeopleList> {
     ];
   }
 
-  /// Rows in one rounded card, with hairlines inset past the avatar.
+  /// Rows in one outlined Settings card, no hairlines.
   Widget _card(List<Widget> rows) {
-    return ClipRRect(
-      borderRadius: OmiRadius.lgAll,
-      child: Material(
-        color: OmiColors.surface1,
-        child: Column(
-          children: [
-            for (final (i, row) in rows.indexed) ...[
-              if (i > 0) Divider(height: 1, thickness: 1, indent: 72, color: OmiColors.border),
-              row,
-            ],
-          ],
-        ),
-      ),
+    return OmiGroupedCard(
+      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xxs),
+      child: Column(children: rows),
     );
   }
 }
@@ -391,19 +381,13 @@ class _CleanUpBanner extends StatelessWidget {
     final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.only(top: OmiSpacing.sm),
-      child: Container(
+      child: OmiGroupedCard(
         key: const Key('people_clean_up_banner'),
         padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.xs),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
-              child: Icon(Icons.people_outline, size: 20, color: OmiColors.textPrimary),
-            ),
+            const OmiSettingsIconTile(Icon(Icons.people_outline)),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
               child: Column(

@@ -4378,7 +4378,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get saveKeyWarning => 'Išsaugokite šį raktą dabar! Daugiau jo nematysite.';
 
   @override
-  String get yourApiKey => 'JŪSŲ API RAKTAS';
+  String get yourApiKey => 'Jūsų API raktas';
 
   @override
   String get tapToCopy => 'Bakstelėkite, kad nukopijuotumėte';
@@ -4393,13 +4393,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get accessDataProgrammatically => 'Pasiekite savo duomenis programiškai';
 
   @override
-  String get keyNameLabel => 'RAKTO PAVADINIMAS';
+  String get keyNameLabel => 'Rakto pavadinimas';
 
   @override
   String get keyNamePlaceholder => 'pvz., Mano programėlės integracija';
 
   @override
-  String get permissionsLabel => 'LEIDIMAI';
+  String get permissionsLabel => 'Leidimai';
 
   @override
   String get permissionsInfoNote => 'R = Skaityti, W = Rašyti. Numatytasis tik skaitymas, jei nieko nepasirinkta.';

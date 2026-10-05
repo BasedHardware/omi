@@ -4412,7 +4412,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get saveKeyWarning => 'I-save ang key na ito ngayon! Hindi mo na makikita ito ulit.';
 
   @override
-  String get yourApiKey => 'ANG IYONG API KEY';
+  String get yourApiKey => 'Ang iyong API key';
 
   @override
   String get tapToCopy => 'Itap upang kopyahin';
@@ -4427,13 +4427,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get accessDataProgrammatically => 'I-access ang iyong data nang programmatically';
 
   @override
-  String get keyNameLabel => 'KEY NAME';
+  String get keyNameLabel => 'Key name';
 
   @override
   String get keyNamePlaceholder => 'e.g., My App Integration';
 
   @override
-  String get permissionsLabel => 'PERMISSIONS';
+  String get permissionsLabel => 'Permissions';
 
   @override
   String get permissionsInfoNote => 'R = Read, W = Write. Defaults sa read-only kung walang napiling selection.';

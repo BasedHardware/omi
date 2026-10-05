@@ -4384,7 +4384,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get saveKeyWarning => 'Lưu khóa này ngay bây giờ! Bạn sẽ không thể xem lại nó.';
 
   @override
-  String get yourApiKey => 'KHÓA API CỦA BẠN';
+  String get yourApiKey => 'Khóa API của bạn';
 
   @override
   String get tapToCopy => 'Nhấn để sao chép';
@@ -4399,13 +4399,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accessDataProgrammatically => 'Truy cập dữ liệu của bạn theo chương trình';
 
   @override
-  String get keyNameLabel => 'TÊN KHÓA';
+  String get keyNameLabel => 'Tên khóa';
 
   @override
   String get keyNamePlaceholder => 'vd: Tích hợp ứng dụng của tôi';
 
   @override
-  String get permissionsLabel => 'QUYỀN';
+  String get permissionsLabel => 'Quyền';
 
   @override
   String get permissionsInfoNote => 'R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì.';

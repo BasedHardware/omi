@@ -83,25 +83,23 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(context.l10n.appSettings(widget.appName)),
-        actions: [
-          if (widget.showRefresh)
-            OmiIconButton(icon: const Icon(Icons.refresh), label: context.l10n.refresh, onPressed: widget.onRefresh),
-        ],
-      ),
+    return OmiGroupedPage(
+      title: context.l10n.appSettings(widget.appName),
+      actions: [
+        if (widget.showRefresh)
+          OmiIconButton(icon: const Icon(Icons.refresh), label: context.l10n.refresh, onPressed: widget.onRefresh),
+      ],
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(OmiSpacing.lg),
+          padding: OmiGroupedPage.padding,
           children: [
             // Status and what the connection does, in one row; Disconnect follows the content
-            // instead of sitting at the bottom of an otherwise empty screen.
+            // instead of sitting at the bottom of an otherwise empty screen. A quiet ink check,
+            // not a green banner.
             OmiSettingsGroup(
               children: [
                 OmiSettingsRow(
-                  leading: Icon(Icons.check_circle, color: OmiColors.success),
+                  leading: const OmiSettingsIconTile(Icon(Icons.check_circle)),
                   title: context.l10n.connectedToApp(widget.appName),
                   subtitle: widget.infoText ?? context.l10n.actionItemsSyncedTo(widget.appName),
                 ),

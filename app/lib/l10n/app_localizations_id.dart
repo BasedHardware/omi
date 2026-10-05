@@ -4387,7 +4387,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get saveKeyWarning => 'Simpan kunci ini sekarang! Anda tidak akan bisa melihatnya lagi.';
 
   @override
-  String get yourApiKey => 'KUNCI API ANDA';
+  String get yourApiKey => 'Kunci API Anda';
 
   @override
   String get tapToCopy => 'Ketuk untuk menyalin';
@@ -4402,13 +4402,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get accessDataProgrammatically => 'Akses data Anda secara terprogram';
 
   @override
-  String get keyNameLabel => 'NAMA KUNCI';
+  String get keyNameLabel => 'Nama kunci';
 
   @override
   String get keyNamePlaceholder => 'mis., Integrasi Aplikasi Saya';
 
   @override
-  String get permissionsLabel => 'IZIN';
+  String get permissionsLabel => 'Izin';
 
   @override
   String get permissionsInfoNote => 'R = Baca, W = Tulis. Default hanya baca jika tidak ada yang dipilih.';

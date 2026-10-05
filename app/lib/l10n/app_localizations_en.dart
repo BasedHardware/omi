@@ -4381,7 +4381,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saveKeyWarning => 'Save this key now! You won\'t be able to see it again.';
 
   @override
-  String get yourApiKey => 'YOUR API KEY';
+  String get yourApiKey => 'Your API Key';
 
   @override
   String get tapToCopy => 'Tap to copy';
@@ -4396,13 +4396,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accessDataProgrammatically => 'Access your data programmatically';
 
   @override
-  String get keyNameLabel => 'KEY NAME';
+  String get keyNameLabel => 'Key Name';
 
   @override
   String get keyNamePlaceholder => 'e.g., My App Integration';
 
   @override
-  String get permissionsLabel => 'PERMISSIONS';
+  String get permissionsLabel => 'Permissions';
 
   @override
   String get permissionsInfoNote => 'R = Read, W = Write. Defaults to read-only if nothing selected.';
