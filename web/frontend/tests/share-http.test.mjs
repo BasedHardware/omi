@@ -128,6 +128,8 @@ test(
         assert.ok(document.includes(fact), `${fact}\n${logs}`);
       // An unknown owner or due date is left out of the page, never spelled out.
       assert.doesNotMatch(document, /Due Unknown|Owner: Unknown/);
+      // Pin the owner element itself; the participant list contains the same name.
+      assert.match(document, /class="sn-owner"[^>]*>[\s\S]*?Ada Example/);
       // Next dev overwrites rendered HTML cache headers. Production dynamic
       // rendering follows the uncached fetch; reject a shared max-age either way.
       const htmlCache = html.headers.get('cache-control') || '';

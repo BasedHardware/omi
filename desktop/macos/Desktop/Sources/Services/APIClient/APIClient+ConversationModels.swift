@@ -681,8 +681,10 @@ struct Structured: Codable, Equatable {
       OmiAPI.ActionItem(
         candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: $0.captureOwner,
         completed: $0.completed,
-        completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description,
-        dueAt: nil, ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
+        completedAt: nil, concreteDeliverable: nil, context: $0.context, conversationId: nil, createdAt: nil,
+        description_: $0.description,
+        dueAt: $0.dueAt.map(Event.encodeDateForWire), dueCertainty: $0.dueCertainty, ownerName: $0.ownerName,
+        ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
         targetTaskId: $0.targetTaskID, updatedAt: nil)
     }
     let eventsWire = events.map {

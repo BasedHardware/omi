@@ -105,6 +105,7 @@ void main() {
           'Share the wind-down provider information with David.',
           captureOwner: 'other',
           ownerName: 'Eddie Thai',
+          dueAt: DateTime(2026, 10, 7),
           context: 'Eddie said they would follow up about Simple Closure.',
         ),
         ActionItem('Send investors an update on the wind-down plan.', captureOwner: 'user'),
@@ -116,7 +117,7 @@ void main() {
       expect(find.text('Eddie said they would follow up about Simple Closure.'), findsOneWidget);
       expect(find.text('You'), findsOneWidget);
       expect(find.textContaining('Unknown'), findsNothing);
-      expect(find.textContaining('Due'), findsNothing);
+      expect(find.text('Due Wed, Oct 7'), findsOneWidget);
     });
 
     testWidgets('row menu offers both task and transcript actions and row controls are addressable', (tester) async {
