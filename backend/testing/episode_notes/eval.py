@@ -123,8 +123,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         '--thinking-max-input-bytes',
         type=int,
-        default=24000,
-        help='High/xhigh byte ceiling; 0 disables it for offline effort experiments only',
+        default=0,
+        help='High/xhigh byte ceiling; 0 (production default) disables it',
     )
     parser.add_argument('--selection', choices=('compact', *SELECTIONS), default='compact')
     parser.add_argument('--jev-threshold', type=float, default=0.70)
