@@ -149,7 +149,7 @@ Quando a pesquisa semântica não retorna resultados, o modo JSON também tenta 
 
 Se os pixels não estiverem disponíveis, os erros em modo JSON preservam os campos estruturados do Desktop como `status_code`, `error`, `reason`, `hint` e `screenshot_id`. Por exemplo, `screenshot_pending` indica que o quadro ainda está no segmento de vídeo ativo; tente novamente em breve ou escolha um ID de captura mais antigo nos resultados de busca.
 
-Gravações em tarefas só devem ser executadas depois que o usuário solicitar claramente essa alteração:
+Comandos que modificam tarefas só devem ser executados depois que o usuário solicitar claramente essa alteração:
 
 ```bash
 omi --json local task complete task_123
