@@ -1,6 +1,9 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' show setConversationActionItemState;
 import 'package:omi/backend/schema/structured.dart';
@@ -62,27 +65,91 @@ typedef ConversationItemStateWriter = Future<bool> Function(int itemIndex, bool 
 
 /// Owns task identity for one open conversation detail. The stable idempotency key protects a
 /// retry after a lost create response, while the recorded task id makes later toggles update the
-/// same task.
+/// same task. Both survive page sessions: the key is derived from the conversation and the item's
+/// content identity, and the task link is persisted, so navigating away or restarting can neither
+/// unlink a promoted item nor mint a duplicate task.
 class ConversationActionItemTaskSession {
   ConversationActionItemTaskSession({
+    required this.conversationId,
     required this.createTask,
     required this.updateTask,
     required this.updateConversationItem,
     String Function()? newIdempotencyKey,
-  }) : _newIdempotencyKey = newIdempotencyKey ?? (() => const Uuid().v4());
+    Future<Map<String, String>> Function()? readPersistedTaskIds,
+    Future<void> Function(Map<String, String>)? writePersistedTaskIds,
+  })  : _newIdempotencyKey = newIdempotencyKey,
+        _readPersistedTaskIds = readPersistedTaskIds ?? (() => _readStoredTaskIds(_storageKey(conversationId))),
+        _writePersistedTaskIds =
+            writePersistedTaskIds ?? ((taskIds) => _writeStoredTaskIds(_storageKey(conversationId), taskIds));
 
+  static const _storagePrefix = 'omi.conversation_action_item_tasks';
+
+  /// Conversations whose links stay on disk; the oldest fall off the end. Entries
+  /// are tiny, but the store must not grow without bound.
+  static const _storedConversationLimit = 50;
+  static const _storageIndexKey = '$_storagePrefix.index';
+
+  static String _storageKey(String conversationId) => '$_storagePrefix.$conversationId';
+
+  static Map<String, String> _decodeTaskIds(String? raw) {
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded.map((key, value) => MapEntry(key, value is String ? value : ''));
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  static Future<Map<String, String>> _readStoredTaskIds(String storageKey) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return _decodeTaskIds(prefs.getString(storageKey));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> _writeStoredTaskIds(String storageKey, Map<String, String> taskIds) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(storageKey, jsonEncode(taskIds));
+      final index = prefs.getStringList(_storageIndexKey) ?? const [];
+      final updated = [storageKey, ...index.where((key) => key != storageKey)];
+      if (updated.length > _storedConversationLimit) {
+        for (final evicted in updated.sublist(_storedConversationLimit)) {
+          await prefs.remove(evicted);
+        }
+      }
+      await prefs.setStringList(_storageIndexKey, updated.sublist(0, _storedConversationLimit));
+    } catch (_) {}
+  }
+
+  final String conversationId;
   final ConversationTaskCreator createTask;
   final ConversationTaskUpdater updateTask;
   final ConversationItemStateWriter updateConversationItem;
-  final String Function() _newIdempotencyKey;
+  final String Function()? _newIdempotencyKey;
+  final Future<Map<String, String>> Function() _readPersistedTaskIds;
+  final Future<void> Function(Map<String, String>) _writePersistedTaskIds;
   final Map<String, String> _taskIds = {};
   final Map<String, String> _idempotencyKeys = {};
   final Set<String> _pending = {};
 
+  /// Completes when persisted links are loaded. Mutating methods await it so the
+  /// first action on a fresh page session addresses a restored task instead of
+  /// racing the read and minting a duplicate.
+  late final Future<void> _restored = _readPersistedTaskIds().then((persisted) {
+    persisted.forEach((identity, taskId) {
+      _taskIds.putIfAbsent(identity, () => taskId);
+    });
+  });
+
   /// Content-stable identity for one extracted row. Segment IDs are evidence
-  /// references, not identities: one segment can carry several commitments, and
-  /// the backend allows multiple identical items in a conversation, so the
-  /// item's own description and due date disambiguate rows that share evidence.
+  /// references, not identities: one segment can carry several commitments, and the
+  /// backend allows multiple identical items in a conversation, so the item's own
+  /// description and due date disambiguate rows that share evidence.
   static String identity(ActionItem item) =>
       '${item.sourceSegmentIds.join('|')}|${item.description}|${item.dueAt?.millisecondsSinceEpoch ?? ''}';
 
@@ -90,16 +157,34 @@ class ConversationActionItemTaskSession {
   bool get pending => _pending.isNotEmpty;
   bool isPending(ActionItem item) => _pending.contains(identity(item));
 
-  String _key(String identity) => _idempotencyKeys.putIfAbsent(identity, _newIdempotencyKey);
+  String idempotencyKeyFor(ActionItem item) => _key(identity(item));
+
+  String _key(String identity) => _idempotencyKeys.putIfAbsent(
+      identity,
+      () =>
+          _newIdempotencyKey?.call() ??
+          'conversation-action-item:${_stableKeyPart(conversationId)}:${_stableKeyPart(identity)}');
+
+  /// A retry — including one from a fresh page session — must recreate the same
+  /// item's task, so the production key is derived from the conversation and item
+  /// identity, never random. The backend returns the task an equal key already
+  /// created, which is what keeps a re-opened page from minting a second task.
+  static String _stableKeyPart(String value) => md5.convert(utf8.encode(value)).toString().substring(0, 16);
+
+  void _rememberTaskId(String identity, String taskId) {
+    _taskIds[identity] = taskId;
+    _writePersistedTaskIds(Map<String, String>.of(_taskIds));
+  }
 
   Future<bool> addToTasks(ActionItem item) async {
+    await _restored;
     final identity = identityFor(item);
     if (item.targetTaskId != null || _taskIds.containsKey(identity)) return true;
     if (!_pending.add(identity)) return false;
     try {
       final taskId = await createTask(item, completed: false, idempotencyKey: _key(identity));
       if (taskId == null) return false;
-      _taskIds[identity] = taskId;
+      _rememberTaskId(identity, taskId);
       return true;
     } finally {
       _pending.remove(identity);
@@ -107,6 +192,7 @@ class ConversationActionItemTaskSession {
   }
 
   Future<bool> setCompleted(ActionItem item, int itemIndex, bool completed) async {
+    await _restored;
     final identity = identityFor(item);
     if (!_pending.add(identity)) return false;
     try {
@@ -114,7 +200,7 @@ class ConversationActionItemTaskSession {
       if (taskId == null && completed) {
         taskId = await createTask(item, completed: true, idempotencyKey: _key(identity));
         if (taskId == null) return false;
-        _taskIds[identity] = taskId;
+        _rememberTaskId(identity, taskId);
       } else if (taskId != null && !await updateTask(taskId, completed)) {
         return false;
       }
@@ -151,6 +237,7 @@ class _ConversationActionItemsSectionState extends State<ConversationActionItems
   final Set<String> _failed = {};
 
   late final ConversationActionItemTaskSession _taskSession = ConversationActionItemTaskSession(
+    conversationId: widget.conversationId,
     createTask: (item, {required completed, required idempotencyKey}) async =>
         (await context.read<ActionItemsProvider>().createActionItem(
                   description: item.description,
