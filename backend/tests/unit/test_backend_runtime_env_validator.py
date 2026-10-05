@@ -3466,3 +3466,31 @@ def test_mentor_pipeline_runtime_values(pipeline, kind):
     elif kind == 'binding':
         config = {'MENTOR_PIPELINE': {'env_var': 'MENTOR_PIPELINE', 'default': pipeline}}
     assert bool(validate_mentor_pipeline(scope='host', config=config)) == (pipeline == 'typo')
+
+
+def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts():
+    # main.py serves capture, sync, developer processing and reprocess on all
+    # four Cloud Run copies. pusher runs the same finalizer; desktop_backend
+    # and the cron jobs never compute/persist these snapshots.
+    expected = {
+        'gke/backend-listen',
+        'gke/pusher',
+        'cloud_run/backend',
+        'cloud_run/backend-sync',
+        'cloud_run/backend-sync-backfill',
+        'cloud_run/backend-integration',
+    }
+    validator = load_validator()
+    prod = validator._get_env_config(validator._load_yaml(validator.DEFAULT_MANIFEST), 'prod')
+    overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
+    for source in (prod, overlay):
+        declared = {scope for scope, env in _manifest_env_blocks(source) if 'SPEAKER_MATCH_SCORES_ENABLED' in env}
+        assert declared == expected
+        for scope, env in _manifest_env_blocks(source):
+            if scope in expected:
+                assert env['SPEAKER_MATCH_SCORES_ENABLED'] == {'value': 'true', 'category': 'rollout'}
+    for chart in (
+        ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml',
+        ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
+    ):
+        assert parse_env_entries(chart.read_text())['SPEAKER_MATCH_SCORES_ENABLED'].value == 'true'
