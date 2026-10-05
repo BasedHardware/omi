@@ -20,4 +20,19 @@ void main() {
     expect(loadMessage.toLowerCase(), contains('knowledge graph'));
     expect(rebuildMessage.toLowerCase(), contains('knowledge graph'));
   });
+
+  test('knowledge-graph error message handles 409 canonical graph conflict cleanly', () {
+    const conflictBody =
+        '{"detail":"Canonical knowledge graph state is derived from canonical memories and cannot be deleted or rebuilt directly."}';
+
+    final message = KnowledgeGraphApi.knowledgeGraphHttpUserMessage(
+      action: 'rebuild',
+      statusCode: 409,
+      body: conflictBody,
+    );
+
+    expect(message, 'Knowledge graph is up to date');
+    expect(message, isNot(contains(conflictBody)));
+    expect(message, isNot(contains('Canonical knowledge graph state')));
+  });
 }

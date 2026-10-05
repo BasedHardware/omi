@@ -16,7 +16,10 @@ class KnowledgeGraphApi {
   /// logs only.
   @visibleForTesting
   static String knowledgeGraphHttpUserMessage({required String action, int? statusCode, String? body}) {
-    final _ = (statusCode, body);
+    final _ = (body);
+    if (statusCode == 409) {
+      return 'Knowledge graph is up to date';
+    }
     return "Couldn't $action knowledge graph";
   }
 
@@ -46,6 +49,14 @@ class KnowledgeGraphApi {
 
     if (response != null && response.statusCode == 200) {
       return wire.GeneratedRebuildResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
+    }
+    if (response != null && response.statusCode == 409) {
+      Logger.debug('Knowledge graph rebuild skipped: account has canonical graph state');
+      return const wire.GeneratedRebuildResponse(
+        edgesCount: 0,
+        nodesCount: 0,
+        status: 'canonical_up_to_date',
+      ).toJson();
     }
     _throwHttpFailure(action: 'rebuild', statusCode: response?.statusCode, body: response?.body);
   }
