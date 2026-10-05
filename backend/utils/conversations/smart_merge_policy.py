@@ -256,10 +256,10 @@ def _new_capture_is_live(new: Mapping[str, Any]) -> bool:
     return revision is None or (type(revision) is int and revision == 0)
 
 
-def _overlap_skippable(candidate: Mapping[str, Any], new: Mapping[str, Any]) -> bool:
+def overlap_predecessor_skippable(candidate: Mapping[str, Any], new: Mapping[str, Any]) -> bool:
     """A proven sync-created duplicate that overlaps (or sits inside the split
     window of) a live new conversation; anything unproven stays a barrier."""
-    if not _new_capture_is_live(new):
+    if partition(candidate) != partition(new) or not _new_capture_is_live(new):
         return False
     revision = candidate.get('sync_content_revision')
     if isinstance(revision, bool) or not isinstance(revision, int) or revision <= 0:
@@ -301,7 +301,7 @@ def select_predecessor(
     for row in rows:
         if partition(row) != new_partition:
             continue
-        if len(skipped) < MAX_OVERLAP_PREDECESSOR_SKIPS and _overlap_skippable(row, new):
+        if len(skipped) < MAX_OVERLAP_PREDECESSOR_SKIPS and overlap_predecessor_skippable(row, new):
             skipped.append(str(row.get('id')))
             continue
         return PredecessorSelection(row, tuple(skipped))

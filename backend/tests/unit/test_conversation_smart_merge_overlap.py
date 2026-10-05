@@ -17,6 +17,7 @@ from config import conversation_smart_merge as config
 from config.jev_decisions import JEV_MODEL
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 from tests.unit.test_conversation_smart_merge import T0, UID, World
 from utils import metrics
 from utils.conversations import smart_merge
@@ -561,6 +562,125 @@ def test_a_concurrent_edit_of_the_chosen_row_still_rejects(world):
     assert record['decision'] == 'kept' and record['reason'] == 'user_managed'
     assert record['predecessor_skipped_overlap'] == 1
     assert not world.raw('n').get('deleted')
+
+
+_CURATIONS = [
+    {'starred': True},
+    {'manual_speaker_assignments': {'0': 'self'}},
+    {'status': 'processing'},
+    {'sync_live_target': True},
+    {'source': 'desktop'},
+    {'client_device_id': 'pendant-2'},
+    {'is_locked': True},
+    {'finished_at': T0 + timedelta(minutes=7)},
+    {'smart_merge': {'role': 'survivor', 'revision': 2, 'refreshed_revision': 1}},
+]
+
+
+@pytest.mark.parametrize(
+    'mutation',
+    _CURATIONS,
+    ids=[next(iter(m)) for m in _CURATIONS],
+)
+def test_a_concurrent_change_of_the_skipped_row_rejects(world, mutation):
+    world.add('p', 0, 5)
+    _sync(world, 'p2', 7, 16)
+    world.add('n', 10, 15)
+    world.jev_answers = [0.5]
+    world.on_ask = lambda: world.raw('p2').update(mutation)
+    assert world.finish('n') is False
+    record = world.raw('n')['smart_merge_decision']
+    assert record['decision'] == 'kept' and record['reason'] == 'survivor_changed'
+    assert record['predecessor_skipped_overlap'] == 1
+    assert not world.raw('n').get('deleted')
+    assert 'smart_merge' not in world.raw('p')
+    for key, value in mutation.items():
+        assert world.raw('p2')[key] == value
+
+
+def test_a_concurrent_delete_of_the_skipped_row_rejects(world):
+    world.add('p', 0, 5)
+    _sync(world, 'p2', 7, 16)
+    world.add('n', 10, 15)
+    world.jev_answers = [0.5]
+    world.on_ask = lambda: world.store.rows.pop(('users', UID, 'conversations', 'p2'))
+    assert world.finish('n') is False
+    record = world.raw('n')['smart_merge_decision']
+    assert record['decision'] == 'kept' and record['reason'] == 'survivor_changed'
+    assert record['predecessor_skipped_overlap'] == 1
+    assert not world.raw('n').get('deleted')
+    assert 'smart_merge' not in world.raw('p')
+    assert world.raw('p2') is None
+
+
+def test_each_skipped_row_is_rechecked_inside_the_transaction(world, monkeypatch):
+    world.add('p', 0, 5)
+    for index in range(3):
+        _sync(world, f's{index}', 6 + index, 10 + index)
+    world.add('n', 10, 15)
+    world.jev_answers = [0.5]
+    untouched = {sid: deepcopy(world.raw(sid)) for sid in ('s0', 's1', 's2')}
+    reads = []
+    real_get = StrictFirestoreDocument.get
+
+    def spy(ref, transaction=None, **kwargs):
+        if transaction is not None:
+            reads.append(ref.path)
+        return real_get(ref, transaction, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', spy)
+    assert world.finish('n') is True
+    for sid in ('s0', 's1', 's2'):
+        assert reads.count(('users', UID, 'conversations', sid)) == 1
+        assert world.raw(sid) == untouched[sid]
+    assert world.raw('n')['smart_merge_decision']['predecessor_skipped_overlap'] == 3
+
+
+def test_no_skip_passes_no_skipped_guard_kwargs(world):
+    calls = []
+    real = smart_merge_db.absorb_conversation
+    world.monkeypatch.setattr(
+        smart_merge_db, 'absorb_conversation', lambda *a, **kw: calls.append(kw) or real(*a, **kw)
+    )
+    world.add('p', 0, 5)
+    world.add('n', 10, 15)
+    world.jev_answers = [0.5]
+    assert world.finish('n') is True
+    assert len(calls) == 1
+    assert 'skipped_predecessor_ids' not in calls[0] and 'predecessor_skip_check' not in calls[0]
+
+
+def _always_skippable(candidate, new):
+    return True
+
+
+@pytest.mark.parametrize(
+    'skipped,checker',
+    [
+        (('a', 'b', 'c', 'd'), _always_skippable),
+        (('x', 'x'), _always_skippable),
+        (('n',), _always_skippable),
+        (('p',), _always_skippable),
+        (('x',), None),
+    ],
+    ids=['over_max', 'duplicate', 'donor_id', 'survivor_id', 'no_checker'],
+)
+def test_absorb_rejects_malformed_skipped_lists_without_running_the_plan(world, skipped, checker):
+    world.add('p', 0, 5)
+    world.add('n', 10, 15)
+    before = deepcopy(world.store.rows)
+    result = smart_merge_db.absorb_conversation(
+        UID,
+        'p',
+        'n',
+        expected_revision=0,
+        plan=lambda *a: pytest.fail('plan executed'),
+        skipped_predecessor_ids=skipped,
+        predecessor_skip_check=checker,
+        firestore_client=world.store,
+    )
+    assert (result.outcome, result.reason) == ('rejected', 'survivor_changed')
+    assert world.store.rows == before
 
 
 @pytest.mark.parametrize('skipped,label', [(1, '1'), (2, '2'), (3, '3'), (4, 'other'), (17, 'other')])

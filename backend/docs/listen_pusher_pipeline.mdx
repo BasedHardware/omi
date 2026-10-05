@@ -747,7 +747,15 @@ user-managed or user-ended row, a custom-STT or refresh-owing row, a row with
 absent or malformed capture evidence, and every same-capture live row all
 remain barriers judged by the unchanged gates. A skipped row is never mutated
 and never enters donor ancestry; the device partition and the query window are
-unchanged. Each selection that skipped rows increments
+unchanged. The skip decision is also rechecked at write time: each skipped
+card (at most three) is re-read inside the absorb transaction and the same
+skip proofs are re-evaluated against the current donor row, so a duplicate
+that was curated, went busy, changed partition or capture provenance, moved
+its span out of the window, or vanished between decide and commit rejects the
+absorb instead of letting a stale skip land the merge. Skipped rows are also
+excluded from the Jev stretch context. The offline replay harness cannot
+predict these races — a local snapshot performs no transaction I/O. Each
+selection that skipped rows increments
 `omi_conversation_smart_merge_predecessor_overlap_total` (mode, skipped
 `1|2|3|other`) and, when the pair reaches a decision line or record, adds a
 `predecessor_skipped_overlap` count to the server-only record and the

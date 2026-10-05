@@ -74,6 +74,7 @@ from utils.conversations.smart_merge_policy import (
     is_donor,
     ledger_fragments,
     new_conversation_skip,
+    overlap_predecessor_skippable,
     predecessor_status_skip,
     refresh_owed,
     revision,
@@ -169,6 +170,7 @@ class _MergePlan:
         expected_survivor_sync_revision: Any = None,
         expected_donor_sync_revision: Any = None,
         predecessor_skipped: int = 0,
+        skipped_predecessor_ids: tuple[str, ...] = (),
     ):
         self.survivor_id = survivor_id
         self.expected_revision = expected_revision
@@ -177,6 +179,7 @@ class _MergePlan:
         self.expected_survivor_sync_revision = expected_survivor_sync_revision
         self.expected_donor_sync_revision = expected_donor_sync_revision
         self.predecessor_skipped = predecessor_skipped
+        self.skipped_predecessor_ids = skipped_predecessor_ids
 
 
 def _segments(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -417,6 +420,7 @@ def _decide(
         expected_survivor_sync_revision=survivor.get('sync_content_revision'),
         expected_donor_sync_revision=new_row.get('sync_content_revision'),
         predecessor_skipped=predecessor_skipped,
+        skipped_predecessor_ids=selection.skipped_ids,
     )
 
 
@@ -452,6 +456,14 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         survivor_update['sync_merged_from'] = union
         return None, survivor_update, donor_update, ancestor_updates
 
+    skip_guard: dict[str, Any] = (
+        {
+            'skipped_predecessor_ids': plan.skipped_predecessor_ids,
+            'predecessor_skip_check': overlap_predecessor_skippable,
+        }
+        if plan.skipped_predecessor_ids
+        else {}
+    )
     try:
         result = smart_merge_db.absorb_conversation(
             uid,
@@ -461,6 +473,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             plan=payloads,
             expected_survivor_sync_revision=plan.expected_survivor_sync_revision,
             expected_donor_sync_revision=plan.expected_donor_sync_revision,
+            **skip_guard,
         )
         outcome, reason, audit = result.outcome, result.reason, result.audit
         flattened_count = result.flattened_ancestor_count
