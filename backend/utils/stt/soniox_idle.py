@@ -13,6 +13,7 @@ import time
 from collections import deque
 from typing import Any, Awaitable, Callable
 
+from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
 from config.soniox_idle import idle_max_closes_per_hour, idle_rearm_seconds
 from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
@@ -74,6 +75,9 @@ class IdleSonioxSocket(STTSocket):
         self._close_task: asyncio.Task[Any] | None = None
         self._reopen_task: asyncio.Task[bool] | None = None
         self._pending = bytearray()
+        self._wire_epoch: Any = None
+        self._pending_spans: list[tuple[int, int]] = []
+        self._pending_unknown = False
         self._resumed_audio = b''
         self._resume_offset: float | None = None
         self._admitted_samples = 0
@@ -83,6 +87,10 @@ class IdleSonioxSocket(STTSocket):
         self._last_end = 0.0
         self._capture_axis_ledger: Callable[[], int | None] | None = None
         transport._stream_transcript = self._socket_callback(0.0, 0)
+
+    def set_wire_ledger(self, epoch: Any) -> None:
+        self._wire_epoch = epoch
+        self._transport.set_wire_ledger(epoch)
 
     def set_capture_axis_ledger(self, ledger: Callable[[], int | None]) -> None:
         self._capture_axis_ledger = ledger
@@ -160,6 +168,10 @@ class IdleSonioxSocket(STTSocket):
                 self._dead, self._reason = True, 'capacity_full'
                 return False
             self._pending.extend(data)
+            if self._wire_epoch is not None:
+                audio = observed_audio(data, self._wire_epoch, capture_spans.get())
+                self._pending_unknown |= not bool(audio.spans)
+                self._pending_spans.extend(audio.spans)
             return True
         accepted = self._transport.send(data)
         if accepted:
@@ -189,6 +201,8 @@ class IdleSonioxSocket(STTSocket):
 
         try:
             self._transport = await self._connect(callback)
+            if self._wire_epoch is not None:
+                self._transport.set_wire_ledger(self._wire_epoch)
             if self._capture_axis_ledger is not None:
                 try:
                     self._transport.set_capture_axis_ledger(
@@ -211,7 +225,13 @@ class IdleSonioxSocket(STTSocket):
             self._idle_closed_at = None
             data = bytes(self._pending)
             self._pending.clear()
-            accepted = self.send(data)
+            token = capture_spans.set(() if self._pending_unknown else tuple(self._pending_spans))
+            try:
+                accepted = self.send(data)
+            finally:
+                capture_spans.reset(token)
+            self._pending_spans.clear()
+            self._pending_unknown = False
             if not accepted:
                 self._pending.extend(data)
             if accepted:
@@ -252,6 +272,8 @@ class IdleSonioxSocket(STTSocket):
     def take_unsent_audio(self) -> bytes:
         data = bytes(self._pending) or self._resumed_audio
         self._pending.clear()
+        self._pending_spans.clear()
+        self._pending_unknown = False
         self._resumed_audio = b''
         return data
 

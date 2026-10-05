@@ -616,6 +616,7 @@ class ProviderEpochTranslator:
         # capture positions instead.
         self.replay_origin_sample: Optional[int] = None
         self.require_observed_send_mapping = False
+        self.wire_audio_samples: Optional[int] = None
 
     def capture_merge_proof(self, first: int, end: int) -> Optional[CaptureWindowProof]:
         """Snapshot one accepted run, split at strict half-open wall hiatuses.
@@ -669,12 +670,21 @@ class ProviderEpochTranslator:
         """Whether translate() rewrites start/end onto the capture wall axis."""
         return self._project_times
 
-    def note_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
+    def note_wire_audio(self, length: int, spans: Sequence[Tuple[int, int]]) -> None:
+        """Consume actual emitted PCM; holes carry no capture or owner proof."""
+        start = self.wire_audio_samples or 0
+        self.wire_audio_samples = start + length
+        self.require_observed_send_mapping = True
+        self.send_path = 'managed_chain'
+        if spans:
+            self.note_accepted_spans(spans, provider_start=start)
+
+    def note_accepted_spans(self, spans: Sequence[Tuple[int, int]], *, provider_start: Optional[int] = None) -> None:
         first_span = True
         for capture_start, length in spans:
             if length <= 0:
                 continue
-            start = self.send_map.last_provider_sample or 0
+            start = provider_start if provider_start is not None else (self.send_map.last_provider_sample or 0)
             if self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'on':
                 start = self._note_elapsed_span(capture_start, length)
             if first_span:
@@ -682,6 +692,8 @@ class ProviderEpochTranslator:
                 first_span = False
             self.send_map.add_accepted(start, capture_start, length)
             end = start + length
+            if provider_start is not None:
+                provider_start = end
             owner = self._owner_at_send(capture_start, length) if self._owner_at_send is not None else None
             if self._only_send_owner is None and not self._send_owner_ambiguous:
                 self._only_send_owner = owner

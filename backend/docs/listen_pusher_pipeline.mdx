@@ -2012,6 +2012,27 @@ and collapsed candidates; `vad_uncovered` includes decisions evicted from the
 supplied production `unknown` aggregate. None of these metrics changes capture
 placement or enables the elapsed hypothesis.
 
+`SONIOX_WIRE_LEDGER` defaults to `false` in code and every deployment. New
+managed Soniox transports snapshot it. ON carries receiver-observed capture
+spans through the VAD output, replay and idle-onset queues, and registers them
+only after the actual binary WebSocket write succeeds. Every emitted sample
+consumes compact provider time; missing, malformed, partly unknown or
+out-of-receiver capture spans reserve an unplaceable provider interval. A
+prefix emitted before binding is also unplaceable. Later known sends cannot
+slide backward across that interval. Failed writes grant no capture proof.
+Repeated manual finalization was independently reproduced to advance Soniox's
+processed-audio axis beyond emitted PCM (12 controls added 1.071 seconds for
+synthetic 2.670750-second blocks). ON therefore suppresses midstream manual
+finalize on bound managed sockets, keeping their compact axis continuous.
+Streaming final tokens continue normally; finish and planned idle close still
+drain the tail. No padding duration is invented or granted a capture origin.
+The switch selects the probe-verified compact axis over the experimental
+elapsed axis, retains strict observed-send containment, and keeps unknown text
+without granting audio windows. OFF retains the admission-time ledger exactly.
+The diagnostic ledger reference counts all emitted samples, including unknown
+intervals; its written-PCM counter still measures actual binary writes only.
+Pusher carries an inert mirror declaration; managed Soniox sockets run in listen.
+
 `SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
 keeps the compact send axis for all placement and speaker windows, exactly as
 `off` does. A separate elapsed-axis map supplies metrics only; it never gates

@@ -25,6 +25,8 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
 from config.soniox_idle import idle_close_seconds
+from config.audio_timeline import soniox_wire_ledger_enabled
+from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
 from utils.stt.soniox_capture_axis import (
     CaptureAxisDiagnostics,
     diagnostic_error,
@@ -192,6 +194,9 @@ class SafeSonioxSocket(STTSocket):
         *,
         sample_rate: int = 16000,
     ) -> None:
+        self._wire_ledger_enabled = soniox_wire_ledger_enabled()
+        self._wire_epoch: Any = None
+        self._wire_samples = 0
         self._capture_axis: CaptureAxisDiagnostics | None = None
         self._capture_axis_failed = False
         try:
@@ -257,6 +262,7 @@ class SafeSonioxSocket(STTSocket):
                 return False
             if not data:
                 return True
+            had_odd_byte = bool(self._pending_odd_byte)
             aligned = self._pending_odd_byte + data
             self._pending_odd_byte = aligned[-1:] if len(aligned) % 2 else b''
             if self._pending_odd_byte:
@@ -274,6 +280,9 @@ class SafeSonioxSocket(STTSocket):
             return False
 
         try:
+            if self._wire_ledger_enabled and self._wire_epoch is not None:
+                spans = () if had_odd_byte or len(data) % 2 else capture_spans.get()
+                aligned = observed_audio(aligned, self._wire_epoch, spans)
             self._send_queue.put_nowait(aligned)
             self._diagnostic(lambda diagnostic: setattr(diagnostic, 'queued', diagnostic.queued + len(aligned) // 2))
         except asyncio.QueueFull:
@@ -300,6 +309,12 @@ class SafeSonioxSocket(STTSocket):
         return not (self._dead or self._closed or self._finishing)
 
     def finalize(self) -> None:
+        # Soniox rounds/pads its processing axis at every manual finalize.
+        # Reusing that socket then shifts future tokens beyond emitted PCM.
+        # Keep the continuous compact axis; terminal/idle drains still finalize.
+        if self._wire_epoch is not None and not self._planned_close and not self._finishing:
+            return
+
         def enqueue() -> None:
             if self._dead or self._closed:
                 return
@@ -388,10 +403,30 @@ class SafeSonioxSocket(STTSocket):
     ) -> None:
         self._diagnostic(lambda diagnostic: diagnostic.bind(ledger, origin, phase))
 
+    def set_wire_ledger(self, epoch: Any) -> None:
+        if not self._wire_ledger_enabled:
+            return
+        if self._wire_epoch is not None:
+            if self._wire_epoch is not epoch:
+                raise RuntimeError('Soniox transport already owns a different ledger')
+            return
+        self._wire_epoch = epoch
+        # This switch uses the compact axis verified by the controlled probe.
+        epoch.soniox_elapsed_mode = 'off'
+        if epoch.wire_audio_samples is None:
+            epoch.wire_audio_samples = epoch.send_map.last_provider_sample or 0
+        if self._wire_samples:
+            epoch.note_wire_audio(self._wire_samples, ())
+
     async def _write(self, data: bytes | str) -> None:
         self._diagnostic(lambda diagnostic: setattr(diagnostic, 'inflight', True))
         try:
             await self._ws.send(data)
+            if self._wire_ledger_enabled and isinstance(data, bytes):
+                length = len(data) // 2
+                self._wire_samples += length
+                if self._wire_epoch is not None:
+                    self._wire_epoch.note_wire_audio(length, getattr(data, 'spans', ()))
             self._diagnostic(lambda diagnostic: diagnostic.sent(data))
         finally:
             self._diagnostic(lambda diagnostic: setattr(diagnostic, 'inflight', False))

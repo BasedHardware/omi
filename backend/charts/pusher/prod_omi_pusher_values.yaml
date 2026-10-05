@@ -203,6 +203,8 @@ env:
     value: 'true'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "true"
+  - name: SONIOX_WIRE_LEDGER
+    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.

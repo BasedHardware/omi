@@ -45,6 +45,9 @@ environments:
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
             value: 'false'
             category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -526,6 +529,9 @@ environments:
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
             value: 'false'
             category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -960,6 +966,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1303,6 +1312,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1614,6 +1626,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1876,6 +1891,9 @@ environments:
               value: 'false'
               category: rollout
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -2427,6 +2445,9 @@ environments:
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
             value: 'true'
             category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -2941,6 +2962,9 @@ environments:
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
             value: 'true'
             category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -3287,6 +3311,9 @@ environments:
               value: 'false'
               category: rollout
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
@@ -3652,6 +3679,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3956,6 +3986,9 @@ environments:
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
               value: 'false'
               category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -4232,6 +4265,9 @@ environments:
               value: 'false'
               category: rollout
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
               value: 'false'
               category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
