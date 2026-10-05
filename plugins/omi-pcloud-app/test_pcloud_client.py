@@ -47,6 +47,12 @@ class TestPCloudClientAndProvider(unittest.TestCase):
         eu_client = PCloudClient("token", location_id=2)
         self.assertEqual(eu_client.base_url, "https://eapi.pcloud.com")
 
+        with self.assertRaises(ValueError):
+            PCloudClient("token", location_id=3)
+
+        with self.assertRaises(ValueError):
+            PCloudClient("token", location_id=0)
+
     def test_sanitize_path(self):
         """Sanitizer cleans invalid characters and preserves valid text."""
         self.assertEqual(
