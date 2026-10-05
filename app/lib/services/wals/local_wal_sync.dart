@@ -624,7 +624,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         evidenceFrames,
         _frameSynced.sublist(low, high),
         captureSelectionStartSeconds(
-            now.subtract(Duration(seconds: newFrameSyncDelaySeconds)), chunkFrameCount, _framesPerSecond),
+            now.subtract(const Duration(seconds: newFrameSyncDelaySeconds)), chunkFrameCount, _framesPerSecond),
         generation,
         extendMemWal: true,
         legacySelectionTimerStart: timerStart,
