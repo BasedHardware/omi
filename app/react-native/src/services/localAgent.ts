@@ -22,7 +22,7 @@ export interface LocalModel {
 const TASK_VERBS = /(add|create|make|write|new|note|jot)\s+(a\s+)?(task|todo|to-do|reminder|note)\s*[:\-]?\s*/i
 const REMIND = /(^|\s)(remind me to|remind me|set a reminder to|reminder to)\s+/i
 
-function minutesFrom(text: string): number | undefined {
+export function minutesFrom(text: string): number | undefined {
   const m = text.match(/in\s+(\d+)\s*(min|mins|minute|minutes|h|hr|hour|hours)/i)
   const n = m ? Number.parseInt(m[1] ?? '', 10) : NaN
   if (!m || Number.isNaN(n)) return undefined

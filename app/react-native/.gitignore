@@ -10,3 +10,10 @@ ios/
 # local signing credentials (do not commit)
 credentials.json
 android/keystores/
+
+# The local-brain Expo module lives under modules/local-brain/android and MUST be
+# tracked -- the bare `android/` rule above is a managed-workflow convention that
+# would otherwise swallow every Kotlin source in it. The 90MB model is still
+# excluded, because that one is genuinely fetched rather than committed.
+!modules/local-brain/android/
+modules/local-brain/android/src/main/assets/minilm.tflite
