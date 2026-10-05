@@ -96,6 +96,8 @@ def _install_prometheus_client_stub():
     prometheus_client.REGISTRY = registry
     prometheus_client.CONTENT_TYPE_LATEST = 'text/plain; version=0.0.4; charset=utf-8'
     prometheus_client.generate_latest = lambda registry=None: b''
+    prometheus_client.disable_created_metrics = lambda: None
+    prometheus_client.start_http_server = lambda *args, **kwargs: None
 
     sys.modules['prometheus_client'] = prometheus_client
 
