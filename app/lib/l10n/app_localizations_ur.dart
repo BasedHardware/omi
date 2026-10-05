@@ -12425,4 +12425,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get dismiss => 'چھپائیں';
+
+  @override
+  String get showOnLockScreen => 'لاک اسکرین پر دکھائیں';
 }

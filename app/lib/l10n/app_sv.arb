@@ -3838,5 +3838,6 @@
     "stopThese": "Stoppa dessa",
     "dismiss": "Avvisa",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Visa på låsskärmen"
 }

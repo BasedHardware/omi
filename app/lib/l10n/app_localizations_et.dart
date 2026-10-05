@@ -12406,4 +12406,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get dismiss => 'Peida';
+
+  @override
+  String get showOnLockScreen => 'Kuva lukustuskuval';
 }

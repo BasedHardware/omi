@@ -125,7 +125,8 @@ class SharedPreferencesUtil {
 
     final lastVersion = prefs.get('lastKnownAppVersion');
     final bootSchema = prefs.get(BootRecovery.schemaKey);
-    final existingInstall = prefs.get('onboardingCompleted') == true ||
+    final existingInstall =
+        prefs.get('onboardingCompleted') == true ||
         (lastVersion is String && lastVersion.trim().isNotEmpty) ||
         (bootSchema is int && bootSchema > 0);
     final savedDefault = prefs.get(appearanceDefaultMigrationKey);
@@ -796,6 +797,9 @@ class SharedPreferencesUtil {
   set notificationFrequency(int value) => saveInt('notificationFrequency', value);
 
   int get notificationFrequency => getInt('notificationFrequency', defaultValue: 0);
+
+  bool get showCaptureLiveActivity => getBool('showCaptureLiveActivity', defaultValue: true);
+  Future<bool> setShowCaptureLiveActivity(bool value) => saveBool('showCaptureLiveActivity', value);
 
   // Task category order for drag-and-drop sorting persistence
   // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }

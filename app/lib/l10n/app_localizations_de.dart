@@ -12508,4 +12508,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get dismiss => 'Ausblenden';
+
+  @override
+  String get showOnLockScreen => 'Auf dem Sperrbildschirm anzeigen';
 }

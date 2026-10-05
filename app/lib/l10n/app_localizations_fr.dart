@@ -12514,4 +12514,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dismiss => 'Masquer';
+
+  @override
+  String get showOnLockScreen => 'Afficher sur l’écran verrouillé';
 }

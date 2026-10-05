@@ -46,18 +46,34 @@ def declarations():
     return manifest, charts
 
 
-def test_composed_and_helm_declarations_are_all_off(declarations):
+# Rollout (2026-10-05): the proven merge union is on for prod listen and its inert pusher mirror.
+UNION_ON_SCOPES = {('prod', 'backend-listen'), ('prod', 'pusher')}
+
+
+def test_composed_and_helm_declarations_pin_rollout_state(declarations):
     manifest, charts = declarations
-    flags = (FLAG, 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'LIVE_CAPTURE_WINDOW_STRICT_PROJECTION')
-    for env in manifest['environments'].values():
-        for service in (*env['gke'].values(), *env['cloud_run']['services'].values()):
-            for flag in flags:
-                if flag in service.get('env', {}):
-                    assert service['env'][flag] == {'category': 'rollout', 'value': 'false'}
+    off_flags = (
+        FLAG,
+        'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION',
+        'LIVE_CAPTURE_WINDOW_STRICT_PROJECTION',
+    )
+    union = 'LIVE_CAPTURE_WINDOW_MERGE_UNION'
+    for env_name, env in manifest['environments'].items():
+        services = {**env['gke'], **env['cloud_run']['services']}
+        for name, service in services.items():
+            declared = service.get('env', {})
+            for flag in off_flags:
+                if flag in declared:
+                    assert declared[flag] == {'category': 'rollout', 'value': 'false'}
+            if union in declared:
+                expected = 'true' if (env_name, name) in UNION_ON_SCOPES else 'false'
+                assert declared[union] == {'category': 'rollout', 'value': expected}
     assert charts
-    for values in charts.values():
-        for flag in flags:
+    for path, values in charts.items():
+        for flag in off_flags:
             assert [v for v in values if v.get('name') == flag] == [{'name': flag, 'value': 'false'}]
+        expected = 'true' if path.name.startswith('prod_') else 'false'
+        assert [v for v in values if v.get('name') == union] == [{'name': union, 'value': expected}]
 
 
 @pytest.mark.parametrize('enabled', [False, True])

@@ -11395,5 +11395,6 @@
     "stopThese": "Заустави ово",
     "dismiss": "Сакриј",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Прикажи на закључаном екрану"
 }

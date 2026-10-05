@@ -3838,5 +3838,6 @@
     "stopThese": "Atura aquests",
     "dismiss": "Descarta",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Mostra a la pantalla de bloqueig"
 }

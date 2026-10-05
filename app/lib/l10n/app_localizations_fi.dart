@@ -12416,4 +12416,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dismiss => 'Hylkää';
+
+  @override
+  String get showOnLockScreen => 'Näytä lukitusnäytöllä';
 }

@@ -135,6 +135,15 @@ class CaptureLifetime implements CaptureScheduling {
     });
   }
 
+  CaptureOwned listenTo(Listenable source, VoidCallback listener) {
+    void guarded() {
+      if (!_closed) listener();
+    }
+
+    if (!_closed) source.addListener(guarded);
+    return own(() => source.removeListener(guarded));
+  }
+
   /// Replace [previous] with [next]. A closed lifetime cancels [next] immediately.
   StreamSubscription? takeSubscription(StreamSubscription? previous, StreamSubscription? next) {
     previous?.cancel();
@@ -244,10 +253,10 @@ class _LifetimeSubscription<T> implements StreamSubscription<T> {
 
   @override
   void onDone(void Function()? handleDone) => _inner.onDone(() {
-        _drop();
-        if (_isClosed()) return;
-        handleDone?.call();
-      });
+    _drop();
+    if (_isClosed()) return;
+    handleDone?.call();
+  });
   @override
   void pause([Future<void>? resumeSignal]) => _inner.pause(resumeSignal);
   @override

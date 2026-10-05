@@ -7,11 +7,14 @@ import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/http/api/memories.dart' show GetMemoriesResult;
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/home_deep_links.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/home/home_prompt_gate.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/utils/enums.dart';
 
 /// Home shell navigation: links open inside the one Home (nav #3, #18), prompts wait while the
@@ -53,6 +56,10 @@ void main() {
     test('selects the parent tab before the page', () {
       // Two pages now: conversations, memories and search open over Home; tasks over Tasks.
       expect(HomeDeepLink.parse('/conversations')!.tabIndex, HomeProvider.homeTab);
+      // Live Activity links open over Home; index 1 is now Tasks.
+      final capture = HomeDeepLink.parse('/capture?recording=active-session')!;
+      expect(capture.tabIndex, HomeProvider.homeTab);
+      expect(capture.query['recording'], 'active-session');
       expect(HomeDeepLink.parse('/action-items')!.tabIndex, HomeProvider.tasksTab);
       expect(HomeDeepLink.parse('/apps/xyz')!.tabIndex, isNull, reason: 'the app catalog is not a tab any more');
       expect(HomeDeepLink.parse('/memories')!.tabIndex, HomeProvider.homeTab);
@@ -70,14 +77,13 @@ void main() {
       bool micInterrupted = false,
       PhoneCallState call = PhoneCallState.idle,
       bool firmware = false,
-    }) =>
-        promptsBlocked(
-          recordingState: recording,
-          phoneMicBatchRecording: batch,
-          micInterruptedByCall: micInterrupted,
-          callState: call,
-          firmwareUpdateInProgress: firmware,
-        );
+    }) => promptsBlocked(
+      recordingState: recording,
+      phoneMicBatchRecording: batch,
+      micInterruptedByCall: micInterrupted,
+      callState: call,
+      firmwareUpdateInProgress: firmware,
+    );
 
     test('idle, passive wearable capture and a muted pendant do not hold prompts', () {
       expect(blocked(), isFalse);
@@ -174,16 +180,9 @@ void main() {
   testWidgets('indexed task opens by backend id outside the visible filtered page', (tester) async {
     const task = ActionItemWithMetadata(id: 'task-150', description: 'Older indexed task', completed: false);
     final provider = ActionItemsProvider(
-      getActionItems: (
-              {limit = 100,
-              offset = 0,
-              completed,
-              conversationId,
-              startDate,
-              endDate,
-              dueStartDate,
-              dueEndDate}) async =>
-          const ActionItemsResponse(actionItems: [], hasMore: false),
+      getActionItems:
+          ({limit = 100, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async =>
+              const ActionItemsResponse(actionItems: [], hasMore: false),
     );
     addTearDown(provider.dispose);
     final opened = <String>[];
@@ -225,6 +224,35 @@ void main() {
     );
     expect(cancelledOpened, isFalse);
     expect(opened, ['task-150']);
+  });
+
+  testWidgets('a Live Activity link for a recording that ended shows Home and opens nothing', (tester) async {
+    final capture = CaptureProvider(localSegmentStore: LocalSegmentStore.disabled());
+    addTearDown(capture.dispose);
+    final home = HomeProvider()..selectedIndex = HomeProvider.tasksTab;
+    addTearDown(home.dispose);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+          ChangeNotifierProvider<HomeProvider>.value(value: home),
+        ],
+        child: const MaterialApp(home: SizedBox(key: Key('capture-link-home'))),
+      ),
+    );
+    final context = tester.element(find.byKey(const Key('capture-link-home')));
+
+    final opened = await openHomeDeepLink(
+      context,
+      HomeDeepLink.parse('/capture?recording=ended-session')!,
+      openSettings: () async {},
+    );
+    await tester.pump();
+
+    expect(capture.activeRecordingId, isNull);
+    expect(opened, isFalse);
+    expect(home.selectedIndex, HomeProvider.homeTab);
+    expect(find.byType(ConversationCapturingPage), findsNothing);
   });
 
   testWidgets('indexed memory opens by backend id outside the visible filter', (tester) async {
@@ -289,15 +317,15 @@ void main() {
   test('indexed memory resolver follows owner-wide cursors beyond the visible page', () async {
     final now = DateTime.now();
     Memory memory(String id, {String uid = 'owner', MemoryLayer? layer}) => Memory(
-          id: id,
-          uid: uid,
-          content: id,
-          category: MemoryCategory.manual,
-          createdAt: now,
-          updatedAt: now,
-          visibility: MemoryVisibility.private,
-          layer: layer,
-        );
+      id: id,
+      uid: uid,
+      content: id,
+      category: MemoryCategory.manual,
+      createdAt: now,
+      updatedAt: now,
+      visibility: MemoryVisibility.private,
+      layer: layer,
+    );
     final cursors = <String?>[];
     final found = await resolveIndexedMemoryById(
       'target',

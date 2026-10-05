@@ -240,9 +240,10 @@ and [live STT routing runbook](runbooks/live-stt-routing.md).
 
 Router-promoted paid spillover validates each configured provider cap (integer
 0–10000); malformed values deny promotion and preserve configured order with one
-warning per provider per process. Recovery terminal-after-text alert volume and
-ratio queries both select `listen_track="canary"`, which requires recovery enabled
-on that cohort. See the [routing runbook](runbooks/live-stt-routing.md#router-on-readiness-controls-default-off).
+warning per provider per process. The recovery terminal-after-text alert aggregates
+all `backend-listen-metrics` traffic, including stable and former-canary series;
+the pinned recovery flag is enabled across production listen. See the
+[routing runbook](runbooks/live-stt-routing.md#router-on-readiness-controls-default-off).
 
 The adapter log statements routed through `sanitize_provider_error()` do
 not echo raw provider or user text. Live-socket, batch, and auxiliary STT error paths
@@ -918,16 +919,17 @@ breakers, and `omi_stt_provider_retired{provider}` exporting the deployment's
 
 The new live-STT recovery behavior described below — enlarged replay retention,
 paced prefix replay, the recovery controller, and its metrics — is gated by
-`STT_FAILOVER_RECOVERY_ENABLED`, which defaults to `false` in code, chart, dev,
-and prod values. The mode is pinned once at session start; in-flight sessions
+`STT_FAILOVER_RECOVERY_ENABLED`, which defaults to `false` in code and remains
+`false` for dev listen; prod listen chart/runtime values set it to `true`.
+The mode is pinned once at session start; in-flight sessions
 and successor legs keep it even if the environment changes, so toggling the
 variable only affects new sessions (or replacement pods). When off, sessions
 run the pre-recovery paths: the 135-second capture cap and legacy reconnect
 budgets, plain `asyncio.Queue` provider send queues without writer pacing, the
 legacy finalize/EOS order, and legacy circuit rejection semantics; the new
-recovery metrics register but stay at zero. When on — intended only for the
-separately enabled canary Deployment — the recovery paths below apply. No
-deployment or enablement is performed by this change. See the rollout gate in
+recovery metrics register but stay at zero. When on, including prod listen
+after the stable Helm rollout, the recovery paths below apply. See the rollout
+gate in
 `backend/docs/operational/windowed-live-stt.md`.
 
 Recovery-armed initial paid legs and recovered successors use the independent
@@ -3010,7 +3012,44 @@ the close drain. These are estimated connection savings, not vendor invoices.
 The fake-mode local soak establishes byte preservation and lifecycle behavior;
 it does not measure real provider handshake latency or acoustic quality.
 
+### Accepted replay sends and translator coverage
+
+`LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS` defaults to `false` in code, the runtime
+env overlays and listen/pusher Helm values. ON records successful raw replay
+prefix sends before both the paced recovery pump and the legacy cross-provider
+rebuild adopt a live-tail wrapper. Managed legs already account for replay and
+are excluded from this extra wrapper. The prefix's compact provider axis begins
+at zero and continues into tail sends; original capture sample references are
+retained. No provider elapsed-axis selection or guessed callback offset is added.
+The existing unpaced same-provider reconnect already wraps its prefix.
+
+ON also registers a managed leg's accepted PCM immediately after `raw.send`
+returns exactly `True`, before a subsequent `finalize` can fail. That failure
+still fails the send boundary and follows the existing recovery policy. False,
+raised and unobserved sends grant no new proof. Repaired epochs require complete
+provider sample coverage and a strict wall projection; tolerance-sized overshoot,
+VAD holes, wall hiatuses and compacted anchors remain unplaced with text kept.
+Stored/public schemas, STT selection, transport pacing and audio storage stay
+unchanged. OFF preserves the previous ordering and replay send path. The shared
+send mapper always treats an exact exclusive end as belonging to the preceding
+send and refuses capture gaps, duplicates or reorders within a window; this
+correctness repair also applies with the switch OFF. Turning the
+switch off prevents new repair registrations; accepted evidence already recorded
+in an epoch is retained until that epoch ends.
+
 ### Live capture-window attribution
+
+`omi_audio_timeline_outside_sends_total{provider,send_path,subreason}` adds bounded
+geometry to `translator_outside_accepted_sends`: `empty_map`, `before_first_send`,
+`after_last_send`, `interior_hole`, or `evicted`. These describe the retained send
+ledger, not an inferred provider fault. Empty maps can indicate missing replay
+registration; after-last refusals can be either an omitted prefix or actual
+overshoot. Existing refusal, past-send, and stored-segment counters keep their
+names, labels and counting semantics. This sibling counter counts outside-send
+rejected segment translations, independently of persisted rows. A callback with
+N refused segments increments it N times; retries recount. It stores no session
+identifiers.
+
 
 `omi_live_audio_capture_windows_total` keeps its existing labels and committed-version
 semantics. The additive `omi_live_audio_capture_attribution_total{population,reason}`
@@ -3053,6 +3092,40 @@ Compacted anchors still refuse. This applies within the original 64-anchor horiz
 as well as old retained anchors. OFF preserves the former endpoint projection,
 including its hiatus weakness. V2 translation always uses the same strict helper;
 `AUDIO_TIMELINE_V2` stays off. Transcript text survives refusals; no gap is filled.
+
+### Receiver-proven live merge unions
+
+`LIVE_CAPTURE_WINDOW_MERGE_UNION` defaults **off** in code and every deployment
+surface. With ON, each translated known piece can carry a private fixed-size
+snapshot of its provider epoch, strict half-open window and contiguous accepted
+send run. Accepted runs coalesce only when both provider and capture sample axes
+are adjacent; strict wall anchors split the run. A positive-gap text union is
+known only if both pieces have matching window proofs from the same epoch and
+one snapshot covers the entire union. Received silence counts as audio; failed
+or missing sends, VAD skips, wall hiatuses, compacted anchors and epoch changes
+cannot be bridged. Legacy endpoint projection is not upgraded by this switch.
+
+The transcript processor retains only one proven mutable tail per conversation,
+up to 32 recent conversations, for this session. Each transaction validates its
+snapshot window against that sidecar before merging. Successful writes return
+the new tail proof separately from storage. Restarts, older tails, changed
+transaction windows and uncertain write acknowledgements can reduce recovery;
+no provider connection or raw audio is retained, and no epoch identifier or proof
+enters stored transcripts, client projections or inbound diagnostic cassettes.
+The receiver omits the proof from the copy sent to diagnostic capture while keeping
+it on live transport. OFF preserves legacy text/window payloads and counters.
+
+ON never changes row count, text, order, speakers or timing. It only retains the
+union capture window when two known windows merge across a positive gap fully
+covered by the receiver's accepted-send proof. Every merge involving an unknown
+side keeps legacy absorption and clearing, regardless of punctuation, titles,
+callback boundaries or row size. No row splitting or sentence-boundary heuristic
+is introduced by this switch. Partial cross-speaker redistribution still clears
+both windows because it lacks per-word proof. Manual protection, speaker scopes
+and durable replay receipts retain precedence. Recovered unions
+use the existing `known_window` attribution; there is no new metric label.
+Capture placement and conversation-wide resolution still require stored-audio
+span validation. The preservation and retention switches remain independent.
 
 ### Preserve original live provider pieces
 

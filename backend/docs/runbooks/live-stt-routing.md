@@ -440,10 +440,10 @@ the monitoring release process before rollout; committing rules does not make
 them live. The live-STT import allowlist and coverage gate include these rules;
 the monitoring import must precede verification of their live coverage. Lifecycle/replay rules document their configured-chain/recovery
 prerequisites. The #20391 terminal-after-text emitter also requires the pinned
-recovery flag. Its dedicated alert scopes the volume floor, numerator and denominator
-to `listen_track="canary"`; enable recovery on that entire cohort before using it.
-Stable traffic cannot dilute the canary ratio or satisfy its 20-session floor.
-The alert is dormant while recovery is off on the canary cohort. The
+recovery flag. Production recovery is now enabled across all listen traffic, so its
+dedicated alert scopes the volume floor, numerator and denominator to every
+`backend-listen-metrics` series, including stable and former-canary series. Both
+cohorts contribute to the 20-session floor and the terminal-after-text ratio. The
 independent mid-session terminal rule covers every path. Never pool lifecycle
 counters across instances or targets.
 

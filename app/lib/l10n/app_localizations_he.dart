@@ -12321,4 +12321,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get dismiss => 'סגירה';
+
+  @override
+  String get showOnLockScreen => 'הצגה במסך הנעילה';
 }

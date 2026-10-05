@@ -12407,4 +12407,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dismiss => 'Ẩn';
+
+  @override
+  String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
 }

@@ -11,7 +11,11 @@ import uuid
 from pydantic import BaseModel, Field, StrictStr
 
 from config.live_capture import capture_window_reason
-from config.audio_timeline import live_capture_window_merge_preservation_enabled
+from config.audio_timeline import (
+    live_capture_window_merge_preservation_enabled,
+    live_capture_window_merge_union_enabled,
+)
+from models.capture_window_proof import CaptureWindowProof
 from database.read_boundary import parse_payload_strict
 from models.speaker_label_provenance import project_source
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
@@ -373,6 +377,7 @@ class LiveTranscriptMerge:
     absorbed_into: dict[str, str]
     capture_reasons: dict[str, str] = field(default_factory=dict)
     created_ids: set[str] = field(default_factory=set)
+    capture_proofs: dict[str, CaptureWindowProof] = field(default_factory=dict)
 
     def with_segments(self, segments: list[dict]) -> 'LiveTranscriptMerge':
         return replace(self, segments=segments)
@@ -389,6 +394,7 @@ def merge_live_segments(
     *,
     absorbed_ids: Optional[list[str]] = None,
     capture_reasons: Optional[dict[str, str]] = None,
+    capture_proofs: Optional[dict[str, CaptureWindowProof]] = None,
 ) -> LiveTranscriptMerge:
     """Plan only the mutable tail and fresh batch against the transaction's receipt.
 
@@ -422,6 +428,11 @@ def merge_live_segments(
             segment.capture_window_reason = 'inherited_unknown'
     for segment in incoming:
         segment.capture_window_reason = capture_window_reason((capture_reasons or {}).get(str(segment.id)))
+    if live_capture_window_merge_union_enabled():
+        for segment in [*tail, *incoming]:
+            proof = (capture_proofs or {}).get(str(segment.id))
+            if proof and proof.matches(segment.capture_window_bounds()):
+                segment.capture_merge_proof = proof
     # Selected-segment decisions are keyed by ID, so those segments must keep it.
     # Speaker-wide decisions are keyed by speaker: same-speaker merges keep them.
     covered = set(_receipt_section(receipt, 'segments'))
@@ -451,4 +462,9 @@ def merge_live_segments(
         combined.absorbed_into,
         {str(s.id): s.capture_window_reason for s in combined.joined if s.id},
         {str(s.id) for s in combined.segments if s.id and str(s.id) not in prior_ids},
+        {
+            str(s.id): s.capture_merge_proof
+            for s in combined.segments
+            if result and s.id == result[-1].get('id') and s.capture_merge_proof is not None
+        },
     )

@@ -41,6 +41,9 @@ def env(monkeypatch):
 
 ROUND4_RED_ENV = 'OMI_ROUND4_RED'
 ROUND4_RED_SHA = os.environ.get(ROUND4_RED_ENV + '_SHA', '07acece3fd')
+# Freeze the main baseline used by the mixed-version probes. A shared tracking
+# ref can advance mid-run and import dependencies absent from this checkout.
+HISTORICAL_MAIN_SHA = '3697ab9fd0450d9e044981da9b93860f64d2dd6e'
 
 
 def _historical(name, revision, path):
@@ -240,12 +243,12 @@ async def test_ambiguous_send_stores_exactly_once(monkeypatch, spans, protection
 
 @pytest.fixture(scope='module')
 def old_main_pusher_module():
-    return _optional_historical('r4_main_pusher', 'origin/main', 'backend/routers/pusher.py')
+    return _optional_historical('r4_main_pusher', HISTORICAL_MAIN_SHA, 'backend/routers/pusher.py')
 
 
 @pytest.fixture(scope='module')
 def old_main_storage_module():
-    return _optional_historical('r4_main_storage', 'origin/main', 'backend/utils/other/storage.py')
+    return _optional_historical('r4_main_storage', HISTORICAL_MAIN_SHA, 'backend/utils/other/storage.py')
 
 
 @pytest.fixture(scope='module')
@@ -301,7 +304,7 @@ async def test_ambiguous_send_literal625_listen_residual_double_store(
 
 @pytest.fixture(scope='module')
 def old_main_session_module():
-    return _optional_historical('r4_main_session', 'origin/main', 'backend/utils/listen_pusher_session.py')
+    return _optional_historical('r4_main_session', HISTORICAL_MAIN_SHA, 'backend/utils/listen_pusher_session.py')
 
 
 async def _interior_prefix_run(mp, *, protection, session_module=None, peer=None, storage_peer=None):
@@ -1357,7 +1360,7 @@ def test_off_capture_history_without_saved_sync_refuses(env, monkeypatch, damage
 
 def test_off_own_capture_cache_loss_parity_with_main(env, monkeypatch, round4_stage):
     main_stage = _optional_historical(
-        'r4_main_stage', 'origin/main', 'backend/utils/conversations/speaker_resolution.py'
+        'r4_main_stage', HISTORICAL_MAIN_SHA, 'backend/utils/conversations/speaker_resolution.py'
     )
     head_stage = round4_stage if round4_stage else stagemod.stage
     results = []

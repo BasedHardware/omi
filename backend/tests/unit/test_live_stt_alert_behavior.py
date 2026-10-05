@@ -52,19 +52,26 @@ def _series(metric, track, increase, *, pod='one', job='backend-listen-metrics',
 
 @pytest.mark.parametrize('export', ['alerts/live-stt.json', 'alert-rules.json'])
 @pytest.mark.parametrize(
-    'canary_transcribed,canary_failures,stable_transcribed,stable_failures,expected_ratio,fires',
+    'canary_transcribed,canary_failures,stable_transcribed,stable_failures,expected_transcribed,expected_ratio,fires',
     [
-        (100, 2, 10000, 0, 0.02, True),  # Recovery-off traffic cannot dilute 2% canary failure.
-        (100, 2, 0, 0, 0.02, True),
-        (100, 0, 10000, 1000, 0, False),  # Other cohorts cannot inflate the numerator.
-        (19, 1, 10000, 0, 1 / 19, False),  # Other cohorts cannot satisfy the volume floor.
-        (20, 1, 10000, 0, 0.05, True),
-        (100, 1, 10000, 1000, 0.01, False),  # Threshold is strictly greater than 1%.
-        (0, 0, 10000, 1000, 0, False),
+        (100, 2, 10000, 0, 10100, 2 / 10100, False),  # Stable traffic contributes to denominator.
+        (100, 2, 0, 0, 100, 0.02, True),
+        (0, 0, 100, 2, 100, 0.02, True),  # Stable traffic contributes to numerator.
+        (10, 0, 10, 0, 20, 0, False),  # Both cohorts count toward the volume floor.
+        (10, 1, 10, 0, 20, 0.05, True),
+        (100, 1, 0, 0, 100, 0.01, False),  # Threshold is strictly greater than 1%.
+        (0, 0, 0, 0, 0, 0, False),
     ],
 )
-def test_recovery_alert_evaluates_only_canary_cohort(
-    export, canary_transcribed, canary_failures, stable_transcribed, stable_failures, expected_ratio, fires
+def test_recovery_alert_evaluates_all_listen_traffic(
+    export,
+    canary_transcribed,
+    canary_failures,
+    stable_transcribed,
+    stable_failures,
+    expected_transcribed,
+    expected_ratio,
+    fires,
 ):
     rule = next(
         rule for rule in json.loads((MONITORING / export).read_text()) if rule['uid'] == 'omi-stt-terminal-after-text'
@@ -86,7 +93,7 @@ def test_recovery_alert_evaluates_only_canary_cohort(
         _series(failure_metric, 'canary', 1000, job='other-job'),
     ]
     transcribed, ratio, actual_fires = _evaluate(rule, series)
-    assert transcribed == canary_transcribed
+    assert transcribed == expected_transcribed
     assert ratio == pytest.approx(expected_ratio)
     assert actual_fires is fires
 
