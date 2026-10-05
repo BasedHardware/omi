@@ -70,6 +70,7 @@ from utils.stt.live_failure import (
 from utils.stt.live_chain import LiveChainExhausted, ProviderChainUnavailable
 from utils.stt.live_recovery import select_live_replacement
 from config.live_stt_recovery import current_recovery_enabled, session_recovery_enabled
+from utils.stt.soniox_capture_axis import validation_detail
 from utils.stt.soniox_idle import SonioxIdleBudget
 from routers.listen import legacy_recovery
 from utils.stt import legacy_replay
@@ -661,6 +662,7 @@ class ListenReceiver(ReplayFilterMixin):
     @staticmethod
     def _record_elapsed_validation(provider: str, interval: Optional[Tuple[int, int]], gate: Any) -> None:
         outcome = gate.classify_capture_speech(*interval) if gate is not None and interval is not None else 'unknown'
+        validation_detail(audio_timeline_provider_label(provider), interval, gate, outcome)
         OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL.labels(
             provider=audio_timeline_provider_label(provider), outcome=outcome
         ).inc()
