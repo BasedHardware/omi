@@ -6,7 +6,7 @@ types: `due_at`, `created_at`, and `updated_at` become real datetime cells you
 can sort and filter, status is normalized to `completed` or `open`, the header
 row is styled and frozen, and an AutoFilter is automatically enabled. It reads a
 saved JSON export, makes no network requests, and complements
-[`action_items_csv.md`](action_items_csv.md) when rich formatting is desired.
+[`action_items_todotxt.md`](action_items_todotxt.md) when rich spreadsheet formatting is desired.
 
 You need Python 3.10+, an authenticated `omi-cli` for the initial export, and
 [`openpyxl`](https://pypi.org/project/openpyxl/):

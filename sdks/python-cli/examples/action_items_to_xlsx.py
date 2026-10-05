@@ -117,7 +117,7 @@ def convert_action_items_to_xlsx(
     count = 0
     for item in source_items:
         if not isinstance(item, dict):
-            continue
+            raise ValueError("Each action item in the export must be a JSON object")
 
         raw_desc = item.get("description")
         desc = "" if raw_desc is None else str(raw_desc).strip()
@@ -158,6 +158,8 @@ def convert_action_items_to_xlsx(
     partial = output_path.with_name(f"{output_path.name}.partial.{os.getpid()}")
     try:
         workbook.save(partial)
+        if output_path.exists() and not overwrite:
+            raise FileExistsError(f"Refusing to overwrite existing {output_path} (use --overwrite)")
         os.replace(partial, output_path)
     except Exception:
         if partial.exists():
@@ -173,12 +175,12 @@ def convert_action_items_to_xlsx(
 def load_input_json(source: Optional[str]) -> List[Dict[str, Any]]:
     """Load JSON from standard input or file path."""
     if source is None or source == "-":
-        raw = sys.stdin.read()
+        raw = sys.stdin.read().lstrip("\ufeff")
     else:
         path = validate_path(source)
         if not path.is_file():
             raise FileNotFoundError(f"Input file not found: {source}")
-        raw = path.read_text(encoding="utf-8")
+        raw = path.read_text(encoding="utf-8-sig")
 
     data = json.loads(raw)
     if isinstance(data, list):
