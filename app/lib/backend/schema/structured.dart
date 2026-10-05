@@ -149,7 +149,10 @@ class Structured {
       'emoji': emoji,
       'category': category,
       'sections': sections.map((section) => section.toJson()).toList(),
-      'actionItems': actionItems.map((item) => item.description).toList(),
+      // Full objects, not description strings: the conversation cache writes
+      // this shape and legacy caches (< this change) decode either via the
+      // String branch in fromJson.
+      'actionItems': actionItems.map((item) => item.toJson()).toList(),
       'events': events.map((event) => event.toJson()).toList(),
     };
   }

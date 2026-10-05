@@ -773,9 +773,11 @@ html[data-share-theme='dark']:has(.share-note) body {
   font-size: 9px;
 }
 
-.share-note .sn-action-meta > * + *::before {
+/* The separator rides at the end of the owner (only when a due date follows),
+   so a wrapped due date never starts its row with a stray dot. */
+.share-note .sn-action-meta .sn-owner:has(+ time)::after {
   content: '·';
-  margin-right: 10px;
+  margin-left: 4px; /* + the 6px flex gap inside .sn-owner = the 10px the old rule used */
   color: var(--sn-faint);
 }
 

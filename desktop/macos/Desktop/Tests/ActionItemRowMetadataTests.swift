@@ -69,4 +69,32 @@ final class ActionItemRowMetadataTests: XCTestCase {
     XCTAssertNil(decoded.dueAt)
     XCTAssertNil(decoded.context)
   }
+
+  /// `Structured.encode(to:)` used to rebuild every action item with `dueAt: nil`
+  /// and no owner/context, so any domain-level JSON round trip (e.g. the
+  /// conversation cache) silently dropped the metadata this PR surfaces.
+  func testStructuredEncodeKeepsActionItemMetadata() throws {
+    let due = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-07T16:00:00Z"))
+    let structured = Structured(
+      title: "Planning",
+      overview: "Overview",
+      emoji: "🧭",
+      category: "work",
+      actionItems: [
+        ActionItem(
+          description: "Share the provider info", completed: false, deleted: false,
+          captureOwner: "other", ownerName: "Eddie Thai", dueAt: due,
+          context: "Eddie said they would follow up.")
+      ],
+      events: [],
+      sections: []
+    )
+    let decoded = try JSONDecoder().decode(Structured.self, from: JSONEncoder().encode(structured))
+    XCTAssertEqual(decoded.actionItems.count, 1)
+    let item = decoded.actionItems[0]
+    XCTAssertEqual(item.ownerName, "Eddie Thai")
+    XCTAssertEqual(item.captureOwner, "other")
+    XCTAssertEqual(item.dueAt, due)
+    XCTAssertEqual(item.context, "Eddie said they would follow up.")
+  }
 }
