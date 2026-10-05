@@ -34,6 +34,7 @@ SMART_MERGE_MODE_ENV = 'CONVERSATION_SMART_MERGE_MODE'
 SMART_MERGE_UID_ALLOWLIST_ENV = 'CONVERSATION_SMART_MERGE_UID_ALLOWLIST'
 SMART_MERGE_AUDIT_ENV = 'CONVERSATION_SMART_MERGE_AUDIT_ENABLED'
 SMART_MERGE_FLATTEN_ENV = 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED'
+SMART_MERGE_OVERLAP_ENV = 'CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
 
@@ -90,6 +91,11 @@ def smart_merge_flatten_enabled() -> bool:
     return not raw or raw in _ON
 
 
+def smart_merge_overlap_predecessor_enabled() -> bool:
+    """Default off: only an explicit on-value lets the selection skip sync duplicates."""
+    return os.getenv(SMART_MERGE_OVERLAP_ENV, '').strip().lower() in _ON
+
+
 # Sources the benchmark measured. Pendant pairs were 113 of 138; desktop recall
 # was 0 of 2 and desktop rows carry meeting receipts and on-device projections.
 ELIGIBLE_SOURCES = frozenset({'omi'})
@@ -131,6 +137,35 @@ MAX_FRAGMENTS = 12
 
 # Rows fetched to find the predecessor and its stretch context.
 PRECEDING_QUERY_LIMIT = 6
+
+MAX_OVERLAP_PREDECESSOR_SKIPS = 3
+
+PRECEDING_METADATA_FIELDS = (
+    'id',
+    'created_at',
+    'started_at',
+    'finished_at',
+    'source',
+    'client_device_id',
+    'status',
+    'discarded',
+    'deleted',
+    'is_locked',
+    'structured.title',
+    'structured.overview',
+    'user_title',
+    'starred',
+    'folder_user_set',
+    'sync_relevance_user_kept',
+    'visibility',
+    'has_photos',
+    'capture_group',
+    'uses_custom_stt',
+    'external_data.duplicate_capture_of',
+    'relevance_decision.trigger',
+    'smart_merge',
+)
+OVERLAP_CAPTURE_FIELDS = ('sync_content_revision', 'sync_live_target', 'manual_speaker_assignments')
 
 # A survivor refresh lease outlives one slow reprocess, never a crashed worker for long.
 REFRESH_LEASE_SECONDS = 10 * 60

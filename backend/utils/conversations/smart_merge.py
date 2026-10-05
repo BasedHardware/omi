@@ -46,6 +46,7 @@ from config.conversation_smart_merge import (
     SmartMergeMode,
     smart_merge_flatten_enabled,
     smart_merge_mode,
+    smart_merge_overlap_predecessor_enabled,
     smart_merge_uid_allowed,
 )
 from config.jev_decisions import JEV_MODEL
@@ -73,10 +74,10 @@ from utils.conversations.smart_merge_policy import (
     is_donor,
     ledger_fragments,
     new_conversation_skip,
-    partition,
     predecessor_status_skip,
     refresh_owed,
     revision,
+    select_predecessor,
     smart_merge_state,
     stretch_before,
     user_managed,
@@ -87,6 +88,7 @@ from utils.llm.jev_client import ask_jev
 from utils.metrics import (
     record_conversation_smart_merge,
     record_conversation_smart_merge_audit,
+    record_conversation_smart_merge_predecessor_overlap,
     record_conversation_smart_merge_refresh,
     record_smart_merge_flatten,
 )
@@ -166,6 +168,7 @@ class _MergePlan:
         gap: Optional[float],
         expected_survivor_sync_revision: Any = None,
         expected_donor_sync_revision: Any = None,
+        predecessor_skipped: int = 0,
     ):
         self.survivor_id = survivor_id
         self.expected_revision = expected_revision
@@ -173,6 +176,7 @@ class _MergePlan:
         self.gap = gap
         self.expected_survivor_sync_revision = expected_survivor_sync_revision
         self.expected_donor_sync_revision = expected_donor_sync_revision
+        self.predecessor_skipped = predecessor_skipped
 
 
 def _segments(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -180,9 +184,23 @@ def _segments(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return [s for s in value if isinstance(s, Mapping)] if isinstance(value, list) else []
 
 
-def _skip(mode: SmartMergeMode, reason: str, uid: str, conversation_id: str, gap: Optional[float] = None) -> None:
+def _skip(
+    mode: SmartMergeMode,
+    reason: str,
+    uid: str,
+    conversation_id: str,
+    gap: Optional[float] = None,
+    predecessor_skipped: int = 0,
+) -> None:
     record_conversation_smart_merge(mode=mode.value, decision='skip', reason=reason, gap_seconds=gap)
-    logger.info('event=smart_merge decision=skip reason=%s uid=%s conversation=%s', reason, uid, conversation_id)
+    suffix = f' predecessor_skipped_overlap={predecessor_skipped}' if predecessor_skipped else ''
+    logger.info(
+        'event=smart_merge decision=skip reason=%s uid=%s conversation=%s%s',
+        reason,
+        uid,
+        conversation_id,
+        suffix,
+    )
 
 
 def _user_tz(uid: str) -> ZoneInfo:
@@ -203,9 +221,10 @@ def _decision_record(
     check: PairCheck,
     stretch_count: int,
     state_hash: Optional[str],
+    predecessor_skipped: int = 0,
 ) -> dict[str, Any]:
     """Server-only audit record: numbers and ids, never text."""
-    return {
+    record = {
         'version': RECORD_VERSION,
         'mode': mode.value,
         'decision': decision,
@@ -222,6 +241,9 @@ def _decision_record(
         'state_sha256': state_hash,
         'decided_at': datetime.now(timezone.utc),
     }
+    if predecessor_skipped:
+        record['predecessor_skipped_overlap'] = predecessor_skipped
+    return record
 
 
 def _ask(state: str) -> Optional[float]:
@@ -250,16 +272,30 @@ def _decide(
         _skip(mode, reason, uid, conversation_id)
         return None
 
-    rows = smart_merge_db.find_preceding_conversations(
-        uid, source=new_row['source'], created_before=new_row['created_at'], limit=PRECEDING_QUERY_LIMIT
-    )
-    survivor_meta = next((row for row in rows if partition(row) == partition(new_row)), None)
+    overlap_enabled = smart_merge_overlap_predecessor_enabled()
+    if overlap_enabled:
+        rows = smart_merge_db.find_preceding_conversations(
+            uid,
+            source=new_row['source'],
+            created_before=new_row['created_at'],
+            limit=PRECEDING_QUERY_LIMIT,
+            include_capture_metadata=True,
+        )
+    else:
+        rows = smart_merge_db.find_preceding_conversations(
+            uid, source=new_row['source'], created_before=new_row['created_at'], limit=PRECEDING_QUERY_LIMIT
+        )
+    selection = select_predecessor(new_row, rows, overlap_enabled=overlap_enabled)
+    predecessor_skipped = len(selection.skipped_ids)
+    if predecessor_skipped:
+        record_conversation_smart_merge_predecessor_overlap(mode.value, predecessor_skipped)
+    survivor_meta = selection.candidate
     if survivor_meta is None:
-        _skip(mode, SkipReason.NO_PREDECESSOR, uid, conversation_id)
+        _skip(mode, SkipReason.NO_PREDECESSOR, uid, conversation_id, predecessor_skipped=predecessor_skipped)
         return None
     reason = predecessor_status_skip(survivor_meta)
     if reason is not None:
-        _skip(mode, reason, uid, conversation_id)
+        _skip(mode, reason, uid, conversation_id, predecessor_skipped=predecessor_skipped)
         return None
     survivor_id = str(survivor_meta['id'])
     if refresh_owed(survivor_meta) and mode is SmartMergeMode.MERGE:
@@ -276,13 +312,13 @@ def _decide(
 
     survivor = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
     if not survivor:
-        _skip(mode, SkipReason.NO_PREDECESSOR, uid, conversation_id)
+        _skip(mode, SkipReason.NO_PREDECESSOR, uid, conversation_id, predecessor_skipped=predecessor_skipped)
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
     check = check_pair(survivor, survivor_segments, new_row, new_segments)
     if check.reason is not None:
-        _skip(mode, check.reason, uid, conversation_id, check.gap_seconds)
+        _skip(mode, check.reason, uid, conversation_id, check.gap_seconds, predecessor_skipped=predecessor_skipped)
         return None
 
     stored = new_row.get(DECISION_FIELD)
@@ -296,7 +332,13 @@ def _decide(
         fragments = ledger_fragments(survivor)
         b = fragment_of(new_row)
         if b is None or not fragments:
-            _skip(mode, SkipReason.CONVERSATION_NOT_ELIGIBLE, uid, conversation_id)
+            _skip(
+                mode,
+                SkipReason.CONVERSATION_NOT_ELIGIBLE,
+                uid,
+                conversation_id,
+                predecessor_skipped=predecessor_skipped,
+            )
             return None
         a = fragments[-1]
         candidates = list(fragments[:-1])
@@ -336,6 +378,7 @@ def _decide(
             check=check,
             stretch_count=stretch_count,
             state_hash=state_hash,
+            predecessor_skipped=predecessor_skipped,
         )
 
     if mode is SmartMergeMode.SHADOW or not same:
@@ -349,8 +392,9 @@ def _decide(
             gap_seconds=check.gap_seconds,
             p_same=None if reuse else p_same,
         )
+        suffix = f' predecessor_skipped_overlap={predecessor_skipped}' if predecessor_skipped else ''
         logger.info(
-            'event=smart_merge mode=%s decision=%s reason=%s p_same=%s gap_s=%s uid=%s conversation=%s candidate=%s',
+            'event=smart_merge mode=%s decision=%s reason=%s p_same=%s gap_s=%s uid=%s conversation=%s candidate=%s%s',
             mode.value,
             decision,
             reason,
@@ -359,6 +403,7 @@ def _decide(
             uid,
             conversation_id,
             survivor_id,
+            suffix,
         )
         return None
     merge_record = record(MERGED, reason)
@@ -371,6 +416,7 @@ def _decide(
         check.gap_seconds,
         expected_survivor_sync_revision=survivor.get('sync_content_revision'),
         expected_donor_sync_revision=new_row.get('sync_content_revision'),
+        predecessor_skipped=predecessor_skipped,
     )
 
 
@@ -443,14 +489,16 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         except Exception:
             logger.warning('event=smart_merge outcome=record_failed uid=%s conversation=%s', uid, conversation_id)
         record_conversation_smart_merge(mode=mode.value, decision='keep', reason=reason, gap_seconds=plan.gap)
+        suffix = f' predecessor_skipped_overlap={plan.predecessor_skipped}' if plan.predecessor_skipped else ''
         logger.info(
-            'event=smart_merge mode=%s decision=kept reason=%s uid=%s conversation=%s candidate=%s flattened_ancestor_count=%s',
+            'event=smart_merge mode=%s decision=kept reason=%s uid=%s conversation=%s candidate=%s flattened_ancestor_count=%s%s',
             mode.value,
             reason,
             uid,
             conversation_id,
             plan.survivor_id,
             flattened_count,
+            suffix,
         )
         return False
 
@@ -468,14 +516,16 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
                 reason='local_heal',
                 outcome='degraded',
             )
+    suffix = f' predecessor_skipped_overlap={plan.predecessor_skipped}' if plan.predecessor_skipped else ''
     logger.info(
-        'event=smart_merge mode=%s decision=merged p_same=%s uid=%s conversation=%s survivor=%s flattened_ancestor_count=%s',
+        'event=smart_merge mode=%s decision=merged p_same=%s uid=%s conversation=%s survivor=%s flattened_ancestor_count=%s%s',
         mode.value,
         plan.record.get('p_same'),
         uid,
         conversation_id,
         plan.survivor_id,
         flattened_count,
+        suffix,
     )
     finish_absorb(uid, conversation_id, owner=owner)
     return True

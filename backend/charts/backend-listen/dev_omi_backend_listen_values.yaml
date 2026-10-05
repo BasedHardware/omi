@@ -119,6 +119,8 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
+  - name: CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED
+    value: "false"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED

@@ -51,6 +51,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+            value: 'false'
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -529,6 +532,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+            value: 'false'
+            category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -960,6 +966,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+              value: 'false'
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1300,6 +1309,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+              value: 'false'
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1608,6 +1620,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+              value: 'false'
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1869,6 +1884,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+              value: 'false'
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -2415,6 +2433,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+            value: 'false'
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -2926,6 +2947,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+            value: 'false'
+            category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -3271,6 +3295,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+              value: 'false'
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -3631,6 +3658,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+              value: 'false'
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -3932,6 +3962,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+              value: 'false'
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -4207,6 +4240,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+              value: 'false'
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout

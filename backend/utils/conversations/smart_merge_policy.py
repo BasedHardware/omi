@@ -27,6 +27,7 @@ from config.conversation_smart_merge import (
     MAX_GAP_SECONDS,
     MAX_MERGED_SEGMENTS,
     MAX_MERGED_SPAN_SECONDS,
+    MAX_OVERLAP_PREDECESSOR_SKIPS,
     MAX_STRETCH_FRAGMENTS,
     MIN_GAP_SECONDS,
     MIN_WORDS,
@@ -237,6 +238,74 @@ def predecessor_status_skip(row: Mapping[str, Any]) -> Optional[str]:
     if user_ended(row):
         return SkipReason.PREDECESSOR_USER_ENDED
     return None
+
+
+@dataclass(frozen=True)
+class PredecessorSelection:
+    candidate: Optional[Mapping[str, Any]]
+    skipped_ids: tuple[str, ...] = ()
+
+
+def _new_capture_is_live(new: Mapping[str, Any]) -> bool:
+    """Proof the new row is a live capture, not a sync-created row."""
+    if new.get('sync_live_target') is True:
+        return True
+    if new.get('sync_live_target') is not None:
+        return False
+    revision = new.get('sync_content_revision')
+    return revision is None or (type(revision) is int and revision == 0)
+
+
+def _overlap_skippable(candidate: Mapping[str, Any], new: Mapping[str, Any]) -> bool:
+    """A proven sync-created duplicate that overlaps (or sits inside the split
+    window of) a live new conversation; anything unproven stays a barrier."""
+    if not _new_capture_is_live(new):
+        return False
+    revision = candidate.get('sync_content_revision')
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision <= 0:
+        return False
+    if candidate.get('sync_live_target') is not False:
+        return False
+    if smart_merge_state(candidate):
+        return False
+    if predecessor_status_skip(candidate) is not None or refresh_owed(candidate):
+        return False
+    started, finished = candidate.get('started_at'), candidate.get('finished_at')
+    new_started, new_finished = new.get('started_at'), new.get('finished_at')
+    if not (
+        isinstance(started, datetime)
+        and isinstance(finished, datetime)
+        and isinstance(new_started, datetime)
+        and isinstance(new_finished, datetime)
+    ):
+        return False
+    if started > finished or new_started > new_finished or started > new_finished:
+        return False
+    return (new_started - finished).total_seconds() < MIN_GAP_SECONDS
+
+
+def select_predecessor(
+    new: Mapping[str, Any], rows: Sequence[Mapping[str, Any]], *, overlap_enabled: bool
+) -> PredecessorSelection:
+    """The same-partition predecessor inside the fetched window, nearest barrier wins.
+
+    Disabled is the legacy first matching row. Enabled may skip up to
+    MAX_OVERLAP_PREDECESSOR_SKIPS proven sync-created duplicates of a live new
+    capture; every other row, including a fourth skippable one, is the nearest
+    barrier and is returned as the candidate for the ordinary gates to judge.
+    """
+    if not overlap_enabled:
+        return PredecessorSelection(next((row for row in rows if partition(row) == partition(new)), None))
+    new_partition = partition(new)
+    skipped: list[str] = []
+    for row in rows:
+        if partition(row) != new_partition:
+            continue
+        if len(skipped) < MAX_OVERLAP_PREDECESSOR_SKIPS and _overlap_skippable(row, new):
+            skipped.append(str(row.get('id')))
+            continue
+        return PredecessorSelection(row, tuple(skipped))
+    return PredecessorSelection(None, tuple(skipped))
 
 
 @dataclass(frozen=True)

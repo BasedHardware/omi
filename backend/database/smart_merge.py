@@ -30,7 +30,11 @@ from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
 from database.people_stats_cache import invalidate_people_stats_cache
 from config import merge_ancestry
-from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.conversation_smart_merge import (
+    OVERLAP_CAPTURE_FIELDS,
+    PRECEDING_METADATA_FIELDS,
+    smart_merge_flatten_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,31 +44,7 @@ _CONVERSATIONS = 'conversations'
 _ALL_STATUSES = ('in_progress', 'processing', 'merging', 'completed', 'failed')
 # Metadata only: the predecessor's transcript is read separately, and only for
 # the one row that can become the survivor.
-_PRECEDING_FIELDS = (
-    'id',
-    'created_at',
-    'started_at',
-    'finished_at',
-    'source',
-    'client_device_id',
-    'status',
-    'discarded',
-    'deleted',
-    'is_locked',
-    'structured.title',
-    'structured.overview',
-    'user_title',
-    'starred',
-    'folder_user_set',
-    'sync_relevance_user_kept',
-    'visibility',
-    'has_photos',
-    'capture_group',
-    'uses_custom_stt',
-    'external_data.duplicate_capture_of',
-    'relevance_decision.trigger',
-    SMART_MERGE_FIELD,
-)
+_PRECEDING_FIELDS = PRECEDING_METADATA_FIELDS
 
 Plan = Callable[
     [
@@ -100,6 +80,7 @@ def find_preceding_conversations(
     created_before: datetime,
     limit: int,
     firestore_client: Any = None,
+    include_capture_metadata: bool = False,
 ) -> list[dict[str, Any]]:
     """Newest-first visible rows of one source created before ``created_before``.
 
@@ -118,7 +99,8 @@ def find_preceding_conversations(
         },
         field_filter_factory=FieldFilter,
     )
-    query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(list(_PRECEDING_FIELDS))
+    fields = list(_PRECEDING_FIELDS + OVERLAP_CAPTURE_FIELDS) if include_capture_metadata else list(_PRECEDING_FIELDS)
+    query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(fields)
     rows = []
     for snapshot in query.limit(limit).stream():
         data = snapshot.to_dict() or {}
