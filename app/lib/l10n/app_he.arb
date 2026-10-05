@@ -11395,5 +11395,6 @@
     "stopThese": "הפסקת אלה",
     "dismiss": "סגירה",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "הצגה במסך הנעילה"
 }

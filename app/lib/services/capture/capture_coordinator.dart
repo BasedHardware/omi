@@ -533,6 +533,8 @@ class CaptureEnvironment {
     required this.deviceRecording,
     required this.micCapturing,
     this.systemAudioRecording = false,
+    this.systemSurfaceRecordingId,
+    this.systemSurfaceConversationRevision = 0,
   });
 
   /// `_preferences.capturePolicy.muted`.
@@ -560,6 +562,11 @@ class CaptureEnvironment {
   /// `recordingState` in {record, interrupted, systemAudioRecord}.
   final bool micCapturing;
   final bool systemAudioRecording;
+
+  /// `activeRecordingId` and `systemSurfaceConversationRevision`: what a Live
+  /// Activity tap must still match when it is applied.
+  final String? systemSurfaceRecordingId;
+  final int systemSurfaceConversationRevision;
 
   /// Mirrors [selectPhoneMicSessionMode] so the reducer can phase the session
   /// before the start effect picks the same mode. [batchMode] overrides the
@@ -600,20 +607,42 @@ class PhoneStopRequested extends CaptureEvent {
   final bool resumeSuspendedPendant;
 }
 
+/// The recording and conversation a Live Activity card showed when it was tapped.
+class SystemSurfaceTarget {
+  const SystemSurfaceTarget({required this.recordingId, required this.conversationRevision});
+  final String recordingId;
+  final int conversationRevision;
+}
+
+/// The result of a card tap whose recording or conversation was replaced before
+/// the tap was applied; nothing ran.
+class StaleSystemSurfaceTarget {
+  const StaleSystemSurfaceTarget();
+}
+
 /// `finishCapture`: stop and process the phone conversation before a pendant
 /// it took over from resumes.
 class FinishRequested extends CaptureEvent {
-  const FinishRequested();
+  const FinishRequested({this.target});
+
+  /// Set by a Live Activity tap; see [SystemSurfaceTarget].
+  final SystemSurfaceTarget? target;
 }
 
 /// `pauseCapture`: pause whichever source currently owns capture.
 class PauseCaptureRequested extends CaptureEvent {
-  const PauseCaptureRequested();
+  const PauseCaptureRequested({this.target});
+
+  /// Set by a Live Activity tap; see [SystemSurfaceTarget].
+  final SystemSurfaceTarget? target;
 }
 
 /// `resumeCapture`: resume the source pause paused.
 class ResumeCaptureRequested extends CaptureEvent {
-  const ResumeCaptureRequested();
+  const ResumeCaptureRequested({this.target});
+
+  /// Set by a Live Activity tap; see [SystemSurfaceTarget].
+  final SystemSurfaceTarget? target;
 }
 
 /// `toggleOfflineMute`.
@@ -1630,9 +1659,9 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
     switch (event) {
       PhoneStartRequested() => _reducePhoneStart(state, event, env),
       PhoneStopRequested() => _reducePhoneStop(state, event),
-      FinishRequested() => _reduceFinish(state),
-      PauseCaptureRequested() => _reducePause(state, env),
-      ResumeCaptureRequested() => _reduceResume(state, env),
+      FinishRequested() => _rejectStaleTarget(state, event.target, env) ?? _reduceFinish(state),
+      PauseCaptureRequested() => _rejectStaleTarget(state, event.target, env) ?? _reducePause(state, env),
+      ResumeCaptureRequested() => _rejectStaleTarget(state, event.target, env) ?? _reduceResume(state, env),
       OfflineMuteToggled() => _reduceOfflineMuteToggle(state, env),
       DeviceStartRequested() => _reduceDeviceStart(state, event, env),
       DeviceStopRequested() => _reduceDeviceStop(state, event),
@@ -1654,6 +1683,18 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       OnboardingBatchChanged() => _reduceOnboardingBatch(state, event),
       LaunchRecovery() => _reduceLaunchRecovery(state, event, env),
     };
+
+/// A card tap can queue behind a stop, handoff or finish, so it is checked when
+/// applied: it never acts on the recording or conversation that replaced its own.
+CaptureTransition? _rejectStaleTarget(
+    CaptureCoordinatorState state, SystemSurfaceTarget? target, CaptureEnvironment env) {
+  if (target == null ||
+      (target.recordingId == env.systemSurfaceRecordingId &&
+          target.conversationRevision == env.systemSurfaceConversationRevision)) {
+    return null;
+  }
+  return CaptureTransition(state, const [], result: const StaleSystemSurfaceTarget());
+}
 
 CaptureTransition _reducePhoneStart(CaptureCoordinatorState state, PhoneStartRequested event, CaptureEnvironment env) {
   if (state.callActive && state.awaitingPhoneResume) {

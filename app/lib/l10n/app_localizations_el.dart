@@ -12492,4 +12492,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get dismiss => 'Απόρριψη';
+
+  @override
+  String get showOnLockScreen => 'Εμφάνιση στην οθόνη κλειδώματος';
 }

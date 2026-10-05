@@ -12412,4 +12412,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get dismiss => 'Avvis';
+
+  @override
+  String get showOnLockScreen => 'Vis på låseskjermen';
 }

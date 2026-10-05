@@ -12496,4 +12496,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get dismiss => 'மறை';
+
+  @override
+  String get showOnLockScreen => 'பூட்டுத் திரையில் காட்டு';
 }

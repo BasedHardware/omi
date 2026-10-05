@@ -3838,5 +3838,6 @@
     "stopThese": "इन्हें रोकें",
     "dismiss": "हटाएँ",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ"
 }

@@ -12430,4 +12430,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get dismiss => 'Dispensar';
+
+  @override
+  String get showOnLockScreen => 'Mostrar na tela de bloqueio';
 }

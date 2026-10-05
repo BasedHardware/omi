@@ -12419,4 +12419,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get dismiss => 'लपवा';
+
+  @override
+  String get showOnLockScreen => 'लॉक स्क्रीनवर दाखवा';
 }

@@ -12440,4 +12440,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get dismiss => 'Paslēpt';
+
+  @override
+  String get showOnLockScreen => 'Rādīt bloķēšanas ekrānā';
 }

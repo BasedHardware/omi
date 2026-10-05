@@ -12463,4 +12463,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get dismiss => 'దాచు';
+
+  @override
+  String get showOnLockScreen => 'లాక్ స్క్రీన్‌పై చూపించు';
 }

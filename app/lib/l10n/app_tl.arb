@@ -11395,5 +11395,6 @@
     "stopThese": "Itigil Ang Mga Ito",
     "dismiss": "Isara",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Ipakita sa lock screen"
 }

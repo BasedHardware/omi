@@ -12412,4 +12412,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get dismiss => 'সরিয়ে দিন';
+
+  @override
+  String get showOnLockScreen => 'লক স্ক্রিনে দেখান';
 }
