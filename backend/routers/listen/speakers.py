@@ -9,6 +9,8 @@ from collections import deque
 from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
 import av
+import config.speaker_match_scores as match_scores
+import utils.stt.speaker_match as match_policy
 import numpy as np
 from pydantic import ValidationError
 
@@ -90,6 +92,7 @@ class SpeakerMatcher:
         # Pinned-speaker prior (flagged): people an unmatched voice resembles, and the
         # pinned near-miss already offered as a suggestion, per diarized speaker.
         self.voice_candidates: Dict[int, list] = {}
+        self.match_scores: list = []
         self._suggested_person: Dict[int, str] = {}
         # Recent (embedding, clip seconds) per diarized speaker. A decision is made on
         # the centroid once enough audio has accumulated, instead of letting the first
@@ -577,6 +580,22 @@ class SpeakerMatcher:
                     )
                     if prior:
                         self._offer_pinned_suggestion(voice, result, pinned, segment_id, assigned)
+                if match_scores.enabled():
+                    self.match_scores = match_scores.merge(
+                        self.match_scores,
+                        [
+                            match_scores.summarize(
+                                voice,
+                                self._voice_distances[voice],
+                                result,
+                                sum(seconds for _, seconds in self.speaker_evidence[voice]),
+                                'capture',
+                                threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
+                                margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
+                                scope=self._voice_scopes.get(voice, ''),
+                            )
+                        ],
+                    )
                 self.voice_identity_status[voice] = status
                 self.segment_identity_status[segment_id] = status
             self.host.state.speaker_map_dirty = True
@@ -658,4 +677,5 @@ class SpeakerMatcher:
         self._voice_centroids.clear()
         self._voice_scopes.clear()
         self.voice_candidates.clear()
+        self.match_scores.clear()
         self._suggested_person.clear()

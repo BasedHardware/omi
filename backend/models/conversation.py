@@ -3,6 +3,10 @@ from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
+from pydantic.json_schema import SkipJsonSchema
+
+import config.speaker_match_scores as match_scores
+
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 from models.audio_file import AudioFile
@@ -477,6 +481,24 @@ class Conversation(BaseModel):
     capture_evidence: Optional[CaptureEvidenceMetadata] = Field(default=None, exclude=True)
     # Absent on conversations processed before speakers were resolved: count no ids as people.
     speaker_resolution: Optional[ConversationSpeakers] = None
+    speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
+
+    @model_validator(mode='after')
+    def _collect_match_scores(self):
+        updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
+        if updates and match_scores.enabled():
+            self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
+        return self
+
+    @model_serializer(mode='wrap')
+    def _serialize_match_scores(self, handler, info):
+        data = handler(self)
+        if info.mode == 'python' and self.speaker_match_scores is not None:
+            excluded = info.exclude or ()
+            included = info.include
+            if 'speaker_match_scores' not in excluded and (included is None or 'speaker_match_scores' in included):
+                data['speaker_match_scores'] = match_scores.merge(None, self.speaker_match_scores)
+        return data
 
     # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
     # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read

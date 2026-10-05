@@ -29,6 +29,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
+import config.speaker_match_scores as match_scores
+
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 
@@ -84,6 +86,7 @@ class SpeakerResolution:
     coverage: float
     """Share of embeddable speech that voice evidence or a manual label placed."""
     stats: Dict[str, Any] = field(default_factory=dict)
+    match_scores: List[dict] = field(default_factory=list)
     voice_identity_statuses: Dict[int, str] = field(default_factory=dict)
     """Evidence states for automatic voices only; manual receipts remain authoritative."""
 
@@ -130,6 +133,7 @@ def resolve_conversation_speakers(
     manual_speakers: Optional[Mapping[int, Identity]] = None,
     voiceprints: Optional[Mapping[str, Any]] = None,
     abstained_segment_ids: Optional[Set[str]] = None,
+    embedding_seconds: Optional[Mapping[str, float]] = None,
 ) -> Optional[SpeakerResolution]:
     """Resolve one speaker_id per voice across the whole conversation.
 
@@ -274,6 +278,7 @@ def resolve_conversation_speakers(
     voice_identity: Dict[int, Identity] = {}
     distances = {}
     decisions = {}
+    score_seconds = {}
     for index, cluster in enumerate(clusters):
         if identities_of(cluster):
             continue
@@ -281,6 +286,12 @@ def resolve_conversation_speakers(
         vector = centroid(cluster)
         if vector is None or not prints or evidence < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
             continue
+        evidence_ids = [_seg(s, 'id') for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors]
+        score_seconds[index] = (
+            sum(embedding_seconds[sid] for sid in evidence_ids)
+            if embedding_seconds is not None and all(sid in embedding_seconds for sid in evidence_ids)
+            else None
+        )
         distances[index] = {key: _cosine(vector, p) for key, p in prints.items()}
         decisions[index] = select_speaker_match(distances[index], threshold=VOICE_MATCH_THRESHOLD)
     decisions = arbitrate_owner_matches(
@@ -431,6 +442,26 @@ def resolve_conversation_speakers(
         voice_identity_statuses={
             new_id_of[position]: status for position, status in final_status.items() if position in new_id_of
         },
+        match_scores=(
+            match_scores.merge(
+                None,
+                [
+                    match_scores.summarize(
+                        new_id_of[position],
+                        distances[index],
+                        decisions[index],
+                        score_seconds[index],
+                        'resolution',
+                        threshold=VOICE_MATCH_THRESHOLD,
+                        margin_threshold=SPEAKER_MATCH_MARGIN,
+                    )
+                    for position, index in enumerate(keep)
+                    if position in new_id_of and index in decisions
+                ],
+            )
+            if match_scores.enabled()
+            else []
+        ),
         embedded_segments=len(vectors),
         input_speaker_ids=len({int(_seg(s, 'speaker_id')) for s in all_eligible}),
         coverage=_coverage(all_eligible, vectors, manual_speakers, abstained),

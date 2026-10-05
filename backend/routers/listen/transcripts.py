@@ -48,6 +48,7 @@ from utils.metrics import (
 )
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
+import config.speaker_match_scores as match_scores
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
 from utils.speaker_identification import detect_speaker_introduction
 from utils.stt.streaming import sort_segments_by_start
@@ -591,6 +592,16 @@ class TranscriptProcessor:
     def _apply_speaker_identity_statuses(self, segments: List[TranscriptSegment]) -> None:
         speaker = self.host.speakers
         for segment in segments:
+            if match_scores.enabled():
+                segment.speaker_match_scores = next(
+                    (
+                        row
+                        for row in getattr(speaker, 'match_scores', [])
+                        if row['speaker_id'] == segment.speaker_id
+                        and row['speaker_id_scope'] == (segment.speaker_id_scope or '')[:128]
+                    ),
+                    None,
+                )
             person_id = speaker.segment_assignments.get(cast(str, segment.id))
             if person_id is None and segment.speaker_id in speaker.speaker_to_person:
                 person_id = speaker.speaker_to_person[cast(int, segment.speaker_id)][0]

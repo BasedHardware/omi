@@ -56,6 +56,7 @@ from utils.other.portability_read import (
     iter_portability_guarded,
     verified_encrypted_read,
 )
+import config.speaker_match_scores as match_scores
 from utils.other.storage import list_audio_chunks
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
@@ -128,6 +129,7 @@ def get_conversation_ids(uid: str) -> List[str]:
 
 def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
+    _reveal_match_scores_for_read(data, uid)
 
     if 'transcript_segments' not in data:
         _reveal_manual_speaker_assignments_for_read(data, uid)
@@ -219,12 +221,33 @@ def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) 
         data['transcript_segments'] = apply_manual_assignments(segments, data['manual_speaker_assignments'])
 
 
+def _reveal_match_scores_for_read(data: Dict[str, Any], uid: str) -> None:
+    if match_scores.FIELD not in data:
+        return
+    try:
+        data[match_scores.FIELD] = _reveal_json_value(data[match_scores.FIELD], uid, True)
+    except (json.JSONDecodeError, TypeError, zlib.error, ValueError):
+        if current_portability_read() is not None:
+            raise
+        data.pop(match_scores.FIELD, None)
+
+
 def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
+    _reveal_match_scores_for_read(data, uid)
+    segments = data.get('transcript_segments')
+    if isinstance(segments, list):
+        updates = match_scores.from_segments(segments)
+        if updates and match_scores.enabled():
+            data[match_scores.FIELD] = match_scores.merge(data.get(match_scores.FIELD), updates)
+        for segment in segments:
+            segment.pop(match_scores.FIELD, None)
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
         data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
         data['transcript_segments_compressed'] = True
+    if isinstance(data.get(match_scores.FIELD), list):
+        data[match_scores.FIELD] = _protect_json_value(match_scores.merge(None, data[match_scores.FIELD]), uid, level)
     if 'manual_speaker_assignments' in data:
         if not isinstance(data['manual_speaker_assignments'], dict):
             raise ValueError('manual_speaker_assignments must be an object')
@@ -446,6 +469,7 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
                 pass
 
     _reveal_manual_speaker_assignments_for_read(data, uid)
+    _reveal_match_scores_for_read(data, uid)
     return data
 
 
@@ -894,6 +918,7 @@ def persist_processing_result_with_lifecycle(
             # Speaker resolution ran on the processing snapshot; its ids only
             # describe a transcript this write no longer persists.
             write_data.pop('speaker_resolution', None)
+            write_data.pop(match_scores.FIELD, None)
 
         # Restoring a legacy review row is an explicit user decision. A
         # processor that started before the restore may still carry the old
@@ -1906,6 +1931,10 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 payload['transcript_segments'] = _decode_transcript_segments_strict(
                     uid, current['transcript_segments'], bool(current.get('transcript_segments_compressed'))
                 )
+            if match_scores.FIELD in current:
+                _reveal_match_scores_for_read(current, uid)
+                if match_scores.FIELD in current:
+                    payload[match_scores.FIELD] = current[match_scores.FIELD]
             if 'manual_speaker_assignments' in current:
                 payload['manual_speaker_assignments'] = decode_manual_speaker_assignments(
                     uid,
@@ -2858,6 +2887,9 @@ def update_conversation_segments(
             incoming.extend(s for s in persisted if s.get('id') not in known)
             incoming.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))
         accepted = apply_manual_assignments(incoming, receipt)
+        score_updates = match_scores.merge(match_scores.from_segments(segments), match_scores.from_segments(accepted))
+        # Numeric snapshots never count as transcript content or reach live deltas.
+        accepted = [{k: v for k, v in segment.items() if k != match_scores.FIELD} for segment in accepted]
         update_payload = {
             'transcript_segments': accepted,
             # Once a live generation has received content, empty cleanup must
@@ -2876,6 +2908,9 @@ def update_conversation_segments(
             # one that read before a sync append. Retries with no change do
             # not invalidate a current processor.
             update_payload['sync_content_revision'] = current['sync_content_revision'] + 1
+        if score_updates and match_scores.enabled():
+            _reveal_match_scores_for_read(current, uid)
+            update_payload[match_scores.FIELD] = match_scores.merge(current.get(match_scores.FIELD), score_updates)
         if capture_evidence is not None:
             update_payload['capture_evidence'] = capture_evidence
         if remap:
@@ -3400,6 +3435,7 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             )
         else:
             result.pop('manual_speaker_assignments', None)
+        _reveal_match_scores_for_read(result, uid)
         return result
 
     attempted: dict[str, str] = {}

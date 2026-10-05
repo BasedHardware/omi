@@ -3141,3 +3141,28 @@ Completed conversations retain meeting-treatment audit receipts and notes on the
 conversation surface. Finalization, reprocessing, and receipt backfill do not post
 capture or meeting-note cards into Chat; rich conversation links remain available
 in agent replies to a user message.
+
+
+### Internal voice-match score snapshots
+
+`SPEAKER_MATCH_SCORES_ENABLED` defaults on for `OMI_ENV_STAGE=dev|local|offline`
+and off otherwise; explicit `true|1|on|yes` enables it on any host. Capture,
+sync and conversation resolution snapshot existing cosine comparisons without
+new model calls, audio reads or Firestore operations. Jev does not consume them.
+
+Python-mode segment dumps carry transient `speaker_match_scores`; existing
+conversation writes fold them into a conversation-level blob and remove them
+from stored segments. The blob retains at most 16 speaker/scope keys per stage
+(48 rows total), rounded to three decimals. Keys are stage-local; resolution
+IDs must not be joined to capture/sync IDs without segment provenance. Margin
+is nearest vs runner-up, and null denotes missing/non-finite evidence. Resolution
+seconds count actual embedded PCM durations saved alongside the existing encrypted
+embedding cache; older caches lack that duration and report null, without replay.
+
+Unlike the coarse plaintext `speaker_resolution` status, these distances and
+person references are biometric-adjacent evidence. They use the existing compressed
+JSON codec and per-user encryption for enhanced protection, including protection
+level migrations. Standard protection stores compressed JSON. Both segment and
+conversation fields are excluded from OpenAPI, JSON responses, list/detail dict
+views and integration/webhook payloads; backend Python
+models retain the evidence before relevance and for offline reads. No backfill runs.
