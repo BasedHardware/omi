@@ -114,7 +114,7 @@ def apply_summary_speaker_labels(uid: str, conversation, *, firestore_client=Non
                         for p in people
                         if normalized_name(p.get('name') or '') == proposed_name
                         or (
-                            full_real_name(proposed_name)
+                            full_real_name(proposed_name, min_cjk_length=3)
                             and proposed_name in [normalized_name(a) for a in p.get('aliases', [])]
                         )
                     ]

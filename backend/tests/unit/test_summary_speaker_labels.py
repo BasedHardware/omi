@@ -103,6 +103,14 @@ def test_one_letter_apostrophe_prefix_is_extended_before_name_validation(name):
     assert select([candidate(name)], [segment(text=f'My name is {name}.')])
 
 
+@pytest.mark.parametrize('proposed,introduced', [("D'Angelo", 'D’Angelo'), ('D’Angelo', "D'Angelo")])
+def test_straight_and_curly_apostrophe_names_have_the_same_identity(proposed, introduced):
+    from utils.conversations.summary_speaker_labels import normalized_name
+
+    assert normalized_name(proposed) == normalized_name(introduced)
+    assert select([candidate(proposed)], [segment(text=f'My name is {introduced}.')])
+
+
 @pytest.mark.parametrize('name,prefix', [('Joan of Arc', 'Joan'), ('Nguyen To Anh', 'Nguyen')])
 def test_in_name_particles_cannot_turn_a_full_introduction_into_a_prefix(name, prefix):
     rows = [segment(text=f'My name is {name}.')]
@@ -362,6 +370,38 @@ def test_transaction_creates_people_and_labels_idempotently_with_provenance(worl
     assert store.rows[path]['structured']['title'] == 'Intro'
 
 
+@pytest.mark.parametrize(
+    'name,text',
+    [
+        ('Eddie Thai of Google', 'My name is Eddie Thai of Google.'),
+        ('Joan of Arc of France', 'My name is Joan of Arc of France.'),
+        ('Hello David Nguyen', 'Hello David Nguyen is my name.'),
+        ('Hi David Nguyen', 'Hi David Nguyen is my name.'),
+        ('Howdy David Nguyen', 'Howdy David Nguyen is my name.'),
+        ('Hey David Nguyen', 'Hey David Nguyen is my name.'),
+        ('Greetings David Nguyen', 'Greetings David Nguyen is my name.'),
+        ('Eddie Thai From Google', 'My name is Eddie Thai From Google.'),
+        ('Eddie Thai At Google', 'My name is Eddie Thai At Google.'),
+    ],
+)
+def test_padded_introduction_never_creates_a_person_or_labels_the_voice(world, name, text):
+    from utils.conversations.summary_speaker_labels import explicit_introduction_names
+
+    stage, db, store, path, conv = world
+    conv.structured._summary_speaker_candidates = [candidate(name)]
+    conv.transcript_segments = [TranscriptSegment.model_validate(segment(text=text))]
+    store.rows[path].update(
+        db.encode_conversation_for_write(
+            'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
+        )
+    )
+    before = deepcopy(store.rows)
+    assert stage.apply_summary_speaker_labels('u', conv) == 0
+    assert store.rows == before
+    assert not conv.transcript_segments[0].person_id
+    assert explicit_introduction_names(text) == [None]
+
+
 @pytest.mark.parametrize('mode', ['normalized', 'alias', 'link'])
 def test_existing_people_resolved_without_duplicate(world, mode):
     stage, _, store, _, conv = world
@@ -411,6 +451,27 @@ def test_unspaced_cjk_full_alias_resolves_existing_person_without_duplicate(worl
     assert stage.apply_summary_speaker_labels('u', conv) == 1
     assert conv.transcript_segments[0].person_id == 'p1'
     assert len([p for p in store.rows if p[-2] == 'people']) == 1
+
+
+@pytest.mark.parametrize('stored_name,expected', [('山田太郎', 0), ('太郎', 1)])
+def test_two_character_cjk_alias_needs_the_same_full_stored_name(world, stored_name, expected):
+    stage, db, store, path, conv = world
+    c = candidate('太郎')
+    c.bindings[0].evidence_kind = 'contextual'
+    conv.structured._summary_speaker_candidates = [c]
+    conv.transcript_segments = [TranscriptSegment.model_validate(segment(text='I can help.'))]
+    store.rows[path].update(
+        db.encode_conversation_for_write(
+            'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
+        )
+    )
+    store.rows[('users', 'u', 'people', 'p1')] = dict(name=stored_name, aliases=['太郎'])
+    before = deepcopy(store.rows)
+    assert stage.apply_summary_speaker_labels('u', conv) == expected
+    if expected:
+        assert conv.transcript_segments[0].person_id == 'p1'
+    else:
+        assert store.rows == before
 
 
 def test_contextual_identity_can_attach_an_existing_exact_person_without_a_roster_name(world):

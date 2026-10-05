@@ -14,11 +14,30 @@ _MEETING_ROSTER_SOURCES = frozenset(
     {'system_calendar', 'macos_calendar', 'google_calendar', 'outlook_calendar', 'google', 'outlook', 'screen_activity'}
 )
 _NAME_PARTICLES = frozenset({'of', 'to', 'de', 'del', 'da', 'di', 'van', 'von', 'der', 'den', 'la', 'le'})
+_INTRO_DISCOURSE_WORDS = frozenset(
+    {
+        'hello',
+        'hi',
+        'hey',
+        'howdy',
+        'greetings',
+        'welcome',
+        'bonjour',
+        'hola',
+        'ciao',
+        'from',
+        'at',
+        'with',
+        'is',
+        'am',
+        'i',
+    }
+)
 _NAME_TOKEN = r"[^\W\d_]+(?:[-'’][^\W\d_]+)*"
 
 
 def normalized_name(name: str) -> str:
-    return ' '.join(unicodedata.normalize('NFKC', name).casefold().split())
+    return ' '.join(unicodedata.normalize('NFKC', name).replace('’', "'").casefold().split())
 
 
 def explicit_introduction_names(text: str) -> list[Optional[str]]:
@@ -64,18 +83,34 @@ def explicit_introduction_names(text: str) -> list[Optional[str]]:
                     end += following.end(1)
             span = text[start:end]
             tokens = span.split()
-            valid = len(span) >= 2 and all(
-                (0 < i < len(tokens) - 1 and normalized_name(token) in _NAME_PARTICLES)
-                or (token[0].isupper() and normalized_name(token) not in SPEAKER_NAME_STOPWORDS)
-                for i, token in enumerate(tokens)
-            )
+            valid = len(span) >= 2
+            non_particles = 0
+            for i, token in enumerate(tokens):
+                normalized = normalized_name(token)
+                if normalized in _INTRO_DISCOURSE_WORDS:
+                    valid = False
+                    break
+                if normalized in _NAME_PARTICLES:
+                    # Once two name tokens exist, another particle may begin
+                    # an affiliation/location phrase. Never guess by trimming.
+                    if i == 0 or i == len(tokens) - 1 or non_particles >= 2:
+                        valid = False
+                        break
+                elif not token[0].isupper() or normalized in SPEAKER_NAME_STOPWORDS:
+                    valid = False
+                    break
+                else:
+                    non_particles += 1
             names.append(normalized_name(span) if valid else None)
     return names
 
 
-def full_real_name(name: str) -> bool:
-    # CJK explicit forms capture a complete validated name without spaces.
-    return len(name.split()) >= 2 or bool(re.fullmatch(r'[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7a3]{2,6}', name))
+def full_real_name(name: str, *, min_cjk_length: int = 2) -> bool:
+    # CJK introductions/rosters can validate short names. Alias-only admission
+    # is stricter because a two-character retained alias may be a given name.
+    return len(name.split()) >= 2 or (
+        len(name) >= min_cjk_length and bool(re.fullmatch(r'[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7a3]{2,6}', name))
+    )
 
 
 def transcript_identity(segments: list[dict]) -> list[tuple]:

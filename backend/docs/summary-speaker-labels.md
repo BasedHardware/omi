@@ -33,7 +33,14 @@ contradictory one. One-letter apostrophe prefixes are extended across ASCII or
 curly apostrophes before length validation. Contiguous surnames and internal
 name particles (“Joan of Arc”, “Nguyen To Anh”) cannot be discarded or borrowed
 from a later mention. Leading discourse words and ambiguous clause continuations
-decline the binding rather than trimming or guessing a name boundary. Latin
+decline the binding rather than trimming or guessing a name boundary. Greetings
+and discourse words anywhere in the span also decline. Once a name contains
+two non-particle tokens, another particle may start an affiliation/location
+phrase, so the whole span declines: “Eddie Thai of Google” and
+“Joan of Arc of France” authorize neither creation nor a label. An ambiguous
+span still counts as contrary evidence. This intentionally favors false
+negatives over guessing, including complex real names with a later particle.
+Latin
 name tokens require capitals except internal particles; uncertain lowercase
 spans decline. This scanner reuses main's explicit lead-ins and CJK validation
 without changing the shared detector's other callers.
@@ -53,7 +60,11 @@ negative evidence. Existing labels and manual decisions still take precedence.
 People resolve by a roster person link, normalized name, or retained alias.
 An alias must equal the entire proposed full real name;
 a short alias such as “Ann” cannot assign “Anne Smith”. Exact equality with the
-person's own normalized name remains eligible. Duplicate matches decline.
+person's own normalized name remains eligible. Normalization folds straight
+and curly apostrophes to the same character. Alias-only CJK matching requires
+3–6 characters; a two-character alias such as “太郎” cannot assign “山田太郎”.
+Exact equality with a person's full stored name remains eligible even when it
+is two characters. Duplicate matches decline.
 Contextual evidence can attach an existing exact-name person even when the
 cited text never says the name and the roster lacks it. Context alone never
 creates a person. Creation needs a verified full-name explicit introduction,
@@ -63,7 +74,9 @@ sources and corroborated `screen_activity` call rosters supply that authority;
 background mentions and unsupported sources do not. A first-name-only explicit
 introduction can attach an existing exact person, but cannot create one. The
 same `full_real_name` predicate gates introductions, rosters, and aliases: two
-or more space-separated tokens or a complete unspaced CJK name of 2–6 characters.
+or more space-separated tokens or a complete unspaced CJK name. Introductions
+and actual participant rosters permit 2–6 characters; aliases use the stricter
+minimum of three characters unless the full stored name matches exactly.
 Thus a CJK alias can resolve the existing person instead of creating a duplicate.
 The bounded catalog reads at most 501 documents once per transaction attempt; a
 catalog exceeding 500 people declines named assignments because uniqueness
