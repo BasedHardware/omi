@@ -40,6 +40,9 @@ class SonioxProviderClock:
     """
 
     def __init__(self, sample_rate: int) -> None:
+        from utils.stt.soniox_wire_metrics import wire_metrics
+
+        self._metrics = wire_metrics()
         self.sample_rate = sample_rate
         self.samples = 0
         self._pending = 0
@@ -69,22 +72,35 @@ class SonioxProviderClock:
         )
         if not acknowledgments:
             return 0
+        settled = min(self._pending, acknowledgments)
         uncontested = self._pending == acknowledgments == 1 and not (self._audio_after_finalize or self._audio_inflight)
         self._pending = max(0, self._pending - acknowledgments)
         self._uncertain = True
         if not uncontested:
-            return 0
+            return self._raced(settled)
         total, final = message.get('total_audio_proc_ms'), message.get('final_audio_proc_ms')
         # Full finalize acknowledgment must carry one exact, non-regressing
         # position. A token endpoint, lagging progress report or missing field
         # cannot establish padding. Reject bools, strings and fractional samples.
         if type(total) is not int or type(final) is not int or total != final or total < 0:
-            return 0
+            return self._raced(settled)
         numerator = total * self.sample_rate
         if numerator % 1000 or numerator // 1000 < self.samples:
-            return 0
+            return self._raced(settled)
         position = numerator // 1000
         hole = position - self.samples
         self.samples = position
         self._uncertain = False
+        self._metrics.checkpoints.labels(outcome='clean').inc()
         return hole
+
+    def _raced(self, settled: int) -> int:
+        # Invalid/missing positions and overlapping controls also cannot prove
+        # ordering. Unsolicited/duplicate acks settle no finalize controls.
+        self._metrics.checkpoints.labels(outcome='raced').inc(settled)
+        return 0
+
+    def close(self) -> None:
+        """Settle unmatched controls once, on receive-loop termination."""
+        self._metrics.checkpoints.labels(outcome='missing_ack').inc(self._pending)
+        self._pending = 0

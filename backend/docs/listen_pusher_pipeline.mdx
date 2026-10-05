@@ -2057,6 +2057,42 @@ keeps its own wall projection. Private visible-time metadata is consumed before
 the receiver sees the result; a cross-gap token remains without a capture window.
 Pusher carries an inert mirror declaration; managed Soniox sockets run in listen.
 
+Wire-ledger rollout uses ON-only bounded counters, independent of the existing
+capture-axis diagnostics gate. OFF creates no collectors and changes no values
+even if a previous ON socket registered them in the same process:
+
+| Counter | Semantics |
+| --- | --- |
+| `omi_soniox_wire_ledger_finalize_checkpoints_total{outcome="clean\|raced\|missing_ack"}` | Each begun finalize control settles once. `clean` is a sole, uncontested, exact nonregressing position, including zero padding; `raced` includes subsequent/in-flight audio, overlapping controls and invalid/missing positions on a received `<fin>`; `missing_ack` settles outstanding controls when the receive loop ends, including timeout/cancellation. Unsolicited/duplicate acknowledgments settle no controls. |
+| `omi_soniox_wire_ledger_provider_holes_total` | Positive reported holes actually registered on the bound logical epoch, including pre-binding padding registered once at bind. |
+| `omi_soniox_wire_ledger_provider_hole_samples_total` | Total registered hole samples; convert with the configured wire rate, independently of emitted PCM. |
+| `omi_soniox_wire_ledger_intervals_total{outcome="known\|unplaceable_by_race\|other_refused"}` | One outcome per translator candidate, before persistence/merging. `known` grants an observed-send window. A refused native interval overlapping PCM emitted while the finalize clock was uncertain is `unplaceable_by_race`; unknown origins, provider padding, capture gaps and other refusals are `other_refused` unless they also overlap that uncertainty. |
+
+Race attribution retains at most 4096 coalesced provider intervals per epoch.
+It cannot authorize a window. Late refusals beyond this attribution history
+fall into `other_refused`; the capture map still fails closed independently.
+Unbound emitted prefixes remain unknown-origin refusals. New socket clocks
+start fresh after idle reopen; prior logical-epoch race history stays available
+for delayed intervals. These are local evidence cohorts, not provider-confirmed
+source-word boundaries or counts of distinct persisted segments.
+
+For rollout, first independently conserve actual binary PCM at the wire boundary
+and require no known window to span a provider hole, raced interval, unknown
+origin or unobserved capture gap. Compare checkpoint fractions using all three
+outcomes as the denominator; unmatched controls appear only at receive teardown,
+so compare settled cohorts over a window long enough to include socket closes.
+Clean checkpoint share and the `known` candidate fraction should rise where
+reported anchors recover mapping, while race/missing-ack shares explain the
+coverage ceiling. The race-refusal fraction should track uncertain emitted
+audio and may rise when the old false grant is correctly removed. A lower total
+refusal rate alone is never success. Track these candidate rates alongside
+distinct/committed capture-window coverage and inspect placement evidence before
+widening; increased known counts without correct containment are a stop signal.
+There is no expected reduction in `wire=past` or
+`total_audio_proc_ms` minus written PCM: ON retains every finalize frame and
+provider-only padding. R12's finalize-suppression drift-collapse criterion is
+superseded. No production cohort or enablement is established by local tests.
+
 `SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
 keeps the compact send axis for all placement and speaker windows, exactly as
 `off` does. A separate elapsed-axis map supplies metrics only; it never gates

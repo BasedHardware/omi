@@ -442,7 +442,9 @@ class SafeSonioxSocket(STTSocket):
                 self._wire_samples += length
                 provider_clock.end_audio(length)
                 if self._wire_epoch is not None:
-                    self._wire_epoch.note_wire_audio(length, getattr(data, 'spans', ()) if placeable else ())
+                    self._wire_epoch.note_wire_audio(
+                        length, getattr(data, 'spans', ()) if placeable else (), unplaceable_by_race=not placeable
+                    )
             self._diagnostic(lambda diagnostic: diagnostic.sent(data))
         finally:
             if not written and provider_clock is not None and isinstance(data, bytes):
@@ -589,6 +591,8 @@ class SafeSonioxSocket(STTSocket):
                 f'ws recv error: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
             )
         finally:
+            if self._provider_clock is not None:
+                self._provider_clock.close()
             try:
                 self._flush_pending()
             finally:
