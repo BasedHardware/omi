@@ -50,6 +50,7 @@ from utils.stt.provider_resilience import (
 from utils.stt.socket import STTSocket
 from utils.stt import parakeet_window as window
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_RATE_LIMITED
+from utils.stt import paid_admission
 
 Connect = Callable[[], Awaitable[STTSocket | None]]
 logger = logging.getLogger(__name__)
@@ -244,9 +245,7 @@ async def connect_configured_chain(
                 continue
             fallback.extend((service, target) for target in permitted.get(service.value, ()))
             if service in configured_candidates and service.value not in represented:
-                entry = capacity_targets.get(DEFAULT_IDS.get(service.value, ''))
-                if entry is None or capacity_available(entry):
-                    fallback.append((service, None))
+                fallback.append((service, None))
 
         def conservative_stage(route: tuple[STTService, Target | None]) -> int:
             service, target = route
@@ -278,20 +277,17 @@ async def connect_configured_chain(
                 # Registry withdrawal/capability/ramp exclusions also own the
                 # default endpoint. Re-appending it as a "legacy" tail would
                 # bypass the very exclusion the policy just decided.
-                represented = {
-                    target.family
-                    for target in targets or ()
-                    if target.endpoint is None and engine_matches(target, routing_models)
-                }
-                tail = [(service, None) for service in configured_candidates if service.value not in represented]
-                tail = [
-                    (service, target)
-                    for service, target in tail
-                    if (entry := capacity_targets.get(DEFAULT_IDS.get(service.value, ''))) is None
-                    or capacity_available(entry)
-                ]
-                routes = [(STTService(target.family), target) for target in proposed] + tail
+                routes = [(STTService(target.family), target) for target in proposed]
                 routes.extend((STTService(target.family), target) for target in last_resorts)
+                # Preserve every permitted configured endpoint, even when the
+                # proposal omitted it for capacity or health. Hard withdrawals
+                # were already applied by configured_candidates. A custom
+                # endpoint must never consume the family's default tail.
+                for service in configured_candidates:
+                    if any(s == service and (t is None or t.endpoint is None) for s, t in routes):
+                        continue
+                    target, _ = route_target(service)
+                    routes.append((service, target if targets and target in targets else None))
         except CostHealthUnavailable as error:
             COST_FAIL_OPEN.labels(reason='cache_unavailable').inc()
             routes, active = fallback_routes(error.states)
@@ -380,6 +376,16 @@ async def connect_configured_chain(
     capacity_blocked = set()
     capacity_resorts = []
     backoff_skipped = []
+    parakeet_capacity_refused = (
+        active
+        and paid_admission.enabled()
+        and STTService.parakeet in configured_candidates
+        and callbacks.get(STTService.parakeet) is not None
+        and (
+            any(target.family == 'parakeet' and not capacity_available(target) for target in capacity_targets.values())
+            or ((routing_models or {}).get('parakeet') == 'parakeet-window' and not window.admission.available())
+        )
+    )
 
     def attempt_identity(service: STTService, target) -> str:
         if target is not None:
@@ -388,12 +394,51 @@ async def connect_configured_chain(
             return (routing_models or {}).get('parakeet') or 'parakeet'
         return DEFAULT_IDS.get(service.value) or service.value
 
+    async def _restore_configured_chain() -> tuple[STTSocket, STTService]:
+        record_fallback(
+            component='stt_selection',
+            from_mode=origin,
+            to_mode=primary_service.value,
+            reason='config_incomplete',
+            outcome='degraded',
+        )
+        return await connect_configured_chain(
+            primary_service=primary_service,
+            connect_primary=connect_primary,
+            callbacks=callbacks,
+            failed=failed,
+            models=models,
+            routing_uid=routing_uid,
+            routing_language=routing_language,
+            routing_languages=routing_languages,
+            routing_models=routing_models,
+            failed_targets=failed_targets,
+            _routing_static=True,
+        )
+
+    def _paid_spillover_scope(service: STTService) -> bool:
+        return (
+            active
+            and paid_admission.enabled()
+            and service.value in {'soniox', 'modulate', 'deepgram'}
+            and (parakeet_capacity_refused or prior_reason == 'capacity_full')
+        )
+
     async def attempt(
         service: STTService, connect: Connect, target=None, *, force_backoff: bool = False, rescue: bool = False
     ) -> tuple[STTSocket, STTService] | None:
-        if not recovery_on:
-            return await _attempt_legacy(service, connect, target)
         nonlocal origin, prior_reason, prior_capacity_subtype, primary_open
+        if not recovery_on:
+            # Legacy dialing has no backoff lease or recovery reservation
+            # between here and its connect(), so this is already the last
+            # policy gate before the dial.
+            if _paid_spillover_scope(service) and not await paid_admission.admit(service.value):
+                # Release any half-open probe acquired by the route loop.
+                # Budget denial is policy, never a provider-health failure.
+                _, release = target_circuit(target, _circuit_for_primary(service)).deferred_result_callbacks()
+                release()
+                return await _restore_configured_chain()
+            return await _attempt_legacy(service, connect, target)
         circuit = target_circuit(target, _circuit_for_primary(service))
         on_success, on_close = circuit.deferred_result_callbacks()
         backoff_lease = connect_backoff().acquire(
@@ -414,6 +459,19 @@ async def connect_configured_chain(
             )
             return None
         try:
+            # The spillover budget admits paid dials, not selection attempts:
+            # spend it only after the backoff lease exists and the episode
+            # still has dial time, so skipped or expired attempts cannot burn
+            # the per-minute cap without any provider traffic.
+            episode = current_recovery.get()
+            if episode is not None and episode.dial_budget() <= 0:
+                on_close()
+                return None
+            if _paid_spillover_scope(service) and not await paid_admission.admit(service.value):
+                # Release any half-open probe acquired for this attempt.
+                # Budget denial is policy, never a provider-health failure.
+                on_close()
+                return await _restore_configured_chain()
             return await _attempt_dial(service, connect, target, circuit, on_success, on_close, backoff_lease)
         finally:
             backoff_lease.finish()

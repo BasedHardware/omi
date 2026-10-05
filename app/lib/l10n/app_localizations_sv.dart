@@ -12417,4 +12417,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get dismiss => 'Avvisa';
+
+  @override
+  String get showOnLockScreen => 'Visa på låsskärmen';
 }

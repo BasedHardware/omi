@@ -116,12 +116,21 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
   - name: MENTOR_GATE_DEBOUNCE_ENABLED
     value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
+  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
+    value: "shadow"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
@@ -185,6 +194,23 @@ env:
     value: "false"
   - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "false"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "false"
+  - name: SONIOX_WIRE_LEDGER
+    value: "false"
+  - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
+    value: "false"
+  # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
+  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
+    value: "true"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_CHAT_AGENT_ROUTE

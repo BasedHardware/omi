@@ -106,12 +106,21 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
   - name: MENTOR_GATE_DEBOUNCE_ENABLED
     value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
+  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
+    value: "shadow"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
@@ -557,6 +566,24 @@ env:
     value: "false"
   - name: LIVE_SPEAKER_SPAN_RESOLUTION
     value: "false"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "false"
+  - name: SONIOX_WIRE_LEDGER
+    value: "false"
+  - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
+    value: "false"
+  # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
+  # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
+  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
+    value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

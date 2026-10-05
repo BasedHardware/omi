@@ -44,6 +44,16 @@ checks:
     triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
+  - id: plugin-request-timeouts
+    command: ["python3", "scripts/check_plugin_request_timeouts.py"]
+    triggers: ["plugins/**/*.py", "scripts/check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "requests applies no default timeout, so an upstream that accepts the connection and stops answering pins the worker; 19 of these calls ran inside async handlers, where one wedged token exchange blocked the event loop and the app stopped serving every user"
+  - id: plugin-request-timeout-check-tests
+    command: ["python3", "scripts/test_check_plugin_request_timeouts.py"]
+    triggers: ["scripts/check_plugin_request_timeouts.py", "scripts/test_check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the timeout scanner is the guard for this class, so its own detection of bare calls, requests.Session aliases and async call sites stays executable"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
@@ -510,6 +520,16 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
+  - id: rewind-repository-ownership-guard-tests
+    command: ["python3", "desktop/macos/scripts/check-rewind-repository-ownership.py", "--self-test"]
+    triggers: ["desktop/macos/scripts/check-rewind-repository-ownership.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #9519: the guard must prove it rejects copied private Rewind DatabasePool/generation caches while accepting repository-owned storage"
+  - id: rewind-repository-ownership
+    command: ["python3", "desktop/macos/scripts/check-rewind-repository-ownership.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-rewind-repository-ownership.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #9519: all Rewind-backed actors must acquire replaceable pools through RewindRepository so owner switches and recovery cannot leave a private stale pool cache"
   - id: desktop-agent-credential-boundary
     command: ["python3", "desktop/macos/scripts/check-agent-credentials.py"]
     triggers: ["desktop/macos/Desktop/Sources/Chat/**", "desktop/macos/agent/src/**", "desktop/macos/pi-mono-extension/**", "desktop/macos/scripts/check-agent-credentials.py", ".github/checks-manifest.yaml"]
@@ -817,6 +837,11 @@ checks:
     triggers: ["web/frontend/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
     lanes: ["local", "ci"]
     reason: "web/frontend's node --test suite had no lane, so its guards never ran in CI and a deleted frontend test had to be re-homed into a backend pytest to keep running"
+  - id: web-share-http-tests
+    command: ["bash", "scripts/run-web-share-http-tests.sh"]
+    triggers: ["web/frontend/**", "scripts/run-web-share-http-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-599: public share URLs returned HTML for Markdown and JSON requests and omitted public speaker/time/task facts; synthetic HTTP requests exercise the shared rendering primitives through actual Next routing"
   - id: web-admin-tests
     command: ["bash", "scripts/run-web-admin-tests.sh"]
     triggers: ["web/admin/lib/**", "web/admin/app/api/**", "scripts/run-web-admin-tests.sh", ".github/checks-manifest.yaml"]

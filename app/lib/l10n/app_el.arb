@@ -3838,5 +3838,6 @@
     "stopThese": "Διακοπή αυτών",
     "dismiss": "Απόρριψη",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος"
 }

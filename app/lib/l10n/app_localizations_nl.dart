@@ -12448,4 +12448,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dismiss => 'Verbergen';
+
+  @override
+  String get showOnLockScreen => 'Toon op vergrendelscherm';
 }

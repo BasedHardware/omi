@@ -12455,4 +12455,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get dismiss => 'Скрыть';
+
+  @override
+  String get showOnLockScreen => 'Показывать на экране блокировки';
 }

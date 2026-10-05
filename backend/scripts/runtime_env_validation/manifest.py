@@ -52,6 +52,7 @@ from scripts.runtime_env_validation.common import (
     _validate_forbidden_env_entries,
     data_plane_project,
     validate_mentor_pipeline,
+    validate_proactivity_v2_posthog_token,
 )
 
 _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
@@ -721,6 +722,38 @@ def _validate_desktop_backend_vertex_pt_contract(env: str, env_config: ConfigDic
     return errors
 
 
+def _validate_proactivity_v2_flag_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Every feed/mentor host and gateway admission executor needs the dedicated token."""
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    hosts = [(f'gke/{name}', gke.get(name)) for name in ('backend-listen', 'pusher')]
+    hosts.extend((f'cloud_run/{name}', host) for name, host in services.items())
+    hosts.extend((name, env_config.get(name)) for name in ('llm_gateway', 'desktop_backend'))
+    errors: list[ValidationError] = []
+    for name, host in hosts:
+        env_map = _as_config_dict((_as_config_dict(host) or {}).get('env')) or {}
+        errors.extend(validate_proactivity_v2_posthog_token(scope=f'{env}/{name}', env_entries=env_map, required=True))
+
+    # Gateway has its own manifest section, outside _validate_gke's service loop.
+    gateway = _as_config_dict(env_config.get('llm_gateway')) or {}
+    gateway_env = _as_config_dict(gateway.get('env')) or {}
+    values = _load_yaml(ROOT / f'backend/charts/llm-gateway/{env}_omi_llm_gateway_values.yaml')
+    errors.extend(
+        _validate_env_entries(
+            scope=f'{env}/llm_gateway',
+            expected={
+                name: gateway_env[name]
+                for name in ('PROACTIVITY_V2_POSTHOG_TOKEN', 'PROACTIVITY_V2_POSTHOG_HOST')
+                if name in gateway_env
+            },
+            actual=_env_entries_by_name(values.get('env', [])),
+            strict_provisional=True,
+        )
+    )
+    return errors
+
+
 def validate_runtime_env(
     *,
     env: str,
@@ -740,6 +773,7 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
+    errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     for service, service_config in (_as_config_dict(env_config.get('gke')) or {}).items():
         values_file = (_as_config_dict(service_config) or {}).get('values_file')

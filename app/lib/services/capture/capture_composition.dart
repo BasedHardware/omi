@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:omi/backend/preferences.dart';
@@ -6,6 +7,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/capture_system_surface.dart';
+import 'package:omi/services/bridges/live_activity_bridge.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
@@ -117,7 +120,7 @@ CaptureProvider composeProductionCaptureProvider({
   if (Platform.environment.containsKey('FLUTTER_TEST') || const bool.fromEnvironment('FLUTTER_TEST')) {
     throw UnsupportedError('composeProductionCaptureProvider refuses FLUTTER_TEST');
   }
-  return CaptureProvider(
+  final provider = CaptureProvider(
     sessionOwner: CaptureSessionOwner(
       coordinator: RecordingTransferCoordinator.instance,
       startForeground: () async {
@@ -134,6 +137,11 @@ CaptureProvider composeProductionCaptureProvider({
     // An Omi phone call pauses a streaming pendant and gives it back when it ends.
     omiCallState: PhoneCallProvider.callStateListenable,
   );
+  if (Platform.isIOS) {
+    // Presentation failure must never stop capture.
+    unawaited(CaptureSystemSurface(provider, LiveActivityBridge()).start());
+  }
+  return provider;
 }
 
 CaptureWedgeMonitor composeCaptureWedgeMonitor() {

@@ -3838,5 +3838,6 @@
     "stopThese": "Zastavit tyto",
     "dismiss": "Skrýt",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Zobrazit na zamčené obrazovce"
 }

@@ -11,7 +11,7 @@ UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 - **raybanDat**: camera-capable iOS target with the same iOS development identity; `scripts/rayban_dat.sh` excludes mcumgr only for that transaction, then restores the default graph.
 
 ### Version string
-`pubspec.yaml` (`1.0.543+992`) is the local marketing+build placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest TestFlight/App Store (or Play) version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only when stores have no history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER` (Codemagic's `BUILD_NUMBER`, else `"local"`). Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
+`pubspec.yaml` (`1.0.543+992`) is the local placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest store version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only with no store history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER`. Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
 
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
@@ -56,13 +56,15 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 ### Pigeon (Phone Mic — conversation capture)
 - Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift` + `android/app/src/main/kotlin/com/friend/ios/phonemic/PhoneMicPigeon.g.kt`
 - Regenerate: `dart run pigeon --input lib/phone_mic_interface.dart`
-- iOS module: `ios/Runner/PhoneMic/` — self-healing AVAudioEngine capture (interruptions/route changes recover natively; Dart only mirrors state)
-- Android module: `android/app/src/main/kotlin/com/friend/ios/phonemic/` — AudioRecord capture with a self-healing rebuild loop + silencing detection (calls/assistant recover natively; Dart only mirrors state); `PhoneMicForegroundService` (microphone FGS) keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus
-- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
-- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops events with a foreign id so a stale native event can't clobber a fresh session; `start()` onto a live native session adopts the new id and re-emits state so the caller converges; `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
-- Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit iOS, libopus JNI shim Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or auto offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
+- Modules: iOS `ios/Runner/PhoneMic/` (self-healing AVAudioEngine capture; interruptions/routes recover natively); Android `android/app/src/main/kotlin/com/friend/ios/phonemic/` (AudioRecord with self-healing rebuild + silencing detection; `PhoneMicForegroundService` keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus)
+- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` arbitrates the two stacks
+- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops foreign-id events, `start()` onto a live session adopts the new id and re-emits state, and `stop()` always forwards to native then tears down locally once
+- Two capture modes fixed at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Selection: `CaptureController.streamRecording` (explicit or offline fallback); `omibatchphoneauto` auto-uploads on reconnect
 
 On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
+
+### MethodChannel (On-device tool surface)
+- `com.omi.device_tools` (`lib/services/device_tools/device_tool_surface.dart`, iOS `DeviceToolsService.swift`): `search_contacts`, `propose_message`, `request_permission`. iOS verb is **propose** — the compose sheet is the approval; cancelled ≠ delivered. Rides `device_tools` on `POST /v2/messages` + `tool:` SSE frames, never surfaced to chat UI. Contract: `desktop/macos/docs/device-tool-surface.md`.
 
 ## Permission Matrix
 

@@ -11395,5 +11395,6 @@
     "stopThese": "এগুলো বন্ধ করুন",
     "dismiss": "সরিয়ে দিন",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "লক স্ক্রিনে দেখান"
 }

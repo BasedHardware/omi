@@ -3873,5 +3873,6 @@
     "stopThese": "Parar estes",
     "dismiss": "Dispensar",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Mostrar na tela de bloqueio"
 }

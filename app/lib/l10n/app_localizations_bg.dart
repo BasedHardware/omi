@@ -12457,4 +12457,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get dismiss => 'Скрий';
+
+  @override
+  String get showOnLockScreen => 'Показване на заключения екран';
 }

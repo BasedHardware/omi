@@ -81,6 +81,7 @@ final class QuickActionsIconPatcher: NSObject {
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var liveActivityManager: Any?
   private static let unusedForegroundTaskRefreshIdentifier = "com.pravera.flutter_foreground_task.refresh"
   private var methodChannel: FlutterMethodChannel?
   private var capturePolicyChannel: FlutterMethodChannel?
@@ -109,6 +110,8 @@ final class QuickActionsIconPatcher: NSObject {
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
+  private var deviceToolsChannel: FlutterMethodChannel?
+  private let deviceToolsService = DeviceToolsService()
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
@@ -146,6 +149,9 @@ final class QuickActionsIconPatcher: NSObject {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
     SiriBridge.shared.attach(messenger: messenger)
+    if #available(iOS 16.1, *) {
+      liveActivityManager = LiveActivityManager(messenger: messenger)
+    }
     #if compiler(>=6.4)
     if #available(iOS 16.0, *),
        let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiShortcutsButton") {
@@ -369,6 +375,12 @@ final class QuickActionsIconPatcher: NSObject {
       self?.handleAppleHealthCall(call, result: result)
     }
 
+    // Create the on-device tool surface method channel
+    deviceToolsChannel = FlutterMethodChannel(name: "com.omi.device_tools", binaryMessenger: messenger)
+    deviceToolsChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.deviceToolsService.handleMethodCall(call, result: result)
+    }
+
     // Create Speech Recognition method channel
     let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: messenger)
     let speechHandler = SpeechRecognitionHandler()
@@ -472,7 +484,6 @@ final class QuickActionsIconPatcher: NSObject {
     } else {
       NSLog("[AppDelegate] Phone calls plugin registrar unavailable")
     }
-
   }
 
   private func endNativeSyncTransferBackgroundTask() {
@@ -630,6 +641,9 @@ final class QuickActionsIconPatcher: NSObject {
   override func applicationWillTerminate(_ application: UIApplication) {
     QuickActionsIconPatcher.shared.stopObserving()
     OmiBleManager.shared.disconnectAllPeripherals()
+    if #available(iOS 16.1, *) {
+      LiveActivityManager.endAllBeforeTermination()
+    }
 
     // If title and body are nil, then we don't need to show notification.
     guard let title = notificationTitleOnKill, let body = notificationBodyOnKill else { return }

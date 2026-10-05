@@ -12201,4 +12201,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dismiss => '忽略';
+
+  @override
+  String get showOnLockScreen => '在锁定屏幕上显示';
 }

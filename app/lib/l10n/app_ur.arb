@@ -11395,5 +11395,6 @@
     "stopThese": "یہ روکیں",
     "dismiss": "چھپائیں",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "لاک اسکرین پر دکھائیں"
 }

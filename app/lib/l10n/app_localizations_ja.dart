@@ -12222,4 +12222,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dismiss => '非表示';
+
+  @override
+  String get showOnLockScreen => 'ロック画面に表示';
 }

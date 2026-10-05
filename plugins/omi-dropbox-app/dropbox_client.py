@@ -8,6 +8,8 @@ from typing import Optional, Tuple
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+REQUEST_TIMEOUT = (5, 30)
+
 
 class DropboxClient:
     """Client for Dropbox API operations."""
@@ -52,6 +54,7 @@ class DropboxClient:
             response = requests.post(
                 f"{self.API_BASE}/users/get_current_account",
                 headers=self._headers(),
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -78,6 +81,7 @@ class DropboxClient:
                 f"{self.API_BASE}/files/create_folder_v2",
                 headers=self._headers(),
                 json={"path": path, "autorename": False},
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -129,6 +133,7 @@ class DropboxClient:
                 f"{self.CONTENT_BASE}/files/upload",
                 headers=headers,
                 data=content,
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -146,6 +151,7 @@ class DropboxClient:
                 f"{self.API_BASE}/files/get_metadata",
                 headers=self._headers(),
                 json={"path": path},
+                timeout=REQUEST_TIMEOUT,
             )
             if response.status_code == 200:
                 metadata = response.json()
@@ -193,6 +199,7 @@ class DropboxClient:
                 f"{self.API_BASE}/files/search_v2",
                 headers=self._headers(),
                 json=payload,
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -240,6 +247,7 @@ class DropboxClient:
                     "limit": limit,
                     "recursive": False,
                 },
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:

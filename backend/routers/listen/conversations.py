@@ -17,11 +17,13 @@ from routers.listen.contracts import ConversationCaptureOrigin, persisted_starte
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.live_speaker_carry import carried_receipt
+from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.live_continuation import resolve_live_continuation
 from utils.conversation_continuity import resumable_continuation
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.transcribe_decisions import (
@@ -648,18 +650,71 @@ class LiveConversationController:
         supervisor crash that tears down the socket. A conversation whose finalization write
         fails every time (a document already at Firestore's 1 MiB limit) was retried by each
         reconnect and ended each session seconds after it started, so the client reconnected
-        in a loop and its live transcription never ran. The row keeps its status and the next
-        session's sweep retries it; unrelated rows in the same sweep still run.
+        in a loop and its live transcription never ran. A transient failure (contention, an
+        expired transaction) keeps the row's status for the next session's sweep; unrelated rows
+        in the same sweep still run. A rejection at the 1 MiB ceiling is permanent, so that row
+        goes to ``_close_oversized`` instead of being retried by every reconnect.
         """
         try:
             await finalize(conversation_id)
         except Exception as error:
+            failure = classify_finalization_failure(error, conversation_id)
+            if failure.conversation_at_size_limit:
+                await self._close_oversized(conversation_id, stage=stage)
+                return
+            # Bounded tokens, never the message: Firestore names the rejected
+            # document by its path, which carries the uid.
             logger.error(
-                'Listen pending finalization failed stage=%s conversation=%s type=%s',
+                'Listen pending finalization failed stage=%s conversation=%s type=%s reason=%s document=%s',
                 stage,
                 conversation_id,
                 type(error).__name__,
+                failure.reason,
+                failure.document,
             )
+
+    async def _close_oversized(self, conversation_id: str, *, stage: str) -> None:
+        """Terminalize a row whose finalization can never commit because it is at the 1 MiB ceiling.
+
+        Retrying is pointless (the binding write grows the document) and the row
+        would stay ``in_progress``, invisible to the user, while every reconnect
+        retried it. The lifecycle owner closes it as a kept, completed
+        conversation with its transcript intact; its own fences decide, and any
+        refusal leaves the row exactly as it was.
+        """
+        try:
+            outcome = await self.host.persistence.call(
+                lifecycle_service.close_oversized_in_progress_conversation,
+                self.host.request.uid,
+                conversation_id,
+                quiet_for=timedelta(seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS),
+            )
+        except Exception as error:
+            logger.error(
+                'Listen oversized conversation close failed stage=%s conversation=%s type=%s reason=%s',
+                stage,
+                conversation_id,
+                type(error).__name__,
+                classify_finalization_failure(error, conversation_id).reason,
+            )
+            return
+        logger.warning(
+            'Listen pending finalization hit the document size limit stage=%s conversation=%s close=%s',
+            stage,
+            conversation_id,
+            outcome,
+        )
+        if outcome != 'closed':
+            return
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='listen_finalization',
+            to_mode='oversized_terminal',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        self.on_conversation_processed(conversation_id)
 
     async def recover_stale_in_progress(self) -> None:
         """Route orphaned `in_progress` conversations through normal finalization (#9809).

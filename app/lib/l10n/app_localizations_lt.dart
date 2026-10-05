@@ -12434,4 +12434,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get dismiss => 'Slėpti';
+
+  @override
+  String get showOnLockScreen => 'Rodyti užrakinimo ekrane';
 }

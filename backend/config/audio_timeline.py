@@ -61,3 +61,41 @@ def live_speaker_capture_clock_enabled() -> bool:
     switch (see ``ListenReceiver._write_ring_buffer_frame``).
     """
     return os.getenv('LIVE_SPEAKER_CAPTURE_CLOCK', '').strip().lower() not in _FALSY
+
+
+def live_capture_window_retention_enabled() -> bool:
+    """Retain more observed capture anchors/send spans for delayed finals. Default off."""
+    return os.getenv('LIVE_CAPTURE_WINDOW_RETENTION', '').strip().lower() in _TRUTHY
+
+
+def capture_anchor_limit() -> int:
+    return 512 if live_capture_window_retention_enabled() else 64
+
+
+def capture_send_span_limit() -> int:
+    return 16384 if live_capture_window_retention_enabled() else 4096
+
+
+def live_capture_window_merge_preservation_enabled() -> bool:
+    """Keep provider pieces when live text repair would discard known capture proof. Default off."""
+    return os.getenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', '').strip().lower() in _TRUTHY
+
+
+def live_capture_window_strict_projection_enabled() -> bool:
+    """Reject legacy windows across observed wall hiatuses. Default off for parity."""
+    return os.getenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', '').strip().lower() in _TRUTHY
+
+
+def live_capture_window_merge_union_enabled() -> bool:
+    """Union known live windows across receiver-proven received gaps. Default off."""
+    return os.getenv('LIVE_CAPTURE_WINDOW_MERGE_UNION', '').strip().lower() in _TRUTHY
+
+
+def live_capture_window_translator_sends_enabled() -> bool:
+    """Record observed raw replay and managed pre-finalize sends. Default off."""
+    return os.getenv('LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS', '').strip().lower() in _TRUTHY
+
+
+def soniox_wire_ledger_enabled() -> bool:
+    """Account every emitted Soniox sample, refusing unknown capture origins. Default off."""
+    return os.getenv('SONIOX_WIRE_LEDGER', 'false').strip().lower() == 'true'

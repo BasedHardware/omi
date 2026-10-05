@@ -5363,6 +5363,23 @@
         "title": "CancelSubscriptionRequest",
         "type": "object"
       },
+      "CandidateAcceptanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "summary_item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SummaryTaskReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "CandidateAcceptanceRequest",
+        "type": "object"
+      },
       "CandidateAction": {
         "enum": [
           "create",
@@ -11079,6 +11096,16 @@
       },
       "DailySummarySettingsResponse": {
         "properties": {
+          "depth": {
+            "default": "brief",
+            "enum": [
+              "brief",
+              "normal",
+              "deep"
+            ],
+            "title": "Depth",
+            "type": "string"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -11097,6 +11124,22 @@
       },
       "DailySummarySettingsUpdate": {
         "properties": {
+          "depth": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brief",
+                  "normal",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
+          },
           "enabled": {
             "anyOf": [
               {
@@ -11121,6 +11164,46 @@
           }
         },
         "title": "DailySummarySettingsUpdate",
+        "type": "object"
+      },
+      "DailySummarySettingsUpdateResponse": {
+        "properties": {
+          "depth": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brief",
+                  "normal",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "DailySummarySettingsUpdateResponse",
         "type": "object"
       },
       "DailySummaryTestResponse": {
@@ -12692,6 +12775,35 @@
           "end"
         ],
         "title": "DeveloperTranscriptSegment",
+        "type": "object"
+      },
+      "DeviceToolResultRequest": {
+        "description": "A client's result for one in-flight device tool call.",
+        "properties": {
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "DeviceToolResultRequest",
+        "type": "object"
+      },
+      "DeviceToolResultResponse": {
+        "description": "Acknowledgement that a device tool result was handed over.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "DeviceToolResultResponse",
         "type": "object"
       },
       "DiagnosticsReceipt": {
@@ -17864,6 +17976,20 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
           }
         },
         "required": [
@@ -17986,6 +18112,61 @@
           }
         },
         "title": "McpOauthGrantsResponse",
+        "type": "object"
+      },
+      "McpPersonMutationResponse": {
+        "properties": {
+          "dismissed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dismissed"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "person_id": {
+            "title": "Person Id",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "person_id"
+        ],
+        "title": "McpPersonMutationResponse",
+        "type": "object"
+      },
+      "McpPersonRenameRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "McpPersonRenameRequest",
         "type": "object"
       },
       "McpRefreshToolsResponse": {
@@ -24993,6 +25174,20 @@
               }
             ]
           },
+          "device_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Tools"
+          },
           "file_ids": {
             "anyOf": [
               {
@@ -25312,9 +25507,43 @@
             "title": "Completed",
             "type": "boolean"
           },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
           }
         },
         "required": [
@@ -25763,6 +25992,34 @@
         "title": "SharedPluginResult",
         "type": "object"
       },
+      "SharedSection": {
+        "description": "Public note content, without internal transcript evidence IDs.",
+        "properties": {
+          "body_markdown": {
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          },
+          "kind": {
+            "default": "main",
+            "enum": [
+              "main",
+              "side_notes"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "heading",
+          "body_markdown"
+        ],
+        "title": "SharedSection",
+        "type": "object"
+      },
       "SharedStructured": {
         "description": "Public share projection of conversation structure.",
         "properties": {
@@ -25822,6 +26079,13 @@
               "$ref": "#/components/schemas/SharedParticipant"
             },
             "title": "Participants",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SharedSection"
+            },
+            "title": "Sections",
             "type": "array"
           },
           "title": {
@@ -27322,6 +27586,37 @@
         ],
         "title": "SubscriptionStatus",
         "type": "string"
+      },
+      "SummaryTaskReference": {
+        "additionalProperties": false,
+        "description": "The summary row the reader explicitly chose, not a client-authored task.",
+        "properties": {
+          "action_item_index": {
+            "minimum": 0.0,
+            "title": "Action Item Index",
+            "type": "integer"
+          },
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "expected_description": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Expected Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "action_item_index",
+          "expected_description"
+        ],
+        "title": "SummaryTaskReference",
+        "type": "object"
       },
       "SyncBatchItem": {
         "properties": {
@@ -40179,6 +40474,115 @@
         ]
       }
     },
+    "/v1/candidates/from-conversation": {
+      "post": {
+        "description": "Prepare only; the reader must separately accept to materialize a task.",
+        "operationId": "prepare_conversation_task_candidate_v1_candidates_from_conversation_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SummaryTaskReference"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Prepare Conversation Task Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
     "/v1/candidates/integrations/drain": {
       "post": {
         "operationId": "drain_candidate_integrations_v1_candidates_integrations_drain_post",
@@ -40518,6 +40922,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CandidateAcceptanceRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -55795,6 +56216,122 @@
         ]
       }
     },
+    "/v1/mcp/people/{person_id}/dismiss": {
+      "post": {
+        "operationId": "dismiss_person_v1_mcp_people__person_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpPersonMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "description": "Person not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Dismiss Person",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/people/{person_id}/name": {
+      "patch": {
+        "operationId": "rename_person_v1_mcp_people__person_id__name_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpPersonRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpPersonMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Rename Person",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
     "/v1/mcp/profile": {
       "get": {
         "description": "Omi's cached high-level user profile, if one has been generated.",
@@ -63534,7 +64071,7 @@
     },
     "/v1/users/daily-summary-settings": {
       "get": {
-        "description": "Get user's daily summary notification settings.\n\nReturns:\n    - enabled: Whether daily summary notifications are enabled (default: True)\n    - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)",
+        "description": "Get user's daily summary notification settings.\n\nReturns:\n    - enabled: Whether daily summary notifications are enabled (default: True)\n    - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)\n    - depth: Recap detail level (brief by default)",
         "operationId": "get_daily_summary_settings_v1_users_daily_summary_settings_get",
         "parameters": [
           {
@@ -63610,7 +64147,7 @@
         ]
       },
       "patch": {
-        "description": "Update user's daily summary notification settings.\n\nParameters:\n    - enabled: Enable/disable daily summary notifications\n    - hour: Preferred hour in local timezone (0-23).\n            Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)\n\nNote: Hour is stored as local time. The system determines when to send\nbased on the user's timezone and will send the summary at the correct local time",
+        "description": "Update user's daily summary notification settings.\n\nParameters:\n    - enabled: Enable/disable daily summary notifications\n    - hour: Preferred hour in local timezone (0-23).\n            Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)\n    - depth: brief, normal, or deep for newly generated recaps\n\nNote: Hour is stored as local time. The system determines when to send\nbased on the user's timezone and will send the summary at the correct local time",
         "operationId": "update_daily_summary_settings_v1_users_daily_summary_settings_patch",
         "parameters": [
           {
@@ -63665,7 +64202,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserStatusResponse"
+                  "$ref": "#/components/schemas/DailySummarySettingsUpdateResponse"
                 }
               }
             },
@@ -72510,6 +73047,103 @@
           }
         ],
         "summary": "Send Message",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/v2/messages/device-tool/{call_id}/result": {
+      "post": {
+        "description": "Deliver a client's result for an in-flight device tool call.\n\nThe awaiting tool coroutine may be on a different worker than this request,\nso the result is handed over through Redis rather than an in-process future.\nThe key is scoped by uid, so one user cannot answer another user's call.\n\nA result is only accepted for a call that is actually in flight for this uid.\nWithout that check the endpoint is a write primitive: an authenticated caller\ncould invent call ids and park an oversized value in shared Redis for each\none, at the full rate limit, for the length of the TTL.",
+        "operationId": "submit_device_tool_result_v2_messages_device_tool__call_id__result_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "call_id",
+            "required": true,
+            "schema": {
+              "title": "Call Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceToolResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceToolResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Submit Device Tool Result",
         "tags": [
           "chat"
         ]

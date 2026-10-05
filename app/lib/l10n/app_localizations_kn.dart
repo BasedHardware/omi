@@ -12449,4 +12449,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get dismiss => 'ಮರೆಮಾಡಿ';
+
+  @override
+  String get showOnLockScreen => 'ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ';
 }

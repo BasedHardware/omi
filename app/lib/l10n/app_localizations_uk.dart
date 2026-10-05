@@ -12440,4 +12440,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get dismiss => 'Приховати';
+
+  @override
+  String get showOnLockScreen => 'Показувати на екрані блокування';
 }

@@ -19,6 +19,7 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/startup/boot_journal.dart';
+import 'package:omi/startup/boot_recovery.dart';
 import 'package:omi/env/physical_qualification.dart';
 
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
@@ -75,6 +76,7 @@ class SharedPreferencesUtil {
   set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
 
   static const String appearanceModeKey = 'appearanceMode';
+  static const String appearanceDefaultMigrationKey = 'appearanceDefaultMigration';
 
   String get appearanceMode => getString(appearanceModeKey, defaultValue: 'light');
 
@@ -85,7 +87,9 @@ class SharedPreferencesUtil {
 
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
+    final hadStoredAppearance = _preferences!.containsKey(appearanceModeKey);
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
+    await _migrateAppearanceDefault(hadStoredAppearance: hadStoredAppearance);
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
     await _loadCapturePolicy();
     await _reconcileNativeCapturePolicy();
@@ -110,6 +114,46 @@ class SharedPreferencesUtil {
       _authTokenCache = _instance.getString('authToken');
     }
     await _syncNativeAuthToken(_authTokenCache);
+  }
+
+  /// Pin the default once, before this launch creates other preferences. Existing
+  /// installs without a choice keep System; fresh installs keep Light even after
+  /// onboarding. A quarantined appearance value retains the Light error fallback.
+  static Future<void> _migrateAppearanceDefault({required bool hadStoredAppearance}) async {
+    final prefs = _preferences!;
+    if (prefs.containsKey(appearanceModeKey)) return;
+
+    final lastVersion = prefs.get('lastKnownAppVersion');
+    final bootSchema = prefs.get(BootRecovery.schemaKey);
+    final existingInstall = prefs.get('onboardingCompleted') == true ||
+        (lastVersion is String && lastVersion.trim().isNotEmpty) ||
+        (bootSchema is int && bootSchema > 0);
+    final savedDefault = prefs.get(appearanceDefaultMigrationKey);
+    final String mode;
+    if (hadStoredAppearance) {
+      mode = 'light';
+    } else if (savedDefault is String && (savedDefault == 'light' || savedDefault == 'system')) {
+      mode = savedDefault;
+    } else {
+      mode = existingInstall ? 'system' : 'light';
+    }
+
+    // Save the decision before attempting the appearance write. Later startup
+    // stages stamp boot/version/onboarding history, which must not change this
+    // decision if the appearance write fails and the next process retries it.
+    // Attempt each write independently: either durable value is sufficient.
+    // If both fail, the cached choice still works this boot, but no decision can
+    // survive a process restart without a successful storage write.
+    for (final key in [if (savedDefault != mode) appearanceDefaultMigrationKey, appearanceModeKey]) {
+      try {
+        if (!await prefs.setString(key, mode)) {
+          Logger.debug('Appearance default migration could not persist $key');
+        }
+      } catch (e, stack) {
+        Logger.debug('Appearance default migration failed for $key: $e');
+        Logger.debug('Stack: $stack');
+      }
+    }
   }
 
   static Future<void> _quarantineBootSettings() async {
@@ -753,6 +797,9 @@ class SharedPreferencesUtil {
 
   int get notificationFrequency => getInt('notificationFrequency', defaultValue: 0);
 
+  bool get showCaptureLiveActivity => getBool('showCaptureLiveActivity', defaultValue: true);
+  Future<bool> setShowCaptureLiveActivity(bool value) => saveBool('showCaptureLiveActivity', value);
+
   // Task category order for drag-and-drop sorting persistence
   // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }
   set taskCategoryOrder(Map<String, List<String>> value) {
@@ -1077,11 +1124,17 @@ class SharedPreferencesUtil {
     saveStringList('cachedConversations', conversations);
   }
 
-  List<ServerMessage> get cachedMessages => _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
+  List<ServerMessage> get cachedMessages {
+    // Older caches discarded journal provenance, so automatic cards cannot be
+    // distinguished from rich replies. Rehydrate those from canonical history.
+    if (getInt('cachedMessagesSchema') != 1) return [];
+    return _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
+  }
 
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
+    saveInt('cachedMessagesSchema', 1);
   }
 
   /// Last owner-scoped memory projection used for offline/restart rendering.

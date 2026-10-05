@@ -3934,5 +3934,6 @@
     "stopThese": "Ezek leállítása",
     "dismiss": "Elrejtés",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Megjelenítés a zárolási képernyőn"
 }

@@ -22,10 +22,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from google.api_core.exceptions import Aborted, InvalidArgument
 
 from database import conversations as conversations_db
 from database.conversations import select_stale_in_progress
-from routers.listen.conversations import LiveConversationController
+from routers.listen.conversations import STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS, LiveConversationController
 
 
 class _Host:
@@ -188,7 +189,8 @@ async def test_failing_stale_conversation_does_not_crash_the_sweep(caplog):
     assert controller.processed == ['conv-oversized', 'conv-orphan']
     failures = [r.getMessage() for r in caplog.records if 'pending finalization failed' in r.getMessage()]
     assert failures == [
-        'Listen pending finalization failed stage=stale_in_progress conversation=conv-oversized type=_OversizedDocument'
+        'Listen pending finalization failed stage=stale_in_progress conversation=conv-oversized '
+        'type=_OversizedDocument reason=other document=none'
     ]
 
 
@@ -204,6 +206,177 @@ async def test_failing_timed_out_and_processing_rows_do_not_skip_the_rest():
 
     assert controller.processed == ['conv-timed-out', 'conv-orphan']
     assert controller.scheduled == ['conv-processing-bad', 'conv-processing-ok']
+
+
+# ── A row at the 1 MiB ceiling is closed, not retried by every reconnect ────
+#
+# Prod (2026-09-30..10-04): five in_progress rows whose documents sat just under
+# Firestore's 1 MiB ceiling failed their finalization binding on every session
+# (stale_in_progress/InvalidArgument, up to 120 times per row). The isolation
+# above kept the socket alive but the rows stayed invisible forever.
+
+_SIZE_LIMIT_MESSAGE = (
+    "Document 'projects/p/databases/(default)/documents/users/{uid}/conversations/{cid}' cannot be "
+    "written because its size (1,048,684 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
+)
+
+
+def _size_limit_error(cid: str, *, uid: str = 'uid-1', collection: str = 'conversations') -> InvalidArgument:
+    message = _SIZE_LIMIT_MESSAGE.format(uid=uid, cid=cid)
+    if collection != 'conversations':
+        message = message.replace('/conversations/', f'/{collection}/')
+    return InvalidArgument(message)
+
+
+class _RaisingController(_RecordingController):
+    """process_conversation raises the configured exception per conversation id."""
+
+    def __init__(self, host: _Host, *, errors: dict[str, BaseException]) -> None:
+        super().__init__(host)
+        self.errors = errors
+        self.completed_events: list[str] = []
+
+    async def process_conversation(self, conversation_id: str) -> bool:
+        self.processed.append(conversation_id)
+        if conversation_id in self.errors:
+            raise self.errors[conversation_id]
+        return True
+
+    def on_conversation_processed(self, conversation_id: str) -> None:
+        self.completed_events.append(conversation_id)
+
+
+class _CloseHost(_Host):
+    """Host whose persistence also answers the lifecycle oversize close."""
+
+    def __init__(self, *, close_outcome: object = 'closed', **kwargs) -> None:
+        super().__init__(woken_by_shutdown=False, processing=[], **kwargs)
+        self.close_outcome = close_outcome
+        self.close_calls: list[tuple] = []
+
+    async def _call(self, fn, *args, **kwargs):
+        if fn.__name__ == 'close_oversized_in_progress_conversation':
+            self.close_calls.append((args, kwargs))
+            if isinstance(self.close_outcome, BaseException):
+                raise self.close_outcome
+            return self.close_outcome
+        return await super()._call(fn, *args, **kwargs)
+
+
+def _messages(caplog) -> list[str]:
+    return [record.getMessage() for record in caplog.records if record.name == 'routers.listen.conversations']
+
+
+async def test_stale_row_at_the_size_ceiling_is_closed_instead_of_retried(caplog):
+    host = _CloseHost(stale_in_progress=[{'id': 'conv-oversized'}, {'id': 'conv-orphan'}])
+    controller = _RaisingController(host, errors={'conv-oversized': _size_limit_error('conv-oversized')})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    # The lifecycle owner is asked to close exactly that row, fenced on an hour of quiet.
+    assert host.close_calls == [
+        (('uid-1', 'conv-oversized'), {'quiet_for': timedelta(seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS)})
+    ]
+    assert controller.completed_events == ['conv-oversized']
+    # The rest of the sweep still ran.
+    assert controller.processed == ['conv-oversized', 'conv-orphan']
+    messages = _messages(caplog)
+    assert (
+        'Listen pending finalization hit the document size limit stage=stale_in_progress '
+        'conversation=conv-oversized close=closed'
+    ) in messages
+    assert not [m for m in messages if 'pending finalization failed' in m]
+    # The Firestore message carries the uid-bearing document path; it is never logged.
+    assert not [m for m in caplog.text.splitlines() if 'uid-1' in m]
+
+
+async def test_refused_close_leaves_the_row_and_reports_the_fence(caplog):
+    host = _CloseHost(close_outcome='recent_write', stale_in_progress=[{'id': 'conv-oversized'}])
+    controller = _RaisingController(host, errors={'conv-oversized': _size_limit_error('conv-oversized')})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert len(host.close_calls) == 1
+    assert controller.completed_events == []
+    assert (
+        'Listen pending finalization hit the document size limit stage=stale_in_progress '
+        'conversation=conv-oversized close=recent_write'
+    ) in _messages(caplog)
+
+
+async def test_lifecycle_rollover_size_rejection_also_routes_to_the_close():
+    host = _CloseHost()
+    controller = _RaisingController(host, errors={'conv-live': _size_limit_error('conv-live')})
+
+    await controller._finalize_isolated(controller.process_conversation, 'conv-live', stage='lifecycle_rollover')
+
+    assert [args for args, _ in host.close_calls] == [('uid-1', 'conv-live')]
+    assert controller.completed_events == ['conv-live']
+
+
+async def test_size_rejection_naming_another_document_is_not_a_close(caplog):
+    """Only a rejection of the row's own document proves the row itself is at the ceiling."""
+    host = _CloseHost(stale_in_progress=[{'id': 'conv-a'}, {'id': 'conv-b'}])
+    errors = {
+        'conv-a': _size_limit_error('conv-other'),
+        'conv-b': _size_limit_error('conv-b', collection='people'),
+    }
+    controller = _RaisingController(host, errors=errors)
+
+    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert host.close_calls == []
+    assert _messages(caplog) == [
+        'Listen pending finalization failed stage=stale_in_progress conversation=conv-a '
+        'type=InvalidArgument reason=document_size_limit document=conversation',
+        'Listen pending finalization failed stage=stale_in_progress conversation=conv-b '
+        'type=InvalidArgument reason=document_size_limit document=other',
+    ]
+
+
+@pytest.mark.parametrize(
+    ('error', 'reason'),
+    [
+        (ValueError('Failed to commit transaction in 5 attempts.'), 'contention'),
+        (Aborted('Too much contention on these documents. Please try again.'), 'contention'),
+        (InvalidArgument('The referenced transaction has expired or is no longer valid.'), 'expired_transaction'),
+        (ValueError('something else'), 'other'),
+    ],
+)
+async def test_transient_failures_are_classified_and_left_for_the_next_sweep(caplog, error, reason):
+    host = _CloseHost(stale_in_progress=[{'id': 'conv-a'}])
+    controller = _RaisingController(host, errors={'conv-a': error})
+
+    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert host.close_calls == []
+    assert controller.completed_events == []
+    assert _messages(caplog) == [
+        f'Listen pending finalization failed stage=stale_in_progress conversation=conv-a '
+        f'type={type(error).__name__} reason={reason} document=none'
+    ]
+
+
+async def test_failing_close_does_not_crash_the_sweep(caplog):
+    host = _CloseHost(
+        close_outcome=Aborted('Too much contention on these documents. Please try again.'),
+        stale_in_progress=[{'id': 'conv-oversized'}, {'id': 'conv-orphan'}],
+    )
+    controller = _RaisingController(host, errors={'conv-oversized': _size_limit_error('conv-oversized')})
+
+    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert controller.processed == ['conv-oversized', 'conv-orphan']
+    assert controller.completed_events == []
+    assert _messages(caplog) == [
+        'Listen oversized conversation close failed stage=stale_in_progress conversation=conv-oversized '
+        'type=Aborted reason=contention'
+    ]
 
 
 async def test_cancellation_still_propagates_out_of_the_sweep():

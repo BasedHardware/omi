@@ -7,6 +7,8 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.observability.sync_phases import sync_phase, sync_attempt
+
 import asyncio
 import contextlib
 import hashlib
@@ -965,6 +967,7 @@ def _merge_and_cap_vad_segments(voice_segments: list) -> list:
     return segments
 
 
+@sync_phase('decode_vad')
 def retrieve_vad_segments(
     path: str,
     segmented_paths: set,
@@ -1106,6 +1109,7 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
     return _build_person_embeddings_cache(uid, dependencies=_speaker_identity_dependencies())
 
 
+@sync_phase('gcs')
 def _download_audio_bytes(url: str) -> Optional[bytes]:
     """Download audio from a signed URL. Returns WAV bytes or None on failure."""
     try:
@@ -1117,6 +1121,7 @@ def _download_audio_bytes(url: str) -> Optional[bytes]:
         return None
 
 
+@sync_phase('speaker_id')
 def identify_speakers_for_segments(
     transcript_segments: List['TranscriptSegment'],
     audio_bytes: Optional[bytes],
@@ -1605,6 +1610,7 @@ def _store_sync_audio_chunk(
         logger.warning(f'sync: failed to store audio chunk for {conversation_id}@{timestamp}: {e}')
 
 
+@sync_phase('firestore')
 def _finalize_sync_audio_files(uid: str, response: dict):
     """After all segments are assigned, build audio_files from the uploaded chunks and
     persist them on each conversation — exactly as the realtime flush does — then warm the
@@ -1873,6 +1879,7 @@ async def _resolve_safety_wal_target(
     )
 
 
+@sync_attempt
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -2128,22 +2135,20 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             except asyncio.CancelledError:
                 preserve_retry_material = True
                 raise
-            if (
-                use_lineage
-                and sync_recording_lineage.sync_lineage_s1_required()
-                and len(source_frame_maps) != len(wav_paths)
-            ):
-                use_lineage = False
-                target_conversation_id = await _resolve_safety_wal_target(
-                    uid,
-                    target_conversation_id,
-                    recording_session_id,
-                    source,
-                    client_device_id,
-                    should_lock,
-                    audio_start_seconds,
-                    audio_end_seconds,
-                )
+            if use_lineage and sync_recording_lineage.sync_lineage_s1_required():
+                if len(source_frame_maps) != len(wav_paths):
+                    sync_recording_lineage.emit_s1_refusal('count_mismatch')
+                    use_lineage = False
+                    target_conversation_id = await _resolve_safety_wal_target(
+                        uid,
+                        target_conversation_id,
+                        recording_session_id,
+                        source,
+                        client_device_id,
+                        should_lock,
+                        audio_start_seconds,
+                        audio_end_seconds,
+                    )
             # --- Phase 2: VAD ---
             job_phase = 'vad'
             await run_blocking(

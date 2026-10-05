@@ -102,6 +102,13 @@ User/API intents: `PhoneStartRequested`, `PhoneStopRequested`,
 `TranscriptionSettingsChanged`, `RecordProfileChanged`,
 `OnboardingBatchChanged`.
 
+A Live Activity tap sends `PauseCaptureRequested`, `ResumeCaptureRequested` or
+`FinishRequested` with the card's `SystemSurfaceTarget` (recording id and
+conversation revision). The reducer compares it with the environment when it
+applies the event and rejects a stale tap with no effects
+(`StaleSystemSurfaceTarget`), so a tap queued behind a stop, handoff or finish
+never acts on the recording or conversation that replaced the card's.
+
 External signals: `CallStateChanged`, `MicInterruptionChanged`,
 `NativeMicStalled`, `AppForegrounded`, `SocketClosed`, `SocketConnected`,
 `SocketError`, `KeepAliveTick`, `LaunchRecovery`.

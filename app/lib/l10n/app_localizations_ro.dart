@@ -12467,4 +12467,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dismiss => 'Ascunde';
+
+  @override
+  String get showOnLockScreen => 'Afișează pe ecranul de blocare';
 }
