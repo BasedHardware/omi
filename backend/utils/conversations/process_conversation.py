@@ -442,7 +442,7 @@ def _get_structured(
                 if _conversation_notes_v2_enabled():
                     roster: Optional[MeetingRoster] = None
                     meeting_context_block: Optional[str] = None
-                    episode_enabled = _meeting_notes_episode_evidence_enabled()
+                    episode_enabled = _meeting_notes_episode_evidence_enabled(uid)
                     episode_items = (
                         import_module('utils.conversations.episode_evidence').capture_evidence(
                             conversation, transcript=ext_conv.text
@@ -550,7 +550,7 @@ def _get_structured(
         segments = main_conv.transcript_segments or []
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
 
-        episode_enabled = _conversation_notes_v2_enabled() and _meeting_notes_episode_evidence_enabled()
+        episode_enabled = _conversation_notes_v2_enabled() and _meeting_notes_episode_evidence_enabled(uid)
         episode_items = []
         roster, meeting_context_block, desktop_capture, screen_frames = None, None, False, ()
 

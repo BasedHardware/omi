@@ -56,8 +56,10 @@ def meeting_notes_rich_context_enabled() -> bool:
     return _flag_enabled('MEETING_NOTES_RICH_CONTEXT_ENABLED')
 
 
-def meeting_notes_episode_evidence_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED')
+def meeting_notes_episode_evidence_enabled(uid: str | None = None) -> bool:
+    return _flag_enabled('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED') and import_module(
+        'config.episode_notes'
+    ).episode_notes_cohort(uid)
 
 
 def meeting_notes_screen_text_context_enabled() -> bool:

@@ -242,7 +242,7 @@ def test_discard_unchanged_and_episode_inputs_not_gathered(stack, processing, mo
         started_at=now, finished_at=now, source='desktop', transcript_segments=[], photos=[]
     )
     monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
-    monkeypatch.setattr(processing, '_meeting_notes_episode_evidence_enabled', lambda: episode_enabled)
+    monkeypatch.setattr(processing, '_meeting_notes_episode_evidence_enabled', lambda uid: episode_enabled)
     monkeypatch.setattr(processing, '_meeting_notes_screen_text_context_enabled', lambda: True)
     monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', lambda *a: ('', '', {}))
     monkeypatch.setattr(processing, 'recovery_minimum_terminal_enabled', lambda: True)
@@ -281,7 +281,7 @@ def test_episode_inputs_gathered_once_after_keep_decision(stack, processing, mon
     conversation = _blank_capture(stack)
     events = []
     monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
-    monkeypatch.setattr(processing, '_meeting_notes_episode_evidence_enabled', lambda: True)
+    monkeypatch.setattr(processing, '_meeting_notes_episode_evidence_enabled', lambda uid: True)
     monkeypatch.setattr(processing, '_meeting_notes_screen_text_context_enabled', lambda: True)
     monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', lambda *a: ('', '', {}))
 
