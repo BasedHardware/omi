@@ -1,18 +1,5 @@
-import sys
 import unittest
 from unittest.mock import MagicMock
-
-# Hermetic test isolation: mock optional external transport libraries
-for mod in [
-    "google",
-    "google.cloud",
-    "google.cloud.firestore_v1",
-    "google.api_core",
-    "google.api_core.exceptions",
-    "redis",
-]:
-    if mod not in sys.modules:
-        sys.modules[mod] = MagicMock()
 
 from database.app_review_config import (
     _SUPPORTED_PLATFORMS,
