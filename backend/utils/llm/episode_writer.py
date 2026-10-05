@@ -10,6 +10,7 @@ from utils.conversations.episode_selection import (
     deterministic_episode_selection,
     selected_episode_items,
     selection_payload,
+    model_selection_allowed,
 )
 
 
@@ -25,7 +26,7 @@ def prepare_episode_evidence(items, settings: EpisodeWriterSettings, *, started_
     if settings.selection == 'deterministic':
         return conservative
     # Do not buy another full-context call for a large meeting.
-    if sum(len(item.content.encode('utf-8')) for item in items) > 120000:
+    if not model_selection_allowed(items):
         if run is not None:
             run.violations.add('selection_long_input')
         return conservative

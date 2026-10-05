@@ -109,3 +109,7 @@ def selection_payload(items: Sequence[Any], started_at: str, finished_at: str | 
         'capture_end': finished_at,
         'evidence': [item.model_dump(exclude_none=True) for item in items],
     }
+
+
+def model_selection_allowed(items: Sequence[Any]) -> bool:
+    return sum(len(item.content.encode('utf-8')) for item in items) <= 120000

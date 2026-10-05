@@ -139,3 +139,24 @@ For judge variance, copy reference and generated candidate receipts (not judge
 receipts) into a second outside-worktree cache and run the same DEV comparison.
 This fixes evidence/reference/candidates and resamples only the judge; it does
 not measure generation variance. Never include held-out inputs in an iteration.
+
+Round-9 configurations use `--selection compact|deterministic|model`,
+`--no-claims`, and `--candidate-effort default|high|xhigh`. Only the writer's
+Luna request receives the selected thinking effort; default sends no override.
+The optional Luna selector uses low effort, a 30-second deadline and the same
+production large-input guard/fallback. It returns exact source IDs and short
+connection reasons; the writer sees selected original evidence, not the reasons.
+`--judge-samples 2` generates one candidate per arm then obtains two separately
+cached judgments against the same reference. Effort/selection/claim mode enter
+candidate cache identities; the selector's effort/deadline enter its own cache.
+Reference/judge rules are unchanged, so their receipts can be shared across configs.
+
+`candidate_cost` includes selection plus writing, while `writer_cost` and
+`selection_cost` retain individual receipts. Reports include reasoning tokens
+(a SUBSET of billed output, never add them twice) and USD `provider_cost` when
+reported by the endpoint; unknown usage/cost stays null. A reused selector receipt
+is charged to each configuration's hypothetical production note cost; it does not
+claim a second actual API bill. Eval reference/judge spend is separate. Repeated
+payload caching and OpenRouter routing do not predict production bills/latency.
+The harness still omits production presentation/vacuity repairs; long-input and
+remaining-time repair guards are tested with fakes, not a live production route.

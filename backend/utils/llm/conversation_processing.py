@@ -1206,11 +1206,7 @@ def get_conversation_notes(
     current_local = current_time.astimezone(user_tz)
     episode_settings = import_module('config.episode_writer').episode_writer_settings() if episode_mode else None
     if run is not None and episode_settings is not None:
-        run.effort, run.selection, run.claims_enabled = (
-            episode_settings.effort,
-            episode_settings.selection,
-            episode_settings.claims,
-        )
+        run.configure_episode(episode_settings)
     rich_mode = rich_context_enabled or episode_mode
     transcript_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     if transcript_word_count < 500:
@@ -1277,8 +1273,9 @@ def get_conversation_notes(
             started_at=started_at.isoformat(),
             finished_at=episode_finished_at.isoformat() if episode_finished_at else None,
             run=run,
-            model_factory=lambda: get_llm('conv_structure', request_timeout=15, max_retries=0).bind(
-                reasoning_effort='low'
+            model_factory=lambda: import_module('utils.llm.episode_writer').bind_episode_effort(
+                get_llm('conv_structure', request_timeout=episode_settings.selection_timeout, max_retries=0),
+                episode_settings.selection_effort,
             ),
         )
         if screen_frames and episode_settings.selection != 'compact':

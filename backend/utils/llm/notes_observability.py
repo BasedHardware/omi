@@ -18,6 +18,8 @@ class NotesRun:
         self.selection_calls = 0
         self.effort = 'default'
         self.selection = 'none'
+        self.selection_effort = 'none'
+        self.selection_timeout = 0
         self.claims_enabled = False
         self.usage = {'input_tokens': 0, 'output_tokens': 0, 'cached_tokens': 0, 'reasoning_tokens': 0}
         self.known = {key: True for key in self.usage}
@@ -26,6 +28,10 @@ class NotesRun:
         self.claim_count = 0
         self.error = False
         self.vacuity = False
+
+    def configure_episode(self, settings):
+        self.effort, self.selection, self.claims_enabled = settings.effort, settings.selection, settings.claims
+        self.selection_effort, self.selection_timeout = settings.selection_effort, settings.selection_timeout
 
     def remaining(self, budget: float) -> float:
         return max(0.0, budget - (monotonic() - self.started))
@@ -70,7 +76,8 @@ class NotesRun:
         logger.info(
             'conversation_notes_receipt arm=%s input_tokens=%s output_tokens=%s cached_tokens=%s reasoning_tokens=%s '
             'latency_seconds=%.3f retry_count=%s violations=%s vacuity=%s claim_count=%s '
-            'fallback_to_best_note=%s errors=%s effort=%s selection=%s claims_enabled=%s selection_calls=%s',
+            'fallback_to_best_note=%s errors=%s effort=%s selection=%s claims_enabled=%s selection_calls=%s '
+            'selection_effort=%s selection_timeout_seconds=%s',
             self.arm,
             *(self.usage[key] if self.calls and self.known[key] else None for key in self.usage),
             monotonic() - self.started,
@@ -84,6 +91,8 @@ class NotesRun:
             self.selection,
             self.claims_enabled,
             self.selection_calls,
+            self.selection_effort,
+            self.selection_timeout,
         )
 
 

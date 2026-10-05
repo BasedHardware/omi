@@ -158,3 +158,44 @@ def test_endpoint_effort_is_candidate_only_and_provider_cost_is_measured(monkeyp
     assert result.provider_cost == 0.002 and result.reasoning_tokens == 3
     endpoint('Synthetic judge', {'evidence': []})
     assert 'reasoning' not in wires[1]
+
+
+def test_selector_is_skipped_for_long_evidence_without_model_calls():
+    from utils.llm.episode_writer import prepare_episode_evidence
+
+    items = [EvidenceItem(id='s', source_kind='speech', content='word ' * 25000)]
+    result = prepare_episode_evidence(
+        items,
+        EpisodeWriterSettings(selection='model'),
+        started_at='2026-01-01T10:00:00Z',
+        finished_at='2026-01-01T11:00:00Z',
+        run=None,
+        model_factory=lambda: (_ for _ in ()).throw(AssertionError('long selection called provider')),
+    )
+    assert result == items
+
+
+def test_selector_attempt_is_not_reported_as_writer_retry(caplog):
+    from types import SimpleNamespace
+    from utils.llm.notes_observability import NotesRun
+
+    run = NotesRun('episode')
+    run.configure_episode(EpisodeWriterSettings('high', 'model', False))
+    model = SimpleNamespace(
+        invoke=lambda m: SimpleNamespace(
+            content='Synthetic',
+            usage_metadata={
+                'input_tokens': 10,
+                'output_tokens': 5,
+                'input_token_details': {'cache_read': 0},
+                'output_token_details': {'reasoning': 2},
+            },
+        )
+    )
+    run.invoke(model, [], kind='selection')
+    run.invoke(model, [])
+    with caplog.at_level('INFO'):
+        run.emit()
+    assert 'retry_count=0' in caplog.text and 'selection_calls=1' in caplog.text
+    assert 'reasoning_tokens=4' in caplog.text and 'effort=high' in caplog.text
+    assert 'Synthetic' not in caplog.text

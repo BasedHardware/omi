@@ -16,6 +16,7 @@ from testing.episode_notes.prompts import (
     SOURCE_FIELDS,
 )
 from testing.episode_notes.reporting import arm_reports, paired_reports
+from testing.episode_notes.selection import evaluate_selection
 from testing.episode_notes.schema import FixtureSet, JudgeScore, LLMCallError, LLMResult
 from config.episode_writer import EpisodeWriterSettings
 from testing.episode_notes.prompts import fixture_evidence_items
@@ -187,7 +188,7 @@ def evaluate(
         rows = []
         for arm in arms:
             result, judged = None, None
-            selection_result = None
+            selection_result, selection_fallback = None, None
             selected_items = fixture_evidence_items(episode)
             phase = 'candidate'
             try:
@@ -200,22 +201,13 @@ def evaluate(
                             selected_items, finished_at=episode.evidence.finished_at
                         )
                     elif arm == 'episode' and settings.selection == 'model':
-                        phase = 'selection'
-                        selection_result = cached_call(
-                            cache_dir,
-                            'selection',
-                            candidate_model,
-                            SELECTION_PROMPT,
-                            {
-                                **selection_payload(
-                                    selected_items, episode.evidence.started_at, episode.evidence.finished_at
-                                ),
-                                '_request_options': {'effort': 'low'},
-                            },
-                            llm,
-                        )
-                        selected_items = selected_episode_items(
-                            selected_items, selection_result.content, finished_at=episode.evidence.finished_at
+                        selected_items, selection_result, selection_fallback = evaluate_selection(
+                            selected_items,
+                            episode,
+                            cache_dir=cache_dir,
+                            candidate_model=candidate_model,
+                            llm=llm,
+                            settings=settings,
                         )
                     phase = 'candidate'
                     prompt, payload = candidate_request(episode, arm, settings=settings, items=selected_items)
@@ -258,6 +250,7 @@ def evaluate(
                         {
                             'id': episode.id,
                             'judge_sample': sample,
+                            'selection_fallback': selection_fallback,
                             'selection_cost': selection_result.cost() if selection_result else None,
                             'writer_cost': result.cost(),
                             'stratum': episode.stratum,
@@ -273,6 +266,7 @@ def evaluate(
                             'judge_cost': judged.cost(),
                             'finish_reasons': {
                                 'candidate': result.finish_reason,
+                                'selection': selection_result.finish_reason if selection_result else None,
                                 'reference': reference_result.finish_reason,
                                 'judge': judged.finish_reason,
                             },
@@ -308,7 +302,13 @@ def evaluate(
         'cases': rows,
         'arms': reports,
         'paired': paired_reports(first_sample),
-        'configuration': {'effort': settings.effort, 'selection': settings.selection, 'claims': settings.claims},
+        'configuration': {
+            'effort': settings.effort,
+            'selection': settings.selection,
+            'claims': settings.claims,
+            'selection_effort': settings.selection_effort,
+            'selection_timeout': settings.selection_timeout,
+        },
         'samples': {
             str(sample): {
                 'arms': arm_reports([row for row in rows if row.get('judge_sample', 1) == sample], arms),

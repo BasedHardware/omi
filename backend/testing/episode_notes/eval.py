@@ -57,7 +57,9 @@ class CompatibleEndpoint:
         )
         started = perf_counter()
         try:
-            with urlopen(request, timeout=self.timeout) as response:
+            with urlopen(
+                request, timeout=min(self.timeout, float(options.get('timeout_seconds', self.timeout)))
+            ) as response:
                 result = json.load(response)
         except Exception as exc:
             raise LLMCallError(
