@@ -16,10 +16,7 @@ class KnowledgeGraphApi {
   /// logs only.
   @visibleForTesting
   static String knowledgeGraphHttpUserMessage({required String action, int? statusCode, String? body}) {
-    final _ = (body);
-    if (statusCode == 409) {
-      return 'Knowledge graph is up to date';
-    }
+    final _ = (statusCode, body);
     return "Couldn't $action knowledge graph";
   }
 
@@ -44,6 +41,13 @@ class KnowledgeGraphApi {
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
   }
 
+  /// Triggers a rebuild of the knowledge graph.
+  ///
+  /// Accounts with canonical memory assertions return HTTP 409
+  /// (CANONICAL_GRAPH_MUTATION_CONFLICT) from the backend because their graph
+  /// is already derived and up to date. This method synthesizes a client-side
+  /// [wire.GeneratedRebuildResponse] with status `'canonical_up_to_date'` so
+  /// callers can recognize this terminal state without polling or failing.
   static Future<Map<String, dynamic>> rebuildKnowledgeGraph() async {
     final response = await makeApiCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
 
@@ -52,6 +56,7 @@ class KnowledgeGraphApi {
     }
     if (response != null && response.statusCode == 409) {
       Logger.debug('Knowledge graph rebuild skipped: account has canonical graph state');
+      // Synthetic client status: account has canonical graph state and is already up to date.
       return const wire.GeneratedRebuildResponse(
         edgesCount: 0,
         nodesCount: 0,

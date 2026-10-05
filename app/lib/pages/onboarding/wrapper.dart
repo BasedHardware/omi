@@ -231,7 +231,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     try {
       final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
       final status = rebuildResult['status'];
-      if (status == 'canonical_up_to_date' || status == 'canonical') {
+      // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
+      if (status == 'canonical_up_to_date') {
         return;
       }
       await KnowledgeGraphApi.waitForGraphStability(

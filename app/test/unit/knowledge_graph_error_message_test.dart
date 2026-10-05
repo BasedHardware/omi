@@ -21,7 +21,7 @@ void main() {
     expect(rebuildMessage.toLowerCase(), contains('knowledge graph'));
   });
 
-  test('knowledge-graph error message handles 409 canonical graph conflict cleanly', () {
+  test('knowledge-graph error message handles 409 conflict cleanly without leaking backend details', () {
     const conflictBody =
         '{"detail":"Canonical knowledge graph state is derived from canonical memories and cannot be deleted or rebuilt directly."}';
 
@@ -31,7 +31,7 @@ void main() {
       body: conflictBody,
     );
 
-    expect(message, 'Knowledge graph is up to date');
+    expect(message, "Couldn't rebuild knowledge graph");
     expect(message, isNot(contains(conflictBody)));
     expect(message, isNot(contains('Canonical knowledge graph state')));
   });
