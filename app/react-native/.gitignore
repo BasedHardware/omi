@@ -16,4 +16,5 @@ android/keystores/
 # would otherwise swallow every Kotlin source in it. The 90MB model is still
 # excluded, because that one is genuinely fetched rather than committed.
 !modules/local-brain/android/
+!modules/local-calls/android/
 modules/local-brain/android/src/main/assets/minilm.tflite
