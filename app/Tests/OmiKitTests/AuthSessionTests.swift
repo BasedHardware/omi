@@ -242,6 +242,17 @@ final class AuthSessionTests: XCTestCase {
         }
     }
 
+    func testCallbackRejectsEmbeddedNul() {
+        let redirect = "omi-rnruntime://auth/callback"
+        XCTAssertNil(
+            authCallbackCode(
+                "\(redirect)?code=x&state=st\u{0}&state=other", redirectURI: redirect,
+                expectedState: "st"))
+        XCTAssertNil(
+            authCallbackCode(
+                "\(redirect)?code=x&state=st", redirectURI: redirect, expectedState: "st\u{0}x"))
+    }
+
     func testCallbackRejectsUserInfoErrorsEncodedPathAndEmptyState() {
         let redirect = "omi-rnruntime://auth/callback"
         for callback in [

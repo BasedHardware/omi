@@ -169,7 +169,10 @@ public func legacyAuthorizeURL(
 public func authCallbackCode(
     _ callback: String, redirectURI: String, expectedState: String
 ) -> String? {
-    Policy.authCallbackCode(callback, redirectURI: redirectURI, expectedState: expectedState)
+    for value in [callback, redirectURI, expectedState] where Array(value.utf8).contains(UInt8(0)) {
+        return nil
+    }
+    return Policy.authCallbackCode(callback, redirectURI: redirectURI, expectedState: expectedState)
 }
 
 /// Collect one bounded HTTP header block from a fragmented loopback callback.
