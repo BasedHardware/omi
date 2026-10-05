@@ -77,7 +77,12 @@ complete validated S1 upload claim set for the exact uploaded basename set
 under `CAPTURE_EVIDENCE_V1_DARK_WRITE`. Absent, invalid or incomplete claims
 fall back to the pre-lineage whole-batch resolver even for admitted users, and
 a post-decode mapping-count mismatch at the coordinator takes the same route
-before VAD. Turning the gate off broadens eligibility back to the prior
+before VAD. Each refusal emits exactly one bounded
+`omi_sync_lineage_resolve_total{outcome="s1_refused"}` increment and log line
+with a closed reason (`no_claims`, `parse_failed`, `count_mismatch`,
+`filename_mismatch`, `not_admitted`) and no ids, names or claim content;
+claims rejected at the upload HTTP boundary reach the gate as `{}` and
+classify as `no_claims`. Turning the gate off broadens eligibility back to the prior
 ungated binding; it is not a lineage kill switch and never widens the
 allowlist or bypasses `SYNC_LINEAGE_RESOLVE_ENABLED`. Prod declares `true` on
 Cloud Run `backend`, `backend-sync`, `backend-sync-backfill` and
@@ -319,13 +324,15 @@ send span. Soniox's [keepalive](https://soniox.com/docs/stt/rt/connection-keepal
 and [manual finalization](https://soniox.com/docs/stt/rt/manual-finalization)
 docs describe this lifecycle, but do not promise an exact timestamp shift across
 a pause. Production final tokens observed 1–30 seconds beyond the cumulative
-sent-PCM axis. For Soniox only, the ledger therefore advances the provider
-position by elapsed capture wall time between accepted sends while recording
-no send span for withheld audio. Text timed inside that hole stays unplaced;
-Modulate and other providers retain their cumulative sent-PCM axis. The
-5/9/34-second managed-chain tests pin the observed model and the exact gated
-PCM payload. A live Soniox timing probe remains necessary to establish whether
-every paused session advances by precisely that duration.
+sent-PCM axis. This does not establish clock semantics: the default shadow
+ledger reserves elapsed wall gaps only as a hypothesis, without registering
+withheld audio as received. Compact placement stays authoritative. No PCM
+silence is synthesized by the managed leg or adapter. Pre-roll and the hangover
+are real receiver PCM and their spans are registered when admitted. Neither
+keepalive nor finalize establishes that Soniox advances its audio clock.
+The 5/9/34-second tests simulate the elapsed hypothesis; they do not prove
+remote provider timing. A controlled timing probe remains necessary.
+
 
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order
@@ -1961,11 +1968,61 @@ A mapped legacy segment follows the existing v1 timestamp path, including the
 active gate's remap for non-passthrough providers; the mapping only attaches a
 private capture window for live speaker identification.
 
+`SONIOX_CAPTURE_AXIS_DIAGNOSTICS=false` is measurement only. When enabled,
+each actual Soniox socket retains queued/written PCM sample counts and two
+monotonic clock anchors, with no audio or transcript retention. It measures raw
+original final-token ends before preseconds subtraction, idle-reopen offset,
+VAD remap or managed leg rebase. `omi_soniox_capture_axis_delta_seconds` has
+bounded reference/phase/write_state/queue labels: token minus written/queued PCM,
+connection/first-write elapsed time, queued minus the compact managed ledger,
+and optional provider `total_audio_proc_ms`/`final_audio_proc_ms` minus written
+PCM. Those processing fields are measured as reported, without assigning them
+clock semantics. Each observation is one response with original final tokens
+(maximum final-token end), rather than a persisted segment or distinct ID.
+Processing-field observations can also occur on responses without tokens.
+Signed buckets are seconds; use bucket/count distributions, not rate of signed
+sums. `inflight` marks a wire write awaiting completion: only `settled` events
+can establish overshoot beyond successfully written PCM. Successful text
+keepalive/finalize/end and binary audio frames have bounded sibling event counts;
+control frames add zero samples. The sibling
+`omi_soniox_capture_axis_comparison_total` joins wire overshoot (greater than
+100 ms), exact queued/compact-ledger conservation, phase, write state and queue on the
+same response. `queue=drained|backlogged` compares written and queued samples exactly
+at response receipt. `settled` alone can still have backlog. Query
+`ledger="equal",queue="drained",write_state="settled"` on the joint counter for
+conserved, drained PCM; every delta histogram also has the queue discriminator.
+Histogram marginals do not additionally select ledger equality. The full static
+label Cartesian product is at most 1,150 series per process including `_created`:
+56 histogram children x 16 samples, 96 comparison children x 2, six event children
+x 2 and 25 validation-detail children x 2. The 100 ms threshold is diagnostic only. Numeric overshoot
+samples log at most four times per socket and once per minute per process;
+no audio, text or identity is logged. Missing ledgers and diagnostic errors count
+separately. Constructor, binding, queue/write accounting, response, getter, metric
+and log failures disable diagnostics for that actual socket and attempt one bounded
+`diagnostic_error` increment without changing connection, PCM or parsing. If the
+error collector itself fails, transport still proceeds. All four new families
+(including HELP/TYPE) are hidden from scrapes while the switch is OFF, even after
+an ON observation; existing families keep their registration and data. Admission
+remains pinned at socket construction; runtime OFF hides old samples immediately
+but new socket construction/restart is needed to remove existing socket state.
+Initial and idle-reopened transports have separate phase labels;
+reopened ledger references subtract the exact configured provider resume offset.
+Elapsed-axis `on` deliberately reports the compact ledger as unavailable.
+
+The same switch adds `omi_audio_timeline_elapsed_validation_detail_total` with
+`map_refused|no_gate|invalid_interval|vad_uncovered|classified`, leaving the old
+validation metric unchanged. `map_refused` includes outside-send, discontinuity
+and collapsed candidates; `vad_uncovered` includes decisions evicted from the
+2048-chunk retention. This decomposition cannot retrospectively explain the
+supplied production `unknown` aggregate. None of these metrics changes capture
+placement or enables the elapsed hypothesis.
+
 `SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
 keeps the compact send axis for all placement and speaker windows, exactly as
 `off` does. A separate elapsed-axis map supplies metrics only; it never gates
 window attachment, changes provider PCM, or changes transcript fields. `on`
-allows elapsed-axis placement only after a live timing probe and validation;
+selects the unverified elapsed axis; operators must require a live timing probe
+and validation before selecting it;
 `off` disables the candidate map. Each Soniox candidate and mapped Modulate
 control segment increments `omi_audio_timeline_elapsed_validation_total` by
 `provider` and `outcome=on_speech|on_silence|partial|unknown`. The comparison

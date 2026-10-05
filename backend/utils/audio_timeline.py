@@ -712,9 +712,9 @@ class ProviderEpochTranslator:
         elapsed_start = self._elapsed_send_map.last_provider_sample or 0
         wall_start = self.timeline.wall_strict(capture_start)
         if wall_start is not None and self._last_accepted_wall_end is not None:
-            # Keepalives/finalize send no PCM, but observed Soniox token
-            # offsets continue along elapsed stream time. A withheld
-            # interval gets axis space, never a send span.
+            # Hypothesis only: keepalives/finalize carry no PCM. Reserve
+            # elapsed gap space in this candidate axis without granting a
+            # send span; provider clock semantics remain unproven.
             elapsed = max(0.0, wall_start - self._last_accepted_wall_end)
             elapsed_start += round(elapsed * self.provider_sample_rate)
         wall_end = self.timeline.wall_strict(capture_start + length)
