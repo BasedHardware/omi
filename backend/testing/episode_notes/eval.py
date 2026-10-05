@@ -33,7 +33,7 @@ class CompatibleEndpoint:
         options = payload.get('_request_options') or {}
         payload = {key: value for key, value in payload.items() if key != '_request_options'}
         effort = options.get('effort', 'default')
-        if effort not in (*EFFORTS, 'low'):
+        if effort not in (*EFFORTS, 'none', 'minimal', 'low', 'medium'):
             raise ValueError('invalid candidate effort')
         body = json.dumps(
             {
@@ -63,13 +63,15 @@ class CompatibleEndpoint:
                 result = json.load(response)
         except Exception as exc:
             raise LLMCallError(
-                type(exc).__name__, LLMResult(content={}, latency_seconds=perf_counter() - started)
+                type(exc).__name__,
+                LLMResult(content={}, latency_seconds=perf_counter() - started, effective_effort=effort),
             ) from None
         latency = perf_counter() - started
         usage = result.get('usage') or {}
         choice = (result.get('choices') or [{}])[0]
         receipt = LLMResult(
             content={},
+            effective_effort=effort,
             input_tokens=usage.get('prompt_tokens'),
             output_tokens=usage.get('completion_tokens'),
             latency_seconds=latency,
@@ -102,6 +104,7 @@ class CompatibleEndpoint:
             content=content,
             **receipt.cost(),
             finish_reason=receipt.finish_reason,
+            effective_effort=receipt.effective_effort,
         )
 
 
@@ -120,6 +123,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--max-tokens', type=int, default=32000)
     parser.add_argument('--timeout', type=float, default=300)
     parser.add_argument('--candidate-effort', choices=EFFORTS, default='default')
+    parser.add_argument(
+        '--provider-default-effort', action='store_true', help='Opt out of conv_structure gateway effort parity'
+    )
     parser.add_argument(
         '--thinking-max-input-bytes',
         type=int,
@@ -222,6 +228,7 @@ def main(argv: list[str] | None = None) -> None:
                 receipt = {
                     'role': role,
                     'effort': (payload.get('_request_options') or {}).get('effort', 'default'),
+                    'effective_effort': result.effective_effort,
                     **result.cost(),
                 }
                 path = args.spend_log.expanduser()
@@ -260,6 +267,7 @@ def main(argv: list[str] | None = None) -> None:
             experiment=args.experiment,
             experiment_cutoff=args.experiment_cutoff,
             candidate_max_tokens=args.candidate_max_tokens,
+            provider_default_effort=args.provider_default_effort,
         )
         write_json(output, report)
     except Exception as exc:

@@ -213,7 +213,7 @@ def test_output_budget_is_keyed_and_only_applied_to_c6_then_one_c7_fallback():
                 'output_truncated',
                 LLMResult(content={}, provider_cost=0.008, latency_seconds=80, finish_reason='length'),
             )
-        assert 'max_tokens' not in options and options['effort'] == 'default'
+        assert 'max_tokens' not in options and options['effort'] == 'low'
         return LLMResult(
             content={'title': 'Synthetic launch', 'overview': 'Spoken plan captured', 'note_claims': []},
             provider_cost=0.002,

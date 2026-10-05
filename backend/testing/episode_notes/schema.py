@@ -106,6 +106,7 @@ class LLMResult:
     cached_tokens: int | None = None
     claim_tokens: int | None = None
     provider_cost: float | None = None
+    effective_effort: str | None = None
 
     def cost(self) -> dict:
         return {

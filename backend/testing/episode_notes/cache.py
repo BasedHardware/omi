@@ -45,6 +45,9 @@ def cached_call(
     llm: Callable[[str, dict], dict | LLMResult],
     validate: Callable[[dict], object] | None = None,
 ) -> LLMResult:
+    prepare = getattr(llm, 'prepare_payload', None)
+    if prepare is not None:
+        payload = prepare(prompt, payload)
     key = fingerprint({'model': model, 'prompt': prompt, 'payload': payload})
     path = directory / f'{kind}-{key}.json' if directory else None
     if path is not None and path.exists():
@@ -64,7 +67,13 @@ def cached_call(
             validate(result.content)
         except Exception as exc:
             raise LLMCallError(
-                type(exc).__name__, LLMResult(content={}, **result.cost(), finish_reason=result.finish_reason)
+                type(exc).__name__,
+                LLMResult(
+                    content={},
+                    **result.cost(),
+                    finish_reason=result.finish_reason,
+                    effective_effort=result.effective_effort,
+                ),
             ) from None
     if path is not None:
         write_json(
@@ -75,6 +84,7 @@ def cached_call(
                     'content': result.content,
                     **result.cost(),
                     'finish_reason': result.finish_reason,
+                    'effective_effort': result.effective_effort,
                 },
             },
         )

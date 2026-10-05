@@ -128,7 +128,17 @@ def evaluate(
     experiment: str = 'none',
     experiment_cutoff: float = 0.3,
     candidate_max_tokens: int | None = None,
+    provider_default_effort: bool = False,
 ) -> dict:
+    from testing.episode_notes.gateway_parity import CandidateEffortParity
+    from utils.conversations.episode_jev import JEV_SELECTOR_PROMPT
+
+    llm = CandidateEffortParity(
+        llm,
+        excluded_prompts=(REFERENCE_PROMPT, JUDGE_PROMPT, JEV_SELECTOR_PROMPT),
+        jev_prompt=JEV_SELECTOR_PROMPT,
+        provider_default=provider_default_effort,
+    )
     settings = settings or EpisodeWriterSettings(selection='compact', claims=True)
     if candidate_max_tokens is not None and (split != 'dev' or not 1000 <= candidate_max_tokens <= 32000):
         raise ValueError('C6 output-budget experiments require DEV and 1000..32000 tokens')
@@ -196,6 +206,11 @@ def evaluate(
                     'class': exc.error_class if isinstance(exc, LLMCallError) else type(exc).__name__,
                 },
                 'candidate_cost': candidate.cost(),
+                'effective_efforts': {
+                    'candidate': candidate.effective_effort,
+                    'reference': reference.effective_effort,
+                    'judge': judge.effective_effort,
+                },
                 'reference_cost': reference.cost(),
                 'judge_cost': judge.cost(),
                 'finish_reasons': {
@@ -388,6 +403,13 @@ def evaluate(
                                 ),
                             ),
                             'generation_performed': arm != 'stored',
+                            'effective_efforts': {
+                                'candidate': result.effective_effort,
+                                'reference': reference_result.effective_effort,
+                                'judge': judged.effective_effort,
+                                'helper': helper_result.effective_effort if helper_result else None,
+                                'failed_writer': failed_writer.effective_effort if failed_writer else None,
+                            },
                             'candidate_reasoning_tokens': result.reasoning_tokens,
                             'prompt_sha256': prompt_hash,
                             'reference': reference_result.content,
@@ -446,6 +468,7 @@ def evaluate(
             'experiment': experiment,
             'experiment_cutoff': experiment_cutoff,
             'candidate_max_tokens': candidate_max_tokens,
+            'candidate_default_effort': llm.default_effort,
         },
         'samples': {
             str(sample): {
