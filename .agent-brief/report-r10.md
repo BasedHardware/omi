@@ -258,6 +258,18 @@ new diagnostic families are separately excluded, and OFF creates no diagnostic
 state. Both receipts: **1 passed, 22 deselected**. OFF/ON behavioral controls and
 all ordinary existing suites retain their actual assertions.
 
+The final expanded OFF probe (`r10-allmetrics-proof.py`) runs that same real-path
+receipt case with a frozen monotonic clock and widens the temporary fixture's
+snapshot to **all existing Omi metric data samples**: counters, gauges, histogram
+buckets/counts/sums. Collector creation timestamps are excluded as registration
+metadata, as are the new diagnostic families. Base and candidate receipts match
+exactly: `r10-base-allmetrics-off.json == r10-candidate-allmetrics-off.json`.
+Each run: **one passed, 22 deselected**. The probe restores all five production
+modules AND the shipped test byte-for-byte in `finally`; `r10-allmetrics-proof-results.json`
+records verified restoration and source hashes. The original 23-case red/green
+and counter-parity proof was rerun afterward and remained green/exact. None of
+these fixture-only probes changes the validated commit or production clock.
+
 ## Validation
 
 Validation is pinned to `6ccbf9340bbb930f4bafbcca86ec7ef9f89f6de2`. All 21 changed source/test/doc/
