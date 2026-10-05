@@ -606,7 +606,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     isMonitoring = false
     if releasedFocusLock {
-      (NSApp.delegate as? AppDelegate)?.refreshFocusLockMenuState()
+      AppDelegate.shared?.refreshFocusLockMenuState()
     }
     isStartingMonitoring = false  // Reset in case stop was called during startup
     isProcessingRewindFrame = false
