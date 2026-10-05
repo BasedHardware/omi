@@ -896,3 +896,122 @@ def test_merge_score_union_preserves_unscoped_donor_keys_and_cap():
     assert {r['speaker_id_scope'] for r in union} == {'conversation:a', 'conversation:b'}
     capped = scores.aggregate([{'id': str(i), scores.FIELD: [row(1, 'resolution')]} for i in range(30)])
     assert len(capped) == 16
+
+
+@pytest.mark.parametrize('entry', ['constructor', 'model_validate', 'factory'])
+@pytest.mark.parametrize('bad', [b'raw-compressed', 'raw-encrypted', {}, [None], [{'stage': 'capture'}], [42]])
+def test_raw_scores_fail_open_at_every_model_entry(entry, bad):
+    import models.conversation as models
+    from utils.conversations.factory import deserialize_conversation
+
+    payload = conversation().model_dump()
+    payload[scores.FIELD] = bad
+    if entry == 'constructor':
+        restored = models.Conversation(**payload)
+    elif entry == 'model_validate':
+        restored = models.Conversation.model_validate(payload)
+    else:
+        restored = deserialize_conversation(payload)
+    assert restored.id == 'c'
+    assert restored.speaker_match_scores is None
+    assert scores.FIELD not in restored.model_dump(mode='json')
+    assert payload[scores.FIELD] == bad  # Never mutate the caller's stored document.
+
+
+@pytest.fixture
+def manual_score_routes(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import database.conversations as db
+    import database.speaker_learning_jobs as learning_jobs
+    import routers.conversations as assignment_router
+    import routers.speaker_labels as rejection_router
+    import utils.other.endpoints as auth
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    store = StrictFirestore()
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(db, 'db', store)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    monkeypatch.setattr(db, 'record_speaker_review', lambda *a: None)
+    monkeypatch.setattr(learning_jobs, 'record_speaker_learning_job_events', lambda *a: None)
+    monkeypatch.setattr(assignment_router, '_emit_speaker_identity_confirmed', lambda **kw: None)
+    app = FastAPI()
+    app.include_router(assignment_router.router)
+    app.include_router(rejection_router.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'
+    return TestClient(app), store
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('operation', ['assignment', 'rejection'])
+@pytest.mark.parametrize('corrupt', [False, True])
+def test_manual_speaker_routes_with_stored_scores(manual_score_routes, monkeypatch, level, operation, corrupt):
+    import database.conversations as db
+
+    client, store = manual_score_routes
+    path = ('users', 'u', 'conversations', 'c')
+    segment = dict(id='s', text='synthetic', speaker_id=1, is_user=operation == 'rejection', start=0, end=6)
+    data = conversation([segment], data_protection_level=level).model_dump()
+    data[scores.FIELD] = [row()]
+    store.rows[path] = db.encode_conversation_for_write('u', data, level)
+    if corrupt:
+        store.rows[path][scores.FIELD] = 'bad-encrypted' if level == 'enhanced' else b'bad-compressed'
+    blob = store.rows[path][scores.FIELD]
+    returned = []
+    assign = db.assign_conversation_speaker
+
+    def commit(*a, **kw):
+        result = assign(*a, **kw)
+        returned.append(result[0])
+        return result
+
+    monkeypatch.setattr(db, 'assign_conversation_speaker', commit)
+    if operation == 'assignment':
+        response = client.patch(
+            '/v1/conversations/c/assign-speaker/1?assign_type=is_user&value=true&use_for_speech_training=false',
+            json={'segment_ids': ['s'], 'assign_type': 'is_user', 'value': 'true'},
+        )
+    else:
+        response = client.post('/v1/conversations/c/speakers/1/reject', json={'kind': 'not_me', 'segment_ids': ['s']})
+    assert response.status_code == 200, response.text
+    assert response.json()['transcript_segments'][0]['is_user'] == (operation == 'assignment')
+    assert scores.FIELD not in response.json()
+    assert store.rows[path][scores.FIELD] == blob
+    assert returned[0].get(scores.FIELD) == (None if corrupt else [row()])
+    receipt = db.decode_manual_speaker_assignments('u', store.rows[path]['manual_speaker_assignments'], True)
+    assert receipt['generation'] == 1
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('operation', ['text', 'assignment', 'translation'])
+def test_partial_transcript_writes_reclaim_stored_scores(manual_score_routes, level, operation):
+    import database.conversations as db
+
+    _, store = manual_score_routes
+    path = ('users', 'u', 'conversations', 'c')
+    segment = dict(id='s', text='synthetic', speaker_id=1, is_user=False, start=0, end=6)
+    data = conversation([segment], data_protection_level=level).model_dump()
+    data[scores.FIELD] = [row()]
+    store.rows[path] = db.encode_conversation_for_write('u', data, level)
+    assert scores.FIELD in store.rows[path]
+    store.rows[path]['other_metadata'] = 'x' * (900 * 1024)
+    if operation == 'text':
+        assert db.update_conversation_segment_text('u', 'c', 's', 'edited') == 'ok'
+    elif operation == 'assignment':
+        updated, *_ = db.assign_conversation_speaker(
+            'u', 'c', is_user=True, speaker_id=1, use_for_speech_training=False
+        )
+        assert scores.FIELD not in updated
+    else:
+        assert db.materialize_translation('u', 'c', 's', 'synthetic', 'en', 'translated', firestore_client=store)
+    assert store.rows[path][scores.FIELD] is db.firestore.DELETE_FIELD
+    readable = db.prepare_conversation_for_read(store.rows[path], 'u')
+    assert scores.FIELD not in readable
+    stored_segment = readable['transcript_segments'][0]
+    if operation == 'text':
+        assert stored_segment['text'] == 'edited'
+    elif operation == 'assignment':
+        assert stored_segment['is_user']
+    else:
+        assert stored_segment['translations'] == [{'lang': 'en', 'text': 'translated'}]

@@ -1787,6 +1787,7 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
         # boundary without pretending that the old evidence still applies.
         prepared_payload['updated_at'] = datetime.now(timezone.utc)
         _invalidate_client_processing(prepared_payload)
+        _guard_match_score_size(prepared_payload, raw_data, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, prepared_payload)
         return 'ok'
 
@@ -2810,8 +2811,11 @@ def assign_conversation_speaker(
         written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
         payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
         _invalidate_client_processing(payload)
+        _guard_match_score_size(payload, raw, getattr(ref, 'path', None))
         transaction.update(ref, payload)
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
+        if payload.get(match_scores.FIELD) is firestore.DELETE_FIELD:
+            current.pop(match_scores.FIELD, None)
         for field in PROJECTION_FAMILY_FIELDS:
             current.pop(field, None)
         return current, resolved, removed, relabeled
@@ -2821,6 +2825,10 @@ def assign_conversation_speaker(
     current, _, _, before = result
     record_speaker_review(uid, current['id'], before, current['transcript_segments'])
     record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))
+    try:
+        _reveal_match_scores_for_read(current, uid)
+    except Exception:
+        _drop_match_scores(current, 'malformed_doc')
     return result
 
 
@@ -3154,6 +3162,7 @@ def materialize_translation(
         payload['translation_materializations_compressed'] = True
         if reservation is not None and not reservation_is_current(reservation):
             return None
+        _guard_match_score_size(payload, current, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, payload)
         return selected
 

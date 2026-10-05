@@ -484,6 +484,20 @@ class Conversation(BaseModel):
     speaker_resolution: Optional[ConversationSpeakers] = None
     speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
 
+    @field_validator('speaker_match_scores', mode='before')
+    @classmethod
+    def _validate_match_scores(cls, value):
+        # Some mutation owners return a stored document with a readable
+        # transcript. Without a uid this model must omit, never decrypt, its
+        # optional raw score blob. Covers factory and direct model callers.
+        if value is None:
+            return None
+        try:
+            return match_scores.normalize(value)
+        except Exception:
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+            return None
+
     @model_validator(mode='after')
     def _collect_match_scores(self):
         try:
