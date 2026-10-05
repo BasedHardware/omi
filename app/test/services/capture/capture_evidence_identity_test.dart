@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
-import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/wal.dart';
 
 import '../../support/capture/capture_replay_world.dart';
