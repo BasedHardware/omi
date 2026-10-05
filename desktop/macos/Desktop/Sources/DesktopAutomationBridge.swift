@@ -2620,6 +2620,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "device_tools_probe",
+      effects: [],
       summary: "Probe the on-device tool surface without reading real messages or sending anything",
       params: ["messagesDbPath"]
     ) { params in
