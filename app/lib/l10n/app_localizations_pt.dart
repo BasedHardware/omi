@@ -12433,4 +12433,44 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Mostrar na tela de bloqueio';
+
+  @override
+  String get meetingActionItemsTitle => 'Itens de ação';
+
+  @override
+  String get addToTasks => 'Adicionar às tarefas';
+
+  @override
+  String get showInTranscript => 'Mostrar transcrição';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Prazo por volta de $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Prazo provisório $date';
+  }
+
+  @override
+  String get openTask => 'Abrir tarefa';
+
+  @override
+  String get completeTask => 'Concluir tarefa';
+
+  @override
+  String get reopenTask => 'Reabrir tarefa';
+
+  @override
+  String get addingToTasks => 'Adicionando às tarefas';
+
+  @override
+  String get taskAddedToTasks => 'Tarefa criada';
+
+  @override
+  String get completedStatus => 'Concluído';
+
+  @override
+  String get notCompletedStatus => 'Pendente';
 }

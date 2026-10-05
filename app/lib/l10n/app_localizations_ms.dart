@@ -12446,4 +12446,44 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Tunjukkan pada skrin kunci';
+
+  @override
+  String get meetingActionItemsTitle => 'Perkara tindakan';
+
+  @override
+  String get addToTasks => 'Tambah ke Tugasan';
+
+  @override
+  String get showInTranscript => 'Tunjukkan Transkrip';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Tarikh akhir sekitar $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Tarikh akhir sementara $date';
+  }
+
+  @override
+  String get openTask => 'Buka Tugasan';
+
+  @override
+  String get completeTask => 'Selesaikan tugasan';
+
+  @override
+  String get reopenTask => 'Buka semula tugasan';
+
+  @override
+  String get addingToTasks => 'Menambah ke Tugasan';
+
+  @override
+  String get taskAddedToTasks => 'Tugas dicipta';
+
+  @override
+  String get completedStatus => 'Selesai';
+
+  @override
+  String get notCompletedStatus => 'Belum selesai';
 }

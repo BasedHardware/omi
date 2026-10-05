@@ -246,7 +246,7 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 | Say | Not |
 |---|---|
 | **Omi** | omi, OMI |
-| **Task(s)** (D3) | Action Item(s), To-Do(s) |
+| **Tasks** (D3) | Action Item(s), To-Do(s), except the meeting-note section of extracted items is **Action items** |
 | **Memories** | Facts |
 | **Try Again** | Retry, Try again |
 | **Not Now** (postpone) | Later, Maybe Later, No |

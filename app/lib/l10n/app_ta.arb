@@ -11396,5 +11396,17 @@
     "dismiss": "மறை",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "பூட்டுத் திரையில் காட்டு"
+    "showOnLockScreen": "பூட்டுத் திரையில் காட்டு",
+    "meetingActionItemsTitle": "செயல் உருப்படிகள்",
+    "addToTasks": "பணிகளில் சேர்க்கவும்",
+    "showInTranscript": "உரைப்பதிவில் காண்பிக்கவும்",
+    "tentativeTaskDueDate": "தோராயமான காலக்கெடு {date}",
+    "tentativeTaskDueDateSemantics": "தற்காலிக காலக்கெடு {date}",
+    "openTask": "பணியைத் திறக்கவும்",
+    "completeTask": "பணியை முடிக்கவும்",
+    "reopenTask": "பணியை மீண்டும் திறக்கவும்",
+    "addingToTasks": "பணிகளில் சேர்க்கப்படுகிறது",
+    "taskAddedToTasks": "பணி உருவாக்கப்பட்டுள்ளது",
+    "completedStatus": "முடிந்தவை",
+    "notCompletedStatus": "நிலுவையில் உள்ளது"
 }

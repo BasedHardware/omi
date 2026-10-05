@@ -11396,5 +11396,17 @@
     "dismiss": "Isara",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Ipakita sa lock screen"
+    "showOnLockScreen": "Ipakita sa lock screen",
+    "meetingActionItemsTitle": "Mga hakbang",
+    "addToTasks": "Idagdag sa Mga Gawain",
+    "showInTranscript": "Ipakita sa Transcript",
+    "tentativeTaskDueDate": "Takdang petsa mga {date}",
+    "tentativeTaskDueDateSemantics": "Pansamantalang takdang petsa {date}",
+    "openTask": "Buksan ang Gawain",
+    "completeTask": "Kumpletuhin ang gawain",
+    "reopenTask": "Muling buksan ang gawain",
+    "addingToTasks": "Idinadagdag sa Mga Gawain",
+    "taskAddedToTasks": "Ang gawain ay nilikha na",
+    "completedStatus": "Kumpleto",
+    "notCompletedStatus": "Naghihintay"
 }

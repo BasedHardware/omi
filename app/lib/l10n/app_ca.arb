@@ -3839,5 +3839,17 @@
     "dismiss": "Descarta",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Mostra a la pantalla de bloqueig"
+    "showOnLockScreen": "Mostra a la pantalla de bloqueig",
+    "meetingActionItemsTitle": "Elements d'acció",
+    "addToTasks": "Afegeix a Tasques",
+    "showInTranscript": "Mostra la transcripció",
+    "tentativeTaskDueDate": "Venciment aproximat {date}",
+    "tentativeTaskDueDateSemantics": "Venciment previst {date}",
+    "openTask": "Obre la tasca",
+    "completeTask": "Completa la tasca",
+    "reopenTask": "Torna a obrir la tasca",
+    "addingToTasks": "S'està afegint a Tasques",
+    "taskAddedToTasks": "Tasca creada",
+    "completedStatus": "Completat",
+    "notCompletedStatus": "Pendent"
 }

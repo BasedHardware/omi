@@ -3839,5 +3839,17 @@
     "dismiss": "Απόρριψη",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος"
+    "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος",
+    "meetingActionItemsTitle": "Ενέργειες",
+    "addToTasks": "Προσθήκη στις Εργασίες",
+    "showInTranscript": "Εμφάνιση απομαγνητοφώνησης",
+    "tentativeTaskDueDate": "Προθεσμία περίπου {date}",
+    "tentativeTaskDueDateSemantics": "Πιθανή προθεσμία {date}",
+    "openTask": "Άνοιγμα εργασίας",
+    "completeTask": "Ολοκλήρωση εργασίας",
+    "reopenTask": "Επανάνοιγμα εργασίας",
+    "addingToTasks": "Προσθήκη στις Εργασίες…",
+    "taskAddedToTasks": "Η εργασία δημιουργήθηκε",
+    "completedStatus": "Ολοκληρώθηκε",
+    "notCompletedStatus": "Εκκρεμεί"
 }

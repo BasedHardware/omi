@@ -268,8 +268,16 @@ describe('action item rows', () => {
     );
     assert.doesNotMatch(source, /Due Unknown|Owner: \{owner\}/);
     assert.match(source, /ownerKnown &&/);
-    assert.match(source, /due && <time/);
+    assert.match(source, /due && \(/);
     assert.match(source, /<p className="sn-context">/);
+  });
+
+  it('keeps tentative certainty and renders the date tentatively and accessibly', () => {
+    const due = actionItemFacts({ due_at: '2026-10-07T00:00:00Z', due_certainty: 'tentative' }).due;
+    assert.equal(due?.certainty, 'tentative');
+    const source = readFileSync(new URL('../components/memories/summary/action-items.tsx', import.meta.url), 'utf8');
+    assert.match(source, /Tentatively due/);
+    assert.match(source, /certainty === 'tentative' \? '~'/);
   });
 });
 

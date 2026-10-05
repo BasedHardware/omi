@@ -14844,5 +14844,63 @@
     "showOnLockScreen": "Show on Lock Screen",
     "@showOnLockScreen": {
         "description": "Setting for recording Live Activities on the lock screen and Dynamic Island"
+    },
+    "meetingActionItemsTitle": "Action items",
+    "@meetingActionItemsTitle": {
+        "description": "meetingActionItemsTitle"
+    },
+    "addToTasks": "Add to Tasks",
+    "@addToTasks": {
+        "description": "addToTasks"
+    },
+    "showInTranscript": "Show in Transcript",
+    "@showInTranscript": {
+        "description": "showInTranscript"
+    },
+    "tentativeTaskDueDate": "Due ~{date}",
+    "@tentativeTaskDueDate": {
+        "description": "tentativeTaskDueDate",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "tentativeTaskDueDateSemantics": "Tentatively due {date}",
+    "@tentativeTaskDueDateSemantics": {
+        "description": "tentativeTaskDueDateSemantics",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "openTask": "Open Task",
+    "@openTask": {
+        "description": "openTask"
+    },
+    "completeTask": "Complete task",
+    "@completeTask": {
+        "description": "completeTask"
+    },
+    "reopenTask": "Reopen task",
+    "@reopenTask": {
+        "description": "reopenTask"
+    },
+    "addingToTasks": "Adding to Tasks…",
+    "@addingToTasks": {
+        "description": "addingToTasks"
+    },
+    "taskAddedToTasks": "Added to Tasks",
+    "@taskAddedToTasks": {
+        "description": "taskAddedToTasks"
+    },
+    "completedStatus": "Completed",
+    "@completedStatus": {
+        "description": "completedStatus"
+    },
+    "notCompletedStatus": "Not completed",
+    "@notCompletedStatus": {
+        "description": "notCompletedStatus"
     }
 }

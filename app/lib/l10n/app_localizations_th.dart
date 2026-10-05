@@ -12349,4 +12349,44 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'แสดงบนหน้าจอล็อก';
+
+  @override
+  String get meetingActionItemsTitle => 'รายการที่ต้องทำ';
+
+  @override
+  String get addToTasks => 'เพิ่มไปยังงาน';
+
+  @override
+  String get showInTranscript => 'แสดงบทถอดเสียง';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'กำหนดส่งประมาณ $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'กำหนดส่งโดยประมาณ $date';
+  }
+
+  @override
+  String get openTask => 'เปิดงาน';
+
+  @override
+  String get completeTask => 'ทำงานให้เสร็จ';
+
+  @override
+  String get reopenTask => 'เปิดงานอีกครั้ง';
+
+  @override
+  String get addingToTasks => 'กำลังเพิ่มไปยังงาน';
+
+  @override
+  String get taskAddedToTasks => 'สร้างงานแล้ว';
+
+  @override
+  String get completedStatus => 'เสร็จสิ้น';
+
+  @override
+  String get notCompletedStatus => 'รอดำเนินการ';
 }

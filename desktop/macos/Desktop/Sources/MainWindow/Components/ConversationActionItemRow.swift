@@ -76,7 +76,9 @@ struct ActionItemRowMetadata: Equatable {
     } else {
       owner = name
     }
-    due = item.dueAt.map { "Due \(OmiDateFormat.dayHeader($0, now: now, calendar: calendar))" }
+    due = item.dueAt.map {
+      "Due \(item.dueCertainty == "tentative" ? "~" : "")\(OmiDateFormat.dayHeader($0, now: now, calendar: calendar))"
+    }
     let trimmedContext = item.context?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     context = trimmedContext.isEmpty ? nil : trimmedContext
   }
@@ -99,6 +101,7 @@ struct ConversationActionItemRow: View {
   let transcriptTitle: String
   let onTaskAction: () -> Void
   let onOpenTranscript: () -> Void
+  let onToggleCompleted: () -> Void
 
   private enum Control: Hashable {
     case task
@@ -118,10 +121,15 @@ struct ConversationActionItemRow: View {
       isHovered: isHovered, hasFocus: hasFocus)
 
     HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-      Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(item.completed ? Ink.listeningGreen : Ink.secondary)
-        .frame(width: 16)
+      Button(action: onToggleCompleted) {
+        Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(item.completed ? Ink.listeningGreen : Ink.secondary)
+          .frame(width: 16)
+      }
+      .buttonStyle(.plain)
+      .help(item.completed ? "Reopen task" : "Complete task")
+      .accessibilityIdentifier("action-item-completion-\(item.id)")
 
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(item.description)
@@ -156,6 +164,7 @@ struct ConversationActionItemRow: View {
     .accessibilityAction(named: Text(taskState.actionTitle)) {
       if taskState.isActionable { onTaskAction() }
     }
+    .accessibilityAction(named: Text(item.completed ? "Reopen task" : "Complete task"), onToggleCompleted)
     .accessibilityAction(named: Text("Open \(transcriptTitle)"), onOpenTranscript)
     .accessibilityIdentifier("action-item-row-\(item.id)")
   }
@@ -201,7 +210,10 @@ struct ConversationActionItemRow: View {
     if item.completed { parts.append("Completed") }
     let metadata = metadata
     if let owner = metadata.owner { parts.append("Owner: \(owner)") }
-    if let due = metadata.due { parts.append(due) }
+    if let due = metadata.due {
+      parts.append(
+        item.dueCertainty == "tentative" ? due.replacingOccurrences(of: "Due ~", with: "Tentatively due ") : due)
+    }
     if let context = metadata.context { parts.append(context) }
     switch taskState {
     case .idle: break

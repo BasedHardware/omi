@@ -12437,4 +12437,44 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Rodyti užrakinimo ekrane';
+
+  @override
+  String get meetingActionItemsTitle => 'Veiksmai';
+
+  @override
+  String get addToTasks => 'Pridėti prie užduočių';
+
+  @override
+  String get showInTranscript => 'Rodyti transkripciją';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Terminas apie $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Preliminarus terminas $date';
+  }
+
+  @override
+  String get openTask => 'Atidaryti užduotį';
+
+  @override
+  String get completeTask => 'Užbaigti užduotį';
+
+  @override
+  String get reopenTask => 'Atnaujinti užduotį';
+
+  @override
+  String get addingToTasks => 'Pridedama prie užduočių';
+
+  @override
+  String get taskAddedToTasks => 'Užduotis sukurta';
+
+  @override
+  String get completedStatus => 'Užbaigta';
+
+  @override
+  String get notCompletedStatus => 'Laukiama';
 }

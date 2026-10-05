@@ -12409,4 +12409,44 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Kuva lukustuskuval';
+
+  @override
+  String get meetingActionItemsTitle => 'Tegevusüksused';
+
+  @override
+  String get addToTasks => 'Lisa ülesannetesse';
+
+  @override
+  String get showInTranscript => 'Näita transkriptsioonis';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Tähtaeg umbes $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Esialgne tähtaeg $date';
+  }
+
+  @override
+  String get openTask => 'Ava ülesanne';
+
+  @override
+  String get completeTask => 'Lõpeta ülesanne';
+
+  @override
+  String get reopenTask => 'Ava ülesanne uuesti';
+
+  @override
+  String get addingToTasks => 'Lisatakse ülesannetesse';
+
+  @override
+  String get taskAddedToTasks => 'Ülesanne loodud';
+
+  @override
+  String get completedStatus => 'Lõpetatud';
+
+  @override
+  String get notCompletedStatus => 'Ootel';
 }

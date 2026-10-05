@@ -11396,5 +11396,17 @@
     "dismiss": "Skrij",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Prikaži na zaklenjenem zaslonu"
+    "showOnLockScreen": "Prikaži na zaklenjenem zaslonu",
+    "meetingActionItemsTitle": "Dejanja",
+    "addToTasks": "Dodaj med opravila",
+    "showInTranscript": "Pokaži prepis",
+    "tentativeTaskDueDate": "Rok približno {date}",
+    "tentativeTaskDueDateSemantics": "Predvideni rok {date}",
+    "openTask": "Odpri opravilo",
+    "completeTask": "Dokončaj opravilo",
+    "reopenTask": "Znova odpri opravilo",
+    "addingToTasks": "Dodajanje med opravila",
+    "taskAddedToTasks": "Naloga je ustvarjena",
+    "completedStatus": "Završeno",
+    "notCompletedStatus": "Čakajoče"
 }

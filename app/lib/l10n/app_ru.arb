@@ -3874,5 +3874,17 @@
     "dismiss": "Скрыть",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Показывать на экране блокировки"
+    "showOnLockScreen": "Показывать на экране блокировки",
+    "meetingActionItemsTitle": "Пункты действий",
+    "addToTasks": "Добавить в задачи",
+    "showInTranscript": "Показать расшифровку",
+    "tentativeTaskDueDate": "Срок примерно {date}",
+    "tentativeTaskDueDateSemantics": "Предварительный срок {date}",
+    "openTask": "Открыть задачу",
+    "completeTask": "Завершить задачу",
+    "reopenTask": "Открыть задачу снова",
+    "addingToTasks": "Добавление в задачи…",
+    "taskAddedToTasks": "Задача создана",
+    "completedStatus": "Завершено",
+    "notCompletedStatus": "Ожидание"
 }

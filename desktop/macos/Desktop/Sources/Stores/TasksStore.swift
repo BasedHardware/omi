@@ -3079,6 +3079,7 @@ class TasksStore: ObservableObject {
     description: String,
     dueAt: Date?,
     priority: String?,
+    completed: Bool = false,
     tags: [String]? = nil,
     recurrenceRule: String? = nil,
     expectedOwnerID: String? = nil
@@ -3098,10 +3099,12 @@ class TasksStore: ObservableObject {
 
       let record = ActionItemRecord(
         description: description,
+        completed: completed,
         source: "manual",
         priority: priority,
         category: tags?.first,
         dueAt: dueAt,
+        completedAt: completed ? Date() : nil,
         recurrenceRule: recurrenceRule,
         metadataJson: metadataJson
       )

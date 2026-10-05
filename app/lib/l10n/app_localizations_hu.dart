@@ -12463,4 +12463,44 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Megjelenítés a zárolási képernyőn';
+
+  @override
+  String get meetingActionItemsTitle => 'Teendők';
+
+  @override
+  String get addToTasks => 'Hozzáadás a feladatokhoz';
+
+  @override
+  String get showInTranscript => 'Megjelenítés az átiratban';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Határidő körülbelül: $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Várható határidő: $date';
+  }
+
+  @override
+  String get openTask => 'Feladat megnyitása';
+
+  @override
+  String get completeTask => 'Feladat befejezése';
+
+  @override
+  String get reopenTask => 'Feladat újranyitása';
+
+  @override
+  String get addingToTasks => 'Hozzáadás a feladatokhoz…';
+
+  @override
+  String get taskAddedToTasks => 'Feladat létrehozva';
+
+  @override
+  String get completedStatus => 'Befejezve';
+
+  @override
+  String get notCompletedStatus => 'Függőben';
 }

@@ -733,7 +733,7 @@ struct Structured: Codable, Equatable {
 struct ActionItem: Codable, Identifiable, Equatable {
   var id: String { description }
   let description: String
-  let completed: Bool
+  var completed: Bool
   let deleted: Bool
   /// Extraction ownership from the backend (`capture_owner`), e.g. "user" when
   /// the item is the user's own commitment. Optional: legacy captures and
@@ -747,6 +747,7 @@ struct ActionItem: Codable, Identifiable, Equatable {
   /// The owner's display name when the extraction names one (`owner_name`).
   let ownerName: String?
   let dueAt: Date?
+  let dueCertainty: String?
   /// One line on why the item exists (`context`).
   let context: String?
 
@@ -759,6 +760,7 @@ struct ActionItem: Codable, Identifiable, Equatable {
     sourceSegmentIDs: [String] = [],
     ownerName: String? = nil,
     dueAt: Date? = nil,
+    dueCertainty: String? = nil,
     context: String? = nil
   ) {
     self.description = description
@@ -769,6 +771,7 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.sourceSegmentIDs = sourceSegmentIDs
     self.ownerName = ownerName
     self.dueAt = dueAt
+    self.dueCertainty = dueCertainty
     self.context = context
   }
 
@@ -784,6 +787,7 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
     self.ownerName = wire.ownerName
     self.dueAt = wire.dueAt.flatMap(Event.parseWireDate)
+    self.dueCertainty = wire.dueCertainty
     self.context = wire.context
   }
 
@@ -805,6 +809,7 @@ struct ActionItem: Codable, Identifiable, Equatable {
       createdAt: nil,
       description_: description,
       dueAt: dueAt.map(Event.encodeDateForWire),
+      dueCertainty: dueCertainty,
       ownerName: ownerName,
       ownershipConfidence: nil,
       sourceSegmentIds: sourceSegmentIDs,

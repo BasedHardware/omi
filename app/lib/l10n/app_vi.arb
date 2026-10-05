@@ -3839,5 +3839,17 @@
     "dismiss": "Ẩn",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Hiển thị trên màn hình khóa"
+    "showOnLockScreen": "Hiển thị trên màn hình khóa",
+    "meetingActionItemsTitle": "Việc cần làm",
+    "addToTasks": "Thêm vào Công việc",
+    "showInTranscript": "Hiển thị bản chép lời",
+    "tentativeTaskDueDate": "Hạn vào khoảng {date}",
+    "tentativeTaskDueDateSemantics": "Hạn dự kiến {date}",
+    "openTask": "Mở công việc",
+    "completeTask": "Hoàn thành công việc",
+    "reopenTask": "Mở lại công việc",
+    "addingToTasks": "Đang thêm vào Công việc",
+    "taskAddedToTasks": "Đã tạo nhiệm vụ",
+    "completedStatus": "Đã hoàn thành",
+    "notCompletedStatus": "Đang chờ"
 }

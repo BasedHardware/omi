@@ -12452,4 +12452,44 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ';
+
+  @override
+  String get meetingActionItemsTitle => 'ಮಾಡಬೇಕಾದ ಕೆಲಸಗಳು';
+
+  @override
+  String get addToTasks => 'ಕಾರ್ಯಗಳಿಗೆ ಸೇರಿಸಿ';
+
+  @override
+  String get showInTranscript => 'ಪ್ರತಿಲಿಪಿಯಲ್ಲಿ ತೋರಿಸಿ';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'ಅಂದಾಜು ಅಂತಿಮ ದಿನಾಂಕ $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'ತಾತ್ಕಾಲಿಕ ಅಂತಿಮ ದಿನಾಂಕ $date';
+  }
+
+  @override
+  String get openTask => 'ಕಾರ್ಯ ತೆರೆಯಿರಿ';
+
+  @override
+  String get completeTask => 'ಕಾರ್ಯ ಪೂರ್ಣಗೊಳಿಸಿ';
+
+  @override
+  String get reopenTask => 'ಕಾರ್ಯವನ್ನು ಮತ್ತೆ ತೆರೆಯಿರಿ';
+
+  @override
+  String get addingToTasks => 'ಕಾರ್ಯಗಳಿಗೆ ಸೇರಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get taskAddedToTasks => 'ಕಾರ್ಯ ರಚಿಸಲಾಗಿದೆ';
+
+  @override
+  String get completedStatus => 'ಪೂರ್ಣ';
+
+  @override
+  String get notCompletedStatus => 'ಪಕ್ಷಾನುಮತಿ';
 }

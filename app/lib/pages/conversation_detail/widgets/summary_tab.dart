@@ -28,13 +28,15 @@ class SummaryTab extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
+  final ValueChanged<List<String>>? onShowActionItemInTranscript;
 
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
       this.searchQuery = '',
       this.currentResultIndex = -1,
-      this.onTapWhenSearchEmpty});
+      this.onTapWhenSearchEmpty,
+      this.onShowActionItemInTranscript});
 
   @override
   State<SummaryTab> createState() => _SummaryTabState();
@@ -135,7 +137,11 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                               ),
                         // After the note's sections, before the screenshots: the Mac's order.
                         if (!discarded && conversation != null)
-                          ConversationActionItemsSection(items: conversation.structured.actionItems),
+                          ConversationActionItemsSection(
+                            items: conversation.structured.actionItems,
+                            conversationId: conversation.id,
+                            onShowInTranscript: widget.onShowActionItemInTranscript ?? (_) {},
+                          ),
                       ]),
                     ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed

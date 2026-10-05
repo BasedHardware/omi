@@ -12443,4 +12443,44 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Показувати на екрані блокування';
+
+  @override
+  String get meetingActionItemsTitle => 'Пункти дій';
+
+  @override
+  String get addToTasks => 'Додати до Завдань';
+
+  @override
+  String get showInTranscript => 'Показати транскрипт';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Термін приблизно $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Попередній термін $date';
+  }
+
+  @override
+  String get openTask => 'Відкрити завдання';
+
+  @override
+  String get completeTask => 'Завершити завдання';
+
+  @override
+  String get reopenTask => 'Відкрити завдання знову';
+
+  @override
+  String get addingToTasks => 'Додавання до Завдань…';
+
+  @override
+  String get taskAddedToTasks => 'Завдання створено';
+
+  @override
+  String get completedStatus => 'Завершено';
+
+  @override
+  String get notCompletedStatus => 'Очікування';
 }

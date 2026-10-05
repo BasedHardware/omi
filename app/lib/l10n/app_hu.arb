@@ -3935,5 +3935,17 @@
     "dismiss": "Elrejtés",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Megjelenítés a zárolási képernyőn"
+    "showOnLockScreen": "Megjelenítés a zárolási képernyőn",
+    "meetingActionItemsTitle": "Teendők",
+    "addToTasks": "Hozzáadás a feladatokhoz",
+    "showInTranscript": "Megjelenítés az átiratban",
+    "tentativeTaskDueDate": "Határidő körülbelül: {date}",
+    "tentativeTaskDueDateSemantics": "Várható határidő: {date}",
+    "openTask": "Feladat megnyitása",
+    "completeTask": "Feladat befejezése",
+    "reopenTask": "Feladat újranyitása",
+    "addingToTasks": "Hozzáadás a feladatokhoz…",
+    "taskAddedToTasks": "Feladat létrehozva",
+    "completedStatus": "Befejezve",
+    "notCompletedStatus": "Függőben"
 }

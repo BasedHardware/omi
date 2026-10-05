@@ -11396,5 +11396,17 @@
     "dismiss": "סגירה",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "הצגה במסך הנעילה"
+    "showOnLockScreen": "הצגה במסך הנעילה",
+    "meetingActionItemsTitle": "משימות לביצוע",
+    "addToTasks": "הוספה למשימות",
+    "showInTranscript": "הצגה בתמלול",
+    "tentativeTaskDueDate": "מועד יעד משוער {date}",
+    "tentativeTaskDueDateSemantics": "מועד יעד זמני {date}",
+    "openTask": "פתיחת משימה",
+    "completeTask": "השלמת משימה",
+    "reopenTask": "פתיחה מחדש של משימה",
+    "addingToTasks": "מוסיף למשימות",
+    "taskAddedToTasks": "המשימה נוצרה",
+    "completedStatus": "הושלם",
+    "notCompletedStatus": "בהמתנה"
 }

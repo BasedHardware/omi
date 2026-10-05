@@ -12410,4 +12410,44 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
+
+  @override
+  String get meetingActionItemsTitle => 'Việc cần làm';
+
+  @override
+  String get addToTasks => 'Thêm vào Công việc';
+
+  @override
+  String get showInTranscript => 'Hiển thị bản chép lời';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Hạn vào khoảng $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Hạn dự kiến $date';
+  }
+
+  @override
+  String get openTask => 'Mở công việc';
+
+  @override
+  String get completeTask => 'Hoàn thành công việc';
+
+  @override
+  String get reopenTask => 'Mở lại công việc';
+
+  @override
+  String get addingToTasks => 'Đang thêm vào Công việc';
+
+  @override
+  String get taskAddedToTasks => 'Đã tạo nhiệm vụ';
+
+  @override
+  String get completedStatus => 'Đã hoàn thành';
+
+  @override
+  String get notCompletedStatus => 'Đang chờ';
 }

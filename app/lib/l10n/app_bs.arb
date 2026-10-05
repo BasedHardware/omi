@@ -11396,5 +11396,17 @@
     "dismiss": "Sakrij",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Prikaži na zaključanom ekranu"
+    "showOnLockScreen": "Prikaži na zaključanom ekranu",
+    "meetingActionItemsTitle": "Stavke za uraditi",
+    "addToTasks": "Dodaj u zadatke",
+    "showInTranscript": "Prikaži transkript",
+    "tentativeTaskDueDate": "Rok oko {date}",
+    "tentativeTaskDueDateSemantics": "Okvirni rok {date}",
+    "openTask": "Otvori zadatak",
+    "completeTask": "Završi zadatak",
+    "reopenTask": "Ponovo otvori zadatak",
+    "addingToTasks": "Dodavanje u zadatke",
+    "taskAddedToTasks": "Zadatak je kreiran",
+    "completedStatus": "Završeno",
+    "notCompletedStatus": "Na čekanju"
 }

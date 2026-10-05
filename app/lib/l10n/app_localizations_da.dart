@@ -12403,4 +12403,44 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Vis på låseskærmen';
+
+  @override
+  String get meetingActionItemsTitle => 'Handlingspunkter';
+
+  @override
+  String get addToTasks => 'Føj til Opgaver';
+
+  @override
+  String get showInTranscript => 'Vis transskription';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Frist cirka $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Foreløbig frist $date';
+  }
+
+  @override
+  String get openTask => 'Åbn opgave';
+
+  @override
+  String get completeTask => 'Fuldfør opgave';
+
+  @override
+  String get reopenTask => 'Genåbn opgave';
+
+  @override
+  String get addingToTasks => 'Føjer til Opgaver';
+
+  @override
+  String get taskAddedToTasks => 'Opgave oprettet';
+
+  @override
+  String get completedStatus => 'Fuldført';
+
+  @override
+  String get notCompletedStatus => 'Afventende';
 }

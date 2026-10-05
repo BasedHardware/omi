@@ -15,6 +15,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
@@ -394,6 +395,30 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       selectedTab = ConversationTab.transcript;
     });
     _controller?.animateTo(_transcriptTabIndex);
+  }
+
+  void _showActionItemInTranscript(List<String> sourceSegmentIds) {
+    final provider = context.read<ConversationDetailProvider>();
+    TranscriptSegment? target;
+    for (final segment in provider.conversation.transcriptSegments) {
+      if (segment.id != null && sourceSegmentIds.contains(segment.id)) {
+        target = segment;
+        break;
+      }
+    }
+    setState(() {
+      selectedTab = ConversationTab.transcript;
+      _hasExplicitTabSelection = true;
+    });
+    _controller?.animateTo(_transcriptTabIndex);
+    final resolvedTarget = target;
+    if (resolvedTarget != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (mounted && _seekToSegmentCallback != null) {
+          await _seekToSegmentCallback!(resolvedTarget.start, resolvedTarget.end);
+        }
+      });
+    }
   }
 
   @override
@@ -1140,6 +1165,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                             searchQuery: _searchQuery,
                             currentResultIndex: getCurrentResultIndexForHighlighting(),
                             onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                            onShowActionItemInTranscript: _showActionItemInTranscript,
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),

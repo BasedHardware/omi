@@ -217,6 +217,7 @@ Future<ActionItemWithMetadata?> createActionItem({
   DateTime? dueAt,
   String? conversationId,
   bool completed = false,
+  String? idempotencyKey,
 }) async {
   var requestBody = {'description': description, 'completed': completed};
 
@@ -229,7 +230,7 @@ Future<ActionItemWithMetadata?> createActionItem({
 
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/action-items',
-    headers: {},
+    headers: {if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey},
     method: 'POST',
     body: jsonEncode(requestBody),
   );

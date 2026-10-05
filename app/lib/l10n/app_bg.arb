@@ -3839,5 +3839,17 @@
     "dismiss": "Скрий",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Показване на заключения екран"
+    "showOnLockScreen": "Показване на заключения екран",
+    "meetingActionItemsTitle": "Елементи за действие",
+    "addToTasks": "Добави в Задачи",
+    "showInTranscript": "Покажи в транскрипцията",
+    "tentativeTaskDueDate": "Срок около {date}",
+    "tentativeTaskDueDateSemantics": "Предполагаем срок {date}",
+    "openTask": "Отвори задачата",
+    "completeTask": "Завърши задачата",
+    "reopenTask": "Отвори задачата отново",
+    "addingToTasks": "Добавя се в Задачи",
+    "taskAddedToTasks": "Задачата е създадена",
+    "completedStatus": "Завършено",
+    "notCompletedStatus": "В изчакване"
 }

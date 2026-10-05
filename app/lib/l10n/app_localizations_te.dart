@@ -12466,4 +12466,44 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'లాక్ స్క్రీన్‌పై చూపించు';
+
+  @override
+  String get meetingActionItemsTitle => 'చర్య అంశాలు';
+
+  @override
+  String get addToTasks => 'పనులకు జోడించండి';
+
+  @override
+  String get showInTranscript => 'ట్రాన్స్‌క్రిప్ట్‌లో చూపండి';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'సుమారు గడువు $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'తాత్కాలిక గడువు $date';
+  }
+
+  @override
+  String get openTask => 'పనిని తెరవండి';
+
+  @override
+  String get completeTask => 'పనిని పూర్తి చేయండి';
+
+  @override
+  String get reopenTask => 'పనిని మళ్లీ తెరవండి';
+
+  @override
+  String get addingToTasks => 'పనులకు జోడిస్తోంది';
+
+  @override
+  String get taskAddedToTasks => 'పని సృష్టించబడింది';
+
+  @override
+  String get completedStatus => 'సంపూర్ణమైంది';
+
+  @override
+  String get notCompletedStatus => 'పెండింగ్';
 }

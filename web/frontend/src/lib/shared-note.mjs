@@ -315,7 +315,7 @@ export function actionItemFacts(item) {
   return {
     owner: ownerKnown ? rawOwner : 'Unknown',
     ownerKnown,
-    due,
+    due: due ? { ...due, certainty: item?.due_certainty === 'tentative' ? 'tentative' : 'confirmed' } : null,
     context: item?.context?.trim() || '',
   };
 }

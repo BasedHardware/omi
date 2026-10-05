@@ -3839,5 +3839,17 @@
     "dismiss": "Peida",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Kuva lukustuskuval"
+    "showOnLockScreen": "Kuva lukustuskuval",
+    "meetingActionItemsTitle": "Tegevusüksused",
+    "addToTasks": "Lisa ülesannetesse",
+    "showInTranscript": "Näita transkriptsioonis",
+    "tentativeTaskDueDate": "Tähtaeg umbes {date}",
+    "tentativeTaskDueDateSemantics": "Esialgne tähtaeg {date}",
+    "openTask": "Ava ülesanne",
+    "completeTask": "Lõpeta ülesanne",
+    "reopenTask": "Ava ülesanne uuesti",
+    "addingToTasks": "Lisatakse ülesannetesse",
+    "taskAddedToTasks": "Ülesanne loodud",
+    "completedStatus": "Lõpetatud",
+    "notCompletedStatus": "Ootel"
 }

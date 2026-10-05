@@ -1,3 +1,3 @@
 {
-  "change": "Conversation summaries show their tasks again, with who owns each one, when it is due, and why"
+  "change": "Meeting notes call the section Action items and show owners, context, and confirmed or tentative due dates, with row actions to add, complete, reopen, and find tasks in the transcript."
 }

@@ -12229,4 +12229,44 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get showOnLockScreen => '잠금 화면에 표시';
+
+  @override
+  String get meetingActionItemsTitle => '실행 항목';
+
+  @override
+  String get addToTasks => '작업에 추가';
+
+  @override
+  String get showInTranscript => '스크립트에서 보기';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return '기한 약 $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return '예정 기한 $date';
+  }
+
+  @override
+  String get openTask => '작업 열기';
+
+  @override
+  String get completeTask => '작업 완료';
+
+  @override
+  String get reopenTask => '작업 다시 열기';
+
+  @override
+  String get addingToTasks => '작업에 추가 중…';
+
+  @override
+  String get taskAddedToTasks => '작업이 생성되었습니다';
+
+  @override
+  String get completedStatus => '완료';
+
+  @override
+  String get notCompletedStatus => '대기 중';
 }

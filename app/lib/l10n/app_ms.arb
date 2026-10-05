@@ -3839,5 +3839,17 @@
     "dismiss": "Tutup",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Tunjukkan pada skrin kunci"
+    "showOnLockScreen": "Tunjukkan pada skrin kunci",
+    "meetingActionItemsTitle": "Perkara tindakan",
+    "addToTasks": "Tambah ke Tugasan",
+    "showInTranscript": "Tunjukkan Transkrip",
+    "tentativeTaskDueDate": "Tarikh akhir sekitar {date}",
+    "tentativeTaskDueDateSemantics": "Tarikh akhir sementara {date}",
+    "openTask": "Buka Tugasan",
+    "completeTask": "Selesaikan tugasan",
+    "reopenTask": "Buka semula tugasan",
+    "addingToTasks": "Menambah ke Tugasan",
+    "taskAddedToTasks": "Tugas dicipta",
+    "completedStatus": "Selesai",
+    "notCompletedStatus": "Belum selesai"
 }

@@ -12495,4 +12495,44 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Εμφάνιση στην οθόνη κλειδώματος';
+
+  @override
+  String get meetingActionItemsTitle => 'Ενέργειες';
+
+  @override
+  String get addToTasks => 'Προσθήκη στις Εργασίες';
+
+  @override
+  String get showInTranscript => 'Εμφάνιση απομαγνητοφώνησης';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Προθεσμία περίπου $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Πιθανή προθεσμία $date';
+  }
+
+  @override
+  String get openTask => 'Άνοιγμα εργασίας';
+
+  @override
+  String get completeTask => 'Ολοκλήρωση εργασίας';
+
+  @override
+  String get reopenTask => 'Επανάνοιγμα εργασίας';
+
+  @override
+  String get addingToTasks => 'Προσθήκη στις Εργασίες…';
+
+  @override
+  String get taskAddedToTasks => 'Η εργασία δημιουργήθηκε';
+
+  @override
+  String get completedStatus => 'Ολοκληρώθηκε';
+
+  @override
+  String get notCompletedStatus => 'Εκκρεμεί';
 }

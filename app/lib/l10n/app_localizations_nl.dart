@@ -12451,4 +12451,44 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Toon op vergrendelscherm';
+
+  @override
+  String get meetingActionItemsTitle => 'Actiepunten';
+
+  @override
+  String get addToTasks => 'Toevoegen aan Taken';
+
+  @override
+  String get showInTranscript => 'In transcript tonen';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Vervaldatum rond $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Voorlopige vervaldatum $date';
+  }
+
+  @override
+  String get openTask => 'Taak openen';
+
+  @override
+  String get completeTask => 'Taak voltooien';
+
+  @override
+  String get reopenTask => 'Taak heropenen';
+
+  @override
+  String get addingToTasks => 'Toevoegen aan Taken…';
+
+  @override
+  String get taskAddedToTasks => 'Taak aangemaakt';
+
+  @override
+  String get completedStatus => 'Voltooid';
+
+  @override
+  String get notCompletedStatus => 'In afwachting';
 }

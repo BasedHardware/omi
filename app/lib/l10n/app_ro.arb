@@ -3839,5 +3839,17 @@
     "dismiss": "Ascunde",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Afișează pe ecranul de blocare"
+    "showOnLockScreen": "Afișează pe ecranul de blocare",
+    "meetingActionItemsTitle": "Elemente de acțiune",
+    "addToTasks": "Adaugă la Sarcini",
+    "showInTranscript": "Afișează transcrierea",
+    "tentativeTaskDueDate": "Scadență aproximativă {date}",
+    "tentativeTaskDueDateSemantics": "Scadență provizorie {date}",
+    "openTask": "Deschide sarcina",
+    "completeTask": "Finalizează sarcina",
+    "reopenTask": "Redeschide sarcina",
+    "addingToTasks": "Se adaugă la Sarcini",
+    "taskAddedToTasks": "Sarcină creată",
+    "completedStatus": "Finalizat",
+    "notCompletedStatus": "În așteptare"
 }

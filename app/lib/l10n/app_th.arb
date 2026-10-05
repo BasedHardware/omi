@@ -3839,5 +3839,17 @@
     "dismiss": "ปิด",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "แสดงบนหน้าจอล็อก"
+    "showOnLockScreen": "แสดงบนหน้าจอล็อก",
+    "meetingActionItemsTitle": "รายการที่ต้องทำ",
+    "addToTasks": "เพิ่มไปยังงาน",
+    "showInTranscript": "แสดงบทถอดเสียง",
+    "tentativeTaskDueDate": "กำหนดส่งประมาณ {date}",
+    "tentativeTaskDueDateSemantics": "กำหนดส่งโดยประมาณ {date}",
+    "openTask": "เปิดงาน",
+    "completeTask": "ทำงานให้เสร็จ",
+    "reopenTask": "เปิดงานอีกครั้ง",
+    "addingToTasks": "กำลังเพิ่มไปยังงาน",
+    "taskAddedToTasks": "สร้างงานแล้ว",
+    "completedStatus": "เสร็จสิ้น",
+    "notCompletedStatus": "รอดำเนินการ"
 }

@@ -12324,4 +12324,44 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'הצגה במסך הנעילה';
+
+  @override
+  String get meetingActionItemsTitle => 'משימות לביצוע';
+
+  @override
+  String get addToTasks => 'הוספה למשימות';
+
+  @override
+  String get showInTranscript => 'הצגה בתמלול';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'מועד יעד משוער $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'מועד יעד זמני $date';
+  }
+
+  @override
+  String get openTask => 'פתיחת משימה';
+
+  @override
+  String get completeTask => 'השלמת משימה';
+
+  @override
+  String get reopenTask => 'פתיחה מחדש של משימה';
+
+  @override
+  String get addingToTasks => 'מוסיף למשימות';
+
+  @override
+  String get taskAddedToTasks => 'המשימה נוצרה';
+
+  @override
+  String get completedStatus => 'הושלם';
+
+  @override
+  String get notCompletedStatus => 'בהמתנה';
 }

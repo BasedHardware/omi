@@ -3839,5 +3839,17 @@
     "dismiss": "Verbergen",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Toon op vergrendelscherm"
+    "showOnLockScreen": "Toon op vergrendelscherm",
+    "meetingActionItemsTitle": "Actiepunten",
+    "addToTasks": "Toevoegen aan Taken",
+    "showInTranscript": "In transcript tonen",
+    "tentativeTaskDueDate": "Vervaldatum rond {date}",
+    "tentativeTaskDueDateSemantics": "Voorlopige vervaldatum {date}",
+    "openTask": "Taak openen",
+    "completeTask": "Taak voltooien",
+    "reopenTask": "Taak heropenen",
+    "addingToTasks": "Toevoegen aan Taken…",
+    "taskAddedToTasks": "Taak aangemaakt",
+    "completedStatus": "Voltooid",
+    "notCompletedStatus": "In afwachting"
 }

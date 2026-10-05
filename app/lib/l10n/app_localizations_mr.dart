@@ -12422,4 +12422,44 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'लॉक स्क्रीनवर दाखवा';
+
+  @override
+  String get meetingActionItemsTitle => 'करावयाच्या गोष्टी';
+
+  @override
+  String get addToTasks => 'टास्कमध्ये जोडा';
+
+  @override
+  String get showInTranscript => 'ट्रान्सक्रिप्टमध्ये दाखवा';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'अंदाजे अंतिम तारीख $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'तात्पुरती अंतिम तारीख $date';
+  }
+
+  @override
+  String get openTask => 'टास्क उघडा';
+
+  @override
+  String get completeTask => 'टास्क पूर्ण करा';
+
+  @override
+  String get reopenTask => 'टास्क पुन्हा उघडा';
+
+  @override
+  String get addingToTasks => 'टास्कमध्ये जोडत आहे';
+
+  @override
+  String get taskAddedToTasks => 'कार्य तयार केले गेले';
+
+  @override
+  String get completedStatus => 'पूर्ण';
+
+  @override
+  String get notCompletedStatus => 'प्रलंबित';
 }

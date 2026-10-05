@@ -1,3 +1,3 @@
 {
-  "change": "Meeting-note action items now show who owns them, when they are due, and why, and Add to Tasks keeps the due date"
+  "change": "Meeting-note Action items now show owners, context, and confirmed or tentative due dates; readers can add, complete, reopen, and find linked tasks, and Try with Apps starts collapsed."
 }

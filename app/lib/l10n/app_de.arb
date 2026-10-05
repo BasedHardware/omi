@@ -3839,5 +3839,17 @@
     "dismiss": "Ausblenden",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Auf dem Sperrbildschirm anzeigen"
+    "showOnLockScreen": "Auf dem Sperrbildschirm anzeigen",
+    "meetingActionItemsTitle": "Aktionspunkte",
+    "addToTasks": "Zu Aufgaben hinzufügen",
+    "showInTranscript": "Im Transkript anzeigen",
+    "tentativeTaskDueDate": "Fällig etwa {date}",
+    "tentativeTaskDueDateSemantics": "Voraussichtlich fällig {date}",
+    "openTask": "Aufgabe öffnen",
+    "completeTask": "Aufgabe abschließen",
+    "reopenTask": "Aufgabe wieder öffnen",
+    "addingToTasks": "Wird zu Aufgaben hinzugefügt",
+    "taskAddedToTasks": "Aufgabe erstellt",
+    "completedStatus": "Abgeschlossen",
+    "notCompletedStatus": "Ausstehend"
 }

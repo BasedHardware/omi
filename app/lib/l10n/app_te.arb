@@ -11396,5 +11396,17 @@
     "dismiss": "దాచు",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు"
+    "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు",
+    "meetingActionItemsTitle": "చర్య అంశాలు",
+    "addToTasks": "పనులకు జోడించండి",
+    "showInTranscript": "ట్రాన్స్‌క్రిప్ట్‌లో చూపండి",
+    "tentativeTaskDueDate": "సుమారు గడువు {date}",
+    "tentativeTaskDueDateSemantics": "తాత్కాలిక గడువు {date}",
+    "openTask": "పనిని తెరవండి",
+    "completeTask": "పనిని పూర్తి చేయండి",
+    "reopenTask": "పనిని మళ్లీ తెరవండి",
+    "addingToTasks": "పనులకు జోడిస్తోంది",
+    "taskAddedToTasks": "పని సృష్టించబడింది",
+    "completedStatus": "సంపూర్ణమైంది",
+    "notCompletedStatus": "పెండింగ్"
 }

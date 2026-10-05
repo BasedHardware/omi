@@ -12411,4 +12411,44 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Zobraziť na zamknutej obrazovke';
+
+  @override
+  String get meetingActionItemsTitle => 'Akčné položky';
+
+  @override
+  String get addToTasks => 'Pridať do úloh';
+
+  @override
+  String get showInTranscript => 'Zobraziť prepis';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Termín približne $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Predbežný termín $date';
+  }
+
+  @override
+  String get openTask => 'Otvoriť úlohu';
+
+  @override
+  String get completeTask => 'Dokončiť úlohu';
+
+  @override
+  String get reopenTask => 'Znova otvoriť úlohu';
+
+  @override
+  String get addingToTasks => 'Pridáva sa do úloh';
+
+  @override
+  String get taskAddedToTasks => 'Úloha bola vytvorená';
+
+  @override
+  String get completedStatus => 'Dokončené';
+
+  @override
+  String get notCompletedStatus => 'Čakajúce';
 }

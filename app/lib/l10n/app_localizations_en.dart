@@ -12403,4 +12403,44 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Show on Lock Screen';
+
+  @override
+  String get meetingActionItemsTitle => 'Action items';
+
+  @override
+  String get addToTasks => 'Add to Tasks';
+
+  @override
+  String get showInTranscript => 'Show in Transcript';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Due ~$date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Tentatively due $date';
+  }
+
+  @override
+  String get openTask => 'Open Task';
+
+  @override
+  String get completeTask => 'Complete task';
+
+  @override
+  String get reopenTask => 'Reopen task';
+
+  @override
+  String get addingToTasks => 'Adding to Tasks…';
+
+  @override
+  String get taskAddedToTasks => 'Added to Tasks';
+
+  @override
+  String get completedStatus => 'Completed';
+
+  @override
+  String get notCompletedStatus => 'Not completed';
 }

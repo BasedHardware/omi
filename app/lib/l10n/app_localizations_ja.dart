@@ -12225,4 +12225,44 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'ロック画面に表示';
+
+  @override
+  String get meetingActionItemsTitle => 'アクション項目';
+
+  @override
+  String get addToTasks => 'タスクに追加';
+
+  @override
+  String get showInTranscript => '文字起こしを表示';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return '期限（目安）$date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return '予定期限 $date';
+  }
+
+  @override
+  String get openTask => 'タスクを開く';
+
+  @override
+  String get completeTask => 'タスクを完了';
+
+  @override
+  String get reopenTask => 'タスクを再開';
+
+  @override
+  String get addingToTasks => 'タスクに追加中…';
+
+  @override
+  String get taskAddedToTasks => 'タスクを作成しました';
+
+  @override
+  String get completedStatus => '完了';
+
+  @override
+  String get notCompletedStatus => '保留中';
 }

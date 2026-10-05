@@ -20,6 +20,10 @@ struct ConversationActionItemsSection: View {
   @State private var addedActionItemIDs: Set<String> = []
   @State private var addingActionItemIDs: Set<String> = []
   @State private var failedActionItemIDs: Set<String> = []
+  @State private var completedOverrides: [String: Bool] = [:]
+  @State private var createdTasks: [String: TaskActionItem] = [:]
+  @State private var createdTaskCompletion: [String: Bool] = [:]
+  @State private var togglingActionItemIDs: Set<String> = []
 
   private var activeItems: [ActionItem] {
     conversation.structured.actionItems.filter { !$0.deleted }
@@ -28,14 +32,16 @@ struct ConversationActionItemsSection: View {
   var body: some View {
     if !activeItems.isEmpty {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        DetailSectionHeader(title: "Action Items", systemImage: "checklist", count: activeItems.count)
+        DetailSectionHeader(title: "Action items", systemImage: "checklist", count: activeItems.count)
 
         VStack(alignment: .leading, spacing: 0) {
-          ForEach(Array(activeItems.enumerated()), id: \.element.id) { index, item in
+          ForEach(
+            Array(conversation.structured.actionItems.enumerated().filter { !$0.element.deleted }), id: \.element.id
+          ) { index, item in
             if index > 0 {
               GlassSeparator().padding(.leading, 36)
             }
-            row(item)
+            row(item, index: index)
           }
         }
         .glassCard(cornerRadius: PageGlass.rowRadius)
@@ -55,13 +61,16 @@ struct ConversationActionItemsSection: View {
     }
   }
 
-  private func row(_ item: ActionItem) -> some View {
+  private func row(_ sourceItem: ActionItem, index: Int) -> some View {
+    var item = sourceItem
+    item.completed = completedOverrides[item.id] ?? sourceItem.completed
+    let identity = actionItemIdentity(sourceItem)
     let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
       item.sourceSegmentIDs, segments: conversation.transcriptSegments)
     let linkedTaskID = onOpenLinkedTask == nil ? nil : item.targetTaskID
     return ConversationActionItemRow(
       item: item,
-      taskState: taskState(for: item, linkedTaskID: linkedTaskID),
+      taskState: taskState(for: item, identity: identity, linkedTaskID: linkedTaskID),
       transcriptTitle: sourceIDs.isEmpty ? "Transcript" : "Source",
       onTaskAction: {
         if let linkedTaskID {
@@ -76,38 +85,104 @@ struct ConversationActionItemsSection: View {
           showTranscript: true,
           transcriptSegmentIds: sourceIDs
         )
-      }
+      },
+      onToggleCompleted: { toggleCompletion(item, index: index, identity: identity) }
     )
   }
 
-  private func taskState(for item: ActionItem, linkedTaskID: String?) -> ActionItemTaskState {
+  private func taskState(for item: ActionItem, identity: String, linkedTaskID: String?) -> ActionItemTaskState {
     if linkedTaskID != nil { return .linked }
-    if addedActionItemIDs.contains(item.id) { return .added }
-    if addingActionItemIDs.contains(item.id) { return .adding }
-    if failedActionItemIDs.contains(item.id) { return .failed }
+    if addedActionItemIDs.contains(identity) { return .added }
+    if addingActionItemIDs.contains(identity) { return .adding }
+    if failedActionItemIDs.contains(identity) { return .failed }
     return .idle
+  }
+
+  private func actionItemIdentity(_ item: ActionItem) -> String {
+    item.sourceSegmentIDs.isEmpty ? item.description : item.sourceSegmentIDs.joined(separator: "|")
   }
 
   /// Explicit, per-item promotion of a summary action item into the task list.
   /// This gesture is the only way an extracted item becomes a task.
   private func addActionItemToTasks(_ item: ActionItem) {
-    guard !addedActionItemIDs.contains(item.id), !addingActionItemIDs.contains(item.id) else { return }
-    addingActionItemIDs.insert(item.id)
-    failedActionItemIDs.remove(item.id)
+    let identity = actionItemIdentity(item)
+    guard !addedActionItemIDs.contains(identity), !addingActionItemIDs.contains(identity) else { return }
+    addingActionItemIDs.insert(identity)
+    failedActionItemIDs.remove(identity)
     Task { @MainActor in
       let created = await TasksStore.shared.createTask(
         description: item.description,
         dueAt: item.dueAt,
         priority: nil
       )
-      addingActionItemIDs.remove(item.id)
+      addingActionItemIDs.remove(identity)
       if created != nil {
-        addedActionItemIDs.insert(item.id)
+        addedActionItemIDs.insert(identity)
+        createdTasks[identity] = created
+        createdTaskCompletion[identity] = created?.completed ?? false
       } else {
-        failedActionItemIDs.insert(item.id)
+        failedActionItemIDs.insert(identity)
       }
     }
   }
+
+  private func toggleCompletion(_ item: ActionItem, index: Int, identity: String) {
+    guard !togglingActionItemIDs.contains(identity) else { return }
+    togglingActionItemIDs.insert(identity)
+    let next = !item.completed
+    Task { @MainActor in
+      defer { togglingActionItemIDs.remove(identity) }
+      var task = createdTasks[identity]
+      var taskIsCompleted = createdTaskCompletion[identity]
+      if task == nil, let targetTaskID = item.targetTaskID {
+        task = try? await APIClient.shared.getActionItem(id: targetTaskID)
+        guard task != nil else {
+          failedActionItemIDs.insert(identity)
+          return
+        }
+        taskIsCompleted = task?.completed
+      }
+      if task == nil && next {
+        task = await TasksStore.shared.createTask(
+          description: item.description, dueAt: item.dueAt, priority: nil, completed: true)
+        taskIsCompleted = task?.completed
+        if let task {
+          createdTasks[identity] = task
+          createdTaskCompletion[identity] = task.completed
+          addedActionItemIDs.insert(identity)
+        }
+      }
+      if let task, let taskIsCompleted, taskIsCompleted != next {
+        let toggleInput = TaskActionItem(
+          id: task.id, description: task.description, completed: taskIsCompleted, createdAt: task.createdAt,
+          dueAt: task.dueAt, conversationId: task.conversationId, source: task.source, priority: task.priority)
+        await TasksStore.shared.toggleTask(toggleInput)
+        createdTaskCompletion[identity] = next
+      }
+      do {
+        let body = SetConversationActionItemStatusBody(itemsIdx: [index], values: [next])
+        let _: ConversationActionItemStatusResponse = try await APIClient.shared.patch(
+          "v1/conversations/\(conversation.id)/action-items", body: body)
+        if let task { createdTasks[identity] = task }
+        completedOverrides[item.id] = next
+      } catch {
+        failedActionItemIDs.insert(identity)
+      }
+    }
+  }
+}
+
+private struct SetConversationActionItemStatusBody: Encodable {
+  let itemsIdx: [Int]
+  let values: [Bool]
+  enum CodingKeys: String, CodingKey {
+    case itemsIdx = "items_idx"
+    case values
+  }
+}
+
+private struct ConversationActionItemStatusResponse: Decodable {
+  let status: String
 }
 
 // MARK: - App Insights
@@ -141,31 +216,51 @@ struct ConversationAppInsightsSection: View {
 
 // MARK: - Try with Apps
 
+enum ConversationSuggestedAppsDisclosure {
+  static let initiallyExpanded = false
+}
+
 /// Apps with memory capability that have not produced a result for this conversation yet.
 struct ConversationSuggestedAppsSection: View {
   let apps: [OmiApp]
   let isLoadingApps: Bool
   let reprocessingAppID: String?
   let onSelect: (OmiApp) -> Void
+  @State private var isExpanded = ConversationSuggestedAppsDisclosure.initiallyExpanded
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      DetailSectionHeader(title: "Try with Apps", systemImage: "sparkles")
+      Button {
+        isExpanded.toggle()
+      } label: {
+        HStack(spacing: OmiSpacing.xs) {
+          DetailSectionHeader(title: "Try with Apps", systemImage: "sparkles")
+          Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("conversation-try-with-apps-disclosure")
+      .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
-      if apps.isEmpty && !isLoadingApps {
-        Text("Enable apps with memory capability to get more insights from your conversations.")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      } else {
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: OmiSpacing.sm) {
-            ForEach(apps) { app in
-              SuggestedAppCard(
-                app: app,
-                isLoading: reprocessingAppID == app.id,
-                onTap: { onSelect(app) }
-              )
+      if isExpanded {
+        if apps.isEmpty && !isLoadingApps {
+          Text("Enable apps with memory capability to get more insights from your conversations.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: OmiSpacing.sm) {
+              ForEach(apps) { app in
+                SuggestedAppCard(
+                  app: app,
+                  isLoading: reprocessingAppID == app.id,
+                  onTap: { onSelect(app) }
+                )
+              }
             }
           }
         }

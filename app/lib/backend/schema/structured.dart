@@ -180,6 +180,9 @@ class ActionItem {
   /// Who the extraction says owns the item, when it names someone.
   String? ownerName;
   DateTime? dueAt;
+  String? dueCertainty;
+  String? targetTaskId;
+  List<String> sourceSegmentIds;
 
   /// Why the item exists, in a sentence ("Eddie offered to pass it on").
   String? context;
@@ -192,6 +195,9 @@ class ActionItem {
     this.captureOwner,
     this.ownerName,
     this.dueAt,
+    this.dueCertainty,
+    this.targetTaskId,
+    this.sourceSegmentIds = const [],
     this.context,
   });
 
@@ -203,6 +209,9 @@ class ActionItem {
       captureOwner: generated.captureOwner,
       ownerName: generated.ownerName,
       dueAt: generated.dueAt,
+      dueCertainty: generated.dueCertainty,
+      targetTaskId: generated.targetTaskId,
+      sourceSegmentIds: generated.sourceSegmentIds ?? const [],
       context: generated.context,
     );
   }
@@ -218,6 +227,9 @@ class ActionItem {
       captureOwner: captureOwner,
       ownerName: ownerName,
       dueAt: dueAt,
+      dueCertainty: dueCertainty,
+      targetTaskId: targetTaskId,
+      sourceSegmentIds: sourceSegmentIds,
       context: context,
     );
   }

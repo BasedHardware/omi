@@ -12484,4 +12484,44 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Mostra sulla schermata di blocco';
+
+  @override
+  String get meetingActionItemsTitle => 'Azioni da svolgere';
+
+  @override
+  String get addToTasks => 'Aggiungi alle attività';
+
+  @override
+  String get showInTranscript => 'Mostra trascrizione';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Scadenza circa $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Scadenza provvisoria $date';
+  }
+
+  @override
+  String get openTask => 'Apri attività';
+
+  @override
+  String get completeTask => 'Completa attività';
+
+  @override
+  String get reopenTask => 'Riapri attività';
+
+  @override
+  String get addingToTasks => 'Aggiunta alle attività…';
+
+  @override
+  String get taskAddedToTasks => 'Attività creata';
+
+  @override
+  String get completedStatus => 'Completato';
+
+  @override
+  String get notCompletedStatus => 'In attesa';
 }

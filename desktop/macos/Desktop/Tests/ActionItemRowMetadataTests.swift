@@ -5,6 +5,10 @@ import XCTest
 /// An action-item row's owner, due date and context: each shown when known, absent (never
 /// "Unknown") when not, and kept across the summary cache's JSON round trip.
 final class ActionItemRowMetadataTests: XCTestCase {
+  func testSuggestedAppsDisclosureStartsCollapsed() {
+    XCTAssertFalse(ConversationSuggestedAppsDisclosure.initiallyExpanded)
+  }
+
   private var calendar: Calendar {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
@@ -47,16 +51,24 @@ final class ActionItemRowMetadataTests: XCTestCase {
     XCTAssertEqual(metadata.context, "Eddie will forward it.")
   }
 
+  func testTentativeDueDateAddsMarker() {
+    let item = ActionItem(
+      description: "x", completed: false, deleted: false, dueAt: now, dueCertainty: "tentative")
+    XCTAssertEqual(ActionItemRowMetadata(item, now: now, calendar: calendar).due, "Due ~Today")
+  }
+
   func testWireFieldsDecodeAndSurviveTheCacheRoundTrip() throws {
     let json = """
       {"description": "Share the provider info", "completed": false, "capture_owner": "other",
        "owner_name": "Eddie Thai", "due_at": "2026-10-07T16:00:00Z",
+       "due_certainty": "tentative",
        "context": "Eddie said they would follow up."}
       """
     let decoded = try JSONDecoder().decode(ActionItem.self, from: Data(json.utf8))
     XCTAssertEqual(decoded.ownerName, "Eddie Thai")
     XCTAssertEqual(decoded.dueAt, ISO8601DateFormatter().date(from: "2026-10-07T16:00:00Z"))
     XCTAssertEqual(decoded.context, "Eddie said they would follow up.")
+    XCTAssertEqual(decoded.dueCertainty, "tentative")
 
     let reread = try JSONDecoder().decode(ActionItem.self, from: JSONEncoder().encode(decoded))
     XCTAssertEqual(reread, decoded)
@@ -67,6 +79,7 @@ final class ActionItemRowMetadataTests: XCTestCase {
       ActionItem.self, from: Data(#"{"description": "Old item", "completed": true}"#.utf8))
     XCTAssertNil(decoded.ownerName)
     XCTAssertNil(decoded.dueAt)
+    XCTAssertNil(decoded.dueCertainty)
     XCTAssertNil(decoded.context)
   }
 }

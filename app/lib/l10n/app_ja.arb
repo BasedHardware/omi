@@ -3839,5 +3839,17 @@
     "dismiss": "非表示",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "ロック画面に表示"
+    "showOnLockScreen": "ロック画面に表示",
+    "meetingActionItemsTitle": "アクション項目",
+    "addToTasks": "タスクに追加",
+    "showInTranscript": "文字起こしを表示",
+    "tentativeTaskDueDate": "期限（目安）{date}",
+    "tentativeTaskDueDateSemantics": "予定期限 {date}",
+    "openTask": "タスクを開く",
+    "completeTask": "タスクを完了",
+    "reopenTask": "タスクを再開",
+    "addingToTasks": "タスクに追加中…",
+    "taskAddedToTasks": "タスクを作成しました",
+    "completedStatus": "完了",
+    "notCompletedStatus": "保留中"
 }

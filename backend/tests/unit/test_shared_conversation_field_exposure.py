@@ -19,6 +19,7 @@ import routers.conversations as conv_router
 from models.conversation import (
     CalendarEventLink,
     Conversation,
+    SharedActionItem,
     SharedConversationResponse,
     SharedPerson,
     project_shared_conversation,
@@ -214,6 +215,12 @@ def test_people_projection_is_id_and_name_only():
     assert set(payload['people'][0]) == set(SharedPerson.model_fields)
 
 
+@pytest.mark.parametrize('certainty', ['confirmed', 'tentative', None])
+def test_shared_action_item_preserves_due_certainty(certainty):
+    item = SharedActionItem.model_validate({'description': 'Send proposal', 'due_certainty': certainty})
+    assert item.due_certainty == certainty
+
+
 def test_structured_and_transcript_drop_internal_nested_fields():
     payload = _payload(_call_shared(_conversation()))
     structured = payload['structured']
@@ -236,6 +243,7 @@ def test_structured_and_transcript_drop_internal_nested_fields():
             'completed': False,
             'owner_name': 'Ada',
             'due_at': CREATED_AT.isoformat().replace('+00:00', 'Z'),
+            'due_certainty': None,
             'context': 'Prepare the follow-up',
         }
     ]

@@ -12485,4 +12485,44 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Mostra a la pantalla de bloqueig';
+
+  @override
+  String get meetingActionItemsTitle => 'Elements d\'acció';
+
+  @override
+  String get addToTasks => 'Afegeix a Tasques';
+
+  @override
+  String get showInTranscript => 'Mostra la transcripció';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Venciment aproximat $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Venciment previst $date';
+  }
+
+  @override
+  String get openTask => 'Obre la tasca';
+
+  @override
+  String get completeTask => 'Completa la tasca';
+
+  @override
+  String get reopenTask => 'Torna a obrir la tasca';
+
+  @override
+  String get addingToTasks => 'S\'està afegint a Tasques';
+
+  @override
+  String get taskAddedToTasks => 'Tasca creada';
+
+  @override
+  String get completedStatus => 'Completat';
+
+  @override
+  String get notCompletedStatus => 'Pendent';
 }

@@ -43,7 +43,19 @@ export default function ActionItems({ items }: ActionsItemsProps) {
                         {owner}
                       </span>
                     )}
-                    {due && <time dateTime={due.iso}>Due {due.label}</time>}
+                    {due && (
+                      <time
+                        dateTime={due.iso}
+                        aria-label={
+                          due.certainty === 'tentative'
+                            ? `Tentatively due ${due.label}`
+                            : undefined
+                        }
+                      >
+                        Due {due.certainty === 'tentative' ? '~' : ''}
+                        {due.label}
+                      </time>
+                    )}
                   </div>
                 )}
                 {context && <p className="sn-context">{context}</p>}

@@ -12204,4 +12204,44 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get showOnLockScreen => '在锁定屏幕上显示';
+
+  @override
+  String get meetingActionItemsTitle => '行动事项';
+
+  @override
+  String get addToTasks => '添加到任务';
+
+  @override
+  String get showInTranscript => '在文字稿中显示';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return '截止日期约为 $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return '预计截止日期 $date';
+  }
+
+  @override
+  String get openTask => '打开任务';
+
+  @override
+  String get completeTask => '完成任务';
+
+  @override
+  String get reopenTask => '重新打开任务';
+
+  @override
+  String get addingToTasks => '正在添加到任务…';
+
+  @override
+  String get taskAddedToTasks => '任务已创建';
+
+  @override
+  String get completedStatus => '已完成';
+
+  @override
+  String get notCompletedStatus => '待处理';
 }
