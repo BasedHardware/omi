@@ -7,7 +7,8 @@
 
 Model `typesafe/jev-1.13`, gateway `omi:auto:jev-decisions`, relevance question
 `relevance_b1` and owner question `owner_a1` are pinned. Discard is strictly
-P(discard) > 0.95; owner flip is P(user) >= 0.9. Changing wording, model or
+P(discard) > 0.80 (lowered from 0.95 on 2026-10-05, see "Threshold
+re-measure" below); owner flip is P(user) >= 0.9. Changing wording, model or
 threshold requires a new calibration and protocol.
 
 Keep-all selection uses a stable SHA256 bucket of conversation ID and salt
@@ -173,6 +174,32 @@ probability min(1, 8 / unique eligible count); at partial percentages report the
 percentage-plus-cap selection probability and actual coverage separately. Check
 score and coverage by candidate_index/eligible_count for residual position bias.
 Report decision counts separately from unique conversations.
+
+## Threshold re-measure (2026-10-05)
+
+At 0.95 the live arm discarded about 3% of model-tier conversations against
+about 90% for nano, and on the owner's 2026-10 labels (60 cards in three
+waves; the random wave was 20 of 20 noise) almost all of Jev's extra keeps
+were noise. The threshold was re-measured offline on the owner's account only:
+
+- Tuned on 55 decided 2026-10 labels (9 kept); evaluated once on 77 decided
+  2026-09-23 labels (20 kept) that were never used for tuning.
+- Held-out: nano lost 15-17 of 20 kept conversations and kept 4-5 of 57 noise;
+  Jev `relevance_b1` at 0.70 lost 7 and kept 7; at 0.80 lost 3 and kept 10.
+  Jev AUC was about 0.85 on both sets. Reworded "own voice" questions and added
+  speaker metadata did not beat `relevance_b1` on the held-out set.
+- 0.80 was picked after seeing the held-out set (0.70 was the pre-declared
+  value), favouring fewer lost keeps. With 29 kept conversations in total the
+  loss rate is uncertain.
+- Population (shadow records since 2026-10-03, 30.8k decisions, 995 users):
+  Jev discards 62.9% at 0.80 against nano's 89.6%. Predicted incremental notes
+  spend at J=100 is about 5.2k conversations/day x $0.0024 = about $12/day,
+  inside the $25/day cap (0.95 would have been about $36/day).
+- Deviation from the acceptance bars below: fewer than 250 stratified owner
+  labels and the keep-all readout (due about 2026-10-15) is not in. The owner
+  approved shipping the re-measured threshold at the current J=10 stage; the
+  ramp's abort criteria still apply, with the shadow-predicted discard rate
+  now taken at 0.80.
 
 ## Acceptance bars
 
