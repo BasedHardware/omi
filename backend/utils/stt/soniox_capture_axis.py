@@ -4,9 +4,11 @@ import logging
 import math
 import os
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from prometheus_client import REGISTRY, Counter, Histogram
+from prometheus_client.metrics_core import Metric
+from prometheus_client.registry import Collector
 
 logger = logging.getLogger(__name__)
 _last_sample_log = float('-inf')
@@ -43,16 +45,16 @@ VALIDATION_DETAIL = Counter(
 )
 
 
-class _EnabledCollectors:
+class _EnabledCollectors(Collector):
     """Reserve names once, but expose neither metadata nor samples while OFF."""
 
     metrics = (AXIS_DELTA, AXIS_EVENTS, AXIS_COMPARISON, VALIDATION_DETAIL)
 
-    def describe(self):
+    def describe(self) -> Iterable[Metric]:
         for metric in self.metrics:
             yield from metric.describe()
 
-    def collect(self):
+    def collect(self) -> Iterable[Metric]:
         if enabled():
             for metric in self.metrics:
                 yield from metric.collect()
