@@ -148,9 +148,10 @@ public func isoString(fromDate value: JSONValue?) -> String? {
     guard let text = value?.stringValue else { return nil }
     let bytes = Array(text.utf8)
     guard bytes.count >= 11,
-        (0...3).allSatisfy({ bytes[$0] >= 0x30 && bytes[$0] <= 0x39 }),
-        bytes[4] == UInt8(ascii: "-"), bytes[7] == UInt8(ascii: "-"),
-        bytes[10] == UInt8(ascii: "T")
+        ASCII.isDigit(bytes[0]), ASCII.isDigit(bytes[1]), ASCII.isDigit(bytes[2]),
+        ASCII.isDigit(bytes[3]),
+        bytes[4] == ASCII.minus, bytes[7] == ASCII.minus,
+        bytes[10] == ASCII.upperT
     else { return nil }
     guard let seconds = ISO8601Reader.epochSeconds(text) else { return nil }
     return isoString(fromEpochMilliseconds: Int64(seconds * 1000))
@@ -419,46 +420,39 @@ public func parseMemoryText(_ text: String) -> (text: String, provenanceLabel: S
     return (text, nil)
 }
 
-private func tokenChar(_ scalar: Unicode.Scalar) -> Bool {
-    (scalar.value >= 0x30 && scalar.value <= 0x39)
-        || (scalar.value >= 0x61 && scalar.value <= 0x7A)
-        || scalar == "_" || scalar == "-"
-}
-
-private func isTokenCharacter(_ character: Character) -> Bool {
+private func isTokenByte(_ byte: UInt8) -> Bool {
     // Case-insensitive token class [a-z0-9_-].
-    character.unicodeScalars.allSatisfy {
-        tokenChar(Unicode.Scalar(String($0).lowercased().unicodeScalars.first!))
-    }
+    ASCII.isAlphanumeric(byte) || byte == ASCII.underscore || byte == ASCII.minus
 }
 
-private func isWhitespaceCharacter(_ character: Character) -> Bool {
-    character == " " || character == "\t" || character == "\n" || character == "\r"
-        || character == "\u{0B}" || character == "\u{0C}"
+private func isWhitespaceByte(_ byte: UInt8) -> Bool {
+    byte == ASCII.space || byte == ASCII.tab || byte == ASCII.lineFeed
+        || byte == ASCII.carriageReturn || byte == UInt8(0x0B) || byte == UInt8(0x0C)
 }
 
 private func matchProvenanceList(_ text: String) -> (text: String, provenanceLabel: String?)? {
     // ((?:[a-z0-9_-]+:){2,}[a-z0-9_-]+)\s+(.+)$ with ignoreCase + dotall.
+    let bytes = Array(text.utf8)
     var tokens = [String]()
-    var token = ""
-    var index = text.startIndex
-    while index < text.endIndex {
-        let character = text[index]
-        if isTokenCharacter(character) {
-            token.append(character)
-            index = text.index(after: index)
-        } else if character == ":" {
-            if token.isEmpty { return nil }
-            tokens.append(token)
-            token = ""
-            index = text.index(after: index)
-        } else if isWhitespaceCharacter(character) {
-            guard tokens.count >= 2, !token.isEmpty else { return nil }
+    var tokenStart = 0
+    var index = 0
+    while index < bytes.count {
+        let byte = bytes[index]
+        if isTokenByte(byte) {
+            index += 1
+        } else if byte == ASCII.colon {
+            if index == tokenStart { return nil }
+            tokens.append(utf8String(Array(bytes[tokenStart..<index])))
+            index += 1
+            tokenStart = index
+        } else if isWhitespaceByte(byte) {
+            guard tokens.count >= 2, index > tokenStart else { return nil }
+            let token = utf8String(Array(bytes[tokenStart..<index]))
             var bodyStart = index
-            while bodyStart < text.endIndex, isWhitespaceCharacter(text[bodyStart]) {
-                bodyStart = text.index(after: bodyStart)
+            while bodyStart < bytes.count, isWhitespaceByte(bytes[bodyStart]) {
+                bodyStart += 1
             }
-            let body = String(text[bodyStart...])
+            let body = utf8String(Array(bytes[bodyStart..<bytes.count]))
             guard !body.isEmpty else { return nil }
             return (body, tokens.joined(separator: ":") + ":\(token)")
         } else {
@@ -482,11 +476,7 @@ private func matchHyphenatedProvenance(_ text: String) -> (text: String, provena
     for group in label.split(separator: "-", omittingEmptySubsequences: false) {
         let groupOK =
             !group.isEmpty
-            && group.unicodeScalars.allSatisfy { scalar in
-                (scalar.value >= 0x30 && scalar.value <= 0x39)
-                    || (scalar.value >= 0x61 && scalar.value <= 0x7A)
-                    || (scalar.value >= 0x41 && scalar.value <= 0x5A)
-            }
+            && Array(String(group).utf8).allSatisfy { ASCII.isAlphanumeric($0) }
         guard groupOK else { return nil }
     }
     return (rest, label)

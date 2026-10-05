@@ -42,9 +42,9 @@ public enum TerminalFrame: Sendable, Equatable {
 private let chatMessageSequence = LockedBox(0)
 
 public func createLocalChatMessage(_ text: String, now: Int64) -> ChatMessage {
-    let sequence = chatMessageSequence.withLock { value -> Int in
-        value += 1
-        return value
+    let sequence = chatMessageSequence.withLock {
+        $0 += 1
+        return $0
     }
     return ChatMessage(
         id: "desktop-\(now)-\(sequence)", text: text, sender: .human,
@@ -269,9 +269,9 @@ public func sendChatMessage(
                 let events = parser.withLock { (try? $0.push(frame)) ?? [] }
                 for event in events {
                     guard case .data(let chunk) = event else { continue }
-                    let text = visible.withLock { value -> String in
-                        value += chunk
-                        return value
+                    let text = visible.withLock {
+                        $0 += chunk
+                        return $0
                     }
                     onAssistantText?(text)
                 }
@@ -323,9 +323,9 @@ public func sendChatMessage(
                 visible.set(snapshot)
                 onAssistantText?(snapshot)
             case .delta(let delta):
-                let text = visible.withLock { value -> String in
-                    value += delta
-                    return value
+                let text = visible.withLock {
+                    $0 += delta
+                    return $0
                 }
                 onAssistantText?(text)
             default:
@@ -334,7 +334,7 @@ public func sendChatMessage(
         }
     }
 
-    let terminal: TerminalFrame
+    var terminal: TerminalFrame
     do {
         let streamResponse = try await transport.generationEvents(
             generationId: wireAdmission.generationId, lastEventId: nil,

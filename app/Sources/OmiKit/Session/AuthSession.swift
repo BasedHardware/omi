@@ -106,7 +106,11 @@ public struct AuthSessionConfig: Sendable {
 /// SHA-256 → base64url, shared by PKCE and the desktop handoff.
 public enum AuthCrypto {
     public static func sha256Base64URL(_ value: String) -> String? {
-        guard let digest = Policy.authSHA256(Array(value.utf8)) else { return nil }
+        sha256Base64URL(bytes: Array(value.utf8))
+    }
+
+    static func sha256Base64URL(bytes: [UInt8]) -> String? {
+        guard let digest = Policy.authSHA256(bytes) else { return nil }
         return Base64Codec.encodeURL(digest)
     }
 
@@ -115,7 +119,8 @@ public enum AuthCrypto {
     public static func deriveDesktopSessionId(
         challenge: String, confirmationChallenge: String
     ) -> String? {
-        sha256Base64URL("\(challenge)\u{0}\(confirmationChallenge)")
+        sha256Base64URL(
+            bytes: Array(challenge.utf8) + [UInt8(0)] + Array(confirmationChallenge.utf8))
     }
 
     /// Six decimal digits, rejection-sampled over 000000-999999.
@@ -123,10 +128,10 @@ public enum AuthCrypto {
         for _ in 0..<16 {
             guard let bytes = Policy.authRandomBytes(4), bytes.count == 4 else { return nil }
             let raw =
-                (UInt32(bytes[0]) << 24) | (UInt32(bytes[1]) << 16)
-                | (UInt32(bytes[2]) << 8) | UInt32(bytes[3])
-            if raw < UInt32(4_294_000_000) {
-                return String(format: "%06d", raw % 1_000_000)
+                (Int64(bytes[0]) << 24) | (Int64(bytes[1]) << 16)
+                | (Int64(bytes[2]) << 8) | Int64(bytes[3])
+            if raw < Int64(4_294_000_000) {
+                return String(format: "%06d", Int(raw % Int64(1_000_000)))
             }
         }
         return nil
@@ -192,7 +197,10 @@ public struct AuthHTTPRequestHeaderAccumulator: Sendable {
         }
 
         let headerEnd =
-            Self.terminatorEnd(bytes, [13, 10, 13, 10]) ?? Self.terminatorEnd(bytes, [10, 10])
+            Self.terminatorEnd(
+                bytes,
+                [UInt8(13), UInt8(10), UInt8(13), UInt8(10)])
+            ?? Self.terminatorEnd(bytes, [UInt8(10), UInt8(10)])
 
         if let headerEnd {
             guard
@@ -224,8 +232,10 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
     private let config: AuthSessionConfig
     private let credentials: CredentialStoring
     private let browserAuth: BrowserAuthControlling?
-    private let handoffs: InvalidationStream<DesktopHandoff>
-    private let invalidations: InvalidationStream<Void>
+    private let handoffStream: AsyncStream<DesktopHandoff>
+    private let emitHandoff: @Sendable (DesktopHandoff) -> Void
+    private let invalidationStream: AsyncStream<Void>
+    private let invalidationContinuation: AsyncStream<Void>.Continuation
     private let lock = NSLock()
     private var signInAttempt: Int = 0
     private var settled = true
@@ -243,12 +253,17 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         self.browserAuth = browserAuth
         self.urlSession = urlSession
         self.planeStore = planeStore
-        self.handoffs = InvalidationStream()
-        self.invalidations = InvalidationStream()
+        let handoffs = AsyncStream.makeStream(of: DesktopHandoff.self)
+        self.handoffStream = handoffs.stream
+        let handoffContinuation = handoffs.continuation
+        self.emitHandoff = { handoffContinuation.yield($0) }
+        let invalidations = AsyncStream.makeStream(of: Void.self)
+        self.invalidationStream = invalidations.stream
+        self.invalidationContinuation = invalidations.continuation
     }
 
-    public var desktopHandoffs: AsyncStream<DesktopHandoff> { handoffs.stream }
-    public var sessionInvalidated: AsyncStream<Void> { invalidations.stream }
+    public var desktopHandoffs: AsyncStream<DesktopHandoff> { handoffStream }
+    public var sessionInvalidated: AsyncStream<Void> { invalidationStream }
 
     // MARK: Session refresh (Firebase REST)
 
@@ -277,7 +292,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
             #else
             await credentials.clear()
             #endif
-            invalidations.yield(())
+            invalidationContinuation.yield()
             return nil
         }
         let apiKey = session.firebaseApiKey ?? config.firebaseApiKey
@@ -304,7 +319,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
             #endif
             return session.idToken.isEmpty ? nil : session.idToken
         }
-        let expiresIn = body["expires_in"]?.numberValue ?? 3600
+        let expiresIn = body["expires_in"]?.numberValue ?? 3600.0
         let userId = body["user_id"]?.stringValue ?? session.uid
         session.idToken = idToken
         session.refreshToken = refreshToken
@@ -378,10 +393,10 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
             let idToken = body["idToken"]?.stringValue,
             let refreshToken = body["refreshToken"]?.stringValue
         else {
-            NSLog("Omi auth firebase redeem status=%d", http?.statusCode ?? -1)
+            NSLog("Omi auth firebase redeem status=\(http?.statusCode ?? -1)")
             return false
         }
-        let expiresIn = body["expiresIn"]?.numberValue ?? 3600
+        let expiresIn = body["expiresIn"]?.numberValue ?? 3600.0
         let stored = StoredSession(
                 idToken: idToken, refreshToken: refreshToken,
                 expiresAtMs: Int64(Date().timeIntervalSince1970 * 1000)
@@ -447,13 +462,13 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         await cancelSignIn()
         #if !SKIP && canImport(Security)
         if let secure = credentials as? SecureSessionCredentialStoring {
-            defer { invalidations.yield(()) }
+            defer { invalidationContinuation.yield() }
             try secure.clearSecureSession()
             return true
         }
         #endif
         await credentials.clear()
-        invalidations.yield(())
+        invalidationContinuation.yield()
         return true
     }
 
@@ -477,7 +492,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
             throw AuthError.unconfigured
         }
         var base = origin
-        while base.hasSuffix("/") { base.removeLast() }
+        while base.hasSuffix("/") { base = String(base.dropLast()) }
         var start = URLRequest(url: URL(string: "\(base)/v1/auth/desktop/start")!)
         start.httpMethod = "POST"
         start.setValue("application/json", forHTTPHeaderField: "content-type")
@@ -500,7 +515,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
             throw AuthError.transport
         }
         let handoffUrl = browserUrl + "#c=\(confirmationCode)"
-        handoffs.yield(
+        emitHandoff(
             DesktopHandoff(
                 code: confirmationCode, expiresAt: Int64(expiresAt),
                 browserUrl: handoffUrl))
@@ -605,7 +620,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
                 String(data: exchanged.0, encoding: String.Encoding.utf8)),
             payload.isRecord
         else {
-            NSLog("Omi auth token exchange status=%d", http.statusCode)
+            NSLog("Omi auth token exchange status=\(http.statusCode)")
             throw AuthError.unauthorized("Omi cloud token exchange failed")
         }
         // Only a custom_token mints a refreshable Omi session.
@@ -616,23 +631,5 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         }
         guard isAttemptCurrent(attempt) else { return false }
         return await redeemCustomToken(customToken, pinPlane: "old", attempt: attempt)
-    }
-}
-
-/// Small continuation holder shared by the auth session streams.
-final class InvalidationStream<Value: Sendable>: @unchecked Sendable {
-    let continuation: AsyncStream<Value>.Continuation
-    let stream: AsyncStream<Value>
-
-    init() {
-        var captured: AsyncStream<Value>.Continuation!
-        self.stream = AsyncStream { continuation in
-            captured = continuation
-        }
-        self.continuation = captured
-    }
-
-    func yield(_ value: Value) {
-        continuation.yield(value)
     }
 }

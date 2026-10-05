@@ -20,7 +20,7 @@ public enum OmiBleEnergyPolicy {
         nowMs: Int64
     ) -> Bool {
         Policy.deviceShouldPersistBatteryReading(
-            previousLevel: previousLevel.map(Int32.init),
+            previousLevel: previousLevel.map { Int32($0) },
             previousTimestampMs: previousTimestampMs,
             level: Int32(level), nowMs: nowMs)
     }

@@ -142,9 +142,9 @@ public func parseCloudSubscription(
     return CloudSubscription(
         plan: plan, status: status,
         transcriptionSecondsUsed: optionalInteger(record["transcription_seconds_used"])
-            .map(Int.init),
+            .map { Int($0) },
         transcriptionSecondsLimit: optionalInteger(record["transcription_seconds_limit"])
-            .map(Int.init))
+            .map { Int($0) })
 }
 
 public func parseStoreRecordingPermission(

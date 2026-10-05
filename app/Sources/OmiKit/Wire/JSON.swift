@@ -129,7 +129,7 @@ public enum JSON {
     public static func serialize(_ value: JSONValue) -> String {
         var output = [UInt8]()
         serialize(value, into: &output)
-        return String(decoding: output, as: UTF8.self)
+        return utf8String(output)
     }
 
     static func serialize(_ value: JSONValue, into output: inout [UInt8]) {
@@ -139,64 +139,58 @@ public enum JSON {
         case .bool(let value):
             output.append(contentsOf: Array((value ? "true" : "false").utf8))
         case .number(let value):
-            if value.rounded(.towardZero) == value,
-                value >= -9_007_199_254_740_991, value <= 9_007_199_254_740_991
-            {
-                output.append(contentsOf: Array(String(Int64(value)).utf8))
-            } else {
-                output.append(contentsOf: Array(String(value).utf8))
-            }
+            output.append(contentsOf: Array((Policy.jsonFormatNumber(value) ?? "null").utf8))
         case .string(let value):
             serializeString(value, into: &output)
         case .array(let items):
-            output.append(UInt8(ascii: "["))
+            output.append(ASCII.openBracket)
             for (index, item) in items.enumerated() {
-                if index > 0 { output.append(UInt8(ascii: ",")) }
+                if index > 0 { output.append(ASCII.comma) }
                 serialize(item, into: &output)
             }
-            output.append(UInt8(ascii: "]"))
+            output.append(ASCII.closeBracket)
         case .object(let members):
-            output.append(UInt8(ascii: "{"))
+            output.append(ASCII.openBrace)
             for (index, member) in members.enumerated() {
-                if index > 0 { output.append(UInt8(ascii: ",")) }
+                if index > 0 { output.append(ASCII.comma) }
                 serializeString(member.0, into: &output)
-                output.append(UInt8(ascii: ":"))
+                output.append(ASCII.colon)
                 serialize(member.1, into: &output)
             }
-            output.append(UInt8(ascii: "}"))
+            output.append(ASCII.closeBrace)
         }
     }
 
     static func serializeString(_ value: String, into output: inout [UInt8]) {
-        output.append(UInt8(ascii: "\""))
-        for scalar in value.unicodeScalars {
-            switch scalar.value {
-            case 0x22:
+        let hexBytes = Array("0123456789abcdef".utf8)
+        output.append(ASCII.quote)
+        for byte in Array(value.utf8) {
+            switch byte {
+            case ASCII.quote:
                 output.append(contentsOf: Array("\\\"".utf8))
-            case 0x5C:
+            case ASCII.backslash:
                 output.append(contentsOf: Array("\\\\".utf8))
-            case 0x0A:
+            case ASCII.lineFeed:
                 output.append(contentsOf: Array("\\n".utf8))
-            case 0x0D:
+            case ASCII.carriageReturn:
                 output.append(contentsOf: Array("\\r".utf8))
-            case 0x09:
+            case ASCII.tab:
                 output.append(contentsOf: Array("\\t".utf8))
-            case 0x08:
+            case UInt8(0x08):
                 output.append(contentsOf: Array("\\b".utf8))
-            case 0x0C:
+            case UInt8(0x0C):
                 output.append(contentsOf: Array("\\f".utf8))
             default:
-                if scalar.value < 0x20 {
-                    let hexBytes = Array("0123456789abcdef".utf8)
+                if byte < ASCII.space {
                     output.append(contentsOf: Array("\\u00".utf8))
-                    output.append(hexBytes[Int((scalar.value >> 4) & 0xF)])
-                    output.append(hexBytes[Int(scalar.value & 0xF)])
+                    output.append(hexBytes[Int(byte) >> 4])
+                    output.append(hexBytes[Int(byte) & 0xF])
                 } else {
-                    output.append(contentsOf: Array(String(scalar).utf8))
+                    output.append(byte)
                 }
             }
         }
-        output.append(UInt8(ascii: "\""))
+        output.append(ASCII.quote)
     }
 }
 
@@ -213,7 +207,9 @@ struct JSONParser {
     mutating func skipWhitespace() {
         while position < bytes.count {
             let byte = bytes[position]
-            if byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D {
+            if byte == ASCII.space || byte == ASCII.tab || byte == ASCII.lineFeed
+                || byte == ASCII.carriageReturn
+            {
                 position += 1
             } else {
                 break
@@ -225,16 +221,16 @@ struct JSONParser {
         skipWhitespace()
         guard !atEnd else { throw JSONParseError.malformed }
         switch bytes[position] {
-        case UInt8(ascii: "{"): return try parseObject()
-        case UInt8(ascii: "["): return try parseArray()
-        case UInt8(ascii: "\""): return .string(try parseString())
-        case UInt8(ascii: "t"):
+        case ASCII.openBrace: return try parseObject()
+        case ASCII.openBracket: return try parseArray()
+        case ASCII.quote: return .string(try parseString())
+        case ASCII.lowerT:
             try expectLiteral("true")
             return .bool(true)
-        case UInt8(ascii: "f"):
+        case ASCII.lowerF:
             try expectLiteral("false")
             return .bool(false)
-        case UInt8(ascii: "n"):
+        case ASCII.lowerN:
             try expectLiteral("null")
             return .null
         default: return try parseNumber()
@@ -242,7 +238,7 @@ struct JSONParser {
     }
 
     mutating func expectLiteral(_ literal: String) throws {
-        for byte in literal.utf8 {
+        for byte in Array(literal.utf8) {
             guard position < bytes.count, bytes[position] == byte else {
                 throw JSONParseError.malformed
             }
@@ -254,18 +250,18 @@ struct JSONParser {
         position += 1  // '{'
         var members = [(String, JSONValue)]()
         skipWhitespace()
-        if position < bytes.count, bytes[position] == UInt8(ascii: "}") {
+        if position < bytes.count, bytes[position] == ASCII.closeBrace {
             position += 1
             return .object(members)
         }
         while true {
             skipWhitespace()
-            guard position < bytes.count, bytes[position] == UInt8(ascii: "\"") else {
+            guard position < bytes.count, bytes[position] == ASCII.quote else {
                 throw JSONParseError.malformed
             }
             let key = try parseString()
             skipWhitespace()
-            guard position < bytes.count, bytes[position] == UInt8(ascii: ":") else {
+            guard position < bytes.count, bytes[position] == ASCII.colon else {
                 throw JSONParseError.malformed
             }
             position += 1
@@ -278,11 +274,11 @@ struct JSONParser {
             }
             skipWhitespace()
             guard position < bytes.count else { throw JSONParseError.malformed }
-            if bytes[position] == UInt8(ascii: ",") {
+            if bytes[position] == ASCII.comma {
                 position += 1
                 continue
             }
-            if bytes[position] == UInt8(ascii: "}") {
+            if bytes[position] == ASCII.closeBrace {
                 position += 1
                 return .object(members)
             }
@@ -294,7 +290,7 @@ struct JSONParser {
         position += 1  // '['
         var items = [JSONValue]()
         skipWhitespace()
-        if position < bytes.count, bytes[position] == UInt8(ascii: "]") {
+        if position < bytes.count, bytes[position] == ASCII.closeBracket {
             position += 1
             return .array(items)
         }
@@ -302,11 +298,11 @@ struct JSONParser {
             items.append(try parseValue())
             skipWhitespace()
             guard position < bytes.count else { throw JSONParseError.malformed }
-            if bytes[position] == UInt8(ascii: ",") {
+            if bytes[position] == ASCII.comma {
                 position += 1
                 continue
             }
-            if bytes[position] == UInt8(ascii: "]") {
+            if bytes[position] == ASCII.closeBracket {
                 position += 1
                 return .array(items)
             }
@@ -320,24 +316,24 @@ struct JSONParser {
         while true {
             guard position < bytes.count else { throw JSONParseError.malformed }
             let byte = bytes[position]
-            if byte == UInt8(ascii: "\"") {
+            if byte == ASCII.quote {
                 position += 1
-                return String(decoding: output, as: UTF8.self)
+                return utf8String(output)
             }
-            if byte == UInt8(ascii: "\\") {
+            if byte == ASCII.backslash {
                 position += 1
                 guard position < bytes.count else { throw JSONParseError.malformed }
                 let escape = bytes[position]
                 switch escape {
-                case UInt8(ascii: "\""): output.append(UInt8(ascii: "\""))
-                case UInt8(ascii: "\\"): output.append(UInt8(ascii: "\\"))
-                case UInt8(ascii: "/"): output.append(UInt8(ascii: "/"))
-                case UInt8(ascii: "b"): output.append(0x08)
-                case UInt8(ascii: "f"): output.append(0x0C)
-                case UInt8(ascii: "n"): output.append(0x0A)
-                case UInt8(ascii: "r"): output.append(0x0D)
-                case UInt8(ascii: "t"): output.append(0x09)
-                case UInt8(ascii: "u"):
+                case ASCII.quote: output.append(ASCII.quote)
+                case ASCII.backslash: output.append(ASCII.backslash)
+                case ASCII.slash: output.append(ASCII.slash)
+                case ASCII.lowerB: output.append(UInt8(0x08))
+                case ASCII.lowerF: output.append(UInt8(0x0C))
+                case ASCII.lowerN: output.append(ASCII.lineFeed)
+                case ASCII.lowerR: output.append(ASCII.carriageReturn)
+                case ASCII.lowerT: output.append(ASCII.tab)
+                case ASCII.lowerU:
                     let scalar = try parseUnicodeEscape()
                     appendScalar(scalar, to: &output)
                 default: throw JSONParseError.malformed
@@ -345,81 +341,86 @@ struct JSONParser {
                 position += 1
                 continue
             }
-            if byte < 0x20 { throw JSONParseError.malformed }
+            if byte < ASCII.space { throw JSONParseError.malformed }
             output.append(byte)
             position += 1
         }
     }
 
-    private mutating func parseUnicodeEscape() throws -> UInt32 {
-        func hex4(at offset: Int) throws -> UInt32 {
+    private mutating func parseUnicodeEscape() throws -> Int {
+        func hex4(at offset: Int) throws -> Int {
             guard offset + 4 <= bytes.count else { throw JSONParseError.malformed }
             var value = 0
             for index in offset..<(offset + 4) {
                 let byte = bytes[index]
                 let digit: Int
-                switch byte {
-                case UInt8(ascii: "0")...UInt8(ascii: "9"): digit = Int(byte - UInt8(ascii: "0"))
-                case UInt8(ascii: "a")...UInt8(ascii: "f"): digit = Int(byte - UInt8(ascii: "a") + 10)
-                case UInt8(ascii: "A")...UInt8(ascii: "F"): digit = Int(byte - UInt8(ascii: "A") + 10)
-                default: throw JSONParseError.malformed
+                if ASCII.isDigit(byte) {
+                    digit = Int(byte) - Int(ASCII.zero)
+                } else if byte >= ASCII.lowerA, byte <= ASCII.lowerF {
+                    digit = Int(byte) - Int(ASCII.lowerA) + 10
+                } else if byte >= ASCII.upperA, byte <= ASCII.upperF {
+                    digit = Int(byte) - Int(ASCII.upperA) + 10
+                } else {
+                    throw JSONParseError.malformed
                 }
                 value = value * 16 + digit
             }
-            return UInt32(value)
+            return value
         }
         let first = try hex4(at: position + 1)
         position += 4
         // Surrogate pair.
         if first >= 0xD800, first <= 0xDBFF,
             position + 6 < bytes.count,
-            bytes[position + 1] == UInt8(ascii: "\\"),
-            bytes[position + 2] == UInt8(ascii: "u")
+            bytes[position + 1] == ASCII.backslash,
+            bytes[position + 2] == ASCII.lowerU
         {
             let second = try hex4(at: position + 3)
             if second >= 0xDC00, second <= 0xDFFF {
                 position += 6
-                let scalar = 0x10000 + (Int(first) - 0xD800) << 10 + (Int(second) - 0xDC00)
-                return UInt32(scalar)
+                return 0x10000 + ((first - 0xD800) << 10) + (second - 0xDC00)
             }
         }
         return first
     }
 
-    private func appendScalar(_ scalar: UInt32, to output: inout [UInt8]) {
-        if let unicode = Unicode.Scalar(scalar) {
-            output.append(contentsOf: Array(String(Character(unicode)).utf8))
-        } else {
+    private func appendScalar(_ scalar: Int, to output: inout [UInt8]) {
+        if scalar >= 0xD800, scalar <= 0xDFFF {
             // Lone surrogate: replace, matching lenient decode behavior.
-            output.append(0xEF)
-            output.append(0xBF)
-            output.append(0xBD)
+            output.append(UInt8(0xEF))
+            output.append(UInt8(0xBF))
+            output.append(UInt8(0xBD))
+        } else if scalar < 0x80 {
+            output.append(UInt8(scalar))
+        } else if scalar < 0x800 {
+            output.append(UInt8(0xC0 | (scalar >> 6)))
+            output.append(UInt8(0x80 | (scalar & 0x3F)))
+        } else if scalar < 0x10000 {
+            output.append(UInt8(0xE0 | (scalar >> 12)))
+            output.append(UInt8(0x80 | ((scalar >> 6) & 0x3F)))
+            output.append(UInt8(0x80 | (scalar & 0x3F)))
+        } else {
+            output.append(UInt8(0xF0 | (scalar >> 18)))
+            output.append(UInt8(0x80 | ((scalar >> 12) & 0x3F)))
+            output.append(UInt8(0x80 | ((scalar >> 6) & 0x3F)))
+            output.append(UInt8(0x80 | (scalar & 0x3F)))
         }
     }
 
     mutating func parseNumber() throws -> JSONValue {
         let start = position
-        if position < bytes.count, bytes[position] == UInt8(ascii: "-") {
-            position += 1
-        }
-        var sawDigit = false
         while position < bytes.count {
             let byte = bytes[position]
-            if byte >= UInt8(ascii: "0"), byte <= UInt8(ascii: "9") {
-                sawDigit = true
-                position += 1
-            } else if byte == UInt8(ascii: ".") || byte == UInt8(ascii: "e")
-                || byte == UInt8(ascii: "E") || byte == UInt8(ascii: "+")
-                || byte == UInt8(ascii: "-")
+            if ASCII.isDigit(byte) || byte == ASCII.period || byte == ASCII.lowerE
+                || byte == ASCII.upperE || byte == ASCII.plus || byte == ASCII.minus
             {
                 position += 1
             } else {
                 break
             }
         }
-        guard sawDigit, position > start,
-            let value = Double(String(decoding: bytes[start..<position], as: UTF8.self)),
-            value.isFinite
+        let text = utf8String(Array(bytes[start..<position]))
+        guard Policy.jsonNumberValid(text), let value = Double(text), value.isFinite
         else { throw JSONParseError.malformed }
         return .number(value)
     }

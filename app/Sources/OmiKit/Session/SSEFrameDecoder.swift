@@ -9,16 +9,16 @@ struct SSEFrameDecoder {
   private var firstLine = true
 
   mutating func append(_ byte: UInt8) -> String? {
-    if afterCarriageReturn && byte == 10 {
+    if afterCarriageReturn && byte == ASCII.lineFeed {
       afterCarriageReturn = false
       return nil
     }
-    afterCarriageReturn = byte == 13
-    guard byte == 10 || byte == 13 else {
+    afterCarriageReturn = byte == ASCII.carriageReturn
+    guard byte == ASCII.lineFeed || byte == ASCII.carriageReturn else {
       line.append(byte)
       return nil
     }
-    var text = String(decoding: line, as: UTF8.self)
+    var text = decodeUTF8Lossy(line)
     line.removeAll(keepingCapacity: true)
     if firstLine {
       firstLine = false
@@ -36,7 +36,7 @@ struct SSEFrameDecoder {
 
   mutating func finish() -> String? {
     if !line.isEmpty {
-      lines.append(String(decoding: line, as: UTF8.self))
+      lines.append(decodeUTF8Lossy(line))
       line.removeAll(keepingCapacity: true)
     }
     guard !lines.isEmpty else { return nil }

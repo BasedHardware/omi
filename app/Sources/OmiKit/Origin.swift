@@ -80,11 +80,11 @@ public func parseOrigin(_ value: String) -> BackendOrigin? {
         guard hostname == "::1" else { return nil }
     } else {
         guard !hostname.isEmpty else { return nil }
-        for scalar in hostname.unicodeScalars {
+        for byte in Array(hostname.utf8) {
             let ok =
-                (scalar.value >= 97 && scalar.value <= 122)  // a-z
-                || (scalar.value >= 48 && scalar.value <= 57)  // 0-9
-                || scalar == "." || scalar == "-"
+                (byte >= ASCII.lowerA && byte <= ASCII.lowerZ)  // a-z
+                || ASCII.isDigit(byte)  // 0-9
+                || byte == ASCII.period || byte == ASCII.minus
             guard ok else { return nil }
         }
     }

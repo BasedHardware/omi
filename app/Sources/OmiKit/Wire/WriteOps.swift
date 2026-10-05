@@ -35,11 +35,12 @@ public enum WriteFailure: Sendable, Equatable {
         }
     }
 
-    public var detail: String {
+    public var message: String {
         switch self {
-        case .retryable(_, let detail), .rateLimited(_, let detail),
-            .authInvalid(let detail), .permanent(_, let detail):
-            return detail
+        case .retryable(_, let detail): return detail
+        case .rateLimited(_, let detail): return detail
+        case .authInvalid(let detail): return detail
+        case .permanent(_, let detail): return detail
         }
     }
 
@@ -94,9 +95,7 @@ public func parseWriteId(_ raw: String) -> String? {
     let bytes = Array(raw.utf8)
     guard bytes.count == 64 else { return nil }
     for byte in bytes {
-        let isHex =
-            (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
-            || (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "f"))
+        let isHex = ASCII.isLowerHex(byte)
         guard isHex else { return nil }
     }
     return raw
@@ -110,10 +109,10 @@ public func mintWriteId(_ entropy: [UInt8]) -> String? {
     var output = [UInt8]()
     output.reserveCapacity(64)
     for byte in entropy {
-        output.append(hexBytes[Int(byte >> 4)])
-        output.append(hexBytes[Int(byte & 0x0F)])
+        output.append(hexBytes[Int(byte) >> 4])
+        output.append(hexBytes[Int(byte) & 0x0F])
     }
-    return String(decoding: output, as: UTF8.self)
+    return utf8String(output)
 }
 
 /// Domains that accept client writes. Memories is read-only by ratified
@@ -198,18 +197,13 @@ func isRecordId(_ value: String) -> Bool {
     let bytes = Array(value.utf8)
     guard !bytes.isEmpty, bytes.count <= RECORD_ID_MAX_LENGTH else { return false }
     // [\x21-\x7e] — printable ASCII without space.
-    return bytes.allSatisfy { $0 >= 0x21 && $0 <= 0x7E }
+    return bytes.allSatisfy { Int($0) >= 0x21 && Int($0) <= 0x7E }
 }
 
 func isRevision(_ value: String) -> Bool {
-    guard value.count == REVISION_LENGTH else { return false }
-    for scalar in value.unicodeScalars {
-        let ok =
-            (scalar.value >= 0x30 && scalar.value <= 0x39)
-            || (scalar.value >= 0x61 && scalar.value <= 0x66)
-        if !ok { return false }
-    }
-    return true
+    let bytes = Array(value.utf8)
+    guard bytes.count == REVISION_LENGTH else { return false }
+    return bytes.allSatisfy { ASCII.isLowerHex($0) }
 }
 
 /// Strict predicate over already-parsed trusted JSON (write/ops.ts

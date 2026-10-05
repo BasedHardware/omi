@@ -44,6 +44,15 @@ public protocol NativePolicyBridge: Sendable {
     func authCallbackCode(
         _ callback: String, redirectURI: String, expectedState: String
     ) -> String?
+    /// Length of the whole-scalar UTF-8 prefix, nil when invalid
+    /// (`omi_utf8_complete_prefix`).
+    func utf8CompletePrefix(_ bytes: [UInt8]) -> Int?
+    /// Valid UTF-8 with U+FFFD replacements (`omi_utf8_lossy`).
+    func utf8Lossy(_ bytes: [UInt8]) -> [UInt8]
+    /// ECMAScript Number::toString (`omi_json_format_number`).
+    func jsonFormatNumber(_ value: Double) -> String?
+    /// RFC 8259 number grammar (`omi_json_number_valid`).
+    func jsonNumberValid(_ text: String) -> Bool
 
     // Portable BLE device logic (`omi_device`): naming, energy rule,
     // device-info parsing, packet assembly, capture machine. Handles are
@@ -135,8 +144,12 @@ public struct DeviceCaptureHandoff: Sendable, Equatable {
 /// The process-wide bridge. Apple/Windows use the C++ binding by default;
 /// the Android host replaces it with its JNI bridge at bootstrap.
 public enum Policy {
+    #if !SKIP
     public nonisolated(unsafe) static var bridge: NativePolicyBridge =
         DefaultPolicyBridge()
+    #else
+    public static var bridge: NativePolicyBridge! = nil
+    #endif
 
     public static func routeStrip(_ path: String) -> String? {
         bridge.routeStrip(path)
@@ -197,6 +210,18 @@ public enum Policy {
     ) -> String? {
         bridge.authCallbackCode(
             callback, redirectURI: redirectURI, expectedState: expectedState)
+    }
+    public static func utf8CompletePrefix(_ bytes: [UInt8]) -> Int? {
+        bridge.utf8CompletePrefix(bytes)
+    }
+    public static func utf8Lossy(_ bytes: [UInt8]) -> [UInt8] {
+        bridge.utf8Lossy(bytes)
+    }
+    public static func jsonFormatNumber(_ value: Double) -> String? {
+        bridge.jsonFormatNumber(value)
+    }
+    public static func jsonNumberValid(_ text: String) -> Bool {
+        bridge.jsonNumberValid(text)
     }
 
     // MARK: Portable BLE device logic (omi_device)
@@ -420,6 +445,43 @@ struct DefaultPolicyBridge: NativePolicyBridge {
             }
         }
         return status == 1 ? String(cString: buffer) : nil
+    }
+
+    // MARK: omi_text
+
+    func utf8CompletePrefix(_ bytes: [UInt8]) -> Int? {
+        var complete = 0
+        let status = bytes.withUnsafeBufferPointer { buffer in
+            omi_utf8_complete_prefix(buffer.baseAddress, buffer.count, &complete)
+        }
+        return status == 0 ? complete : nil
+    }
+
+    func utf8Lossy(_ bytes: [UInt8]) -> [UInt8] {
+        var output = [UInt8](repeating: 0, count: bytes.count * 3)
+        var written = 0
+        let status = bytes.withUnsafeBufferPointer { input in
+            output.withUnsafeMutableBufferPointer { out in
+                omi_utf8_lossy(input.baseAddress, input.count, out.baseAddress, out.count, &written)
+            }
+        }
+        guard status == 0 else { return [] }
+        return Array(output[..<written])
+    }
+
+    func jsonFormatNumber(_ value: Double) -> String? {
+        var buffer = [CChar](repeating: 0, count: 32)
+        let written = omi_json_format_number(value, &buffer, buffer.count)
+        return written >= 0 ? String(cString: buffer) : nil
+    }
+
+    func jsonNumberValid(_ text: String) -> Bool {
+        let bytes = Array(text.utf8)
+        return bytes.withUnsafeBufferPointer { buffer in
+            buffer.withMemoryRebound(to: CChar.self) {
+                omi_json_number_valid($0.baseAddress, $0.count) == 1
+            }
+        }
     }
 
     // MARK: omi_device (portable BLE device logic)

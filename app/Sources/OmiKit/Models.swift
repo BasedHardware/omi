@@ -326,7 +326,7 @@ public struct ChatHistoryPage: Sendable, Hashable {
 // MARK: - Device sessions and recording journals
 
 public enum DeviceSessionState: String, Sendable, Hashable {
-    case open
+    case opened = "open"
     case complete
     case failed
 }
@@ -579,7 +579,7 @@ public struct AccountSettingsSnapshot: Sendable, Hashable {
 public enum ISO8601Reader {
     /// Returns epoch seconds (fractional) for an ISO string, or nil.
     public static func epochSeconds(_ value: String) -> Double? {
-        let bytes = Array(value.utf8)
+        let bytes = Array(value.utf8).map { Int($0) }
         // Numeric epoch passthrough (seconds or milliseconds heuristics are
         // the caller's concern; projections carry ISO strings).
         if !bytes.isEmpty,
@@ -591,12 +591,12 @@ public enum ISO8601Reader {
         let chars = bytes
         // YYYY-MM-DDTHH:MM:SS at minimum (19 chars).
         guard chars.count >= 19 else { return nil }
-        func digits(_ range: ClosedRange<Int>) -> Int? {
+        func digits(_ first: Int, _ last: Int) -> Int? {
             var result = 0
-            for index in range {
+            for index in first...last {
                 let byte = chars[index]
                 guard byte >= 48, byte <= 57 else { return nil }
-                result = result * 10 + Int(byte - 48)
+                result = result * 10 + byte - 48
             }
             return result
         }
@@ -604,9 +604,9 @@ public enum ISO8601Reader {
             chars[4] == 45, chars[7] == 45,
             chars[10] == 84 || chars[10] == 116 || chars[10] == 32,
             chars[13] == 58, chars[16] == 58,
-            let year = digits(0...3), let month = digits(5...6),
-            let day = digits(8...9), let hour = digits(11...12),
-            let minute = digits(14...15), let second = digits(17...18)
+            let year = digits(0, 3), let month = digits(5, 6),
+            let day = digits(8, 9), let hour = digits(11, 12),
+            let minute = digits(14, 15), let second = digits(17, 18)
         else { return nil }
         var fractional = 0.0
         if chars.count > 19, chars[19] == 46 {
@@ -645,8 +645,8 @@ public func conversationGroupLabel(
     let nowDay = utcDay(nowEpochMilliseconds)
     let dateDay = utcDay(Int64(seconds * 1000))
     let difference = nowDay - dateDay
-    if difference == 0 { return "Today" }
-    if difference == 1 { return "Yesterday" }
+    if difference == Int64(0) { return "Today" }
+    if difference == Int64(1) { return "Yesterday" }
     let formatter = DateFormatter()
     formatter.timeStyle = DateFormatter.Style.none
     formatter.dateStyle = DateFormatter.Style.medium

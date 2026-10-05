@@ -20,7 +20,7 @@ enum LegacyOmiChat {
         guard let bytes = Base64Codec.decode(trimWhitespace(value)) else {
             throw ChatClientError.malformed("Omi chat stream is malformed")
         }
-        let text = String(decoding: bytes, as: UTF8.self)
+        let text = decodeUTF8Lossy(bytes)
         guard let parsed = JSON.parseOrNull(text) else {
             throw ChatClientError.malformed("Omi chat message is malformed")
         }
@@ -87,8 +87,7 @@ enum LegacyOmiChat {
         guard !digits.isEmpty else {
             throw ChatClientError.malformed("Omi chat cursor is malformed")
         }
-        for scalar in digits.unicodeScalars
-        where scalar.value < 0x30 || scalar.value > 0x39 {
+        for byte in Array(digits.utf8) where !ASCII.isDigit(byte) {
             throw ChatClientError.malformed("Omi chat cursor is malformed")
         }
         guard let offset = Int(digits), offset <= Int(Int32.max) else {

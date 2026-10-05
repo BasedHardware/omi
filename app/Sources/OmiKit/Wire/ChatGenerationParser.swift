@@ -127,7 +127,7 @@ public struct IncrementalChatGenerationParser: Sendable {
         if field == "event" {
             eventName = value
         } else if field == "id" {
-            if value.utf8.contains(0) {
+            if Array(value.utf8).contains(UInt8(0)) {
                 throw GenerationParseError.eventContainsNUL
             }
             eventId = value

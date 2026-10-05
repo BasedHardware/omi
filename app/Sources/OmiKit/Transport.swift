@@ -76,7 +76,7 @@ public protocol BackendTransport: Sendable {
     func generationEvents(
         generationId: String,
         lastEventId: String?,
-        onFrame: @escaping @Sendable (_ frame: String) -> Void
+        onFrame: @escaping @Sendable (String) -> Void
     ) async throws -> BackendResponse
     func cancelGenerationEvents(generationId: String) async
     func createWriteId() async throws -> String

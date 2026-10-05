@@ -62,7 +62,7 @@ public enum TaskPatchResult: Sendable {
     case failed(failure: WriteFailure, controlUnavailable: Bool)
 
     public var okValue: String?? {
-        if case .ok(let revision) = self { return .some(revision) }
+        if case .ok(let revision) = self { return revision }
         return nil
     }
 }

@@ -27,7 +27,7 @@ public func timelineDayLabel(
     nowMs: Int64,
     calendar: Calendar = Calendar.current
 ) -> String {
-    if atMs == 0 { return "Undated" }
+    if atMs == Int64(0) { return "Undated" }
     var dayCalendar = calendar
     dayCalendar.timeZone = calendar.timeZone
     func startOfDay(_ ms: Int64) -> Int64 {
@@ -51,7 +51,7 @@ public func timelineDayLabel(
 
 /// Port of `timeLabel` — locale-independent "h:mm a".
 public func timelineTimeLabel(atMs: Int64) -> String {
-    if atMs == 0 { return "" }
+    if atMs == Int64(0) { return "" }
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.timeZone = TimeZone(identifier: "UTC")
@@ -86,9 +86,9 @@ func topicTokens(_ entry: TimelineEntry) -> [String] {
     var tokens: [String] = []
     var seen = Set<String>()
     var index = 0
-    func isWordStart(_ byte: UInt8) -> Bool { byte >= 97 && byte <= 122 }
+    func isWordStart(_ byte: UInt8) -> Bool { byte >= ASCII.lowerA && byte <= ASCII.lowerZ }
     func isWordBody(_ byte: UInt8) -> Bool {
-        (byte >= 97 && byte <= 122) || (byte >= 48 && byte <= 57) || byte == 35 || byte == 43
+        isWordStart(byte) || ASCII.isDigit(byte) || byte == UInt8(35) || byte == ASCII.plus
     }
     while index < bytes.count {
         guard isWordStart(bytes[index]) else {
@@ -100,7 +100,7 @@ func topicTokens(_ entry: TimelineEntry) -> [String] {
         while index < bytes.count, isWordBody(bytes[index]) {
             index += 1
         }
-        let token = String(decoding: bytes[start..<index], as: UTF8.self)
+        let token = decodeUTF8Lossy(Array(bytes[start..<index]))
         if token.utf8.count < 4 || timelineTopicStopwords.contains(token) || seen.contains(token) {
             continue
         }

@@ -3,6 +3,14 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+#else
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.Headers.Companion.toHeaders
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 #endif
 
 // URLSession-based `BackendTransport`. Policy (the C++ middleware) owns the
@@ -33,11 +41,9 @@ public actor HTTPBackendTransport: BackendTransport {
         private let lock = NSLock()
 
         init() {
-            var captured: AsyncStream<Void>.Continuation!
-            self.stream = AsyncStream { continuation in
-                captured = continuation
-            }
-            self.continuation = captured
+            let made = AsyncStream.makeStream(of: Void.self)
+            self.stream = made.stream
+            self.continuation = made.continuation
         }
     }
 
@@ -146,11 +152,12 @@ public actor HTTPBackendTransport: BackendTransport {
     }
 
     private func makeURL(path: String, origin: String?) throws -> URL {
-        guard var origin else {
+        guard let origin else {
             throw TransportFailure.unconfigured
         }
-        while origin.hasSuffix("/") { origin.removeLast() }
-        guard let url = URL(string: origin + path) else {
+        var trimmed: String = origin
+        while trimmed.hasSuffix("/") { trimmed = String(trimmed.dropLast()) }
+        guard let url = URL(string: trimmed + path) else {
             throw TransportFailure.unconfigured
         }
         return url
@@ -195,28 +202,9 @@ public actor HTTPBackendTransport: BackendTransport {
         ownershipProbe: Bool = false, invalidateOn401: Bool = true,
         expectedPlane: String? = nil
     ) async throws -> BackendResponse {
-        let data: Data
-        let response: URLResponse
-        do {
-            #if !SKIP
-            (data, response) = try await session.data(for: urlRequest, delegate: RefuseBackendRedirects())
-            #else
-            (data, response) = try await session.data(for: urlRequest)
-            #endif
-        } catch is CancellationError {
-            throw TransportFailure.cancelled
-        } catch {
-            #if !SKIP && canImport(Security)
-            if let error = error as? URLError {
-                if error.code == .cancelled { throw TransportFailure.cancelled }
-                if ownershipProbe && [.cannotFindHost, .dnsLookupFailed, .cannotConnectToHost,
-                    .notConnectedToInternet, .timedOut].contains(error.code) {
-                    throw OwnershipConnectivityFailure.unavailable
-                }
-            }
-            #endif
-            throw TransportFailure.transportFailed
-        }
+        let fetched = try await fetchMappingFailures(urlRequest, ownershipProbe: ownershipProbe)
+        let data = fetched.0
+        let response = fetched.1
         if let expectedPlane, !isPlaneCurrent(expectedPlane) {
             throw TransportFailure.unconfigured
         }
@@ -239,8 +227,37 @@ public actor HTTPBackendTransport: BackendTransport {
             }
         }
         return BackendResponse(
-            id: id, status: status, body: String(decoding: data, as: UTF8.self),
+            id: id, status: status, body: decodeUTF8Lossy(Array(data)),
             retryAfterSeconds: retryAfterSeconds)
+    }
+
+    private func fetch(_ urlRequest: URLRequest) async throws -> (Data, URLResponse) {
+        #if !SKIP
+        return try await session.data(for: urlRequest, delegate: RefuseBackendRedirects())
+        #else
+        return try await fetchWithoutRedirects(urlRequest)
+        #endif
+    }
+
+    private func fetchMappingFailures(
+        _ urlRequest: URLRequest, ownershipProbe: Bool
+    ) async throws -> (Data, URLResponse) {
+        do {
+            return try await fetch(urlRequest)
+        } catch is CancellationError {
+            throw TransportFailure.cancelled
+        } catch {
+            #if !SKIP && canImport(Security)
+            if let error = error as? URLError {
+                if error.code == .cancelled { throw TransportFailure.cancelled }
+                if ownershipProbe && [.cannotFindHost, .dnsLookupFailed, .cannotConnectToHost,
+                    .notConnectedToInternet, .timedOut].contains(error.code) {
+                    throw OwnershipConnectivityFailure.unavailable
+                }
+            }
+            #endif
+            throw TransportFailure.transportFailed
+        }
     }
 
     // MARK: Generation SSE
@@ -334,13 +351,9 @@ public actor HTTPBackendTransport: BackendTransport {
             #else
             // Skip/FoundationNetworking do not expose Apple's AsyncBytes API.
             // Preserve their existing response path with the shared UTF-8 decoder.
-            let response: URLResponse
-            #if !SKIP
-            (data, response) = try await session.data(for: urlRequest, delegate: RefuseBackendRedirects())
-            #else
-            (data, response) = try await session.data(for: urlRequest)
-            #endif
-            guard let response = response as? HTTPURLResponse else {
+            let fetched = try await fetch(urlRequest)
+            data = fetched.0
+            guard let response = fetched.1 as? HTTPURLResponse else {
                 throw TransportFailure.transportFailed
             }
             http = response
@@ -387,7 +400,7 @@ public actor HTTPBackendTransport: BackendTransport {
         }
         return BackendResponse(
             id: generationId, status: http.statusCode,
-            body: http.statusCode == 200 ? streamBody : String(decoding: data, as: UTF8.self),
+            body: http.statusCode == 200 ? streamBody : decodeUTF8Lossy(Array(data)),
             retryAfterSeconds: retryAfter)
     }
 
@@ -543,6 +556,41 @@ extension HTTPBackendTransport: RecordingJournalOwnerRequesting {
             try ownerContext(current, origin: owner.backendOrigin).hasSameIdentity(as: owner)
         else { throw EncryptedRecordingJournalError.ownerChanged }
         return response
+    }
+}
+#endif
+
+#if SKIP
+private let backendHTTPClient: OkHttpClient = OkHttpClient.Builder()
+    .followRedirects(false)
+    .followSslRedirects(false)
+    .build()
+
+private func fetchWithoutRedirects(_ urlRequest: URLRequest) async throws -> (Data, URLResponse) {
+    guard let url = urlRequest.url else { throw TransportFailure.transportFailed }
+    var client = backendHTTPClient
+    if urlRequest.timeoutInterval > 0.0 {
+        client = backendHTTPClient.newBuilder()
+            .callTimeout(Int64(urlRequest.timeoutInterval * 1000.0), TimeUnit.MILLISECONDS)
+            .build()
+    }
+    let builder = Request.Builder()
+        .url(url.absoluteString)
+        .method(urlRequest.httpMethod ?? "GET", urlRequest.httpBody?.platformValue?.toRequestBody())
+    if let headerMap = urlRequest.allHTTPHeaderFields?.kotlin(nocopy: true) as? Map<String, String> {
+        builder.headers(headerMap.toHeaders())
+    }
+    let call = client.newCall(builder.build())
+    return withContext(Dispatchers.IO) {
+        let response = call.execute()
+        let bytes = response.body?.bytes()
+        let headers = Dictionary(response.headers.toMap(), nocopy: true)
+        let status = response.code
+        response.close()
+        guard let http = HTTPURLResponse(
+            url: url, statusCode: status, httpVersion: nil, headerFields: headers)
+        else { throw TransportFailure.transportFailed }
+        return (bytes == nil ? Data() : Data(platformValue: bytes!), http as URLResponse)
     }
 }
 #endif

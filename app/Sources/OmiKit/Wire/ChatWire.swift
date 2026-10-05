@@ -177,7 +177,7 @@ public struct ParsedRecordId: Sendable, Equatable {
 /// ratified grammar here is "non-empty string".
 public func parseRecordId(_ raw: String) -> ParsedRecordId? {
     guard !raw.isEmpty else { return nil }
-    for scalar in raw.unicodeScalars where scalar.value < 0x20 {
+    for byte in Array(raw.utf8) where Int(byte) < 0x20 {
         return nil
     }
     return ParsedRecordId(id: raw)
@@ -327,16 +327,23 @@ public func parseChatGenerationEventStream(_ text: String) -> [ChatGenerationFra
 /// (`contentHash` in chat.ts, including the 0x2c separator byte).
 public func chatContentHash(_ ids: [String]) -> String {
     // FNV-1a in Int with explicit 32-bit masking (Skip-safe: no UInt math).
-    var hash = 0x811C9DC5
+    var hash = Int64(0x811C9DC5)
     for id in ids.sorted() {
         for codeUnit in Array(id.utf16) {
-            hash = hash ^ Int(codeUnit)
-            hash = (hash &* 0x01000193) & 0xFFFF_FFFF
+            hash = hash ^ Int64(codeUnit)
+            hash = (hash &* Int64(0x01000193)) & Int64(0xFFFF_FFFF)
         }
-        hash = hash ^ 0x2C
-        hash = (hash &* 0x01000193) & 0xFFFF_FFFF
+        hash = hash ^ Int64(0x2C)
+        hash = (hash &* Int64(0x01000193)) & Int64(0xFFFF_FFFF)
     }
-    return "fnv-\(String(hash, radix: 16))"
+    let hexDigits = Array("0123456789abcdef".utf8)
+    var hex = [UInt8]()
+    var remaining = hash
+    repeat {
+        hex.insert(hexDigits[Int(remaining & Int64(0xF))], at: 0)
+        remaining = remaining >> 4
+    } while remaining > Int64(0)
+    return "fnv-\(utf8String(hex))"
 }
 
 /// 32-bit wrapping multiply (Math.imul).
@@ -362,7 +369,7 @@ public func splitDelimiter(_ value: String, _ delimiter: String) -> [String] {
             current = ""
             index = value.index(index, offsetBy: delimiter.count)
         } else {
-            current.append(value[index])
+            current += String(value[index])
             index = value.index(after: index)
         }
     }
@@ -373,10 +380,10 @@ public func splitDelimiter(_ value: String, _ delimiter: String) -> [String] {
 public func trimWhitespace(_ value: String) -> String {
     var result = value
     while let first = result.first, first == " " || first == "\t" || first == "\n" || first == "\r" {
-        result.removeFirst()
+        result = String(result.dropFirst())
     }
     while let last = result.last, last == " " || last == "\t" || last == "\n" || last == "\r" {
-        result.removeLast()
+        result = String(result.dropLast())
     }
     return result
 }
@@ -384,7 +391,7 @@ public func trimWhitespace(_ value: String) -> String {
 func trimStart(_ value: String) -> String {
     var result = value
     while let first = result.first, first == " " || first == "\t" {
-        result.removeFirst()
+        result = String(result.dropFirst())
     }
     return result
 }

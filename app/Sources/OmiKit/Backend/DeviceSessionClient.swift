@@ -50,24 +50,20 @@ public func isOptionalCaptureTimestamp(_ value: Int64?) -> Bool {
 public func isCaptureUUID(_ value: String) -> Bool {
     let bytes = Array(value.utf8)
     guard bytes.count == 36 else { return false }
-    func hex(_ byte: UInt8) -> Bool {
-        (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
-            || (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "f"))
-    }
     for (index, byte) in bytes.enumerated() {
         switch index {
         case 8, 13, 18, 23:
-            if byte != UInt8(ascii: "-") { return false }
+            if byte != ASCII.minus { return false }
         case 14:
-            if byte != UInt8(ascii: "4") { return false }
+            if byte != ASCII.four { return false }
         case 19:
-            if !(byte == UInt8(ascii: "8") || byte == UInt8(ascii: "9")
-                || byte == UInt8(ascii: "a") || byte == UInt8(ascii: "b"))
+            if !(byte == ASCII.eight || byte == ASCII.nine || byte == ASCII.lowerA
+                || byte == ASCII.lowerB)
             {
                 return false
             }
         default:
-            if !hex(byte) { return false }
+            if !ASCII.isLowerHex(byte) { return false }
         }
     }
     return true
@@ -110,7 +106,7 @@ func parseSessionValue(_ value: JSONValue?) throws -> DeviceSessionRecord {
     return DeviceSessionRecord(
         capturedAtMs: capturedAtMs, id: id, deviceId: deviceId,
         deviceName: item["deviceName"]?.stringValue, codec: Int(codec),
-        state: DeviceSessionState(rawValue: stateRaw) ?? .open,
+        state: DeviceSessionState(rawValue: stateRaw) ?? .opened,
         byteCount: Int(byteCount), chunkCount: Int(chunkCount),
         startedAt: startedAt,
         endedAt: item["endedAt"]?.safeIntegerValue

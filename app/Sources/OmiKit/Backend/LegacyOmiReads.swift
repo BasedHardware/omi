@@ -95,8 +95,9 @@ func legacyOffset(_ cursor: String?) throws -> Int {
     guard let cursor else { return 0 }
     guard cursor.hasPrefix("omi-offset:") else { throw LegacyOmiReadError.malformedCursor }
     let digits = String(cursor.dropFirst("omi-offset:".count))
-    guard !digits.isEmpty, digits.first.map({ $0 >= "1" && $0 <= "9" }) == true,
-        digits.unicodeScalars.allSatisfy({ $0.value >= 0x30 && $0.value <= 0x39 })
+    let digitBytes = Array(digits.utf8)
+    guard !digitBytes.isEmpty, digitBytes[0] != ASCII.zero,
+        digitBytes.allSatisfy({ ASCII.isDigit($0) })
     else { throw LegacyOmiReadError.malformedCursor }
     guard let value = Int(digits), value <= Int(Int32.max) - legacyOmiReadLimit else {
         throw LegacyOmiReadError.malformedCursor
@@ -157,7 +158,7 @@ public func loadOmiConversations(
     let records = try legacyRows(
         try await legacyRead(transport, path: "/v1/conversations?limit=50&offset=\(start)")
     )
-    let items = try records.map { row -> ConversationProjection in
+    let items = try records.map { (row: JSONValue) -> ConversationProjection in
         let structured = try legacyObject(row["structured"])
         let title = try legacyText(structured["title"], "")
         let summary = try legacyText(structured["overview"], "")
@@ -193,7 +194,7 @@ public func loadOmiMemories(
     let records = try legacyRows(
         try await legacyRead(transport, path: "/v3/memories?limit=50&offset=\(start)")
     )
-    let items = try records.map { row -> MemoryProjection in
+    let items = try records.map { (row: JSONValue) -> MemoryProjection in
         let content = try legacyText(row["content"])
         let created = try legacyMilliseconds(row["created_at"])
         let conversation =
@@ -224,7 +225,7 @@ public func loadOmiTasks(
         throw LegacyOmiReadError.malformedPagination
     }
     let records = try legacyRows(envelope["action_items"])
-    let items = try records.map { row -> TaskProjection in
+    let items = try records.map { (row: JSONValue) -> TaskProjection in
         let description = try legacyText(row["description"])
         let completed = try legacyBool(row["completed"])
         guard row["completed"]?.boolValue != nil else {
@@ -235,7 +236,7 @@ public func loadOmiTasks(
         guard evidence.arrayValue != nil else {
             throw LegacyOmiReadError.malformedProvenance
         }
-        let provenance = try evidence.arrayValue!.map { item -> String in
+        let provenance = try evidence.arrayValue!.map { (item: JSONValue) -> String in
             let ref = try legacyObject(item)
             _ = try legacyID(ref["id"])
             return JSON.serialize(ref)

@@ -152,9 +152,7 @@ private func validHexToken(_ value: String, prefix: String, hexCount: Int) -> Bo
   guard value.hasPrefix(prefix), value.count == prefix.count + hexCount else {
     return false
   }
-  return value.dropFirst(prefix.count).utf8.allSatisfy { byte in
-    (byte >= 48 && byte <= 57) || (byte >= 97 && byte <= 102)
-  }
+  return Array(String(value.dropFirst(prefix.count)).utf8).allSatisfy({ ASCII.isLowerHex($0) })
 }
 
 private func validReceipt(_ value: String) -> Bool {
@@ -162,13 +160,10 @@ private func validReceipt(_ value: String) -> Bool {
   guard parts.count == 3, parts[0] == "capture1", parts[1].count == 64,
     parts[2].count == 64
   else { return false }
-  return parts[1].utf8.allSatisfy(isLowerHex)
-    && parts[2].utf8.allSatisfy(isLowerHex)
+  return Array(String(parts[1]).utf8).allSatisfy({ ASCII.isLowerHex($0) })
+    && Array(String(parts[2]).utf8).allSatisfy({ ASCII.isLowerHex($0) })
 }
 
-private func isLowerHex(_ byte: UInt8) -> Bool {
-  (byte >= 48 && byte <= 57) || (byte >= 97 && byte <= 102)
-}
 
 #if !SKIP && canImport(CryptoKit) && canImport(Security)
   /// Apple journal keys are separate from the token key. One AES-GCM key is kept
@@ -329,7 +324,7 @@ private func isLowerHex(_ byte: UInt8) -> Bool {
           let values = try child.resourceValues(forKeys: [.isDirectoryKey])
           guard values.isDirectory == true,
             child.lastPathComponent.utf8.count == 64,
-            child.lastPathComponent.utf8.allSatisfy(isLowerHex)
+            Array(child.lastPathComponent.utf8).allSatisfy({ ASCII.isLowerHex($0) })
           else { throw RecordingJournalFileError.invalidFile }
           partitions.append(child)
         }
@@ -810,7 +805,7 @@ private func isLowerHex(_ byte: UInt8) -> Bool {
       } catch {
         throw EncryptedRecordingJournalError.secureVaultUnavailable
       }
-      guard identifier.count == 64, identifier.utf8.allSatisfy(isLowerHex) else {
+      guard identifier.count == 64, Array(identifier.utf8).allSatisfy({ ASCII.isLowerHex($0) }) else {
         throw EncryptedRecordingJournalError.secureVaultUnavailable
       }
       return root.appendingPathComponent(identifier, isDirectory: true)
