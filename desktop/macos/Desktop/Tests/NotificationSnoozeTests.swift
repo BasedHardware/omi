@@ -8,6 +8,49 @@ import XCTest
 /// nudge". These tests cover the control that does silence them.
 final class NotificationSnoozeTests: XCTestCase {
   private let now = Date(timeIntervalSince1970: 1_000_000)
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
+
+  override func tearDown() async throws {
+    await ownerFixture?.restore()
+    ownerFixture = nil
+  }
+
+  /// Callers that wait for an outcome — the proactivity v2 feed stops polling while a card is
+  /// pending — must hear about a snooze suppression through `onDropped`, like every other
+  /// early return in `sendNotification`. Silence would leave the card pending forever.
+  @MainActor
+  func testASnoozedProactiveDeliveryReportsItsDrop() async throws {
+    let defaults = UserDefaults.standard
+    let pinnedKeys = [
+      NotificationService.masterEnabledDefaultsKey,
+      NotificationService.frequencyDefaultsKey,
+      DefaultsKey.desktopIsPaywalled.rawValue,
+      NotificationService.notificationsSnoozedUntilDefaultsKey,
+    ]
+    let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
+    defer {
+      for (key, value) in savedValues {
+        if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+      }
+    }
+    let owner = "owner-snooze-drop-\(UUID().uuidString)"
+    ownerFixture = RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture?.establish(authOwnerID: owner)
+    defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
+    NotificationService.snoozeNotifications(for: 60 * 60)
+
+    var drops = 0
+    NotificationService(registerWithSystemNotificationCenter: false).sendNotification(
+      ownerID: owner,
+      title: "Follow up",
+      message: "You said you'd send the spec.",
+      assistantId: "proactivity_v2",
+      onDropped: { drops += 1 })
+
+    XCTAssertEqual(drops, 1)
+  }
 
   func testProactiveNotificationIsSuppressedWhileSnoozed() {
     XCTAssertTrue(

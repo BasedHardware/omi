@@ -54,14 +54,19 @@ enum NotificationSpeech {
 final class NotificationSpeechOnDelivery {
   private let text: String?
   private let speak: (String) -> Void
+  private let othersCanHearNow: () -> Bool
   private var hasSpoken = false
 
   init(
     text: String?,
-    speak: @escaping (String) -> Void = { FloatingBarVoicePlaybackService.shared.speakOneShot($0) }
+    speak: @escaping (String) -> Void = { FloatingBarVoicePlaybackService.shared.speakOneShot($0) },
+    othersCanHearNow: @escaping () -> Bool = {
+      NotificationService.shouldWithholdSpeechForPresence(presence: NotificationService.currentPresence())
+    }
   ) {
     self.text = text
     self.speak = speak
+    self.othersCanHearNow = othersCanHearNow
   }
 
   convenience init(message: String, isProactive: Bool, othersCanHear: Bool = false) {
@@ -82,9 +87,7 @@ final class NotificationSpeechOnDelivery {
     // Admission and presentation can be separated by an arbitrarily long queue.
     // Re-read the call state here so a card accepted in private never starts
     // speaking after the user joins a call.
-    if NotificationService.shouldWithholdSpeechForPresence(
-      presence: NotificationService.currentPresence())
-    {
+    if othersCanHearNow() {
       log("NotificationSpeech: withholding delivered notification because others can hear")
       return
     }

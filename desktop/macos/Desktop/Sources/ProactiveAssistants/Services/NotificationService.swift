@@ -717,6 +717,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       now: Date())
     {
       log("NotificationService: suppressing \(assistantId) notification — user silenced notifications")
+      onDropped?()
       return
     }
 
@@ -726,6 +727,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       : PresenceSignals(screenShared: false, onCall: false)
     if Self.shouldSuppressForPresence(respectFrequency: respectFrequency, presence: presence) {
       log("NotificationService: suppressing \(assistantId) notification while the screen is shared")
+      onDropped?()
       return
     }
 
