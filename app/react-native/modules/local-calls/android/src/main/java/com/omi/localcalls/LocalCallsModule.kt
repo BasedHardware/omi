@@ -1,6 +1,7 @@
 package com.omi.localcalls
 
 import expo.modules.kotlin.Promise
+import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -16,8 +17,13 @@ import expo.modules.kotlin.modules.ModuleDefinition
  * have to exist; see the module README.
  */
 class LocalCallsModule : Module() {
+  // applicationContext rather than the react context: this registers a
+  // TelephonyCallback that outlives any single bridge, and holding a
+  // ReactApplicationContext for that long would leak it.
   private val detector: CallStateDetector by lazy {
-    CallStateDetector(appContext.reactContext ?: appContext.applicationContext)
+    val context = appContext.reactContext?.applicationContext
+      ?: throw Exceptions.AppContextLost()
+    CallStateDetector(context)
   }
 
   override fun definition() = ModuleDefinition {
@@ -42,7 +48,7 @@ class LocalCallsModule : Module() {
           detector.start(
               object : CallStateDetector.Listener {
                 override fun onStateChanged(state: String, caller: String?) {
-                  sendEvent("callState", state, caller)
+                  sendEvent("callState", mapOf("state" to state, "caller" to caller))
                 }
               })
       if (ok) {
@@ -51,6 +57,7 @@ class LocalCallsModule : Module() {
         promise.reject(
             "E_NO_PERMISSION",
             "READ_PHONE_STATE not granted; call requestCallPermissions() from JS first",
+            null,
         )
       }
     }
@@ -62,12 +69,12 @@ class LocalCallsModule : Module() {
 
     AsyncFunction("answer") { promise: Promise ->
       val error = detector.answer()
-      if (error == null) promise.resolve(true) else promise.reject("E_ANSWER", error)
+      if (error == null) promise.resolve(true) else promise.reject("E_ANSWER", error, null)
     }
 
     AsyncFunction("endCall") { promise: Promise ->
       val error = detector.endCall()
-      if (error == null) promise.resolve(true) else promise.reject("E_END_CALL", error)
+      if (error == null) promise.resolve(true) else promise.reject("E_END_CALL", error, null)
     }
   }
 }

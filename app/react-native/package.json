@@ -67,8 +67,5 @@
     "patch-package": "^8.0.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.65.0"
-  },
-  "expo": {
-    "autolinking": {}
   }
 }

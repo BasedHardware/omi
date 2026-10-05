@@ -1,0 +1,45 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+  id 'org.jetbrains.kotlin.android'
+}
+
+group = 'com.omi.localcalls'
+version = '1.0.0'
+
+expoModule {
+  canBePublished false
+}
+
+android {
+  namespace "com.omi.localcalls"
+  compileSdk rootProject.ext.compileSdkVersion
+
+  defaultConfig {
+    minSdk rootProject.ext.minSdkVersion
+    targetSdk rootProject.ext.targetSdkVersion
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+}
+
+repositories {
+  google()
+  mavenCentral()
+}
+
+dependencies {
+  // Deliberately none beyond expo-modules-core. TelephonyCallback,
+  // TelephonyManager, PhoneStateListener and TelecomManager are all in the
+  // Android framework, so play-services-telephony is not needed. It was listed
+  // in an earlier revision of this file and did not resolve; dropping it also
+  // drops a dependency that would have pulled in a large GMS tree for no gain.
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+}

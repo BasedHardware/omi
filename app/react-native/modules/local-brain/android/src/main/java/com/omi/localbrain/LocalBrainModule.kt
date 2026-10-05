@@ -1,6 +1,7 @@
 package com.omi.localbrain
 
 import android.content.Context
+import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.util.concurrent.Executors
@@ -82,7 +83,10 @@ class LocalBrainModule : Module() {
     if (loaded) return
     worker.execute {
       if (!loaded) {
-        val context = appContext.reactContext ?: appContext.applicationContext
+        // applicationContext: the router owns a CompiledModel and a worker
+        // thread that outlive any single bridge.
+        val context = appContext.reactContext?.applicationContext
+          ?: throw Exceptions.AppContextLost()
         val created = IntentRouter(context, prototypeArgument, outOfDomainArgument)
         created.load()
         router = created
