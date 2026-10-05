@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 // omi-v5 Android host. Consumes the Skip skipstone Kotlin output (transpiled
 // from the OmiKit + OmiUI Swift sources) plus skip-lib/skip-ui runtime
 // artifacts, and binds the SAME native-core C++ middleware through JNI.
@@ -12,27 +10,24 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // plus the Skip/SkipModel/SkipLib/SkipUI runtime outputs alongside them.
 
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
 }
 
-// <repo>/app/Platforms/android/app → repo root is four levels up.
-val repoRoot: File = file("../../../..")
-val skipstoneOutput: File = repoRoot.resolve(".build/scratch-platforms/plugins/outputs")
-val omiPackageOutput: String = skipstoneOutput.listFiles()
-    ?.firstOrNull { it.resolve("OmiKit/destination/skipstone/OmiKit").isDirectory }
-    ?.name
-    ?: throw GradleException("Skipstone output missing under $skipstoneOutput; run `swift build --scratch-path .build/scratch-platforms` from the repo root first.")
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(libs.versions.jvm.get().toString())
+    }
+}
 
 android {
     namespace = "omi.v5.host"
-    compileSdk = 35
+    compileSdk = libs.versions.android.sdk.compile.get().toInt()
 
     defaultConfig {
         applicationId = "org.reactjs.native.omi_v5_android" // mirrors the RN `com.rnruntime` slot with the v5 namespace
-        minSdk = 26          // Skip requires java.time + API 26+ surfaces
-        targetSdk = 35
+        minSdk = libs.versions.android.sdk.min.get().toInt()
+        targetSdk = libs.versions.android.sdk.compile.get().toInt()
         versionCode = 1
         versionName = "1.0"
         ndk {
@@ -53,54 +48,16 @@ android {
         }
     }
 
-    sourceSets {
-        getByName("main") {
-            // Skipstone output for the shared package and the Skip runtimes
-            // it depends on (all generated, never committed). Each entry is
-            // the `src/main` tree of the transpiled module.
-            val modules = listOf(
-                "$omiPackageOutput/OmiKit/destination/skipstone/OmiKit",
-                "$omiPackageOutput/OmiUI/destination/skipstone/OmiUI",
-                "skip-model/SkipModel/destination/skipstone/SkipModel",
-                "skip-lib/SkipLib/destination/skipstone/SkipLib",
-                "skip-foundation/SkipFoundation/destination/skipstone/SkipFoundation",
-                "skip-ui/SkipUI/destination/skipstone/SkipUI",
-            )
-            for (module in modules) {
-                kotlin.srcDir(skipstoneOutput.resolve(module).resolve("src/main/kotlin"))
-            }
-        }
-    }
-
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
-        }
+        sourceCompatibility = JavaVersion.toVersion(libs.versions.jvm.get())
+        targetCompatibility = JavaVersion.toVersion(libs.versions.jvm.get())
     }
 
     buildFeatures {
         compose = true
     }
-
-    packaging {
-        resources.excludes += setOf("META-INF/*.kotlin_module")
-    }
 }
 
 dependencies {
-    // Compose host runtime for the transpiled SkipUI root.
-    val composeBom = platform("androidx.compose:compose-bom:2024.09.03")
-    implementation(composeBom)
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
-
-    // skip-lib / skip-foundation / skip-ui Kotlin sources expect these.
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    implementation("omi.ui:OmiUI")
 }

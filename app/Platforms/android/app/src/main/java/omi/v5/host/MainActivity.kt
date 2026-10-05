@@ -1,22 +1,29 @@
 package omi.v5.host
 
+import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 
-import omi.kit.Policy
+import omi.kit.KeyValueStoring
 import omi.kit.PreferenceValue
 import omi.kit.SettingsStore
 import omi.ui.AppServices
 import omi.ui.AppStore
-import omi.ui.KeyValueStoring
 import omi.ui.RootView
+import skip.foundation.ProcessInfo
+import skip.ui.ColorScheme
+import skip.ui.ComposeContext
+import skip.ui.PresentationRoot
+import skip.ui.UIApplication
 
 // Android host shell. Bootstrap + injection + intent plumbing only; all
 // product UI comes from the skipstone-transpiled OmiUI RootView.
@@ -30,25 +37,31 @@ import omi.ui.RootView
 //     auth, and BLE facades are injected by their Kotlin ports when they
 //     land; absent facades degrade honestly (the store keeps the Welcome
 //     gate instead of faking a signed-in shell).
-class MainActivity : ComponentActivity() {
+class OmiApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        ProcessInfo.launch(applicationContext)
+        OmiPolicyJniBridge.installOnce(applicationContext)
+    }
+}
+
+class MainActivity : AppCompatActivity() {
+    private lateinit var store: AppStore
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         OmiPolicyJniBridge.installOnce(applicationContext)
+        UIApplication.launch(this)
+        enableEdgeToEdge()
 
         val services = AppServices(
             settings = SettingsStore(SharedPreferencesKeyValueStore(applicationContext)),
         )
-        val store = AppStore(services = services)
+        store = AppStore(services = services)
         applyIntent(intent)
 
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    // Same composition as the Apple hosts:
-                    // RootView().environmentObject(store).
-                    RootView().environmentObject(store)
-                }
-            }
+            OmiPresentationRoot(store, ComposeContext())
         }
     }
 
@@ -69,30 +82,41 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Composable
+private fun OmiPresentationRoot(store: AppStore, context: ComposeContext) {
+    val colorScheme = if (isSystemInDarkTheme()) ColorScheme.dark else ColorScheme.light
+    PresentationRoot(defaultColorScheme = colorScheme, context = context) { ctx ->
+        val contentContext = ctx.content()
+        Box(modifier = ctx.modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            RootView().environmentObject(store).Compose(context = contentContext)
+        }
+    }
+}
+
 /// SharedPreferences backend for the whitelisted desktop preference keys
 /// (bool vs integer discrimination mirrors the Apple hosts' CFBoolean rule).
 class SharedPreferencesKeyValueStore(context: Context) : KeyValueStoring {
     private val preferences =
         context.getSharedPreferences("omi.v5.preferences", Context.MODE_PRIVATE)
 
-    override fun value(key: String): PreferenceValue? {
-        if (!preferences.contains(key)) return null
-        return when (val raw = preferences.all[key]) {
-            is Boolean -> PreferenceValue.Bool(raw)
-            is Int -> PreferenceValue.Int(raw)
-            is Long -> PreferenceValue.Int(raw.toInt())
-            is String -> PreferenceValue.Str(raw)
+    override fun value(forKey: String): PreferenceValue? {
+        if (!preferences.contains(forKey)) return null
+        return when (val raw = preferences.all[forKey]) {
+            is Boolean -> PreferenceValue.bool(raw)
+            is Int -> PreferenceValue.integer(raw)
+            is Long -> PreferenceValue.integer(raw.toInt())
+            is String -> PreferenceValue.string(raw)
             else -> null
         }
     }
 
-    override fun set(value: PreferenceValue?, key: String) {
+    override fun set(value: PreferenceValue?, forKey: String) {
         val editor = preferences.edit()
         when (value) {
-            null -> editor.remove(key)
-            is PreferenceValue.Bool -> editor.putBoolean(key, value.value)
-            is PreferenceValue.Int -> editor.putInt(key, value.value)
-            is PreferenceValue.Str -> editor.putString(key, value.value)
+            null -> editor.remove(forKey)
+            is PreferenceValue.BoolCase -> editor.putBoolean(forKey, value.associated0)
+            is PreferenceValue.IntegerCase -> editor.putInt(forKey, value.associated0)
+            is PreferenceValue.StringCase -> editor.putString(forKey, value.associated0)
         }
         editor.apply()
     }

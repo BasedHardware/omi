@@ -8,7 +8,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(omi_native_core_jni LANGUAGES C CXX)
 
-set(OMI_NATIVE_CORE_DIR ../../../../../../native-core)
+set(OMI_NATIVE_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../native-core)
 
 set(OMI_NATIVE_SOURCES
     ${OMI_NATIVE_CORE_DIR}/src/omi_native_boundary.cpp

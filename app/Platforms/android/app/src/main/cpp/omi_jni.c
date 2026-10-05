@@ -7,12 +7,16 @@
  */
 #include <jni.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "omi_auth.h"
+#include "omi_backend_http.h"
 #include "omi_backend_policy.h"
 #include "omi_backend_recording.h"
 #include "omi_device.h"
 #include "omi_native_boundary.h"
+#include "omi_text.h"
 
 #define JNI_CLASS omi_v5_host_OmiPolicyJniBridge
 
@@ -443,6 +447,14 @@ Java_omi_v5_host_OmiPolicyJniBridge_nativeDeviceCaptureHandoff(JNIEnv *env, jobj
 }
 
 JNIEXPORT jint JNICALL
+Java_omi_v5_host_OmiPolicyJniBridge_nativeDeviceCapturePacketCount(JNIEnv *env, jobject self,
+                                                                   jlong handle) {
+    (void)env;
+    (void)self;
+    return (jint)omi_device_capture_packet_count(dev_handle(handle));
+}
+
+JNIEXPORT jint JNICALL
 Java_omi_v5_host_OmiPolicyJniBridge_nativeDeviceCaptureBatchCount(JNIEnv *env, jobject self,
                                                                   jlong handle) {
     (void)env;
@@ -522,4 +534,130 @@ Java_omi_v5_host_OmiPolicyJniBridge_nativeDeviceCaptureCodec(JNIEnv *env, jobjec
     (void)env;
     (void)self;
     return omi_device_capture_codec(dev_handle(handle));
+}
+
+static char *dup_jbytes_cstring(JNIEnv *env, jbyteArray bytes) {
+    if (bytes == NULL) return NULL;
+    jsize n = (*env)->GetArrayLength(env, bytes);
+    char *copy = (char *)malloc((size_t)n + 1);
+    if (copy == NULL) return NULL;
+    (*env)->GetByteArrayRegion(env, bytes, 0, n, (jbyte *)copy);
+    copy[n] = '\0';
+    if (memchr(copy, '\0', (size_t)n) != NULL) {
+        free(copy);
+        return NULL;
+    }
+    return copy;
+}
+
+static jbyteArray new_jbytes(JNIEnv *env, const void *data, size_t length) {
+    jbyteArray out = (*env)->NewByteArray(env, (jsize)length);
+    if (out != NULL && length > 0) {
+        (*env)->SetByteArrayRegion(env, out, 0, (jsize)length, (const jbyte *)data);
+    }
+    return out;
+}
+
+JNIEXPORT jint JNICALL
+Java_omi_v5_host_OmiPolicyJniBridge_nativeAuthSha256(JNIEnv *env, jobject self,
+                                                     jbyteArray data, jbyteArray out) {
+    (void)self;
+    if ((*env)->GetArrayLength(env, out) < OMI_AUTH_SHA256_LENGTH) return -1;
+    jsize n = (*env)->GetArrayLength(env, data);
+    jbyte *bytes = (*env)->GetByteArrayElements(env, data, NULL);
+    uint8_t digest[OMI_AUTH_SHA256_LENGTH];
+    int32_t status = omi_auth_sha256((const uint8_t *)bytes, (size_t)n, digest);
+    (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+    if (status == 0) {
+        (*env)->SetByteArrayRegion(env, out, 0, OMI_AUTH_SHA256_LENGTH, (const jbyte *)digest);
+    }
+    return status;
+}
+
+JNIEXPORT jint JNICALL
+Java_omi_v5_host_OmiPolicyJniBridge_nativeAuthRandomBytes(JNIEnv *env, jobject self,
+                                                          jbyteArray out) {
+    (void)self;
+    jsize n = (*env)->GetArrayLength(env, out);
+    uint8_t *buffer = (uint8_t *)malloc(n > 0 ? (size_t)n : 1);
+    if (buffer == NULL) return -1;
+    int32_t status = omi_auth_random_bytes(buffer, (size_t)n);
+    if (status == 0 && n > 0) {
+        (*env)->SetByteArrayRegion(env, out, 0, n, (const jbyte *)buffer);
+    }
+    free(buffer);
+    return status;
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_omi_v5_host_OmiPolicyJniBridge_nativeAuthCallbackCode(JNIEnv *env, jobject self,
+                                                           jbyteArray callback,
+                                                           jbyteArray redirect_uri,
+                                                           jbyteArray expected_state) {
+    (void)self;
+    char *c = dup_jbytes_cstring(env, callback);
+    char *r = dup_jbytes_cstring(env, redirect_uri);
+    char *st = dup_jbytes_cstring(env, expected_state);
+    jbyteArray result = NULL;
+    if (c != NULL && r != NULL && st != NULL) {
+        size_t cap = strlen(c) + 1;
+        char *code = (char *)malloc(cap);
+        if (code != NULL && omi_auth_callback_code(c, r, st, code, cap) == 1) {
+            result = new_jbytes(env, code, strlen(code));
+        }
+        free(code);
+    }
+    free(c);
+    free(r);
+    free(st);
+    return result;
+}
+
+JNIEXPORT jint JNICALL
+Java_omi_v5_host_OmiPolicyJniBridge_nativeUtf8CompletePrefix(JNIEnv *env, jobject self,
+                                                             jbyteArray data) {
+    (void)self;
+    jsize n = (*env)->GetArrayLength(env, data);
+    jbyte *bytes = (*env)->GetByteArrayElements(env, data, NULL);
+    size_t complete = 0;
+    int32_t status = omi_utf8_complete_prefix((const uint8_t *)bytes, (size_t)n, &complete);
+    (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+    return status == 0 ? (jint)complete : -1;
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_omi_v5_host_OmiPolicyJniBridge_nativeUtf8Lossy(JNIEnv *env, jobject self,
+                                                    jbyteArray data) {
+    (void)self;
+    jsize n = (*env)->GetArrayLength(env, data);
+    size_t cap = (size_t)n * 3;
+    uint8_t *out = (uint8_t *)malloc(cap > 0 ? cap : 1);
+    if (out == NULL) return NULL;
+    jbyte *bytes = (*env)->GetByteArrayElements(env, data, NULL);
+    size_t written = 0;
+    int32_t status = omi_utf8_lossy((const uint8_t *)bytes, (size_t)n, out, cap, &written);
+    (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+    jbyteArray result = status == 0 ? new_jbytes(env, out, written) : NULL;
+    free(out);
+    return result;
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_omi_v5_host_OmiPolicyJniBridge_nativeJsonFormatNumber(JNIEnv *env, jobject self,
+                                                           jdouble value) {
+    (void)self;
+    char buffer[32];
+    int32_t written = omi_json_format_number((double)value, buffer, sizeof(buffer));
+    return written >= 0 ? new_jbytes(env, buffer, (size_t)written) : NULL;
+}
+
+JNIEXPORT jint JNICALL
+Java_omi_v5_host_OmiPolicyJniBridge_nativeJsonNumberValid(JNIEnv *env, jobject self,
+                                                          jbyteArray text) {
+    (void)self;
+    jsize n = (*env)->GetArrayLength(env, text);
+    jbyte *bytes = (*env)->GetByteArrayElements(env, text, NULL);
+    int32_t valid = omi_json_number_valid((const char *)bytes, (size_t)n);
+    (*env)->ReleaseByteArrayElements(env, text, bytes, JNI_ABORT);
+    return valid;
 }
