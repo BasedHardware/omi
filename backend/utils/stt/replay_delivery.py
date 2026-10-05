@@ -21,6 +21,7 @@ REPLAY_CONNECT_SECONDS = 5.0
 REPLAY_PREFIX_SECONDS = REPLAY_WALL_BUDGET - REPLAY_CONNECT_SECONDS
 LIVE_TAIL_SECONDS = REPLAY_WALL_BUDGET + 1.0
 TAIL_RESIDENCE_SECONDS = 28.0
+SHUTDOWN_CLEANUP_SECONDS = 2.0
 REPLAY_RATES = {'soniox': 1.0, 'modulate': 1.0, 'deepgram': 1.0, 'parakeet': 1.0}
 clock = time.monotonic
 sleep = asyncio.sleep
@@ -77,6 +78,14 @@ REPLAY_PACKET_BYTES = 16 * 1024
 WRITER_SLOT_SECONDS = 2.0
 
 
+def _next_audio_slot(previous: float, duration: float, now: float) -> float:
+    """Advance the armed audio slot from the previous slot, not the observed
+    send/write time: sub-frame timer oversleep is absorbed instead of
+    accumulating drift, while a slip of one frame or longer rebases on the
+    clock so it never banks catch-up credit."""
+    return (now if now - previous >= duration else previous) + duration
+
+
 class AudioDeliveryExpired(TimeoutError):
     """A queued live audio frame outlived its absolute capture-age deadline."""
 
@@ -85,9 +94,10 @@ class RecoveryWriterPace:
     """Opt-in per-recovery-leg wire cadence shared with the typed limits.
 
     Sustained writes stay at <=1x audio time plus the bounded jitter allowance
-    of queued-plus-in-flight bytes. There is no catch-up credit: the next write
-    start is ``max(now, previous_write_start + audio_duration)``, so a blocked
-    write never earns debt that a resumed transport could burst with.
+    of queued-plus-in-flight bytes. There is no catch-up credit: slots advance
+    from the previously armed slot (sub-frame timer oversleep is absorbed, not
+    accumulated), and a stall of one frame or longer rebases on the clock, so
+    a blocked write never earns debt that a resumed transport could burst with.
     """
 
     def __init__(self, sample_rate: int, rate: float, budget: Callable[[], float | None] = lambda: None) -> None:
@@ -119,7 +129,7 @@ class RecoveryWriterPace:
     def note_write(self, nbytes: int) -> float:
         """Record the write start immediately before ws.send."""
         start = clock()
-        self.next_write = start + nbytes / (2 * self.sample_rate * self.rate)
+        self.next_write = _next_audio_slot(self.next_write, nbytes / (2 * self.sample_rate * self.rate), start)
         return start
 
     def complete_write(self) -> None:
@@ -229,6 +239,7 @@ class ReplayPacer:
         active: Callable[[], bool],
         *,
         replay: bool,
+        admitted: bool = False,
         deadline: float | None = None,
     ) -> bool:
         # Owner departure and death are checked at each bounded packet interval;
@@ -276,13 +287,44 @@ class ReplayPacer:
         if not replay and packet_deadline is not None:
             token = audio_send_deadline.set(packet_deadline)
         try:
-            accepted = send(data, start) if callable(send) else socket.send(data, start_sample=start)
+            if admitted:
+                accepted = socket.send_admitted_audio(data, ((start, len(data) // 2),))
+            else:
+                accepted = send(data, start) if callable(send) else socket.send(data, start_sample=start)
         finally:
             if token is not None:
                 audio_send_deadline.reset(token)
-        self.next_send = clock() + len(data) / (2 * self.sample_rate * self.rate)
+        complete = (
+            getattr(socket, 'complete_send', None) if getattr(socket, 'idle_close_enabled', False) is True else None
+        )
+        if accepted is True and callable(complete):
+            if packet_deadline is not None:
+                async with asyncio.timeout(max(0.0, packet_deadline - clock())):
+                    accepted = await cast(Callable[[], Awaitable[bool]], complete)()
+            else:
+                accepted = await cast(Callable[[], Awaitable[bool]], complete)()
+        self.next_send = _next_audio_slot(self.next_send, len(data) / (2 * self.sample_rate * self.rate), clock())
         await sleep(0)
-        return accepted is True and not socket.is_connection_dead
+        succeeded = accepted is True and not socket.is_connection_dead
+        if succeeded and getattr(socket, 'idle_close_enabled', False) is True:
+            socket.commit_send()
+        return succeeded
+
+
+def raw_transport(socket: Any) -> Any:
+    """Unwrap ReplayTailSocket/LiveLeg/Gated/Recording layers to the raw
+    provider transport owner whose tasks and wire must be aborted."""
+    current = socket
+    seen: set[int] = set()
+    for _ in range(8):
+        if current is None or id(current) in seen:
+            return current
+        seen.add(id(current))
+        inner = getattr(current, 'raw', None) or getattr(current, '_conn', None) or getattr(current, 'connection', None)
+        if inner is None or inner is current:
+            return current
+        current = inner
+    return current
 
 
 async def abort_replay_socket(socket: Any, timeout: float = 2.0) -> None:
@@ -299,7 +341,11 @@ async def abort_replay_socket(socket: Any, timeout: float = 2.0) -> None:
         release_live_stt_socket(socket)
     except Exception as error:
         logger.warning('replay abort release failed: %s', type(error).__name__)
-    raw = getattr(socket, 'raw', socket)
+    raw = raw_transport(socket)
+    abort = getattr(raw, 'abort_transport', None)
+    if callable(abort):
+        await cast(Callable[[float], Awaitable[None]], abort)(max(0.0, deadline - clock()))
+        return
     if hasattr(raw, '_closed'):
         raw._closed = True
     tasks = [
@@ -487,6 +533,7 @@ class TailPacket:
     start: int
     data: bytes
     received: float
+    admitted: bool = False
 
 
 class ReplayTailSocket:
@@ -507,10 +554,12 @@ class ReplayTailSocket:
         source: str = 'unknown',
         birth: 'BirthLedger | None' = None,
         retire_interval: Callable[[int], int] | None = None,
+        write_wait_seconds: float | None = None,
     ) -> None:
         self.connection, self.pacer, self.tail, self.host = socket, pacer, tail, host
         self._birth = birth
         self._retire_interval = retire_interval
+        self._write_wait_seconds = write_wait_seconds
         self._task: asyncio.Task[Any] | None = None
         self._pumping = True
         self._dead = False
@@ -518,6 +567,7 @@ class ReplayTailSocket:
         self._closing = False
         self._finalize_pending = False
         self._draining = False
+        self._pending_write: tuple[Any, int, bytes, Any, int | None] | None = None
         self._tail_bytes = sum(len(packet.data) for packet in tail)
         self.source = source if source in REPLAY_RATES else 'unknown'
 
@@ -585,6 +635,27 @@ class ReplayTailSocket:
             self._start_pump()
         return True
 
+    def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        # Queue an already gated onset behind every older replay/tail packet.
+        # Preserve each capture interval; concatenated pre-roll can have gaps.
+        if data and not spans:
+            return False  # No capture proof: never accept bytes without queuing them.
+        if self._closing or self.is_connection_dead:
+            return False
+        if self._tail_bytes + len(data) > self._tail_bound_bytes():
+            self.mark_capacity_full()
+            return False
+        offset = 0
+        for start, length in spans:
+            packet = data[offset * 2 : (offset + length) * 2]
+            received = self._birth.note(start, start + length) if self._birth is not None else clock()
+            self.tail.append(TailPacket(start, packet, received, admitted=True))
+            offset += length
+        self._tail_bytes += len(data)
+        if not self._pumping:
+            self._start_pump()
+        return True
+
     def _start_pump(self) -> None:
         if self._task is not None and self._task.done():
             self._task = None
@@ -592,7 +663,8 @@ class ReplayTailSocket:
             self._pumping = True
             self._task = self.host.spawn(self._pump_tail(), name='stt_replay_live_tail')
 
-    def start_tail(self) -> None:
+    def start_tail(self, *, draining: bool = False) -> None:
+        self._draining = self._draining or draining
         if self.tail:
             self._start_pump()
         else:
@@ -611,18 +683,55 @@ class ReplayTailSocket:
                 ):
                     born = self._birth.lookup(position) if self._birth is not None else None
                     packet_deadline = (entry.received if born is None else born) + TAIL_RESIDENCE_SECONDS
+                    shutdown_deadline = getattr(getattr(self.host, 'receiver', None), 'shutdown_deadline', None)
+                    if shutdown_deadline is not None:
+                        packet_deadline = min(packet_deadline, shutdown_deadline)
                     if clock() >= packet_deadline:
                         expired_mid = True
                         break
+                    raw = raw_transport(self.connection)
+                    queue = getattr(raw, '_send_queue', None)
+                    enqueued = getattr(queue, 'enqueued_audio', None)
+                    self._pending_write = (
+                        entry,
+                        position,
+                        packet,
+                        queue,
+                        enqueued + 1 if isinstance(enqueued, int) else None,
+                    )
                     if not await self.pacer.send(
-                        self.connection, packet, position, self.active, replay=False, deadline=packet_deadline
+                        self.connection,
+                        packet,
+                        position,
+                        self.active,
+                        replay=False,
+                        admitted=entry.admitted,
+                        deadline=packet_deadline,
                     ):
+                        self._pending_write = None
                         if clock() >= packet_deadline and not self.connection.is_connection_dead:
                             expired_mid = True
                             break
                         entry.start = position
                         self._dead = True
                         return
+                    try:
+                        write_deadline = packet_deadline
+                        if self._write_wait_seconds is not None:
+                            write_deadline = min(write_deadline, clock() + self._write_wait_seconds)
+                        confirmed = await await_frozen_writes(self.connection, write_deadline)
+                    except asyncio.CancelledError:
+                        if not self._closing and not self._debit_pending_write():
+                            entry.start = position
+                        raise
+                    if not confirmed:
+                        if not self._debit_pending_write():
+                            entry.start = position
+                        self._dead = True
+                        if clock() < packet_deadline and not self.connection.is_connection_dead:
+                            self._local_reason = 'capacity_full'
+                        return
+                    self._pending_write = None
                     entry.start = position + len(packet) // 2
                     entry.data = entry.data[len(packet) :]
                     self._tail_bytes -= len(packet)
@@ -663,11 +772,30 @@ class ReplayTailSocket:
         else:
             self.connection.finalize()
 
+    def _debit_pending_write(self) -> bool:
+        pending = self._pending_write
+        if pending is None:
+            return False
+        entry, position, packet, queue, target = pending
+        if isinstance(target, int) and getattr(queue, 'written_audio', 0) >= target:
+            entry.start = position + len(packet) // 2
+            entry.data = entry.data[len(packet) :]
+            self._tail_bytes -= len(packet)
+            self._pending_write = None
+            return True
+        return False
+
     def finish(self) -> None:
         self._closing = True
         if self._task is not None:
             self._task.cancel()
-        self.connection.finish()
+        try:
+            self.connection.finish()
+        finally:
+            # The receiver tracks the inner connection, not this tail wrapper.
+            release_live_stt_socket(self.connection)
+        self._debit_pending_write()
+        self._pending_write = None
         outcome = getattr(self.connection, 'leg_outcome', None)
         if self.tail and (not self.host.state.active or getattr(outcome, 'owner_closing', False)):
             REPLAY_SKIPPED.labels(source=self.source, successor=family(self.connection)).inc(
@@ -676,17 +804,55 @@ class ReplayTailSocket:
         self.tail.clear()
         self._tail_bytes = 0
 
+    def take_tail(self) -> deque[TailPacket]:
+        """Transfer unwritten capture before aborting a leg without a replay ring.
+
+        Freeze the pump synchronously so cancellation cannot mutate the handed
+        off packets. Confirmed writes are debited; an ambiguous write remains
+        owed to the successor. The original capture timestamps stay intact.
+        """
+        self._closing = True
+        if self._task is not None:
+            self._task.cancel()
+        self._debit_pending_write()
+        self._pending_write = None
+        while self.tail and not self.tail[0].data:
+            self.tail.popleft()
+        tail, self.tail = self.tail, deque()
+        self._tail_bytes = 0
+        return tail
+
     async def drain_and_close(self) -> None:
         # Accepted tail remains owed after client departure. Drain it before
         # EOS; only cancellation/death/deadline cuts the tail, and finish meters it.
         self._draining = True
+        shutdown_deadline = getattr(getattr(self.host, 'receiver', None), 'shutdown_deadline', None)
         try:
             if self._task is not None and not self._task.done() and not self.is_connection_dead:
-                _, pending = await asyncio.wait({self._task}, timeout=LIVE_TAIL_SECONDS + 2.0)
+                budget = LIVE_TAIL_SECONDS + SHUTDOWN_CLEANUP_SECONDS
+                if shutdown_deadline is not None:
+                    budget = max(0.0, min(budget, shutdown_deadline - clock()))
+                _, pending = await asyncio.wait({self._task}, timeout=budget)
                 if pending:
                     self.finish()
-            await self.connection.drain_and_close()
+            if shutdown_deadline is None:
+                await self.connection.drain_and_close()
+            else:
+                cleanup_left = lambda: max(0.0, shutdown_deadline + SHUTDOWN_CLEANUP_SECONDS - clock())
+                remaining = shutdown_deadline - clock()
+                if remaining > 0:
+                    drain = self.host.spawn(self.connection.drain_and_close(), name='stt_shutdown_provider')
+                    done, _ = await asyncio.wait({drain}, timeout=remaining)
+                    if not done:
+                        drain.cancel()
+                        _, _ = await asyncio.wait({drain}, timeout=cleanup_left())
+                        await abort_replay_socket(self.connection, timeout=cleanup_left())
+                else:
+                    await abort_replay_socket(self.connection, timeout=cleanup_left())
         finally:
             self.finish()
             if self._task is not None:
-                await asyncio.gather(self._task, return_exceptions=True)
+                bound = SHUTDOWN_CLEANUP_SECONDS
+                if shutdown_deadline is not None:
+                    bound = max(0.0, min(bound, shutdown_deadline + SHUTDOWN_CLEANUP_SECONDS - clock()))
+                _, _ = await asyncio.wait({self._task}, timeout=bound)

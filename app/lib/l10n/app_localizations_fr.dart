@@ -9341,6 +9341,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Téléchargement depuis votre appareil';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current sur $total';
   }
@@ -11341,6 +11351,9 @@ class AppLocalizationsFr extends AppLocalizations {
       'Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi se reconnectera tout seul';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name et d\'autres';
   }
@@ -12326,24 +12339,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Voix';
-
-  @override
-  String get assistantVoice => 'Voix de l\'assistant';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Votre choix de voix est partagé entre le mobile et le bureau.';
-
-  @override
-  String get readChatRepliesAloud => 'Lire les réponses du chat à voix haute';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Parle uniquement lorsque la réponse vocale l\'autorise.';
-
-  @override
-  String get voicePreviewSample => 'Salut, je suis Omi. Voici ma voix.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration de cette voix';
   }
@@ -12413,7 +12408,51 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Impossible de se connecter. Vérifiez votre connexion et réessayez.';
+
+  @override
+  String get chatReplyServerError => 'Un problème est survenu de notre côté. Veuillez réessayer.';
+
+  @override
+  String get chatReplyTimeout => 'La réponse a pris trop de temps. Veuillez réessayer.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Vous n\'êtes pas connecté. Connectez-vous et réessayez.';
+
+  @override
+  String get chatAppsLoadFailed => 'Impossible de charger les applications de chat. Veuillez réessayer.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Voix';
+
+  @override
+  String get assistantVoice => 'Voix de l\'assistant';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Votre choix de voix est partagé entre le mobile et le bureau.';
+
+  @override
+  String get readChatRepliesAloud => 'Lire les réponses du chat à voix haute';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Parle uniquement lorsque la réponse vocale l\'autorise.';
+
+  @override
+  String get voicePreviewSample => 'Salut, je suis Omi. Voici ma voix.';
+
+  @override
   String get peopleStatsIncomplete => 'Les comptes peuvent être incomplets.';
+
+  @override
+  String get previousDay => 'Jour précédent';
+
+  @override
+  String get nextDay => 'Jour suivant';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Aucune tâche le $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Retraitement de la conversation…';
@@ -12466,4 +12505,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Vérifiez la connexion';
+
+  @override
+  String get forYou => 'Pour vous';
+
+  @override
+  String get stopThese => 'Ne plus recevoir ceci';
+
+  @override
+  String get dismiss => 'Masquer';
+
+  @override
+  String get showOnLockScreen => 'Afficher sur l’écran verrouillé';
 }

@@ -386,7 +386,7 @@ final captureScenarios = <AuditScenario>[
     id: 'home-capture-pendant-live',
     title: 'Pendant recording',
     page: _home,
-    state: 'The pendant streams; 12:04 in',
+    state: 'The pendant streams; the pill shows the latest line, not the session clock',
     run: (a) => _runHome(a, AuditLive.pendant, pendantConnected: true),
   ),
   AuditScenario(

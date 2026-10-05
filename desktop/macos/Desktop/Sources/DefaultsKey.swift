@@ -43,6 +43,8 @@ enum DefaultsKey: String {
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
+  /// Retained goal/reminder preference; keep the historical persisted key after Advice retirement.
+  case goalReminderNotificationsEnabled = "adviceNotificationsEnabled"
   /// Opt-out (defaults to on): the post-meeting summary share notification —
   /// the persistent notch card offering "Copy link" / "Send to <participant>".
   case meetingSummaryNotificationsEnabled = "meetingSummaryNotificationsEnabled"

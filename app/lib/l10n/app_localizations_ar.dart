@@ -9203,6 +9203,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncCardDownloadingTitle => 'جارٍ التنزيل من جهازك';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current من $total';
   }
@@ -11179,6 +11189,9 @@ class AppLocalizationsAr extends AppLocalizations {
       'فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.';
 
   @override
+  String get capturePendantDisconnectedShort => 'سيعيد Omi الاتصال تلقائيًا';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name وآخرون';
   }
@@ -12153,24 +12166,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'الصوت';
-
-  @override
-  String get assistantVoice => 'صوت المساعد';
-
-  @override
-  String get voiceSharedAcrossDevices => 'اختيارك للصوت مشترك بين الجوال وسطح المكتب.';
-
-  @override
-  String get readChatRepliesAloud => 'قراءة ردود الدردشة بصوت عالٍ';
-
-  @override
-  String get readChatRepliesAloudDescription => 'يتحدث فقط عندما يسمح إعداد \"الرد الصوتي\" بذلك.';
-
-  @override
-  String get voicePreviewSample => 'مرحباً، أنا Omi. هذا صوتي.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration من هذا الصوت';
   }
@@ -12240,7 +12235,51 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'تعذر الاتصال. تحقق من اتصالك وحاول مرة أخرى.';
+
+  @override
+  String get chatReplyServerError => 'حدث خطأ ما من جانبنا. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get chatReplyTimeout => 'استغرقت الاستجابة وقتاً طويلاً. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get chatReplyNotSignedIn => 'لم تسجّل الدخول. سجّل الدخول وحاول مرة أخرى.';
+
+  @override
+  String get chatAppsLoadFailed => 'تعذّر تحميل تطبيقات الدردشة. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'الصوت';
+
+  @override
+  String get assistantVoice => 'صوت المساعد';
+
+  @override
+  String get voiceSharedAcrossDevices => 'اختيارك للصوت مشترك بين الجوال وسطح المكتب.';
+
+  @override
+  String get readChatRepliesAloud => 'قراءة ردود الدردشة بصوت عالٍ';
+
+  @override
+  String get readChatRepliesAloudDescription => 'يتحدث فقط عندما يسمح إعداد \"الرد الصوتي\" بذلك.';
+
+  @override
+  String get voicePreviewSample => 'مرحباً، أنا Omi. هذا صوتي.';
+
+  @override
   String get peopleStatsIncomplete => 'قد تكون الأعداد غير مكتملة.';
+
+  @override
+  String get previousDay => 'اليوم السابق';
+
+  @override
+  String get nextDay => 'اليوم التالي';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'لا توجد مهام في $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'جارٍ إعادة معالجة المحادثة…';
@@ -12293,4 +12332,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'تحقق من الاتصال';
+
+  @override
+  String get forYou => 'من أجلك';
+
+  @override
+  String get stopThese => 'إيقاف هذه';
+
+  @override
+  String get dismiss => 'تجاهل';
+
+  @override
+  String get showOnLockScreen => 'إظهار على شاشة القفل';
 }

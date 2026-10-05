@@ -9281,6 +9281,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Preuzimanje s vašeg uređaja';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current od $total';
   }
@@ -11273,6 +11283,9 @@ class AppLocalizationsBs extends AppLocalizations {
       'Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi će se sam ponovo povezati';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name i drugi';
   }
@@ -12253,24 +12266,6 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Glas';
-
-  @override
-  String get assistantVoice => 'Glas asistenta';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Vaš izbor glasa dijeli se između mobilne i desktop aplikacije.';
-
-  @override
-  String get readChatRepliesAloud => 'Čitaj odgovore iz chata naglas';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Govori samo kada to dozvoli \"Glasovni odgovor\".';
-
-  @override
-  String get voicePreviewSample => 'Zdravo, ja sam Omi. Ovo je moj glas.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
@@ -12340,7 +12335,51 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Nije moguće povezivanje. Provjerite vezu i pokušajte ponovo.';
+
+  @override
+  String get chatReplyServerError => 'Nešto je pošlo po zlu s naše strane. Pokušajte ponovo.';
+
+  @override
+  String get chatReplyTimeout => 'Odgovor je predugo trajao. Pokušajte ponovo.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Niste prijavljeni. Prijavite se i pokušajte ponovo.';
+
+  @override
+  String get chatAppsLoadFailed => 'Nije moguće učitati aplikacije za ćaskanje. Pokušajte ponovo.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Glas';
+
+  @override
+  String get assistantVoice => 'Glas asistenta';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Vaš izbor glasa dijeli se između mobilne i desktop aplikacije.';
+
+  @override
+  String get readChatRepliesAloud => 'Čitaj odgovore iz chata naglas';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Govori samo kada to dozvoli \"Glasovni odgovor\".';
+
+  @override
+  String get voicePreviewSample => 'Zdravo, ja sam Omi. Ovo je moj glas.';
+
+  @override
   String get peopleStatsIncomplete => 'Brojevi možda nisu potpuni.';
+
+  @override
+  String get previousDay => 'Prethodni dan';
+
+  @override
+  String get nextDay => 'Sljedeći dan';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Nema zadataka za $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Ponovna obrada razgovora…';
@@ -12393,4 +12432,16 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Provjerite vezu';
+
+  @override
+  String get forYou => 'Za vas';
+
+  @override
+  String get stopThese => 'Zaustavi ovo';
+
+  @override
+  String get dismiss => 'Sakrij';
+
+  @override
+  String get showOnLockScreen => 'Prikaži na zaključanom ekranu';
 }

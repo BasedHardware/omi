@@ -1,5 +1,5 @@
 """
-Chat routing — dispatches to persona or agentic paths.
+Chat routing — dispatches every turn to the agentic path.
 
 Replaces the previous LangGraph state machine with a simple async router.
 Claude decides implicitly whether to use tools, eliminating the need for
@@ -231,11 +231,13 @@ async def execute_chat_stream(
     platform: Optional[str] = None,
     client_kind: Optional[ClientKind] = None,
     client_tz: Optional[str] = None,
+    device_tool_names: Optional[set] = None,
 ) -> AsyncGenerator[Optional[str], None]:
-    """Route chat requests to the appropriate handler.
+    """Route chat requests to the agentic chat handler.
 
-    - Persona apps -> persona chat (LangChain/OpenAI)
-    - Omi turns -> agentic chat with session file search when relevant
+    All selected apps (chat and persona capable) run through the same agentic
+    stream; the selected app's personality text is applied inside the shared
+    system prompt rather than replacing it.
     """
     if callback_data is None:
         callback_data = {}
@@ -258,22 +260,9 @@ async def execute_chat_stream(
         yield None
         return
 
-    # 1. Persona apps
-    if app and app.is_a_persona():
-        async for chunk in execute_persona_chat_stream(
-            uid,
-            messages,
-            app,
-            cited=cited,
-            callback_data=callback_data,
-            chat_session=chat_session,
-            current_datetime_block=current_datetime_block,
-        ):
-            yield chunk
-        return
-
-    # All Omi turns retain the system prompt, history and tools. Attached files
-    # remain addressable through search_files_tool.
+    # Persona apps previously took a dedicated LangChain/OpenAI stream; every
+    # turn now keeps the shared prompt, history and tools so a selected persona
+    # cannot drop tool, memory, or file access.
     async for chunk in execute_agentic_chat_stream(
         uid,
         messages,
@@ -286,6 +275,7 @@ async def execute_chat_stream(
         current_datetime_block=current_datetime_block,
         tz=tz,
         setup_deadline_at=setup_deadline_at,
+        device_tool_names=device_tool_names,
     ):
         yield chunk
 

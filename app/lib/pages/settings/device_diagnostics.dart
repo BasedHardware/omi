@@ -93,13 +93,18 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
   }
 
+  int _recentWindowStart(int countersSinceMs) {
+    final cutoff = clock.now().millisecondsSinceEpoch - const Duration(days: 7).inMilliseconds;
+    return countersSinceMs > cutoff ? countersSinceMs : cutoff;
+  }
+
   /// The connection summary the page shows, over the window since [_countersSinceMs] (bounded by
   /// the native history's 7-day retention). Its window counts mirror `reconnection_count_window`
   /// and `fail_to_connect_count_window` in [_buildBundle].
   DiagnosticsSummary get _summary => summarizeDiagnostics(
         _diagnostics?.disconnectHistory ?? const [],
         nowMs: clock.now().millisecondsSinceEpoch,
-        sinceMs: _countersSinceMs,
+        sinceMs: _countersSinceMs == null ? null : _recentWindowStart(_countersSinceMs!),
       );
 
   Future<void> _loadBatteryHistory() async {
@@ -138,6 +143,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final disconnects = (extended['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList();
     final since = extended['counters_since'] as num?;
     final sinceMs = since?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+    final windowStart = _recentWindowStart(sinceMs);
     return {
       'schema_version': 2,
       'device_id': widget.deviceId,
@@ -158,31 +164,33 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'fail_to_connect_count': diagnostics.failToConnectCount,
       'counters_since': {'reconnection_count': sinceMs, 'fail_to_connect_count': sinceMs},
       'reconnection_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= sinceMs && (e['timeToReconnectMs'] as num? ?? 0) > 0)
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && (e['timeToReconnectMs'] as num? ?? 0) > 0)
           .length,
       'fail_to_connect_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= sinceMs && e['eventType'] == 'fail_to_connect')
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && e['eventType'] == 'fail_to_connect')
           .length,
       'rssi_samples': extended['rssi_samples'] ?? [],
       'battery_history': extended['battery_history_v2'] ??
           _batteryHistory.map((p) => {'ts': p.timestamp, 'level': p.level, 'charging': null}).toList(),
       'disconnect_history': disconnects
-          .map((e) => {
-                'ts': e['timestamp'],
-                'reason': e['reason'],
-                'code': e['reasonCode'],
-                'manual': e['isManual'],
-                'event_type': e['eventType'],
-                'last_rssi': e['lastRssi'],
-                'last_rssi_age_ms': e['lastRssiAgeMs'],
-                'connection_duration_ms': e['connectionDurationMs'],
-                'app_state': e['appState'],
-                'time_to_reconnect_ms': e['timeToReconnectMs'],
-                'rssi_trend': e['rssiTrend'],
-                'lost_audio_seconds': e['lostAudioSeconds'],
-                'audio_packets_received': e['audioPacketsReceived'],
-                'audio_packets_expected': e['audioPacketsExpected'],
-              })
+          .map(
+            (e) => {
+              'ts': e['timestamp'],
+              'reason': e['reason'],
+              'code': e['reasonCode'],
+              'manual': e['isManual'],
+              'event_type': e['eventType'],
+              'last_rssi': e['lastRssi'],
+              'last_rssi_age_ms': e['lastRssiAgeMs'],
+              'connection_duration_ms': e['connectionDurationMs'],
+              'app_state': e['appState'],
+              'time_to_reconnect_ms': e['timeToReconnectMs'],
+              'rssi_trend': e['rssiTrend'],
+              'lost_audio_seconds': e['lostAudioSeconds'],
+              'audio_packets_received': e['audioPacketsReceived'],
+              'audio_packets_expected': e['audioPacketsExpected'],
+            },
+          )
           .toList(),
       'audio_packets_received_current': extended['audio_packets_received'],
       'audio_packets_expected_current': extended['audio_packets_expected'],
@@ -270,8 +278,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       json = const JsonEncoder.withIndent('  ').convert(bundle);
     } catch (e) {
       Logger.debug('Failed to build diagnostics bundle: $e');
-      PlatformManager.instance.analytics
-          .diagnosticsSendFailed(failureStage: DiagnosticsSendFailedFailureStage.buildBundle);
+      PlatformManager.instance.analytics.diagnosticsSendFailed(
+        failureStage: DiagnosticsSendFailedFailureStage.buildBundle,
+      );
       if (mounted) OmiFeedback.error(context, context.l10n.deviceDiagnosticsUploadFailed);
       return;
     }
@@ -283,11 +292,13 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         content: SizedBox(
           width: 520,
           height: 400,
-          child: Column(children: [
-            Text(context.l10n.deviceDiagnosticsUploadDescription),
-            const SizedBox(height: 12),
-            Expanded(child: SingleChildScrollView(child: SelectableText(json))),
-          ]),
+          child: Column(
+            children: [
+              Text(context.l10n.deviceDiagnosticsUploadDescription),
+              const SizedBox(height: 12),
+              Expanded(child: SingleChildScrollView(child: SelectableText(json))),
+            ],
+          ),
         ),
         actions: [
           OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
@@ -440,11 +451,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           value: latestRssi == null ? '--' : null,
           trailing: latestRssi == null
               ? null
-              : _valueStack(
-                  _rssiQuality(latestRssi),
-                  detail: '$latestRssi dBm',
-                  dot: _rssiColor(latestRssi),
-                ),
+              : _valueStack(_rssiQuality(latestRssi), detail: '$latestRssi dBm', dot: _rssiColor(latestRssi)),
         ),
       ],
     );
@@ -489,10 +496,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
               rate == null ? (windowed ? '${summary.drops}' : l10n.diagnosticsCountSincePairing(lifetimeDrops)) : null,
           trailing: rate == null ? null : _valueStack('${summary.drops}', detail: l10n.diagnosticsDropsPerHour(rate)),
         ),
-        OmiSettingsRow(
-          title: l10n.diagnosticsLongestGap,
-          value: longest == null ? '--' : _formatDurationMs(longest),
-        ),
+        OmiSettingsRow(title: l10n.diagnosticsLongestGap, value: longest == null ? '--' : _formatDurationMs(longest)),
         OmiSettingsRow(
           title: l10n.failedConnections,
           value: windowed ? '${summary.failed}' : l10n.diagnosticsCountSincePairing(lifetimeFails),
@@ -512,7 +516,11 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (dot != null) ...[
-              Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: dot)),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: dot),
+              ),
               const SizedBox(width: 6),
             ],
             Text(value, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
@@ -563,10 +571,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final spots = [
       for (final p in _rssiPoints)
         if (latest.difference(p.time).inMilliseconds <= _rssiWindowSecs * 1000)
-          FlSpot(
-            -latest.difference(p.time).inMilliseconds / 1000.0,
-            p.rssi.toDouble().clamp(_rssiMin, _rssiMax),
-          ),
+          FlSpot(-latest.difference(p.time).inMilliseconds / 1000.0, p.rssi.toDouble().clamp(_rssiMin, _rssiMax)),
     ];
     final color = _rssiColor(_rssiPoints.last.rssi);
 
@@ -1028,7 +1033,7 @@ DiagnosticsSummary summarizeDiagnostics(List<BleDisconnectEvent> history, {requi
   final window = sinceMs == null ? history : history.where((e) => e.timestamp >= sinceMs).toList();
   final gaps = [
     for (final e in window)
-      if (e.timeToReconnectMs > 0) e.timeToReconnectMs
+      if (e.timeToReconnectMs > 0) e.timeToReconnectMs,
   ]..sort();
   int? median;
   if (gaps.isNotEmpty) {

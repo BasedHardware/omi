@@ -9282,6 +9282,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Downloaden van je apparaat';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current van $total';
   }
@@ -11276,6 +11286,9 @@ class AppLocalizationsNl extends AppLocalizations {
       'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi maakt vanzelf opnieuw verbinding';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name en anderen';
   }
@@ -12260,24 +12273,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Stem';
-
-  @override
-  String get assistantVoice => 'Stem van assistent';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Je stemkeuze wordt gedeeld tussen mobiel en desktop.';
-
-  @override
-  String get readChatRepliesAloud => 'Chatantwoorden hardop voorlezen';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Spreekt alleen als Spraakantwoord dit toestaat.';
-
-  @override
-  String get voicePreviewSample => 'Hoi, ik ben Omi. Dit is mijn stem.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
@@ -12347,7 +12342,51 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Kan geen verbinding maken. Controleer je verbinding en probeer het opnieuw.';
+
+  @override
+  String get chatReplyServerError => 'Er is iets misgegaan aan onze kant. Probeer het opnieuw.';
+
+  @override
+  String get chatReplyTimeout => 'De reactie duurde te lang. Probeer het opnieuw.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Je bent niet ingelogd. Log in en probeer het opnieuw.';
+
+  @override
+  String get chatAppsLoadFailed => 'Chat-apps konden niet worden geladen. Probeer het opnieuw.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Stem';
+
+  @override
+  String get assistantVoice => 'Stem van assistent';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Je stemkeuze wordt gedeeld tussen mobiel en desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Chatantwoorden hardop voorlezen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Spreekt alleen als Spraakantwoord dit toestaat.';
+
+  @override
+  String get voicePreviewSample => 'Hoi, ik ben Omi. Dit is mijn stem.';
+
+  @override
   String get peopleStatsIncomplete => 'De aantallen zijn mogelijk onvolledig.';
+
+  @override
+  String get previousDay => 'Vorige dag';
+
+  @override
+  String get nextDay => 'Volgende dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Geen taken op $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Gesprek wordt opnieuw verwerkt…';
@@ -12400,4 +12439,16 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Controleer verbinding';
+
+  @override
+  String get forYou => 'Voor jou';
+
+  @override
+  String get stopThese => 'Deze stoppen';
+
+  @override
+  String get dismiss => 'Verbergen';
+
+  @override
+  String get showOnLockScreen => 'Toon op vergrendelscherm';
 }

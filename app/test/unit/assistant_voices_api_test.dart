@@ -147,9 +147,7 @@ void main() {
     });
 
     test('malformed payloads are decode failures, not crashes', () async {
-      final api = AssistantVoicesApi(
-        send: (_) async => _json(200, {'voices': 'not-a-list'}),
-      );
+      final api = AssistantVoicesApi(send: (_) async => _json(200, {'voices': 'not-a-list'}));
       expect(await api.getCatalog(), isA<ApiFailure<AssistantVoiceCatalog>>());
       final api2 = AssistantVoicesApi(send: (_) async => _json(200, {'voice_id': ''}));
       expect(await api2.getPreference(), isA<ApiFailure<AssistantVoicePreference>>());

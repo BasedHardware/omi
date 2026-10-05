@@ -165,8 +165,13 @@ void main() {
 
   SDCardWalSyncImpl syncWith(_FakeLocalSync local, _FakeSdCard card, Wal wal, {String firmware = '3.0.10'}) {
     final sync = SDCardWalSyncImpl(_Listener())
-      ..testDevice =
-          BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40, firmwareRevision: firmware)
+      ..testDevice = BtDevice(
+        id: 'devkit-1',
+        name: 'Omi DevKit',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: firmware,
+      )
       ..testConnection = card
       ..testWals = [wal];
     sync.setLocalSync(local);
@@ -177,10 +182,12 @@ void main() {
     const packets = 5; // 5 * 80 bytes of legacy packets
     final wal = makeWal(totalBytes: packets * 80, seconds: 1);
     final local = _FakeLocalSync()..admit = false;
-    final card = _FakeSdCard(packets: [
-      for (var i = 0; i < packets; i++) _legacyPacket(10),
-      [100]
-    ]);
+    final card = _FakeSdCard(
+      packets: [
+        for (var i = 0; i < packets; i++) _legacyPacket(10),
+        [100],
+      ],
+    );
     final sync = syncWith(local, card, wal);
 
     await expectLater(sync.syncWal(wal: wal), throwsA(anything));
@@ -196,10 +203,13 @@ void main() {
     const packets = 3;
     final wal = makeWal(totalBytes: packets * 80, seconds: 1);
     final local = _FakeLocalSync();
-    final card = _FakeSdCard(packets: [
-      for (var i = 0; i < packets; i++) _legacyPacket(10),
-      [100]
-    ], clearAccepted: false);
+    final card = _FakeSdCard(
+      packets: [
+        for (var i = 0; i < packets; i++) _legacyPacket(10),
+        [100],
+      ],
+      clearAccepted: false,
+    );
     final sync = syncWith(local, card, wal);
 
     await expectLater(sync.syncWal(wal: wal), throwsA(anything));
@@ -213,10 +223,12 @@ void main() {
     final packet = _packed440(List.filled(10, frameLen), trailingSizeByte: 80);
     final wal = makeWal(totalBytes: 440, seconds: 1);
     final local = _FakeLocalSync();
-    final card = _FakeSdCard(packets: [
-      packet,
-      [100]
-    ]);
+    final card = _FakeSdCard(
+      packets: [
+        packet,
+        [100],
+      ],
+    );
     final sync = syncWith(local, card, wal);
 
     await sync.syncWal(wal: wal);
@@ -232,12 +244,14 @@ void main() {
     const epochMarker = 1700000000;
     final wal = makeWal(totalBytes: 3 * 440, seconds: 1);
     final local = _FakeLocalSync()..failOnChunk = 2;
-    final card = _FakeSdCard(packets: [
-      _packed440(List.filled(2, frameLen)),
-      _packed440(List.filled(2, frameLen)),
-      _packed440(List.filled(3, frameLen), markerEpoch: epochMarker, markerAt: 0),
-      [100],
-    ]);
+    final card = _FakeSdCard(
+      packets: [
+        _packed440(List.filled(2, frameLen)),
+        _packed440(List.filled(2, frameLen)),
+        _packed440(List.filled(3, frameLen), markerEpoch: epochMarker, markerAt: 0),
+        [100],
+      ],
+    );
     final sync = syncWith(local, card, wal, firmware: '3.0.17');
 
     await expectLater(sync.syncWal(wal: wal), throwsA(anything));
@@ -251,10 +265,12 @@ void main() {
   test('a short transfer that ends before the expected offset is not cleared', () async {
     final wal = makeWal(totalBytes: 3 * 80, seconds: 1);
     final local = _FakeLocalSync();
-    final card = _FakeSdCard(packets: [
-      _legacyPacket(10),
-      [100]
-    ]);
+    final card = _FakeSdCard(
+      packets: [
+        _legacyPacket(10),
+        [100],
+      ],
+    );
     final sync = syncWith(local, card, wal);
 
     await expectLater(sync.syncWal(wal: wal), throwsA(anything));

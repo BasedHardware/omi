@@ -88,19 +88,30 @@ final tasksScenarios = <AuditScenario>[
           DateTime? dueStartDate,
           DateTime? dueEndDate,
         }) async =>
-            const ActionItemsResponse(actionItems: [
-          ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
-          ActionItemWithMetadata(
-              id: 'child', description: 'Book the venue', completed: false, sortOrder: 2000, indentLevel: 1),
-        ]),
+            const ActionItemsResponse(
+          actionItems: [
+            ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
+            ActionItemWithMetadata(
+              id: 'child',
+              description: 'Book the venue',
+              completed: false,
+              sortOrder: 2000,
+              indentLevel: 1,
+            ),
+          ],
+        ),
       );
       await a.tester.runAsync(actionItems.ensureLoaded);
-      await a.pump(const HomeFrame(tasks: ActionItemsPage()), scaffold: false, providers: [
-        ChangeNotifierProvider<ActionItemsProvider>.value(value: actionItems),
-        ChangeNotifierProvider<HomeProvider>(create: (_) => HomeProvider()..setIndex(HomeProvider.tasksTab)),
-        ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider()),
-        ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(AuditLive.idle)),
-      ]);
+      await a.pump(
+        const HomeFrame(tasks: ActionItemsPage()),
+        scaffold: false,
+        providers: [
+          ChangeNotifierProvider<ActionItemsProvider>.value(value: actionItems),
+          ChangeNotifierProvider<HomeProvider>(create: (_) => HomeProvider()..setIndex(HomeProvider.tasksTab)),
+          ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider()),
+          ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(AuditLive.idle)),
+        ],
+      );
       await a.shot('Tap Tasks in the switcher');
     },
   ),
@@ -120,16 +131,24 @@ final tasksScenarios = <AuditScenario>[
         DateTime? dueStartDate,
         DateTime? dueEndDate,
       }) async =>
-          const ActionItemsResponse(actionItems: [
-            ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
-            ActionItemWithMetadata(
-                id: 'child', description: 'Book the venue', completed: false, sortOrder: 2000, indentLevel: 1),
-          ]);
+          const ActionItemsResponse(
+            actionItems: [
+              ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
+              ActionItemWithMetadata(
+                id: 'child',
+                description: 'Book the venue',
+                completed: false,
+                sortOrder: 2000,
+                indentLevel: 1,
+              ),
+            ],
+          );
       final actionItems = ActionItemsProvider(getActionItems: items);
       await a.tester.runAsync(actionItems.ensureLoaded);
-      await a.pump(const ActionItemsPage(), providers: [
-        ChangeNotifierProvider<ActionItemsProvider>.value(value: actionItems),
-      ]);
+      await a.pump(
+        const ActionItemsPage(),
+        providers: [ChangeNotifierProvider<ActionItemsProvider>.value(value: actionItems)],
+      );
       await a.shot('Tasks tab with a parent task and an indented child', step: 'list');
       await a.longPress(find.text('Book the venue'));
       await a.shot('Long-press the indented task row', step: 'menu');

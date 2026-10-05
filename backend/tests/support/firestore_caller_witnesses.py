@@ -32,6 +32,7 @@ import routers.developer as developer_router
 import routers.google_calendar as google_calendar_router
 import routers.integration as integration_router
 import routers.search as search_router
+import routers.support as support_router
 import routers.users as users_router
 import utils.app_integrations as app_integrations
 import utils.apps as apps_utils
@@ -226,6 +227,7 @@ def _run_main_count(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> 
 
 def _run_speaker_browse(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, users_db, 'get_person', lambda uid, person_id: {'id': person_id, 'name': 'Speaker'})
+    _stub(monkeypatch, conversations_router, 'run_blocking', _inline_run_blocking)
     for discarded in _DISCARDED:
         for start, end in _DATE_PAIRS:
             request = SearchRequest(
@@ -235,7 +237,12 @@ def _run_speaker_browse(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
                 start_date=start.isoformat() if start else None,
                 end_date=end.isoformat() if end else None,
             )
-            trial(capture, conversations_router.search_conversations_endpoint, request, uid='u1')
+            trial(
+                capture,
+                lambda request=request: asyncio.run(
+                    conversations_router.search_conversations_endpoint(request, uid='u1')
+                ),
+            )
 
 
 def _run_developer_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
@@ -504,6 +511,19 @@ def _run_calendar_gaps(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) 
     trial(capture, call)
 
 
+def _run_support_trace(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    _stub(monkeypatch, support_router, 'resolve_support_target', lambda email: 'u1')
+    trial(
+        capture,
+        support_router.trace_support_recordings,
+        email='customer@example.com',
+        input_from=FROZEN_NOW.isoformat(),
+        input_to=FROZEN_LATER.isoformat(),
+        caller_uid='support-caller',
+    )
+    assert capture.calls[-1]['limit'] == 51 and capture.calls[-1]['metadata_only'] is True
+
+
 def _run_wrapped(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, wrapped_2025, '_update_progress', lambda *a, **k: None)
     trial(capture, wrapped_2025.generate_wrapped_2025, 'u1')
@@ -512,6 +532,14 @@ def _run_wrapped(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> Non
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
+        CallerWitness(
+            'routers/support.py:trace_support_recordings:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('support-trace',),
+            1,
+            _run_support_trace,
+        ),
         CallerWitness(
             'routers/conversations.py:get_conversations:database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
@@ -529,7 +557,7 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_main_count,
         ),
         CallerWitness(
-            'routers/conversations.py:search_conversations_endpoint:database.conversation_scan.speaker_browse_scan',
+            'routers/conversations.py:_browse_speaker_conversations:database.conversation_scan.speaker_browse_scan',
             'database.conversation_scan.speaker_browse_scan',
             'database.conversation_scan.speaker_browse_scan',
             ('speaker-search-fallback-recipe',),

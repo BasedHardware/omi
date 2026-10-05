@@ -14,6 +14,7 @@ from utils.stt import speaker_identity  # noqa: F401 - retain allocator across l
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
 from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
+from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
 
 import asyncio
 import hashlib
@@ -852,7 +853,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
         payload = _valid_sync_task_payload(lane='backfill')
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -873,7 +874,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -893,7 +894,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill',
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
         assert enqueue.call_args.args[:3] == (
             'sync-backfill',
@@ -912,7 +913,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -932,7 +933,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_QUEUE': '',
             'SYNC_BACKFILL_TASKS_HANDLER_URL': '',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -945,10 +946,33 @@ class TestVerifyCloudTasksOidc:
     def test_enqueue_rejects_payload_schema_drift_before_cloud_tasks(self):
         cloud_tasks = _load_cloud_tasks()
         payload = _valid_sync_task_payload(unexpected_field='must-not-be-admitted')
-        with patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             with pytest.raises(ValueError, match='durable worker schema'):
                 cloud_tasks.enqueue_sync_job(payload)
         enqueue.assert_not_called()
+
+    @pytest.mark.parametrize('sequenced', [False, True])
+    def test_enqueue_admits_capture_evidence_claims(self, sequenced):
+        # Regression: routers/sync.py adds capture_evidence_claims whenever S1
+        # claims parse; the exact-key check raised ValueError and wedged the
+        # uid's sequencer for every claims-bearing upload.
+        cloud_tasks = _load_cloud_tasks()
+        extra = {'sequencer_epoch': 3} if sequenced else {}
+        payload = _valid_sync_task_payload(capture_evidence_claims={'a.bin': {'version': 1}}, **extra)
+        env = {'SYNC_TASKS_QUEUE': 'sync-jobs', 'SYNC_TASKS_HANDLER_URL': 'https://backend-sync.example.com/run'}
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job(payload)
+        enqueue.assert_called_once()
+        assert enqueue.call_args.args[3]['capture_evidence_claims'] == {'a.bin': {'version': 1}}
+
+    def test_payload_key_validator_rejects_missing_core_key_even_with_optional(self):
+        cloud_tasks = _load_cloud_tasks()
+        payload = _valid_sync_task_payload(capture_evidence_claims={})
+        del payload['lane']
+        assert not cloud_tasks.sync_job_payload_keys_valid(payload)
+        assert not cloud_tasks.sync_job_payload_keys_valid(
+            {**_valid_sync_task_payload(), 'sequencer_epoch': 1}, allow_sequenced=False
+        )
 
     def test_enqueue_account_deletion_task_is_named_by_job_id(self):
         cloud_tasks = _load_cloud_tasks()
@@ -961,7 +985,7 @@ class TestVerifyCloudTasksOidc:
         }
         job_hash = hashlib.sha256(b'job-1').hexdigest()[:32]
         task_id = f'account-delete-{job_hash}-abc123'
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue, patch.object(
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue, patch.object(
             cloud_tasks.uuid, 'uuid4', return_value=MagicMock(hex='abc123')
         ):
             cloud_tasks.enqueue_account_deletion_wipe('job-1')

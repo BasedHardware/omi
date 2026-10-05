@@ -24,11 +24,7 @@ const _catalog = {
   'default_voice_id': 'Charon',
 };
 
-AssistantVoicesApi _api({
-  String selected = 'Kore',
-  Map<String, int> patchStatus = const {},
-  List<String>? patched,
-}) {
+AssistantVoicesApi _api({String selected = 'Kore', Map<String, int> patchStatus = const {}, List<String>? patched}) {
   return AssistantVoicesApi(
     send: (request) async {
       if (request.method == 'PATCH') {
@@ -151,7 +147,10 @@ void main() {
 
   testWidgets('a failed PATCH keeps the previous selection', (tester) async {
     final patched = <String>[];
-    await _pump(tester, api: _api(patched: patched, patchStatus: const {'Puck': 503}));
+    await _pump(
+      tester,
+      api: _api(patched: patched, patchStatus: const {'Puck': 503}),
+    );
 
     await tester.tap(find.byKey(const ValueKey('settings_row_assistantVoice')));
     await tester.pumpAndSettle();
@@ -174,11 +173,7 @@ void main() {
   testWidgets('closing the picker sheet stops an in-flight preview without an error toast', (tester) async {
     var stops = 0;
     var previews = 0;
-    await _pump(
-      tester,
-      onPreview: (id) async => previews++,
-      onStopPreview: () async => stops++,
-    );
+    await _pump(tester, onPreview: (id) async => previews++, onStopPreview: () async => stops++);
 
     await tester.tap(find.byKey(const ValueKey('settings_row_assistantVoice')));
     await tester.pumpAndSettle();
@@ -194,7 +189,10 @@ void main() {
 
   testWidgets('a failed PATCH clears the saving state so a retry can run', (tester) async {
     final patched = <String>[];
-    await _pump(tester, api: _api(patched: patched, patchStatus: const {'Puck': 503}));
+    await _pump(
+      tester,
+      api: _api(patched: patched, patchStatus: const {'Puck': 503}),
+    );
 
     await tester.tap(find.byKey(const ValueKey('settings_row_assistantVoice')));
     await tester.pumpAndSettle();
@@ -227,11 +225,7 @@ void main() {
   testWidgets('an in-flight preview shows a spinner in the sheet and disables other previews', (tester) async {
     final gate = Completer<void>();
     var stops = 0;
-    await _pump(
-      tester,
-      onPreview: (id) => gate.future,
-      onStopPreview: () async => stops++,
-    );
+    await _pump(tester, onPreview: (id) => gate.future, onStopPreview: () async => stops++);
 
     await tester.tap(find.byKey(const ValueKey('settings_row_assistantVoice')));
     await tester.pumpAndSettle();
@@ -252,10 +246,7 @@ void main() {
   });
 
   testWidgets('load failure shows the error state with retry', (tester) async {
-    await _pump(
-      tester,
-      api: AssistantVoicesApi(send: (_) async => _json(503, {'error': 'down'})),
-    );
+    await _pump(tester, api: AssistantVoicesApi(send: (_) async => _json(503, {'error': 'down'})));
     expect(find.byType(OmiErrorState), findsOneWidget);
     expect(find.text(en.tryAgain), findsOneWidget);
   });

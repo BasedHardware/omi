@@ -50,13 +50,17 @@ class AudioChunkReadSession:
                 return []
             remaining = self.deadline - time.monotonic()
             try:
-                self._chunks = storage.list_audio_chunks(
+                listed = storage.list_audio_chunks(
                     self.uid,
                     self.conversation_id,
                     timeout=min(1.0, remaining),
                     retry=DEFAULT_RETRY.with_timeout(min(1.0, remaining)),
                     deadline=self.deadline,
                 )
+                self._chunks = [
+                    {**chunk, 'span': dict(chunk['span'])} if isinstance(chunk.get('span'), dict) else dict(chunk)
+                    for chunk in listed
+                ]
             except (
                 TimeoutError,
                 RetryError,
@@ -117,11 +121,15 @@ class AudioChunkReadSession:
                         # range to detect budget truncation, never decode it.
                         allowance = size if size is not None else maximum
                         session.bytes += allowance
-                        data = bucket.blob(path).download_as_bytes(
-                            timeout=max(0.001, session.deadline - time.monotonic()),
-                            retry=None,
-                            end=allowance - 1,
-                        )
+                        download_kwargs: Dict[str, Any] = {
+                            'timeout': max(0.001, session.deadline - time.monotonic()),
+                            'retry': None,
+                            'end': allowance - 1,
+                        }
+                        generation = chunk.get('generation')
+                        if generation is not None:
+                            download_kwargs['if_generation_match'] = generation
+                        data = bucket.blob(path).download_as_bytes(**download_kwargs)
                         if size is None and len(data) >= allowance:
                             session.reason, session.limit_hit = 'download_limit', True
                             raise TimeoutError('unknown object exceeds speaker byte allowance')

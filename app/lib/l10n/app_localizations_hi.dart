@@ -9240,6 +9240,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String get syncCardDownloadingTitle => 'आपके डिवाइस से डाउनलोड हो रहा है';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$total में से $current';
   }
@@ -11226,6 +11236,9 @@ class AppLocalizationsHi extends AppLocalizations {
       'आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi अपने आप फिर से कनेक्ट हो जाएगा';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name और अन्य';
   }
@@ -12207,24 +12220,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'आवाज़';
-
-  @override
-  String get assistantVoice => 'असिस्टेंट की आवाज़';
-
-  @override
-  String get voiceSharedAcrossDevices => 'आपकी चुनी हुई आवाज़ मोबाइल और डेस्कटॉप दोनों में साझा होती है।';
-
-  @override
-  String get readChatRepliesAloud => 'चैट के जवाब ज़ोर से पढ़ें';
-
-  @override
-  String get readChatRepliesAloudDescription => 'केवल तभी बोलता है जब वॉइस रिस्पॉन्स इसकी अनुमति दे।';
-
-  @override
-  String get voicePreviewSample => 'हाय, मैं Omi हूँ। यह मेरी आवाज़ है।';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return 'इस आवाज़ का $duration';
   }
@@ -12294,7 +12289,51 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'कनेक्ट नहीं हो सका। अपना कनेक्शन जांचें और फिर से प्रयास करें।';
+
+  @override
+  String get chatReplyServerError => 'हमारी ओर से कुछ गड़बड़ हुई। कृपया फिर से प्रयास करें।';
+
+  @override
+  String get chatReplyTimeout => 'जवाब देने में बहुत समय लगा। कृपया फिर से प्रयास करें।';
+
+  @override
+  String get chatReplyNotSignedIn => 'आपने साइन इन नहीं किया है। साइन इन करें और फिर से प्रयास करें।';
+
+  @override
+  String get chatAppsLoadFailed => 'चैट ऐप लोड नहीं हो सके। कृपया फिर से प्रयास करें।';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'आवाज़';
+
+  @override
+  String get assistantVoice => 'असिस्टेंट की आवाज़';
+
+  @override
+  String get voiceSharedAcrossDevices => 'आपकी चुनी हुई आवाज़ मोबाइल और डेस्कटॉप दोनों में साझा होती है।';
+
+  @override
+  String get readChatRepliesAloud => 'चैट के जवाब ज़ोर से पढ़ें';
+
+  @override
+  String get readChatRepliesAloudDescription => 'केवल तभी बोलता है जब वॉइस रिस्पॉन्स इसकी अनुमति दे।';
+
+  @override
+  String get voicePreviewSample => 'हाय, मैं Omi हूँ। यह मेरी आवाज़ है।';
+
+  @override
   String get peopleStatsIncomplete => 'गिनती अधूरी हो सकती है।';
+
+  @override
+  String get previousDay => 'पिछला दिन';
+
+  @override
+  String get nextDay => 'अगला दिन';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date को कोई कार्य नहीं';
+  }
 
   @override
   String get reprocessingConversationProgress => 'बातचीत फिर से प्रोसेस हो रही है…';
@@ -12347,4 +12386,16 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'कनेक्शन जाँचें';
+
+  @override
+  String get forYou => 'आपके लिए';
+
+  @override
+  String get stopThese => 'इन्हें रोकें';
+
+  @override
+  String get dismiss => 'हटाएँ';
+
+  @override
+  String get showOnLockScreen => 'लॉक स्क्रीन पर दिखाएँ';
 }

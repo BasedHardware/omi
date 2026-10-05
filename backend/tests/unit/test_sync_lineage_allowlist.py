@@ -41,6 +41,18 @@ from utils.sync.recording_lineage import OUTCOMES, lineage_resolution_requested
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
+S1_CLAIMS = {
+    'f.opus': {
+        'capture_root': 'a1b2c3d4-1111-4222-8333-444455556666',
+        'clock_epoch': 0,
+        'source_frame_start': 0,
+        'frame_count': 1,
+        'rate_hz': 16000,
+        'codec': 'opus',
+        'channel': 'mono',
+    }
+}
+
 # (kill switch value, allowlist template); ``{uid}`` is the owner under test.
 OFF = ('off', '')
 ACTIVE = {
@@ -68,6 +80,41 @@ def configure(monkeypatch, config, uid):
 def clean_env(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'true')
+    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+    monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', 'off')
+
+
+@pytest.fixture(autouse=True)
+def no_real_firestore_client(monkeypatch):
+    import database._client
+    import database.conversations
+    import firebase_admin.firestore
+    from google.cloud import firestore
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError('real Firestore client construction is forbidden in this suite')
+
+    monkeypatch.setattr(database._client, 'get_firestore_client', forbidden)
+    monkeypatch.setattr(database.conversations, 'get_firestore_client', forbidden)
+    monkeypatch.setattr(firestore, 'Client', forbidden)
+    monkeypatch.setattr(firebase_admin.firestore, 'client', forbidden)
+
+
+def test_real_firestore_client_paths_fail_closed_without_io():
+    import database._client
+    import database.conversations
+    import firebase_admin.firestore
+    from google.cloud import firestore
+
+    with pytest.raises(AssertionError):
+        database._client.get_firestore_client()
+    with pytest.raises(AssertionError):
+        database.conversations.get_firestore_client()
+    with pytest.raises(AssertionError):
+        firestore.Client()
+    with pytest.raises(AssertionError):
+        firebase_admin.firestore.client()
 
 
 # --- Parsing ------------------------------------------------------------------
@@ -103,20 +150,29 @@ def test_empty_allowlist_admits_everyone_and_the_kill_switch_still_wins(monkeypa
 # --- Site 1: per-segment binding request (backend-sync, backend REST) ------------
 
 
-def _decision(monkeypatch, caplog, config, uid='u'):
+def _decision(monkeypatch, caplog, config, uid='u', s1=False):
     configure(monkeypatch, config, 'u')
     metrics = MagicMock()
     monkeypatch.setattr(recording_lineage, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)
     caplog.clear()
     with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
-        requested = lineage_resolution_requested(uid, ORIGIN, 1.0, 2.0, job_id='00000000-0000-4000-8000-000000000000')
+        requested = lineage_resolution_requested(
+            uid,
+            ORIGIN,
+            1.0,
+            2.0,
+            job_id='00000000-0000-4000-8000-000000000000',
+            capture_evidence_claims=deepcopy(S1_CLAIMS) if s1 else None,
+            filenames=['f.opus'] if s1 else (),
+        )
     lines = [r.getMessage() for r in caplog.records if 'event=sync_lineage_resolve' in r.getMessage()]
     outcomes = [call.kwargs['outcome'] for call in metrics.labels.call_args_list]
     return requested, outcomes, lines
 
 
-def test_not_allowlisted_upload_records_a_bounded_id_free_decision(monkeypatch, caplog):
-    requested, outcomes, lines = _decision(monkeypatch, caplog, ('', 'OTHER-A,OTHER-B'))
+@pytest.mark.parametrize('s1', [False, True])
+def test_not_allowlisted_upload_records_a_bounded_id_free_decision(monkeypatch, caplog, s1):
+    requested, outcomes, lines = _decision(monkeypatch, caplog, ('', 'OTHER-A,OTHER-B'), s1=s1)
     assert not requested
     assert outcomes == ['not_allowlisted'] and 'not_allowlisted' in OUTCOMES
     assert len(lines) == 1 and 'outcome=not_allowlisted' in lines[0]
@@ -128,16 +184,22 @@ def test_not_allowlisted_upload_records_a_bounded_id_free_decision(monkeypatch, 
 @pytest.mark.parametrize(
     ('config', 'outcome'), [(OFF, 'disabled'), (('off', 'u'), 'disabled'), (('x', 'u'), 'disabled')]
 )
-def test_kill_switch_records_disabled_even_for_an_allowlisted_uid(monkeypatch, caplog, config, outcome):
-    requested, outcomes, lines = _decision(monkeypatch, caplog, config)
+@pytest.mark.parametrize('s1', [False, True])
+def test_kill_switch_records_disabled_even_for_an_allowlisted_uid(monkeypatch, caplog, config, outcome, s1):
+    requested, outcomes, lines = _decision(monkeypatch, caplog, config, s1=s1)
     assert not requested and outcomes == [outcome]
     assert len(lines) == 1
 
 
 @pytest.mark.parametrize('name', sorted(ACTIVE))
-def test_admitted_upload_binds_per_segment_without_a_gate_decision(monkeypatch, caplog, name):
-    requested, outcomes, lines = _decision(monkeypatch, caplog, ACTIVE[name])
-    assert requested and outcomes == [] and lines == []
+@pytest.mark.parametrize('s1', [False, True])
+def test_admitted_upload_binds_per_segment_without_a_gate_decision(monkeypatch, caplog, name, s1):
+    requested, outcomes, lines = _decision(monkeypatch, caplog, ACTIVE[name], s1=s1)
+    assert requested == s1
+    assert outcomes == ([] if s1 else ['s1_refused'])
+    assert len(lines) == (0 if s1 else 1)
+    if not s1:
+        assert 'outcome=s1_refused' in lines[0] and 'job_ref=none' in lines[0]
 
 
 def test_ineligible_upload_is_untouched_by_the_gate(monkeypatch, caplog):
@@ -159,11 +221,13 @@ def test_metric_help_names_every_bounded_outcome():
     assert tuple(documented) == OUTCOMES
 
 
-async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None):
+async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None, s1=False):
     """One coordinator attempt for harness owner ``uid``; returns (targets, enrichment intents)."""
     configure(monkeypatch, config, 'uid')
     chunks = upload_straddling_next_two()
-    captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
+    captured, kwargs = _drive(
+        module, stubs, chunks, monkeypatch, stamp=gen_id(L), s1_claims=deepcopy(S1_CLAIMS) if s1 else None
+    )
     pipeline = stubs['pipeline']
     pipeline.get_sync_job = MagicMock(return_value={'partial_result': partial or {}})
     by_id = {chunk['id']: f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav" for chunk in chunks}
@@ -180,26 +244,30 @@ async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), parti
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('name', sorted(INACTIVE))
-async def test_coordinator_for_a_refused_uid_is_the_kill_switch_outcome(coordinator, monkeypatch, name):
+@pytest.mark.parametrize('s1', [False, True])
+async def test_coordinator_for_a_refused_uid_is_the_kill_switch_outcome(coordinator, monkeypatch, name, s1):
     module, stubs = coordinator
-    off = await _coordinate(module, stubs, monkeypatch, OFF)
+    off = await _coordinate(module, stubs, monkeypatch, OFF, s1=s1)
     assert off == ([None] * 4, [{}])  # whole-batch resolver: stamp dropped, no lineage retry intent
-    assert await _coordinate(module, stubs, monkeypatch, INACTIVE[name]) == off
+    assert await _coordinate(module, stubs, monkeypatch, INACTIVE[name], s1=s1) == off
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('name', sorted(ACTIVE))
-async def test_coordinator_replay_binds_generations_for_an_admitted_uid(coordinator, monkeypatch, name):
+@pytest.mark.parametrize('s1', [False, True])
+async def test_coordinator_replay_binds_generations_for_an_admitted_uid(coordinator, monkeypatch, name, s1):
     module, stubs = coordinator
-    targets, _ = await _coordinate(module, stubs, monkeypatch, ACTIVE[name])
-    assert targets == [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2
+    expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if s1 else [None] * 4
+    targets, _ = await _coordinate(module, stubs, monkeypatch, ACTIVE[name], s1=s1)
+    assert targets == expected
     # A retry under the same configuration plans the same rows.
-    assert (await _coordinate(module, stubs, monkeypatch, ACTIVE[name]))[0] == targets
+    assert (await _coordinate(module, stubs, monkeypatch, ACTIVE[name], s1=s1))[0] == targets
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('s1', [False, True])
 async def test_allowlist_change_between_attempts_reroutes_only_unlanded_segments_to_the_new_config(
-    coordinator, monkeypatch
+    coordinator, monkeypatch, s1
 ):
     """Decision: the gate is evaluated per attempt, like the kill switch.
 
@@ -212,21 +280,25 @@ async def test_allowlist_change_between_attempts_reroutes_only_unlanded_segments
     landed = [chunk['id'] for chunk in chunks[:2]]
     partial = {'updated_memories': [gen_id(L + 1)]}
     admitted, refused = ('', '{uid}'), ('', 'OTHER-A')
-    pure_off, _ = await _coordinate(module, stubs, monkeypatch, OFF)
-    pure_on, _ = await _coordinate(module, stubs, monkeypatch, admitted)
+    pure_off, _ = await _coordinate(module, stubs, monkeypatch, OFF, s1=s1)
+    pure_on, _ = await _coordinate(module, stubs, monkeypatch, admitted, s1=s1)
     narrowed, narrowed_intent = await _coordinate(
-        module, stubs, monkeypatch, refused, processed=landed, partial=partial
+        module, stubs, monkeypatch, refused, processed=landed, partial=partial, s1=s1
     )
     assert narrowed == ['SKIPPED'] * 2 + pure_off[2:]
     assert narrowed_intent == [{}]
-    widened, widened_intent = await _coordinate(module, stubs, monkeypatch, admitted, processed=landed, partial=partial)
+    widened, widened_intent = await _coordinate(
+        module, stubs, monkeypatch, admitted, processed=landed, partial=partial, s1=s1
+    )
     assert widened == ['SKIPPED'] * 2 + pure_on[2:]
-    assert widened_intent == [{gen_id(L + 1): stubs['pipeline']._LINEAGE_RETRY_LANGUAGE}]
+    expected_intent = [{gen_id(L + 1): stubs['pipeline']._LINEAGE_RETRY_LANGUAGE}] if s1 else [{}]
+    assert widened_intent == expected_intent
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('config', [('', 'OTHER-A'), OFF])
-async def test_narrowing_preserves_an_already_owed_refresh(coordinator, monkeypatch, config):
+@pytest.mark.parametrize('s1', [False, True])
+async def test_narrowing_preserves_an_already_owed_refresh(coordinator, monkeypatch, config, s1):
     module, stubs = coordinator
     landed = [chunk['id'] for chunk in upload_straddling_next_two()]
     owed = gen_id(L + 1)
@@ -235,7 +307,7 @@ async def test_narrowing_preserves_an_already_owed_refresh(coordinator, monkeypa
         'lineage_enrichment_pending': [owed, 'FENCED'],
         'fenced_conversation_ids': ['FENCED'],
     }
-    targets, intent = await _coordinate(module, stubs, monkeypatch, config, processed=landed, partial=partial)
+    targets, intent = await _coordinate(module, stubs, monkeypatch, config, processed=landed, partial=partial, s1=s1)
     assert targets == ['SKIPPED'] * 4
     assert intent == [{owed: stubs['pipeline']._LINEAGE_RETRY_LANGUAGE}]
 
@@ -398,10 +470,20 @@ def test_admitted_refresh_debt_survives_both_receipt_stores_and_excludes_fenced_
 
 
 @pytest.mark.asyncio
-async def test_coordinator_checkpoints_admitted_refresh_debt_before_marking_audio_processed(coordinator, monkeypatch):
+@pytest.mark.parametrize('s1', [False, True])
+async def test_coordinator_checkpoints_admitted_refresh_debt_before_marking_audio_processed(
+    coordinator, monkeypatch, s1
+):
     module, stubs = coordinator
     configure(monkeypatch, ACTIVE['allowlisted'], 'uid')
-    captured, kwargs = _drive(module, stubs, upload_straddling_next_two(), monkeypatch, stamp=gen_id(L))
+    captured, kwargs = _drive(
+        module,
+        stubs,
+        upload_straddling_next_two(),
+        monkeypatch,
+        stamp=gen_id(L),
+        s1_claims=deepcopy(S1_CLAIMS) if s1 else None,
+    )
     pipeline = stubs['pipeline']
     original = pipeline.process_segment
     events = []
@@ -425,7 +507,10 @@ async def test_coordinator_checkpoints_admitted_refresh_debt_before_marking_audi
     )
     assert len(captured) == 4
     assert [event[0] for event in events] == ['receipt', 'processed'] * 4
-    assert events[-2][1]['lineage_enrichment_pending'] == [gen_id(L + 1), gen_id(L + 2)]
+    if s1:
+        assert events[-2][1]['lineage_enrichment_pending'] == [gen_id(L + 1), gen_id(L + 2)]
+    else:
+        assert 'lineage_enrichment_pending' not in events[-2][1]
 
 
 # --- Metadata-only origin stamp stays on the kill switch alone -----------------

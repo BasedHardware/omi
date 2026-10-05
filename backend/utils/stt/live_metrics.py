@@ -1,8 +1,20 @@
 """Bounded live-chain and windowed TDT metrics, collected by the listen scrape."""
 
 from prometheus_client import Counter, Gauge, Histogram
+from typing import NamedTuple
+import threading
 
 from config.live_stt_recovery import recovery_enabled
+
+PAID_SPILLOVER_ADMISSIONS = Counter(
+    'omi_stt_paid_spillover_admissions_total', 'Fleet paid router spillover budget decisions', ['provider', 'outcome']
+)
+NO_TEXT_RESCUE_AUDIO = Counter(
+    'omi_stt_no_text_rescue_audio_seconds_total', 'Paid audio admitted during bounded progress rescue', ['provider']
+)
+NO_TEXT_RESCUE_OUTCOME = Counter(
+    'omi_stt_no_text_rescue_total', 'Bounded no-text rescue intervals and successor proof', ['outcome']
+)
 
 REPLAY_WALL = Histogram(
     'omi_stt_replay_wall_seconds',
@@ -211,6 +223,15 @@ COST_SHADOW = Counter(
     ['agreement', 'static_primary', 'proposed_primary'],
 )
 COST_FAIL_OPEN = Counter('omi_stt_cost_routing_fail_open_total', 'Configured-order router recovery', ['reason'])
+COST_NO_PERMITTED_TARGET = Counter(
+    'omi_stt_cost_routing_no_permitted_target_total',
+    'Routing decisions with no permitted live STT target',
+)
+COST_LANGUAGE_STATE = Counter(
+    'omi_stt_cost_routing_language_state_total',
+    'Global vs language target health disagreements observed at selection',
+    ['target', 'comparison'],
+)
 
 PROVIDER_FAMILIES = ('parakeet', 'modulate', 'soniox', 'deepgram', 'unknown')
 
@@ -237,3 +258,36 @@ if recovery_enabled():
         LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider)
         for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):
             CONNECT_BACKOFF.labels(provider=_provider, event=_event)
+
+
+class SonioxIdleMetrics(NamedTuple):
+    closes: Counter
+    reopens: Counter
+    latency: Histogram
+    failures: Counter
+    avoided: Counter
+
+
+_soniox_idle_metrics: SonioxIdleMetrics | None = None
+_soniox_idle_lock = threading.Lock()
+
+
+def soniox_idle_metrics() -> SonioxIdleMetrics:
+    """Register only when an enabled Soniox socket is constructed; no off series."""
+    global _soniox_idle_metrics
+    with _soniox_idle_lock:
+        if _soniox_idle_metrics is None:
+            _soniox_idle_metrics = SonioxIdleMetrics(
+                Counter('omi_soniox_idle_closes_total', 'Planned paid transport closes'),
+                Counter('omi_soniox_idle_reopens_total', 'Speech-triggered paid transport dials'),
+                Histogram(
+                    'omi_soniox_idle_reopen_seconds',
+                    'Onset to replacement audio admission',
+                    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+                ),
+                Counter('omi_soniox_idle_reopen_failures_total', 'Failed speech-triggered transport dials'),
+                Counter(
+                    'omi_soniox_idle_connected_seconds_avoided_total', 'Estimated wall seconds with transport closed'
+                ),
+            )
+    return _soniox_idle_metrics

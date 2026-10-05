@@ -9254,6 +9254,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Allalaadimine sinu seadmest';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current / $total';
   }
@@ -11239,6 +11249,9 @@ class AppLocalizationsEt extends AppLocalizations {
       'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi loob ühenduse ise uuesti';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name ja teised';
   }
@@ -12218,24 +12231,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Hääl';
-
-  @override
-  String get assistantVoice => 'Assistendi hääl';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Sinu häälevalik on ühine mobiilis ja töölaual.';
-
-  @override
-  String get readChatRepliesAloud => 'Loe vestluse vastused ette';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Räägib ainult siis, kui \"Häälvastus\" seda lubab.';
-
-  @override
-  String get voicePreviewSample => 'Tere, mina olen Omi. See on minu hääl.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
@@ -12305,7 +12300,51 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Ühendust ei saa luua. Kontrolli ühendust ja proovi uuesti.';
+
+  @override
+  String get chatReplyServerError => 'Meie poolel läks midagi valesti. Palun proovi uuesti.';
+
+  @override
+  String get chatReplyTimeout => 'Vastus võttis liiga kaua aega. Palun proovi uuesti.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Sa pole sisse logitud. Logi sisse ja proovi uuesti.';
+
+  @override
+  String get chatAppsLoadFailed => 'Vestlusrakendusi ei õnnestunud laadida. Palun proovi uuesti.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Hääl';
+
+  @override
+  String get assistantVoice => 'Assistendi hääl';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Sinu häälevalik on ühine mobiilis ja töölaual.';
+
+  @override
+  String get readChatRepliesAloud => 'Loe vestluse vastused ette';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Räägib ainult siis, kui \"Häälvastus\" seda lubab.';
+
+  @override
+  String get voicePreviewSample => 'Tere, mina olen Omi. See on minu hääl.';
+
+  @override
   String get peopleStatsIncomplete => 'Arvud võivad olla puudulikud.';
+
+  @override
+  String get previousDay => 'Eelmine päev';
+
+  @override
+  String get nextDay => 'Järgmine päev';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date pole ülesandeid';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Vestlust töödeldakse uuesti…';
@@ -12358,4 +12397,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Kontrollige ühendust';
+
+  @override
+  String get forYou => 'Sulle';
+
+  @override
+  String get stopThese => 'Peata need';
+
+  @override
+  String get dismiss => 'Peida';
+
+  @override
+  String get showOnLockScreen => 'Kuva lukustuskuval';
 }

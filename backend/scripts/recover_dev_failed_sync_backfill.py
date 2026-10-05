@@ -16,7 +16,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from utils.cloud_tasks import SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS, SYNC_JOB_TASK_PAYLOAD_KEYS
+from utils.cloud_tasks import sync_job_payload_keys_valid
 
 
 def selection_reason(row: dict[str, Any], job: dict[str, Any] | None, blobs_present: bool) -> str:
@@ -24,7 +24,7 @@ def selection_reason(row: dict[str, Any], job: dict[str, Any] | None, blobs_pres
     payload = row.get('payload')
     if not isinstance(payload, dict):
         return 'missing_payload'
-    if frozenset(payload) not in (SYNC_JOB_TASK_PAYLOAD_KEYS, SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS):
+    if not sync_job_payload_keys_valid(payload):
         return 'invalid_payload_schema'
     job_id, uid = row.get('job_id'), row.get('uid')
     if not isinstance(job_id, str) or not job_id or not isinstance(uid, str) or not uid:

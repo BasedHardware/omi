@@ -1,0 +1,68 @@
+{
+  "feed": {
+    "schema_version": 1,
+    "enabled": true,
+    "items": [
+      {
+        "id": "0123456789abcdef0123456789abcdef",
+        "producer": "future_registered_producer",
+        "created_at": "2026-10-03T12:00:00Z",
+        "title": "Synthetic follow-up",
+        "body": "Revisit this saved item.",
+        "target": {
+          "kind": "action_item",
+          "id": "synthetic-task"
+        },
+        "acted": false,
+        "dismissed": false,
+        "feedback": "none"
+      }
+    ],
+    "next_cursor": "",
+    "has_more": false,
+    "server_time": "2026-10-03T12:01:00Z"
+  },
+  "outcome": {
+    "item_id": "0123456789abcdef0123456789abcdef",
+    "recorded": true,
+    "acted_24h": true,
+    "negative": false
+  },
+  "producer_items": [
+    {
+      "id": "11111111111111111111111111111111",
+      "producer": "conversation_mentor_v2",
+      "created_at": "2026-10-03T12:00:00Z",
+      "title": "Synthetic mentor",
+      "body": "Revisit this saved item.",
+      "target": {
+        "kind": "conversation",
+        "id": "synthetic-conversation"
+      },
+      "acted": false,
+      "dismissed": false,
+      "feedback": "none"
+    },
+    {
+      "id": "22222222222222222222222222222222",
+      "producer": "commitment_followup",
+      "created_at": "2026-10-03T12:00:00Z",
+      "title": "Synthetic follow-up",
+      "body": "Revisit this saved item.",
+      "target": {
+        "kind": "action_item",
+        "id": "synthetic-task"
+      },
+      "acted": false,
+      "dismissed": false,
+      "feedback": "none"
+    }
+  ],
+  "mentor_push": {
+    "notification_type": "proactivity_v2",
+    "item_id": "11111111111111111111111111111111",
+    "target_kind": "conversation",
+    "target_id": "synthetic-conversation",
+    "navigate_to": "/chat/mentor"
+  }
+}

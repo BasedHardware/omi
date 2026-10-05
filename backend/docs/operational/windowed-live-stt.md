@@ -25,13 +25,13 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | `STT_CIRCUIT_HALF_OPEN_PROBES` | `1` | `1` | `1` |
 | `SONIOX_CIRCUIT_FAILURE_THRESHOLD` | `3` | `3` | `3` |
 | `SONIOX_CIRCUIT_COOLDOWN_SECONDS` | `30` | `30` | `30` |
-| `STT_FAILOVER_RECOVERY_ENABLED` | `false` | `false` | `false` |
+| `STT_FAILOVER_RECOVERY_ENABLED` | `false` | `false` | `true` |
 
 **Failover-recovery gate.** `STT_FAILOVER_RECOVERY_ENABLED` selects the session
 mode once at listen-session start; the pin survives mid-session environment
 changes, delayed component construction, successor legs, and spawned writer
 tasks, so changing the value only affects new sessions or replacement pods.
-**Off** (the default everywhere, including this merge) runs the pre-recovery
+**Off** (the code default and dev listen setting) runs the pre-recovery
 paths: the 135-second capture cap and legacy reconnect budgets (3 total, 2 per
 minute, 30s cumulative replay), plain `asyncio.Queue` provider send queues
 without writer pacing, the legacy finalize/EOS order, legacy circuit
@@ -42,14 +42,14 @@ are unchanged), and the unmanaged `_finishing` latch. The new recovery metrics (
 `omi_stt_recovery_attempts_total`, `omi_stt_connect_backoff_total`,
 `omi_live_session_terminal_after_text_total`) still register but never emit
 values in this mode; baseline metrics such as `omi_stt_replay_seconds_total`
-and `omi_stt_reconnect_total` are unchanged. **On**, intended only for the
-canary Deployment with `STT_FAILOVER_RECOVERY_ENABLED=true`, the recovery
+and `omi_stt_reconnect_total` are unchanged. **On**, configured for prod listen
+with `STT_FAILOVER_RECOVERY_ENABLED=true`, the recovery
 state machine applies: `LiveRecoveryController`, the shared 60s
 episode, 150s bounded replacement headroom, paced `AudioSendQueue` replay, and
 release-not-bench 429 probe handling. **Every recovery description in this
 document below applies only to flag-on sessions.**
 
-The production scrape exposes pod names, not the `track=canary` label. Set
+For the pre-flip canary comparison, set
 `${canary_pods:regex}` to the escaped exact enabled-canary pod names and
 `${control_pods:regex}` to the escaped exact flag-off control pod names;
 refresh those lists after replacement. These are proposed watches, not executed
@@ -65,7 +65,13 @@ sum(increase(omi_stt_recovery_attempts_total{job="backend-listen-metrics",namesp
 New recovery counters and histogram observation counts must stay zero on
 flag-off controls. Missing telemetry is not proof of darkness or health; the
 coordinator must verify scrape coverage and actual per-pod flag configuration.
-This merge is inert — it performs no deploy and changes no running session.
+The stable enablement deploys through the normal listen Helm workflow,
+`gcp_backend_listen_helm.yml` (`environment=prod`, `mode=deploy`). Roll back by
+reverting the enablement PR and deploying listen, or use that workflow with
+`mode=rollback` for an emergency Helm rollback. Enabling recovery also enables
+the canary-only TAT metric fleet-wide; relax the canary-scoped alert selectors
+from #20660 in a follow-up after the stable rollout. This config change does
+not change those alerts.
 
 The first flag gates all new routing/breaker behavior, including account cooldown,
 last-resort primary admission and Soniox's own circuit configuration. With it off,
@@ -382,9 +388,12 @@ is the sole repeat grant. A typed `LiveChainExhausted` latches exhaustion so
 concurrent send/monitor races cannot redial.
 
 Recovery legs opt into per-leg writer pacing at the transport, not just
-admission: each write starts no earlier than `previous_start + audio_duration`
-(sustained ≤1x, no catch-up credit on a stalled-then-resumed transport), with
-each `ws.send` bounded by `min(2s, episode remaining)`. The observable burst
+admission: the armed slot advances from the previously armed slot, so
+sub-frame timer oversleep is compensated against the accumulated slot instead
+of drifting, while a stall of one frame or longer rebases on the clock and
+discards missed-slot credit (sustained ≤1x, no catch-up burst on a
+stalled-then-resumed transport), with each `ws.send` bounded by `min(2s,
+episode remaining)`. The observable burst
 allowance is bounded queue+in-flight bytes (at most two 16KiB frames); that
 bound never grows. Prefix delivery — replay enqueues plus the frozen transport
 writes they owed — must complete inside the **20s prefix wall**, not just the

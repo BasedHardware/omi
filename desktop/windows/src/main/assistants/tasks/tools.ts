@@ -4,14 +4,14 @@
 // (TaskAssistant.swift:963–1038): every name, type, enum value, and description
 // string below is verbatim.
 //
-// TYPES ARE REUSED from `insight/models.ts` (the same wire shapes the tool loop
+// TYPES ARE REUSED from `core/geminiTypes.ts` (the same wire shapes the tool loop
 // serializes), via indexed access — NOT re-declared. insight's tools never used
 // an array parameter, so its `PropertySpec` has no `items`; `extract_task.tags`
 // is Gemini's one array field, which the protocol requires to carry an `items`
 // sub-spec. So the task property type is insight's exact shape widened with an
 // optional `items` — an additive superset, still structurally assignable back to
 // insight's `GeminiTool` for the shared wire layer.
-import type { GeminiTool } from '../insight/models'
+import type { GeminiTool } from '../core/geminiTypes'
 
 type InsightFunctionDeclaration = GeminiTool['function_declarations'][number]
 type InsightPropertySpec = InsightFunctionDeclaration['parameters']['properties'][string]

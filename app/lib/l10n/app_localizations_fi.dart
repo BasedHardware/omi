@@ -9260,6 +9260,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Ladataan laitteeltasi';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current / $total';
   }
@@ -11248,6 +11258,9 @@ class AppLocalizationsFi extends AppLocalizations {
       'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi yhdistää itsestään uudelleen';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name ja muut';
   }
@@ -12228,24 +12241,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Ääni';
-
-  @override
-  String get assistantVoice => 'Avustajan ääni';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Äänivalintasi on yhteinen mobiilissa ja työpöydällä.';
-
-  @override
-  String get readChatRepliesAloud => 'Lue chat-vastaukset ääneen';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Puhuu vain, kun Äänivastaus sen sallii.';
-
-  @override
-  String get voicePreviewSample => 'Hei, olen Omi. Tämä on ääneni.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }
@@ -12315,7 +12310,51 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Yhteyttä ei voitu muodostaa. Tarkista yhteys ja yritä uudelleen.';
+
+  @override
+  String get chatReplyServerError => 'Jotain meni pieleen meidän puolellamme. Yritä uudelleen.';
+
+  @override
+  String get chatReplyTimeout => 'Vastaus kesti liian kauan. Yritä uudelleen.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Et ole kirjautunut sisään. Kirjaudu sisään ja yritä uudelleen.';
+
+  @override
+  String get chatAppsLoadFailed => 'Chat-sovelluksia ei voitu ladata. Yritä uudelleen.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Ääni';
+
+  @override
+  String get assistantVoice => 'Avustajan ääni';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Äänivalintasi on yhteinen mobiilissa ja työpöydällä.';
+
+  @override
+  String get readChatRepliesAloud => 'Lue chat-vastaukset ääneen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Puhuu vain, kun Äänivastaus sen sallii.';
+
+  @override
+  String get voicePreviewSample => 'Hei, olen Omi. Tämä on ääneni.';
+
+  @override
   String get peopleStatsIncomplete => 'Määrät voivat olla puutteellisia.';
+
+  @override
+  String get previousDay => 'Edellinen päivä';
+
+  @override
+  String get nextDay => 'Seuraava päivä';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Ei tehtäviä $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Keskustelua käsitellään uudelleen…';
@@ -12368,4 +12407,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Tarkista yhteys';
+
+  @override
+  String get forYou => 'Sinulle';
+
+  @override
+  String get stopThese => 'Lopeta nämä';
+
+  @override
+  String get dismiss => 'Hylkää';
+
+  @override
+  String get showOnLockScreen => 'Näytä lukitusnäytöllä';
 }

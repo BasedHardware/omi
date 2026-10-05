@@ -86,6 +86,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     _updateState(DeviceTransportState.connecting);
 
     _deviceReadyCompleter = Completer<List<BleService>>();
+    final deviceReady = _deviceReadyCompleter!.future;
+    // A disconnect can arrive while the platform's manageDevice reply is pending.
+    // Observe that error immediately; the await below still delivers it to connect's caller.
+    deviceReady.ignore();
 
     try {
       await _hostApi.manageDevice(_peripheralUuid, requiresBond);
@@ -97,7 +101,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     }
 
     try {
-      _services = await _deviceReadyCompleter!.future.timeout(
+      _services = await deviceReady.timeout(
         const Duration(seconds: 60),
         onTimeout: () => throw TimeoutException('Device ready timeout after 60s'),
       );
@@ -393,13 +397,15 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
           }
         }
       }
-      unawaited(Future.wait(controlSubscriptions).then((_) {
-        for (final key in _activeSubscriptionKeys) {
-          final parts = key.split(':');
-          if (parts.length != 2 || !isBleAudioCharacteristicUuid(parts[1])) continue;
-          unawaited(_subscribeCharacteristic(parts[0], parts[1]));
-        }
-      }));
+      unawaited(
+        Future.wait(controlSubscriptions).then((_) {
+          for (final key in _activeSubscriptionKeys) {
+            final parts = key.split(':');
+            if (parts.length != 2 || !isBleAudioCharacteristicUuid(parts[1])) continue;
+            unawaited(_subscribeCharacteristic(parts[0], parts[1]));
+          }
+        }),
+      );
 
       _updateState(DeviceTransportState.connected);
       _audioSilenceResubscribes = 0;
@@ -454,7 +460,8 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     // Waiting for the native confirmation is not a retry. In particular its
     // confirmation wait must not consume the one retry at the 4-second watch.
     if (_pendingSubscriptions.entries.any(
-        (entry) => entry.value == _subscriptionGeneration && isBleAudioCharacteristicUuid(entry.key.split(':').last))) {
+      (entry) => entry.value == _subscriptionGeneration && isBleAudioCharacteristicUuid(entry.key.split(':').last),
+    )) {
       _armAudioLivenessWatch();
       return;
     }

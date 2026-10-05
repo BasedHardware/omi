@@ -1438,6 +1438,52 @@ import XCTest
       }
     }
 
+    func testAutomaticJournalHistoryIsHiddenWhileAgentRichReplyIsProjected() throws {
+      let provider = ChatProvider()
+      let surface = provider.mainChatSurfaceReference()
+      let rawBlocks: [[String: Any]] = [
+        ["type": "taskCard", "id": "task-block", "taskId": "task"],
+        ["type": "goalLink", "id": "goal-block", "goalId": "goal", "summary": "Goal"],
+        ["type": "conversationLink", "id": "meeting-block", "conversationId": "meeting", "summary": "Notes"],
+      ]
+      func entry(_ id: String, metadata: String) throws -> KernelJournalTurn {
+        try XCTUnwrap(
+          KernelJournalTurn(dictionary: [
+            "turnId": id, "role": "assistant", "content": "", "status": "completed",
+            "surfaceKind": surface.surfaceKind, "externalRefKind": surface.externalRefKind,
+            "externalRefId": surface.externalRefId, "origin": "typed_chat", "contentBlocks": rawBlocks,
+            "metadataJson": metadata, "createdAtMs": 1000,
+          ]))
+      }
+      let old = try entry(
+        "automatic", metadata: #"{"chatFirstIntentId":"old","chatFirstIntentSource":"capture_arrival"}"#)
+      provider.messages = [old.chatMessage()]
+      provider.projectJournalTurns([
+        old,
+        try entry("reply", metadata: #"{"continuityKey":"user-turn"}"#),
+        try entry("daily", metadata: #"{"chatFirstIntentSource":"daily_opener"}"#),
+        try entry("cold", metadata: #"{"chatFirstIntentSource":"cold_start_rich"}"#),
+        try entry("notification", metadata: #"{"continuityKey":"notification:old"}"#),
+      ])
+      XCTAssertEqual(provider.messages.map(\.id), ["reply"])
+      XCTAssertEqual(provider.messages[0].contentBlocks.count, 3)
+    }
+
+    func testUserNotificationFollowupAndColdStartAnswerStayInJournalProjection() throws {
+      let provider = ChatProvider()
+      let surface = provider.mainChatSurfaceReference()
+      let notification = try turn(
+        surface: surface, turnId: "notification-user", turnSeq: 1, role: "user",
+        content: "Follow up", metadata: #"{"continuityKey":"notification:old"}"#)
+      let answer = try turn(
+        surface: surface, turnId: "cold-start-answer", turnSeq: 2, role: "user",
+        content: "My answer", metadata: #"{"coldStartSequence":{"id":"old-sequence","step":1}}"#)
+      XCTAssertFalse(notification.isAutomaticChatEntry)
+      XCTAssertFalse(answer.isAutomaticChatEntry)
+      provider.projectJournalTurns([notification, answer])
+      XCTAssertEqual(Set(provider.messages.map(\.id)), ["notification-user", "cold-start-answer"])
+    }
+
     private func turn(
       surface: AgentSurfaceReference,
       turnId: String,

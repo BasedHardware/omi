@@ -110,7 +110,23 @@ rules:
         overrides:
           namespace: { resource: "namespace" }
           pod: { resource: "pod" }
-    # Total active NLLB translation requests for HPA (concurrency-based autoscaling)
+    - metricsQuery: histogram_quantile(0.99, sum(rate(parakeet_request_duration_seconds_bucket{<<.LabelMatchers>>}[2m])) by (le))
+      name:
+        as: parakeet_request_latency_p99
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+      seriesQuery: parakeet_request_duration_seconds_bucket{namespace!=""}
+    - metricsQuery: avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))
+      name:
+        as: parakeet_gpu_utilization
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+      seriesQuery: DCGM_FI_DEV_GPU_UTIL{namespace!=""}
+    # Keep for the prod NLLB chart's concurrency HPA, even while live is CPU-only.
     - name:
         as: "nllb_active_requests_total"
       seriesQuery: 'nllb_active_requests{namespace!=""}'
@@ -118,5 +134,36 @@ rules:
       resources:
         overrides:
           namespace: { resource: "namespace" }
+  custom:
+    - metricsQuery: sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+      name:
+        as: parakeet_active_streams
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          pod:
+            resource: pod
+      seriesQuery: parakeet_active_streams{namespace!="",pod!=""}
+    - metricsQuery: sum(parakeet_active_batch_requests{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+      name:
+        as: parakeet_active_batch_requests
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          pod:
+            resource: pod
+      seriesQuery: parakeet_active_batch_requests{namespace!="",pod!=""}
+    - metricsQuery: (sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>) + sum(parakeet_active_batch_requests{<<.LabelMatchers>>}) by (<<.GroupBy>>))
+      name:
+        as: parakeet_active_requests_total
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          pod:
+            resource: pod
+      seriesQuery: parakeet_active_streams{namespace!="",pod!=""}
 extraArguments:
   - --metrics-max-age=5m

@@ -67,7 +67,12 @@ class DeviceHealthTelemetry {
     var drainLevels = 0;
     var drainHours = 0.0;
     var chargeEvents = 0;
+    var cliffCount = 0;
+    var maxStepDrop = 0;
+    var maxStepDropSeconds = 0.0;
     Map? previousBattery;
+    int? lastOffChargerMvMin;
+    int? lastOffChargerMvMax;
     for (final point in battery) {
       final ts = (point['ts'] as num?)?.toInt() ?? 0;
       if (ts < start || ts >= end) {
@@ -75,21 +80,48 @@ class DeviceHealthTelemetry {
         continue;
       }
       if (point['charging'] == true && previousBattery?['charging'] != true) chargeEvents++;
-      if (previousBattery != null && point['charging'] == false && previousBattery['charging'] == false) {
+      if (previousBattery != null) {
         final priorTs = (previousBattery['ts'] as num?)?.toInt() ?? 0;
         final elapsed = (ts - priorTs) / 3600000;
         final drop = ((previousBattery['level'] as num?) ?? 0) - ((point['level'] as num?) ?? 0);
-        if (elapsed > 0 && elapsed <= 2 && drop > 0) {
+        // Unknown flags still count as drain, but an explicitly charging
+        // endpoint on either side excludes the interval. The previous day's
+        // last sample still anchors the first interval of the day so a drain
+        // window crossing midnight is counted by this day's rollup.
+        final draining = point['charging'] != true && previousBattery['charging'] != true;
+        if (elapsed > 0 && elapsed <= 2 && drop > 0 && draining) {
           drainLevels += drop.toInt();
           drainHours += elapsed;
+        }
+        if (priorTs >= start && priorTs < end && ts > priorTs && ts - priorTs <= 10 * 60 * 1000 && drop >= 30) {
+          cliffCount++;
+          if (drop > maxStepDrop) {
+            maxStepDrop = drop.toInt();
+            maxStepDropSeconds = (ts - priorTs) / 1000;
+          }
         }
       }
       previousBattery = point;
     }
     final observedBoots = <int>{};
+    int? chargePinEdgesMax;
+    int? socFrozenSamples;
     for (final read in firmware) {
       final ts = (read['ts'] as num?)?.toInt() ?? 0;
       if (ts < start || ts >= end) continue;
+      final edges = read['charge_pin_edges'];
+      if (edges is num && (chargePinEdgesMax == null || edges > chargePinEdgesMax)) {
+        chargePinEdgesMax = edges.toInt();
+      }
+      final offChargerMv = read['last_off_charger_mv'];
+      if (offChargerMv is num) {
+        final value = offChargerMv.toInt();
+        if (lastOffChargerMvMin == null || value < lastOffChargerMvMin) lastOffChargerMvMin = value;
+        if (lastOffChargerMvMax == null || value > lastOffChargerMvMax) lastOffChargerMvMax = value;
+      }
+      if (read['soc_frozen'] is bool) {
+        socFrozenSamples = (socFrozenSamples ?? 0) + (read['soc_frozen'] == true ? 1 : 0);
+      }
       final bootAt = ts - (((read['uptime_s'] as num?)?.toInt() ?? 0) * 1000);
       final bootBucket = bootAt ~/ 60000;
       if (!observedBoots.add(bootBucket)) continue;
@@ -109,6 +141,13 @@ class DeviceHealthTelemetry {
       'audio_packet_loss_ratio': expected == 0 ? 0 : (expected - received).clamp(0, expected) / expected,
       'drain_percent_per_hour': drainHours == 0 ? 0 : drainLevels / drainHours,
       'charge_events': chargeEvents,
+      'cliff_count': cliffCount,
+      'max_step_drop': maxStepDrop,
+      'max_step_drop_seconds': maxStepDropSeconds,
+      if (chargePinEdgesMax != null) 'charge_pin_edges_max': chargePinEdgesMax,
+      if (lastOffChargerMvMin != null) 'last_off_charger_mv_min': lastOffChargerMvMin,
+      if (lastOffChargerMvMax != null) 'last_off_charger_mv_max': lastOffChargerMvMax,
+      if (socFrozenSamples != null) 'soc_frozen_samples': socFrozenSamples,
       'device_resets_by_reason': resets,
     };
   }

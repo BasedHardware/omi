@@ -9340,6 +9340,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Dina-download mula sa iyong device';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current ng $total';
   }
@@ -11341,6 +11351,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Kusang kokonekta muli ang Omi';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name at iba pa';
   }
@@ -12325,24 +12338,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Boses';
-
-  @override
-  String get assistantVoice => 'Boses ng Assistant';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Ang napili mong boses ay ibinabahagi sa mobile at desktop.';
-
-  @override
-  String get readChatRepliesAloud => 'Basahin nang malakas ang mga sagot sa chat';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Magsasalita lamang kapag pinapayagan ng Voice response.';
-
-  @override
-  String get voicePreviewSample => 'Hi, ako si Omi. Ito ang boses ko.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
@@ -12412,7 +12407,51 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Hindi makakonekta. Suriin ang iyong koneksyon at subukan ulit.';
+
+  @override
+  String get chatReplyServerError => 'May nangyaring mali sa aming panig. Subukan muli.';
+
+  @override
+  String get chatReplyTimeout => 'Napakatagal ng sagot. Subukan muli.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Hindi ka naka-sign in. Mag-sign in at subukan muli.';
+
+  @override
+  String get chatAppsLoadFailed => 'Hindi ma-load ang mga chat app. Subukan muli.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Boses';
+
+  @override
+  String get assistantVoice => 'Boses ng Assistant';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ang napili mong boses ay ibinabahagi sa mobile at desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Basahin nang malakas ang mga sagot sa chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Magsasalita lamang kapag pinapayagan ng Voice response.';
+
+  @override
+  String get voicePreviewSample => 'Hi, ako si Omi. Ito ang boses ko.';
+
+  @override
   String get peopleStatsIncomplete => 'Maaaring hindi kumpleto ang mga bilang.';
+
+  @override
+  String get previousDay => 'Nakaraang araw';
+
+  @override
+  String get nextDay => 'Susunod na araw';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Walang gawain noong $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Muling pinoproseso ang pag-uusap…';
@@ -12465,4 +12504,16 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Suriin ang Koneksyon';
+
+  @override
+  String get forYou => 'Para Sa Iyo';
+
+  @override
+  String get stopThese => 'Itigil Ang Mga Ito';
+
+  @override
+  String get dismiss => 'Isara';
+
+  @override
+  String get showOnLockScreen => 'Ipakita sa lock screen';
 }

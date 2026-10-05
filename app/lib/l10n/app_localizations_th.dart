@@ -9208,6 +9208,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncCardDownloadingTitle => 'กำลังดาวน์โหลดจากอุปกรณ์ของคุณ';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current จาก $total';
   }
@@ -11184,6 +11194,9 @@ class AppLocalizationsTh extends AppLocalizations {
       'จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi จะเชื่อมต่อใหม่เอง';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name และคนอื่นๆ';
   }
@@ -12158,24 +12171,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'เสียง';
-
-  @override
-  String get assistantVoice => 'เสียงผู้ช่วย';
-
-  @override
-  String get voiceSharedAcrossDevices => 'เสียงที่คุณเลือกจะใช้ร่วมกันทั้งบนมือถือและเดสก์ท็อป';
-
-  @override
-  String get readChatRepliesAloud => 'อ่านคำตอบแชทออกเสียง';
-
-  @override
-  String get readChatRepliesAloudDescription => 'พูดเฉพาะเมื่อการตอบกลับด้วยเสียงอนุญาตเท่านั้น';
-
-  @override
-  String get voicePreviewSample => 'สวัสดี ฉันคือ Omi นี่คือเสียงของฉัน';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ของเสียงนี้';
   }
@@ -12245,7 +12240,51 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'ไม่สามารถเชื่อมต่อได้ โปรดตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
+
+  @override
+  String get chatReplyServerError => 'เกิดข้อผิดพลาดจากฝั่งเรา โปรดลองอีกครั้ง';
+
+  @override
+  String get chatReplyTimeout => 'คำตอบใช้เวลานานเกินไป โปรดลองอีกครั้ง';
+
+  @override
+  String get chatReplyNotSignedIn => 'คุณยังไม่ได้เข้าสู่ระบบ เข้าสู่ระบบแล้วลองอีกครั้ง';
+
+  @override
+  String get chatAppsLoadFailed => 'ไม่สามารถโหลดแอปแชทได้ โปรดลองอีกครั้ง';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'เสียง';
+
+  @override
+  String get assistantVoice => 'เสียงผู้ช่วย';
+
+  @override
+  String get voiceSharedAcrossDevices => 'เสียงที่คุณเลือกจะใช้ร่วมกันทั้งบนมือถือและเดสก์ท็อป';
+
+  @override
+  String get readChatRepliesAloud => 'อ่านคำตอบแชทออกเสียง';
+
+  @override
+  String get readChatRepliesAloudDescription => 'พูดเฉพาะเมื่อการตอบกลับด้วยเสียงอนุญาตเท่านั้น';
+
+  @override
+  String get voicePreviewSample => 'สวัสดี ฉันคือ Omi นี่คือเสียงของฉัน';
+
+  @override
   String get peopleStatsIncomplete => 'จำนวนอาจไม่ครบถ้วน';
+
+  @override
+  String get previousDay => 'วันก่อนหน้า';
+
+  @override
+  String get nextDay => 'วันถัดไป';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'ไม่มีงานในวันที่ $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'กำลังประมวลผลการสนทนาอีกครั้ง…';
@@ -12298,4 +12337,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'ตรวจสอบการเชื่อมต่อ';
+
+  @override
+  String get forYou => 'สำหรับคุณ';
+
+  @override
+  String get stopThese => 'หยุดรายการแบบนี้';
+
+  @override
+  String get dismiss => 'ปิด';
+
+  @override
+  String get showOnLockScreen => 'แสดงบนหน้าจอล็อก';
 }

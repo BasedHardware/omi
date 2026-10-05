@@ -1,7 +1,7 @@
 # Live Proactive Suggestions — design
 
 **Date:** 2026-07-25
-**Status:** proposed
+**Status:** historical design; old Insight/context/JIT proactivity and Interject superseded by the 2026-10-03 v2 cut. Focus remains supported. See `backend/docs/proactivity-v2-retirement.md`.
 **Surface:** macOS desktop (`desktop/macos`), notch / floating control bar
 
 ## Problem

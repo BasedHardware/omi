@@ -991,6 +991,8 @@ Future<ConversationSearchResult> searchConversationsServerResult(
     url: '${Env.apiBaseUrl}v1/conversations/search',
     headers: {},
     method: 'POST',
+    timeout: const Duration(seconds: 15),
+    retries: 0,
     body: jsonEncode({
       'query': query,
       'page': page ?? 1,

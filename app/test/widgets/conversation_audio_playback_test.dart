@@ -118,20 +118,22 @@ void main() {
 
     test('parts without start times still play, but transcript taps cannot be placed', () {
       final plan = ConversationPlaybackPlan.resolve(
-        AudioUrlsResponse(files: [_url('a', 'cached')]),
-        [_file('a')],
-        conversationStart: _start,
-      );
+          AudioUrlsResponse(files: [_url('a', 'cached')]),
+          [
+            _file('a'),
+          ],
+          conversationStart: _start);
       expect(plan.parts, hasLength(1));
       expect(plan.mapper, isNull);
     });
 
     test('a part with no recorded length takes the URL’s length', () {
       final plan = ConversationPlaybackPlan.resolve(
-        AudioUrlsResponse(files: [_url('a', 'cached', duration: 42)]),
-        [_file('a', duration: 0, startsAfterSeconds: 0)],
-        conversationStart: _start,
-      );
+          AudioUrlsResponse(files: [_url('a', 'cached', duration: 42)]),
+          [
+            _file('a', duration: 0, startsAfterSeconds: 0),
+          ],
+          conversationStart: _start);
       expect(plan.duration, const Duration(seconds: 42));
     });
 
@@ -189,8 +191,9 @@ void main() {
       return provider;
     }
 
-    testWidgets('a refused or failed request says so at once instead of spinning, and the next tap retries',
-        (tester) async {
+    testWidgets('a refused or failed request says so at once instead of spinning, and the next tap retries', (
+      tester,
+    ) async {
       var fetches = 0;
       await pumpBar(tester, (_) async {
         fetches++;
@@ -219,8 +222,9 @@ void main() {
       expect(find.bySemanticsLabel('Play'), findsOneWidget);
     });
 
-    testWidgets('waits while the audio is built, then reports a file that will not load and leaves Play',
-        (tester) async {
+    testWidgets('waits while the audio is built, then reports a file that will not load and leaves Play', (
+      tester,
+    ) async {
       final responses = [
         AudioUrlsResponse(files: [_url('a', 'pending')], pollAfterMs: 10),
         AudioUrlsResponse(files: [_url('a', 'cached')]),

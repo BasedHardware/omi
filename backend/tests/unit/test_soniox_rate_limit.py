@@ -337,6 +337,9 @@ async def test_router_on_target_429_releases_target_probe_without_bench(monkeypa
     monkeypatch.setattr(live_chain.health, 'quarantine', lambda *args: quarantined.append(args))
     monkeypatch.setattr(live_chain.health, 'quarantine_target', lambda *args: quarantined.append(args))
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    selected = live_chain.registry()[0]
+    circuit = live_router.target_circuit(selected, streaming._soniox_circuit)
+    assert circuit is streaming._soniox_circuit
 
     async def connect():
         raise SonioxRateLimitError('transient 429')
@@ -352,9 +355,10 @@ async def test_router_on_target_429_releases_target_probe_without_bench(monkeypa
             routing_language='en',
         )
 
-    target_circuit = live_router._target_circuits['soniox-b']
-    assert target_circuit.state == 'closed'
-    assert target_circuit._failures == 0
+    assert live_router.target_circuit(selected, streaming._soniox_circuit) is circuit
+    assert circuit.state == 'closed'
+    assert circuit._failures == 0
+    assert circuit._probes_in_flight == 0
     assert streaming._soniox_circuit._probes_in_flight == 0
     assert quarantined == []
 
@@ -412,6 +416,7 @@ def test_managed_socket_gauge_tracks_physical_close_not_death_latch():
     socket._local_death_reason = None
     socket._replay_failure_reason = None
     socket._closing_for_health = False
+    socket._rescue_timer = None
     from utils.stt.live_outcome import LiveLegOutcome
 
     socket.leg_outcome = LiveLegOutcome('soniox', 'en', None, None, lambda *args: True)

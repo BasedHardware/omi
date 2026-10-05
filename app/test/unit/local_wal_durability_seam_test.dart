@@ -126,8 +126,11 @@ void main() {
 
     final index = await WalFileManager.loadWals();
     final colliding = index.where((w) => w.timerStart == ts && w.device == 'devkit-1').toList();
-    expect(colliding, hasLength(2),
-        reason: 'distinct audio sharing device+timerStart must not be dropped or overwrite');
+    expect(
+      colliding,
+      hasLength(2),
+      reason: 'distinct audio sharing device+timerStart must not be dropped or overwrite',
+    );
     expect(colliding.map((w) => w.filePath).toSet(), hasLength(2));
     await sync.stop();
   });

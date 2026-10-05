@@ -150,22 +150,15 @@ def _stub_meeting_backfill(monkeypatch, candidates=None):
     )
 
 
-def test_meeting_receipt_reconciler_redrives_one_missing_intent(monkeypatch):
-    candidate = {'job_id': 'job-1', 'uid': 'uid-1', 'conversation_id': 'conversation-1'}
+def test_meeting_receipt_reconciler_does_not_redrive_missing_chat_intents(monkeypatch):
     monkeypatch.setattr(conversation_finalization, 'is_meeting_receipt_reconciler_enabled', lambda: True)
     monkeypatch.setattr(
         conversation_finalization.jobs_db,
         'get_meeting_receipt_reconcile_candidates',
-        lambda **kwargs: [candidate],
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError('retired Chat queue must not be read')),
     )
-    repair = mock.Mock(return_value=True)
-    monkeypatch.setattr(conversation_finalization, 'repair_meeting_receipt_intent', repair)
     _stub_meeting_backfill(monkeypatch)
-
-    result = reconcile_meeting_receipts()
-
-    assert result == {'repaired': 1, 'backfilled': 0, 'skipped': 0, 'error': 0}
-    repair.assert_called_once_with(candidate)
+    assert reconcile_meeting_receipts() == {'repaired': 0, 'backfilled': 0, 'skipped': 0, 'error': 0}
 
 
 def test_meeting_receipt_backfill_repairs_two_2026_08_19_shaped_rows(monkeypatch):
@@ -181,7 +174,7 @@ def test_meeting_receipt_backfill_repairs_two_2026_08_19_shaped_rows(monkeypatch
     )
     _stub_meeting_backfill(monkeypatch, candidates)
     record = mock.Mock(return_value={'status': 'recorded'})
-    monkeypatch.setattr(conversation_finalization, 'record_and_persist_finalized_meeting_receipt', record)
+    monkeypatch.setattr(conversation_finalization, 'record_finalized_meeting_receipt', record)
 
     result = reconcile_meeting_receipts()
 

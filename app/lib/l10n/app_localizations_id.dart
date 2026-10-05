@@ -9265,6 +9265,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Mengunduh dari perangkat Anda';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current dari $total';
   }
@@ -11255,6 +11265,9 @@ class AppLocalizationsId extends AppLocalizations {
       'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
 
   @override
+  String get capturePendantDisconnectedShort => 'Omi akan menyambung kembali sendiri';
+
+  @override
   String participantsSummaryUncounted(String name) {
     return '$name dan lainnya';
   }
@@ -12236,24 +12249,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get assistantVoiceSettingsTitle => 'Suara';
-
-  @override
-  String get assistantVoice => 'Suara Asisten';
-
-  @override
-  String get voiceSharedAcrossDevices => 'Pilihan suara Anda dibagikan di seluler dan desktop.';
-
-  @override
-  String get readChatRepliesAloud => 'Bacakan balasan chat';
-
-  @override
-  String get readChatRepliesAloudDescription => 'Hanya berbicara saat Respons Suara mengizinkannya.';
-
-  @override
-  String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
-
-  @override
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
@@ -12323,7 +12318,51 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get chatReplyOffline => 'Tidak dapat terhubung. Periksa koneksi Anda dan coba lagi.';
+
+  @override
+  String get chatReplyServerError => 'Terjadi kesalahan di sisi kami. Silakan coba lagi.';
+
+  @override
+  String get chatReplyTimeout => 'Respons memakan waktu terlalu lama. Silakan coba lagi.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Anda belum masuk. Masuk dan coba lagi.';
+
+  @override
+  String get chatAppsLoadFailed => 'Tidak dapat memuat aplikasi chat. Silakan coba lagi.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Suara';
+
+  @override
+  String get assistantVoice => 'Suara Asisten';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Pilihan suara Anda dibagikan di seluler dan desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Bacakan balasan chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Hanya berbicara saat Respons Suara mengizinkannya.';
+
+  @override
+  String get voicePreviewSample => 'Hai, saya Omi. Ini suara saya.';
+
+  @override
   String get peopleStatsIncomplete => 'Jumlah mungkin belum lengkap.';
+
+  @override
+  String get previousDay => 'Hari sebelumnya';
+
+  @override
+  String get nextDay => 'Hari berikutnya';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Tidak ada tugas pada $date';
+  }
 
   @override
   String get reprocessingConversationProgress => 'Memproses ulang percakapan…';
@@ -12376,4 +12415,16 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Periksa Koneksi';
+
+  @override
+  String get forYou => 'Untuk Anda';
+
+  @override
+  String get stopThese => 'Hentikan Ini';
+
+  @override
+  String get dismiss => 'Tutup';
+
+  @override
+  String get showOnLockScreen => 'Tampilkan di layar kunci';
 }

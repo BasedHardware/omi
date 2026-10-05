@@ -12,12 +12,13 @@ import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 
 class _ScriptedTransport extends DeviceTransport {
-  _ScriptedTransport(
-      {required this.infoPayload,
-      this.enableStatus = 0,
-      this.grantedCaps,
-      this.advanceStatus = 0,
-      this.dropEnableAck = false});
+  _ScriptedTransport({
+    required this.infoPayload,
+    this.enableStatus = 0,
+    this.grantedCaps,
+    this.advanceStatus = 0,
+    this.dropEnableAck = false,
+  });
 
   final List<int>? infoPayload;
   final int enableStatus;
@@ -68,9 +69,11 @@ class _ScriptedTransport extends DeviceTransport {
       case RingProtocol.cmdCustodyEnable:
         if (dropEnableAck) break;
         final held = holdEnableAck;
-        void sendAck() => _notify.add(grantedCaps != null
-            ? [RingProtocol.notifyAck, enableStatus, grantedCaps!]
-            : [RingProtocol.notifyAck, enableStatus]);
+        void sendAck() => _notify.add(
+              grantedCaps != null
+                  ? [RingProtocol.notifyAck, enableStatus, grantedCaps!]
+                  : [RingProtocol.notifyAck, enableStatus],
+            );
         if (held != null) {
           unawaited(held.future.then((_) => sendAck()));
           break;
@@ -141,26 +144,28 @@ Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 50))
 bool _hasOp(_ScriptedTransport t, int op) => t.writes.any((w) => w[0] == op);
 
 void main() {
-  test('ring firmware >= 3.0.20 probes INFO at connect; 0x14 opt-in only once a real audio listener attaches',
-      () async {
-    final t = _ScriptedTransport(infoPayload: _v1Info(), grantedCaps: 0x0F);
-    final conn = OmiDeviceConnection(_device('3.0.21'), t);
-    t.emit(DeviceTransportState.connected);
-    await _settle();
+  test(
+    'ring firmware >= 3.0.20 probes INFO at connect; 0x14 opt-in only once a real audio listener attaches',
+    () async {
+      final t = _ScriptedTransport(infoPayload: _v1Info(), grantedCaps: 0x0F);
+      final conn = OmiDeviceConnection(_device('3.0.21'), t);
+      t.emit(DeviceTransportState.connected);
+      await _settle();
 
-    expect(_hasOp(t, RingProtocol.cmdInfo), isTrue);
-    expect(conn.lastRingInfo, isNotNull);
-    expect(_hasOp(t, RingProtocol.cmdCustodyEnable), isFalse);
-    expect(conn.ringLivePersistEnabled, isFalse);
+      expect(_hasOp(t, RingProtocol.cmdInfo), isTrue);
+      expect(conn.lastRingInfo, isNotNull);
+      expect(_hasOp(t, RingProtocol.cmdCustodyEnable), isFalse);
+      expect(conn.ringLivePersistEnabled, isFalse);
 
-    final audioSub = await conn.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
-    await _settle();
+      final audioSub = await conn.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
+      await _settle();
 
-    final enable = t.writes.firstWhere((w) => w[0] == RingProtocol.cmdCustodyEnable);
-    expect(enable, [0x14, 0x01, 0x0F]);
-    expect(conn.ringLivePersistEnabled, isTrue);
-    await audioSub?.cancel();
-  });
+      final enable = t.writes.firstWhere((w) => w[0] == RingProtocol.cmdCustodyEnable);
+      expect(enable, [0x14, 0x01, 0x0F]);
+      expect(conn.ringLivePersistEnabled, isTrue);
+      await audioSub?.cancel();
+    },
+  );
 
   test('legacy 31-byte INFO never sends the new custody opcode', () async {
     final t = _ScriptedTransport(infoPayload: _legacyInfo());
@@ -191,43 +196,40 @@ void main() {
     expect(conn.ringLivePersistEnabled, isFalse);
     expect(conn.ringEffectiveCaps, 0);
 
-    final ack = await conn.advanceRingCustody(
-      7,
-      expectedEpoch: conn.ringCustodyEpoch,
-      expectedRingId: null,
-    );
+    final ack = await conn.advanceRingCustody(7, expectedEpoch: conn.ringCustodyEpoch, expectedRingId: null);
     expect(ack?.isOk, isTrue);
     final advance = t.writes.last;
     expect(advance[0], RingProtocol.cmdAdvance); // 0x12, not 0x15
   });
 
-  test('a lost ENABLE ack keeps ring-id custody; a stale-ring advance is fenced with status 11 and no wire write',
-      () async {
-    const ringA = 0x1122334455667788;
-    const ringB = 0x0102030405060708;
-    final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringA), dropEnableAck: true);
-    final conn = OmiDeviceConnection(_device('3.0.21'), t);
-    t.emit(DeviceTransportState.connected);
-    await _settle();
-    await conn.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
-    await Future<void>.delayed(const Duration(seconds: 6));
+  test(
+    'a lost ENABLE ack keeps ring-id custody; a stale-ring advance is fenced with status 11 and no wire write',
+    () async {
+      const ringA = 0x1122334455667788;
+      const ringB = 0x0102030405060708;
+      final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringA), dropEnableAck: true);
+      final conn = OmiDeviceConnection(_device('3.0.21'), t);
+      t.emit(DeviceTransportState.connected);
+      await _settle();
+      await conn.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
+      await Future<void>.delayed(const Duration(seconds: 6));
 
-    expect(conn.ringEffectiveCaps & RingProtocol.capRingId, RingProtocol.capRingId);
-    expect(conn.ringEffectiveCaps & RingProtocol.capLivePersist, 0);
-    expect(conn.ringLivePersistEnabled, isFalse);
+      expect(conn.ringEffectiveCaps & RingProtocol.capRingId, RingProtocol.capRingId);
+      expect(conn.ringEffectiveCaps & RingProtocol.capLivePersist, 0);
+      expect(conn.ringLivePersistEnabled, isFalse);
 
-    t.notify(_v1Info(ringId: ringB, readSeq: 0));
-    await _settle();
-    final before = t.writes.length;
-    final ack = await conn.advanceRingCustody(
-      1,
-      expectedEpoch: conn.ringCustodyEpoch,
-      expectedRingId: ringA,
-    );
-    expect(ack?.status, RingProtocol.ackRingIdMismatch);
-    expect(t.writes.length, before,
-        reason: 'no 0x12 or 0x15 may leave the transport for a proof captured under ring A');
-  });
+      t.notify(_v1Info(ringId: ringB, readSeq: 0));
+      await _settle();
+      final before = t.writes.length;
+      final ack = await conn.advanceRingCustody(1, expectedEpoch: conn.ringCustodyEpoch, expectedRingId: ringA);
+      expect(ack?.status, RingProtocol.ackRingIdMismatch);
+      expect(
+        t.writes.length,
+        before,
+        reason: 'no 0x12 or 0x15 may leave the transport for a proof captured under ring A',
+      );
+    },
+  );
 
   test('armed CAP_RING_ID advance sends 0x15 [ringId u64 BE][seq u64 BE]', () async {
     const ringId = 0x1122334455667788;
@@ -238,11 +240,7 @@ void main() {
     await conn.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
     await _settle();
 
-    await conn.advanceRingCustody(
-      42,
-      expectedEpoch: conn.ringCustodyEpoch,
-      expectedRingId: ringId,
-    );
+    await conn.advanceRingCustody(42, expectedEpoch: conn.ringCustodyEpoch, expectedRingId: ringId);
     final advance = t.writes.last;
     expect(advance[0], RingProtocol.cmdAdvanceId);
     expect(advance.length, 17);
@@ -291,8 +289,11 @@ void main() {
     await _settle();
     expect(conn.ringCustodyEpoch, epoch1 + 1);
     expect(t.writes.where((w) => w[0] == RingProtocol.cmdInfo).length, greaterThanOrEqualTo(2));
-    expect(t.writes.where((w) => w[0] == RingProtocol.cmdCustodyEnable).length, greaterThanOrEqualTo(2),
-        reason: 'a surviving audio subscriber re-opts-in once per physical epoch without re-attaching');
+    expect(
+      t.writes.where((w) => w[0] == RingProtocol.cmdCustodyEnable).length,
+      greaterThanOrEqualTo(2),
+      reason: 'a surviving audio subscriber re-opts-in once per physical epoch without re-attaching',
+    );
     expect(conn.ringLivePersistEnabled, isTrue);
   });
 
@@ -313,14 +314,9 @@ void main() {
       final store = PendantCustodyStore(directoryProvider: () async => tmp);
       final seed = PendantRingCustody(store: store, walValidator: (_) async => true);
       await seed.beginConnection('omi-1', 1, _ringInfo(ringId: ringId));
-      await seed.recordDurableRingRange(
-        'omi-1',
-        1,
-        ringId,
-        0,
-        10,
-        const [CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1)],
-      );
+      await seed.recordDurableRingRange('omi-1', 1, ringId, 0, 10, const [
+        CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1),
+      ]);
 
       final custody = PendantRingCustody(store: store, walValidator: (_) async => true);
       final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringId), grantedCaps: 0x0F);
@@ -348,14 +344,9 @@ void main() {
       final store = PendantCustodyStore(directoryProvider: () async => tmp);
       final seed = PendantRingCustody(store: store, walValidator: (_) async => true);
       await seed.beginConnection('omi-1', 1, _ringInfo(ringId: ringId));
-      await seed.recordDurableRingRange(
-        'omi-1',
-        1,
-        ringId,
-        0,
-        10,
-        const [CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1)],
-      );
+      await seed.recordDurableRingRange('omi-1', 1, ringId, 0, 10, const [
+        CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1),
+      ]);
 
       final custody = PendantRingCustody(store: store, walValidator: (_) async => true);
       final t = _ScriptedTransport(
@@ -373,11 +364,7 @@ void main() {
       expect(conn.ringEffectiveCaps, 0);
       expect(conn.ringLivePersistEnabled, isFalse);
       final writesBefore = t.writes.length;
-      final fenced = await conn.advanceRingCustody(
-        10,
-        expectedEpoch: conn.ringCustodyEpoch,
-        expectedRingId: ringId,
-      );
+      final fenced = await conn.advanceRingCustody(10, expectedEpoch: conn.ringCustodyEpoch, expectedRingId: ringId);
       expect(fenced?.status, RingProtocol.ackRingIdMismatch);
       expect(t.writes.length, writesBefore);
       expect(_hasOp(t, RingProtocol.cmdAdvance), isFalse);
@@ -438,10 +425,16 @@ void main() {
     final second = conn.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
     await _settle();
 
-    expect(t.writes.where((w) => w[0] == RingProtocol.cmdCustodyEnable), hasLength(1),
-        reason: 'the second attach must join the held opt-in, not send another 0x14');
-    expect(t.subscribes.where((c) => c == audioUuid), isEmpty,
-        reason: 'no audio characteristic subscription while the enable ACK is in flight');
+    expect(
+      t.writes.where((w) => w[0] == RingProtocol.cmdCustodyEnable),
+      hasLength(1),
+      reason: 'the second attach must join the held opt-in, not send another 0x14',
+    );
+    expect(
+      t.subscribes.where((c) => c == audioUuid),
+      isEmpty,
+      reason: 'no audio characteristic subscription while the enable ACK is in flight',
+    );
 
     t.holdEnableAck!.complete();
     final s1 = await first;
@@ -458,7 +451,9 @@ void main() {
     final tmp = await Directory.systemTemp.createTemp('custody_disconnect_test');
     try {
       final custody = PendantRingCustody(
-          store: PendantCustodyStore(directoryProvider: () async => tmp), walValidator: (_) async => true);
+        store: PendantCustodyStore(directoryProvider: () async => tmp),
+        walValidator: (_) async => true,
+      );
       final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringId), grantedCaps: 0x0F);
       final conn = OmiDeviceConnection(_device('3.0.21'), t, custody: custody);
       t.emit(DeviceTransportState.connected);

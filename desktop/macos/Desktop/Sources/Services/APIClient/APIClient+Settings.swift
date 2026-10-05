@@ -506,6 +506,17 @@ struct SubscriptionPlanOption: Codable, Identifiable {
   }
 }
 
+struct TranscriptionAllowanceSnapshot: Codable {
+  let mode: String
+  let remainingSeconds: Int?
+  let reason: String
+
+  enum CodingKeys: String, CodingKey {
+    case mode, reason
+    case remainingSeconds = "remaining_seconds"
+  }
+}
+
 struct UserSubscriptionResponse: Codable {
   let subscription: UserSubscriptionInfo
   let transcriptionSecondsUsed: Int
@@ -518,6 +529,9 @@ struct UserSubscriptionResponse: Codable {
   let memoriesCreatedLimit: Int
   let availablePlans: [SubscriptionPlanOption]
   let showSubscriptionUI: Bool
+  /// Server-resolved allowance for this request, including its validated BYOK headers.
+  /// Nil on older backends; the UI must not infer unlimited STT from a BYOK plan.
+  let transcriptionAllowance: TranscriptionAllowanceSnapshot?
   // Set for Neo subscribers whose current billing period started before the
   // policy change in #7496 — they retain desktop access until this unix-seconds
   // timestamp (their `current_period_end`). Null for everyone else.
@@ -535,6 +549,7 @@ struct UserSubscriptionResponse: Codable {
     case memoriesCreatedLimit = "memories_created_limit"
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
+    case transcriptionAllowance = "transcription_allowance"
     case desktopGrandfatherUntil = "desktop_grandfather_until"
   }
 
@@ -555,6 +570,8 @@ struct UserSubscriptionResponse: Codable {
     memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
     availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
     showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
+    transcriptionAllowance = try? c.decodeIfPresent(
+      TranscriptionAllowanceSnapshot.self, forKey: .transcriptionAllowance)
     desktopGrandfatherUntil = try c.decodeIfPresent(Int.self, forKey: .desktopGrandfatherUntil)
   }
 }
@@ -843,24 +860,6 @@ struct TaskSettingsResponse: Codable {
   }
 }
 
-struct InsightSettingsResponse: Codable {
-  var enabled: Bool?
-  var analysisPrompt: String?
-  var extractionInterval: Double?
-  var minConfidence: Double?
-  var notificationsEnabled: Bool?
-  var excludedApps: [String]?
-
-  enum CodingKeys: String, CodingKey {
-    case enabled
-    case analysisPrompt = "analysis_prompt"
-    case extractionInterval = "extraction_interval"
-    case minConfidence = "min_confidence"
-    case notificationsEnabled = "notifications_enabled"
-    case excludedApps = "excluded_apps"
-  }
-}
-
 struct MemorySettingsResponse: Codable {
   var enabled: Bool?
   var analysisPrompt: String?
@@ -944,7 +943,6 @@ enum AssistantSettingsJSONValue: Codable, Equatable {
 struct AssistantSettingsResponse: Codable {
   var shared: SharedAssistantSettingsResponse?
   var task: TaskSettingsResponse?
-  var insight: InsightSettingsResponse?
   var memory: MemorySettingsResponse?
   var floatingBar: FloatingBarSettingsResponse?
   var updateChannel: String?
@@ -952,7 +950,6 @@ struct AssistantSettingsResponse: Codable {
 
   enum CodingKeys: String, CodingKey, CaseIterable {
     case shared, task
-    case insight = "advice"
     case memory
     case floatingBar = "floating_bar"
     case updateChannel = "update_channel"
@@ -961,7 +958,6 @@ struct AssistantSettingsResponse: Codable {
   init(
     shared: SharedAssistantSettingsResponse? = nil,
     task: TaskSettingsResponse? = nil,
-    insight: InsightSettingsResponse? = nil,
     memory: MemorySettingsResponse? = nil,
     floatingBar: FloatingBarSettingsResponse? = nil,
     updateChannel: String? = nil,
@@ -969,7 +965,6 @@ struct AssistantSettingsResponse: Codable {
   ) {
     self.shared = shared
     self.task = task
-    self.insight = insight
     self.memory = memory
     self.floatingBar = floatingBar
     self.updateChannel = updateChannel
@@ -980,7 +975,6 @@ struct AssistantSettingsResponse: Codable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     shared = Self.decodeLossy(SharedAssistantSettingsResponse.self, from: container, forKey: .shared)
     task = Self.decodeLossy(TaskSettingsResponse.self, from: container, forKey: .task)
-    insight = Self.decodeLossy(InsightSettingsResponse.self, from: container, forKey: .insight)
     memory = Self.decodeLossy(MemorySettingsResponse.self, from: container, forKey: .memory)
     floatingBar = Self.decodeLossy(
       FloatingBarSettingsResponse.self, from: container, forKey: .floatingBar)
@@ -1000,7 +994,6 @@ struct AssistantSettingsResponse: Codable {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encodeIfPresent(shared, forKey: .shared)
     try container.encodeIfPresent(task, forKey: .task)
-    try container.encodeIfPresent(insight, forKey: .insight)
     try container.encodeIfPresent(memory, forKey: .memory)
     try container.encodeIfPresent(floatingBar, forKey: .floatingBar)
     try container.encodeIfPresent(updateChannel, forKey: .updateChannel)
