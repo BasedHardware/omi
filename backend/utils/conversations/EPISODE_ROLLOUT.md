@@ -25,7 +25,7 @@ Writer configuration (episode cohort only, read at each call):
 - `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES=0`: optional experimental guard
   disabled by default; setting 4k–240k retains the previous baseline size policy.
 - Luna selector effort defaults low, timeout 30s (bounded 1–30).
-- Jev threshold defaults 0.75 as an experimental midpoint; it is NOT an accepted
+- Jev threshold defaults 0.70, the best measured experimental cutoff; it is NOT an accepted
   shipping cutoff. DEV sweeps 0.70/0.80/0.90 did not justify replacing deterministic
   selection. The selector flag stays deterministic unless renewed acceptance does.
 
@@ -39,8 +39,9 @@ no outer request, lease, shutdown or client limit changes here. C7 timeout/overs
 remains an ordinary provider failure. C6 gets one C7 rewrite only for timeout or
 context-limit failure; auth/quota/refusal errors are not retried as C7. After that
 fallback all further model repair is disabled. The worst requested writer time is
-115s + 120s, plus bounded selection/transport overhead, inside the 1500s job lease.
-This is not a hard guarantee against process termination or the rest of enrichment.
+115s + 120s, plus bounded selection/transport overhead, inside the 1500s job lease at the level of requested timeouts.
+Completed calls exceeding a socket deadline log `writer_deadline_overrun` and
+disable paid repair. This is not a hard guarantee against process termination or the rest of enrichment.
 
 Set `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED=true` AND
 `MEETING_NOTES_EPISODE_EVIDENCE_PERCENT=1` for a sticky SHA-256 UID cohort.

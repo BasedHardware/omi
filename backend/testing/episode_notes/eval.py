@@ -126,7 +126,7 @@ def main(argv: list[str] | None = None) -> None:
         help='High/xhigh byte ceiling; 0 disables it for offline effort experiments only',
     )
     parser.add_argument('--selection', choices=('compact', *SELECTIONS), default='compact')
-    parser.add_argument('--jev-threshold', type=float, default=0.75)
+    parser.add_argument('--jev-threshold', type=float, default=0.70)
     parser.add_argument('--tiered', action='store_true')
     parser.add_argument('--apply-deadlines', action='store_true')
     parser.add_argument('--writer-timeout', type=float, default=120)

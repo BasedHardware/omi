@@ -161,3 +161,15 @@ def test_jev_failure_has_deterministic_original_items_and_no_extra_reads(monkeyp
     )
     assert chosen == items[:1] and calls == [{'lane': 'episode_evidence', 'max_attempts': 1}]
     assert run.actual_selection == 'deterministic' and 'jev_unavailable' in run.violations
+
+
+def test_late_completed_writer_is_preserved_and_repair_disabled(monkeypatch):
+    from utils.llm import notes_observability
+
+    times = iter([0, 0, 136])
+    monkeypatch.setattr(notes_observability, 'monotonic', lambda: next(times))
+    run = NotesRun('episode')
+    run.writer_deadline = 115
+    note = SimpleNamespace(content='Synthetic complete note', usage_metadata={})
+    assert run.invoke(SimpleNamespace(invoke=lambda _: note), []) is note
+    assert run.repair_disabled and 'writer_deadline_overrun' in run.violations

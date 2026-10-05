@@ -73,6 +73,7 @@ class NotesRun:
         return max(0.0, budget - (monotonic() - self.started))
 
     def invoke(self, model: Any, messages: Any, *, kind: str = 'writer') -> Any:
+        call_started = monotonic()
         self.calls += 1
         self.selection_calls += int(kind == 'selection')
         try:
@@ -81,6 +82,9 @@ class NotesRun:
             self.model_errors += 1
             self.known = {key: False for key in self.usage}
             raise
+        if kind == 'writer' and self.writer_deadline and monotonic() - call_started > self.writer_deadline:
+            self.violations.add('writer_deadline_overrun')
+            self.repair_disabled = True
         usage = getattr(response, 'usage_metadata', None) or {}
         for key in ('input_tokens', 'output_tokens'):
             if key not in usage:
