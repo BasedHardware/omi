@@ -158,9 +158,18 @@ def convert_action_items_to_xlsx(
     partial = output_path.with_name(f"{output_path.name}.partial.{os.getpid()}")
     try:
         workbook.save(partial)
-        if output_path.exists() and not overwrite:
-            raise FileExistsError(f"Refusing to overwrite existing {output_path} (use --overwrite)")
-        os.replace(partial, output_path)
+        if overwrite:
+            os.replace(partial, output_path)
+        else:
+            try:
+                os.link(partial, output_path)
+                partial.unlink()
+            except FileExistsError:
+                raise FileExistsError(f"Refusing to overwrite existing {output_path} (use --overwrite)")
+            except OSError:
+                if output_path.exists():
+                    raise FileExistsError(f"Refusing to overwrite existing {output_path} (use --overwrite)")
+                os.replace(partial, output_path)
     except Exception:
         if partial.exists():
             try:
