@@ -116,10 +116,9 @@ test(
         '1:30 PM UTC',
         '00:01:05',
         'Ada Example',
-        'Owner:',
         'Due ',
         '4:00 PM UTC',
-        'Unknown',
+        'For review',
         'Example Labs',
         'Engineer',
         'Ship Thursday.',
@@ -127,6 +126,8 @@ test(
         '6:00 PM UTC',
       ])
         assert.ok(document.includes(fact), `${fact}\n${logs}`);
+      // An unknown owner or due date is left out of the page, never spelled out.
+      assert.doesNotMatch(document, /Due Unknown|Owner: Unknown/);
       // Next dev overwrites rendered HTML cache headers. Production dynamic
       // rendering follows the uncached fetch; reject a shared max-age either way.
       const htmlCache = html.headers.get('cache-control') || '';
