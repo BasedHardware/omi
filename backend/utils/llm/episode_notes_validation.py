@@ -71,13 +71,17 @@ def repair_episode_note(
     run: Any = None,
     repair_budget: float = 60,
     retry_model_factory: Any = None,
+    claims_enabled: bool = True,
 ) -> Structured:
     restore_episode_claim_ids(structured.note_claims or [], evidence)
     violations = initial_violations | sanitize_episode_ids(structured)
     presentation = enforce_structured_presentation_contract(structured, transcript_segment_ids)
     if presentation.needs_revision:
         violations.add('presentation_contract')
-    violations |= claim_violations(structured, evidence)
+    if claims_enabled:
+        violations |= claim_violations(structured, evidence)
+    else:
+        structured.note_claims = None
     if is_vacuous_note(structured):
         violations.add('vacuity')
     if not violations:
@@ -114,7 +118,10 @@ def repair_episode_note(
         violations.add('retry_unavailable')
     residual = sanitize_episode_ids(structured)
     enforce_structured_presentation_contract(structured, transcript_segment_ids, safe_fallback=True)
-    residual |= claim_violations(structured, evidence, drop_invalid=True)
+    if claims_enabled:
+        residual |= claim_violations(structured, evidence, drop_invalid=True)
+    else:
+        structured.note_claims = None
     if is_vacuous_note(structured):
         residual.add('vacuity')
     if run is not None:

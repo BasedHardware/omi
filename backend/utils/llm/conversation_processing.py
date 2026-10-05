@@ -1166,16 +1166,14 @@ def get_conversation_notes(
     roster: Optional[MeetingRoster] = None,
     screen_frames: Sequence[NotesFrameImage] = (),
     episode_evidence: Optional[Sequence["EvidenceItem"]] = None,
+    episode_finished_at: Optional[datetime] = None,
 ) -> Structured:
     """Generate sections, actions, and events in one coherent model call.
 
-    ``rich_context_enabled`` switches to the extended extraction schema and the
-    rich instruction blocks; ``meeting_context`` is the rendered BACKGROUND
-    CONTEXT block appended to the volatile suffix only. With the flag off all
-    three new arguments must be absent/default and the legacy instruction text
-    and schema are retained. Static instructions are sent as a system message;
-    volatile instructions are sent as a user message so provider wire formats
-    always include user content.
+    Rich context selects the extended extraction schema and background suffix.
+    Episode mode additionally selects evidence, optional claims and configured effort.
+    With episode admission off, legacy/rich schema and prompt bytes are retained.
+    Instructions remain in the static system prefix; evidence is volatile user content.
     """
     episode_mode = episode_evidence is not None
     run = current_run()
@@ -1206,6 +1204,13 @@ def get_conversation_notes(
         user_tz = timezone.utc
     started_local = (started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)).astimezone(user_tz)
     current_local = current_time.astimezone(user_tz)
+    episode_settings = import_module('config.episode_writer').episode_writer_settings() if episode_mode else None
+    if run is not None and episode_settings is not None:
+        run.effort, run.selection, run.claims_enabled = (
+            episode_settings.effort,
+            episode_settings.selection,
+            episode_settings.claims,
+        )
     rich_mode = rich_context_enabled or episode_mode
     transcript_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     if transcript_word_count < 500:
@@ -1227,13 +1232,15 @@ def get_conversation_notes(
     extraction_parser = PydanticOutputParser(
         pydantic_object=(
             import_module('models.episode_extraction').EpisodeStructuredExtraction
-            if episode_mode
+            if episode_mode and episode_settings.claims
             else RichStructuredExtraction if rich_mode else StructuredExtraction
         )
     )
     if episode_mode:
         static_instructions = import_module('utils.llm.episode_notes_prompts').episode_static_instructions(
-            extraction_parser.get_format_instructions(), _conversation_notes_static_instructions
+            extraction_parser.get_format_instructions(),
+            _conversation_notes_static_instructions,
+            include_claims=episode_settings.claims,
         )
     elif rich_mode:
         static_instructions = rich_static_instructions(
@@ -1264,7 +1271,19 @@ def get_conversation_notes(
         else []
     )
     if episode_mode:
-        evidence_items = import_module('utils.conversations.episode_compaction').compact_episode_items(evidence_items)
+        evidence_items = import_module('utils.llm.episode_writer').prepare_episode_evidence(
+            evidence_items,
+            episode_settings,
+            started_at=started_at.isoformat(),
+            finished_at=episode_finished_at.isoformat() if episode_finished_at else None,
+            run=run,
+            model_factory=lambda: get_llm('conv_structure', request_timeout=15, max_retries=0).bind(
+                reasoning_effort='low'
+            ),
+        )
+        if screen_frames and episode_settings.selection != 'compact':
+            selected_refs = {item.source_ref for item in evidence_items if item.source_kind == 'screen_frame'}
+            screen_frames = tuple(frame for frame in screen_frames if frame.frame_id in selected_refs)
         volatile_instructions = import_module('utils.llm.episode_notes_prompts').episode_volatile_instructions(
             **{
                 key: value
@@ -1273,6 +1292,9 @@ def get_conversation_notes(
             },
             evidence_block=import_module('utils.conversations.episode_evidence').render_episode_evidence(
                 evidence_items
+            ),
+            capture_finished_local_iso=(
+                episode_finished_at.astimezone(user_tz).isoformat() if episode_finished_at else None
             ),
         )
     elif rich_mode:
@@ -1300,6 +1322,8 @@ def get_conversation_notes(
         request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
         **({'max_retries': 0} if episode_mode else {}),
     )
+    if episode_mode:
+        model = import_module('utils.llm.episode_writer').bind_episode_effort(model, episode_settings.effort)
     run = current_run()
     raw_response = _content_str(run.invoke(model, messages) if run else model.invoke(messages))
     episode_presentation_violations = set()
@@ -1357,12 +1381,16 @@ def get_conversation_notes(
             initial_violations=episode_presentation_violations,
             run=run,
             repair_budget=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
-            retry_model_factory=lambda timeout: get_llm(
-                'conv_structure',
-                cache_key=cache_key,
-                prompt_cache_options=cache_options,
-                request_timeout=timeout,
-                max_retries=0,
+            claims_enabled=episode_settings.claims,
+            retry_model_factory=lambda timeout: import_module('utils.llm.episode_writer').bind_episode_effort(
+                get_llm(
+                    'conv_structure',
+                    cache_key=cache_key,
+                    prompt_cache_options=cache_options,
+                    request_timeout=timeout,
+                    max_retries=0,
+                ),
+                episode_settings.effort,
             ),
         )
 
@@ -1380,7 +1408,7 @@ def get_conversation_notes(
         event.created = False
     projected_overview = render_sections_markdown(structured.sections)
     if projected_overview:
-        if episode_mode:
+        if episode_mode and episode_settings.claims:
             # Overview is a projection; section claims already cover the same prose.
             structured.note_claims = [claim for claim in structured.note_claims or [] if claim.target != '/overview']
         structured.overview = projected_overview

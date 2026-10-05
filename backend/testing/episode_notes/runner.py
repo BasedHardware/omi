@@ -157,7 +157,7 @@ def evaluate(
         def error_row(arm, phase, exc, candidate=None, judge=None):
             receipt = exc.result if isinstance(exc, LLMCallError) else LLMResult(content={})
             reference = receipt if phase == 'reference' else reference_result
-            candidate = receipt if phase == 'candidate' else candidate or LLMResult(content={})
+            candidate = receipt if phase in {'candidate', 'selection'} else candidate or LLMResult(content={})
             judge = receipt if phase == 'judge' else judge or LLMResult(content={})
             return {
                 'id': episode.id,

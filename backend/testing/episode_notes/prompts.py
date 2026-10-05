@@ -103,6 +103,7 @@ def candidate_request(
             **common,
             evidence_block=render_episode_evidence(items),
             wake_word_rules=EPISODE_WAKE_WORD_RULES if any(item.wake_word_invocation for item in items) else '',
+            capture_finished_local_iso=bundle.finished_at,
         )
         prompt = (
             CANDIDATE_PROMPT

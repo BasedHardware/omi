@@ -37,6 +37,13 @@ def valid_note(title='Written approval', overview='The message shows approval.')
     )
 
 
+@pytest.fixture(autouse=True)
+def claim_generation_mode(monkeypatch):
+    # These regression fixtures exercise the existing annotated path explicitly.
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'compact')
+
+
 @pytest.fixture(scope='module', autouse=True)
 def processing():
     from testing.import_isolation import stub_modules
@@ -793,3 +800,45 @@ def test_episode_static_prefix_keeps_explicit_cache_breakpoint(processing, monke
     assert static['prompt_cache_breakpoint'] == {'mode': 'explicit'}
     assert 'EPISODE NOTES CONTRACT' in static['text']
     assert 'screen_ocr:1' not in static['text']
+
+
+def test_metadata_off_has_no_coverage_repair_and_optional_claims(processing, monkeypatch, caplog):
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'false')
+    result, calls = invoke_notes(
+        processing, monkeypatch, [{'title': 'Written approval', 'overview': 'The message shows approval.'}]
+    )
+    assert len(calls) == 1
+    assert result.note_claims is None
+    assert 'Do not generate note_claims' in str(calls[0][0].content)
+    assert 'missing_claim' not in caplog.text
+
+
+def test_selected_effort_applies_to_writer_and_repair(processing, monkeypatch):
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+
+    bindings, calls = [], []
+
+    class Model:
+        def bind(self, **options):
+            bindings.append(options)
+            return self
+
+        def invoke(self, messages):
+            calls.append(messages)
+            return SimpleNamespace(
+                content=json.dumps(valid_note('Quick chat', 'A brief exchange').model_dump(mode='json'))
+            )
+
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'high')
+    monkeypatch.setattr(processing, 'get_llm', lambda *a, **kw: Model())
+    processing.get_conversation_notes(
+        ConversationPromptPrefix('synthetic', 'FULL TRANSCRIPT'),
+        started_at=START,
+        language_code='en',
+        output_language_code=None,
+        tz='UTC',
+        task_intelligence_capture=False,
+        episode_evidence=[EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed')],
+    )
+    assert bindings == [{'reasoning_effort': 'high'}, {'reasoning_effort': 'high'}]
+    assert len(calls) == 2

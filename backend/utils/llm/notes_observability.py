@@ -15,7 +15,11 @@ class NotesRun:
         self.arm = arm
         self.started = monotonic()
         self.calls = 0
-        self.usage = {'input_tokens': 0, 'output_tokens': 0, 'cached_tokens': 0}
+        self.selection_calls = 0
+        self.effort = 'default'
+        self.selection = 'none'
+        self.claims_enabled = False
+        self.usage = {'input_tokens': 0, 'output_tokens': 0, 'cached_tokens': 0, 'reasoning_tokens': 0}
         self.known = {key: True for key in self.usage}
         self.violations: set[str] = set()
         self.fallback_to_best_note = False
@@ -26,8 +30,9 @@ class NotesRun:
     def remaining(self, budget: float) -> float:
         return max(0.0, budget - (monotonic() - self.started))
 
-    def invoke(self, model: Any, messages: Any) -> Any:
+    def invoke(self, model: Any, messages: Any, *, kind: str = 'writer') -> Any:
         self.calls += 1
+        self.selection_calls += int(kind == 'selection')
         try:
             response = model.invoke(messages)
         except Exception:
@@ -45,6 +50,11 @@ class NotesRun:
             self.known['cached_tokens'] = False
         else:
             self.usage['cached_tokens'] += cached
+        reasoning = (usage.get('output_token_details') or {}).get('reasoning')
+        if reasoning is None:
+            self.known['reasoning_tokens'] = False
+        else:
+            self.usage['reasoning_tokens'] += reasoning
         return response
 
     def instrument(self, model):
@@ -58,18 +68,22 @@ class NotesRun:
 
     def emit(self):
         logger.info(
-            'conversation_notes_receipt arm=%s input_tokens=%s output_tokens=%s cached_tokens=%s '
+            'conversation_notes_receipt arm=%s input_tokens=%s output_tokens=%s cached_tokens=%s reasoning_tokens=%s '
             'latency_seconds=%.3f retry_count=%s violations=%s vacuity=%s claim_count=%s '
-            'fallback_to_best_note=%s errors=%s',
+            'fallback_to_best_note=%s errors=%s effort=%s selection=%s claims_enabled=%s selection_calls=%s',
             self.arm,
             *(self.usage[key] if self.calls and self.known[key] else None for key in self.usage),
             monotonic() - self.started,
-            max(0, self.calls - 1),
+            max(0, self.calls - self.selection_calls - 1),
             ','.join(sorted(self.violations)) or 'none',
             self.vacuity,
             self.claim_count,
             self.fallback_to_best_note,
             int(self.error),
+            self.effort,
+            self.selection,
+            self.claims_enabled,
+            self.selection_calls,
         )
 
 

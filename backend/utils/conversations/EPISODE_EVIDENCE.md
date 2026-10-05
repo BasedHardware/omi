@@ -38,7 +38,8 @@ The prompt centers what happened to/for the owner, not the collected evidence.
 Screen/background facts need an evidenced connection to the episode: participants,
 active call surface, speech reference, owner messages, or demonstrated solo activity.
 Titles/overview describe the episode; missing coverage goes in body bullets. Every factual
-sentence/bullet, including titles and recap bullets, needs an additive `note_claims` entry
+sentence/bullet, including titles and recap bullets, needs source-faithful wording.
+When `MEETING_NOTES_EPISODE_CLAIMS_ENABLED=true` (default false), it also needs a `note_claims` entry
 with a target field, a short unique exact factual anchor, evidence IDs, server-authored source metadata
 (without raw content), provenance (`said`, `shown`,
 `written`, or `inferred`). On-screen text cannot be speech.
@@ -116,3 +117,20 @@ Firestore reads plus model cost per capture measured against the existing gate.
 Later stages add evidence-sufficiency retrieval across windows/sources,
 expectation-versus-observation using calendar and commitments, episode/thread
 linking. None is implemented here.
+
+Round-9 DEV experiments preregister deterministic independent links versus a Luna
+low-effort selection pass, optional claim generation, and default/high/xhigh writer
+effort. `MEETING_NOTES_EPISODE_SELECTION` and `MEETING_NOTES_EPISODE_EFFORT`
+are read at the call boundary; only admitted episode writers use them. Selection
+passes return exact original IDs plus short connection reasons; the writer receives
+only original speech and selected original evidence, never generated reasons.
+Unknown IDs/invalid selection fall back to conservative independent links, and
+large inputs skip the selection model. No retrieval window is widened. The actual
+capture end is separate from processing time; later observations cannot establish
+activity during the window. Claim-disabled notes skip claim-coverage validation,
+retaining prose/presentation/vacuity checks and one bounded optional repair.
+References and judges stay fixed across comparisons. Cache keys include candidate
+effort/selection/claim mode. Two independently cached judgments of fixed candidates
+measure judge variance; selection costs join writer tokens/latency/provider dollars.
+No held-out input may guide these choices. Defaults remain subject to measured DEV
+gates and external held-out acceptance; sticky rollout remains zero here.

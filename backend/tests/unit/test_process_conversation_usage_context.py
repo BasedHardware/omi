@@ -1286,7 +1286,7 @@ def test_all_callsites_use_get_llm():
     """Verify ALL callsites across conversation_processing, knowledge_graph, and memories use get_llm()."""
     backend_dir = Path(__file__).resolve().parent.parent.parent
 
-    # conversation_processing.py: 12 callsites, including the bounded episode repair
+    # conversation_processing.py: 13 callsites, including bounded episode repair and selection
     conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text(encoding="utf-8")
     conv_proc_calls = re.findall(r"get_llm\(\s*'(\w+)'", conv_proc_source)
     assert 'conv_action_items' in conv_proc_calls, "Missing get_llm('conv_action_items') in conversation_processing.py"
@@ -1321,7 +1321,7 @@ def test_all_callsites_use_get_llm():
     # conv_app_result callsite was invisible to it, so the count was calibrated against a scan that
     # silently skipped wrapped calls.
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 21, f"Expected 21 total get_llm() callsites, got {total}"
+    assert total == 22, f"Expected 22 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():

@@ -482,7 +482,13 @@ def _get_structured(
                             rich_context_enabled=roster is not None,
                             roster=roster,
                             **(
-                                {'episode_evidence': episode_items, 'screen_frames': _frames} if episode_enabled else {}
+                                {
+                                    'episode_evidence': episode_items,
+                                    'screen_frames': _frames,
+                                    'episode_finished_at': conversation.finished_at,
+                                }
+                                if episode_enabled
+                                else {}
                             ),
                         )
                     validate_structured_source_segment_ids(structured, ())
@@ -700,7 +706,11 @@ def _get_structured(
                     rich_context_enabled=roster is not None,
                     roster=roster,
                     screen_frames=screen_frames,
-                    **({'episode_evidence': episode_items} if episode_enabled else {}),
+                    **(
+                        {'episode_evidence': episode_items, 'episode_finished_at': conversation.finished_at}
+                        if episode_enabled
+                        else {}
+                    ),
                 )
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False

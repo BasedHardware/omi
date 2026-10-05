@@ -114,6 +114,7 @@ def episode_volatile_instructions(
     evidence_block,
     task_intelligence_capture,
     wake_word_rules='',
+    capture_finished_local_iso=None,
 ) -> str:
     task_filter = (
         'capture clear commitments and direct requests'
@@ -126,5 +127,6 @@ For task-intelligence capture, {task_filter}.
 Conversation local time: {started_local_iso}
 Current local time: {current_local_iso}
 Timezone: {tz_label}
+Capture ended local time: {capture_finished_local_iso or 'unknown; generation time is not capture end'}
 {evidence_block}
 {wake_word_rules}'''

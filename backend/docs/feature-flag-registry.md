@@ -97,9 +97,9 @@ entries are exempt: they are queued for removal, not running.
 | `CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `DAY3_REENGAGEMENT_EMAIL_ENABLED` | dazheng | [backend/docs/experiments/EXP-001-day3-reengagement.md](../../backend/docs/experiments/EXP-001-day3-reengagement.md) | 2026-10-28 |
-| `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | dazheng | — | 2026-11-05 |
-| `MEETING_NOTES_EPISODE_EFFORT` | dazheng | — | 2026-11-05 |
-| `MEETING_NOTES_EPISODE_SELECTION` | dazheng | — | 2026-11-05 |
+| `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
+| `MEETING_NOTES_EPISODE_EFFORT` | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
+| `MEETING_NOTES_EPISODE_SELECTION` | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
 | `MEMORY_OWNER_JEV_FLIP_PERCENT` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `MEMORY_OWNER_JEV_SHADOW_DAILY_CAP` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |

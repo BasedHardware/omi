@@ -105,3 +105,56 @@ def test_two_judges_reuse_candidates_and_reference_with_model_selection(tmp_path
         judge_samples=2,
     )
     assert not calls
+
+
+def test_selector_failure_keeps_only_conservative_original_evidence(monkeypatch):
+    from types import SimpleNamespace
+    from utils.llm.episode_writer import prepare_episode_evidence
+
+    items = [
+        EvidenceItem(id='speech', source_kind='speech', content='We approved the cobalt widget prototype.'),
+        EvidenceItem(id='unrelated', source_kind='message', content='An invented recipe in an unrelated thread.'),
+    ]
+    result = prepare_episode_evidence(
+        items,
+        EpisodeWriterSettings(selection='model'),
+        started_at='2026-01-01T10:00:00Z',
+        finished_at='2026-01-01T10:05:00Z',
+        run=None,
+        model_factory=lambda: SimpleNamespace(invoke=lambda messages: SimpleNamespace(content='invalid JSON')),
+    )
+    assert result == items[:1]
+
+
+def test_endpoint_effort_is_candidate_only_and_provider_cost_is_measured(monkeypatch):
+    import io
+    from testing.episode_notes import eval as cli
+
+    wires = []
+
+    def send(request, timeout):
+        wires.append(json.loads(request.data))
+        return io.StringIO(
+            json.dumps(
+                {
+                    'usage': {
+                        'prompt_tokens': 10,
+                        'completion_tokens': 4,
+                        'cost': 0.002,
+                        'completion_tokens_details': {'reasoning_tokens': 3},
+                    },
+                    'choices': [{'finish_reason': 'stop', 'message': {'content': '{"title":"Synthetic"}'}}],
+                }
+            )
+        )
+
+    monkeypatch.setattr(cli, 'urlopen', send)
+    endpoint = cli.CompatibleEndpoint(
+        key='synthetic-key', base_url='https://example.test/v1', model='openai/gpt-6-luna'
+    )
+    result = endpoint('Synthetic writer', {'_request_options': {'effort': 'xhigh'}, 'evidence': []})
+    assert wires[0]['reasoning'] == {'effort': 'xhigh'}
+    assert '_request_options' not in json.loads(wires[0]['messages'][1]['content'])
+    assert result.provider_cost == 0.002 and result.reasoning_tokens == 3
+    endpoint('Synthetic judge', {'evidence': []})
+    assert 'reasoning' not in wires[1]

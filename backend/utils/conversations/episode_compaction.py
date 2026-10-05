@@ -10,7 +10,7 @@ _STOP = {'this', 'that', 'with', 'from', 'have', 'will', 'what', 'your', 'they',
 _SCREEN = {'screen_frame', 'screen_ocr', 'message'}
 
 
-def _words(text: str) -> set[str]:
+def episode_words(text: str) -> set[str]:
     return set(_WORDS.findall(text.casefold())) - _STOP
 
 
@@ -22,7 +22,7 @@ def compact_episode_items(items: Sequence[Any]) -> list[Any]:
     New lines in successive OCR observations survive; only repeated lines go.
     """
     speech = ' '.join(item.content for item in items if item.source_kind == 'speech')
-    words = _words(speech)
+    words = episode_words(speech)
     people = {item.actor.casefold() for item in items if item.actor and item.source_kind in {'speech', 'roster'}}
     screens = [item for item in items if item.source_kind in _SCREEN]
     scored = []
@@ -31,7 +31,7 @@ def compact_episode_items(items: Sequence[Any]) -> list[Any]:
         score = 3 * bool(_CALL.search(folded)) + 3 * any(
             re.search(r'(?<!\w)' + re.escape(name) + r'(?!\w)', folded) for name in people
         )
-        score += min(3, len(_words(item.content) & words))
+        score += min(3, len(episode_words(item.content) & words))
         scored.append((score, index, item))
     # Bound overall screen volume, prioritizing connected surfaces over incidental
     # windows. Speech/context are retained independently of this allocation.
