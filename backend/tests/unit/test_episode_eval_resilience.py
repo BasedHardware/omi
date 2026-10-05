@@ -24,7 +24,7 @@ def fake(prompt, payload):
             'informativeness_gap': 0.1,
             'unsupported_claims': 0,
             'wrong_provenance_claims': 0,
-            'sensitive_tagging_misses': 0,
+            'unrelated_content_claims': 0,
             'vacuous': False,
             'property_failures': [],
             'reasons': [],

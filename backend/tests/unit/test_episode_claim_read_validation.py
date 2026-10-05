@@ -25,7 +25,7 @@ def note():
         overview=targets['/overview'],
         sections=[Section(heading='Next step', body_markdown=targets['/sections/0/body_markdown'])],
         note_claims=[
-            NoteClaim(target=target, text=text, evidence_ids=['speech:s1'], provenance='said', private=True)
+            NoteClaim(target=target, text=text, evidence_ids=['speech:s1'], provenance='said')
             for target, text in targets.items()
         ],
     )
@@ -107,7 +107,6 @@ def test_locked_projection_filters_claims_after_redaction(render):
             'text': 'Send invoice',
             'evidence_ids': ['speech:s1'],
             'provenance': 'said',
-            'private': False,
         }
     )
     listed = render.redact_conversation_for_list({'is_locked': True, 'structured': deepcopy(structured)})
@@ -116,7 +115,7 @@ def test_locked_projection_filters_claims_after_redaction(render):
     assert [claim['target'] for claim in integrated['structured']['note_claims']] == ['/sections/0/body_markdown']
 
 
-def test_unedited_claims_and_private_attribution_preserved():
+def test_unedited_claims_and_attribution_preserved():
     structured = note()
     assert current_note_claims(structured) == structured.note_claims
     assert conversation(structured).model_dump()['structured'] == structured.model_dump()

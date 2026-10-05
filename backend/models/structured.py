@@ -149,7 +149,6 @@ except ModuleNotFoundError:
         time: Optional[str] = None
         actor: Optional[str] = None
         diarization_key: Optional[str] = None
-        sensitivity: Literal['standard', 'private'] = 'standard'
         source_ref: Optional[str] = None
 
     class NoteClaim(BaseModel):
@@ -157,7 +156,6 @@ except ModuleNotFoundError:
         text: str = Field(description='Exact factual clause within that field')
         evidence_ids: List[str] = Field(description='Smallest sufficient episode evidence IDs')
         provenance: Literal['said', 'shown', 'written', 'inferred']
-        private: bool = Field(default=False, description='Derived from private or sensitive evidence')
         evidence_sources: Optional[List[NoteEvidenceRef]] = Field(
             default=None, description='Server-authored source metadata; model may omit'
         )

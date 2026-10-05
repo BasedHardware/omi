@@ -4,7 +4,7 @@ METRICS = (
     'informativeness_gap',
     'unsupported_claims',
     'wrong_provenance_claims',
-    'sensitive_tagging_misses',
+    'unrelated_content_claims',
     'vacuous',
     'deterministic_vacuity',
     'faithfulness_pass',

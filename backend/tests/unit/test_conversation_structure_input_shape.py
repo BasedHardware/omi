@@ -253,9 +253,7 @@ def test_discard_unchanged_and_episode_inputs_not_gathered(stack, processing, mo
     def inputs(*args, **kwargs):
         gathered.append(kwargs)
         kwargs['evidence_items'].append(
-            EvidenceItem(
-                id='screen_frame:f1', source_kind='screen_frame', content='Empty call screen', sensitivity='private'
-            )
+            EvidenceItem(id='screen_frame:f1', source_kind='screen_frame', content='Empty call screen')
         )
         return None, None, True, ()
 

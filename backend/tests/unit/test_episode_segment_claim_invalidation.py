@@ -25,7 +25,7 @@ def test_segment_edit_drops_dependent_claims_without_extra_reads(monkeypatch, cl
         {'evidence_sources': [{'id': 'speech:s10', 'source_kind': 'speech', 'source_ref': 's10'}]},
     ]
     for claim in dependent + untouched:
-        claim.update(text='Synthetic summary', target='/overview', provenance='inferred', private=False)
+        claim.update(text='Synthetic summary', target='/overview', provenance='inferred')
     structured = {'overview': 'Synthetic summary', 'sections': [{'source_segment_ids': ['s1', 's2']}]}
     if claims_present is not None:
         structured['note_claims'] = dependent + untouched if claims_present else []

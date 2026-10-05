@@ -36,7 +36,6 @@ class EvidenceItem(BaseModel):
     time: str | None = None
     actor: str | None = None
     content: str
-    sensitivity: Literal['standard', 'private'] = 'standard'
     source_ref: str | None = None
     wake_word_invocation: bool = False
     diarization_key: str | None = None
@@ -48,14 +47,13 @@ def evidence_time(value: Any) -> str | None:
     return str(value) if value is not None else None
 
 
-def _item(kind: SourceKind, index: Any, content: Any, *, time=None, actor=None, private=False, ref=None):
+def _item(kind: SourceKind, index: Any, content: Any, *, time=None, actor=None, ref=None):
     return EvidenceItem(
         id=f'{kind}:{index}',
         source_kind=kind,
         time=evidence_time(time),
         actor=actor,
         content=content if isinstance(content, str) else json.dumps(content, ensure_ascii=False, default=str),
-        sensitivity='private' if private else 'standard',
         source_ref=ref,
     )
 
@@ -106,7 +104,6 @@ def capture_evidence(
                     f'photo:{photo.id or index}',
                     photo.description,
                     time=photo.created_at,
-                    private=True,
                     ref=photo.id,
                 )
             )
@@ -141,7 +138,6 @@ def meeting_evidence(roster: Any, calendar: Any, frames: Sequence[Any]) -> list[
                 calendar.model_dump(mode='json'),
                 time=calendar.start_time,
                 ref=calendar.calendar_event_id,
-                private=kind == 'screen_ocr',
             )
         )
     if roster is not None:
@@ -153,7 +149,7 @@ def meeting_evidence(roster: Any, calendar: Any, frames: Sequence[Any]) -> list[
         }
         for index, entry in enumerate(roster.entries):
             # Frame augmentation can retain the calendar's global source label.
-            # A newly observed identity still derives from private screen evidence.
+            # A newly observed identity still derives from screen evidence.
             frame_derived = (
                 bool(frame_names)
                 and entry.kind != 'owner'
@@ -174,7 +170,6 @@ def meeting_evidence(roster: Any, calendar: Any, frames: Sequence[Any]) -> list[
                     },
                     actor=entry.display_name,
                     ref=entry.person_id or source,
-                    private=source == 'screen_activity',
                 )
             )
     for frame in frames:
@@ -188,7 +183,6 @@ def meeting_evidence(roster: Any, calendar: Any, frames: Sequence[Any]) -> list[
                     'role': frame.role,
                 },
                 time=frame.captured_at,
-                private=True,
                 ref=frame.frame_id,
             )
         )
@@ -207,7 +201,6 @@ def context_pack_evidence(pack: Any) -> list[EvidenceItem]:
                 {'title': prior.title, 'gist': prior.gist},
                 time=getattr(prior, 'started_at', None)
                 or (prior.date_label if prior.date_label != 'unknown date' else None),
-                private=True,
                 ref=getattr(prior, 'source_id', None),
             )
         )
@@ -219,7 +212,6 @@ def context_pack_evidence(pack: Any) -> list[EvidenceItem]:
                     task,
                     time=getattr(prior, 'started_at', None)
                     or (prior.date_label if prior.date_label != 'unknown date' else None),
-                    private=True,
                     ref=getattr(prior, 'source_id', None),
                 )
             )
@@ -235,13 +227,12 @@ def context_pack_evidence(pack: Any) -> list[EvidenceItem]:
                     'aliases': list(person.aliases),
                 },
                 actor=person.name,
-                private=True,
                 ref='people_catalog',
             )
         )
     for kind, values in (('goal', pack.goals), ('memory', pack.memories)):
         for index, value in enumerate(values):
-            items.append(_item(cast(SourceKind, kind), index, value, private=True, ref=kind))
+            items.append(_item(cast(SourceKind, kind), index, value, ref=kind))
     # Preserve observed row time and app/window, not a guessed sender or sent time.
     for index, row in enumerate(pack.screen_rows):
         items.append(
@@ -255,7 +246,6 @@ def context_pack_evidence(pack: Any) -> list[EvidenceItem]:
                     'timestamp_semantics': 'screen observation, not message sent time',
                 },
                 time=row.get('timestamp'),
-                private=True,
                 ref=str(row.get('id') or f'screen_row:{index}'),
             )
         )
@@ -264,7 +254,7 @@ def context_pack_evidence(pack: Any) -> list[EvidenceItem]:
 
 def open_task_evidence(tasks: Sequence[dict]) -> list[EvidenceItem]:
     return [
-        _item('open_task', f'related:{index}', task, time=task.get('created_at'), private=True, ref=task.get('id'))
+        _item('open_task', f'related:{index}', task, time=task.get('created_at'), ref=task.get('id'))
         for index, task in enumerate(tasks)
         if not task.get('completed')
     ]
@@ -325,7 +315,7 @@ _PROVENANCE_KINDS = {
 
 
 def claim_violations(structured: Structured, items: Sequence[EvidenceItem], *, drop_invalid: bool = False) -> set[str]:
-    """Validate source IDs, target spans, coverage and sensitivity; never infer factual truth."""
+    """Validate source IDs, target spans, coverage; never infer factual truth."""
     by_id = {item.id: item for item in items}
     violations = set()
     claims = structured.note_claims or []
@@ -358,9 +348,6 @@ def claim_violations(structured: Structured, items: Sequence[EvidenceItem], *, d
         if any(source.source_kind not in _PROVENANCE_KINDS[claim.provenance] for source in sources):
             violations.add('wrong_provenance')
             invalid = True
-        # A private source cannot become public through a model-authored tag.
-        if any(source.sensitivity == 'private' for source in sources):
-            claim.private = True
         if not invalid:
             valid_claims.append(claim)
             covered.setdefault(claim.target, []).append(claim.text)

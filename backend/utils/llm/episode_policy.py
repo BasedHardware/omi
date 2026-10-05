@@ -1,10 +1,4 @@
-"""Shared claim privacy policy for production episode notes and offline judging."""
-
-EPISODE_PRIVACY_RULE = '''A claim is private if ANY supporting source is private OR its content is sensitive:
-health; money, housing or personal finances; credentials, security details or infrastructure secrets;
-legal matters; intimate or relationship details; third-party personal information. This includes paraphrases
-and inferences. A standard/public source never makes sensitive content public. A person's public professional
-name or role alone is not sensitive; their private contact or personal details are. Mark every such claim private.'''
+"""Shared episode relevance and provenance policy for production episode notes and offline judging."""
 
 EPISODE_RELEVANCE_RULE = '''Center the owner: title and overview describe what happened to or for them in this
 capture window. Admit screen/background facts only with an evidence-supported connection: the same participants,

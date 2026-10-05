@@ -6,7 +6,8 @@ and cache paths must be outside **every git worktree**, including through
 symlinks. No real evidence belongs in git, tests, commit messages or reports in
 this repository. Output/cache files are atomic and mode 0600. The loader schema
 is in `schema.py`: typed observations, capture window, stratum, split and expected
-properties. Optional diarization/invocation metadata must be server authored.
+properties. Retired source-tag metadata in older external fixtures is ignored and
+never forwarded to prompts or reports. Optional diarization/invocation metadata must be server authored.
 
 Held-out cases are sealed: never tune prompts using held-out generated notes or
 scores. The CLI and runner require `--split held_out --frozen` acknowledgement.
@@ -46,7 +47,7 @@ request's usage/latency, not incremental spend for the resume. Keep this cache
 private; it contains reference narratives and generated/scored notes derived from sensitive evidence.
 
 Reports include every note and per-arm/per-stratum gap, unsupported claims, wrong
-provenance, sensitive tagging misses, deterministic/judged vacuity, property
+provenance, unrelated content claims, deterministic/judged vacuity, property
 failures, token counts and latency. Provider usage absent from the response is
 null. Cost aggregates include measured counts. Paired `episode_vs_baseline` and
 `episode_vs_stored` compare the same episode IDs, overall and per stratum;
@@ -55,8 +56,11 @@ faithfulness deltas favor episode. Judge variability and small strata still
 require repeated acceptance runs before a quality claim.
 
 Episode notes center the owner's episode and require an evidenced connection for
-screen/background facts. The shared production/reference/judge privacy policy
-marks claims private for private sources OR sensitive content. Names read on a
+screen/background facts. The judge counts claims from evidence without an evidenced
+connection to the episode across all visible fields, including source-supported
+incidental content. `unrelated_content_claims` is reported per arm/stratum and in
+paired comparisons; unsupported/wrong-provenance faithfulness metrics stay intact.
+Sharing applies to the whole note; claims carry provenance without private markers. Names read on a
 screen are shown/written; conclusions about absent evidence are inferred. Rich
 person/pronoun/AI-agent rules also apply. Claims bind factual sentences/bullets
 with short unique exact anchors; headings need no claims. The generation schema

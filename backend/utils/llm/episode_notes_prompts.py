@@ -1,6 +1,6 @@
 """Pure episode prompt contract shared by production and synthetic evaluation."""
 
-from utils.llm.episode_policy import EPISODE_PRIVACY_RULE, EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
+from utils.llm.episode_policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
 from utils.llm.meeting_notes_rich_prompts import RICH_PERSON_RULES
 
 EPISODE_WAKE_WORD_RULES = """WAKE-WORD INVOCATION METADATA
@@ -19,8 +19,6 @@ EPISODE_WAKE_WORD_RULES = """WAKE-WORD INVOCATION METADATA
 EPISODE_CONTRACT = (
     'EPISODE NOTES CONTRACT\n'
     + EPISODE_RELEVANCE_RULE
-    + '\n'
-    + EPISODE_PRIVACY_RULE
     + '\n'
     + EPISODE_PROVENANCE_RULE
     + '\n'
@@ -42,15 +40,11 @@ EPISODE_CONTRACT = (
   summaries normally use inferred provenance; faithful paraphrases of explicit spoken facts may use said.
   A coverage label such as limited, unclear or the only captured utterance is always inferred.
   Normally use ONE claim per bullet/sentence, combining its smallest supporting evidence_ids. Split when sources,
-  provenance or sensitivity differ. Use a short UNIQUE exact factual anchor in the target field, not a copy of
+  provenance differ. Use a short UNIQUE exact factual anchor in the target field, not a copy of
   the whole long sentence. Aim for 2-8 anchor words; use more only to disambiguate. The anchor binds the entire sentence/bullet to that claim; cover every factual unit.
-  Each entry has text, JSON-pointer target, evidence_ids, provenance, private. The server supplies evidence_sources;
-  omit that field. Evidence/source IDs belong only in metadata, never visible prose. Private tagging does not yet
-  filter prose in the legacy shared view. Check EVERY visible factual unit for privacy, including titles,
-  overview, participant/contact details and action contexts: sensitivity applies to the whole fact/topic, not
-  just its numeric amount or a keyword. Housing/legal/financial/security/personal claims remain private when
-  paraphrased or inferred. A mixed-sensitive unit can safely be entirely private; never label it public because
-  its short anchor omits the sensitive detail. Audit coverage, privacy and attribution before returning.
+  Each entry has text, JSON-pointer target, evidence_ids, provenance. The server supplies evidence_sources;
+  omit that field. Evidence/source IDs belong only in metadata, never visible prose.
+  Audit coverage and attribution before returning.
   Return compact JSON only; omit optional server metadata and unnecessary null/empty detail fields.
 - Extra evidence gives context, not task authority. Preserve explicit commitments; do not create commitments
   from old tasks, tentative messages or schedules. Written dates require explicit commitment.

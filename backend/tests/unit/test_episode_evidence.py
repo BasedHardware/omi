@@ -27,8 +27,8 @@ from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_in
 START = datetime(2026, 1, 12, 10, tzinfo=timezone.utc)
 
 
-def claim(target, text, id='screen_ocr:1', provenance='written', private=False):
-    return NoteClaim(target=target, text=text, evidence_ids=[id], provenance=provenance, private=private)
+def claim(target, text, id='screen_ocr:1', provenance='written'):
+    return NoteClaim(target=target, text=text, evidence_ids=[id], provenance=provenance)
 
 
 def valid_note(title='Written approval', overview='The message shows approval.'):
@@ -84,7 +84,7 @@ def test_flag_off_prompt_bytes_pinned_to_base(processing):
     assert 'note_claims' in EpisodeStructuredExtraction.model_json_schema()['properties']
 
 
-def test_adapters_keep_source_time_actor_and_private_rows():
+def test_adapters_keep_source_time_actor_and_screen_rows():
     segment = SimpleNamespace(id='s1', start=1.0, end=3.0, is_user=True, speaker='SPEAKER_00', text='Hello')
     conv = SimpleNamespace(transcript_segments=[segment], source='desktop', started_at=START, finished_at=None)
     speech, state = capture_evidence(conv)
@@ -103,9 +103,8 @@ def test_adapters_keep_source_time_actor_and_private_rows():
     items = context_pack_evidence(pack)
     assert {item.source_kind for item in items} == {'prior_conversation', 'open_task', 'goal', 'screen_ocr'}
     ocr = items[-1]
-    assert ocr.time == '10:01' and ocr.actor is None and ocr.sensitivity == 'private'
+    assert ocr.time == '10:01' and ocr.actor is None
     assert 'Ari: agreed' in ocr.content
-    assert all(item.sensitivity == 'private' for item in items)
     assert render_episode_evidence(items).startswith('EPISODE EVIDENCE')
     frame = SimpleNamespace(frame_id='f1', summary='Empty call screen', names=(), role='strip', captured_at=START)
     assert meeting_evidence(None, None, [frame])[0].source_ref == 'f1'
@@ -115,11 +114,10 @@ def test_adapters_keep_source_time_actor_and_private_rows():
     )
 
 
-def test_wrong_provenance_invalid_ids_coverage_and_sensitivity():
-    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed', sensitivity='private')]
+def test_wrong_provenance_invalid_ids_coverage():
+    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed')]
     note = valid_note()
     assert not claim_violations(note, evidence)
-    assert all(c.private for c in note.note_claims)
     assert note.note_claims[0].evidence_sources[0].source_kind == 'screen_ocr'
     assert 'content' not in note.note_claims[0].evidence_sources[0].model_dump()
     note.note_claims[0].provenance = 'said'
@@ -159,7 +157,7 @@ def invoke_notes(processing, monkeypatch, responses, *, episode=True, sections=F
     prefix = ConversationPromptPrefix(
         conversation_id='synthetic', context='FULL TRANSCRIPT\n', has_usable_content=False
     )
-    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed', sensitivity='private')]
+    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed')]
     result = processing.get_conversation_notes(
         prefix,
         started_at=START,
@@ -179,7 +177,6 @@ def test_empty_audio_with_screen_evidence_and_one_vacuity_retry(processing, monk
     assert len(calls) == 2
     assert 'coverage is missing' in calls[-1][-1].content
     assert result.title == 'Written approval'
-    assert all(c.private for c in result.note_claims)
     assert 'EPISODE EVIDENCE' in calls[0][1].content
     assert 'FULL TRANSCRIPT' not in calls[0][1].content
 
@@ -220,13 +217,10 @@ def test_episode_ids_removed_from_initial_and_retry_without_transcript_citations
 def test_claim_coverage_includes_each_factual_span():
     note = valid_note(overview='The message shows approval. Ari wrote about medical treatment.')
     note.note_claims[1].text = 'The message shows approval.'
-    evidence = [
-        EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Synthetic thread', sensitivity='private')
-    ]
+    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Synthetic thread')]
     assert 'missing_claim_coverage' in claim_violations(note, evidence)
     note.note_claims.append(claim('/overview', 'Ari wrote about medical treatment.'))
     assert not claim_violations(note, evidence)
-    assert all(c.private for c in note.note_claims)
 
 
 def test_wake_word_metadata_is_server_authored_and_prompted(processing, monkeypatch):
@@ -280,7 +274,7 @@ def test_section_projection_remaps_claims(processing, monkeypatch):
     assert len(calls) == 1
     assert result.overview.startswith('## Written decision')
     overview_claims = [c for c in result.note_claims if c.target == '/overview']
-    assert len(overview_claims) == 2 and all(c.text in result.overview and c.private for c in overview_claims)
+    assert len(overview_claims) == 2 and all(c.text in result.overview for c in overview_claims)
 
 
 def test_sdk_and_backend_fallback_keep_claims_optional():
@@ -305,6 +299,16 @@ def test_sdk_and_backend_fallback_keep_claims_optional():
         assert 'note_claims' not in model().model_dump()
         value = model.model_validate(valid_note().model_dump(mode='json'))
         assert value.model_dump()['note_claims'][0]['provenance'] == 'written'
+        claim_schema = model.model_json_schema()['$defs']['NoteClaim']['properties']
+        assert 'private' not in claim_schema
+        assert 'sensitivity' not in model.model_json_schema()['$defs']['NoteEvidenceRef']['properties']
+        legacy = valid_note().model_dump(mode='json')
+        legacy['note_claims'][0]['private'] = True
+        legacy['note_claims'][0]['evidence_sources'] = [
+            {'id': 'screen_ocr:1', 'source_kind': 'screen_ocr', 'sensitivity': 'private'}
+        ]
+        serialized = model.model_validate(legacy).model_dump()['note_claims'][0]
+        assert 'private' not in serialized and 'sensitivity' not in serialized['evidence_sources'][0]
 
 
 def test_mixed_remote_channel_does_not_gain_an_actor_from_roster():
@@ -425,7 +429,7 @@ def test_same_bounded_ocr_read_retains_messages_only_for_episode_pack(monkeypatc
     assert 'sensitive reason' not in legacy.screen_text and not legacy.screen_rows
     assert not typed.screen_text
     items = context_pack_evidence(typed)
-    assert 'sensitive reason' in items[0].content and items[0].sensitivity == 'private'
+    assert 'sensitive reason' in items[0].content
 
 
 def test_invalid_claim_schema_never_invalidates_usable_note(processing, monkeypatch, caplog):
@@ -489,8 +493,8 @@ def test_empty_retry_keeps_initial_note(processing, monkeypatch, caplog):
     assert 'to=empty_retry' in caplog.text
 
 
-@pytest.mark.parametrize('source,private', [('screen_activity', True), ('google', False)])
-def test_roster_claim_inherits_source_sensitivity(source, private):
+@pytest.mark.parametrize('source', ['screen_activity', 'google'])
+def test_roster_claim_retains_underlying_source(source):
     from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
 
     roster = MeetingRoster(
@@ -501,12 +505,13 @@ def test_roster_claim_inherits_source_sensitivity(source, private):
     item = meeting_evidence(roster, None, [])[0]
     note = Structured(title='Ari', note_claims=[claim('/title', 'Ari', item.id, 'shown')])
     assert not claim_violations(note, [item])
-    assert note.note_claims[0].private is private
+    assert json.loads(item.content)['source'] == source
+    assert note.note_claims[0].evidence_sources[0].source_ref == source
 
 
 @pytest.mark.parametrize('field', ['owner_name', 'name', 'email', 'organization', 'role'])
 def test_claim_coverage_includes_owner_and_participant_fields(field):
-    item = EvidenceItem(id='roster:0', source_kind='roster', content='Synthetic identity', sensitivity='private')
+    item = EvidenceItem(id='roster:0', source_kind='roster', content='Synthetic identity')
     note = Structured(title='Synthetic', note_claims=[claim('/title', 'Synthetic', item.id, 'shown')])
     if field == 'owner_name':
         note.action_items = [ActionItem(description='Send report', owner_name='Ari')]
@@ -520,7 +525,6 @@ def test_claim_coverage_includes_owner_and_participant_fields(field):
     assert 'missing_claim_coverage' in claim_violations(note, [item], drop_invalid=True)
     note.note_claims.append(claim(target, text, item.id, 'shown'))
     assert not claim_violations(note, [item])
-    assert note.note_claims[-1].private
 
 
 @pytest.mark.parametrize('episode_mode', [True, False])
@@ -563,7 +567,7 @@ def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch
         assert roster.entries[0].display_name == 'Screen identity'
 
 
-def test_frame_added_identity_in_calendar_roster_keeps_screen_sensitivity():
+def test_frame_added_identity_in_calendar_roster_keeps_screen_source():
     from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
 
     roster = MeetingRoster(
@@ -583,8 +587,7 @@ def test_frame_added_identity_in_calendar_roster_keeps_screen_sensitivity():
     )
     frame = SimpleNamespace(frame_id='f1', names=('Bo',), summary='Synthetic screen', role='strip', captured_at=START)
     items = meeting_evidence(roster, calendar, [frame])
-    assert items[1].sensitivity == 'standard'
-    assert items[2].sensitivity == 'private'
+    assert json.loads(items[1].content)['source'] == 'google'
     assert json.loads(items[2].content)['source'] == 'screen_activity'
 
 
@@ -615,26 +618,25 @@ def test_compact_evidence_preserves_provenance_and_trusted_metadata():
             time='2026-01-01T10:00:00Z',
             actor='Ari',
             content='Invented message',
-            sensitivity='private',
             source_ref='s1',
             wake_word_invocation=True,
             diarization_key='cluster:0',
         ),
-        EvidenceItem(id='screen:1', source_kind='screen_ocr', content='Invented screen', sensitivity='private'),
+        EvidenceItem(id='screen:1', source_kind='screen_ocr', content='Invented screen'),
     ]
     rendered = render_episode_evidence(items)
     encoded = json.loads(rendered.split('\n', 1)[1])
     assert encoded[0] == items[0].model_dump() | {'id': 'evidence:0'}
-    assert encoded[1]['sensitivity'] == 'private' and 'actor' not in encoded[1]
+    assert 'actor' not in encoded[1] and 'sensitivity' not in encoded[1]
     assert len(rendered) < len(json.dumps([item.model_dump() for item in items], indent=2))
 
 
-def test_episode_person_privacy_and_relevance_rules_are_shared():
+def test_episode_person_provenance_and_relevance_rules_are_shared():
     from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT
-    from utils.llm.episode_policy import EPISODE_PRIVACY_RULE, EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE
+    from utils.llm.episode_policy import EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE
     from utils.llm.meeting_notes_rich_prompts import RICH_PERSON_RULES
 
-    for rule in [EPISODE_PRIVACY_RULE, EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE]:
+    for rule in [EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE]:
         assert all(rule in prompt for prompt in [EPISODE_CONTRACT, REFERENCE_PROMPT, JUDGE_PROMPT])
     assert RICH_PERSON_RULES in EPISODE_CONTRACT
     assert "Never infer anyone's gender" in EPISODE_CONTRACT
@@ -643,6 +645,8 @@ def test_episode_person_privacy_and_relevance_rules_are_shared():
     assert 'Section headings need no claims' in EPISODE_CONTRACT
     schema = EpisodeStructuredExtraction.model_json_schema()
     assert 'evidence_sources' not in schema['$defs']['ExtractedNoteClaim']['properties']
+    assert 'private' not in schema['$defs']['ExtractedNoteClaim']['properties']
+    assert 'private' not in EPISODE_CONTRACT and 'sensitivity' not in EPISODE_CONTRACT
     output = EpisodeStructuredExtraction.model_validate(
         {'note_claims': [claim('/title', 'Budget').model_dump()]}
     ).to_structured()

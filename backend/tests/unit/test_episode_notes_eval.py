@@ -41,7 +41,7 @@ def test_fake_llm_reports_per_stratum_and_does_not_leak_expectations():
             'informativeness_gap': 0.8,
             'unsupported_claims': 1,
             'wrong_provenance_claims': 2,
-            'sensitive_tagging_misses': 3,
+            'unrelated_content_claims': 3,
             'vacuous': True,
             'property_failures': ['missing detail'],
             'reasons': ['synthetic fake score'],
@@ -52,6 +52,9 @@ def test_fake_llm_reports_per_stratum_and_does_not_leak_expectations():
     assert len(report['cases']) == 11
     assert all(row['deterministic_vacuity'] and not row['faithfulness_pass'] for row in report['cases'])
     assert all(group['wrong_provenance_claims'] == 2 for group in report['arms']['episode']['strata'].values())
+    assert all(group['unrelated_content_claims'] == 3 for group in report['arms']['episode']['strata'].values())
+    assert report['arms']['episode']['overall']['unrelated_content_claims'] == 33
+    assert 'sensitive_tagging_misses' not in report['arms']['episode']['overall']
     assert json.loads(json.dumps(report)) == report
     assert len(report['arms']['episode']['prompt_sha256']) == 64
     assert all(

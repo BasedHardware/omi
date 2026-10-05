@@ -59,7 +59,7 @@ def fake(prompt, payload):
             'informativeness_gap': 0.1,
             'unsupported_claims': 0,
             'wrong_provenance_claims': 0,
-            'sensitive_tagging_misses': 0,
+            'unrelated_content_claims': 0,
             'vacuous': False,
             'property_failures': [],
             'reasons': [],
@@ -234,3 +234,58 @@ def test_candidate_pin_matches_production_route_without_importing_clients():
     route = next(value for key, value in zip(profile.keys, profile.values) if ast.literal_eval(key) == 'conv_structure')
     assert isinstance(route.elts[0], ast.Name) and route.elts[0].id == 'LUNA_MODEL'
     assert ast.literal_eval(route.elts[1]) == 'openai'
+
+
+def test_supported_unrelated_content_metric_per_arm_stratum_and_pair(tmp_path):
+    bundle = fixtures()
+    bundle.episodes[0].evidence.screen_ocr.append(
+        Observation(id='screen:unrelated', content='An unrelated document lists a synthetic recipe.')
+    )
+    stored = tmp_path / 'stored'
+    stored.mkdir()
+    (stored / 'standin.json').write_text(json.dumps({'fixture_id': bundle.episodes[0].id, 'title': 'stored'}))
+
+    def fake(prompt, payload):
+        if prompt == REFERENCE_PROMPT:
+            return {'narrative': 'Synthetic episode', 'claims': []}
+        if prompt in (CANDIDATE_PROMPT, BASELINE_PROMPT):
+            return {'title': 'episode' if prompt == CANDIDATE_PROMPT else 'baseline'}
+        assert prompt == JUDGE_PROMPT
+        assert 'ALL visible fields' in prompt
+        assert 'source-supported but unrelated claims count' in prompt
+        return {
+            'informativeness_gap': 0.1,
+            'unsupported_claims': 0,
+            'wrong_provenance_claims': 0,
+            'unrelated_content_claims': {'episode': 1, 'baseline': 2, 'stored': 3}[payload['candidate']['title']],
+            'vacuous': False,
+            'property_failures': [],
+            'reasons': ['Synthetic supported but unrelated detail'],
+        }
+
+    report = evaluate(bundle, fake, arms=('episode', 'baseline', 'stored'), stored_notes=stored)
+    for arm, count in [('episode', 1), ('baseline', 2), ('stored', 3)]:
+        assert report['arms'][arm]['overall']['unrelated_content_claims'] == count
+        assert report['arms'][arm]['strata']['invented']['unrelated_content_claims'] == count
+        assert report['arms'][arm]['overall']['faithfulness_pass'] == 1
+    for arm, delta in [('baseline', -1), ('stored', -2)]:
+        paired = report['paired'][f'episode_vs_{arm}']
+        assert paired['overall']['mean_episode_minus_comparator']['unrelated_content_claims'] == delta
+        assert paired['strata']['invented']['mean_episode_minus_comparator']['unrelated_content_claims'] == delta
+
+
+def test_external_legacy_fixture_tags_are_discarded_without_relaxing_schema(tmp_path):
+    data = fixtures(synthetic=False).model_dump()
+    data['episodes'][0]['evidence']['screen_ocr'][0]['sensitivity'] = 'private'
+    data['episodes'][0]['expected']['private_claims'] = ['Synthetic legacy expectation']
+    path = tmp_path / 'external-standin.json'
+    path.write_text(json.dumps(data))
+    result = load_fixtures(path)
+    assert not result.synthetic
+    evidence = result.episodes[0].evidence.model_dump()
+    assert 'sensitivity' not in evidence['screen_ocr'][0]
+    assert 'private_claims' not in result.episodes[0].expected.model_dump()
+    data['episodes'][0]['evidence']['screen_ocr'][0]['unknown_metadata'] = True
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match='extra_forbidden'):
+        load_fixtures(path)

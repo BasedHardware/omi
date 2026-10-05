@@ -15,7 +15,6 @@ class ExtractedNoteClaim(BaseModel):
     target: str = Field(description='JSON pointer to visible field')
     evidence_ids: List[str]
     provenance: Literal['said', 'shown', 'written', 'inferred']
-    private: bool
 
 
 class EpisodeStructuredExtraction(RichStructuredExtraction):
@@ -23,7 +22,7 @@ class EpisodeStructuredExtraction(RichStructuredExtraction):
 
     note_claims: List[ExtractedNoteClaim] = Field(
         default_factory=list,
-        description='One binding per factual sentence/bullet; split for differing sources or sensitivity',
+        description='One binding per factual sentence/bullet; split for differing sources',
     )
 
     def to_structured(self) -> Structured:

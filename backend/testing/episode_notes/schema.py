@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 FIXTURES = Path(__file__).with_name('fixtures') / 'episodes.json'
 
@@ -17,10 +17,17 @@ class Observation(BaseModel):
     time: str | None = None
     actor: str | None = None
     content: str
-    sensitivity: Literal['standard', 'private'] = 'standard'
     source_ref: str | None = None
     diarization_key: str | None = None
     wake_word_invocation: bool = False
+
+    @model_validator(mode='before')
+    @classmethod
+    def _drop_retired_source_tag(cls, value):
+        # External fixture sets can predate the ruling; the tag is never retained.
+        if isinstance(value, dict):
+            return {key: item for key, item in value.items() if key != 'sensitivity'}
+        return value
 
 
 class EvidenceBundle(BaseModel):
@@ -42,7 +49,6 @@ class ExpectedProperties(BaseModel):
     must_cover: list[str]
     must_not_claim: list[str] = Field(default_factory=list)
     provenance: dict[str, Literal['said', 'shown', 'written', 'inferred']] = Field(default_factory=dict)
-    private_claims: list[str] = Field(default_factory=list)
 
 
 class EpisodeFixture(BaseModel):
@@ -64,7 +70,7 @@ class JudgeScore(BaseModel):
     informativeness_gap: float = Field(ge=0, le=1)
     unsupported_claims: int = Field(ge=0)
     wrong_provenance_claims: int = Field(ge=0)
-    sensitive_tagging_misses: int = Field(ge=0)
+    unrelated_content_claims: int = Field(ge=0)
     vacuous: bool
     property_failures: list[str]
     reasons: list[str]
