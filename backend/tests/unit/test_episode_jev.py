@@ -173,3 +173,13 @@ def test_late_completed_writer_is_preserved_and_repair_disabled(monkeypatch):
     note = SimpleNamespace(content='Synthetic complete note', usage_metadata={})
     assert run.invoke(SimpleNamespace(invoke=lambda _: note), []) is note
     assert run.repair_disabled and 'writer_deadline_overrun' in run.violations
+
+
+def test_wire_image_messages_are_counted_when_optional_guard_is_disabled():
+    from utils.llm.episode_writer import episode_input_bytes, episode_budget_exceeded
+
+    image = {'role': 'user', 'content': [{'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,eA=='}}]}
+    assert episode_input_bytes([image]) > 25
+    run = NotesRun('episode')
+    assert not episode_budget_exceeded([image], EpisodeWriterSettings(), run)
+    assert run.estimated_input_bytes > 25

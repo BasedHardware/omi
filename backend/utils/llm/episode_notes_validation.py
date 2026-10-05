@@ -11,6 +11,7 @@ from models.episode_extraction import ExtractedNoteClaim
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # Runtime SDK/fallback export.
 from utils.conversations.episode_evidence import EvidenceItem, SourceKind, claim_violations, restore_episode_claim_ids
 from utils.conversations.episode_vacuity import is_vacuous_note
+from utils.llm.episode_writer import episode_input_bytes
 from utils.llm.meeting_notes_presentation import has_note_content
 from utils.llm.meeting_notes_validation import visible_text_fields, enforce_structured_presentation_contract
 from utils.observability.fallback import record_fallback
@@ -89,11 +90,7 @@ def repair_episode_note(
     try:
         # Long inputs get local repair only; never buy a second full long-context call.
         remaining = run.remaining(repair_budget) if run else repair_budget
-        if (
-            (run and run.repair_disabled)
-            or remaining < 15
-            or sum(len(str(message.content).encode('utf-8')) for message in messages) > 120000
-        ):
+        if (run and run.repair_disabled) or remaining < 15 or episode_input_bytes(messages) > 120000:
             violations.add('repair_budget_exhausted')
             raise TimeoutError('repair budget exhausted')
         retry_model = retry_model_factory((remaining // 5) * 5) if retry_model_factory is not None else model

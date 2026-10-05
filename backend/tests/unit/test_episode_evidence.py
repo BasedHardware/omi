@@ -1,4 +1,5 @@
 import json
+import os
 import importlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,7 +47,16 @@ def claim_generation_mode(monkeypatch):
     from config import episode_writer
 
     configured = episode_writer.episode_writer_settings
-    monkeypatch.setattr(episode_writer, 'episode_writer_settings', lambda: replace(configured(), selection='compact'))
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'compact')
+    monkeypatch.setattr(
+        episode_writer,
+        'episode_writer_settings',
+        lambda: (
+            replace(configured(), selection='compact')
+            if os.getenv('MEETING_NOTES_EPISODE_SELECTION') == 'compact'
+            else configured()
+        ),
+    )
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'default')
 
 

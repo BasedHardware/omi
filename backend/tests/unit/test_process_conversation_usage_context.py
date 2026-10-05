@@ -1286,8 +1286,9 @@ def test_all_callsites_use_get_llm():
     """Verify ALL callsites across conversation_processing, knowledge_graph, and memories use get_llm()."""
     backend_dir = Path(__file__).resolve().parent.parent.parent
 
-    # conversation_processing.py: 13 callsites, including bounded episode repair and selection
+    # Processor and its episode model factory: 13 calls, including repair and selection
     conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text(encoding="utf-8")
+    conv_proc_source += (backend_dir / "utils" / "llm" / "episode_writer.py").read_text(encoding="utf-8")
     conv_proc_calls = re.findall(r"get_llm\(\s*'(\w+)'", conv_proc_source)
     assert 'conv_action_items' in conv_proc_calls, "Missing get_llm('conv_action_items') in conversation_processing.py"
     assert 'conv_app_result' in conv_proc_calls, "Missing get_llm('conv_app_result') in conversation_processing.py"
@@ -1316,10 +1317,7 @@ def test_all_callsites_use_get_llm():
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
 
-    # Total: 11 + 2 + 6 = 19 callsites (notes v2 adds the merged note call). This was 18 while the
-    # pattern above required the feature key on the same line as `get_llm(`: one already-wrapped
-    # conv_app_result callsite was invisible to it, so the count was calibrated against a scan that
-    # silently skipped wrapped calls.
+    # Include wrapped calls and the moved episode retry factory; keep all getter routes covered.
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
     assert total == 22, f"Expected 22 total get_llm() callsites, got {total}"
 

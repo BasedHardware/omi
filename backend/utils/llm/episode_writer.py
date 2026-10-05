@@ -47,7 +47,7 @@ def episode_input_bytes(messages) -> int:
     """Measure text/image payload locally, without tokenizer downloads or model calls."""
     total = 0
     for message in messages:
-        content = message.content
+        content = message.get('content') if isinstance(message, dict) else message.content
         blocks = content if isinstance(content, list) else [content]
         for block in blocks:
             if isinstance(block, dict) and block.get('type') == 'text':
@@ -243,9 +243,9 @@ def invoke_episode_writer(model, messages, settings, run, *, fallback_factory, d
         return (run.invoke(model, messages) if run else model.invoke(messages)), fallback
 
 
-def episode_retry_model(factory, cache_key, cache_options, timeout, effort='default'):
+def episode_retry_model(get_llm, cache_key, cache_options, timeout, effort='default'):
     return bind_episode_effort(
-        factory(
+        get_llm(
             'conv_structure',
             cache_key=cache_key,
             prompt_cache_options=cache_options,
