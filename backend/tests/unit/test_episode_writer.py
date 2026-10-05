@@ -213,3 +213,50 @@ def test_capture_constraints_survive_relevance_selection_without_topic_overlap()
         EvidenceItem(id='noise', source_kind='screen_ocr', content='An unrelated invented recipe document.'),
     ]
     assert [item.id for item in deterministic_episode_selection(items)] == ['s', 'state']
+
+
+def test_high_effort_guard_counts_utf8_and_images_without_tokenizer():
+    from types import SimpleNamespace
+    from utils.llm.episode_writer import episode_budget_exceeded, episode_input_bytes
+    from utils.llm.notes_observability import NotesRun
+
+    messages = [SimpleNamespace(content=[{'type': 'text', 'text': 'é' * 100}])]
+    assert episode_input_bytes(messages) == 200
+    settings = EpisodeWriterSettings('xhigh', thinking_max_input_bytes=200)
+    run = NotesRun('episode')
+    assert not episode_budget_exceeded(messages, settings, run)
+    messages.append(SimpleNamespace(content=[{'type': 'image_url', 'image_url': {'url': 'x' * 200}}]))
+    assert episode_budget_exceeded(messages, settings, run)
+    assert run.estimated_input_bytes > 200
+    assert not episode_budget_exceeded(messages, replace(settings, effort='default'), run)
+
+
+def test_production_defaults_choose_guarded_xhigh_and_invalid_budget_fails_safe(monkeypatch):
+    monkeypatch.delenv('MEETING_NOTES_EPISODE_EFFORT', raising=False)
+    assert episode_writer_settings().effort == 'xhigh'
+    for invalid in ('0', '-1', 'nan', '240001'):
+        monkeypatch.setenv('MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES', invalid)
+        assert episode_writer_settings().thinking_max_input_bytes == 24000
+
+
+def test_budget_route_reuses_baseline_generation_and_both_judges(tmp_path):
+    calls = []
+
+    def llm(prompt, payload):
+        calls.append(prompt)
+        return fake(prompt, payload)
+
+    evaluate(fixtures(), llm, arms=('baseline',), judge_samples=2, cache_dir=tmp_path)
+    assert len(calls) == 4  # Reference, baseline writer, two independent judges.
+    report = evaluate(
+        fixtures(),
+        llm,
+        arms=('episode', 'baseline'),
+        judge_samples=2,
+        cache_dir=tmp_path,
+        settings=EpisodeWriterSettings('xhigh', 'deterministic', False, thinking_max_input_bytes=4000),
+    )
+    assert len(calls) == 4
+    routed = [case for case in report['cases'] if case['arm'] == 'episode']
+    assert len(routed) == 2 and all(case['thinking_fallback'] for case in routed)
+    assert all(case['writer_arm'] == 'baseline' for case in routed)

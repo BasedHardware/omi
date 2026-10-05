@@ -42,6 +42,7 @@ def claim_generation_mode(monkeypatch):
     # These regression fixtures exercise the existing annotated path explicitly.
     monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
     monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'compact')
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'default')
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -842,3 +843,51 @@ def test_selected_effort_applies_to_writer_and_repair(processing, monkeypatch):
     )
     assert bindings == [{'reasoning_effort': 'high'}, {'reasoning_effort': 'high'}]
     assert len(calls) == 2
+
+
+def test_high_effort_budget_falls_back_before_writer_and_preserves_original_frames(processing, monkeypatch, caplog):
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
+
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'xhigh')
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'false')
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'deterministic')
+    monkeypatch.setenv('MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES', '24000')
+    messages, configs = [], []
+
+    def model(*args, **kwargs):
+        configs.append(kwargs)
+        return SimpleNamespace(
+            invoke=lambda value: messages.append(value)
+            or SimpleNamespace(
+                content=json.dumps({'title': 'Pricing approval', 'overview': 'Ari approved the pricing proposal.'})
+            )
+        )
+
+    monkeypatch.setattr(processing, 'get_llm', model)
+    speech = 'Ari approved the pricing proposal. ' * 1500
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='invented', transcript=speech, started_at=START, timezone_name='UTC', language_code='en'
+    )
+    frame = NotesFrameImage('original-frame', '+00:10', 'data:image/jpeg;base64,eA==')
+    with caplog.at_level('INFO'):
+        note = processing.get_conversation_notes(
+            prefix,
+            started_at=START,
+            language_code='en',
+            output_language_code=None,
+            tz='UTC',
+            task_intelligence_capture=False,
+            rich_context_enabled=True,
+            screen_frames=[frame],
+            episode_evidence=[EvidenceItem(id='s', source_kind='speech', content=speech)],
+        )
+    assert note.title == 'Pricing approval'
+    assert len(configs) == len(messages) == 1
+    assert 'max_retries' not in configs[0]  # Only the ordinary baseline model is acquired.
+    assert 'EPISODE NOTES CONTRACT' not in str(messages[0][0].content)
+    assert 'data:image/jpeg;base64,eA==' in str(messages[0][2])
+    receipts = [record.message for record in caplog.records if 'conversation_notes_receipt' in record.message]
+    assert len(receipts) == 1
+    assert 'arm=baseline_budget' in receipts[0]
+    assert 'requested_effort=xhigh' in receipts[0] and 'effort=default' in receipts[0]
+    assert 'thinking_input_baseline' in receipts[0]

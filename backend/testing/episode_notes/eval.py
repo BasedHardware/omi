@@ -119,12 +119,20 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--max-tokens', type=int, default=32000)
     parser.add_argument('--timeout', type=float, default=300)
     parser.add_argument('--candidate-effort', choices=EFFORTS, default='default')
+    parser.add_argument(
+        '--thinking-max-input-bytes',
+        type=int,
+        default=24000,
+        help='High/xhigh byte ceiling; 0 disables it for offline effort experiments only',
+    )
     parser.add_argument('--selection', choices=SELECTIONS, default='compact')
     parser.add_argument('--no-claims', action='store_true')
     parser.add_argument('--judge-samples', type=int, choices=(1, 2), default=1)
     parser.add_argument('--reference-model', default=os.getenv('EPISODE_EVAL_REFERENCE_MODEL', SCORING_MODEL))
     parser.add_argument('--judge-model', default=os.getenv('EPISODE_EVAL_JUDGE_MODEL', SCORING_MODEL))
     args = parser.parse_args(argv)
+    if args.thinking_max_input_bytes < 0:
+        parser.error('--thinking-max-input-bytes must be nonnegative')
     if args.split == 'held_out' and not args.frozen:
         parser.error('held_out requires explicit --split held_out --frozen acknowledgement')
     try:
@@ -169,7 +177,12 @@ def main(argv: list[str] | None = None) -> None:
             episode_ids=tuple(args.episode_id),
             reference_model=args.reference_model,
             judge_model=args.judge_model,
-            settings=EpisodeWriterSettings(args.candidate_effort, args.selection, not args.no_claims),
+            settings=EpisodeWriterSettings(
+                args.candidate_effort,
+                args.selection,
+                not args.no_claims,
+                thinking_max_input_bytes=args.thinking_max_input_bytes,
+            ),
             judge_samples=args.judge_samples,
         )
         write_json(output, report)

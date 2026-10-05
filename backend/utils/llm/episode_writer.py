@@ -18,6 +18,46 @@ def bind_episode_effort(model: Any, effort: str) -> Any:
     return model if effort == 'default' else model.bind(reasoning_effort=effort)
 
 
+def episode_input_bytes(messages) -> int:
+    """Measure text/image payload locally, without tokenizer downloads or model calls."""
+    total = 0
+    for message in messages:
+        content = message.content
+        blocks = content if isinstance(content, list) else [content]
+        for block in blocks:
+            if isinstance(block, dict) and block.get('type') == 'text':
+                block = block.get('text', '')
+            text = block if isinstance(block, str) else json.dumps(block, ensure_ascii=False)
+            total += len(text.encode('utf-8'))
+    return total
+
+
+def episode_budget_exceeded(messages, settings, run) -> bool:
+    size = episode_input_bytes(messages)
+    if run is not None:
+        run.estimated_input_bytes = size
+    return settings.effort in {'high', 'xhigh'} and size > settings.thinking_max_input_bytes
+
+
+def baseline_budget_fallback(notes_fn, run, prefix, **kwargs):
+    """Reuse the same receipt and original rich inputs; never buy a timed-out writer first."""
+    from utils.observability.fallback import record_fallback
+
+    if run is not None:
+        run.arm = 'baseline_budget'
+        run.effort = 'default'
+        run.claims_enabled = False
+        run.violations.add('thinking_input_baseline')
+    record_fallback(
+        component='conversation_notes',
+        from_mode='episode_notes',
+        to_mode='baseline_budget',
+        reason='local_heal',
+        outcome='degraded',
+    )
+    return notes_fn(prefix, **kwargs)
+
+
 def prepare_episode_evidence(items, settings: EpisodeWriterSettings, *, started_at, finished_at, run, model_factory):
     items = compact_episode_items(items)
     if settings.selection == 'compact':

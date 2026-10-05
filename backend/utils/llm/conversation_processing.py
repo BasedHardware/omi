@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 from utils.llm.conversation_notes_prompts import (
     conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
+    conversation_note_density,
     SHARED_CONVERSATION_PREAMBLE,
 )
 from utils.conversations.wake_word import (
@@ -1139,14 +1140,8 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
     return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
 
 
-# Whole-transcript structuring produces the title and summary a conversation cannot be finalized
-# without, so like the test-prompt summary above it must not inherit the shared gateway transport
-# deadline (15s to first response byte), which is sized for background feature calls. In prod on
-# 2026-08-19 every `Error processing conversation` 500 on /v1/conversations, /from-segments and
-# /reprocess ended at 15.2-15.8s of request latency chained from `openai.APITimeoutError`, leaving
-# the conversation with no summary; successful requests on those routes already run to ~55s, inside
-# the route's own 120s TimeoutMiddleware budget.
-# The budget itself is declared on the feature route now (see model_config).
+# Notes must use the foreground structure budget, not the gateway's background
+# first-byte deadline. The owning feature route declares it in model_config.
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 
 
@@ -1168,14 +1163,9 @@ def get_conversation_notes(
     episode_evidence: Optional[Sequence["EvidenceItem"]] = None,
     episode_finished_at: Optional[datetime] = None,
 ) -> Structured:
-    """Generate sections, actions, and events in one coherent model call.
-
-    Rich context selects the extended extraction schema and background suffix.
-    Episode mode additionally selects evidence, optional claims and configured effort.
-    With episode admission off, legacy/rich schema and prompt bytes are retained.
-    Instructions remain in the static system prefix; evidence is volatile user content.
-    """
+    """Generate notes using unchanged legacy/rich prompts or admitted episode evidence."""
     episode_mode = episode_evidence is not None
+    original_screen_frames = screen_frames
     run = current_run()
     if episode_mode and len(prefix.context.encode('utf-8')) > 240000:
         # Very long speech follows the existing rich path, without episode metadata overhead.
@@ -1209,12 +1199,7 @@ def get_conversation_notes(
         run.configure_episode(episode_settings)
     rich_mode = rich_context_enabled or episode_mode
     transcript_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
-    if transcript_word_count < 500:
-        density = f'Use 1-2 sections; target ~{95 if rich_mode else 80} words across the entire note.'
-    elif transcript_word_count < 2500:
-        density = f'Use 2-4 sections; target ~{240 if rich_mode else 200} words across the entire note.'
-    else:
-        density = f'Use 4-6 sections; target ~{480 if rich_mode else 400} words across the entire note.'
+    density = conversation_note_density(transcript_word_count, rich_mode)
 
     existing_lines: List[str] = []
     for item in existing_action_items or []:
@@ -1312,6 +1297,25 @@ def get_conversation_notes(
         messages.append(screen_frames_message(screen_frames, episode_mode=episode_mode))
     cache_key = CONVERSATION_NOTES_CACHE_KEY if cache_enabled else None
     cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
+    if episode_mode and import_module('utils.llm.episode_writer').episode_budget_exceeded(
+        messages, episode_settings, run
+    ):
+        return import_module('utils.llm.episode_writer').baseline_budget_fallback(
+            get_conversation_notes.__wrapped__,
+            run,
+            prefix,
+            started_at=started_at,
+            language_code=language_code,
+            output_language_code=output_language_code,
+            tz=tz,
+            task_intelligence_capture=task_intelligence_capture,
+            existing_action_items=existing_action_items,
+            trusted_wake_word_markers=trusted_wake_word_markers,
+            meeting_context=meeting_context,
+            rich_context_enabled=rich_context_enabled,
+            roster=roster,
+            screen_frames=original_screen_frames,
+        )
     model = get_llm(
         'conv_structure',
         cache_key=cache_key,

@@ -165,6 +165,15 @@ remaining-time repair guards are tested with fakes, not a live production route.
 
 The CLI retains historical `compact` + claims-on defaults for reproducible before
 comparisons. To test the current production experimental defaults, pass
-`--selection deterministic --no-claims --candidate-effort default` explicitly.
+`--selection deterministic --no-claims --candidate-effort xhigh --thinking-max-input-bytes 24000` explicitly.
 Eval permits 300s per writer call; production still permits 60s. Record deadline
 exceedances separately from eval errors before interpreting ramp readiness.
+
+`--thinking-max-input-bytes` defaults to 24000 and reuses the production byte
+measurement and baseline routing before generation for high/xhigh inputs.
+`0` disables this guard only for offline effort experiments (C5/C6); production
+environment configuration cannot disable the guard with zero. Baseline fallback
+reuses baseline generation/judge cache keys when their exact inputs match, keeping
+both samples comparable. Reports record `writer_arm` and `thinking_fallback`;
+no unseen candidate is synthesized from scores. A cache-only replay must reject
+every cache miss and must not be described as a new live generation or resampling.

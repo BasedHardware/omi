@@ -16,7 +16,7 @@ from testing.episode_notes.prompts import (
     SOURCE_FIELDS,
 )
 from testing.episode_notes.reporting import arm_reports, paired_reports
-from testing.episode_notes.selection import evaluate_selection
+from testing.episode_notes.selection import evaluate_selection, routed_candidate_request
 from testing.episode_notes.schema import FixtureSet, JudgeScore, LLMCallError, LLMResult
 from config.episode_writer import EpisodeWriterSettings
 from testing.episode_notes.prompts import fixture_evidence_items
@@ -187,6 +187,7 @@ def evaluate(
             return [error_row(arm, 'reference', exc) for arm in arms]
         rows = []
         for arm in arms:
+            writer_arm = arm
             result, judged = None, None
             selection_result, selection_fallback = None, None
             selected_items = fixture_evidence_items(episode)
@@ -210,17 +211,12 @@ def evaluate(
                             settings=settings,
                         )
                     phase = 'candidate'
-                    prompt, payload = candidate_request(episode, arm, settings=settings, items=selected_items)
-                    if arm == 'episode':
-                        prompt = candidate_prompt or prompt
-                        payload['_request_options'] = {
-                            'effort': settings.effort,
-                            'selection': settings.selection,
-                            'claims': settings.claims,
-                        }
-                    result = cached_call(cache_dir, arm, candidate_model, prompt, payload, llm)
+                    prompt, payload, writer_arm = routed_candidate_request(
+                        episode, arm, settings, selected_items, candidate_prompt
+                    )
+                    result = cached_call(cache_dir, writer_arm, candidate_model, prompt, payload, llm)
                     prompt_hash = fingerprint(prompt)
-                if arm == 'episode':
+                if writer_arm == 'episode':
                     result.content['note_claims'] = [
                         claim.model_dump()
                         for claim in EpisodeStructuredExtraction.model_validate(result.content).note_claims
@@ -233,7 +229,7 @@ def evaluate(
                 for sample in range(1, judge_samples + 1):
                     judged = cached_call(
                         cache_dir,
-                        f'judge-{arm}' if sample == 1 else f'judge-{arm}-sample{sample}',
+                        f'judge-{writer_arm}' if sample == 1 else f'judge-{writer_arm}-sample{sample}',
                         judge_model,
                         JUDGE_PROMPT,
                         {
@@ -255,6 +251,8 @@ def evaluate(
                             'writer_cost': result.cost(),
                             'stratum': episode.stratum,
                             'arm': arm,
+                            'writer_arm': writer_arm,
+                            'thinking_fallback': arm == 'episode' and writer_arm == 'baseline',
                             'status': 'ok',
                             'candidate': result.content,
                             'candidate_cost': combined_cost(result, selection_result),
@@ -308,6 +306,7 @@ def evaluate(
             'claims': settings.claims,
             'selection_effort': settings.selection_effort,
             'selection_timeout': settings.selection_timeout,
+            'thinking_max_input_bytes': settings.thinking_max_input_bytes,
         },
         'samples': {
             str(sample): {

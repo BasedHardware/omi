@@ -102,6 +102,7 @@ entries are exempt: they are queued for removal, not running.
 | `MEETING_NOTES_EPISODE_SELECTION` | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
 | `MEETING_NOTES_EPISODE_SELECTION_EFFORT` | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
 | `MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS` | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
+| `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
 | `MEMORY_OWNER_JEV_FLIP_PERCENT` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `MEMORY_OWNER_JEV_SHADOW_DAILY_CAP` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
@@ -141,6 +142,7 @@ and an explicit empty literal renders as `''`.
 | `MEETING_NOTES_EPISODE_SELECTION` | Episode evidence selection: compact, deterministic or model; baseline unchanged | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_SELECTION_EFFORT` | Optional selector effort, default low; writer effort is independent | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS` | Optional selection pass timeout, default 30 seconds, bounded 1-30; fallback keeps writing | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
+| `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` | High/xhigh writer input byte ceiling, default 24000; larger inputs retain rich baseline before generation | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEMORY_OWNER_JEV_FLIP_PERCENT` | Universal owner flip control: 0 off, 100 on; unset follows live flag; other values off | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-21 | dazheng |
 | `MEMORY_OWNER_JEV_SHADOW_DAILY_CAP` | Global UTC daily admission cap for owner shadow, default 60000 | backend | env | closed | — | 60000 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | 60000 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-21 | dazheng |
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | Candidate-hash percentage for advisory owner measurement | backend | env | closed | — | 0 (cloud_run/backend-sync, cloud_run/backend-sync-backfill); 100 (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | 100 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-21 | dazheng |
@@ -374,6 +376,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEETING_NOTES_EPISODE_SELECTION` — Episode evidence selection: compact, deterministic or model; baseline unchanged (fail: closed)
 - `MEETING_NOTES_EPISODE_SELECTION_EFFORT` — Optional selector effort, default low; writer effort is independent (fail: closed)
 - `MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS` — Optional selection pass timeout, default 30 seconds, bounded 1-30; fallback keeps writing (fail: closed)
+- `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` — High/xhigh writer input byte ceiling, default 24000; larger inputs retain rich baseline before generation (fail: closed)
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)

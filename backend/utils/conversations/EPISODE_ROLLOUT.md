@@ -5,23 +5,27 @@
 Owner: David. No production enablement in this PR. Held-out acceptance on a new
 cohort must precede the first ramp. Sharing remains a decision about the whole note.
 
-Round-9 DEV status: **hold at 0%**. No measured configuration establishes all
-quality and production-deadline gates. Deterministic selection with claims off
-and default effort is the safe experimental default, not a launch approval.
-Xhigh improves coverage and faithfulness in both judge samples, but 7/24 writer
-calls exceeded the existing 60s deadline (maximum 164s). Do not enable it on
-foreground routes without separately validating the complete route budget.
-The eval endpoint's 300s timeout does not establish production completion.
+Round-9 DEV status: **hold at 0% pending held-out acceptance**. The recommended
+experimental configuration is deterministic selection, claims off, xhigh only
+within a 24k UTF-8 input-byte budget; larger inputs retain the existing rich
+baseline before buying a writer call. A cache-only replay on fixed DEV candidates
+meets both numerical judge samples with no observed writer deadline exceedance.
+This is a size policy replay, not another live generation or production guarantee.
+Unbounded xhigh had 7/24 calls above 60s (maximum 164s). The endpoint's 300s eval
+timeout does not establish production completion. Do not raise the byte ceiling
+or route deadlines without separately accepting long-meeting and route budgets.
 
 Writer configuration (episode cohort only, read at each call):
 
 - `MEETING_NOTES_EPISODE_SELECTION=deterministic` (default), `compact`, or `model`.
 - `MEETING_NOTES_EPISODE_CLAIMS_ENABLED=false` (default); true restores metadata.
-- `MEETING_NOTES_EPISODE_EFFORT=default` (default), `high`, or `xhigh`.
+- `MEETING_NOTES_EPISODE_EFFORT=xhigh` (default), `default`, or `high`.
+- `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES=24000` (default, bounded
+  4k–240k): high/xhigh above this text/image payload size use baseline.
 - Optional selector: `MEETING_NOTES_EPISODE_SELECTION_EFFORT=low` and
   `MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS=30` (bounded 1–30).
 
-Invalid settings retain these defaults. The model selector adds a paid call and
+Invalid effort falls back to no override; invalid selection/budget retain safe defaults. The model selector adds a paid call and
 up to 30s before the writer; invalid selection falls back to deterministic links.
 DEV did not justify its extra cost. References/judges remain unchanged. Do not
 raise an effort or enable the selector during a ramp without renewed acceptance.
@@ -37,11 +41,12 @@ Apply consistently to every service that finalizes notes; do not enable only one
 Compare the baseline control with the episode cohort, stratified by duration,
 source, admitted screen volume and capture completeness. `conversation_notes_receipt`
 logs numeric usage/latency/retries/claim count, arm (`episode`, `baseline`,
-`baseline_long`), fixed violation classes, vacuity, best-note fallback and errors.
+`baseline_long`, `baseline_budget`), fixed violation classes, vacuity, best-note fallback and errors.
 Logs contain no note/evidence text. Usage is provider input/output/cache-read metadata;
 missing usage is unknown, not zero. Existing fallback counters retain each violation.
 Receipts also record reasoning tokens, effort, selection mode/effort/deadline,
-claims enabled, selection calls and model errors. Retry count excludes selection.
+claims enabled, selection calls, requested/actual effort, estimated input bytes,
+configured byte ceiling and model errors. Retry count excludes selection.
 Recoverable selector/repair errors are separate from processing errors.
 Count retrieval reads with the existing Firestore read-site instrumentation. Billing,
 LLM gateway routing, cache writes and physical attempts need separate dashboards;
@@ -69,7 +74,9 @@ Those counts apply to the default deterministic/compact modes. Optional model
 selection permits one additional call (three total), skips large evidence, and
 consumes repair headroom; it can add up to 30s before a 60s initial writer call.
 Transport deadlines and gateway/direct hops are not hard wall-clock guarantees.
-The baseline_long arm retains baseline presentation/transport retry policy. Residual contract violations preserve a usable note.
+The baseline_long/baseline_budget arms retain baseline presentation/transport
+retry policy and original frames/background. Budget fallback shares one receipt;
+it never buys an episode writer before choosing baseline. Residual contract violations preserve a usable note.
 These limits do not eliminate baseline provider errors or guarantee every meeting
 finishes in 60s; they prevent additional long-context episode repair cost.
 

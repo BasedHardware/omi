@@ -145,3 +145,13 @@ Selector controls: `MEETING_NOTES_EPISODE_SELECTION_EFFORT` defaults low and
 `MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS` defaults 30 (bounded 1–30).
 Recoverable selector/repair model errors are separate from processing errors in
 receipts. Source selection failure keeps the conservative evidence and continues.
+
+The recommended DEV configuration uses xhigh only when the complete text/image
+payload is at most `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` (default 24k
+UTF-8 bytes, bounded 4k–240k). This is a local byte estimate, not a tokenizer or
+network read. Larger high/xhigh inputs use the original rich baseline BEFORE an
+episode writer call, preserving original frames/background and one receipt.
+Requested/actual effort and byte ceiling/size are logged. Default effort is xhigh
+with this guard; invalid effort uses no override. The 60s deadline stays unchanged.
+A cache-only fixed-candidate DEV policy replay meets both samples; held-out
+acceptance and operational completion are still required before any ramp.
