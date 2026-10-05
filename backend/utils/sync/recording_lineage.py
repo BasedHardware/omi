@@ -138,7 +138,7 @@ def _s1_claims_complete(capture_evidence_claims: Optional[Mapping], filenames: S
     return len(parsed) == len(filenames) == len(capture_evidence_claims)
 
 
-def _s1_refusal_reason(capture_evidence_claims: Optional[Mapping], filenames: Sequence[str]) -> str:
+def _s1_refusal_reason(capture_evidence_claims: object, filenames: Sequence[str]) -> str:
     """Bounded reason for a false S1 gate; never raises and never leaks claim content.
 
     Claims rejected at the upload HTTP boundary arrive here as ``{}`` — the
