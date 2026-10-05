@@ -107,6 +107,7 @@ _SYS_MODULE_NAMES = [
     "utils.conversations.render",
     "utils.conversations.factory",
     "utils.conversations.search",
+    "utils.conversations.mcp_transcript_search",
     "utils.conversations.transcript_chunks",
     "utils.retrieval",
     "utils.retrieval.tools",
@@ -313,6 +314,31 @@ def _merge_conversation_search_ids(keyword_ids, vector_ids):
 
 
 search_mod.merge_conversation_search_ids = MagicMock(side_effect=_merge_conversation_search_ids)
+transcript_search_mod = _stub_module("utils.conversations.mcp_transcript_search")
+
+
+class _ChatTranscriptSearch:
+    def __init__(self, rows, searched):
+        self.rows = rows
+        self.searched = searched
+
+    @property
+    def conversation_ids(self):
+        return list(dict.fromkeys(row['conversation_id'] for row in self.rows))
+
+
+transcript_search_mod.ChatTranscriptSearch = _ChatTranscriptSearch
+transcript_search_mod.chat_transcript_coverage_note = MagicMock(return_value="Transcript coverage is partial.")
+transcript_search_mod.chat_transcript_excerpts = MagicMock(return_value={})
+transcript_search_mod.merge_chat_conversation_ids = MagicMock(
+    side_effect=lambda keywords, transcripts, vectors, limit: list(dict.fromkeys(keywords + transcripts + vectors))[
+        : limit * 2
+    ]
+)
+transcript_search_mod.merge_summary_and_transcript_ids = MagicMock(
+    side_effect=lambda chunk_ids, summary_ids, limit: list(dict.fromkeys(chunk_ids + summary_ids))[:limit]
+)
+transcript_search_mod.search_chat_transcript_chunks = MagicMock(return_value=_ChatTranscriptSearch([], False))
 transcript_chunks_mod = _stub_module("utils.conversations.transcript_chunks")
 
 
@@ -337,6 +363,12 @@ def reset_conversation_search_stubs():
     transcript_chunks_mod.hydrate_chunk_texts.side_effect = _hydrate_chunk_texts
     vector_db.search_transcript_chunks.reset_mock()
     vector_db.search_transcript_chunks.return_value = []
+    transcript_search_mod.search_chat_transcript_chunks.reset_mock()
+    transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch([], False)
+    transcript_search_mod.chat_transcript_excerpts.reset_mock()
+    transcript_search_mod.chat_transcript_excerpts.side_effect = None
+    transcript_search_mod.chat_transcript_excerpts.return_value = {}
+    transcript_search_mod.merge_chat_conversation_ids.reset_mock()
 
 
 endpoints_mod = _stub_module("utils.other.endpoints")
@@ -647,6 +679,78 @@ class TestSearchConversationsText:
         vector_db.query_vectors.return_value = []
         conversations_db.get_conversations_by_id.reset_mock()
         conversations_db.get_conversations_by_id.return_value = []
+
+    def test_transcript_only_hit_adds_verbatim_evidence_and_source_preview(self):
+        transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch(
+            [{'conversation_id': 'spoken-only', 'chunk_index': 0}], True
+        )
+        transcript_search_mod.chat_transcript_excerpts.return_value = {'spoken-only': 'User: The invoice was $47.'}
+        conversations_db.get_conversations_by_id.return_value = [
+            {
+                'id': 'spoken-only',
+                'transcript_segments': [{'text': 'The invoice was $47.'}],
+                'structured': types.SimpleNamespace(title='Billing', overview='Generic summary'),
+                'created_at': datetime(2026, 8, 18, tzinfo=timezone.utc),
+            }
+        ]
+        embeddings = MagicMock()
+        embeddings.embed_query.return_value = [0.5]
+        sources = []
+        with patch.object(vector_db, 'index', object(), create=True), patch.object(
+            vector_db, 'embeddings', embeddings, create=True
+        ):
+            result = conversations_svc.search_conversations_text(
+                uid='test-uid', query='invoice amount', source_sink=sources
+            )
+        conversations_db.get_conversations_by_id.assert_called_once_with('test-uid', ['spoken-only'])
+        assert embeddings.embed_query.call_count == 1
+        assert vector_db.query_vectors.call_args.kwargs['query_vector'] == [0.5]
+        assert transcript_search_mod.search_chat_transcript_chunks.call_args.kwargs['query_vector'] == [0.5]
+        assert 'The invoice was $47' in result
+        assert sources[0]['source_id'] == 'spoken-only'
+        assert sources[0]['preview'] == 'User: The invoice was $47.'
+
+    def test_stale_transcript_hit_outside_date_filter_is_not_rendered(self):
+        transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch(
+            [{'conversation_id': 'stale', 'chunk_index': 0}], True
+        )
+        conversations_db.get_conversations_by_id.return_value = [{'id': 'stale', 'transcript_segments': []}]
+        search_mod.conversation_matches_date_range.return_value = False
+        embeddings = MagicMock()
+        embeddings.embed_query.return_value = [0.5]
+        with patch.object(vector_db, 'index', object(), create=True), patch.object(
+            vector_db, 'embeddings', embeddings, create=True
+        ):
+            result = conversations_svc.search_conversations_text(uid='test-uid', query='invoice')
+        assert 'No conversations found' in result
+        transcript_search_mod.chat_transcript_excerpts.assert_not_called()
+
+    def test_exact_reference_miss_does_not_claim_transcript_index_unavailable(self):
+        conversation_id = 'e8c05000-52f0-4a95-951c-ccd715523429'
+        search_mod.parse_exact_conversation_reference.return_value = conversation_id
+        result = conversations_svc.search_conversations_text(uid='test-uid', query=conversation_id)
+        assert 'No conversations found' in result
+        assert 'Transcript text was not searched' not in result
+        assert 'Transcript coverage is partial' not in result
+
+    def test_unrenderable_hit_does_not_leak_transcript_excerpt(self):
+        transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch(
+            [{'conversation_id': 'broken', 'chunk_index': 0}], True
+        )
+        transcript_search_mod.chat_transcript_excerpts.side_effect = lambda rows, _search: (
+            {'broken': 'Secret excerpt'} if rows else {}
+        )
+        conversations_db.get_conversations_by_id.return_value = [{'id': 'broken', 'transcript_segments': []}]
+        embeddings = MagicMock()
+        embeddings.embed_query.return_value = [0.5]
+        with patch.object(
+            conversations_svc, 'deserialize_conversation', side_effect=ValueError('invalid')
+        ), patch.object(vector_db, 'index', object(), create=True), patch.object(
+            vector_db, 'embeddings', embeddings, create=True
+        ):
+            result = conversations_svc.search_conversations_text(uid='test-uid', query='invoice')
+        assert 'Secret excerpt' not in result
+        assert transcript_search_mod.chat_transcript_excerpts.call_args.args[0] == []
 
     def test_no_results(self):
         result = conversations_svc.search_conversations_text(uid="test-uid", query="test query")
@@ -1003,6 +1107,31 @@ class TestRouterEndpoints:
         assert resp.status_code == 200
         body = resp.json()
         assert body["tool_name"] == "search_conversations"
+
+    def test_search_conversations_endpoint_returns_transcript_only_source(self):
+        transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch(
+            [{'conversation_id': 'spoken-only', 'chunk_index': 0}], True
+        )
+        transcript_search_mod.chat_transcript_excerpts.return_value = {'spoken-only': 'User: The invoice was $47.'}
+        conversations_db.get_conversations_by_id.return_value = [
+            {
+                'id': 'spoken-only',
+                'transcript_segments': [{'text': 'The invoice was $47.'}],
+                'structured': types.SimpleNamespace(title='Billing', overview='Generic summary'),
+                'created_at': datetime(2026, 8, 18, tzinfo=timezone.utc),
+            }
+        ]
+        embeddings = MagicMock()
+        embeddings.embed_query.return_value = [0.5]
+        with patch.object(vector_db, 'index', object(), create=True), patch.object(
+            vector_db, 'embeddings', embeddings, create=True
+        ):
+            resp = self.client.post('/v1/tools/conversations/search', json={'query': 'invoice amount'})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert 'The invoice was $47.' in body['result_text']
+        assert body['sources'][0]['source_id'] == 'spoken-only'
+        assert body['sources'][0]['preview'] == 'User: The invoice was $47.'
 
     def test_get_memories_endpoint(self):
         resp = self.client.get("/v1/tools/memories")
