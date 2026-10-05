@@ -357,6 +357,8 @@ def test_worst_case_encoded_growth_is_capped(monkeypatch, level):
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_score_encoding_failure_never_blocks_content_commit(monkeypatch, level):
+    import utils.observability.fallback as fallback
+
     import database.conversations as db
     import tests.unit.fixtures.strict_firestore_transaction as fixture
 
@@ -367,7 +369,7 @@ def test_score_encoding_failure_never_blocks_content_commit(monkeypatch, level):
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
     original = db._protect_json_value
     events = []
-    monkeypatch.setattr(db.fallback, 'record_fallback', lambda **kwargs: events.append(kwargs))
+    monkeypatch.setattr(fallback, 'record_fallback', lambda **kwargs: events.append(kwargs))
 
     def fail_scores(value, uid, protection):
         if isinstance(value, list) and value and 'stage' in value[0]:
@@ -606,10 +608,12 @@ def test_sync_bridge_aggregates_decoded_donor_scores(monkeypatch, level):
 
 @pytest.mark.parametrize('retains_rows', [True, False])
 def test_trim_telemetry_distinguishes_partial_retention(monkeypatch, retains_rows):
+    import utils.observability.fallback as fallback
+
     import database.conversations as db
 
     events = []
-    monkeypatch.setattr(db.fallback, 'record_fallback', lambda **kw: events.append(kw))
+    monkeypatch.setattr(fallback, 'record_fallback', lambda **kw: events.append(kw))
     encoded = db._protect_json_value([row()], 'u', 'standard') if retains_rows else None
     monkeypatch.setattr(scores, 'encode_bounded', lambda *a: (encoded, True))
     result = db.encode_conversation_for_write('u', dict(transcript_segments=[], speaker_match_scores=[row()]))

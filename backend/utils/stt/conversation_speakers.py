@@ -30,7 +30,6 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 import config.speaker_match_scores as match_scores
-import utils.observability.fallback as score_fallback
 
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
@@ -296,7 +295,7 @@ def resolve_conversation_speakers(
             )
         except Exception:
             score_seconds[index] = None
-            match_scores.record_failure(score_fallback, None, reason='malformed_doc')
+            match_scores.record_failure(None, reason='malformed_doc')
         distances[index] = {key: _cosine(vector, p) for key, p in prints.items()}
         decisions[index] = select_speaker_match(distances[index], threshold=VOICE_MATCH_THRESHOLD)
     decisions = arbitrate_owner_matches(
@@ -461,7 +460,7 @@ def resolve_conversation_speakers(
             else []
         )
     except Exception:
-        match_scores.record_failure(score_fallback, None)
+        match_scores.record_failure(None)
     return SpeakerResolution(
         speaker_ids=speaker_ids,
         significant_speaker_ids=significant,

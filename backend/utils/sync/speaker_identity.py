@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import config.speaker_match_scores as match_scores
-import utils.observability.fallback as score_fallback
 import utils.stt.speaker_match as match_policy
 
 import numpy as np
@@ -261,7 +260,7 @@ def identify_speakers_for_segments(
                     for segment in segments:
                         segment.speaker_match_scores = row
             except Exception:
-                match_scores.record_failure(score_fallback, logger)
+                match_scores.record_failure(logger)
             for segment in segments:
                 if segment.speaker_match_source == 'sync_embedding':
                     # Reprocessing may revisit our own earlier automatic accept.

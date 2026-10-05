@@ -49,7 +49,6 @@ from utils.metrics import (
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 import config.speaker_match_scores as match_scores
-import utils.observability.fallback as score_fallback
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
 from utils.speaker_identification import detect_speaker_introduction
 from utils.stt.streaming import sort_segments_by_start
@@ -605,7 +604,7 @@ class TranscriptProcessor:
                         None,
                     )
             except Exception:
-                match_scores.record_failure(score_fallback, logger, reason='malformed_doc')
+                match_scores.record_failure(logger, reason='malformed_doc')
             person_id = speaker.segment_assignments.get(cast(str, segment.id))
             if person_id is None and segment.speaker_id in speaker.speaker_to_person:
                 person_id = speaker.speaker_to_person[cast(int, segment.speaker_id)][0]

@@ -1,6 +1,6 @@
 """Bounded, internal snapshots of already-computed voice verification evidence.
 
-No embeddings, text, or IO. Stage-local speaker keys must not be joined across
+No embeddings, text, or storage IO. Diagnostics load only when observed. Stage-local speaker keys must not be joined across
 resolution/reconnects. Each stage retains at most 16 rows, updated in place.
 """
 
@@ -20,9 +20,13 @@ def enabled() -> bool:
     return os.getenv('SPEAKER_MATCH_SCORES_ENABLED', default).strip().lower() in ('true', '1', 'on', 'yes')
 
 
-def record_failure(reporter, log, *, trimmed: bool = False, reason: str = 'other') -> None:
+def record_failure(log, *, trimmed: bool = False, reason: str = 'other') -> None:
     """Optional instrumentation must not turn its own failure into a content failure."""
     try:
+        # Fixture suites install empty utils packages while importing models.
+        # Resolve optional telemetry only at the observation boundary.
+        import utils.observability.fallback as reporter
+
         reporter.record_fallback(
             component='conversation_finalization',
             from_mode=FIELD,

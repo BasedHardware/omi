@@ -58,7 +58,6 @@ from utils.other.portability_read import (
 )
 import config.speaker_match_scores as match_scores
 import utils.firestore_document_size as document_size
-import utils.observability.fallback as fallback
 from utils.other.storage import list_audio_chunks
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
@@ -236,7 +235,7 @@ def _reveal_match_scores_for_read(data: Dict[str, Any], uid: str) -> None:
 
 def _drop_match_scores(data: dict, reason: str = 'other') -> None:
     data.pop(match_scores.FIELD, None)
-    match_scores.record_failure(fallback, logger, reason=reason)
+    match_scores.record_failure(logger, reason=reason)
 
 
 def _guard_match_score_size(data: dict, existing: Optional[dict] = None, path: Optional[str] = None) -> None:
@@ -285,7 +284,7 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
             if encoded is not None:
                 data[match_scores.FIELD] = encoded
                 if trimmed:
-                    match_scores.record_failure(fallback, logger, trimmed=True, reason='capacity_full')
+                    match_scores.record_failure(logger, trimmed=True, reason='capacity_full')
             else:
                 _drop_match_scores(data, 'capacity_full')
         except Exception:
@@ -640,7 +639,7 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
             )
         except Exception:
             # Omitting this optional update leaves the current stored blob intact.
-            match_scores.record_failure(fallback, logger, reason='malformed_doc')
+            match_scores.record_failure(logger, reason='malformed_doc')
     write_data.update(_prepare_conversation_for_write(payload, uid, level))
     write_data['data_protection_level'] = level
 

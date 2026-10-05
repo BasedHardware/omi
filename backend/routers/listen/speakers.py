@@ -10,7 +10,6 @@ from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
 import av
 import config.speaker_match_scores as match_scores
-import utils.observability.fallback as score_fallback
 import utils.stt.speaker_match as match_policy
 import numpy as np
 from pydantic import ValidationError
@@ -639,7 +638,7 @@ class SpeakerMatcher:
                     row['status'] = 'user' if manual.get('is_user') else 'not_user'
                 self.match_scores = match_scores.merge(self.match_scores, [row])
         except Exception:
-            match_scores.record_failure(score_fallback, logger)
+            match_scores.record_failure(logger)
 
     def _offer_pinned_suggestion(
         self, voice: int, result: SpeakerMatchDecision, pinned: set, segment_id: str, assigned: set

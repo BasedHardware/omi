@@ -28,7 +28,6 @@ from datetime import timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple, cast
 
 import config.speaker_match_scores as match_scores
-import utils.observability.fallback as score_fallback
 
 import httpx
 import numpy as np
@@ -122,7 +121,7 @@ def encode_cache(entries: CacheEntries, evidence_seconds: Optional[Mapping[str, 
                 'evidence_seconds': {k: round(v, 3) for k, v in evidence_seconds.items() if k in entries}
             }
     except Exception:
-        match_scores.record_failure(score_fallback, logger, reason='malformed_doc')
+        match_scores.record_failure(logger, reason='malformed_doc')
     header = json.dumps(
         {
             'v': CACHE_FORMAT_VERSION,
@@ -148,7 +147,7 @@ def decode_cache(data: Optional[bytes], evidence_seconds: Optional[Dict[str, flo
             try:
                 evidence_seconds.update(header.get('evidence_seconds') or {})
             except Exception:
-                match_scores.record_failure(score_fallback, logger, reason='malformed_doc')
+                match_scores.record_failure(logger, reason='malformed_doc')
         dim = int(header['dim'])
         matrix = np.frombuffer(data[4 + length :], dtype='<f2').astype(np.float32).reshape(len(header['ids']), dim)
         return {sid: (float(d), matrix[i]) for i, (sid, d) in enumerate(zip(header['ids'], header['durations']))}
@@ -436,7 +435,7 @@ def _embed_missing(
                 try:
                     evidence_seconds[cache_key] = len(clip) / (SAMPLE_RATE * 2)
                 except Exception:
-                    match_scores.record_failure(score_fallback, logger)
+                    match_scores.record_failure(logger)
             cache[cache_key] = (_duration(segment), np.asarray(vector, dtype=np.float32).reshape(-1))
             done.add(segment_id)
             embedded += 1
@@ -831,7 +830,7 @@ def resolve_speakers_for_processing(uid: str, conversation: Any) -> bool:
             if updates:
                 conversation.speaker_match_scores = match_scores.merge(conversation.speaker_match_scores, updates)
     except Exception:
-        match_scores.record_failure(score_fallback, logger, reason='malformed_doc')
+        match_scores.record_failure(logger, reason='malformed_doc')
     began = time.monotonic()
     receipt: Mapping[str, Any] = {}
     receipt_read = False
@@ -1214,7 +1213,7 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
             else ({} if spans_on else clip_seconds)
         )
     except Exception:
-        match_scores.record_failure(score_fallback, logger, reason='malformed_doc')
+        match_scores.record_failure(logger, reason='malformed_doc')
     resolution = resolve_conversation_speakers(
         segments,
         vectors,
@@ -1234,7 +1233,7 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
             retained = [r for r in (conversation.speaker_match_scores or []) if r['stage'] != 'resolution']
             conversation.speaker_match_scores = match_scores.merge(retained, resolution.match_scores)
     except Exception:
-        match_scores.record_failure(score_fallback, logger, reason='malformed_doc')
+        match_scores.record_failure(logger, reason='malformed_doc')
     apply_speaker_resolution(
         conversation, resolution.speaker_ids, resolution.voice_identities, resolution.voice_identity_statuses
     )

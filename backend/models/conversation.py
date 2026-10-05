@@ -7,7 +7,6 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 from pydantic.json_schema import SkipJsonSchema
 
 import config.speaker_match_scores as match_scores
-import utils.observability.fallback as score_fallback
 
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
@@ -493,7 +492,7 @@ class Conversation(BaseModel):
                 self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
         except Exception:
             self.speaker_match_scores = None
-            match_scores.record_failure(score_fallback, logging.getLogger(__name__), reason='malformed_doc')
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
         return self
 
     @model_serializer(mode='wrap')
@@ -506,7 +505,7 @@ class Conversation(BaseModel):
                 try:
                     data['speaker_match_scores'] = match_scores.merge(None, self.speaker_match_scores)
                 except Exception:
-                    match_scores.record_failure(score_fallback, logging.getLogger(__name__), reason='malformed_doc')
+                    match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
         return data
 
     # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
