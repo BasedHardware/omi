@@ -925,6 +925,13 @@ class ProviderEpochTranslator:
                     self._on_mapped()
                 except Exception:
                     pass
+        for segment in translated:
+            visible_times = segment.pop('_provider_visible_times', None)
+            if visible_times is not None and not self._project_times:
+                # Idle reopen keeps native coordinates until capture admission.
+                # Clock-only persistence still exposes the exact legacy clamp;
+                # projected mode owns its visible wall axis independently.
+                segment['start'], segment['end'] = visible_times
         return translated
 
     def _append_unplaced(self, translated: List[Dict], segment: Dict) -> None:

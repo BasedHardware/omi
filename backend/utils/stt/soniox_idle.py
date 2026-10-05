@@ -269,9 +269,19 @@ class IdleSonioxSocket(STTSocket):
         def callback(segments: list[dict[str, Any]]) -> None:
             segments.sort(key=lambda segment: segment['start'])
             for segment in segments:
-                segment['start'] = max(self._last_end, segment['start'] + offset)
-                segment['end'] = max(segment['start'], segment['end'] + offset)
-                self._last_end = segment['end']
+                native_start, native_end = segment['start'] + offset, segment['end'] + offset
+                visible_start = max(self._last_end, native_start)
+                visible_end = max(visible_start, native_end)
+                self._last_end = visible_end
+                if self._wire_epoch is not None:
+                    # Capture containment must see the complete native interval.
+                    # A stale old endpoint can clip a cross-gap token entirely
+                    # into a later span. Restore the legacy visible clamp only
+                    # after translation has decided capture placement.
+                    segment['start'], segment['end'] = native_start, native_end
+                    segment['_provider_visible_times'] = (visible_start, visible_end)
+                else:
+                    segment['start'], segment['end'] = visible_start, visible_end
                 segment['_provider_socket_epoch'] = epoch
                 ranges = segment.get('_provider_word_ranges')
                 if ranges:

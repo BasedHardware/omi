@@ -2048,6 +2048,13 @@ including any acknowledged provider-only padding. The replacement transport star
 a fresh local clock. Its diagnostic origin uses emitted PCM independently;
 provider padding is never called queued, written or ledger PCM. The diagnostic
 ledger reference includes emitted samples with unknown capture origins.
+Idle callbacks preserve the full rebased native token interval for capture
+translation. The previous socket's visible endpoint can exceed an uncertain
+reopen origin; clipping against that endpoint must never shorten the interval
+tested for containment. Clock-only translation applies the identical OFF/ON
+visible monotonic clamp afterward, including for refused tokens. Projected mode
+keeps its own wall projection. Private visible-time metadata is consumed before
+the receiver sees the result; a cross-gap token remains without a capture window.
 Pusher carries an inert mirror declaration; managed Soniox sockets run in listen.
 
 `SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
