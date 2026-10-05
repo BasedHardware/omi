@@ -2454,20 +2454,28 @@ void main() {
     }
 
     test('a periodic chunk splits at a root rotation without losing rooted runs', () async {
+      const timerStart = 1700000000;
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        now: () => DateTime.fromMillisecondsSinceEpoch(timerStart * 1000),
+        persistWals: (wals) async {},
+        loadWals: () async => <Wal>[],
+      );
+      addTearDown(local.stop);
       for (var i = 0; i < 1600; i++) {
-        sync.onFrameCaptured(
+        local.onFrameCaptured(
           WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)),
           captureRoot: i < 60 ? rootA : rootB,
         );
       }
 
-      await sync.onAudioCodecChanged(BleAudioCodec.pcm16);
+      await local.onAudioCodecChanged(BleAudioCodec.pcm16);
 
       if (darkWrite) {
-        expect(sync.testWals, hasLength(2));
-        final first = sync.testWals[0];
-        final second = sync.testWals[1];
+        expect(local.testWals, hasLength(2));
+        final first = local.testWals[0];
+        final second = local.testWals[1];
         expect((first.captureRoot, first.sourceFrameStart, first.totalFrames), (rootA, 0, 60));
         expect((second.captureRoot, second.sourceFrameStart, second.totalFrames), (rootB, 0, 40));
         expect(first.timerStart, second.timerStart, reason: 'both runs land inside the same second');
@@ -2478,9 +2486,9 @@ void main() {
         );
         expect(first.filePath, isNotNull);
       } else {
-        expect(sync.testWals, hasLength(1));
-        expect(sync.testWals.single.captureRoot, isNull);
-        expect(sync.testWals.single.totalFrames, 100);
+        expect(local.testWals, hasLength(1));
+        expect(local.testWals.single.captureRoot, isNull);
+        expect(local.testWals.single.totalFrames, 100);
       }
     });
 
@@ -3072,6 +3080,134 @@ void main() {
         containsAll(names),
         reason: 'claim names match the collision-safe filenames actually uploaded',
       );
+    });
+
+    void expectSubsecondSplit(List<Wal> wals, {int secondSourceStart = 70}) {
+      const t = 1735689600;
+      expect(wals, hasLength(2));
+      final first = wals[0];
+      final second = wals[1];
+      expect((first.captureRoot, first.sourceFrameStart, first.totalFrames), (rootA, 0, 70));
+      expect((second.captureRoot, second.sourceFrameStart, second.totalFrames), (rootB, secondSourceStart, 10));
+      expect(first.timerStart, t, reason: 'floor(t + 0.4)');
+      expect(second.timerStart, t + 1, reason: 'floor(t + 1.1)');
+      expect(first.filePath, endsWith('_$t.4.bin'));
+      expect(second.filePath, endsWith('_${t + 1}.1.bin'));
+      expect(Wal.fromJson(second.toJson()).filePath, second.filePath,
+          reason: 'the fractional name survives serialization');
+    }
+
+    void expectSubsecondBounds(List<Wal> wals, List<(List<String>, double?, double?)> bounds) {
+      const t = 1735689600;
+      final first = wals[0];
+      final second = wals[1];
+      expect(bounds.single.$1, unorderedEquals([first.filePath, second.filePath]));
+      expect(bounds.single.$2, closeTo(t + 0.4, 1e-6));
+      expect(bounds.single.$3, closeTo(t + 1.2, 1e-6));
+    }
+
+    LocalWalSyncImpl boundsSync(List<(List<String>, double?, double?)> bounds, DateTime Function() now) =>
+        LocalWalSyncImpl(
+          _MockListener(),
+          now: now,
+          persistWals: (wals) async {},
+          loadWals: () async => <Wal>[],
+          uploadGate: SyncUploadGate(
+            limiter: SyncRateLimiter.instance,
+            uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async {
+              bounds
+                  .add((files.map((file) => file.uri.pathSegments.last).toList(), audioStartSeconds, audioEndSeconds));
+              return UploadFilesResult.queued('job-${bounds.length}');
+            },
+            fairUseStatusLoader: () async => null,
+          ),
+        );
+
+    List<WalFrame> splitFrames({FrameSyncKey Function(int index)? keyOf}) => [
+          for (var i = 0; i < 80; i++)
+            WalFrame(
+              payload: [i & 0xFF],
+              syncKey: keyOf?.call(i) ?? FrameSyncKey.fromIndex(i),
+              captureRoot: i < 70 ? rootA : rootB,
+              sourceFramePosition: i,
+              sourceClockEpoch: 0,
+            ),
+        ];
+
+    test('a precise session end keeps subsecond run starts in names and bounds', () async {
+      const t = 1735689600;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final bounds = <(List<String>, double?, double?)>[];
+      final local = boundsSync(bounds, () => DateTime.fromMillisecondsSinceEpoch(t * 1000 + 1200));
+      addTearDown(local.stop);
+      local.start();
+      await local.walReady;
+
+      local.testFrames.addAll(splitFrames());
+      local.testFrameSynced.addAll(List.filled(80, false));
+      await local.finalizeCurrentSession();
+
+      if (!darkWrite) {
+        expect(local.testWals, hasLength(1));
+        expect(local.testWals.single.captureRoot, isNull);
+        return;
+      }
+      expectSubsecondSplit(local.testWals);
+      await local.syncAll();
+      expectSubsecondBounds(local.testWals, bounds);
+    });
+
+    test('a precise chunk end keeps subsecond run starts through the delayed boundary', () async {
+      const t = 1735689600;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final bounds = <(List<String>, double?, double?)>[];
+      final local = boundsSync(bounds, () => DateTime.fromMillisecondsSinceEpoch(t * 1000 + 16200));
+
+      for (var i = 0; i < 1580; i++) {
+        local.onFrameCaptured(
+          WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)),
+          captureRoot: i < 70 ? rootA : rootB,
+        );
+      }
+      await local.stop();
+
+      if (!darkWrite) {
+        return;
+      }
+      await local.syncAll();
+      final chunked = local.testWals.where((wal) => wal.captureRoot != null).toList();
+      expect(chunked, hasLength(2), reason: 'the delayed chunk boundary preserves both rooted runs');
+      expectSubsecondSplit(chunked, secondSourceStart: 0);
+      expectSubsecondBounds(chunked, bounds);
+    });
+
+    test('a precise pendant drain keeps subsecond run starts in names and bounds', () async {
+      const t = 1735689600;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final bounds = <(List<String>, double?, double?)>[];
+      final local = boundsSync(bounds, () => DateTime.fromMillisecondsSinceEpoch(t * 1000 + 1200));
+      local.start();
+      await local.walReady;
+      local.setDeviceInfo('pendant1', 'Omi');
+
+      local.testFrames.addAll(splitFrames(keyOf: (i) => FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF, 0])));
+      local.testFrameSynced.addAll(List.filled(80, false));
+      await local.stop();
+
+      if (!darkWrite) {
+        return;
+      }
+      await local.syncAll();
+      expectSubsecondSplit(local.testWals);
+      expectSubsecondBounds(local.testWals, bounds);
     });
   });
 }

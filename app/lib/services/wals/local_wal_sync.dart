@@ -612,7 +612,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return;
     }
 
-    var timerEnd = _now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
+    final now = _now();
+    var timerEnd = now.millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * _framesPerSecond;
     if (pivot <= 0) {
       return;
@@ -627,7 +628,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     var chunkFrameCount = high - low;
 
     if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, evidenceFrames)) {
-      _storeSelectedRuns(evidenceFrames, _frameSynced.sublist(low, high), timerStart, generation, extendMemWal: true);
+      _storeSelectedRuns(
+        evidenceFrames,
+        _frameSynced.sublist(low, high),
+        captureSelectionStartSeconds(
+            now.subtract(Duration(seconds: newFrameSyncDelaySeconds)), chunkFrameCount, _framesPerSecond),
+        generation,
+        extendMemWal: true,
+        legacySelectionTimerStart: timerStart,
+      );
     } else {
       final live = _liveEvidenceFor(evidenceFrames);
 
@@ -732,21 +741,21 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   void _storeSelectedRuns(
     List<WalFrame> selection,
     List<bool> selectionSynced,
-    int selectionTimerStart,
+    double selectionStartSeconds,
     int generation, {
     required bool extendMemWal,
+    required int legacySelectionTimerStart,
   }) {
     for (final run in walEvidenceRunRanges(selection)) {
       final runFrames = selection.sublist(run.start, run.end);
       final runSynced = selectionSynced.sublist(run.start, run.end);
-      var shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
-      if (!shouldStored) {
-        shouldStored = runSynced.any((synced) => !synced);
-      }
+      final shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled || runSynced.any((synced) => !synced);
       if (!shouldStored) continue;
       final syncedOffset = syncedPrefixCount(runSynced);
       final frameCount = run.end - run.start;
-      final timerStart = selectionTimerStart + run.start ~/ _framesPerSecond;
+      final timerStart = run.claimable
+          ? (selectionStartSeconds + run.start / _framesPerSecond).floor()
+          : legacySelectionTimerStart + run.start ~/ _framesPerSecond;
       final first = runFrames.first;
       final live = _liveEvidenceFor(runFrames);
       Wal wal;
@@ -785,7 +794,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         );
         wal.liveConnectionEpoch = live.epoch;
         if (run.claimable) {
-          wal.filePath = walEvidenceRunFileName(wal, selectionTimerStart, run.start, _framesPerSecond);
+          wal.filePath = walEvidenceRunFileName(wal, selectionStartSeconds, run.start, _framesPerSecond);
         }
         _wals.add(wal);
       } else {
@@ -867,13 +876,21 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final syncedOffset = syncedPrefixCount(synced);
 
         final frameCount = frames.length;
-        var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
+        final now = _now();
+        var timerEnd = now.millisecondsSinceEpoch ~/ 1000;
         var timerStart = timerEnd - frameCount ~/ _framesPerSecond;
         final evidence = stableCaptureEvidence(frames);
         final live = _liveEvidenceFor(frames);
 
         if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, frames)) {
-          _storeSelectedRuns(frames, synced, timerStart, generation, extendMemWal: false);
+          _storeSelectedRuns(
+            frames,
+            synced,
+            captureSelectionStartSeconds(now, frameCount, _framesPerSecond),
+            generation,
+            extendMemWal: false,
+            legacySelectionTimerStart: timerStart,
+          );
         } else {
           final wal = Wal(
             codec: _codec,
@@ -1502,7 +1519,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final high = _frames.length;
     if (high <= 0) return;
 
-    var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
+    final now = _now();
+    var timerEnd = now.millisecondsSinceEpoch ~/ 1000;
     final evidenceFrames = _frames.sublist(0, high);
     final evidence = stableCaptureEvidence(evidenceFrames);
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
@@ -1518,7 +1536,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     if (shouldStored) {
       if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, evidenceFrames)) {
-        _storeSelectedRuns(evidenceFrames, _frameSynced.sublist(0, high), timerStart, generation, extendMemWal: false);
+        _storeSelectedRuns(
+          evidenceFrames,
+          _frameSynced.sublist(0, high),
+          captureSelectionStartSeconds(now, chunkFrameCount, _framesPerSecond),
+          generation,
+          extendMemWal: false,
+          legacySelectionTimerStart: timerStart,
+        );
       } else {
         final syncedOffset = syncedPrefixCount(_frameSynced.sublist(0, high));
 

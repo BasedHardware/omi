@@ -14,14 +14,16 @@ bool walExtendsRun(Wal wal, WalEvidenceRun run, WalFrame first) => run.claimable
         wal.sourceFrameStart! + wal.totalFrames == first.sourceFramePosition
     : wal.captureRoot == null;
 
-String walEvidenceRunFileName(Wal wal, int timerStart, int frameOffset, int framesPerSecond) {
-  final name = wal.getFileName();
-  if (frameOffset <= 0 || framesPerSecond <= 0) return name;
-  var token = (timerStart + frameOffset / framesPerSecond).toStringAsFixed(6);
+double captureSelectionStartSeconds(DateTime preciseEnd, int frameCount, int framesPerSecond) =>
+    preciseEnd.microsecondsSinceEpoch / 1000000 - frameCount / framesPerSecond;
+
+String walEvidenceRunFileName(Wal wal, double selectionStartSeconds, int frameOffset, int framesPerSecond) {
+  if (framesPerSecond <= 0) return wal.getFileName();
+  var token = (selectionStartSeconds + frameOffset / framesPerSecond).toStringAsFixed(6);
   if (token.contains('.')) {
     token = token.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
   }
-  return name.replaceAll(RegExp(r'_\d+\.bin$'), '_$token.bin');
+  return wal.getFileName().replaceAll(RegExp(r'_\d+\.bin$'), '_$token.bin');
 }
 
 String walCollisionName(String name, int sequence, bool beforeTimestamp) {
