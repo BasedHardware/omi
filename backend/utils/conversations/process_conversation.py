@@ -3165,6 +3165,12 @@ def process_conversation(
         )
         return conversation
 
+    # Notes have committed before this optional transaction. It rechecks source
+    # text, manual authority and current labels; failures preserve the saved note.
+    from database.summary_speaker_labels import apply_summary_speaker_labels
+
+    apply_summary_speaker_labels(uid, conversation)
+
     # Enrollment is resolved only from backend authority plus the persisted
     # conversation source. We create the durable obligation before omitting a
     # single effect; authority/Firestore failure preserves full-eager behavior.

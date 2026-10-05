@@ -19,6 +19,8 @@ from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Participant, Structured
 from models.structured_extraction import ActionItemsExtraction, RichStructuredExtraction, StructuredExtraction
+from models.summary_speaker_labels import SpeakerLabeledExtraction
+from config.summary_speaker_labels import summary_speaker_labels_enabled
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from .discard_parser import DiscardConversation, LenientDiscardParser
 from .gateway_error_contract import is_byok_rate_limit_gateway_error
@@ -1319,12 +1321,20 @@ def get_conversation_notes(
     existing_context = '\n'.join(existing_lines) or 'None supplied.'
 
     extraction_parser = PydanticOutputParser(
-        pydantic_object=RichStructuredExtraction if rich_mode else StructuredExtraction
+        pydantic_object=(
+            SpeakerLabeledExtraction
+            if rich_mode and summary_speaker_labels_enabled()
+            else RichStructuredExtraction if rich_mode else StructuredExtraction
+        )
     )
     if rich_mode:
         static_instructions = rich_static_instructions(
             extraction_parser.get_format_instructions(), _conversation_notes_static_instructions
         )
+        if summary_speaker_labels_enabled():
+            from utils.llm.meeting_notes_rich_prompts import SUMMARY_SPEAKER_RULES
+
+            static_instructions += '\n\n' + SUMMARY_SPEAKER_RULES
     else:
         static_instructions = _conversation_notes_static_instructions(extraction_parser.get_format_instructions())
     wake_word_rules = ''
@@ -1414,6 +1424,8 @@ def get_conversation_notes(
     projected_overview = render_sections_markdown(structured.sections)
     if projected_overview:
         structured.overview = projected_overview
+    if hasattr(structured, '_summary_speaker_roster'):
+        structured._summary_speaker_roster = roster
     return structured
 
 

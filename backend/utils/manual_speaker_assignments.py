@@ -119,6 +119,7 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
             speaker_match_source=None,
             speaker_label_source=source,
         )
+        copied.pop('summary_speaker_evidence', None)
         result[index] = copied
     return result if result is not None else segments
 
