@@ -7,8 +7,12 @@ import json
 import time
 
 import httpx
+import pytest
 
+from omi_cli import config as cfg
 from omi_cli.auth.store import store_oauth_tokens
+from omi_cli.client import OmiClient
+from omi_cli.errors import TransportError
 from omi_cli.main import app
 
 FAKE_API_BASE = "https://api.test.omi.local"
@@ -91,6 +95,24 @@ def test_clear_requires_explicit_confirmation(config_path, cli_runner, respx_moc
     assert "across clients" in declined.stdout
 
 
+def test_declined_clear_keeps_json_stdout_machine_readable(config_path, cli_runner, respx_mock) -> None:
+    _oauth_profile(config_path)
+    route = respx_mock.delete("/v2/messages").mock(return_value=httpx.Response(200, json={}))
+    result = cli_runner.invoke(app, ["--json", "chat", "--clear"], input="n\n")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"cleared": False}
+    assert not route.called
+
+
+def test_confirmed_clear_keeps_json_stdout_machine_readable(config_path, cli_runner, respx_mock) -> None:
+    _oauth_profile(config_path)
+    route = respx_mock.delete("/v2/messages").mock(return_value=httpx.Response(200, json={}))
+    result = cli_runner.invoke(app, ["--json", "chat", "--clear"], input="y\n")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"cleared": True}
+    assert route.call_count == 1
+
+
 def test_repl_task_commands_use_user_routes(config_path, cli_runner, respx_mock) -> None:
     _oauth_profile(config_path)
     respx_mock.get("/v1/action-items").mock(
@@ -144,6 +166,18 @@ def test_malformed_done_frame_fails_cleanly(config_path, cli_runner, respx_mock)
     result = cli_runner.invoke(app, ["chat", "Hi"])
     assert result.exit_code != 0
     assert "Invalid chat response" in result.output
+
+
+def test_malformed_stream_encoding_gets_history_warning(config_path, respx_mock) -> None:
+    _oauth_profile(config_path)
+    respx_mock.post("/v2/messages").mock(
+        return_value=httpx.Response(200, stream=httpx.ByteStream(b"not gzip"), headers={"Content-Encoding": "gzip"})
+    )
+    with OmiClient(cfg.load().get_profile("default")) as client:
+        with pytest.raises(TransportError) as error:
+            list(client.stream_post_lines("/v2/messages", json_body={"text": "Hi"}))
+    assert error.value.message == "Chat connection interrupted"
+    assert "--history" in (error.value.detail or "")
 
 
 def test_json_repl_is_rejected_before_network(config_path, cli_runner, respx_mock) -> None:

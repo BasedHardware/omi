@@ -209,8 +209,13 @@ def _show_history(ctx: "AppContext", limit: int) -> None:
 
 
 def _clear(ctx: "AppContext", *, confirmed: bool) -> None:
-    if not confirmed and not typer.confirm("Delete shared Omi chat history across clients?", default=False):
-        typer.echo("Kept chat history.")
+    if not confirmed and not typer.confirm(
+        "Delete shared Omi chat history across clients?", default=False, err=ctx.renderer.json_mode
+    ):
+        if ctx.renderer.json_mode:
+            ctx.renderer.emit({"cleared": False})
+        else:
+            typer.echo("Kept chat history.")
         return
     with ctx.make_client() as client:
         client.delete(_CHAT_PATH)

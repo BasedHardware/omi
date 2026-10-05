@@ -143,7 +143,7 @@ class OmiClient:
                     response.read()
                     raise self._error_from_response(response)
                 yield from response.iter_lines()
-        except httpx.TransportError as exc:
+        except (httpx.TransportError, httpx.DecodingError) as exc:
             raise TransportError(
                 message="Chat connection interrupted",
                 detail="The message may have reached Omi. Check `omi chat --history` before sending it again.",
