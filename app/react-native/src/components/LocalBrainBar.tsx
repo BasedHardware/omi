@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, type ViewStyle } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  type ViewStyle,
+} from 'react-native';
 
 // Imported lazily-by-module rather than at the top so the app still renders when
 // the native module is absent (Expo Go, tests, iOS). Both wrappers already return
@@ -16,8 +22,26 @@ import {
   type CallState,
 } from '../../modules/local-calls';
 import { ROUTE_PROTOTYPES, type Route } from '../services/localBrainRouter';
+import { useTheme } from '../hooks/use-theme';
+import { Spacing } from '../constants/theme';
 
 export type BrainState = 'absent' | 'not-loaded' | 'ready';
+
+/**
+ * The token set in constants/theme.ts is neutral-only (text, background,
+ * backgroundElement, backgroundSelected, textSecondary) with no semantic
+ * colours, so ready / needs-attention / off cannot be derived from it without
+ * inventing a green and an amber here anyway. Declared once, in one place, so
+ * there is a single thing to move into the theme when it grows semantic tokens.
+ */
+const STATUS = {
+  ready: '#4ade80',
+  warn: '#fbbf24',
+  off: '#6b7280',
+  accept: '#16a34a',
+  decline: '#b91c1c',
+  onAccent: '#ffffff',
+} as const;
 
 export interface RouteTrace {
   source: 'router' | 'heuristic'
@@ -42,6 +66,9 @@ export function LocalBrainBar({
   trace?: RouteTrace | null
   onCallState?: (state: CallState) => void
 }) {
+  const theme = useTheme();
+  const styles = makeStyles(theme);
+
   const [state] = useState<BrainState>(() =>
     isLocalBrainAvailable ? 'not-loaded' : 'absent'
   );
@@ -184,42 +211,56 @@ export function LocalBrainBar({
   )
 }
 
-const styles = StyleSheet.create({
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  dotOn: { backgroundColor: '#4ade80' },
-  dotWarn: { backgroundColor: '#fbbf24' },
-  dotOff: { backgroundColor: '#6b7280' },
-  label: { color: '#9ca3af', fontSize: 12 },
-  traceWrap: { flex: 1 },
-  trace: { color: '#6b7280', fontSize: 11 },
-  chevron: { color: '#6b7280', fontSize: 12 },
-  detail: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    gap: 3,
-  },
-  detailLine: { color: '#d1d5db', fontSize: 12 },
-  detailNote: { color: '#6b7280', fontSize: 11, marginTop: 4, lineHeight: 15 },
-  ringBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#1f2937',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  ringText: { color: '#f9fafb', fontSize: 14, fontWeight: '600' },
-  ringActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  ringBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
-  ringAccept: { backgroundColor: '#16a34a' },
-  ringDecline: { backgroundColor: '#b91c1c' },
-  ringBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  ringNeedsPerm: { color: '#fbbf24', fontSize: 11 },
-})
+const makeStyles = (theme: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    bar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.two,
+      paddingHorizontal: Spacing.three,
+      paddingVertical: Spacing.two,
+    },
+    dot: { width: 8, height: 8, borderRadius: 4 },
+    dotOn: { backgroundColor: STATUS.ready },
+    dotWarn: { backgroundColor: STATUS.warn },
+    dotOff: { backgroundColor: STATUS.off },
+    label: { color: theme.textSecondary, fontSize: 12 },
+    traceWrap: { flex: 1 },
+    trace: { color: theme.textSecondary, fontSize: 11 },
+    chevron: { color: theme.textSecondary, fontSize: 12 },
+    detail: {
+      paddingHorizontal: Spacing.three,
+      paddingBottom: Spacing.two,
+      gap: Spacing.one,
+    },
+    detailLine: { color: theme.text, fontSize: 12 },
+    detailNote: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      marginTop: Spacing.one,
+      lineHeight: 15,
+    },
+    ringBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.backgroundElement,
+      paddingHorizontal: Spacing.three,
+      paddingVertical: 10,
+    },
+    ringText: { color: theme.text, fontSize: 14, fontWeight: '600' },
+    ringActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.two,
+    },
+    ringBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 8,
+    },
+    ringAccept: { backgroundColor: STATUS.accept },
+    ringDecline: { backgroundColor: STATUS.decline },
+    ringBtnText: { color: STATUS.onAccent, fontSize: 13, fontWeight: '600' },
+    ringNeedsPerm: { color: STATUS.warn, fontSize: 11 },
+  });
