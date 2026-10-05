@@ -66,6 +66,7 @@ def load_app():
     # suite stays hermetic (their sandbox only materializes declared stubs).
     tools_auth_stub = ModuleType("src.tools_auth")
     tools_auth_stub.require_composio_tools_auth = lambda *_args, **_kwargs: None
+    tools_auth_stub.create_composio_session_token = lambda *_args, **_kwargs: "stub-token"
 
     src_pkg = ModuleType("src")
     src_pkg.__path__ = [str(SRC_DIR)]
@@ -173,10 +174,13 @@ class TestCallbackGuardsState(unittest.TestCase):
         )
         background_tasks = Mock()
         state = notion._signed_state("uid-abc")
-        asyncio.run(notion.notion_callback(Mock(), background_tasks, code="c", state=state))
+        res = asyncio.run(notion.notion_callback(Mock(), background_tasks, code="c", state=state))
         self.mock_post.assert_called_once()
         notion.store_notion_credentials.assert_called_once_with("uid-abc", "token", "ws-id", "Test Workspace")
         self.assertEqual(background_tasks.add_task.call_args[0][2], "uid-abc")
+        call_context = notion.templates.TemplateResponse.call_args[0][1]
+        self.assertEqual(call_context["uid"], "uid-abc")
+        self.assertEqual(call_context["session_token"], "stub-token")
 
 
 if __name__ == "__main__":
