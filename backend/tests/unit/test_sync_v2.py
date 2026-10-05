@@ -3977,9 +3977,7 @@ class TestConversationFinalizerExecutor:
         )
 
 
-# ---------------------------------------------------------------------------
 # 14. Bulkhead executor infrastructure tests
-# ---------------------------------------------------------------------------
 
 
 class TestBulkheadExecutors:
