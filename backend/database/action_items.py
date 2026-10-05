@@ -1000,42 +1000,36 @@ def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Di
 
 
 def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[str, Any]]:
-    """
-    Get multiple action items by their IDs in a single batch operation.
-
-    Args:
-        uid: User ID
-        action_item_ids: List of action item IDs
-
-    Returns:
-        List of action items (only those that exist), in the same order as the input IDs
-    """
-    if not action_item_ids:
+    """Get multiple action items by their IDs, chunking get_all in 499-op batches."""
+    if not uid or not uid.strip() or not action_item_ids:
         return []
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
-    # Firestore batch get operation
-    doc_refs = [action_items_ref.document(item_id) for item_id in action_item_ids]
-    docs = db.get_all(doc_refs)
+    seen = set()
+    unique_ids: List[str] = [
+        cleaned
+        for raw in action_item_ids
+        if (cleaned := raw.strip() if isinstance(raw, str) else '') and not (cleaned in seen or seen.add(cleaned))
+    ]
+    if not unique_ids:
+        return []
 
-    # Create a map to preserve order
     action_items_map: Dict[str, Dict[str, Any]] = {}
-    for doc in docs:
-        if doc.exists:
-            data: Dict[str, Any] = typed_doc(doc)
-            data['id'] = doc.id
-            action_item = prepare_action_item_for_read(data)
-            action_items_map[doc.id] = action_item
+    for i in range(0, len(unique_ids), 499):
+        chunk_refs = [action_items_ref.document(item_id) for item_id in unique_ids[i : i + 499]]
+        for doc in db.get_all(chunk_refs):
+            if doc.exists:
+                data: Dict[str, Any] = typed_doc(doc)
+                data['id'] = doc.id
+                action_items_map[doc.id] = prepare_action_item_for_read(data)
 
-    # Return in the same order as input IDs
-    action_items: List[Dict[str, Any]] = []
-    for item_id in action_item_ids:
-        if item_id in action_items_map:
-            action_items.append(action_items_map[item_id])
-
-    return action_items
+    return [
+        action_items_map[cleaned]
+        for raw in action_item_ids
+        if (cleaned := raw.strip() if isinstance(raw, str) else '') in action_items_map
+    ]
 
 
 # *****************************
@@ -1211,14 +1205,17 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
 
 
 def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]:
-    """
-    Delete multiple action items by id, chunking into 500-op Firestore batches.
+    """Delete multiple action items by id, chunking into 499-op Firestore batches."""
+    if not uid or not uid.strip() or not action_item_ids:
+        return []
 
-    Skips per-id existence reads: batch.delete() is a no-op for missing
-    docs, and downstream vector + FCM cleanup are both idempotent for
-    unknown ids.
-    """
-    if not action_item_ids:
+    seen = set()
+    unique_ids: List[str] = [
+        cleaned
+        for raw in action_item_ids
+        if (cleaned := raw.strip() if isinstance(raw, str) else '') and not (cleaned in seen or seen.add(cleaned))
+    ]
+    if not unique_ids:
         return []
 
     user_ref = db.collection('users').document(uid)
@@ -1226,11 +1223,10 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
 
     batch = db.batch()
     count = 0
-
-    for item_id in action_item_ids:
+    for item_id in unique_ids:
         batch.delete(action_items_ref.document(item_id))
         count += 1
-        if count >= 499:  # Firestore batch limit is 500
+        if count >= 499:
             batch.commit()
             batch = db.batch()
             count = 0
@@ -1238,10 +1234,10 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     if count > 0:
         batch.commit()
 
-    for item_id in action_item_ids:
+    for item_id in unique_ids:
         _purge_proactivity_source(uid, item_id)
     bump_action_items_list_version(uid)
-    return list(action_item_ids)
+    return unique_ids
 
 
 def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
@@ -1346,7 +1342,16 @@ def retire_action_items_for_conversation(
 
 def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
     """Mark multiple action items as sync_requested in a single batch write."""
-    if not item_ids:
+    if not uid or not uid.strip() or not item_ids:
+        return
+
+    seen = set()
+    unique_ids: List[str] = [
+        cleaned
+        for raw in item_ids
+        if (cleaned := raw.strip() if isinstance(raw, str) else '') and not (cleaned in seen or seen.add(cleaned))
+    ]
+    if not unique_ids:
         return
 
     user_ref = db.collection('users').document(uid)
@@ -1355,11 +1360,11 @@ def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
 
     batch = db.batch()
     count = 0
-    for item_id in item_ids:
+    for item_id in unique_ids:
         doc_ref = action_items_ref.document(item_id)
         batch.update(doc_ref, {'sync_requested': True, 'updated_at': now})
         count += 1
-        if count >= 499:  # Firestore batch limit is 500
+        if count >= 499:
             batch.commit()
             batch = db.batch()
             count = 0

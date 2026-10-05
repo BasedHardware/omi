@@ -833,21 +833,22 @@ def batch_delete_action_items(
     vector store delete and the FCM cancellation message both use their batch
     helpers — no per-id loop on this hot path.
     """
-    # Chunk the locked-task preflight so large Select All batches (up to 10,000
-    # IDs) stay within Firestore's batch-get limits and avoid loading tens of
-    # megabytes of document data in one RPC before any deletion begins.
-    for i in range(0, len(request.ids), 500):
-        existing_items = action_items_db.get_action_items_by_ids(uid, request.ids[i : i + 500])
+    seen = set()
+    sanitized_ids = [
+        c for r in request.ids if (c := r.strip() if isinstance(r, str) else '') and not (c in seen or seen.add(c))
+    ]
+    if not sanitized_ids:
+        return {"status": "Ok", "deleted_count": 0, "deleted_ids": []}
+
+    for i in range(0, len(sanitized_ids), 499):
+        existing_items = action_items_db.get_action_items_by_ids(uid, sanitized_ids[i : i + 499])
         if any(item.get('is_locked', False) for item in existing_items):
             raise HTTPException(status_code=402, detail="A paid plan is required to delete locked action items.")
 
-    deleted_ids = action_items_db.delete_action_items_batch(uid, request.ids)
-
+    deleted_ids = action_items_db.delete_action_items_batch(uid, sanitized_ids)
     if deleted_ids:
         delete_action_item_vectors_batch(uid, deleted_ids)
         send_action_items_batch_deletion_message(user_id=uid, action_item_ids=deleted_ids)
-
-    if deleted_ids:
         record_product_event('action_item_mutated', request=http_request, op='batch_delete', count=len(deleted_ids))
     return {"status": "Ok", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
 
