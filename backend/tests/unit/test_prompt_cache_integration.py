@@ -146,6 +146,7 @@ sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_filter_category_items = MagicMock(return_value=[])
 sys.modules["database.redis_db"].add_filter_category_item = MagicMock()
 sys.modules["database.redis_db"].get_cached_user_geolocation = MagicMock(return_value=None)
+sys.modules["database.redis_db"].r = MagicMock()
 sys.modules["database.users"].get_user_location_context_consent = MagicMock(return_value=None)
 sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
 sys.modules["database.memories"].get_memories = MagicMock(return_value=[])
@@ -196,6 +197,11 @@ tracker_mod.track_usage = MagicMock()
 gateway_mod = _stub_module("utils.llm.gateway_client")
 gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
 gateway_mod.is_auto_lane_id = lambda value: isinstance(value, str) and value.startswith('omi:auto:')
+# perplexity_tools.py is imported under this harness and names the gateway surface
+# it depends on; mirror the real module's members so the import succeeds.
+gateway_mod.feature_auto_lane_id = lambda feature: f"omi:auto:{feature.replace('_', '-')}"
+gateway_mod.get_llm_gateway_base_url = MagicMock(return_value='https://llm-gateway.test')
+gateway_mod.llm_gateway_headers = MagicMock(return_value={})
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 gateway_mod.raise_if_gateway_feature_mode_blocks_direct_model_surface = MagicMock()
 
@@ -212,6 +218,31 @@ langchain_runnables_mod = _stub_module("langchain_core.runnables")
 langchain_runnables_mod.RunnableConfig = dict
 langchain_callbacks_mod = _stub_module("langchain_core.callbacks")
 langchain_callbacks_mod.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
+
+
+def _passthrough_tool(target=None, **_kwargs):
+    # Mirrors the langchain @tool decorator shape for module-import compatibility only:
+    # production tool modules (e.g. utils/retrieval/tools/perplexity_tools.py) decorate
+    # their tools with @tool at import time. The harness never invokes these tools, so
+    # the real wrapper is not needed here.
+    if callable(target):
+        return target
+    return lambda fn: fn
+
+
+_langchain_tools_was_stubbed = "langchain_core.tools" not in sys.modules
+langchain_tools_mod = _stub_module("langchain_core.tools")
+# Installed on the stub itself rather than through an autouse fixture. The fixture only ran
+# for tests in this file, so any other module that imports a langchain-@tool-decorated module
+# here (test_chat_agent_provider_retry.py) reached its import-time `from langchain_core.tools
+# import tool` against a bare stub and failed collection with ImportError.
+# Only patched when this file created the stub: when the real langchain_core.tools is already
+# imported, its own @tool works and overwriting it here would leak a passthrough decorator into
+# every production tool module imported afterwards in the same process.
+if _langchain_tools_was_stubbed:
+    langchain_tools_mod.tool = _passthrough_tool
+
+langchain_tools_mod.StructuredTool = MagicMock()
 
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")
@@ -386,11 +417,27 @@ def _test_zone_info(name: str):
     raise KeyError(name)
 
 
+_AGENTIC_MODULE_CACHE = None
+
+
 def _get_agentic_module():
-    """Load and return the real utils.retrieval.agentic module."""
-    agentic_stub = sys.modules.get("utils.retrieval.agentic")
-    if agentic_stub is not None and not hasattr(agentic_stub, "CORE_TOOLS"):
-        sys.modules.pop("utils.retrieval.agentic", None)
+    """Load and return this file's stub-graph utils.retrieval.agentic module.
+
+    The module is loaded once and cached: every call must see the same module
+    object so tests that mutate module state hold across calls. When another
+    test file in the same pytest process has already imported the production
+    ``utils.retrieval.agentic`` (``test_device_tools.py`` imports it at module
+    scope, and collection order puts it first), that real module is dropped
+    from ``sys.modules`` before loading — reusing it would bind ``CORE_TOOLS``
+    to the real tool objects, whose runtime names (``look_at_frame``, pydantic
+    ``title``-bearing schemas) do not match this harness's mock expectations.
+    Direct references captured by the other file keep working.
+    """
+    global _AGENTIC_MODULE_CACHE
+    if _AGENTIC_MODULE_CACHE is not None:
+        return _AGENTIC_MODULE_CACHE
+
+    sys.modules.pop("utils.retrieval.agentic", None)
 
     # Module-scope import in agentic.py; stub is enough for CORE_TOOLS / convert_tools tests.
     chat_scope_mod = _stub_module("utils.retrieval.chat_scope")
@@ -476,7 +523,10 @@ def _get_agentic_module():
     langsmith_mod = _stub_module("langsmith")
     langsmith_mod.traceable = lambda **kwargs: lambda func: func
 
-    return _load_module_from_file("utils.retrieval.agentic", BACKEND_DIR / "utils" / "retrieval" / "agentic.py")
+    _AGENTIC_MODULE_CACHE = _load_module_from_file(
+        "utils.retrieval.agentic", BACKEND_DIR / "utils" / "retrieval" / "agentic.py"
+    )
+    return _AGENTIC_MODULE_CACHE
 
 
 # ---------------------------------------------------------------------------

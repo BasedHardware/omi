@@ -39,6 +39,7 @@ overlay:
   gke:
     backend-listen:
       env:
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -258,6 +259,7 @@ overlay:
           category: rollout
     pusher:
       env:
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -488,6 +490,7 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -669,6 +672,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
@@ -823,6 +827,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
@@ -956,6 +961,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y

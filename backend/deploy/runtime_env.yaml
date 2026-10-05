@@ -57,6 +57,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -541,6 +544,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -978,6 +984,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1324,6 +1333,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1638,6 +1650,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1905,6 +1920,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -2457,6 +2475,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -2974,6 +2995,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -3325,6 +3349,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -3691,6 +3718,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -3998,6 +4028,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -4279,6 +4312,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout

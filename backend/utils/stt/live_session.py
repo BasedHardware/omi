@@ -32,10 +32,11 @@ from config.audio_timeline import live_capture_window_translator_sends_enabled
 from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
+from utils.stt.no_text_rescue import NoTextRescue
+from utils.stt.replay_capture_accounting import note_observed_spans
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
-from utils.stt.replay_capture_accounting import note_observed_spans
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
 
 if TYPE_CHECKING:
@@ -60,6 +61,7 @@ class LiveChainSession:
     def __init__(self, receiver: Any) -> None:
         self.receiver = receiver
         self.recovery_enabled = session_recovery_enabled(receiver)
+        self.no_text_rescue = NoTextRescue(recovery_enabled=self.recovery_enabled)
         if not hasattr(receiver, '_stt_failed_targets'):
             receiver._stt_failed_targets = set()
         self.audio_seconds = 0.0
@@ -280,6 +282,9 @@ class LiveChainSession:
                     from utils.stt.parakeet_window import connect_window
 
                     raw = connect_window(callback, sample_rate)
+                    if self.no_text_rescue.enabled:
+                        raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
+                        raw.progress_deadline_enabled = True
                 elif service == st.STTService.parakeet:
                     raw = await st.process_audio_parakeet(callback, language, sample_rate, 1, keywords=keywords)
                 elif service == st.STTService.soniox:
@@ -335,6 +340,14 @@ class LiveChainSession:
             ),
             st.STTService.deepgram: (lambda: build(st.STTService.deepgram)) if dg_model else None,
         }
+        if self.no_text_rescue.returning:
+            # The lease is exhausted. Failback cannot silently re-admit a
+            # paid successor when cheap capacity/permission is unavailable.
+            callbacks = {
+                service: callback if service == st.STTService.parakeet else None
+                for service, callback in callbacks.items()
+            }
+            models = ['parakeet-window']
         primary = callbacks.get(host.stt_service)
         primary_missing = primary is None
         if primary_missing:
@@ -398,6 +411,8 @@ class LiveChainSession:
                     await abort_replay_socket(candidate)
             raise
         host.stt_service = actual
+        if self.no_text_rescue.returning:
+            self.no_text_rescue.returning = False
         self._routing_target_entry = getattr(socket, '_routing_target_entry', None)
         host.stt_model = {
             st.STTService.parakeet: 'parakeet-window' if window else 'parakeet',
@@ -507,6 +522,12 @@ class LiveLegSocket(STTSocket):
         self._health_success: Callable[[], None] = lambda: None
         self._health_close: Callable[[], None] = lambda: None
         self.retired_for_replay = False
+        self._no_text_rescue = getattr(session, 'no_text_rescue', None) or NoTextRescue(recovery_enabled=False)
+        self._rescue_timer = None
+        if self._no_text_rescue.active and not window:
+            self._rescue_timer = asyncio.get_running_loop().call_later(
+                self._no_text_rescue.remaining(), self._expire_rescue
+            )
         self._replay_failure_reason: str | None = None
         self._replay_capacity_subtype: str | None = None
         self._emitted_capture_sample = 0
@@ -674,6 +695,8 @@ class LiveLegSocket(STTSocket):
     def note_selection_transcript(self, segments: list[dict[str, Any]]) -> None:
         if any(str(segment.get('text') or '').strip() for segment in segments):
             self._cost_text_seen = True
+            if self._no_text_rescue.active and not self.window:
+                self._no_text_rescue.note_transcript(segments)
         if self._tracks_window_replay:
             for segment in segments:
                 end = segment.get('_capture_end_sample')
@@ -845,6 +868,9 @@ class LiveLegSocket(STTSocket):
         record_before_finalize = live_capture_window_translator_sends_enabled()
         try:
             if audio:
+                if not self.window and not self._no_text_rescue.can_admit(len(audio) / (self.sample_rate * 2)):
+                    self._expire_rescue()
+                    return False
                 try:
                     token = capture_spans.set(sent_spans) if self._soniox_wire_ledger else None
                     try:
@@ -871,6 +897,8 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     self._dead = True
                     return False
+                if not self.window:
+                    self._no_text_rescue.audio(self.service.value, len(audio) / (self.sample_rate * 2))
             if record_before_finalize and self._send_tracker is not None and not self._soniox_wire_ledger:
                 note_observed_spans(self._send_tracker, sent_spans, 'managed_chain')
             if output is not None and output.should_finalize:
@@ -1015,12 +1043,20 @@ class LiveLegSocket(STTSocket):
     def finalize(self) -> None:
         self.raw.finalize()
 
+    def _expire_rescue(self) -> None:
+        self._rescue_timer = None
+        if not self.retired_for_replay and not self._closing_for_health and not self._client_has_left():
+            self.fail('no_text_rescue_complete')
+
     def _latch_failure(self, *, reason: str | None = None) -> None:
         if self._terminal_reason is None:
             self._terminal_reason = normalize_live_stt_reason(self.typed_death_reason, self.death_reason, reason)
         self.leg_outcome.observe_death()
 
     def _finish_transport(self) -> None:
+        if self._rescue_timer is not None:
+            self._rescue_timer.cancel()
+            self._rescue_timer = None
         self._closing_for_health = True
         try:
             self.raw.finish()

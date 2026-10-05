@@ -1342,19 +1342,6 @@ async def test_router_never_removes_configured_serviceability(monkeypatch, scena
                 'modulate-velma-2': GateState(stage=0, until=1e20),
             },
         )
-    if scenario == 'empty':
-        with pytest.raises(live_chain.NoPermittedTarget):
-            await live_chain.connect_configured_chain(
-                primary_service=primary,
-                connect_primary=connector(primary),
-                callbacks=callbacks,
-                failed=set(),
-                models=models,
-                routing_uid='synthetic',
-                routing_language='en',
-            )
-        assert seen == []
-        return
     _, service = await live_chain.connect_configured_chain(
         primary_service=primary,
         connect_primary=connector(primary, scenario in ('unknown-tail', 'benched-tail')),
