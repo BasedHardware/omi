@@ -33,12 +33,16 @@ def spreadsheet_safe(value: Any) -> str:
     """Sanitize a value for safe inclusion in spreadsheets.
 
     Guards against formula injection (CSV injection) when opened in Excel
-    or Google Sheets while preserving readable strings for valid text.
+    or Google Sheets. Checks both direct injection prefixes and leading
+    space-padded formulas to prevent execution.
     """
     if value is None:
         return ""
     text = str(value)
     if text and text[0] in INJECTION_PREFIXES:
+        return "'" + text
+    stripped = text.lstrip(" ")
+    if stripped and stripped[0] in INJECTION_PREFIXES:
         return "'" + text
     return text
 
@@ -142,8 +146,16 @@ def convert_action_items_to_csv(
                 os.remove(tmp_name)
             raise
 
-    # Atomically replace destination file
-    os.replace(tmp_name, dest)
+    # Atomically replace destination file with cleanup on failure
+    try:
+        os.replace(tmp_name, dest)
+    except Exception:
+        if os.path.exists(tmp_name):
+            try:
+                os.remove(tmp_name)
+            except OSError:
+                pass
+        raise
     return count
 
 

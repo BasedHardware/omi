@@ -22,10 +22,10 @@ omi --json action-item list --open --limit 200 > action_items_open.json
 
 ## Step 2: Convert to CSV
 
-Run the converter script directly against the exported JSON:
+Run the converter script [`action_items_to_csv.py`](action_items_to_csv.py) directly against the exported JSON (from `sdks/python-cli/examples/` or using its relative path):
 
 ```sh
-python action_items_to_csv.py action_items_0.json -o action_items.csv
+python sdks/python-cli/examples/action_items_to_csv.py action_items_0.json -o action_items.csv
 ```
 
 To open directly in Microsoft Excel on Windows without character encoding issues,

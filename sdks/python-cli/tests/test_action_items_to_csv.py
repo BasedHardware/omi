@@ -42,6 +42,8 @@ class TestActionItemsToCsv(unittest.TestCase):
         self.assertEqual(spreadsheet_safe("-calc"), "'-calc")
         self.assertEqual(spreadsheet_safe("@SUM(A1:A5)"), "'@SUM(A1:A5)")
         self.assertEqual(spreadsheet_safe("\talert"), "'\talert")
+        self.assertEqual(spreadsheet_safe("\ralert"), "'\ralert")
+        self.assertEqual(spreadsheet_safe(" =1+1"), "' =1+1")
 
     def test_parse_timestamp_utc(self):
         self.assertEqual(parse_timestamp("2026-10-04T12:00:00Z"), "2026-10-04 12:00:00")
