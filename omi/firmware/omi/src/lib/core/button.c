@@ -200,8 +200,7 @@ void check_button_level(struct k_work *work_item)
         // Check for multi-tap
         uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
         if (press_duration < TAP_THRESHOLD) {
-            if (btn_tap_count > 0 &&
-                (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL < DOUBLE_TAP_WINDOW) {
+            if (btn_tap_count > 0 && (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL < DOUBLE_TAP_WINDOW) {
                 btn_tap_count++;
             } else {
                 btn_tap_count = 1;
@@ -218,8 +217,7 @@ void check_button_level(struct k_work *work_item)
 
     // Check for pending tap after multi-tap window expires
     if (btn_state == BUTTON_RELEASED && !btn_is_pressed) {
-        if (btn_tap_count > 0 &&
-            (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL >= DOUBLE_TAP_WINDOW) {
+        if (btn_tap_count > 0 && (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL >= DOUBLE_TAP_WINDOW) {
             if (btn_tap_count == 1) {
                 event = BUTTON_EVENT_SINGLE_TAP;
             } else if (btn_tap_count == 2) {

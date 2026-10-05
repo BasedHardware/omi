@@ -1740,26 +1740,11 @@ class CaptureController extends ChangeNotifier
       }
       switch (action) {
         case 1:
-          // Pause/resume recording
           Logger.debug("$gestureName: toggling pause/mute");
           _isProcessingButtonEvent = true;
-          if (isPaused) {
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-            resumeDeviceRecording().then((_) {
-              _isProcessingButtonEvent = false;
-            }).catchError((e) {
-              Logger.debug("Error resuming device recording: $e");
-              _isProcessingButtonEvent = false;
-            });
-          } else {
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-            pauseDeviceRecording().then((_) {
-              _isProcessingButtonEvent = false;
-            }).catchError((e) {
-              Logger.debug("Error pausing device recording: $e");
-              _isProcessingButtonEvent = false;
-            });
-          }
+          final future = isPaused ? resumeDeviceRecording() : pauseDeviceRecording();
+          PlatformManager.instance.analytics.omiDoubleTap(feature: isPaused ? 'unmute' : 'mute');
+          future.whenComplete(() => _isProcessingButtonEvent = false);
           break;
         case 2:
           // Star ongoing conversation (doesn't end it)
