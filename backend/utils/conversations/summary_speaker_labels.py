@@ -7,7 +7,16 @@ from dataclasses import dataclass
 from typing import Optional
 
 from models.summary_speaker_labels import SpeakerCandidate
+from models.transcript_segment import SpeakerIdentityStatus
 from utils.conversations.meeting_participants import MeetingRoster, looks_like_ai_agent_name
+
+_MEETING_ROSTER_SOURCES = frozenset(
+    {'system_calendar', 'macos_calendar', 'google_calendar', 'outlook_calendar', 'google', 'outlook', 'screen_activity'}
+)
+_INTRO_CLAUSE_BOUNDARIES = frozenset(
+    {'and', 'but', 'from', 'with', 'at', 'of', 'to', 'here', 'i', "i'm", 'is', 'am', 'we', 'hi', 'hello'}
+)
+_NAME_TOKEN = r"[^\W\d_]+(?:[-'’][^\W\d_]+)*"
 
 
 def normalized_name(name: str) -> str:
@@ -17,17 +26,33 @@ def normalized_name(name: str) -> str:
 def introduction_matches(detection, text: str, name: str) -> bool:
     if not detection or not detection.explicit:
         return False
-    if normalized_name(detection.name) == name:
-        return True
-    # The shared English detector intentionally captures only a first name.
-    # Extend only its explicit lead-in, with the entire proposed name present
-    # there; a surname mentioned elsewhere cannot complete the introduction.
-    return bool(
-        name.startswith(normalized_name(detection.name) + ' ')
-        and re.search(
-            r'\bmy name is\s+' + r'\s+'.join(re.escape(part) for part in name.split()) + r'\b', normalized_name(text)
-        )
-    )
+    from utils.speaker_identification import patterns_to_check
+
+    # Locate the shared detector's capture, then read the entire contiguous
+    # name. Its first-token match cannot prove a shorter candidate or borrow
+    # a surname from a later sentence. Ambiguous trailing words decline.
+    for pattern in patterns_to_check:
+        match = re.search(pattern, text)
+        if not match or normalized_name(match.groups()[-1]) != normalized_name(detection.name):
+            continue
+        start, end = match.span(len(match.groups()))
+        if start == match.start():  # "David Nguyen is my name": extend left
+            while previous := re.search(r'(' + _NAME_TOKEN + r')\s+$', text[:start]):
+                if normalized_name(previous.group(1)) in _INTRO_CLAUSE_BOUNDARIES:
+                    break
+                start = previous.start(1)
+        else:
+            while following := re.match(r'\s+(' + _NAME_TOKEN + r')', text[end:]):
+                if normalized_name(following.group(1)) in _INTRO_CLAUSE_BOUNDARIES:
+                    break
+                end += following.end(1)
+        return normalized_name(text[start:end]) == name
+    return False
+
+
+def full_real_name(name: str) -> bool:
+    # CJK explicit forms capture a complete validated name without spaces.
+    return len(name.split()) >= 2 or bool(re.fullmatch(r'[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7a3]{2,6}', name))
 
 
 def transcript_identity(segments: list[dict]) -> list[tuple]:
@@ -64,7 +89,6 @@ def select_candidates(
         return []
     from utils.speaker_identification import SPEAKER_NAME_STOPWORDS, detect_speaker_introduction
 
-    claims = Counter(b.speaker_id for c in candidates for b in c.bindings)
     by_key: dict[int, list[dict]] = {}
     by_id: dict[str, dict] = {}
     for segment in segments:
@@ -75,11 +99,19 @@ def select_candidates(
         if segment_id in by_id:
             return []  # ambiguous evidence identity
         by_id[segment_id] = segment
+    claims = Counter(
+        (b.speaker_id, scope)
+        for c in candidates
+        for b in c.bindings
+        for scope in {by_id[sid].get('speaker_id_scope') for sid in b.evidence_segment_ids if sid in by_id}
+    )
     owner_names = {normalized_name(e.display_name) for e in roster.entries if e.kind == 'owner' and e.display_name}
     human_entries = [e for e in roster.entries if e.kind == 'human' and e.display_name]
     agent_names = {normalized_name(e.display_name) for e in roster.entries if e.kind == 'ai_agent' and e.display_name}
     result = []
-    owner_claimed = any(s.get('is_user') for s in segments) or any(
+    owner_claimed = any(
+        s.get('is_user') or s.get('speaker_identity_status') == SpeakerIdentityStatus.user for s in segments
+    ) or any(
         isinstance(d, dict) and d.get('is_user')
         for section in ('speakers', 'segments')
         for d in (receipt.get(section) or {}).values()
@@ -108,15 +140,23 @@ def select_candidates(
             continue
         admitted = []
         for binding in candidate.bindings:
-            cluster = by_key.get(binding.speaker_id, [])
             evidence = [by_id.get(sid) for sid in binding.evidence_segment_ids]
+            scopes = {s.get('speaker_id_scope') for s in evidence if s is not None}
+            if len(scopes) != 1:
+                admitted = []
+                break
+            scope = next(iter(scopes))
+            cluster = [s for s in by_key.get(binding.speaker_id, []) if s.get('speaker_id_scope') == scope]
             if (
                 binding.confidence != 'high'
                 or not 1 <= len(binding.evidence_segment_ids) <= 2
-                or claims[binding.speaker_id] != 1
+                or claims[(binding.speaker_id, scope)] != 1
                 or not cluster
-                or len({s.get('speaker_id_scope') for s in cluster}) != 1
                 or any(s.get('person_id') or s.get('is_user') or s.get('speaker_label_source') for s in cluster)
+                or (
+                    candidate.is_owner
+                    and any(s.get('speaker_identity_status') == SpeakerIdentityStatus.not_user for s in cluster)
+                )
                 or str(binding.speaker_id) in (receipt.get('speakers') or {})
                 or any(s.get('id') in (receipt.get('segments') or {}) for s in cluster)
                 or any(
@@ -134,7 +174,7 @@ def select_candidates(
             evidence = [s for s in evidence if s is not None]
             introductions = [detect_speaker_introduction(s['text']) for s in evidence]
             explicit_name = any(introduction_matches(d, s['text'], name) for d, s in zip(introductions, evidence))
-            # Contrary self-introductions anywhere in the key invalidate the
+            # Contrary self-introductions anywhere in this scoped key invalidate the
             # whole candidate, even when the model cites a convenient subset.
             contrary = any(
                 d and d.explicit and not introduction_matches(d, s['text'], name)
@@ -144,13 +184,12 @@ def select_candidates(
             if contrary or (binding.evidence_kind == 'self_introduction' and not explicit_name):
                 admitted = []
                 break
-            # A real roster name plus high-confidence conversation evidence can
-            # ground creation; transcript-only creation needs an explicit intro.
-            # No arbitrary name mentioned elsewhere, email local part, or role.
-            grounded = bool(named_entries) or explicit_name or candidate.is_owner
-            if not grounded:
-                admitted = []
-                break
+            # Context can attach an existing exact person without a literal
+            # name in these turns. Creation needs a full explicit introduction
+            # or a full real name from main's actual calendar/call roster.
+            may_create = (explicit_name and full_real_name(name)) or (
+                len(name.split()) >= 2 and any(e.source in _MEETING_ROSTER_SOURCES for e in named_entries)
+            )
             admitted.append(
                 AdmittedSpeaker(
                     candidate.name.strip(),
@@ -159,7 +198,7 @@ def select_candidates(
                     tuple(s['id'] for s in cluster if s.get('id')),
                     tuple(binding.evidence_segment_ids),
                     next(iter(linked), None),
-                    grounded,
+                    may_create,
                 )
             )
         result.extend(admitted)

@@ -14,27 +14,59 @@ they do not enter the saved note or the participant wire schema.
 
 After the note commits, a separate Firestore transaction reloads the transcript,
 manual receipt, and current labels. It refuses stale source text, a replaced
-note, deletion, discard, lock, merge, incomplete processing, reused speaker keys
-across scopes, duplicate claims, invalid evidence, conflicting introductions,
+note, deletion, discard, lock, merge, incomplete processing, duplicate claims
+on the same scoped key, invalid evidence, conflicting introductions,
 AI identities, and every existing assignment or manual positive/negative decision.
 All bindings for a participant must pass. High confidence is an extraction
 category, not an empirically calibrated probability.
+
+Every cited segment must belong to the bound numeric key and one shared
+`speaker_id_scope`. The stage labels that key only within the cited scope,
+including its uncited turns; it leaves other scopes reusing the number alone.
+Separate independently evidenced bindings can identify different voices that
+share a number across scopes. Conflicting introductions are checked throughout
+the admitted scope. A complete explicit introduction must match the proposed
+name: “My name is David Nguyen” is contrary evidence for “David”, even if the
+model cites a different turn. Contiguous surnames cannot be discarded or
+borrowed from a later mention.
 
 The existing `named_speaker_prompts_allowed` gate runs before candidate admission
 and person lookup. Free accounts can identify the owner; other humans require
 paid eligibility. Manual routes keep their existing permissions. Owner identity
 must agree with the authoritative roster, never an untrusted `is_user` value.
+Context may identify the owner without a literal introduction, preserving the
+product's in-context naming intent. An existing `is_user` or
+`speaker_identity_status=user` anywhere reserves owner identity; the stage does
+not add another owner claim. Main's `speaker_identity_status=not_user` on the
+candidate scope vetoes owner admission. `no_match` is a failed acoustic match,
+not a confident non-owner signal; unknown/ambiguous states are not invented
+negative evidence. Existing labels and manual decisions still take precedence.
 
 People resolve by a roster person link, normalized name, or retained alias.
-Duplicate matches decline. Creation requires a roster-backed real name plus
-high-confidence binding evidence, or a verified explicit introduction. The
+An alias must equal the entire proposed name and contain two or more tokens;
+a short alias such as “Ann” cannot assign “Anne Smith”. Exact equality with the
+person's own normalized name remains eligible. Duplicate matches decline.
+Contextual evidence can attach an existing exact-name person even when the
+cited text never says the name and the roster lacks it. Context alone never
+creates a person. Creation needs a verified full-name explicit introduction,
+or a two-or-more-token real name from an actual calendar/call participant roster
+plus the high-confidence binding. Main's system/macOS/Google/Outlook calendar
+sources and corroborated `screen_activity` call rosters supply that authority;
+background mentions and unsupported sources do not. A first-name-only explicit
+introduction can attach an existing exact person, but cannot create one. The
 bounded catalog reads at most 501 documents once per transaction attempt; a
 catalog exceeding 500 people declines named assignments because uniqueness
 cannot be established. Owner-only admission does not read this catalog.
 People and labels commit atomically; encoding/model validation happens before
 any writes. Labels store `speaker_match_source=summary_inferred`, public source
-`auto`, and evidence/version metadata. Manual corrections clear inferred metadata.
+`auto`, and evidence/scope/version metadata. Manual corrections clear inferred metadata.
 The existing `person_id`/`is_user` display paths show names without a client change.
+
+Hermetic transaction tests prove current-document admission and read-before-write
+ordering. `StrictFirestore` does not model commit retries or transaction
+contention; those behaviors are unverified and require the real dev/emulator
+qualification below. The free-plan owner-plus-guest regression traps every
+catalog read and create while checking that only the owner is labeled.
 
 ## Learning boundary
 
@@ -72,16 +104,18 @@ real tokenizer and cover the same call/parser boundary.
 
 | Transcript words (target) | Humans including owner | Added identity prompt | Added fixture completion | Owner-wording prompt |
 | ---: | ---: | ---: | ---: | ---: |
-| 80 | 2 | 380 | 78 | 71 |
-| 1,800 | 2 | 380 | 78 | 71 |
-| 16,000 | 5 | 380 | 183 | 71 |
+| 80 | 2 | 380 | 78 | 103 |
+| 1,800 | 2 | 380 | 78 | 103 |
+| 16,000 | 5 | 380 | 183 | 103 |
 
 The schema/rules add a constant 380 input tokens; completion grows by roughly
 35 tokens per additional participant, plus the owner object. This is several
 dozen output tokens per human, rather than merely a few. Two evidence IDs and
 multiple keys increase completion. The owner-wording rule is independent of
-the flag and adds 71 input tokens to rich notes. Total added input for both
-changes is 451 tokens when enabled. Disabled identity adds zero identity tokens.
+the flag and adds 103 input tokens to rich notes. Total added input for both
+changes is 483 tokens when enabled. Disabled identity adds zero identity tokens.
+The Round 1 wording scopes owner names to body prose, retains the title ban,
+and explicitly preserves name-or-“they” phrasing for non-owners.
 
 Current `model_config.py` and generated gateway routes name OpenAI `gpt-6-luna`.
 The source is `backend/llm_gateway/config/cost_rate_cards.yaml`, card
@@ -93,11 +127,11 @@ formula against the official model list before rollout; the price-verification
 requirement remains unverified.
 
 At those provisional rates, identity alone costs **$0.0848–$0.1478 per 1,000
-conversations**. Including wording costs **$0.0919–$0.1549 per 1,000**.
+conversations**. Including wording costs **$0.0951–$0.1581 per 1,000**.
 For enabled two-to-five-human conversations, monthly incremental model cost is
-`N × (451 × input_price + completion_delta × output_price) / 1,000,000`.
+`N × (483 × input_price + completion_delta × output_price) / 1,000,000`.
 If only some rich calls enable identity, use
-`N_rich × 71 × input_price / 1,000,000 +
+`N_rich × 103 × input_price / 1,000,000 +
  N_enabled × (380 × input_price + completion_delta × output_price) / 1,000,000`.
 
 The KB's existing 2026-09-21 free-tier local-processing economics record reports
@@ -105,8 +139,8 @@ The KB's existing 2026-09-21 free-tier local-processing economics record reports
 proxy, not a verified 1:1 stored-conversation count. Its desktop-source share
 is 79.3%; free desktop enrichment was 72.5%. No current global eligible volume
 or participant-count distribution was established. Assuming all 19,918 proxy
-events were eligible enabled rich calls gives **$1.83–$3.09/month** for both
-changes. An explicit 100,000 eligible calls/month assumption gives **$9.19–$15.49**.
+events were eligible enabled rich calls gives **$1.89–$3.15/month** for both
+changes. An explicit 100,000 eligible calls/month assumption gives **$9.51–$15.81**.
 These are sensitivity examples, not a production bill forecast.
 
 The historical conversation-size record reports median approximately 1,794

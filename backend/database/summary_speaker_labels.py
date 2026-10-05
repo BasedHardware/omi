@@ -103,11 +103,15 @@ def apply_summary_speaker_labels(uid: str, conversation, *, firestore_client=Non
             for speaker in selected:
                 person_id = None
                 if not speaker.is_owner:
+                    proposed_name = normalized_name(speaker.name)
                     matches = [
                         p
                         for p in people
-                        if normalized_name(p.get('name') or '') == normalized_name(speaker.name)
-                        or normalized_name(speaker.name) in [normalized_name(a) for a in p.get('aliases', [])]
+                        if normalized_name(p.get('name') or '') == proposed_name
+                        or (
+                            len(proposed_name.split()) >= 2
+                            and proposed_name in [normalized_name(a) for a in p.get('aliases', [])]
+                        )
                     ]
                     if speaker.person_id:
                         matches = [p for p in people if p['id'] == speaker.person_id]
@@ -155,7 +159,8 @@ def apply_summary_speaker_labels(uid: str, conversation, *, firestore_client=Non
                     summary_speaker_evidence={
                         'confidence': 'high',
                         'evidence_segment_ids': list(speaker.evidence_segment_ids),
-                        'version': 1,
+                        'speaker_id_scope': segment.get('speaker_id_scope'),
+                        'version': 2,
                     },
                 )
             # Encode before staging any write: a codec error cannot leave people.

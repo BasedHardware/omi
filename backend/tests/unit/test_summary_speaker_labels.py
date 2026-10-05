@@ -68,6 +68,30 @@ def test_full_name_intro_must_be_contiguous_and_not_completed_by_another_mention
 
 
 @pytest.mark.parametrize(
+    'name,introduced,is_owner',
+    [('David', 'David Nguyen', True), ('Eddie', 'Eddie Thai', False), ('Eddie Thai', 'Eddie Thai Nguyen', False)],
+)
+def test_shorter_name_never_matches_a_continuing_explicit_introduction(name, introduced, is_owner):
+    assert not select([candidate(name, is_owner=is_owner)], [segment(text=f'My name is {introduced}.')])
+
+
+def test_uncited_longer_introduction_is_contrary_to_contextual_owner():
+    c = candidate('David', is_owner=True)
+    c.bindings[0].evidence_kind = 'contextual'
+    assert not select([c], [segment(text='We should ship this.'), segment('s2', text='My name is David Nguyen.')])
+
+
+@pytest.mark.parametrize('text', ['My name is David nguyen.', 'Me llamo David Nguyen.', "Je m'appelle David Nguyen."])
+def test_full_introduction_check_also_rejects_lowercase_surnames_and_other_lead_ins(text):
+    from utils.speaker_identification import detect_speaker_introduction
+    from utils.conversations.summary_speaker_labels import introduction_matches
+
+    detection = detect_speaker_introduction(text)
+    assert detection and detection.explicit
+    assert not introduction_matches(detection, text, 'david')
+
+
+@pytest.mark.parametrize(
     'decision',
     [
         dict(person_id='manual'),
@@ -118,8 +142,7 @@ def test_multiple_keys_need_independent_evidence_and_decline_whole_participant()
     assert not select([c], [segment(), segment('s3', 3)])
 
 
-def test_reused_key_scopes_mixed_voice_and_fabricated_evidence_decline():
-    assert not select(segments=[{**segment(), 'speaker_id_scope': 'a'}, {**segment('s3'), 'speaker_id_scope': 'b'}])
+def test_mixed_voice_and_fabricated_evidence_decline():
     assert not select(segments=[segment(), segment('s3', text='My name is Maya Chen.')])
     assert not select([candidate(sid='invented')])
     assert not select([candidate('Boardy', is_ai_agent=True)])
@@ -129,9 +152,71 @@ def test_reused_key_scopes_mixed_voice_and_fabricated_evidence_decline():
 def test_roster_context_can_bind_without_literal_intro_but_no_roster_bijection():
     c = candidate()
     c.bindings[0].evidence_kind = 'contextual'
-    assert select([c], [segment(text='I can send the introductions we discussed.')])
-    assert not select_candidates(
-        [candidate('Avery Quinn')], [segment(text='Avery was mentioned.')], {}, roster(), allow_named=True
+    admitted = select([c], [segment(text='I can send the introductions we discussed.')])
+    assert admitted and admitted[0].may_create  # full calendar-participant name
+    other = candidate('Avery Quinn')
+    other.bindings[0].evidence_kind = 'contextual'
+    admitted = select_candidates([other], [segment(text='I can help.')], {}, roster(), allow_named=True)
+    assert admitted and not admitted[0].may_create  # existing exact person only
+
+
+@pytest.mark.parametrize('source,name', [('background', 'Eddie Thai'), ('macos_calendar', 'Eddie')])
+def test_context_alone_cannot_create_from_a_mention_or_first_name(source, name):
+    c = candidate(name)
+    c.bindings[0].evidence_kind = 'contextual'
+    r = MeetingRoster((entry('David', 'owner'), RosterEntry(name, None, None, 'human', source)), 'Intro', False)
+    admitted = select_candidates([c], [segment(text='I can help.')], {}, r, allow_named=True)
+    assert admitted and not admitted[0].may_create
+
+
+def test_first_name_explicit_intro_needs_an_existing_person():
+    admitted = select([candidate('Ann')], [segment(text='My name is Ann.')])
+    assert admitted and not admitted[0].may_create
+
+
+def test_reused_key_labels_only_the_evidence_scope():
+    rows = [
+        {**segment(), 'speaker_id_scope': 'a'},
+        {**segment('s2', text='I will send it.'), 'speaker_id_scope': 'a'},
+        {**segment('s3', text='My name is Maya Chen.'), 'speaker_id_scope': 'b'},
+    ]
+    admitted = select(segments=rows)
+    assert admitted and admitted[0].segment_ids == ('s1', 's2')
+
+
+def test_evidence_cannot_join_different_scopes_of_one_key():
+    c = candidate()
+    c.bindings[0].evidence_segment_ids = ['s1', 's3']
+    assert not select([c], [{**segment(), 'speaker_id_scope': 'a'}, {**segment('s3'), 'speaker_id_scope': 'b'}])
+
+
+def test_distinct_scoped_voices_can_share_the_same_numeric_key():
+    rows = [
+        {**segment(), 'speaker_id_scope': 'a'},
+        {**segment('s3', text='My name is Maya Chen.'), 'speaker_id_scope': 'b'},
+    ]
+    admitted = select([candidate(), candidate('Maya Chen', sid='s3')], rows)
+    assert [(a.name, a.segment_ids) for a in admitted] == [('Eddie Thai', ('s1',)), ('Maya Chen', ('s3',))]
+
+
+def test_contextual_owner_respects_existing_not_user_signal():
+    c = candidate('David', is_owner=True)
+    c.bindings[0].evidence_kind = 'contextual'
+    assert not select([c], [{**segment(text='We should ship this.'), 'speaker_identity_status': 'not_user'}])
+
+
+@pytest.mark.parametrize('status,expected', [('unknown', True), ('no_match', True), ('ambiguous', True)])
+def test_contextual_owner_does_not_treat_missing_or_failed_matches_as_not_user(status, expected):
+    c = candidate('David', is_owner=True)
+    c.bindings[0].evidence_kind = 'contextual'
+    assert bool(select([c], [{**segment(text='We should ship this.'), 'speaker_identity_status': status}])) == expected
+
+
+def test_contextual_owner_declines_when_another_key_has_owner_resolution():
+    c = candidate('David', is_owner=True)
+    c.bindings[0].evidence_kind = 'contextual'
+    assert not select(
+        [c], [segment(text='We should ship this.'), {**segment('owner', 0), 'speaker_identity_status': 'user'}]
     )
 
 
@@ -238,6 +323,57 @@ def test_existing_people_resolved_without_duplicate(world, mode):
     assert len([p for p in store.rows if p[-2] == 'people']) == 1
 
 
+@pytest.mark.parametrize('own_name,expected', [('Anne Smith', 0), ('Ann', 1)])
+def test_short_alias_cannot_resolve_another_full_name(world, own_name, expected):
+    stage, db, store, path, conv = world
+    conv.structured._summary_speaker_candidates = [candidate('Ann')]
+    conv.transcript_segments = [TranscriptSegment.model_validate(segment(text='My name is Ann.'))]
+    store.rows[path].update(
+        db.encode_conversation_for_write(
+            'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
+        )
+    )
+    store.rows[('users', 'u', 'people', 'p1')] = dict(name=own_name, aliases=['Ann'])
+    before = deepcopy(store.rows)
+    assert stage.apply_summary_speaker_labels('u', conv) == expected
+    if expected:
+        assert conv.transcript_segments[0].person_id == 'p1'
+    else:
+        assert store.rows == before
+
+
+def test_contextual_identity_can_attach_an_existing_exact_person_without_a_roster_name(world):
+    stage, db, store, path, conv = world
+    conv.structured._summary_speaker_candidates = [candidate('Maya Chen')]
+    conv.structured._summary_speaker_candidates[0].bindings[0].evidence_kind = 'contextual'
+    conv.transcript_segments = [TranscriptSegment.model_validate(segment(text='I can help.'))]
+    store.rows[path].update(
+        db.encode_conversation_for_write(
+            'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
+        )
+    )
+    store.rows[('users', 'u', 'people', 'p1')] = dict(name='Maya Chen')
+    assert stage.apply_summary_speaker_labels('u', conv) == 1
+    assert conv.transcript_segments[0].person_id == 'p1'
+
+
+def test_transaction_never_creates_a_context_only_mentioned_person(world):
+    stage, db, store, path, conv = world
+    conv.structured._summary_speaker_candidates[0].bindings[0].evidence_kind = 'contextual'
+    conv.structured._summary_speaker_roster = MeetingRoster(
+        (entry('David', 'owner'), RosterEntry('Eddie Thai', None, None, 'human', 'background')), 'Intro', False
+    )
+    conv.transcript_segments = [TranscriptSegment.model_validate(segment(text='I can help.'))]
+    store.rows[path].update(
+        db.encode_conversation_for_write(
+            'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
+        )
+    )
+    before = deepcopy(store.rows)
+    assert stage.apply_summary_speaker_labels('u', conv) == 0
+    assert store.rows == before
+
+
 @pytest.mark.parametrize(
     'field,value', [('deleted', True), ('is_locked', True), ('discarded', True), ('status', 'processing')]
 )
@@ -323,6 +459,28 @@ def test_free_owner_is_labeled_without_person_creation(world, monkeypatch):
     assert not [p for p in store.rows if p[-2] == 'people']
 
 
+def test_free_owner_plus_guest_drops_guest_before_any_catalog_read_or_create(world, monkeypatch):
+    stage, db, store, path, conv = world
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
+
+    conv.structured._summary_speaker_candidates = [candidate('David', 0, 's0', is_owner=True), candidate()]
+    conv.transcript_segments = [
+        TranscriptSegment.model_validate(s) for s in [segment('s0', 0, 'My name is David.'), segment()]
+    ]
+    store.rows[path].update(
+        db.encode_conversation_for_write(
+            'u', {'transcript_segments': [s.model_dump() for s in conv.transcript_segments]}
+        )
+    )
+    monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', lambda _: False)
+    monkeypatch.setattr(stage, 'read_summary_people_catalog', lambda *args, **kwargs: pytest.fail('guest catalog read'))
+    monkeypatch.setattr(StrictFirestoreTransaction, 'create', lambda *args, **kwargs: pytest.fail('guest create'))
+    assert stage.apply_summary_speaker_labels('u', conv) == 1
+    assert conv.transcript_segments[0].is_user
+    assert not conv.transcript_segments[1].is_user and conv.transcript_segments[1].person_id is None
+    assert not [p for p in store.rows if p[-2] == 'people']
+
+
 def test_manual_correction_clears_inferred_evidence():
     from utils.manual_speaker_assignments import apply_manual_assignments
 
@@ -360,3 +518,6 @@ def test_owner_wording_prompt_keeps_third_person_without_gender_inference():
     assert 'David would welcome a meeting' in _RICH_MEETING_RULES
     assert 'do not use "they" for the owner immediately after naming them' in _RICH_MEETING_RULES
     assert 'Never infer anyone\'s gender' in _RICH_MEETING_RULES
+    assert 'Only in body prose about the account owner' in _RICH_MEETING_RULES
+    assert 'never put the account owner\'s name in it' in _RICH_MEETING_RULES
+    assert 'Keep name-or-"they" wording for non-owner people' in _RICH_MEETING_RULES
