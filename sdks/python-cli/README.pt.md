@@ -162,7 +162,7 @@ O fallback exato por aplicativo, janela e OCR para `omi --json local search-scre
 
 ## Estrutura de comandos
 
-A árvore completa (execute `omi --help` para a versão interativa):
+A árvore completa (execute `omi --help` para ver a árvore de comandos da versão instalada):
 
 ```text
 omi
@@ -235,7 +235,7 @@ Opções numéricas de metas e valores de progresso também devem ser finitos. `
 ```text
 --json                 Emite JSON para stdout (legível por máquina, ideal para agentes).
 --profile, -p NAME     Usa um perfil específico.
---api-base URL         Substitui a URL base da API.
+--api-base URL         Sobrescreve a URL base da API.
 --verbose, -v          Registra o tráfego HTTP em stderr.
 --no-color             Desativa a saída colorida (também respeita $NO_COLOR).
 --version              Exibe a versão instalada.
@@ -265,7 +265,7 @@ O CLI foi construído para que um LLM possa usá-lo sem a necessidade de um wrap
 * As variáveis de ambiente `OMI_API_KEY` e `OMI_API_BASE` funcionam sem qualquer `auth login` prévio.
 * `OMI_LOCAL_API_URL` e `OMI_LOCAL_TOKEN` substituem as configurações locais da API do Desktop do perfil para `omi local`.
 
-Consulte [`examples/agent_quickstart.md`](examples/agent_quickstart.md) para ver um exemplo prático.
+Consulte [`examples/agent_quickstart.pt.md`](examples/agent_quickstart.pt.md) (versão em inglês: [`examples/agent_quickstart.md`](examples/agent_quickstart.md)) para ver um exemplo prático.
 
 ## Limites de taxa
 
