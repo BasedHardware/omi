@@ -410,6 +410,12 @@ _load_module_from_file(
     BACKEND_DIR / "utils" / "llm" / "action_item_normalization.py",
 )
 
+# Content-free receipts are stdlib-only and wrap the notes entry point.
+_load_module_from_file(
+    "utils.llm.notes_observability",
+    BACKEND_DIR / "utils" / "llm" / "notes_observability.py",
+)
+
 # Episode helpers are lazy and unused by these flag-off action-item tests.
 # Keep the isolated graph limited to the production imports exercised here.
 _stub_package("utils.observability")

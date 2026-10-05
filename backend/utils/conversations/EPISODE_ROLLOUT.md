@@ -32,10 +32,11 @@ Hold or abort a step if, relative to the simultaneous baseline control:
   admission does not alter relevance/discard; discarded conversations have no new reads.
 
 Do not advance on improved information coverage alone. Confirm stable cache-hit share
-and long-meeting completion; long speech (>240k transcript-prefix characters) stays on
+and long-meeting completion; long speech (>240k transcript-prefix UTF-8 bytes) stays on
 rich baseline, and episode repair is bounded to remaining 60s (no transport retries).
-At most two model calls per episode note; long evidence (>120k message characters)
-gets one call plus local repair. Residual contract violations preserve a usable note.
+At most two model calls per episode note; long evidence (>120k message UTF-8 bytes)
+within the episode arm gets one call plus local repair.
+The baseline_long arm retains baseline presentation/transport retry policy. Residual contract violations preserve a usable note.
 These limits do not eliminate baseline provider errors or guarantee every meeting
 finishes in 60s; they prevent additional long-context episode repair cost.
 

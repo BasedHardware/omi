@@ -1179,12 +1179,19 @@ def get_conversation_notes(
     """
     episode_mode = episode_evidence is not None
     run = current_run()
-    if episode_mode and len(prefix.context) > 240000:
+    if episode_mode and len(prefix.context.encode('utf-8')) > 240000:
         # Very long speech follows the existing rich path, without episode metadata overhead.
         episode_mode = False
         if run is not None:
             run.arm = 'baseline_long'
             run.violations.add('long_input_baseline')
+        import_module('utils.observability.fallback').record_fallback(
+            component='conversation_notes',
+            from_mode='episode_notes',
+            to_mode='baseline_long',
+            reason='local_heal',
+            outcome='degraded',
+        )
     if not episode_mode and (
         not prefix.context.strip() or not (prefix.has_usable_content or (rich_context_enabled and screen_frames))
     ):

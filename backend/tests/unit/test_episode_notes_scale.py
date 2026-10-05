@@ -206,3 +206,28 @@ def test_production_rich_reads_identical_with_episode_no_n_plus_one(runtime, mon
     assert results[0] == results[1]
     assert all(count == 1 for count in results[1][0].values())
     assert sum(results[1][1].values()) == 91
+
+
+def test_long_fallback_background_reuses_ocr_query(runtime, monkeypatch):
+    _, wiring, sources, _ = runtime
+    from utils.conversations.meeting_context_render import MeetingContextPack
+    from utils.conversations.meeting_participants import MeetingRoster
+
+    calls = []
+    pack = MeetingContextPack(
+        screen_rows=({'appName': 'Browser', 'windowTitle': 'Pricing', 'ocrText': 'Pricing draft'},)
+    )
+    monkeypatch.setattr(sources, 'gather_meeting_context_pack', lambda *a, **k: calls.append(k) or pack)
+    evidence = []
+    background = wiring._rich_meeting_context_block(
+        'invented',
+        SimpleNamespace(),
+        MeetingRoster(entries=(), display_title=None, title_is_window_title=False),
+        [],
+        'UTC',
+        include_screen_text=True,
+        evidence_items=evidence,
+    )
+    assert len(calls) == 1 and calls[0]['preserve_screen_rows']
+    assert 'Pricing draft' in background
+    assert 'Pricing draft' in evidence[0].content

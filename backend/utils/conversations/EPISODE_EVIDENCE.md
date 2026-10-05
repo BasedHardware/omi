@@ -65,7 +65,7 @@ from visible prose without converting them to transcript citations.
 Episode presentation and claim/vacuity repair share ONE optional model call.
 The 60s structure budget includes the repair, transport retries are disabled for
 episode calls, and repairs are skipped for long inputs or less than 15s headroom.
-Transcripts above 240k characters use the existing rich prompt. Baseline behavior
+Transcripts above 240k UTF-8 bytes use the existing rich prompt. Baseline behavior
 is unchanged. Local sanitization always runs, including when repair is skipped.
 One claim normally binds a sentence/bullet; sources or provenance changes split
 it. Headings need no claims. Every factual unit still needs an anchor; repeated

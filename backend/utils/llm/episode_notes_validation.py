@@ -85,7 +85,7 @@ def repair_episode_note(
     try:
         # Long inputs get local repair only; never buy a second full long-context call.
         remaining = run.remaining(repair_budget) if run else repair_budget
-        if remaining < 15 or sum(len(str(message.content)) for message in messages) > 120000:
+        if remaining < 15 or sum(len(str(message.content).encode('utf-8')) for message in messages) > 120000:
             violations.add('repair_budget_exhausted')
             raise TimeoutError('repair budget exhausted')
         retry_model = retry_model_factory((remaining // 5) * 5) if retry_model_factory is not None else model

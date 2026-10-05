@@ -145,7 +145,7 @@ def test_endpoint_reports_provider_usage_and_candidate_latency(monkeypatch):
 def cost_encoder():
     import tiktoken
 
-    return tiktoken.get_encoding('o200k_base')
+    return tiktoken.encoding_for_model('gpt-4o')
 
 
 def test_endpoint_measures_cache_read_and_compact_claim_share(monkeypatch, cost_encoder):

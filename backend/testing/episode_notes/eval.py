@@ -83,7 +83,7 @@ class CompatibleEndpoint:
             receipt = replace(
                 receipt,
                 claim_tokens=len(
-                    tiktoken.get_encoding('o200k_base').encode(
+                    tiktoken.encoding_for_model('gpt-4o').encode(
                         json.dumps(content['note_claims'], ensure_ascii=False, separators=(',', ':'))
                     )
                 ),

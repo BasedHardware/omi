@@ -21,8 +21,10 @@ if TYPE_CHECKING:
     from utils.conversations.episode_evidence import EvidenceItem
 from utils.conversations.meeting_context_gate import should_gather_meeting_context
 from utils.conversations.meeting_context_render import (
+    MAX_SCREEN_CHARACTERS,
     render_meeting_context_pack,
 )
+from utils.conversations.screen_text_digest import digest_screen_rows
 from utils.conversations.meeting_participants import MeetingRoster, normalize_meeting_participants
 from utils.conversations.screen_frame_evidence import (
     NotesFrameImage,
@@ -167,6 +169,10 @@ def _rich_meeting_context_block(
         )
         if evidence_items is not None:
             evidence_items.extend(import_module('utils.conversations.episode_evidence').context_pack_evidence(pack))
+            if pack is not None and pack.screen_rows:
+                # Long-input fallback needs the same rich background as baseline,
+                # reusing already-read rows rather than issuing another query.
+                pack = replace(pack, screen_text=digest_screen_rows(pack.screen_rows, MAX_SCREEN_CHARACTERS))
         return render_meeting_context_pack(pack) if pack else None
     except Exception as exc:  # noqa: BLE001 - background is best effort
         logger.warning('rich meeting context build failed uid=%s: %s', uid, type(exc).__name__)
