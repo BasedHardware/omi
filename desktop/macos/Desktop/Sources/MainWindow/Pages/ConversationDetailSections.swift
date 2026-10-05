@@ -55,8 +55,11 @@ struct ConversationActionItemsSection: View {
           let index = notification.userInfo?["index"] as? Int, activeItems.indices.contains(index)
         else { return }
         let item = activeItems[index]
-        let linkedTaskID = onOpenLinkedTask == nil ? nil : item.targetTaskID
-        if let linkedTaskID { onOpenLinkedTask?(linkedTaskID) } else { addActionItemToTasks(item) }
+        if let linkedTaskID = item.targetTaskID {
+          onOpenLinkedTask?(linkedTaskID)
+        } else {
+          addActionItemToTasks(item)
+        }
       }
     }
   }
@@ -67,7 +70,7 @@ struct ConversationActionItemsSection: View {
     let identity = actionItemIdentity(sourceItem)
     let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
       item.sourceSegmentIDs, segments: conversation.transcriptSegments)
-    let linkedTaskID = onOpenLinkedTask == nil ? nil : item.targetTaskID
+    let linkedTaskID = item.targetTaskID
     return ConversationActionItemRow(
       item: item,
       taskState: taskState(for: item, identity: identity, linkedTaskID: linkedTaskID),
