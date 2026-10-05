@@ -31,22 +31,22 @@ def explicit_introduction_names(text: str) -> list[Optional[str]]:
     from utils.speaker_identification import (
         PATTERN_TO_LANG,
         SPEAKER_NAME_STOPWORDS,
-        _is_explicit_introduction,
-        _is_valid_cjk_speaker_name,
+        is_explicit_introduction,
+        is_valid_cjk_speaker_name,
         patterns_to_check,
     )
 
     names: list[Optional[str]] = []
     for pattern in patterns_to_check:
         for match in re.finditer(pattern, text):
-            if not _is_explicit_introduction(pattern, match):
+            if not is_explicit_introduction(pattern, match):
                 continue
             start, end = match.span(len(match.groups()))
             captured = text[start:end]
             if re.search(r'[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7a3]', captured):
                 names.append(
                     normalized_name(captured)
-                    if _is_valid_cjk_speaker_name(captured, PATTERN_TO_LANG.get(pattern))
+                    if is_valid_cjk_speaker_name(captured, PATTERN_TO_LANG.get(pattern))
                     else None
                 )
                 continue

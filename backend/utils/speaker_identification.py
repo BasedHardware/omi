@@ -640,7 +640,7 @@ SPEAKER_NAME_STOPWORDS = frozenset(
 )
 
 
-def _is_valid_cjk_speaker_name(name: str, pattern_lang: Optional[str] = None) -> bool:
+def is_valid_cjk_speaker_name(name: str, pattern_lang: Optional[str] = None) -> bool:
     """Validate that candidate CJK name is plausible and not a full sentence or clause."""
     has_cjk = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name))
     if not has_cjk:
@@ -701,7 +701,7 @@ class SpeakerNameDetection:
     explicit: bool
 
 
-def _is_explicit_introduction(pattern: str, match: 're.Match[str]') -> bool:
+def is_explicit_introduction(pattern: str, match: 're.Match[str]') -> bool:
     groups = match.groups()
     if len(groups) < 2:
         return pattern not in _NAME_FIRST_COPULAR_PATTERNS
@@ -765,7 +765,7 @@ def detect_speaker_introduction(text: str, language: Optional[str] = None) -> Op
             if name.lower() in SPEAKER_NAME_STOPWORDS:
                 continue
 
-            if not _is_valid_cjk_speaker_name(name, pattern_lang=matched_lang):
+            if not is_valid_cjk_speaker_name(name, pattern_lang=matched_lang):
                 continue
 
             normalized = (
@@ -773,7 +773,7 @@ def detect_speaker_introduction(text: str, language: Optional[str] = None) -> Op
                 if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name)
                 else name.capitalize()
             )
-            return SpeakerNameDetection(name=normalized, explicit=_is_explicit_introduction(pattern, match))
+            return SpeakerNameDetection(name=normalized, explicit=is_explicit_introduction(pattern, match))
     return None
 
 
