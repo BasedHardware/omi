@@ -10,8 +10,9 @@ file lists or `backend/scripts/run-unit-ci.sh`, with the network guard intact.
 ## Findings and ranking
 
 The supplied 18% is a distinct stored-segment attribution share, not a provider
-callback failure rate. The new sibling counter counts callbacks; neither it nor
-these offline reproductions establishes the fleet's provider/session mix.
+callback failure rate. The new sibling counter counts outside-send rejected
+segment translations; neither it nor these offline reproductions establishes
+the fleet's provider/session mix.
 The earlier 12% and later 18% cover different durations. Merge union changes
 window survival, not provider timestamps or accepted-send registration. Those
 percentages alone cannot establish a new clock defect or assign 15 percentage

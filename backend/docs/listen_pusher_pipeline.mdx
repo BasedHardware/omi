@@ -3034,8 +3034,10 @@ geometry to `translator_outside_accepted_sends`: `empty_map`, `before_first_send
 ledger, not an inferred provider fault. Empty maps can indicate missing replay
 registration; after-last refusals can be either an omitted prefix or actual
 overshoot. Existing refusal, past-send, and stored-segment counters keep their
-names, labels and counting semantics. This sibling counter counts provider
-callbacks, not distinct persisted segments, and stores no session identifiers.
+names, labels and counting semantics. This sibling counter counts outside-send
+rejected segment translations, independently of persisted rows. A callback with
+N refused segments increments it N times; retries recount. It stores no session
+identifiers.
 
 
 `omi_live_audio_capture_windows_total` keeps its existing labels and committed-version
