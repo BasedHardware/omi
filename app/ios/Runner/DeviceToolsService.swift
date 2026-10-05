@@ -80,7 +80,7 @@ class DeviceToolsService: NSObject {
           "error": error?.localizedDescription ?? "",
         ])
       } else {
-        result(contactsPermissionFailure(status: status, message: error?.localizedDescription))
+        result(self.contactsPermissionFailure(status: status, message: error?.localizedDescription))
       }
     }
   }
@@ -305,7 +305,11 @@ class DeviceToolsService: NSObject {
     }
     let openedSettings: Bool
     if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-      openedSettings = UIApplication.shared.open(settingsURL)
+      // The completion-based overload: the synchronous Bool-returning variant is
+      // unavailable in newer SDKs, and the result cannot be observed synchronously
+      // anyway — this records that the open was requested.
+      UIApplication.shared.open(settingsURL, options: [:], completionHandler: nil)
+      openedSettings = true
     } else {
       openedSettings = false
     }
