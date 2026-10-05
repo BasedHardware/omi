@@ -90,8 +90,9 @@ mixin ChatHistoryState on ChangeNotifier {
     chatSessionId = session.id;
     isFreshChat = false;
     final loaded = result as ApiSuccess<List<ServerMessage>>;
-    messages = loaded.data..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    _messageOffset = messages.length + loaded.rejectedRows;
+    messages = loaded.data.where((m) => !m.isAutomaticChatEntry).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    _messageOffset = loaded.data.length + loaded.rejectedRows;
     hasOlderMessages = _messageOffset == 100;
     historyProblem = loaded.rejectedRows > 0 ? const ApiProblem(ApiProblemKind.decode) : null;
     hasCachedMessages = false;
@@ -131,7 +132,7 @@ mixin ChatHistoryState on ChangeNotifier {
     loadingOlderMessages = false;
     if (result is ApiSuccess<List<ServerMessage>>) {
       final ids = messages.map((m) => m.id).toSet();
-      messages = [...messages, ...result.data.where((m) => ids.add(m.id))]
+      messages = [...messages, ...result.data.where((m) => !m.isAutomaticChatEntry && ids.add(m.id))]
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
       final received = result.data.length + result.rejectedRows;
       _messageOffset += received;
@@ -259,8 +260,8 @@ mixin ChatHistoryState on ChangeNotifier {
         historyProblem = result.problem;
       } else {
         final loaded = result as ApiSuccess<List<ServerMessage>>;
-        messages = loaded.data;
-        _messageOffset = messages.length + loaded.rejectedRows;
+        messages = loaded.data.where((m) => !m.isAutomaticChatEntry).toList();
+        _messageOffset = loaded.data.length + loaded.rejectedRows;
         hasOlderMessages = _messageOffset == 100;
         historyProblem = loaded.rejectedRows > 0 ? const ApiProblem(ApiProblemKind.decode) : null;
       }
@@ -271,12 +272,12 @@ mixin ChatHistoryState on ChangeNotifier {
       isLoadingMessages = false;
       _pendingAppSwitch = false;
       isSwitchingChatApp = false;
-      messages = loaded;
+      messages = loaded.where((m) => !m.isAutomaticChatEntry).toList();
       historyProblem = null;
       // The legacy cache has no session/app key. Never use it in an explicitly selected thread.
       if ((appId ?? '').isEmpty && !dropdownSelected) {
         if (messages.isEmpty) {
-          messages = List.of(SharedPreferencesUtil().cachedMessages);
+          messages = SharedPreferencesUtil().cachedMessages.where((m) => !m.isAutomaticChatEntry).toList();
         } else {
           SharedPreferencesUtil().cachedMessages = messages;
         }
@@ -294,7 +295,8 @@ mixin ChatHistoryState on ChangeNotifier {
 
   void setMessagesFromCache() {
     if (chatSessionId != null || isFreshChat || (appProvider?.selectedChatAppId ?? '').isNotEmpty) return;
-    messages = List.of(SharedPreferencesUtil().cachedMessages)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    messages = SharedPreferencesUtil().cachedMessages.where((m) => !m.isAutomaticChatEntry).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     hasCachedMessages = messages.isNotEmpty;
     notifyListeners();
   }
@@ -309,7 +311,8 @@ mixin ChatHistoryState on ChangeNotifier {
     try {
       final loaded = await clearChatServer(appId: appProvider?.selectedChatAppId, chatSessionId: chatSessionId);
       resetChatDraft();
-      messages = loaded..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      messages = loaded.where((m) => !m.isAutomaticChatEntry).toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     } catch (e) {
       Logger.debug('Failed to clear chat: $e');
       final l10n = globalNavigatorKey.currentContext?.l10n;

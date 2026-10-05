@@ -192,14 +192,30 @@ def round3_stage(monkeypatch, env):
     return old_stage, old_placement
 
 
-def _admit_any_inventory(uid, conversation, *args, **kwargs):
-    return AudioChunkReadSession(uid, conversation.id, SR)
+def _admit_any_inventory(uid, conversation, *args, audio, **kwargs):
+    """Admit only fixture PCM, with no lazy listing or storage decode left over."""
+    session = AudioChunkReadSession(uid, conversation.id, SR)
+    session._chunks = []
+    for source in audio:
+        for start, pcm in source.chunks:
+            path = f'fixture-{len(session._chunks)}'
+            session._chunks.append(
+                dict(
+                    path=path,
+                    generation=1,
+                    timestamp=start,
+                    span=dict(start=start, samples=len(pcm) // 2, sample_rate=SR),
+                )
+            )
+            session.cache[path] = (pcm, 'none')
+            source.downloads += 1
+    return session
 
 
 def _install_audio(monkeypatch, plan, seconds=4.0, offset=0.0):
     audio = FakeAudio(plan, seconds=seconds, offset=offset)
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', audio)
-    monkeypatch.setattr(stage, '_verified_read_session', _admit_any_inventory)
+    monkeypatch.setattr(stage, '_verified_read_session', lambda *a, **kw: _admit_any_inventory(*a, audio=[audio], **kw))
     return audio
 
 
@@ -594,7 +610,11 @@ def test_span_resolution_mixed_sync_and_capture_scopes_resolve(env, stage_overri
         yield from live_audio(uid, conversation_id, wanted, sample_rate=sample_rate)
 
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', combined)
-    monkeypatch.setattr(stage, '_verified_read_session', _admit_any_inventory)
+    monkeypatch.setattr(
+        stage,
+        '_verified_read_session',
+        lambda *a, **kw: _admit_any_inventory(*a, audio=[sync_audio, live_audio], **kw),
+    )
     conversation = _capture_shifted_conversation(plan, manifest=False)
     origin = STARTED.timestamp()
     for segment in conversation.transcript_segments[:4]:
@@ -1133,7 +1153,11 @@ def test_rebased_donor_segments_resolve_exact_pcm_windows(env, monkeypatch, roun
         yield from donor_audio(uid, cid, wanted, sample_rate)
 
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', all_audio)
-    monkeypatch.setattr(stage, '_verified_read_session', _admit_any_inventory)
+    monkeypatch.setattr(
+        stage,
+        '_verified_read_session',
+        lambda *a, **kw: _admit_any_inventory(*a, audio=[survivor_audio, donor_audio], **kw),
+    )
     store.clear()
     _span_flags(monkeypatch)
     stage.resolve_speakers_for_processing('u1', merged)

@@ -22,6 +22,7 @@ from routers.listen.receiver import ListenReceiver
 from utils.metrics import OMI_LIVE_STT_ACCEPTED_TOTAL
 from utils.observability.transcription import _deployment_environment
 from utils.stt.live_failure import MAX_STT_FAILOVERS
+from utils.stt.replay_delivery import ReplayTailSocket
 from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
 from utils.stt.streaming import STTService, get_stt_service_for_language
 from utils.stt.language_policy import LiveLanguageProfile
@@ -134,7 +135,8 @@ async def test_a_dead_primary_moves_the_session_to_the_next_provider(monkeypatch
     ):
         assert await receiver._failover_stt_socket() is True
 
-    assert receiver.stt_socket is healthy
+    assert isinstance(receiver.stt_socket, ReplayTailSocket)
+    assert receiver.stt_socket.connection is healthy
     assert receiver.host.stt_service == STTService.soniox
     # The dead socket is released rather than leaked for the session's lifetime.
     assert dead.finished is True
@@ -176,7 +178,8 @@ async def test_control_late_rejection_continues_without_a_window_replay_ring(mon
         {provider_for_service(primary), provider_for_service(rejected_service)}
     )
     assert rejected.finished
-    assert receiver.stt_socket is healthy
+    assert isinstance(receiver.stt_socket, ReplayTailSocket)
+    assert receiver.stt_socket.connection is healthy
     assert receiver.host.stt_service == STTService.deepgram
     assert receiver.host.state.active
     assert not receiver.host.state.stt_terminal_failure
@@ -335,7 +338,8 @@ async def test_a_death_observed_by_the_audio_send_path_fails_over_not_terminates
     ):
         await receiver._flush_stt_buffer(buffer, force=True)
 
-    assert receiver.stt_socket is healthy
+    assert isinstance(receiver.stt_socket, ReplayTailSocket)
+    assert receiver.stt_socket.connection is healthy
     assert healthy.sent == [b'synthetic-pcm']
     assert len(buffer) == 0
     assert receiver.host.state.stt_terminal_failure is False

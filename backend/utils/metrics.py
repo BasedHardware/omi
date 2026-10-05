@@ -140,6 +140,11 @@ OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL = Counter(
     'Committed legacy live segment versions by capture-window availability',
     ['outcome', 'reason'],
 )
+OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL = Counter(
+    'omi_live_audio_capture_attribution_total',
+    'Committed legacy live capture windows by cause and population (version or first stored segment ID)',
+    ['population', 'reason'],
+)
 # Keep the established outcome metric stable for existing dashboards. This
 # companion metric exposes a fixed reason vocabulary for every rejected
 # provider interval, including clock-only sessions while the v2 flag is off.
@@ -199,6 +204,20 @@ OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL = Counter(
     'omi_audio_timeline_past_send_total',
     'Provider segments past the last accepted send by seconds',
     ['provider', 'send_path', 'bucket'],
+)
+
+
+AUDIO_TIMELINE_OUTSIDE_SUBREASONS = (
+    'empty_map',
+    'before_first_send',
+    'after_last_send',
+    'interior_hole',
+    'evicted',
+)
+OMI_AUDIO_TIMELINE_OUTSIDE_SENDS_TOTAL = Counter(
+    'omi_audio_timeline_outside_sends_total',
+    'Outside accepted-send refusals by bounded map geometry (not inferred cause)',
+    ['provider', 'send_path', 'subreason'],
 )
 
 

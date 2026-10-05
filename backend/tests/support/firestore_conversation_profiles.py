@@ -34,6 +34,8 @@ def _profile(name: str, *, photo: bool = False, **domains) -> CallerProfile:
         'starred': [None],
     }
     fixed['date_field' if photo else 'sources'] = ['created_at'] if photo else [None]
+    if photo:
+        fixed['metadata_only'] = [False]
     return CallerProfile(name, {**fixed, **domains})
 
 
@@ -105,6 +107,15 @@ RECIPE_PROFILES = (
 )
 
 PHOTO_PROFILES = (
+    _profile(
+        'support-trace',
+        photo=True,
+        metadata_only=[True],
+        date_field=['started_at'],
+        include_discarded=[True],
+        start_date=[FROZEN_NOW],
+        end_date=[FROZEN_LATER],
+    ),
     _profile(
         'developer-list',
         photo=True,

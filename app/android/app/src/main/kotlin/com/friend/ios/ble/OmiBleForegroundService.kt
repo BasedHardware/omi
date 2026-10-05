@@ -574,14 +574,8 @@ class OmiBleForegroundService : Service() {
 
         val cccdTimeout = status == OmiBleManager.CCCD_TIMEOUT_STATUS
         val retrying = handleRetryLogic(addr, status)
-        val error = when {
-            cccdTimeout && !retrying -> "cccd_timeout_exhausted"
-            cccdTimeout -> "cccd_timeout"
-            status == 137 -> "pairing_lost"
-            status == 22 -> "paired_to_another_phone"
-            status != 0 -> "gatt_status_$status"
-            else -> null
-        }
+        val error = BleDisconnectReason.connectionErrorFromStatus(status, retrying)
+
 
         val managed = managedDevices[addr]
         if (managed != null && !managed.hasEverConnected && status != -1) {
@@ -904,17 +898,6 @@ class OmiBleForegroundService : Service() {
 
     // ── Diagnostics persistence ──
 
-    private fun hciStatusDescription(status: Int): String = when (status) {
-        0 -> "clean_disconnect"
-        8 -> "connection_timeout"
-        19 -> "remote_device_terminated"
-        22 -> "paired_to_another_phone"
-        34 -> "link_key_mismatch"
-        62 -> "connection_failed_instant_passed"
-        -1 -> "app_closed"
-        OmiBleManager.CCCD_TIMEOUT_STATUS -> "cccd_ack_timeout"
-        else -> "gatt_error_$status"
-    }
 
     private fun historyKey(address: String) = "${KEY_DISCONNECT_HISTORY}_${address.uppercase()}"
     private fun reconnectKey(address: String) = "${KEY_RECONNECT_COUNT}_${address.uppercase()}"
@@ -995,7 +978,7 @@ class OmiBleForegroundService : Service() {
 
         val event = JSONObject().apply {
             put("timestamp", now)
-            put("reason", if (isManual) "manual" else hciStatusDescription(status))
+            put("reason", if (isManual) "manual" else BleDisconnectReason.fromStatus(status))
             put("reasonCode", status)
             put("isManual", isManual)
             put("eventType", eventType)

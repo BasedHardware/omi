@@ -915,3 +915,38 @@ This action is permanent. Deleted conversations and their associated photos cann
     ```
   </Tab>
 </Tabs>
+
+
+## Public shared notes for agents
+
+For a conversation the owner has already shared, the same public URL supports
+HTML, Markdown, and the public JSON payload. These representations require no
+login and use the existing share visibility rules; private or revoked shares
+return 404 for machine representations and show an unavailable page in HTML.
+
+```bash
+curl -H 'Accept: text/markdown' https://h.omi.me/conversations/CONVERSATION_ID
+curl -H 'Accept: application/json' https://h.omi.me/conversations/CONVERSATION_ID
+```
+
+The `.md` and `.json` suffixes select the same representations, independent of
+`Accept`. Default requests receive HTML. Share responses vary on `Accept` and
+advertise alternate representations in HTTP `Link` headers; the HTML page also
+contains alternate links. [Share discovery](https://h.omi.me/llms.txt) documents
+these URLs.
+
+Markdown comes from the public structured payload, including overview, sections,
+participants, action items, and transcript. The explicit allowlist exposes section
+heading, body and kind, plus action-item description, completion, `owner_name`,
+`due_at` and `context`. It excludes attendee emails, private calendar fields,
+insights, task IDs, confidence scores and section evidence IDs. Existing public
+note text is included as authored; this is not a content redaction service.
+
+Times are explicitly UTC, with ISO-8601 instants in Markdown and JSON. Transcript
+labels use elapsed offsets from the conversation start (`HH:MM:SS`). Speaker
+names use person links or an exact match to a public participant name; roster
+order cannot identify a diarized speaker. An unmatched speaker string is not a
+name: those turns use `Speaker N` when a speaker id exists, otherwise
+`Speaker unknown`. The account holder without a verified name stays `Owner`.
+Event times on the page and in Markdown use the same UTC labels. Unknown action
+owners and due times appear as Unknown. An email-shaped `owner_name` is omitted.

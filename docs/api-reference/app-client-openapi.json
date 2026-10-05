@@ -25684,9 +25684,43 @@
             "title": "Completed",
             "type": "boolean"
           },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
           }
         },
         "required": [
@@ -26135,6 +26169,34 @@
         "title": "SharedPluginResult",
         "type": "object"
       },
+      "SharedSection": {
+        "description": "Public note content, without internal transcript evidence IDs.",
+        "properties": {
+          "body_markdown": {
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          },
+          "kind": {
+            "default": "main",
+            "enum": [
+              "main",
+              "side_notes"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "heading",
+          "body_markdown"
+        ],
+        "title": "SharedSection",
+        "type": "object"
+      },
       "SharedStructured": {
         "description": "Public share projection of conversation structure.",
         "properties": {
@@ -26194,6 +26256,13 @@
               "$ref": "#/components/schemas/SharedParticipant"
             },
             "title": "Participants",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SharedSection"
+            },
+            "title": "Sections",
             "type": "array"
           },
           "title": {

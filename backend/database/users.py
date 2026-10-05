@@ -1738,8 +1738,8 @@ def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
     user_ref.set({'onboarding': onboarding_data}, merge=True)
 
 
-def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Subscription:
-    """Gets the user's subscription, creating a default free one if it doesn't exist."""
+def get_user_subscription(uid: str, *, firestore_client: Any | None = None, read_only: bool = False) -> Subscription:
+    """Get a subscription; read_only suppresses default creation and legacy migration."""
     user_ref = (firestore_client or db).collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if user_doc.exists:
@@ -1758,7 +1758,7 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
 
             subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
             # Handle migration for old 'free' plan identifier after validating the normalized payload.
-            if legacy_free_plan:
+            if legacy_free_plan and not read_only:
                 sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
             observe_subscription(uid, subscription)
@@ -1771,6 +1771,8 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
     from utils.subscription import get_default_basic_subscription
 
     default_subscription = get_default_basic_subscription()
+    if read_only:
+        return default_subscription
     # Strip dynamic fields before storing
     sub_to_store = default_subscription.model_dump()
     sub_to_store.pop('features', None)

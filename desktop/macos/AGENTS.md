@@ -403,9 +403,9 @@ Rules (fail the PR if any break):
    bracket text for legacy rows. Legacy `[Background agent id=…]` bracket
    text remains dual-read only. Do not invent new free-text formats; extend the
    schema + tests together.
-   Proactive notifications use continuity key `notification:<uuid>` (origin
-   `proactive_notification`) and enter the notification-to-chat cache only after
-   journal acceptance; do not reintroduce local timeline append paths.
+   Proactive notifications never journal Chat turns. Owner-scoped, TTL-bounded
+   context may inform user follow-ups. The shared provider filters historical
+   automatic entries by provenance, preserving rich reply blocks.
 6. **Pill cache is derived** — open-by-id hydrates from kernel (`listFloatingAgentPills`
    / `listAgentSessions` / `inspectAgentRun`) when the in-memory pill is missing;
    refresh-on-miss is a fast path only. Success = resolvable agent after hydrate.

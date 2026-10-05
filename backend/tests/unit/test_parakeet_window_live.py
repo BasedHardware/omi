@@ -95,7 +95,7 @@ def runtime(monkeypatch):
     monkeypatch.setattr(live_router, '_capacity_until', {})
     monkeypatch.setattr(live_chain, '_recent_connect_failures', deque(maxlen=1000))
     monkeypatch.setattr(soniox_module, '_rate_limit_events', [])
-    monkeypatch.setattr(soniox_module, '_last_rate_limit_error_log', 0.0)
+    monkeypatch.setattr(soniox_module, '_last_rate_limit_error_log', float('-inf'))
     monkeypatch.setattr(
         connect_backoff_module,
         '_shared',

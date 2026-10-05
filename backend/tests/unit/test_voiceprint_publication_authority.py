@@ -199,7 +199,7 @@ def test_manual_teaching_survives_real_resolution(monkeypatch, target):
     monkeypatch.setattr(stage, 'speaker_embedding_configured', lambda: True)
     monkeypatch.setattr(stage, 'download_speaker_embedding_cache', lambda *a: cache)
     monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a: {})
-    monkeypatch.setattr(stage, '_embed_missing', lambda *a: (0, 'complete'))
+    monkeypatch.setattr(stage, '_embed_missing', lambda *a, **kw: (0, 'complete'))
     assert stage.resolve_speakers_for_processing('u', model)
     resolved = [s.model_dump() for s in model.transcript_segments]
     conv['transcript_segments'] = resolved

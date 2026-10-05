@@ -524,9 +524,9 @@ async def test_consumed_reentry_blocks_a_second_repeat_and_next_provider_serves(
     assert len(dialed) == 1
     assert listener.recovery.dial_attempts == 2
     assert not listener.recovery.grant_soniox_reentry('soniox')
-    listener.stt_socket.is_connection_dead = True
-    listener.stt_socket.typed_death_reason = 'connection_lost'
-    listener.stt_socket.death_reason = 'ws closed'
+    dialed[0].is_connection_dead = True
+    dialed[0].typed_death_reason = 'connection_lost'
+    dialed[0].death_reason = 'ws closed'
     assert not await listener._reconnect_stt_socket_locked()
     assert len(dialed) == 1
     assert listener.recovery.dial_attempts == 2
