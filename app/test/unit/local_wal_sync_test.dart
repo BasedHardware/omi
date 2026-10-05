@@ -2244,6 +2244,18 @@ void main() {
       }
     });
 
+    test('an opus_fs320 WAL claims with the normalized opus codec token', () {
+      if (!darkWrite) return;
+      final wal = claimWal(100, filePath: 'audio_fs320.bin', codec: BleAudioCodec.opusFS320, totalFrames: 3000);
+
+      final batch = nextSyncUploadBatch([wal], now);
+
+      expect(batch, [wal], reason: 'supported Opus variants are claimable');
+      final parsed = jsonDecode(captureEvidenceUploadHeader(batch, [File('audio_fs320.bin')])!) as Map<String, dynamic>;
+      expect((parsed['files'] as List).single['codec'], 'opus');
+      expect((parsed['files'] as List).single['frame_count'], 3000);
+    });
+
     test('an oversized claim list still falls back to an unclaimed upload', () {
       if (!darkWrite) return;
       final wals = [for (var i = 0; i < 20; i++) claimWal(200 - i, filePath: '${'a' * 243}_cap_$i.bin')];
@@ -2382,6 +2394,504 @@ void main() {
         expect(uploads.length, 1);
         expect(uploads.single.$1, ['legacy_a.bin', 'claim_b.bin', 'claim_c.bin']);
         expect(uploads.single.$2, isNull);
+      }
+    });
+
+    test('split WALs sharing one id still each upload in separate batches', () async {
+      final local = buildSync();
+      local.testWals = [
+        diskWal(100, 'split_a.bin', claimable: true, recordingSessionId: 's1'),
+        diskWal(100, 'split_b.bin', claimable: true, recordingSessionId: 's2'),
+      ];
+
+      await local.syncAll();
+
+      if (darkWrite) {
+        expect(uploads.length, 2, reason: 'attempted membership uses durable keys, not the colliding wal.id');
+        expect(
+          uploads.map((upload) => upload.$1.single),
+          unorderedEquals(['split_a.bin', 'split_b.bin']),
+        );
+        for (final upload in uploads) {
+          final parsed = jsonDecode(upload.$2!) as Map<String, dynamic>;
+          expect((parsed['files'] as List).single['name'], upload.$1.single);
+        }
+      } else {
+        expect(uploads.length, 1, reason: 'wal.id attempted membership suppresses the same-id sibling');
+      }
+    });
+  });
+
+  group('capture evidence run construction', () {
+    const darkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
+    const rootA = '12345678-1234-4234-8234-123456789abc';
+    const rootB = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
+
+    void feed(int count, {String? root, FrameSyncKey Function(int index)? keyOf}) {
+      for (var i = 0; i < count; i++) {
+        sync.onFrameCaptured(
+          WalFrame(payload: [i & 0xFF], syncKey: keyOf?.call(i) ?? FrameSyncKey.fromIndex(i)),
+          captureRoot: root,
+        );
+      }
+    }
+
+    test('a periodic chunk splits at a root rotation without losing rooted runs', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      for (var i = 0; i < 1600; i++) {
+        sync.onFrameCaptured(
+          WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)),
+          captureRoot: i < 60 ? rootA : rootB,
+        );
+      }
+
+      await sync.onAudioCodecChanged(BleAudioCodec.pcm16);
+
+      if (darkWrite) {
+        expect(sync.testWals, hasLength(2));
+        final first = sync.testWals[0];
+        final second = sync.testWals[1];
+        expect((first.captureRoot, first.sourceFrameStart, first.totalFrames), (rootA, 0, 60));
+        expect((second.captureRoot, second.sourceFrameStart, second.totalFrames), (rootB, 0, 40));
+        expect(first.timerStart, second.timerStart, reason: 'both runs land inside the same second');
+        expect(
+          {first.filePath, second.filePath},
+          hasLength(2),
+          reason: 'same-second runs persist under distinct durable filenames',
+        );
+        expect(first.filePath, isNotNull);
+      } else {
+        expect(sync.testWals, hasLength(1));
+        expect(sync.testWals.single.captureRoot, isNull);
+        expect(sync.testWals.single.totalFrames, 100);
+      }
+    });
+
+    test('the session tail stores each contiguous run as its own WAL', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      feed(10, root: rootA);
+      feed(10);
+      feed(10, root: rootB);
+
+      await sync.finalizeCurrentSession();
+
+      if (darkWrite) {
+        expect(sync.testWals, hasLength(3));
+        expect(
+          sync.testWals.map((wal) => (wal.captureRoot, wal.sourceFrameStart, wal.totalFrames)).toList(),
+          [(rootA, 0, 10), (null, null, 10), (rootB, 0, 10)],
+        );
+        for (final wal in sync.testWals) {
+          final path = await Wal.getFilePath(wal.filePath!);
+          expect(
+            await File(path!).length(),
+            50,
+            reason: 'each run keeps only its own payload bytes (4-byte length + 1-byte payload per frame)',
+          );
+        }
+      } else {
+        expect(sync.testWals, hasLength(1));
+        expect(sync.testWals.single.captureRoot, isNull);
+        expect(sync.testWals.single.totalFrames, 30);
+      }
+    });
+
+    test('the pendant tail drain stores each contiguous run as its own WAL', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      sync.setDeviceInfo('dev', 'Omi');
+      FrameSyncKey bleKey(int i) => FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF, 0]);
+      feed(10, root: rootA, keyOf: bleKey);
+      feed(10, keyOf: bleKey);
+      feed(10, root: rootB, keyOf: bleKey);
+
+      await sync.stop();
+
+      if (darkWrite) {
+        expect(sync.testWals, hasLength(3));
+        expect(
+          sync.testWals.map((wal) => (wal.captureRoot, wal.sourceFrameStart, wal.totalFrames)).toList(),
+          [(rootA, 0, 10), (null, null, 10), (rootB, 0, 10)],
+        );
+        expect(sync.testWals.every((wal) => wal.device == 'dev'), isTrue);
+      } else {
+        expect(sync.testWals, hasLength(1));
+        expect(sync.testWals.single.captureRoot, isNull);
+        expect(sync.testWals.single.totalFrames, 30);
+      }
+    });
+
+    test('an ordinal gap inside one root splits the run', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      WalFrame positioned(int position) => WalFrame(
+            payload: [position & 0xFF],
+            syncKey: FrameSyncKey.fromIndex(position),
+            captureRoot: rootA,
+            sourceFramePosition: position,
+            sourceClockEpoch: 0,
+          );
+      sync.testFrames.addAll([positioned(0), positioned(1), positioned(5), positioned(6)]);
+      sync.testFrameSynced.addAll([false, false, false, false]);
+
+      await sync.finalizeCurrentSession();
+
+      if (darkWrite) {
+        expect(sync.testWals, hasLength(2));
+        expect(
+          sync.testWals.map((wal) => (wal.captureRoot, wal.sourceFrameStart, wal.totalFrames)).toList(),
+          [(rootA, 0, 2), (rootA, 5, 2)],
+        );
+      } else {
+        expect(sync.testWals, hasLength(1));
+        expect(sync.testWals.single.captureRoot, isNull);
+        expect(sync.testWals.single.totalFrames, 4);
+      }
+    });
+
+    test('a same-second chunk with a different root becomes a distinct WAL', () async {
+      const timerStart = 1700000000;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final oldWal = Wal(
+        timerStart: timerStart,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 60,
+        storage: WalStorage.mem,
+        status: WalStatus.miss,
+        device: 'omi',
+        data: List.generate(60, (_) => [1]),
+        captureRoot: rootA,
+        sourceFrameStart: 0,
+        sourceClockEpoch: 0,
+      );
+      final uploads = <(List<String>, String?)>[];
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 16) * 1000),
+        persistWals: (wals) async {},
+        loadWals: () async => [oldWal],
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            uploads.add((files.map((file) => file.uri.pathSegments.last).toList(), captureEvidence));
+            return UploadFilesResult.queued('job-${uploads.length}');
+          },
+          fairUseStatusLoader: () async => null,
+        ),
+      );
+      local.start();
+      await local.walReady;
+
+      for (var i = 0; i < 1600; i++) {
+        local.onFrameCaptured(
+          WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)),
+          captureRoot: rootB,
+        );
+      }
+      await local.stop();
+
+      if (darkWrite) {
+        expect(local.testWals, hasLength(2), reason: 'the non-contiguous run must not extend the rooted WAL');
+        expect((oldWal.captureRoot, oldWal.sourceFrameStart, oldWal.totalFrames), (rootA, 0, 60),
+            reason: 'the prior claim is never cleared');
+        final fresh = local.testWals.firstWhere((wal) => wal != oldWal);
+        expect((fresh.captureRoot, fresh.sourceFrameStart, fresh.totalFrames), (rootB, 0, 100));
+        expect({oldWal.filePath, fresh.filePath}, hasLength(2));
+
+        await local.syncAll();
+        expect(uploads, hasLength(1));
+        expect(uploads.single.$1, hasLength(2), reason: 'both same-second runs reach the uploader');
+        final parsed = jsonDecode(uploads.single.$2!) as Map<String, dynamic>;
+        expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {rootA, rootB});
+      } else {
+        expect(local.testWals, hasLength(1), reason: 'the colliding chunk extends the in-memory WAL in place');
+        expect(oldWal.captureRoot, isNull, reason: 'the unstable root clears the whole WAL claim');
+        expect(oldWal.totalFrames, 100);
+      }
+    });
+
+    test('a same-second entirely legacy chunk extends the in-memory WAL exactly as before', () async {
+      const timerStart = 1700000000;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final oldWal = Wal(
+        timerStart: timerStart,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 60,
+        storage: WalStorage.mem,
+        status: WalStatus.miss,
+        device: 'omi',
+        data: List.generate(60, (_) => [1]),
+      );
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 16) * 1000),
+        persistWals: (wals) async {},
+        loadWals: () async => [oldWal],
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            return UploadFilesResult.queued('job-1');
+          },
+          fairUseStatusLoader: () async => null,
+        ),
+      );
+      local.start();
+      await local.walReady;
+
+      for (var i = 0; i < 1600; i++) {
+        local.onFrameCaptured(WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)));
+      }
+      await local.stop();
+
+      expect(local.testWals, hasLength(1), reason: 'a legacy selection keeps the original in-place extension');
+      expect(oldWal.captureRoot, isNull);
+      expect(oldWal.sourceFrameStart, isNull);
+      expect(oldWal.sourceClockEpoch, isNull);
+      expect(oldWal.totalFrames, 100, reason: 'non-evident extension keeps the original reset semantics');
+      final path = await Wal.getFilePath(oldWal.filePath);
+      final bytes = await File(path!).readAsBytes();
+      final payloads = <List<int>>[];
+      var offset = 0;
+      while (offset + 4 <= bytes.length) {
+        final length = ByteData.sublistView(Uint8List.fromList(bytes), offset).getUint32(0, Endian.little);
+        payloads.add(bytes.sublist(offset + 4, offset + 4 + length));
+        offset += 4 + length;
+      }
+      expect(payloads, hasLength(160), reason: 'payload bytes append exactly like the legacy path');
+      expect(payloads.sublist(0, 60).every((frame) => frame.single == 1), isTrue);
+      if (darkWrite) {
+        expect(captureEvidenceUploadHeader([oldWal], [File(path)]), isNull);
+      }
+    });
+
+    test('a rooted chunk with an unsupported codec keeps the original single-WAL path', () async {
+      const timerStart = 1700000000;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 16) * 1000),
+        persistWals: (wals) async {},
+        loadWals: () async => <Wal>[],
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            return UploadFilesResult.queued('job-1');
+          },
+          fairUseStatusLoader: () async => null,
+        ),
+      );
+      local.start();
+      await local.walReady;
+      await local.onAudioCodecChanged(BleAudioCodec.pcm8);
+
+      for (var i = 0; i < 1600; i++) {
+        local.onFrameCaptured(
+          WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)),
+          captureRoot: rootA,
+        );
+      }
+      await local.stop();
+
+      expect(local.testWals, hasLength(1), reason: 'an unsupported codec never enters the run partitioner');
+      expect(local.testWals.single.totalFrames, 100);
+      if (darkWrite) {
+        final wal = local.testWals.single;
+        final path = await Wal.getFilePath(wal.filePath);
+        expect(captureEvidenceUploadHeader([wal], [File(path!)]), isNull);
+      }
+    });
+
+    LocalWalSyncImpl pinnedSync(Wal prior) => LocalWalSyncImpl(
+          _MockListener(),
+          now: () => DateTime.fromMillisecondsSinceEpoch((1700000000 + 16) * 1000),
+          persistWals: (wals) async {},
+          loadWals: () async => [prior],
+          uploadGate: SyncUploadGate(
+            limiter: SyncRateLimiter.instance,
+            uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async {
+              return UploadFilesResult.queued('job-1');
+            },
+            fairUseStatusLoader: () async => null,
+          ),
+        );
+
+    Wal rootedMemWal(int syncedOffset, {WalStatus status = WalStatus.miss}) => Wal(
+          timerStart: 1700000000,
+          codec: BleAudioCodec.opus,
+          seconds: 1,
+          totalFrames: 60,
+          storage: WalStorage.mem,
+          status: status,
+          device: 'omi',
+          data: List.generate(60, (_) => [1]),
+          syncedFrameOffset: syncedOffset,
+          captureRoot: rootA,
+          sourceFrameStart: 0,
+          sourceClockEpoch: 0,
+        );
+
+    Future<LocalWalSyncImpl> extendOnce(Wal prior, {required int syncedCount}) async {
+      final local = pinnedSync(prior);
+      local.start();
+      await local.walReady;
+      for (var i = 0; i < 1600; i++) {
+        final frame = local.onFrameCaptured(
+          WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)),
+          captureRoot: rootA,
+        );
+        if (i < syncedCount) local.markFrameSynced(frame.syncKey);
+      }
+      await local.stop();
+      return local;
+    }
+
+    test('a contiguous extension never marks unconfirmed prior frames synced', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final prior = rootedMemWal(30);
+      final local = await extendOnce(prior, syncedCount: 1600);
+
+      if (darkWrite) {
+        expect(local.testWals, hasLength(1));
+        expect((prior.captureRoot, prior.sourceFrameStart, prior.totalFrames), (rootA, 0, 160));
+        expect(prior.syncedFrameOffset, 30, reason: 'the unconfirmed prefix never advances');
+        expect(prior.status, WalStatus.miss);
+      } else {
+        expect((prior.captureRoot, prior.totalFrames), (rootA, 160));
+      }
+    });
+
+    test('a confirmed prior prefix plus a confirmed run marks the whole WAL synced', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final prior = rootedMemWal(60, status: WalStatus.synced);
+      final local = await extendOnce(prior, syncedCount: 1600);
+
+      if (darkWrite) {
+        expect(local.testWals, hasLength(1));
+        expect((prior.captureRoot, prior.sourceFrameStart, prior.totalFrames), (rootA, 0, 160));
+        expect(prior.syncedFrameOffset, 160);
+        expect(prior.status, WalStatus.synced);
+      } else {
+        expect((prior.captureRoot, prior.totalFrames), (rootA, 160));
+      }
+    });
+
+    test('a confirmed prior prefix plus a partially confirmed run advances exactly', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final prior = rootedMemWal(60, status: WalStatus.synced);
+      final local = await extendOnce(prior, syncedCount: 50);
+
+      if (darkWrite) {
+        expect(local.testWals, hasLength(1));
+        expect((prior.captureRoot, prior.sourceFrameStart, prior.totalFrames), (rootA, 0, 160));
+        expect(prior.syncedFrameOffset, 110, reason: 'only the confirmed incoming prefix advances the offset');
+        expect(prior.status, WalStatus.miss);
+      } else {
+        expect((prior.captureRoot, prior.totalFrames), (rootA, 160));
+      }
+    });
+
+    test('a mismatching same-second sibling neither clears claims nor steals the extension', () async {
+      const timerStart = 1700000000;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final walA = Wal(
+        timerStart: timerStart,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 60,
+        storage: WalStorage.mem,
+        status: WalStatus.miss,
+        device: 'omi',
+        data: List.generate(60, (_) => [1]),
+        captureRoot: rootA,
+        sourceFrameStart: 0,
+        sourceClockEpoch: 0,
+      );
+      final walB = Wal(
+        timerStart: timerStart,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 60,
+        storage: WalStorage.mem,
+        status: WalStatus.miss,
+        device: 'omi',
+        data: List.generate(60, (_) => [2]),
+        captureRoot: rootB,
+        sourceFrameStart: 200,
+        sourceClockEpoch: 0,
+      );
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 16) * 1000),
+        persistWals: (wals) async {},
+        loadWals: () async => [walA, walB],
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            return UploadFilesResult.queued('job-1');
+          },
+          fairUseStatusLoader: () async => null,
+        ),
+      );
+      local.start();
+      await local.walReady;
+
+      for (var i = 0; i < 1600; i++) {
+        local.onFrameCaptured(
+          WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)),
+          captureRoot: rootB,
+        );
+      }
+      await local.stop();
+
+      if (darkWrite) {
+        expect(local.testWals, hasLength(2),
+            reason: 'the contiguous sibling extends; the mismatching one is untouched');
+        expect((walA.captureRoot, walA.sourceFrameStart, walA.totalFrames), (rootA, 0, 60));
+        expect((walB.captureRoot, walB.sourceFrameStart, walB.totalFrames), (rootB, 200, 160));
+      } else {
+        expect(local.testWals, hasLength(2));
+        expect(walA.captureRoot, isNull);
+        expect(walA.totalFrames, 100);
       }
     });
   });
