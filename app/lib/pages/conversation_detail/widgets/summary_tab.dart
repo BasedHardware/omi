@@ -18,6 +18,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
 
+import 'conversation_action_items_section.dart';
 import 'conversation_screenshots_section.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
@@ -132,6 +133,9 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                                       );
                                 },
                               ),
+                        // After the note's sections, before the screenshots: the Mac's order.
+                        if (!discarded && conversation != null)
+                          ConversationActionItemsSection(items: conversation.structured.actionItems),
                       ]),
                     ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed
