@@ -1906,6 +1906,7 @@ _add(
     DriverEntry(
         'database.smart_merge.find_preceding_conversations',
         base={'uid': UID, 'source': 'omi', 'created_before': T0},
+        domains={'include_capture_metadata': [False, True]},
         neutrals={'limit': _LIMIT},
     )
 )

@@ -22,6 +22,9 @@ environment_shared:
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+          value: 'false'
+          category: rollout
         SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
         CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
@@ -345,6 +348,9 @@ environment_shared:
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+          value: 'false'
+          category: rollout
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
         CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
         FREE_TIER_LOCAL_PROCESSING:
@@ -529,6 +535,9 @@ environment_shared:
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+            value: 'false'
+            category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -705,6 +714,9 @@ environment_shared:
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+            value: 'false'
+            category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -864,6 +876,9 @@ environment_shared:
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+            value: 'false'
+            category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -1008,6 +1023,9 @@ environment_shared:
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED:
+            value: 'false'
+            category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:

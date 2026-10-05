@@ -191,3 +191,25 @@ def record_smart_merge_flatten(outcome: str, reason: str) -> None:
         ).inc()
     except Exception:
         pass
+
+
+SMART_MERGE_OVERLAP_MODES = frozenset({'shadow', 'merge'})
+SMART_MERGE_OVERLAP_SKIPPED = frozenset({'1', '2', '3'})
+OMI_CONVERSATION_SMART_MERGE_PREDECESSOR_OVERLAP_TOTAL = _reuse_or_create(
+    Counter,
+    'omi_conversation_smart_merge_predecessor_overlap_total',
+    'Proven sync-created predecessors skipped by the overlap-aware smart-merge selection, '
+    'by mode and bounded skipped count. Never labeled by uid. Per-pod; sum() across jobs.',
+    ['mode', 'skipped'],
+)
+
+
+def record_conversation_smart_merge_predecessor_overlap(mode: str, skipped: int) -> None:
+    """Never raises: observability must not change a merge outcome."""
+    try:
+        OMI_CONVERSATION_SMART_MERGE_PREDECESSOR_OVERLAP_TOTAL.labels(
+            mode=mode if mode in SMART_MERGE_OVERLAP_MODES else 'other',
+            skipped=str(skipped) if str(skipped) in SMART_MERGE_OVERLAP_SKIPPED else 'other',
+        ).inc()
+    except Exception:
+        pass

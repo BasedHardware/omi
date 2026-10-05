@@ -30,7 +30,12 @@ from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
 from database.people_stats_cache import invalidate_people_stats_cache
 from config import merge_ancestry
-from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.conversation_smart_merge import (
+    MAX_OVERLAP_PREDECESSOR_SKIPS,
+    OVERLAP_CAPTURE_FIELDS,
+    PRECEDING_METADATA_FIELDS,
+    smart_merge_flatten_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,31 +45,7 @@ _CONVERSATIONS = 'conversations'
 _ALL_STATUSES = ('in_progress', 'processing', 'merging', 'completed', 'failed')
 # Metadata only: the predecessor's transcript is read separately, and only for
 # the one row that can become the survivor.
-_PRECEDING_FIELDS = (
-    'id',
-    'created_at',
-    'started_at',
-    'finished_at',
-    'source',
-    'client_device_id',
-    'status',
-    'discarded',
-    'deleted',
-    'is_locked',
-    'structured.title',
-    'structured.overview',
-    'user_title',
-    'starred',
-    'folder_user_set',
-    'sync_relevance_user_kept',
-    'visibility',
-    'has_photos',
-    'capture_group',
-    'uses_custom_stt',
-    'external_data.duplicate_capture_of',
-    'relevance_decision.trigger',
-    SMART_MERGE_FIELD,
-)
+_PRECEDING_FIELDS = PRECEDING_METADATA_FIELDS
 
 Plan = Callable[
     [
@@ -100,6 +81,7 @@ def find_preceding_conversations(
     created_before: datetime,
     limit: int,
     firestore_client: Any = None,
+    include_capture_metadata: bool = False,
 ) -> list[dict[str, Any]]:
     """Newest-first visible rows of one source created before ``created_before``.
 
@@ -118,7 +100,8 @@ def find_preceding_conversations(
         },
         field_filter_factory=FieldFilter,
     )
-    query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(list(_PRECEDING_FIELDS))
+    fields = list(_PRECEDING_FIELDS + OVERLAP_CAPTURE_FIELDS) if include_capture_metadata else list(_PRECEDING_FIELDS)
+    query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(fields)
     rows = []
     for snapshot in query.limit(limit).stream():
         data = snapshot.to_dict() or {}
@@ -162,6 +145,8 @@ def absorb_conversation(
     plan: Plan,
     expected_survivor_sync_revision: Any = _UNSET,
     expected_donor_sync_revision: Any = _UNSET,
+    skipped_predecessor_ids: tuple[str, ...] = (),
+    predecessor_skip_check: Optional[Callable[[Mapping[str, Any], Mapping[str, Any]], bool]] = None,
     firestore_client: Any = None,
 ) -> AbsorbResult:
     """Atomically append the donor to the survivor and leave a redirect tombstone.
@@ -174,6 +159,15 @@ def absorb_conversation(
     gate and any write, and ``ancestor_updates`` re-points each inherited
     tombstone at the survivor.
     """
+    skipped = tuple(skipped_predecessor_ids)
+    if skipped and (
+        predecessor_skip_check is None
+        or len(skipped) > MAX_OVERLAP_PREDECESSOR_SKIPS
+        or len(set(skipped)) != len(skipped)
+        or donor_id in skipped
+        or survivor_id in skipped
+    ):
+        return AbsorbResult('rejected', 'survivor_changed')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = _collection(client, uid)
     survivor_ref = collection.document(survivor_id)
@@ -195,6 +189,14 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'survivor_changed')
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
+        for skip_id in skipped:
+            skip_raw = collection.document(skip_id).get(transaction=transaction).to_dict()
+            if (
+                not skip_raw
+                or predecessor_skip_check is None
+                or not predecessor_skip_check(dict(skip_raw, id=skip_id), dict(donor_raw, id=donor_id))
+            ):
+                return AbsorbResult('rejected', 'survivor_changed')
         flatten = smart_merge_flatten_enabled()
         if flatten:
             if expected_survivor_sync_revision is not _UNSET and (

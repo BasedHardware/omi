@@ -1,3 +1,4 @@
+from importlib import reload
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -46,3 +47,21 @@ def test_reuse_or_create_rejects_factory_type_mismatch(monkeypatch):
     monkeypatch.setattr(metrics_smart_merge, 'REGISTRY', registry)
     with pytest.raises(ValueError, match='different shape'):
         metrics_smart_merge._reuse_or_create(Histogram, 'omi_test_smart_merge_existing_total', 'test', ['outcome'])
+
+
+def test_overlap_counter_survives_reload_and_bounds_labels(monkeypatch):
+    counter = metrics_smart_merge.OMI_CONVERSATION_SMART_MERGE_PREDECESSOR_OVERLAP_TOTAL
+    reload(metrics_smart_merge)
+    reload(metrics_smart_merge)
+    assert metrics_smart_merge.OMI_CONVERSATION_SMART_MERGE_PREDECESSOR_OVERLAP_TOTAL is counter
+    assert counter._labelnames == ('mode', 'skipped')
+    seen = []
+    monkeypatch.setattr(counter, 'labels', lambda **kw: seen.append(kw) or SimpleNamespace(inc=lambda: None))
+    metrics_smart_merge.record_conversation_smart_merge_predecessor_overlap('merge', 1)
+    metrics_smart_merge.record_conversation_smart_merge_predecessor_overlap('shadow', 3)
+    metrics_smart_merge.record_conversation_smart_merge_predecessor_overlap('untrusted', 999)
+    assert seen == [
+        {'mode': 'merge', 'skipped': '1'},
+        {'mode': 'shadow', 'skipped': '3'},
+        {'mode': 'other', 'skipped': 'other'},
+    ]

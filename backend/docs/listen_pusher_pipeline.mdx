@@ -728,6 +728,50 @@ any error keeps both. Every answered pair stores a server-only
 For a merge verdict, the decision is persisted before the absorb transaction
 so a retry reuses the same score.
 
+`CONVERSATION_SMART_MERGE_OVERLAP_PREDECESSOR_ENABLED` (default off; only an
+explicit on-token enables it, an unrecognized value is off) refines that
+candidate step only. A sync-created row whose upload duplicated a live capture
+can land between the new conversation and its true predecessor and would
+otherwise block the pair as a gap-out-of-window neighbor. When the flag is on,
+the selection reads `sync_content_revision` and `sync_live_target` alongside
+the metadata projection — plus `manual_speaker_assignments` as a protection
+read so a curated duplicate can never be skipped — and walks the same six-row
+window in the same order,
+skipping a same-partition row only when every proof holds: the new row is a
+live capture, the row carries a positive `sync_content_revision` with
+`sync_live_target` false and no `smart_merge` state, it passes the status and
+refresh-debt checks, both spans are valid ordered times, the row starts no
+later than the new row finishes, and its finish is under 120 s before the new
+start. At most three rows may be skipped; a fourth would-be skip, a busy or
+user-managed or user-ended row, a custom-STT or refresh-owing row, a row with
+absent or malformed capture evidence, and every same-capture live row all
+remain barriers judged by the unchanged gates. A skipped row is never mutated
+and never enters donor ancestry; the device partition and the query window are
+unchanged. The skip decision is also rechecked at write time: each skipped
+card (at most three) is re-read inside the absorb transaction and the same
+skip proofs are re-evaluated against the current donor row, so a duplicate
+that was curated, went busy, changed partition or capture provenance, moved
+its span out of the window, or vanished between decide and commit rejects the
+absorb instead of letting a stale skip land the merge. Skipped rows are also
+excluded from the Jev stretch context. The offline replay harness cannot
+predict these races — a local snapshot performs no transaction I/O. Each
+selection that skipped rows increments
+`omi_conversation_smart_merge_predecessor_overlap_total` (mode, skipped
+`1|2|3|other`) and, when the pair reaches a decision line or record, adds a
+`predecessor_skipped_overlap` count to the server-only record and the
+skip/keep/merged log lines; with the flag off every read, payload, log and
+metric is byte-identical to the old behavior. Declare the flag on the six
+hosts that run the finalizer or sync assignment: Cloud Run backend,
+backend-sync, backend-sync-backfill, backend-integration, and GKE
+backend-listen and pusher. Enabling it requires a rebenchmark on the owner's
+export, replayed offline by
+`backend/scripts/smart_merge_overlap_replay.py`: a `schema_version: 1` JSON
+snapshot (`timezone`, `conversations` decoded cards, `evaluations` with
+`conversation_id`, the exported newest-first `preceding_ids`, `capture_end`,
+`uid_allowed`, `mode`, and optional `scores` bound to candidate, question
+version and state hash) that reports the old and new verdicts side by side —
+e.g. `evaluations: [{"conversation_id": "n", "preceding_ids": ["duplicate", "p"], "capture_end": true, "uid_allowed": true, "mode": "merge", "scores": [...]}]`.
+
 A merge keeps the earlier conversation's id. One transaction appends the new
 transcript on the survivor's absolute timeline and turns the new row into the
 sync bridge's redirect tombstone (`deleted`, `discarded`, `sync_merged_into`),
