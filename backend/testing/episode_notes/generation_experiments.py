@@ -95,10 +95,10 @@ def extract_facts(items, *, llm, cache_dir, model):
     for fact in result.content.get('facts', []):
         item, quote = by_id.get(fact.get('id')), fact.get('quote')
         if item is None or not isinstance(quote, str) or not quote or quote not in item.content:
-            raise ValueError('invalid_fact_quote')
+            raise LLMCallError('invalid_fact_quote', replace(result, content={}))
         quotes.setdefault(item.id, []).append(quote)
     if not quotes:
-        raise ValueError('empty_fact_extraction')
+        raise LLMCallError('empty_fact_extraction', replace(result, content={}))
     selected = [
         i.model_copy(update={'content': '\n'.join(dict.fromkeys(quotes[i.id]))}) if i.id in quotes else i
         for i in items
@@ -138,7 +138,10 @@ def fact_check(draft, items, *, llm, cache_dir, cutoff):
         for index, (target, sentence) in enumerate(spans)
         if receipt.content['scores'][f'sentence_{index}'] < cutoff and fields[target].count(sentence) == 1
     ]
-    note, count = apply_edits(draft.content, edits)
+    try:
+        note, count = apply_edits(draft.content, edits)
+    except Exception as exc:
+        raise LLMCallError(type(exc).__name__, replace(receipt, content={})) from None
     return replace(draft, content=note), receipt, {'edits': count}
 
 

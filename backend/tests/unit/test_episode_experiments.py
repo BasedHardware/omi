@@ -96,7 +96,7 @@ def test_fact_extraction_requires_original_exact_quotes():
         model='openai/gpt-6-luna',
     )
     assert [(i.id, i.content) for i in selected] == [('speech:1', 'launch date'), ('device:1', 'Capture finished')]
-    with pytest.raises(ValueError, match='invalid_fact_quote'):
+    with pytest.raises(LLMCallError, match='invalid_fact_quote'):
         extract_facts(
             items(),
             llm=lambda *_: {'facts': [{'id': 'speech:1', 'quote': 'Invented deadline'}]},

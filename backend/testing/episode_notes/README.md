@@ -198,7 +198,8 @@ legacy synchronous requests and inherited gateway effort defaults are audited in
 
 Round-11 DEV ablations are explicit `--experiment` modes, never production
 settings: `verify`, `fact_check`, `facts_first`, `best_two`, `jev_veto`,
-`jev_per_source`, `jev_per_source_pool`, `jev_rank`, `jev_discussed`, `jev_choice`.
+`jev_per_source`, `jev_per_source_pool`, `jev_rank`, `jev_discussed`, `jev_choice`,
+and `jev_rank_verify` (rank followed by the same bounded verifier).
 Use `--experiment-cutoff` for a selector/fact-check threshold (rank uses a
 fraction of the existing deterministic pool). Every selector is removal-only;
 the pool variant asks Jev only about already-admitted candidates. Existing

@@ -151,6 +151,7 @@ def main(argv: list[str] | None = None) -> None:
             'jev_per_source',
             'jev_per_source_pool',
             'jev_rank',
+            'jev_rank_verify',
             'jev_discussed',
             'jev_choice',
         ),

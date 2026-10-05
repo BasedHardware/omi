@@ -146,6 +146,7 @@ def evaluate(
             'jev_per_source',
             'jev_per_source_pool',
             'jev_rank',
+            'jev_rank_verify',
             'jev_discussed',
             'jev_choice',
         }
@@ -230,7 +231,7 @@ def evaluate(
                         selected_items, selection_result, selection_fallback = experiment_selection(
                             selected_items,
                             episode,
-                            mode=experiment,
+                            mode=experiment.removesuffix('_verify'),
                             cutoff=experiment_cutoff,
                             cache_dir=cache_dir,
                             llm=llm,
@@ -290,11 +291,11 @@ def evaluate(
                         result = cached_call(cache_dir, writer_arm, candidate_model, prompt, payload, llm)
                         tier_fallback = True
                     prompt_hash = fingerprint(prompt)
-                    if arm == 'episode' and experiment in {'verify', 'fact_check', 'best_two'}:
+                    if arm == 'episode' and experiment in {'verify', 'fact_check', 'best_two', 'jev_rank_verify'}:
                         from testing.episode_notes.generation_experiments import verify_draft, fact_check, best_of_two
 
                         try:
-                            if experiment == 'verify':
+                            if experiment in {'verify', 'jev_rank_verify'}:
                                 remaining = settings.writer_timeout - (result.latency_seconds or 0)
                                 if remaining >= 15:
                                     result, helper_result, experiment_receipt = verify_draft(

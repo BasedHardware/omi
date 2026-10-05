@@ -91,15 +91,19 @@ def experiment_selection(items, episode, *, mode, cutoff, cache_dir, llm):
             )
         }
     selected = [i for i in conservative if i.source_kind in fixed or i.id in chosen]
-    receipt = LLMResult(
-        content={'scores': scores},
-        **{
-            k: (
-                sum(r.cost()[k] for r in receipts)
-                if receipts and all(r.cost()[k] is not None for r in receipts)
-                else None
-            )
-            for k in LLMResult(content={}).cost()
-        },
+    receipt = (
+        LLMResult(
+            content={'scores': scores},
+            **{
+                k: (
+                    sum(r.cost()[k] for r in receipts)
+                    if receipts and all(r.cost()[k] is not None for r in receipts)
+                    else None
+                )
+                for k in LLMResult(content={}).cost()
+            },
+        )
+        if receipts
+        else None
     )
     return selected, receipt, None
