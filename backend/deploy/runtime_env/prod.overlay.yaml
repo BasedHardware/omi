@@ -76,7 +76,7 @@ overlay:
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
-        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -296,7 +296,7 @@ overlay:
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
-        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
