@@ -105,6 +105,18 @@ def test_fact_extraction_requires_original_exact_quotes():
         )
 
 
+@pytest.mark.parametrize('facts', [None, ['malformed']])
+def test_malformed_fact_extraction_retains_paid_receipt(facts):
+    with pytest.raises(LLMCallError, match='invalid_fact_extraction') as error:
+        extract_facts(
+            items(),
+            llm=lambda *_: LLMResult(content={'facts': facts}, provider_cost=0.001),
+            cache_dir=None,
+            model='openai/gpt-6-luna',
+        )
+    assert error.value.result.provider_cost == 0.001
+
+
 @pytest.mark.parametrize('mode', ['jev_veto', 'jev_per_source', 'jev_rank', 'jev_discussed', 'jev_choice'])
 def test_selector_variants_only_remove_from_deterministic_pool(mode):
     def fake(_, payload):

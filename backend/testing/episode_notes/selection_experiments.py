@@ -1,8 +1,6 @@
 """DEV selector ablations: veto existing links rather than add coincidental context."""
 
 from dataclasses import replace
-from statistics import mean
-
 from config.jev_decisions import JEV_MODEL
 from testing.episode_notes.cache import cached_call
 from testing.episode_notes.schema import LLMResult

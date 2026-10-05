@@ -92,7 +92,12 @@ def extract_facts(items, *, llm, cache_dir, model):
     )
     by_id = {i.id: i for i in items}
     quotes = {}
-    for fact in result.content.get('facts', []):
+    facts = result.content.get('facts')
+    if not isinstance(facts, list):
+        raise LLMCallError('invalid_fact_extraction', replace(result, content={}))
+    for fact in facts:
+        if not isinstance(fact, dict):
+            raise LLMCallError('invalid_fact_extraction', replace(result, content={}))
         item, quote = by_id.get(fact.get('id')), fact.get('quote')
         if item is None or not isinstance(quote, str) or not quote or quote not in item.content:
             raise LLMCallError('invalid_fact_quote', replace(result, content={}))

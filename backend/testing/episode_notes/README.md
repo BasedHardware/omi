@@ -164,10 +164,13 @@ The harness still omits production presentation/vacuity repairs; long-input and
 remaining-time repair guards are tested with fakes, not a live production route.
 
 The CLI retains historical `compact` + claims-on defaults for reproducible before
-comparisons. To test the current production experimental defaults, pass
-`--selection deterministic --no-claims --candidate-effort xhigh --thinking-max-input-bytes 24000` explicitly.
-Eval permits 300s per writer call; production still permits 60s. Record deadline
-exceedances separately from eval errors before interpreting ramp readiness.
+comparisons. To test the current tiered production defaults, pass
+`--selection deterministic --no-claims --candidate-effort default --tiered --thinking-max-input-bytes 0`
+explicitly. Eval otherwise permits 300s per writer call; use
+`--apply-tier-deadlines --c7-deadline-seconds 120 --c6-deadline-seconds 115` for the
+durable tier comparison. Synchronous production paths retain C7/60s. A socket
+timeout is not a hard total wall-clock limit. Record deadline exceedances
+separately from eval errors before interpreting ramp readiness.
 
 `--thinking-max-input-bytes` defaults to 24000 and reuses the production byte
 measurement and baseline routing before generation for high/xhigh inputs.
