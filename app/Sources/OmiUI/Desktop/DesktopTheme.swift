@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 // Port of `react-native/src/desktop/tokens.ts` + `DesktopTheme.tsx`: the
@@ -65,7 +66,7 @@ public struct DesktopTokens: Sendable {
 public enum DesktopPalettes {
     // Color construction mirrors OmiColor.hex in ../Tokens.swift; duplicated
     // privately because Desktop may not edit shared files.
-    static func hex(_ value: UInt32, _ opacity: Double = 1) -> Color {
+    static func hex(_ value: Int, _ opacity: Double = 1) -> Color {
         Color(
             red: Double((value >> 16) & 0xFF) / 255.0,
             green: Double((value >> 8) & 0xFF) / 255.0,
@@ -146,3 +147,4 @@ public struct DesktopRootSurface<Content: View>: View {
             .background(tokens.isLight ? tokens.surfaceInk : Color.clear)
     }
 }
+#endif

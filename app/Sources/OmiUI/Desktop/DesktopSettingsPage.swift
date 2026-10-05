@@ -1,3 +1,4 @@
+#if !SKIP
 import OmiKit
 import SwiftUI
 
@@ -585,3 +586,4 @@ struct ConnectionGalleryView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(tokens.glassQuiet))
     }
 }
+#endif

@@ -113,7 +113,7 @@ public struct TaskEditorView: View {
                         .frame(minWidth: 44, minHeight: 44)
                         .background(disabled ? Color.clear : MobilePalette.text)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .opacity(disabled ? 0.45 : 1)
+                        .opacity(disabled ? 0.45 : 1.0)
                 }
                 .buttonStyle(KitPressableStyle())
                 .disabled(disabled)

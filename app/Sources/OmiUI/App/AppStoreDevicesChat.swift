@@ -1,5 +1,6 @@
 import Foundation
 import OmiKit
+import enum OmiKit.JSONValue
 
 // AppStore orchestration, continued: chat (AppOrchestrator.tsx send / older
 // pages / stop), task mutations (useTaskMutations.ts), and the device layer
@@ -150,7 +151,7 @@ extension AppStore {
             else { return }
             chatMessages = settleChatTranscript(
                 current: chatMessages, echoId: local.id, pendingId: pendingId,
-                human: result.human, assistant: result.assistant)
+                human: result.0, assistant: result.1)
             chatGeneration = .idle
         } catch {
             let started = requestStarted.get()
@@ -578,19 +579,19 @@ extension AppStore {
 
     func startDeviceStreamLoops() {
         guard let transport = services.devices else { return }
-        runtime.streamTasks.append(Task { [weak self] in
+        runtime.streamTasks.append(Task<Void, Never> { [weak self] in
             let initial = await transport.currentBluetoothState()
             await MainActor.run { self?.bluetoothState = initial }
             for await state in transport.bluetoothStates {
                 await MainActor.run { self?.bluetoothState = state }
             }
         })
-        runtime.streamTasks.append(Task { [weak self] in
+        runtime.streamTasks.append(Task<Void, Never> { [weak self] in
             for await event in transport.connectionEvents {
                 await MainActor.run { self?.applyConnectionEvent(event) }
             }
         })
-        runtime.streamTasks.append(Task { [weak self] in
+        runtime.streamTasks.append(Task<Void, Never> { [weak self] in
             for await packet in transport.audioPackets {
                 await self?.ingestAudioPacket(packet)
             }
@@ -599,12 +600,12 @@ extension AppStore {
 
     func startAuthStreamLoops() {
         guard let auth = services.auth else { return }
-        runtime.streamTasks.append(Task { [weak self] in
+        runtime.streamTasks.append(Task<Void, Never> { [weak self] in
             for await handoff in auth.desktopHandoffs {
                 await MainActor.run { self?.desktopHandoff = handoff }
             }
         })
-        runtime.streamTasks.append(Task { [weak self] in
+        runtime.streamTasks.append(Task<Void, Never> { [weak self] in
             for await _ in auth.sessionInvalidated {
                 await MainActor.run { self?.handleSessionInvalidated() }
             }
@@ -673,7 +674,7 @@ extension AppStore {
 
     func ingestAudioPacket(_ packet: DeviceAudioPacket) async {
         let previous = runtime.captureIngressTask
-        let current = Task { [weak self] in
+        let current = Task<Void, Never> { [weak self] in
             await previous?.value
             await self?.persistAndIngestAudioPacket(packet)
         }

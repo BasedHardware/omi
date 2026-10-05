@@ -45,9 +45,9 @@ public struct MobileOmnibar: View {
             modeToggle(.search)
             TextField(
                 mode == .ask ? "Ask anything…" : "Search Omi…",
-                text: $value,
-                onCommit: submit
+                text: $value
             )
+            .onSubmit { submit() }
             .font(TypeStyle(size: 16, lineHeight: 22, weight: .regular).font)
             .foregroundColor(MobilePalette.text)
             .padding(.horizontal, 8)
@@ -78,7 +78,7 @@ public struct MobileOmnibar: View {
                 RoundedRectangle(cornerRadius: MobileRadius.chip)
                     .fill(selected ? MobilePalette.surfaceRaised : Color.clear)
                 KitIcon(
-                    item == .ask ? .chatBubble : .search, size: 19,
+                    item == .ask ? .chatBubble : .search, size: 19.0,
                     color: selected ? MobilePalette.text : MobilePalette.textMuted
                 )
             }
@@ -109,7 +109,7 @@ public struct MobileOmnibar: View {
                 )
         }
         .buttonStyle(KitPressableStyle())
-        .opacity(disabled ? 0.35 : 1)
+        .opacity(disabled ? 0.35 : 1.0)
         .disabled(disabled)
         .accessibilityLabel(submitLabel)
     }

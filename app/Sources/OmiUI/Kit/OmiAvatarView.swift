@@ -91,8 +91,8 @@ public struct OmiAvatarView: View {
     /// The `arrive` stagger: dot `index` trails the ring head by 0.045.
     private func placedFraction(_ index: Int) -> Double {
         let t = (0.685 - Double(index) * 0.045) / 0.685
-        let clamped = max(0, min(1, t))
-        return 1 - pow(1 - clamped, 3)
+        let clamped = max(0.0, min(1.0, t))
+        return 1.0 - pow(1.0 - clamped, 3.0)
     }
 
     private func breath(_ index: Int) -> Double {

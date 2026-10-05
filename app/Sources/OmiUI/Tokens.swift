@@ -10,7 +10,7 @@ import SwiftUI
 /// extension on `Color`.
 public enum OmiColor {
     /// Builds a color from a packed 0xRRGGBB token value.
-    public static func hex(_ value: UInt32) -> Color {
+    public static func hex(_ value: Int) -> Color {
         Color(
             red: Double((value >> 16) & 0xFF) / 255.0,
             green: Double((value >> 8) & 0xFF) / 255.0,

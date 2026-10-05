@@ -119,7 +119,7 @@ public struct MobileOnboardingPage: View {
                     <= setupIndex
                 Capsule()
                     .fill(reached ? MobilePalette.text : MobilePalette.surfaceRaised)
-                    .frame(width: reached ? 22 : 12, height: 5)
+                    .frame(width: reached ? 22.0 : 12.0, height: 5.0)
                     .animation(stepAnimation, value: step)
                     .accessibilityLabel(label(for: .setup(candidate)))
             }
@@ -151,11 +151,10 @@ public struct MobileOnboardingPage: View {
 
     private var canGoBack: Bool {
         guard store.authState != AuthUiState.signingIn else { return false }
-        switch step {
-        case .welcome, .setup(.consent), .setup(.complete): return false
-        case .setup(let setup):
-            return previousMobileSetupStep(setup, itinerary: itinerary) != nil
+        guard case .setup(let setup) = step, setup != .consent, setup != .complete else {
+            return false
         }
+        return previousMobileSetupStep(setup, itinerary: itinerary) != nil
     }
 
     private func goBack() {
@@ -216,50 +215,59 @@ public struct MobileOnboardingPage: View {
         switch step {
         case .welcome:
             OmiAvatarShape()
-        case .setup(.consent):
-            KitIcon(.check, size: 26, color: MobilePalette.text)
-        case .setup(.name):
-            OmiAvatarShape()
-        case .setup(.language):
-            KitIcon(.chatBubble, size: 26, color: MobilePalette.text)
-        case .setup(.source):
-            KitIcon(.search, size: 26, color: MobilePalette.text)
-        case .setup(.permissions):
-            KitIcon(.settings, size: 26, color: MobilePalette.text)
-        case .setup(.speech):
-            KitIcon(.mic, size: 26, color: MobilePalette.text)
-        case .setup(.knowledge):
-            KitIcon(.puzzle, size: 26, color: MobilePalette.text)
-        case .setup(.complete):
-            KitIcon(.check, size: 26, color: MobilePalette.text)
+        case .setup(let setup):
+            switch setup {
+            case .consent:
+                KitIcon(.check, size: 26, color: MobilePalette.text)
+            case .name:
+                OmiAvatarShape()
+            case .language:
+                KitIcon(.chatBubble, size: 26, color: MobilePalette.text)
+            case .source:
+                KitIcon(.search, size: 26, color: MobilePalette.text)
+            case .permissions:
+                KitIcon(.settings, size: 26, color: MobilePalette.text)
+            case .speech:
+                KitIcon(.mic, size: 26, color: MobilePalette.text)
+            case .knowledge:
+                KitIcon(.puzzle, size: 26, color: MobilePalette.text)
+            case .complete:
+                KitIcon(.check, size: 26, color: MobilePalette.text)
+            }
         }
     }
 
     private func title(for step: MobileOnboardingStep) -> String {
         switch step {
         case .welcome: return "A little less to remember."
-        case .setup(.consent): return "Data & Privacy"
-        case .setup(.name): return "What should Omi call you?"
-        case .setup(.language): return "Select your primary language"
-        case .setup(.source): return "How did you find us?"
-        case .setup(.permissions): return "Grant permissions"
-        case .setup(.speech): return "Teach Omi your voice"
-        case .setup(.knowledge): return "Help Omi learn"
-        case .setup(.complete): return "You are all set!"
+        case .setup(let setup):
+            switch setup {
+            case .consent: return "Data & Privacy"
+            case .name: return "What should Omi call you?"
+            case .language: return "Select your primary language"
+            case .source: return "How did you find us?"
+            case .permissions: return "Grant permissions"
+            case .speech: return "Teach Omi your voice"
+            case .knowledge: return "Help Omi learn"
+            case .complete: return "You are all set!"
+            }
         }
     }
 
     private func label(for step: MobileOnboardingStep) -> String {
         switch step {
         case .welcome: return "Welcome"
-        case .setup(.consent): return "Data & Privacy"
-        case .setup(.name): return "Your name"
-        case .setup(.language): return "Language"
-        case .setup(.source): return "Discovery"
-        case .setup(.permissions): return "Permissions"
-        case .setup(.speech): return "Voice"
-        case .setup(.knowledge): return "Learning"
-        case .setup(.complete): return "Get started"
+        case .setup(let setup):
+            switch setup {
+            case .consent: return "Data & Privacy"
+            case .name: return "Your name"
+            case .language: return "Language"
+            case .source: return "Discovery"
+            case .permissions: return "Permissions"
+            case .speech: return "Voice"
+            case .knowledge: return "Learning"
+            case .complete: return "Get started"
+            }
         }
     }
 
@@ -268,22 +276,25 @@ public struct MobileOnboardingPage: View {
         switch step {
         case .welcome:
             welcomeBody
-        case .setup(.consent):
-            consentBody
-        case .setup(.name):
-            nameBody
-        case .setup(.language):
-            languageBody
-        case .setup(.source):
-            sourceBody
-        case .setup(.permissions):
-            permissionsBody
-        case .setup(.speech):
-            speechBody
-        case .setup(.knowledge):
-            knowledgeBody
-        case .setup(.complete):
-            completeBody
+        case .setup(let setup):
+            switch setup {
+            case .consent:
+                consentBody
+            case .name:
+                nameBody
+            case .language:
+                languageBody
+            case .source:
+                sourceBody
+            case .permissions:
+                permissionsBody
+            case .speech:
+                speechBody
+            case .knowledge:
+                knowledgeBody
+            case .complete:
+                completeBody
+            }
         }
     }
 
@@ -519,7 +530,7 @@ public struct MobileOnboardingPage: View {
         Button(action: { Task { await primaryAction() } }) {
             HStack(spacing: 8) {
                 if busy || store.signingIn {
-                    OmiLoadingMark(size: 16, ink: MobilePalette.background)
+                    OmiLoadingMark(size: 16.0, ink: MobilePalette.background)
                 } else {
                     Text(primaryLabel)
                         .font(TypeStyle(size: 15, lineHeight: 20, weight: .semibold).font)
@@ -543,14 +554,17 @@ public struct MobileOnboardingPage: View {
             if store.authState == AuthUiState.onboarding { return "Continue" }
             return store.signingIn ? "Signing in…"
                 : (returning ? "Welcome back — sign in" : "Sign in")
-        case .setup(.consent): return "Agree & Continue"
-        case .setup(.name), .setup(.language): return "Continue"
-        case .setup(.source): return savingStep ? "Saving…" : "Continue"
-        case .setup(.permissions): return "I'll do these later"
-        case .setup(.speech): return "Skip for now"
-        case .setup(.knowledge): return "Continue"
-        case .setup(.complete):
-            return store.completingSetup ? "Saving…" : "Start using Omi"
+        case .setup(let setup):
+            switch setup {
+            case .consent: return "Agree & Continue"
+            case .name, .language: return "Continue"
+            case .source: return savingStep ? "Saving…" : "Continue"
+            case .permissions: return "I'll do these later"
+            case .speech: return "Skip for now"
+            case .knowledge: return "Continue"
+            case .complete:
+                return store.completingSetup ? "Saving…" : "Start using Omi"
+            }
         }
     }
 

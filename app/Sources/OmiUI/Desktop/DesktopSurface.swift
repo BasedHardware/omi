@@ -1,3 +1,4 @@
+#if !SKIP
 import OmiKit
 import SwiftUI
 
@@ -703,3 +704,4 @@ struct DesktopPostSetupOverlay: View {
         .accessibilityLabel("Post setup")
     }
 }
+#endif

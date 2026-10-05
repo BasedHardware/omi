@@ -1,3 +1,4 @@
+#if !SKIP
 import OmiKit
 import SwiftUI
 
@@ -501,37 +502,4 @@ struct DesktopUnifiedTimeline<Header: View>: View {
 func nowMilliseconds() -> Int64 {
     Int64(Date().timeIntervalSince1970 * 1000)
 }
-
-// MARK: - Loading mark (OmiLoadingMark port: the animated Omi dot)
-
-/// The Omi mark: a single ink dot breathing while work is in flight.
-/// Reduce Motion holds it still.
-struct OmiLoadingMark: View {
-    var size: CGFloat
-    var ink: Color
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulsing = false
-
-    var body: some View {
-        Circle()
-            .fill(ink)
-            .frame(width: size * 0.22, height: size * 0.22)
-            .scaleEffect(pulsing ? 1.25 : 0.9)
-            .opacity(pulsing ? 1 : 0.55)
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(
-                    // 900ms pulse token; SwiftUI durations are seconds.
-                    .easeInOut(
-                        duration: DesktopMotion.motionDuration(900, reduceMotion: reduceMotion) / 1000
-                    )
-                    .repeatForever(autoreverses: true)
-                ) {
-                    pulsing = true
-                }
-            }
-            .frame(width: size, height: size)
-            .accessibilityLabel("Loading")
-    }
-}
+#endif

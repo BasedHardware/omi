@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 // Port of `react-native/src/desktop/desktopChrome.ts` (motion tokens, layout
@@ -229,3 +230,4 @@ public func performDesktopWindowCommand(_ command: DesktopWindowCommand) {
         userInfo: ["command": command.rawValue]
     )
 }
+#endif

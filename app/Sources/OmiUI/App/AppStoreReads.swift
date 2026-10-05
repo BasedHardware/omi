@@ -132,9 +132,9 @@ extension AppStore {
             let next: DesktopReadOutcomes
             if let previous = outcomes {
                 next = DesktopReadOutcomes(
-                    conversations: mergedOutcome(
+                    conversations: mergedConversationOutcome(
                         previous.conversations, fresh.conversations),
-                    memories: mergedOutcome(previous.memories, fresh.memories),
+                    memories: mergedMemoryOutcome(previous.memories, fresh.memories),
                     tasks: mergedTaskOutcome(previous.tasks, fresh.tasks))
             } else {
                 next = fresh
@@ -219,14 +219,14 @@ extension AppStore {
 
     /// Port of `mergeOutcome`: a transient service failure never replaces
     /// loaded rows.
-    private func mergedOutcome(
+    private func mergedConversationOutcome(
         _ current: ReadOutcome<DomainRead<ConversationProjection>>,
         _ next: ReadOutcome<DomainRead<ConversationProjection>>
     ) -> ReadOutcome<DomainRead<ConversationProjection>> {
         mergeOutcomeRows(current, next) { !($0?.items.isEmpty ?? true) }
     }
 
-    private func mergedOutcome(
+    private func mergedMemoryOutcome(
         _ current: ReadOutcome<DomainRead<MemoryProjection>>,
         _ next: ReadOutcome<DomainRead<MemoryProjection>>
     ) -> ReadOutcome<DomainRead<MemoryProjection>> {
@@ -261,7 +261,7 @@ extension AppStore {
     }
 
     /// Port of `revalidateLoadedWindow` for the canonical projections.
-    private func revalidateLoadedWindow<T: Sendable>(
+    private func revalidateLoadedWindow<T: Sendable & Hashable>(
         _ load: (String?) async throws -> DomainRead<T>,
         idOf: (T) -> String,
         previousCount: Int,
@@ -427,11 +427,11 @@ extension AppStore {
         let previousPage: ReadPageState?
         let previousItems: Int
         if kind == .conversations {
-            guard case .success(let value) = previousOutcome! else { return }
+            guard let value = previousOutcome!.successValue else { return }
             previousPage = value.page
             previousItems = value.items.count
         } else {
-            guard case .success(let value) = previousMemoryOutcome! else { return }
+            guard let value = previousMemoryOutcome!.successValue else { return }
             previousPage = value.page
             previousItems = value.items.count
         }
@@ -488,7 +488,7 @@ extension AppStore {
             }
             guard sequence == runtime.refreshSeq, let live = outcomes else { return }
             if kind == .conversations {
-                guard case .success(let currentValue) = live.conversations else { return }
+                guard let currentValue = live.conversations.successValue else { return }
                 let mergedItems = replace
                     ? next!.items
                     : currentValue.items + next!.items
@@ -508,7 +508,7 @@ extension AppStore {
                     conversationNotice = "Conversations changed. The list has been refreshed."
                 }
             } else {
-                guard case .success(let currentValue) = live.memories else { return }
+                guard let currentValue = live.memories.successValue else { return }
                 let mergedItems = replace
                     ? nextMemory!.items
                     : currentValue.items + nextMemory!.items
@@ -543,7 +543,7 @@ extension AppStore {
         guard sessionReady, let reads = services.reads else { return }
         guard !runtime.taskPagePending, !runtime.refreshPending else { return }
         guard let current = outcomes,
-            case .success(let value) = current.tasks,
+            let value = current.tasks.successValue,
             value.page.hasMore, let cursor = value.page.nextCursor
         else { return }
         let sequence = runtime.refreshSeq
@@ -568,7 +568,7 @@ extension AppStore {
                 next = try await reads.loadTasks(cursor: nil)
             }
             guard sequence == runtime.refreshSeq, let live = outcomes,
-                case .success(let currentValue) = live.tasks
+                let currentValue = live.tasks.successValue
             else { return }
             if !replace, next.accountEpoch != currentValue.accountEpoch {
                 // An appended page from a different account epoch must never

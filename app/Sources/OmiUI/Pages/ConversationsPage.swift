@@ -136,7 +136,7 @@ public struct ConversationsPage: View {
                         embedded ? "Search loaded conversations…" : "Search loaded conversations",
                         text: $localQuery
                     )
-                    .font(TypeStyle(size: embedded ? 16 : 14, lineHeight: 20, weight: .regular).font)
+                    .font(TypeStyle(size: embedded ? 16.0 : 14.0, lineHeight: 20.0, weight: .regular).font)
                     .foregroundColor(Color.white)
                     .frame(minHeight: 44)
                     .accessibilityLabel("Search loaded conversations")
@@ -403,15 +403,15 @@ public struct ConversationListRow: View {
                 Text(item.title)
                     .font(
                         TypeStyle(
-                            size: embedded ? 17 : 14,
-                            lineHeight: embedded ? 24 : 20, weight: .semibold
+                            size: embedded ? 17.0 : 14.0,
+                            lineHeight: embedded ? 24.0 : 20.0, weight: .semibold
                         ).font
                     )
                     .foregroundColor(Color.white)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(item.summary)
-                    .font(TypeStyle(size: embedded ? 14 : 12, lineHeight: embedded ? 21 : 17, weight: .regular).font)
+                    .font(TypeStyle(size: embedded ? 14.0 : 12.0, lineHeight: embedded ? 21.0 : 17.0, weight: .regular).font)
                     .foregroundColor(
                         embedded ? MobilePalette.textMuted : Palette.textSubtle
                     )
@@ -422,16 +422,16 @@ public struct ConversationListRow: View {
                         embedded ? MobilePalette.textSubtle : OmiColor.hex(0x777777)
                     )
             }
-            .padding(embedded ? 18 : 12)
+            .padding(embedded ? 18.0 : 12.0)
             .background(
-                RoundedRectangle(cornerRadius: embedded ? 22 : Radius.lg)
+                RoundedRectangle(cornerRadius: embedded ? 22.0 : Radius.lg)
                     .fill(embedded ? MobilePalette.surface : Palette.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: embedded ? 22 : Radius.lg)
+                RoundedRectangle(cornerRadius: embedded ? 22.0 : Radius.lg)
                     .strokeBorder(
                         selected ? Color.white : (embedded ? MobilePalette.border : Palette.line),
-                        lineWidth: selected ? 1 : 0.5
+                        lineWidth: selected ? 1.0 : 0.5
                     )
             )
         }

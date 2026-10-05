@@ -609,7 +609,7 @@ public struct MobileTaskRow: View {
             }
             .buttonStyle(KitPressableStyle())
             .disabled(!toggleEnabled)
-            .opacity(!toggleEnabled ? Opacity.disabled : 1)
+            .opacity(!toggleEnabled ? Opacity.disabled : 1.0)
             .accessibilityLabel(toggleAccessibility)
             .accessibilityAddTraits(task.completed ? [.isSelected] : [])
             if onEdit != nil {

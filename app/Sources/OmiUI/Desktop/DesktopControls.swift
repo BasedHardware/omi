@@ -1,3 +1,4 @@
+#if !SKIP
 import OmiKit
 import SwiftUI
 
@@ -536,3 +537,4 @@ struct MemoryCardView: View {
         return formatter.string(from: Date(timeIntervalSince1970: Double(ms) / 1000.0))
     }
 }
+#endif

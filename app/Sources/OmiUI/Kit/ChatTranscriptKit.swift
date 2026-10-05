@@ -29,11 +29,11 @@ public struct ChatMessageRowView: View {
         HStack(alignment: .top, spacing: Space.sm) {
             if !human {
                 OmiAvatarView(
-                    size: compact ? 28 : 40, motion: streaming ? .breathe : .resting,
+                    size: compact ? 28.0 : 40.0, motion: streaming ? .breathe : .resting,
                     reduceMotion: reduceMotion
                 )
             }
-            VStack(alignment: human ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: human ? .trailing : .leading, spacing: 4.0) {
                 bubble(human: human, waiting: waiting)
                 if message.generationOutcome == .cancelled {
                     Text("Response stopped")
@@ -44,11 +44,11 @@ public struct ChatMessageRowView: View {
                     .font(Typography.caption.font)
                     .foregroundColor(OmiColor.hex(0x666666))
             }
-            .frame(maxWidth: compact ? 340 : 480, alignment: human ? .trailing : .leading)
+            .frame(maxWidth: compact ? 340.0 : 480.0, alignment: human ? .trailing : .leading)
         }
         .frame(maxWidth: .infinity, alignment: human ? .trailing : .leading)
         .accessibilityLabel(accessibility(human: human, waiting: waiting))
-        .opacity(animate && !reduceMotion ? 1 : 1)
+        .opacity(animate && !reduceMotion ? 1.0 : 1.0)
     }
 
     @ViewBuilder
@@ -74,7 +74,7 @@ public struct ChatMessageRowView: View {
         .padding(.vertical, 12)
         .background(background)
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .opacity(message.generationOutcome == .cancelled ? 0.72 : 1)
+        .opacity(message.generationOutcome == .cancelled ? 0.72 : 1.0)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(
@@ -112,7 +112,7 @@ public struct ChatThinkingView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .opacity(reduceMotion ? 1 : 0.9)
+        .opacity(reduceMotion ? 1.0 : 0.9)
         .accessibilityLabel("Waiting for response")
     }
 }

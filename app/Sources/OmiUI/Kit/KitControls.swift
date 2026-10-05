@@ -5,6 +5,7 @@ import SwiftUI
 // (`Button.tsx`), the Field input frame (`Field.tsx`), and the mobile
 // StatePanel (`MobileAppSurface.tsx`).
 
+#if !SKIP
 /// FocusPressable: pressed opacity 0.78 and a focus-color ring when focused.
 public struct KitPressableStyle: ButtonStyle {
     public var pressedOpacity: Double = Opacity.pressed
@@ -16,10 +17,21 @@ public struct KitPressableStyle: ButtonStyle {
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .opacity(configuration.isPressed ? pressedOpacity : 1)
+            .opacity(configuration.isPressed ? pressedOpacity : 1.0)
             .animation(KitMotion.press, value: configuration.isPressed)
     }
 }
+#else
+public struct KitPressableStyle {
+    public init(pressedOpacity: Double = Opacity.pressed) {}
+}
+
+extension View {
+    public func buttonStyle(_ style: KitPressableStyle) -> some View {
+        buttonStyle(.plain)
+    }
+}
+#endif
 
 /// The Button component: primary / secondary / ghost / danger across
 /// compact / default / large / icon sizes.
@@ -55,10 +67,10 @@ public struct KitButton: View {
                 .lineLimit(1)
         }
         .buttonStyle(KitPressableStyle())
-        .opacity(disabled ? Opacity.disabled : 1)
+        .opacity(disabled ? Opacity.disabled : 1.0)
         .disabled(disabled)
         .frame(minHeight: height)
-        .padding(.horizontal, size == .icon ? 0 : Space.md)
+        .padding(.horizontal, size == .icon ? 0.0 : Space.md)
         .frame(maxWidth: size == .icon ? height : nil)
         .background(background)
         .overlay(
@@ -142,7 +154,7 @@ public struct KitField: View {
                 TextField(placeholder, text: $value)
                     .font(Typography.body.font)
                     .foregroundColor(Palette.text)
-                    .accentColor(Palette.focus)
+                    .tint(Palette.focus)
             }
             .padding(.horizontal, Space.md)
             .frame(minHeight: Size.control)

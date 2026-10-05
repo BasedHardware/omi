@@ -39,7 +39,7 @@ extension AppStore {
         // Order mirrors the TS orchestrator: hydrate persisted settings
         // first, then probe the session against the loaded onboarding
         // marker, then probe capture availability.
-        runtime.streamTasks.append(Task {
+        runtime.streamTasks.append(Task<Void, Never> {
             await loadPreferencesTask()
             await probeOnboarding()
             if let rewind = services.rewindCapture {
@@ -90,7 +90,7 @@ extension AppStore {
     /// session and stays on Welcome — never a faked ready shell.
     func probeOnboarding() async {
         guard let auth = services.auth else {
-            setOnboardingRequired(true)
+            updateOnboardingRequired(true)
             return
         }
         let completed = onboardingCompletedFromPreferences()
@@ -108,7 +108,7 @@ extension AppStore {
         }
         authErrorCopy = nil
         setupRequired = hasSession && !completed
-        setOnboardingRequired(!completed)
+        updateOnboardingRequired(!completed)
         returningUser = completed && !hasSession
         applySessionGate()
     }
@@ -141,7 +141,7 @@ extension AppStore {
                 let completed = onboardingCompletedFromPreferences()
                 runtime.completedOnboarding = completed
                 setupRequired = !completed
-                setOnboardingRequired(!completed)
+                updateOnboardingRequired(!completed)
                 returningUser = false
                 if completed {
                     await refreshReads(initial: false)
@@ -188,7 +188,7 @@ extension AppStore {
         if let probe = services.auth as? SessionProbeCapable {
             if !(await probe.hasCloudSession()) {
                 setupRequired = false
-                setOnboardingRequired(true)
+                updateOnboardingRequired(true)
                 return
             }
         }
@@ -199,7 +199,7 @@ extension AppStore {
         guard operation == runtime.authOperation else { return }
         runtime.completedOnboarding = true
         setupRequired = false
-        setOnboardingRequired(false)
+        updateOnboardingRequired(false)
         returningUser = false
         await refreshReads(initial: false)
         applySessionGate()
@@ -224,7 +224,7 @@ extension AppStore {
         let completed = runtime.completedOnboarding ?? onboardingCompletedFromPreferences()
         runtime.completedOnboarding = completed
         setupRequired = false
-        setOnboardingRequired(!completed)
+        updateOnboardingRequired(!completed)
         returningUser = completed
         // No reads refresh here: a signed-out Mac must not fire cloud reads.
         resetReads()
@@ -240,7 +240,7 @@ extension AppStore {
         signingIn = false
         setupRequired = false
         let completed = runtime.completedOnboarding ?? onboardingCompletedFromPreferences()
-        setOnboardingRequired(!completed)
+        updateOnboardingRequired(!completed)
         returningUser = completed
         resetReads()
         applySessionGate()
@@ -254,16 +254,16 @@ extension AppStore {
         if !sessionReady {
             resetChatSession()
         } else {
-            runtime.streamTasks.append(Task { [weak self] in
+            runtime.streamTasks.append(Task<Void, Never> { [weak self] in
                 await self?.recoverRecordingJournals()
             })
-            runtime.streamTasks.append(Task { [weak self] in
+            runtime.streamTasks.append(Task<Void, Never> { [weak self] in
                 await self?.refreshChatHistory()
             })
             // The TS reads effect re-runs when the session gate opens — the
             // surfaces may already be mounted (the gate opened after their
             // onAppear), so the store owns this refresh too.
-            runtime.streamTasks.append(Task { [weak self] in
+            runtime.streamTasks.append(Task<Void, Never> { [weak self] in
                 await self?.refreshReads(initial: false)
             })
         }
@@ -292,7 +292,7 @@ extension AppStore {
         runtime.chatSessionEpochMirror.set(runtime.chatSessionEpoch)
     }
 
-    func setOnboardingRequired(_ value: Bool?) {
+    func updateOnboardingRequired(_ value: Bool?) {
         onboardingRequired = value
         syncPostSetupCue()
     }
@@ -475,7 +475,7 @@ extension AppStore {
 
     public func navigate(mobileRoute destination: MobileRoute) {
         homeChatOpen = false
-        mobileRoute = destination
+        self.mobileRoute = destination
         route = destination.appRoute
     }
 }

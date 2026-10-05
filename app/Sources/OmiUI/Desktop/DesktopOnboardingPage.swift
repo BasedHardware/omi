@@ -1,3 +1,4 @@
+#if !SKIP
 import OmiKit
 import SwiftUI
 #if !SKIP
@@ -658,3 +659,4 @@ struct OmiMark: View {
         return 0.72 + 0.28 * bump
     }
 }
+#endif

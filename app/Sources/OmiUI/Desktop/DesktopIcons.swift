@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 // SwiftUI-drawn replacement for MaterialIcon on the desktop surface (SF
@@ -344,3 +345,4 @@ struct CursorShape: Shape {
         return path
     }
 }
+#endif

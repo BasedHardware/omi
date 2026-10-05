@@ -30,6 +30,13 @@ public enum ReadOutcome<Value: Sendable>: Sendable {
         case .error(let message): return message
         }
     }
+
+    public var successValue: Value? {
+        switch self {
+        case .success(let value): return value
+        case .error: return nil
+        }
+    }
 }
 
 public struct DesktopReadOutcomes: Sendable {

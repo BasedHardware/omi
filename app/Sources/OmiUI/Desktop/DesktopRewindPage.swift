@@ -1,3 +1,4 @@
+#if !SKIP
 import OmiKit
 import SwiftUI
 
@@ -307,3 +308,4 @@ func rewindDaySections(_ groups: [RewindCaptureGroup]) -> [RewindDaySection] {
     }
     return sections
 }
+#endif

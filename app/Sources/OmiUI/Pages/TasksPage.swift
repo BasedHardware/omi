@@ -1,4 +1,5 @@
 import OmiKit
+import enum OmiKit.TaskGroup
 import SwiftUI
 
 // Tasks page, ported from `react-native/src/pages/Tasks.tsx`: search over
@@ -271,7 +272,7 @@ public struct TaskCard: View {
                 }
                 .buttonStyle(KitPressableStyle())
                 .disabled(toggleDisabled)
-                .opacity(toggleDisabled ? Opacity.disabled : 1)
+                .opacity(toggleDisabled ? Opacity.disabled : 1.0)
                 .accessibilityLabel(toggleAccessibility)
                 .accessibilityAddTraits(task.completed ? [.isSelected] : [])
                 Button(action: { onSelect(task.id) }) {

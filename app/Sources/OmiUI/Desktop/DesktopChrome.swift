@@ -1,3 +1,4 @@
+#if !SKIP
 import OmiKit
 import SwiftUI
 
@@ -359,3 +360,4 @@ struct DesktopRailRow: View {
         }
     }
 }
+#endif

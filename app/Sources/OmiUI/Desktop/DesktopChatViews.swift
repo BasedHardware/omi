@@ -1,3 +1,4 @@
+#if !SKIP
 import OmiKit
 import SwiftUI
 
@@ -208,17 +209,6 @@ struct DesktopChatTranscript: View {
     }
 }
 
-/// The Omi avatar mark: the wordless circle-and-dot glyph.
-struct OmiAvatarShape: View {
-    var body: some View {
-        ZStack {
-            Circle().inset(by: 6)
-                .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round))
-            Circle().frame(width: 14, height: 14)
-        }
-    }
-}
-
 // MARK: - Inline ask card (DesktopApp.tsx InlineAskCard)
 
 /// Small ask answers pinned under the omnibar: the trailing exchange with a
@@ -367,3 +357,4 @@ struct DesktopChatOverlay: View {
         .environment(\.desktopTokens, tokens)
     }
 }
+#endif
