@@ -162,3 +162,9 @@ claim a second actual API bill. Eval reference/judge spend is separate. Repeated
 payload caching and OpenRouter routing do not predict production bills/latency.
 The harness still omits production presentation/vacuity repairs; long-input and
 remaining-time repair guards are tested with fakes, not a live production route.
+
+The CLI retains historical `compact` + claims-on defaults for reproducible before
+comparisons. To test the current production experimental defaults, pass
+`--selection deterministic --no-claims --candidate-effort default` explicitly.
+Eval permits 300s per writer call; production still permits 60s. Record deadline
+exceedances separately from eval errors before interpreting ramp readiness.
