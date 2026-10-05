@@ -555,7 +555,7 @@ enum OmiBootstrap {
     @MainActor
     static func makeStore() -> AppStore {
         if demoMode {
-            AppStore(services: DemoServices.makeServices())
+            AppStore(services: MacDemoServices.makeServices())
         } else {
             AppStore(services: makeServices())
         }
