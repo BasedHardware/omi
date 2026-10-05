@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 @testable import Omi_Computer
@@ -7,6 +8,47 @@ import XCTest
 final class ActionItemRowMetadataTests: XCTestCase {
   func testSuggestedAppsDisclosureStartsCollapsed() {
     XCTAssertFalse(ConversationSuggestedAppsDisclosure.initiallyExpanded)
+  }
+
+  private func conversation(
+    with item: ActionItem,
+    conversationId: String = "conversation-1"
+  ) -> ServerConversation {
+    let timestamp = Date(timeIntervalSince1970: 1_791_201_600)
+    return ServerConversation(
+      id: conversationId, createdAt: timestamp, updatedAt: timestamp,
+      startedAt: timestamp, finishedAt: timestamp.addingTimeInterval(60),
+      structured: Structured(
+        title: "Planning", overview: "Overview", emoji: "🧭", category: "work",
+        actionItems: [item], events: [], sections: []),
+      transcriptSegments: [], transcriptSegmentsIncluded: true, geolocation: nil,
+      photos: [], appsResults: [], source: .desktop, language: "en", status: .completed,
+      discarded: false, deleted: false, isLocked: false, starred: false, folderId: nil,
+      inputDeviceName: nil)
+  }
+
+  /// Linking a summary item to its promoted task must keep the metadata this change
+  /// added (owner, due, certainty, context): the linked conversation replaces the
+  /// in-memory one, so dropped fields would silently vanish from the visible note.
+  func testLinkedConversationKeepsActionItemMetadata() throws {
+    let due = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-07T16:00:00Z"))
+    let item = ActionItem(
+      description: "Share the provider info", completed: false, deleted: false,
+      captureOwner: "other", ownerName: "Eddie Thai", dueAt: due,
+      dueCertainty: "tentative", context: "Eddie said they would follow up.")
+    let original = conversation(with: item)
+    let selected = OmiAPI.SummaryTaskReference(
+      actionItemIndex: 0, conversationId: "conversation-1", expectedDescription: item.description)
+
+    let linked = try XCTUnwrap(
+      ConversationSummaryTaskPromoter.linkedConversation(original, selected: selected, taskID: "task-9"))
+
+    let linkedItem = try XCTUnwrap(linked.structured.actionItems.first)
+    XCTAssertEqual(linkedItem.targetTaskID, "task-9")
+    XCTAssertEqual(linkedItem.ownerName, "Eddie Thai")
+    XCTAssertEqual(linkedItem.dueAt, due)
+    XCTAssertEqual(linkedItem.dueCertainty, "tentative")
+    XCTAssertEqual(linkedItem.context, "Eddie said they would follow up.")
   }
 
   private var calendar: Calendar {
@@ -41,6 +83,13 @@ final class ActionItemRowMetadataTests: XCTestCase {
       let item = ActionItem(description: "x", completed: false, deleted: false, ownerName: name)
       XCTAssertNil(ActionItemRowMetadata(item, now: now, calendar: calendar).owner, name)
     }
+  }
+
+  func testHandleShapedOwnerNameIsNotAnEmailAndStaysVisible() {
+    // A handle like "@alex" contains an at-sign but is not email-shaped; the
+    // Flutter and web adapters keep it visible, and so does the Mac.
+    let item = ActionItem(description: "x", completed: false, deleted: false, ownerName: "@alex")
+    XCTAssertEqual(ActionItemRowMetadata(item, now: now, calendar: calendar).owner, "@alex")
   }
 
   func testDueReadsAsADayAndContextIsTrimmed() {
