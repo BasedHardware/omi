@@ -111,7 +111,10 @@ void main() {
     expect(find.descendant(of: transcript, matching: find.text('Transcript')), findsOneWidget);
     expect(tester.getCenter(summary).dx, lessThan(tester.getCenter(transcript).dx));
     expect(find.byType(Tab), findsNWidgets(2));
-    expect(find.text('Tasks'), findsNothing);
+    expect(find.descendant(of: find.byType(Tab), matching: find.text('Tasks')), findsNothing);
+    // The note's tasks sit inside the Summary, after its sections, not behind a tab of their own.
+    expect(find.byKey(const ValueKey('conversation_action_items_section')), findsOneWidget);
+    expect(find.text('Send the widget build'), findsOneWidget);
     expect(
       tester.state<ConversationDetailPageState>(find.byType(ConversationDetailPage)).selectedTab,
       ConversationTab.summary,

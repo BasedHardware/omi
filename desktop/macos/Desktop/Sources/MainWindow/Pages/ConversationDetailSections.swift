@@ -97,7 +97,7 @@ struct ConversationActionItemsSection: View {
     Task { @MainActor in
       let created = await TasksStore.shared.createTask(
         description: item.description,
-        dueAt: nil,
+        dueAt: item.dueAt,
         priority: nil
       )
       addingActionItemIDs.remove(item.id)

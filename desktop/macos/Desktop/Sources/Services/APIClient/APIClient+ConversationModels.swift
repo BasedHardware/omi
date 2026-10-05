@@ -744,6 +744,11 @@ struct ActionItem: Codable, Identifiable, Equatable {
   /// rather than inferring a task from the description.
   let targetTaskID: String?
   let sourceSegmentIDs: [String]
+  /// The owner's display name when the extraction names one (`owner_name`).
+  let ownerName: String?
+  let dueAt: Date?
+  /// One line on why the item exists (`context`).
+  let context: String?
 
   init(
     description: String,
@@ -751,7 +756,10 @@ struct ActionItem: Codable, Identifiable, Equatable {
     deleted: Bool,
     captureOwner: String? = nil,
     targetTaskID: String? = nil,
-    sourceSegmentIDs: [String] = []
+    sourceSegmentIDs: [String] = [],
+    ownerName: String? = nil,
+    dueAt: Date? = nil,
+    context: String? = nil
   ) {
     self.description = description
     self.completed = completed
@@ -759,6 +767,9 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.captureOwner = captureOwner
     self.targetTaskID = targetTaskID
     self.sourceSegmentIDs = sourceSegmentIDs
+    self.ownerName = ownerName
+    self.dueAt = dueAt
+    self.context = context
   }
 
   /// Adapter from the generated wire DTO (OmiAPI.ActionItem). `deleted` is a
@@ -771,16 +782,13 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.captureOwner = wire.captureOwner
     self.targetTaskID = wire.targetTaskId
     self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
+    self.ownerName = wire.ownerName
+    self.dueAt = wire.dueAt.flatMap(Event.parseWireDate)
+    self.context = wire.context
   }
 
   init(from decoder: Decoder) throws {
-    let wire = try OmiAPI.ActionItem(from: decoder)
-    self.description = wire.description_
-    self.completed = wire.completed ?? false
-    self.deleted = false
-    self.captureOwner = wire.captureOwner
-    self.targetTaskID = wire.targetTaskId
-    self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
+    self.init(try OmiAPI.ActionItem(from: decoder))
   }
 
   func encode(to encoder: Encoder) throws {
@@ -792,10 +800,12 @@ struct ActionItem: Codable, Identifiable, Equatable {
       completed: completed,
       completedAt: nil,
       concreteDeliverable: nil,
+      context: context,
       conversationId: nil,
       createdAt: nil,
       description_: description,
-      dueAt: nil,
+      dueAt: dueAt.map(Event.encodeDateForWire),
+      ownerName: ownerName,
       ownershipConfidence: nil,
       sourceSegmentIds: sourceSegmentIDs,
       targetTaskId: targetTaskID,
@@ -875,6 +885,11 @@ struct Event: Codable, Identifiable, Equatable {
 
   private static func parseDate(_ s: String) -> Date? {
     fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s)
+  }
+
+  /// The wire's ISO-8601 instant, with or without fractional seconds; nil when unparseable.
+  fileprivate static func parseWireDate(_ s: String) -> Date? {
+    parseDate(s)
   }
 
   private static func decodeDate(_ s: String, using decoder: Decoder) throws -> Date {

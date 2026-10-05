@@ -311,8 +311,10 @@ export function transcriptSpeakerName(
 export function actionItemFacts(item) {
   const due = shareDateTime({ started_at: item?.due_at });
   const rawOwner = typeof item?.owner_name === 'string' ? item.owner_name.trim() : '';
+  const ownerKnown = Boolean(rawOwner) && !EMAIL_RE.test(rawOwner);
   return {
-    owner: rawOwner && !EMAIL_RE.test(rawOwner) ? rawOwner : 'Unknown',
+    owner: ownerKnown ? rawOwner : 'Unknown',
+    ownerKnown,
     due,
     context: item?.context?.trim() || '',
   };

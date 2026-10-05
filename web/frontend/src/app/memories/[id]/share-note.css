@@ -773,11 +773,18 @@ html[data-share-theme='dark']:has(.share-note) body {
   font-size: 9px;
 }
 
+.share-note .sn-action-meta > * + *::before {
+  content: '·';
+  margin-right: 10px;
+  color: var(--sn-faint);
+}
+
 .share-note .sn-context {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--sn-muted);
+  overflow-wrap: anywhere;
 }
 
 .share-note .sn-events {

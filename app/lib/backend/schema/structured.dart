@@ -174,23 +174,52 @@ class ActionItem {
   bool completed = false;
   bool deleted = false;
 
-  ActionItem(this.description, {this.id = 0, this.completed = false, this.deleted = false});
+  /// Extraction ownership (`capture_owner`): "user" when the item is the reader's own.
+  String? captureOwner;
 
-  factory ActionItem.fromGenerated(wire.GeneratedActionItem generated) {
-    return ActionItem(generated.description, completed: generated.completed);
-  }
+  /// Who the extraction says owns the item, when it names someone.
+  String? ownerName;
+  DateTime? dueAt;
 
-  static fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedActionItem.fromJson(json);
+  /// Why the item exists, in a sentence ("Eddie offered to pass it on").
+  String? context;
+
+  ActionItem(
+    this.description, {
+    this.id = 0,
+    this.completed = false,
+    this.deleted = false,
+    this.captureOwner,
+    this.ownerName,
+    this.dueAt,
+    this.context,
+  });
+
+  factory ActionItem.fromGenerated(wire.GeneratedActionItem generated, {bool deleted = false}) {
     return ActionItem(
       generated.description,
       completed: generated.completed,
-      deleted: json['deleted'] ?? false,
+      deleted: deleted,
+      captureOwner: generated.captureOwner,
+      ownerName: generated.ownerName,
+      dueAt: generated.dueAt,
+      context: generated.context,
     );
   }
 
+  static fromJson(Map<String, dynamic> json) {
+    return ActionItem.fromGenerated(wire.GeneratedActionItem.fromJson(json), deleted: json['deleted'] ?? false);
+  }
+
   wire.GeneratedActionItem toGenerated() {
-    return wire.GeneratedActionItem(description: description, completed: completed);
+    return wire.GeneratedActionItem(
+      description: description,
+      completed: completed,
+      captureOwner: captureOwner,
+      ownerName: ownerName,
+      dueAt: dueAt,
+      context: context,
+    );
   }
 
   toJson() => {...toGenerated().toJson(), 'deleted': deleted};
