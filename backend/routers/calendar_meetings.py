@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database.calendar_meetings as calendar_db
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
@@ -31,6 +31,13 @@ class StoreMeetingRequest(BaseModel):
     meeting_link: Optional[str] = Field(default=None, description="URL to join the meeting")
     participants: List[MeetingParticipant] = Field(default_factory=list, description="Meeting participants")
     notes: Optional[str] = Field(default=None, description="Meeting notes/description")
+
+    @field_validator('calendar_event_id', 'calendar_source')
+    @classmethod
+    def _require_non_blank_calendar_identifier(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('must be a non-empty string')
+        return value
 
 
 class StoreMeetingResponse(BaseModel):
@@ -84,6 +91,8 @@ def get_calendar_meeting(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get a calendar meeting by its Firestore document ID"""
+    if not meeting_id.strip():
+        raise HTTPException(status_code=422, detail='meeting_id must be a non-empty string')
     meeting = calendar_db.get_meeting(uid, meeting_id)
 
     if not meeting:
