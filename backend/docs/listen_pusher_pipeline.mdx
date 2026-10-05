@@ -2067,6 +2067,91 @@ and collapsed candidates; `vad_uncovered` includes decisions evicted from the
 supplied production `unknown` aggregate. None of these metrics changes capture
 placement or enables the elapsed hypothesis.
 
+`SONIOX_WIRE_LEDGER` defaults to `false` in code and every deployment. New
+managed Soniox transports snapshot it. ON carries receiver-observed capture
+spans through the VAD output, replay and idle-onset queues, and registers them
+only after the actual binary WebSocket write succeeds. Every emitted sample
+consumes compact provider time; missing, malformed, partly unknown or
+out-of-receiver capture spans reserve an unplaceable provider interval. A
+prefix emitted before binding is also unplaceable. Later known sends cannot
+slide backward across that interval. Failed writes grant no capture proof.
+Repeated manual finalization advances Soniox's processed-audio axis without
+wire PCM. Synthetic probes at the production 16 kHz configuration measured
+strict advancement to the next 120 ms boundary, including a further 120 ms for
+an exact-boundary or no-audio finalize. This measured quantum is not a runtime
+assumption. ON sends every audio and control frame exactly as OFF does,
+including VAD-pause finalize, keepalive, terminal end and planned idle drain.
+No acknowledgment wait, altered pacing or transcription latency policy is added.
+
+The provider cursor is separate from the emitted-PCM ledger. Only a final
+`<fin>` response to the sole outstanding finalize, received before any subsequent
+audio write begins, may anchor the cursor. Both `total_audio_proc_ms` and
+`final_audio_proc_ms` must report the same nonnegative integer position, exactly
+representable at the configured rate and no earlier than the cursor. The delta
+reserves a provider-only hole with no capture or ownership proof. Token endpoints
+and ordinary progress responses never authorize padding. A write begun before
+acknowledgment, even if it completes afterward, is unplaceable; subsequent PCM
+remains unplaceable until a later uncontested finalize establishes an anchor.
+Missing, malformed, overlapping or regressing acknowledgments also fail closed.
+Every successful binary write still counts as emitted PCM regardless of origin.
+The switch selects the compact-with-reported-holes axis over the experimental
+elapsed axis and retains strict observed-send containment. Unknown text persists
+without an audio window. OFF retains the admission-time ledger exactly.
+
+Idle reopen freezes its provider offset after the old writer and receiver drain,
+including any acknowledged provider-only padding. The replacement transport starts
+a fresh local clock. Its diagnostic origin uses emitted PCM independently;
+provider padding is never called queued, written or ledger PCM. The diagnostic
+ledger reference includes emitted samples with unknown capture origins.
+Idle callbacks preserve the full rebased native token interval for capture
+translation. The previous socket's visible endpoint can exceed an uncertain
+reopen origin; clipping against that endpoint must never shorten the interval
+tested for containment. Clock-only translation applies the identical OFF/ON
+visible monotonic clamp afterward, including for refused tokens. Projected mode
+keeps its own wall projection. Private visible-time metadata is consumed before
+the receiver sees the result; a cross-gap token remains without a capture window.
+Pusher carries an inert mirror declaration; managed Soniox sockets run in listen.
+
+Wire-ledger rollout uses ON-only bounded counters, independent of the existing
+capture-axis diagnostics gate. OFF creates no collectors and changes no values
+even if a previous ON socket registered them in the same process:
+
+| Counter | Semantics |
+| --- | --- |
+| `omi_soniox_wire_ledger_finalize_checkpoints_total{outcome="clean\|raced\|missing_ack"}` | Each begun finalize control settles once. `clean` is a sole, uncontested, exact nonregressing position, including zero padding; `raced` includes subsequent/in-flight audio, overlapping controls and invalid/missing positions on a received `<fin>`; `missing_ack` settles outstanding controls when the receive loop ends, including timeout/cancellation. Unsolicited/duplicate acknowledgments settle no controls. |
+| `omi_soniox_wire_ledger_provider_holes_total` | Positive reported holes actually registered on the bound logical epoch, including pre-binding padding registered once at bind. |
+| `omi_soniox_wire_ledger_provider_hole_samples_total` | Total registered hole samples; convert with the configured wire rate, independently of emitted PCM. |
+| `omi_soniox_wire_ledger_intervals_total{outcome="known\|unplaceable_by_race\|other_refused"}` | One outcome per translator candidate, before persistence/merging. `known` grants an observed-send window. A refused native interval overlapping PCM emitted while the finalize clock was uncertain is `unplaceable_by_race`; unknown origins, provider padding, capture gaps and other refusals are `other_refused` unless they also overlap that uncertainty. |
+
+Race attribution retains at most 4096 coalesced provider intervals per epoch.
+Checkpoint telemetry settlement never resets pending provider controls or
+anchors later queued audio. Finalizes begun after receive termination count
+as missing acknowledgments immediately; repeated teardown counts nothing twice.
+It cannot authorize a window. Late refusals beyond this attribution history
+fall into `other_refused`; the capture map still fails closed independently.
+Unbound emitted prefixes remain unknown-origin refusals. New socket clocks
+start fresh after idle reopen; prior logical-epoch race history stays available
+for delayed intervals. These are local evidence cohorts, not provider-confirmed
+source-word boundaries or counts of distinct persisted segments.
+
+For rollout, first independently conserve actual binary PCM at the wire boundary
+and require no known window to span a provider hole, raced interval, unknown
+origin or unobserved capture gap. Compare checkpoint fractions using all three
+outcomes as the denominator; unmatched controls appear only at receive teardown,
+so compare settled cohorts over a window long enough to include socket closes.
+The `known` candidate fraction and committed coverage should rise where
+reported anchors recover mapping. The measured clean checkpoint share describes
+that opportunity, while race/missing-ack shares explain the coverage ceiling.
+ON preserves the protocol, so it does not itself improve the checkpoint mix. The race-refusal fraction should track uncertain emitted
+audio and may rise when the old false grant is correctly removed. A lower total
+refusal rate alone is never success. Track these candidate rates alongside
+distinct/committed capture-window coverage and inspect placement evidence before
+widening; increased known counts without correct containment are a stop signal.
+There is no expected reduction in `wire=past` or
+`total_audio_proc_ms` minus written PCM: ON retains every finalize frame and
+provider-only padding. R12's finalize-suppression drift-collapse criterion is
+superseded. No production cohort or enablement is established by local tests.
+
 `SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
 keeps the compact send axis for all placement and speaker windows, exactly as
 `off` does. A separate elapsed-axis map supplies metrics only; it never gates
