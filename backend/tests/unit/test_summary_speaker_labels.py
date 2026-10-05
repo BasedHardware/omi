@@ -101,6 +101,15 @@ def test_conflict_declines_even_low_confidence_claim():
     assert not select([candidate(), other])
 
 
+@pytest.mark.parametrize('confidence', ['high', 'medium', 'low'])
+def test_missing_evidence_never_grants_a_contextual_label(confidence):
+    c = candidate()
+    c.bindings[0].confidence = confidence
+    c.bindings[0].evidence_kind = 'contextual'
+    c.bindings[0].evidence_segment_ids = []
+    assert not select([c])
+
+
 def test_multiple_keys_need_independent_evidence_and_decline_whole_participant():
     c = candidate()
     c.bindings.append(candidate(key=3, sid='s3').bindings[0])

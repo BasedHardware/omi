@@ -109,6 +109,7 @@ def select_candidates(
             evidence = [by_id.get(sid) for sid in binding.evidence_segment_ids]
             if (
                 binding.confidence != 'high'
+                or not 1 <= len(binding.evidence_segment_ids) <= 2
                 or claims[binding.speaker_id] != 1
                 or not cluster
                 or len({s.get('speaker_id_scope') for s in cluster}) != 1
