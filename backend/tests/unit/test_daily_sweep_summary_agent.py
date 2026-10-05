@@ -529,7 +529,7 @@ def test_untrusted_text_cannot_close_prompt_fences_and_phase_b_inputs_are_clampe
 
 
 def test_phase_b_overhead_constant_covers_the_clamped_blocks():
-    from utils.llm.memories import (
+    from utils.llm.daily_sweep_budget import (
         DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS,
         DAILY_SWEEP_DRAFT_ROW_LIMIT,
         daily_sweep_phase_b_overhead_characters,
