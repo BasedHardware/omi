@@ -22,6 +22,7 @@ def ics_text(value):
         .replace(";", "\\;")
         .replace(",", "\\,")
         .replace("\r\n", "\\n")
+        .replace("\r", "\\n")
         .replace("\n", "\\n")
     )
 
@@ -87,15 +88,16 @@ def convert(source, destination):
         if item.get("conversation_id"):
             notes.append(f"Conversation: {ics_text(item.get('conversation_id'))}")
         created = ics_datetime(item.get("created_at"))
+        summary = f"[DONE] {description}" if item.get("completed") else description
         lines += [
             "BEGIN:VEVENT",
             f"UID:omi-action-{item_id}@omi-cli",
             f"DTSTAMP:{now}",
             f"DTSTART:{stamp(due)}",
             f"DTEND:{stamp(due + EVENT_LENGTH)}",
-            f"SUMMARY:{description}",
+            f"SUMMARY:{summary}",
             "DESCRIPTION:" + "\\n".join(notes),
-            "STATUS:" + ("COMPLETED" if item.get("completed") else "CONFIRMED"),
+            "STATUS:CONFIRMED",
             "CATEGORIES:Omi",
         ]
         if created is not None:
