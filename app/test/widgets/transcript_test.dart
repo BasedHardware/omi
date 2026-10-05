@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/components/omi_spinner.dart';
+import 'package:omi/ui/ui.dart' show OmiColors;
 import 'package:omi/widgets/speaker_label_badge.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/widgets/transcript.dart';
@@ -263,13 +264,13 @@ void main() {
 
       // Tapping the words plays from that line; so does the rest of the line (the time).
       // A single tap waits out the double-tap window (double-tap edits).
-      await tester.tap(find.text('We ship the widgets first.', findRichText: true));
+      await tester.tap(find.textContaining('We ship the widgets first.', findRichText: true));
       await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
       await tester.tap(find.textContaining(RegExp(r'^12:41')));
       await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
       expect(played, ['mine', 'theirs']);
 
-      final words = find.text('Agreed, chat can follow.', findRichText: true);
+      final words = find.textContaining('Agreed, chat can follow.', findRichText: true);
       await tester.tap(words);
       await tester.pump(const Duration(milliseconds: 50));
       await tester.tap(words);
@@ -301,12 +302,14 @@ void main() {
 
       await tester.pumpWidget(page(lines(60)));
       await tester.pumpAndSettle();
-      expect(find.text('Line number 0 of the conversation.', findRichText: true).hitTestable(), findsOneWidget);
-      expect(find.text('Line number 59 of the conversation.', findRichText: true), findsNothing);
+      expect(
+          find.textContaining('Line number 0 of the conversation.', findRichText: true).hitTestable(), findsOneWidget);
+      expect(find.textContaining('Line number 59 of the conversation.', findRichText: true), findsNothing);
 
       await tester.pumpWidget(page(lines(61)));
       await tester.pumpAndSettle();
-      expect(find.text('Line number 0 of the conversation.', findRichText: true).hitTestable(), findsOneWidget);
+      expect(
+          find.textContaining('Line number 0 of the conversation.', findRichText: true).hitTestable(), findsOneWidget);
     });
   });
 
@@ -777,19 +780,105 @@ void main() {
           ),
         );
 
-    testWidgets('a line that continues a turn starts at the left edge, full width like the first', (tester) async {
+    /// Where a line's words start inside its paragraph: just inside the first character.
+    Offset lineStart(WidgetTester tester, String id) =>
+        tester.getTopLeft(find.byKey(ValueKey('transcript_seek_$id'))) + const Offset(4, 12);
+
+    /// The paragraph (one RichText) holding [text].
+    Finder paragraphOf(String text) => find.textContaining(text, findRichText: true);
+
+    testWidgets('a turn reads as one paragraph: its lines flow together under one name', (tester) async {
       await setupSharedPreferences();
-      await pumpDetail(tester, voicesFixture(), onSegmentTap: (_) {});
+      await pumpDetail(tester, voicesFixture(), unresolved: true, onSegmentTap: (_) {});
       await tester.pumpAndSettle();
 
-      final first = find.text('First thing they said.', findRichText: true);
-      final continued = find.text('Still the same voice.', findRichText: true);
-      expect(tester.getTopLeft(continued).dx, tester.getTopLeft(first).dx);
-      // The row is the tap target and the playing highlight, so it spans the list, not the words.
+      final turn = paragraphOf('First thing they said.');
+      expect(turn, findsOneWidget);
       expect(
-        tester.getSize(find.byKey(const ValueKey('transcript_seek_a2'))).width,
-        tester.getSize(find.byKey(const ValueKey('transcript_seek_a1'))).width,
+        tester.widget<RichText>(turn).text.toPlainText(includePlaceholders: false),
+        contains('First thing they said. ⁠Still the same voice.'),
+        reason: 'the second line continues on the same paragraph, after a space',
       );
+      expect(paragraphOf('Another voice replies.'), findsOneWidget);
+      expect(
+        tester.widget<RichText>(paragraphOf('Another voice replies.')).text.toPlainText(),
+        isNot(contains('First thing')),
+        reason: 'a new voice starts its own paragraph',
+      );
+      expect(speakerNameLabels(), findsNWidgets(3), reason: 'one name per paragraph that starts a turn');
+    });
+
+    testWidgets('a long turn starts a new paragraph under its time once a minute has passed', (tester) async {
+      await setupSharedPreferences();
+      await pumpDetail(tester, [
+        line('m1', 0, 'We start with the numbers.', 0, isUser: true),
+        line('m2', 0, 'Then the plan.', 20, isUser: true),
+        line('m3', 0, 'A minute later, the follow-up.', 75, isUser: true),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(paragraphOf('Then the plan.'), findsOneWidget);
+      expect(tester.widget<RichText>(paragraphOf('Then the plan.')).text.toPlainText(), contains('We start with'));
+      expect(
+          tester.widget<RichText>(paragraphOf('A minute later')).text.toPlainText(), isNot(contains('Then the plan')));
+      expect(find.text('You'), findsOneWidget, reason: 'the name shows once for the whole turn');
+      final later = tester.widget<Text>(find.text('1:15'));
+      expect(later.style?.color, OmiColors.textTertiary,
+          reason: 'a time inside a turn, with no name before it, is quiet');
+      expect(find.text('0:20'), findsNothing, reason: 'a line inside the first minute adds no time');
+    });
+
+    testWidgets('a paragraph holds at most twelve lines, and the next starts at the left edge', (tester) async {
+      await setupSharedPreferences();
+      await pumpDetail(tester, [for (var i = 0; i < 13; i++) line('r$i', 3, 'Short $i.', i * 2.0)],
+          onSegmentTap: (_) {});
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<RichText>(paragraphOf('Short 11.')).text.toPlainText(), contains('Short 0.'));
+      final next = paragraphOf('Short 12.');
+      expect(tester.widget<RichText>(next).text.toPlainText(), isNot(contains('Short 11.')));
+      // With no name row above it, the paragraph is only as wide as its words; the list row must
+      // still start it at the edge, not centre it.
+      expect(tester.getTopLeft(next).dx, tester.getTopLeft(paragraphOf('Short 0.')).dx);
+    });
+
+    testWidgets('a marked current line is full ink and the rest dims; unmarked, no line stands out', (tester) async {
+      await setupSharedPreferences();
+      Color? inkOf(String text) {
+        Color? ink;
+        tester.widget<RichText>(paragraphOf(text)).text.visitChildren((span) {
+          if (span is TextSpan && span.text == text) ink = span.style?.color;
+          return ink == null;
+        });
+        return ink;
+      }
+
+      Future<void> pumpPlayback({required bool marked}) => tester.pumpWidget(
+            MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: TranscriptWidget(
+                  segments: voicesFixture(),
+                  isConversationDetail: true,
+                  currentSegmentId: 'a2',
+                  highlightedSegmentId: marked ? 'a2' : null,
+                ),
+              ),
+            ),
+          );
+
+      await pumpPlayback(marked: false);
+      await tester.pumpAndSettle();
+      final resting = OmiColors.textPrimary.withValues(alpha: 0.8);
+      expect(inkOf('Still the same voice.'), resting, reason: 'a transcript just opened marks no line');
+      expect(inkOf('First thing they said.'), resting);
+
+      await pumpPlayback(marked: true);
+      await tester.pump();
+      expect(inkOf('Still the same voice.'), OmiColors.textPrimary);
+      expect(inkOf('First thing they said.'), OmiColors.textPrimary.withValues(alpha: 0.35));
+      expect(inkOf('Another voice replies.'), OmiColors.textPrimary.withValues(alpha: 0.35));
     });
 
     group('unresolved', () {
@@ -830,18 +919,18 @@ void main() {
         await pumpDetail(tester, segments, unresolved: true, onSegmentTap: played.add, onEditSegmentText: edited.add);
         await tester.pumpAndSettle();
 
+        // a1 and a2 share a paragraph: each line still plays itself.
         for (final segment in segments) {
-          expect(find.byKey(ValueKey('transcript-segment-${segment.id}')), findsOneWidget);
-          await tester.tap(find.text(segment.text, findRichText: true));
+          await tester.tapAt(lineStart(tester, segment.id));
           await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
         }
         expect(played, segments);
         expect(played.asMap().entries.every((entry) => identical(entry.value, segments[entry.key])), isTrue);
 
-        final a2 = find.text('Still the same voice.', findRichText: true);
-        await tester.tap(a2);
+        final a2 = lineStart(tester, 'a2');
+        await tester.tapAt(a2);
         await tester.pump(const Duration(milliseconds: 50));
-        await tester.tap(a2);
+        await tester.tapAt(a2);
         await tester.pumpAndSettle();
         expect(edited, [1]);
         expect(played, segments);
@@ -860,9 +949,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final words = find.text('Still the same voice.', findRichText: true);
+        final words = paragraphOf('Still the same voice.');
         expect(find.ancestor(of: words, matching: find.byType(SelectionArea)), findsOneWidget);
-        await tester.longPress(words);
+        await tester.longPressAt(lineStart(tester, 'a2'));
         await tester.pump();
         await tester.pump(kDoubleTapTimeout);
         expect(played, isEmpty);
@@ -1026,7 +1115,7 @@ void main() {
         final confirmBadge = find.byType(SpeakerLikelyConfirm);
         expect(confirmBadge, findsOneWidget);
         expect(
-          find.descendant(of: find.byKey(const ValueKey('transcript-segment-a2')), matching: confirmBadge),
+          find.descendant(of: find.byKey(const ValueKey('transcript-paragraph-m1')), matching: confirmBadge),
           findsOneWidget,
         );
 
@@ -1041,9 +1130,10 @@ void main() {
         expect(identical(rejected.single, segments[1]), isTrue);
 
         expect(played, isEmpty);
+        // Every line keeps its own tap target and its words, inside its paragraph.
         for (final segment in segments) {
-          expect(find.byKey(ValueKey('transcript-segment-${segment.id}')), findsOneWidget);
-          expect(find.text(segment.text, findRichText: true), findsOneWidget);
+          expect(find.byKey(ValueKey('transcript_seek_${segment.id}')), findsOneWidget);
+          expect(find.textContaining(segment.text, findRichText: true), findsOneWidget);
         }
       });
 
