@@ -365,9 +365,25 @@ class SendMap:
             return None
         return self._spans[-1][0] + self._spans[-1][2]
 
+    def outside_reason(self, first: int, end: int) -> str:
+        """Bounded geometry of an outside-send refusal, not a causal guess."""
+        if not self._spans:
+            return 'empty_map'
+        if self.is_evicted_provider_sample(first):
+            return 'evicted'
+        if first < self._spans[0][0]:
+            return 'before_first_send'
+        if end > self._spans[-1][0] + self._spans[-1][2]:
+            return 'after_last_send'
+        return 'interior_hole'
+
     def accepted_samples_in_capture_range(self, first: int, end: int) -> int:
         """Count accepted VAD output in a capture interval, excluding gated gaps."""
         return sum(max(0, min(end, start + length) - max(first, start)) for _, start, length in self._spans)
+
+    def accepted_provider_samples(self, first: int, end: int) -> int:
+        """Observed provider samples inside an interval, without edge tolerance."""
+        return sum(max(0, min(end, start + length) - max(first, start)) for start, _, length in self._spans)
 
     def capture_run_containing(self, first: int, end: int) -> Optional[Tuple[int, int]]:
         """One coalesced accepted span covering [first, end), without edge tolerance."""
@@ -467,9 +483,11 @@ class SendMap:
     def map_interval(self, provider_first_sample: int, provider_last_sample: int) -> Optional[Tuple[int, int]]:
         """Translate a provider interval to capture samples.
 
-        Each endpoint maps independently through its containing span, so a
-        segment is never mapped *through* an unrepresented gap as if it were
-        audio. Endpoints outside every accepted span (beyond edge tolerance)
+        The start is inclusive; an exclusive end exactly at a span boundary
+        belongs to the preceding span, never the next send. Contributing
+        spans must be adjacent on both axes: a capture gap, duplicate or
+        reorder cannot be represented by one capture window.
+        Endpoints outside every accepted span (beyond edge tolerance)
         reject with None rather than landing on another epoch — and so does an
         interval whose two different provider times would clamp onto one
         capture sample: that collapse fabricates a zero-length segment at a
@@ -480,7 +498,11 @@ class SendMap:
         start_capture = self.map_sample(provider_first_sample)
         if start_capture is None:
             return None
-        end_capture = self.map_sample(provider_last_sample)
+        end_span = self._locate(provider_last_sample - 1) if provider_last_sample > provider_first_sample else None
+        if end_span is not None and end_span[0] + end_span[2] == provider_last_sample:
+            end_capture = end_span[1] + end_span[2]
+        else:
+            end_capture = self.map_sample(provider_last_sample)
         if end_capture is None:
             return None
         # Provider time is continuous across VAD-skipped capture audio. The
@@ -493,8 +515,9 @@ class SendMap:
                 break
             if provider_from + length < provider_first_sample:
                 continue
-            if previous is not None and previous[1] + previous[2] != span[1]:
-                return None
+            if previous is not None:
+                if previous[0] + previous[2] != provider_from or previous[1] + previous[2] != span[1]:
+                    return None
             previous = span
         if provider_last_sample > provider_first_sample and end_capture <= start_capture:
             return None
@@ -555,6 +578,7 @@ class ProviderEpochTranslator:
         on_mapped: Optional[Callable[[], None]] = None,
         on_recover: Optional[Callable[[str], None]] = None,
         on_past_send: Optional[Callable[[Optional[float]], None]] = None,
+        on_outside: Optional[Callable[[str], None]] = None,
         on_validation: Optional[Callable[[str, Optional[Tuple[int, int]]], None]] = None,
         owner_at_send: Optional[Callable[[int, int], Optional[str]]] = None,
         project_times: bool = True,
@@ -568,6 +592,7 @@ class ProviderEpochTranslator:
         self._on_mapped = on_mapped
         self._on_recover = on_recover
         self._on_past_send = on_past_send
+        self._on_outside = on_outside
         self._on_validation = on_validation
         self._owner_at_send = owner_at_send
         self._project_times = project_times
@@ -590,6 +615,7 @@ class ProviderEpochTranslator:
         # timestamp axis at zero; replayed segments must use their original
         # capture positions instead.
         self.replay_origin_sample: Optional[int] = None
+        self.require_observed_send_mapping = False
 
     def capture_merge_proof(self, first: int, end: int) -> Optional[CaptureWindowProof]:
         """Snapshot one accepted run, split at strict half-open wall hiatuses.
@@ -826,6 +852,26 @@ class ProviderEpochTranslator:
                     else:
                         translated.append(segment)
                     continue
+            if self.require_observed_send_mapping:
+                # A repaired prefix grants no tolerance, extrapolation or wall
+                # hiatus bridging. Keep text but refuse any unobserved edge.
+                covered = self.send_map.accepted_provider_samples(first_sample, last_sample)
+                if covered != last_sample - first_sample or self.timeline.project_window(*interval) is None:
+                    reason = (
+                        'outside_accepted_sends'
+                        if covered != last_sample - first_sample
+                        else (
+                            'evicted_interval'
+                            if self.timeline.wall_strict(interval[0]) is None
+                            else 'discontinuous_interval'
+                        )
+                    )
+                    self._reject(segment, reason)
+                    if self._project_times:
+                        self._append_unplaced(translated, segment)
+                    else:
+                        translated.append(segment)
+                    continue
             if self._project_times:
                 window = self.timeline.project_window(*interval)
                 if window is None:
@@ -880,6 +926,13 @@ class ProviderEpochTranslator:
         # Transient metadata only; the legacy refusal metric and text stay unchanged.
         attribution = 'anchor_compacted' if reason == 'evicted_interval' else 'translator_' + reason
         if reason == 'outside_accepted_sends':
+            if self._on_outside is not None:
+                try:
+                    first = int(float(segment['start']) * self.provider_sample_rate)
+                    end = int(float(segment['end']) * self.provider_sample_rate)
+                    self._on_outside(self.send_map.outside_reason(first, end))
+                except Exception:
+                    pass
             try:
                 if self.send_map.is_evicted_provider_sample(float(segment['start']) * self.provider_sample_rate):
                     attribution = 'send_map_evicted'
