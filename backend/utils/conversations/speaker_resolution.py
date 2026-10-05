@@ -1198,13 +1198,9 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
         manual_speakers=_manual_speakers(receipt),
         voiceprints=load_voiceprints_for_resolution(uid),
         embedding_seconds=(
-            {
-                s.id: clip_seconds[keys[s.id]]
-                for s in segments
-                if s.id in (keys or {}) and keys[s.id] in (clip_seconds or {})
-            }
-            if spans_on
-            else clip_seconds
+            {s.id: clip_seconds[keys[s.id]] for s in segments if s.id in keys and keys[s.id] in clip_seconds}
+            if spans_on and keys is not None and clip_seconds is not None
+            else ({} if spans_on else clip_seconds)
         ),
     )
     if resolution is None:
