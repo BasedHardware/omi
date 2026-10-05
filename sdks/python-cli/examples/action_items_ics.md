@@ -15,7 +15,7 @@ omi --json action-item list --open --limit 500 > action_items.json
 Check that the command succeeded before converting the file. This is one page;
 to retrieve more, increase `--offset` by 500 and use a different filename.
 
-Save the following as `action_items_to_ics.py`:
+Save the following as `action_items_to_ics.py` (or run [`action_items_to_ics.py`](action_items_to_ics.py) directly):
 
 ```python
 import json
@@ -36,8 +36,14 @@ def ics_text(value):
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    return (value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
-            .replace("\r\n", "\\n").replace("\n", "\\n"))
+    return (
+        value.replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\r", "\\n")
+        .replace("\n", "\\n")
+    )
 
 
 def ics_datetime(value):
@@ -79,8 +85,14 @@ def convert(source, destination):
     if not isinstance(items, list):
         raise ValueError("Expected the JSON array from omi --json action-item list")
     now = stamp(datetime.now(timezone.utc))
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//omi-cli examples//action_items_to_ics//EN",
-             "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Omi action items"]
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//omi-cli examples//action_items_to_ics//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "X-WR-CALNAME:Omi action items",
+    ]
     skipped = 0
     for item in items:
         if not isinstance(item, dict):
@@ -95,11 +107,18 @@ def convert(source, destination):
         if item.get("conversation_id"):
             notes.append(f"Conversation: {ics_text(item.get('conversation_id'))}")
         created = ics_datetime(item.get("created_at"))
-        lines += ["BEGIN:VEVENT", f"UID:omi-action-{item_id}@omi-cli", f"DTSTAMP:{now}",
-                  f"DTSTART:{stamp(due)}", f"DTEND:{stamp(due + EVENT_LENGTH)}",
-                  f"SUMMARY:{description}", "DESCRIPTION:" + "\\n".join(notes),
-                  "STATUS:" + ("COMPLETED" if item.get("completed") else "CONFIRMED"),
-                  "CATEGORIES:Omi"]
+        summary = f"[DONE] {description}" if item.get("completed") else description
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:omi-action-{item_id}@omi-cli",
+            f"DTSTAMP:{now}",
+            f"DTSTART:{stamp(due)}",
+            f"DTEND:{stamp(due + EVENT_LENGTH)}",
+            f"SUMMARY:{summary}",
+            "DESCRIPTION:" + "\\n".join(notes),
+            "STATUS:CONFIRMED",
+            "CATEGORIES:Omi",
+        ]
         if created is not None:
             lines.append(f"CREATED:{stamp(created)}")
         lines.append("END:VEVENT")
@@ -142,7 +161,7 @@ Apple Calendar: File → Import; Outlook: File → Open & Export). Each item wit
 due date becomes a 30-minute event starting at `due_at`, stored in UTC so your
 calendar shows it in local time. The event UID is derived from the item ID, so
 re-importing a fresh export updates the same events instead of duplicating them
-in calendars that honour UIDs. Items without a due date are skipped and counted.
-Commas, semicolons and line breaks in descriptions are escaped, long lines are
+in calendars that honour UIDs. Items without a due date are skipped and counted. Completed items include a
+`[DONE]` prefix in their summary. Commas, semicolons and line breaks in descriptions are escaped, long lines are
 folded per RFC 5545, and the converter refuses to overwrite an existing file.
 Treat the exported file as private data.
