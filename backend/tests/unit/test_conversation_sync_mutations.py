@@ -333,3 +333,40 @@ def test_http_contract_rejects_untyped_or_ambiguous_operations():
     response = client.post('/v1/conversations/conversation-1/mutations', json=payload)
 
     assert response.status_code == 422
+
+
+def test_mutation_rejects_soft_deleted_tombstone_conversation():
+    database = _Firestore(_conversation(deleted=True, user_title='Original Title'))
+
+    with pytest.raises(mutations_db.ConversationMutationNotFoundError):
+        _apply(database, operation={'type': 'set_title', 'title': 'Hacked Title'})
+
+    assert database.rows[database.conversation_path]['user_title'] == 'Original Title'
+    assert len(database.transactions) == 1
+    assert len(database.transactions[0].write_paths) == 0
+
+
+def test_http_contract_returns_404_for_soft_deleted_tombstone(monkeypatch: pytest.MonkeyPatch):
+    app = FastAPI()
+    app.include_router(mutations_router.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'user-1'
+    monkeypatch.setattr(
+        mutations_db,
+        'apply_conversation_sync_mutation',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            mutations_db.ConversationMutationNotFoundError('conversation-1')
+        ),
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        '/v1/conversations/conversation-1/mutations',
+        json={
+            'client_mutation_id': 'mutation-1',
+            'base_revision': BASE_REVISION.isoformat(),
+            'operation': {'type': 'set_title', 'title': 'Updated'},
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Conversation not found'
