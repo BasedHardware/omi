@@ -267,6 +267,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get askAnything => 'कुछ भी पूछें';
 
   @override
+  String get askAnythingButton => 'काहीही विचारा';
+
+  @override
   String get noMessagesYet => 'अद्याप संदेश नाही!\nका संभाषण सुरू करत नाही?';
 
   @override

@@ -83,6 +83,7 @@
     "mergingInBackground": "Slår sammen i bakgrunnen. Dette kan ta et øyeblikk.",
     "failedToStartMerge": "Kunne ikke starte sammenslåing",
     "askAnything": "Spør om hva som helst",
+    "askAnythingButton": "Spør om hva som helst",
     "noMessagesYet": "Ingen meldinger ennå!\nHvorfor ikke starte en samtale?",
     "deletingMessages": "Sletter meldingene dine fra Omis minne…",
     "messageCopied": "✨ Melding kopiert til utklippstavle",

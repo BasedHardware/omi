@@ -268,6 +268,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get askAnything => 'Pregunta cualquier cosa';
 
   @override
+  String get askAnythingButton => 'Pregunta cualquier cosa';
+
+  @override
   String get noMessagesYet => '¡No hay mensajes!\n¿Por qué no inicias una conversación?';
 
   @override

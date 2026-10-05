@@ -267,6 +267,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get askAnything => 'Klauskite bet ko';
 
   @override
+  String get askAnythingButton => 'Klauskite bet ko';
+
+  @override
   String get noMessagesYet => 'Kol kas nėra žinučių!\nKodėl gi nepradėtumėte pokalbio?';
 
   @override

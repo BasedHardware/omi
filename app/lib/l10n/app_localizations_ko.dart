@@ -266,6 +266,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get askAnything => '무엇이든 물어보세요';
 
   @override
+  String get askAnythingButton => '무엇이든 물어보세요';
+
+  @override
   String get noMessagesYet => '아직 메시지가 없습니다!\n대화를 시작해보는 건 어떨까요?';
 
   @override

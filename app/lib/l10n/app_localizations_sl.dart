@@ -267,6 +267,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get askAnything => 'Vprašaj kaj koli';
 
   @override
+  String get askAnythingButton => 'Vprašaj karkoli';
+
+  @override
   String get noMessagesYet => 'Še ni sporočil!\nZakaj ne bi začeli pogovora?';
 
   @override

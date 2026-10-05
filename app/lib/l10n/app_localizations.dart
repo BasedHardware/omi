@@ -687,6 +687,12 @@ abstract class AppLocalizations {
   /// **'Ask anything'**
   String get askAnything;
 
+  /// Home button that opens AI chat, beside a speech-bubble icon
+  ///
+  /// In en, this message translates to:
+  /// **'Ask anything'**
+  String get askAnythingButton;
+
   /// Empty chat state message
   ///
   /// In en, this message translates to:

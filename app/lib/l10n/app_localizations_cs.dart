@@ -268,6 +268,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get askAnything => 'Zeptejte se na cokoliv';
 
   @override
+  String get askAnythingButton => 'Zeptejte se na cokoliv';
+
+  @override
   String get noMessagesYet => 'Zatím žádné zprávy!\nProč nezačít konverzaci?';
 
   @override

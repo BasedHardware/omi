@@ -271,6 +271,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get askAnything => 'Frag irgendetwas';
 
   @override
+  String get askAnythingButton => 'Frag irgendetwas';
+
+  @override
   String get noMessagesYet => 'Noch keine Nachrichten!\nWarum starten Sie keine Unterhaltung?';
 
   @override

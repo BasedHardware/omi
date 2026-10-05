@@ -266,6 +266,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get askAnything => '随便问问';
 
   @override
+  String get askAnythingButton => '随便问问';
+
+  @override
   String get noMessagesYet => '还没有消息！\n为什么不开始一段对话呢？';
 
   @override

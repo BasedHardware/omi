@@ -266,6 +266,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get askAnything => 'اسأل أي شيء';
 
   @override
+  String get askAnythingButton => 'اسأل أي شيء';
+
+  @override
   String get noMessagesYet => 'لا توجد رسائل بعد!\nلماذا لا تبدأ محادثة؟';
 
   @override

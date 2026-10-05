@@ -222,10 +222,10 @@ class _DevicePill extends StatelessWidget {
   }
 }
 
-/// Circular phone-mic record button shown to the right of the home chat bar.
-/// Tap starts/stops recording; long-press opens the record options sheet (phone call). The options
-/// are announced as the long-press action, and a one-time tip points them out after the first
-/// recording.
+/// The record button beside Home's Ask Anything. A tap starts or stops a phone recording, as on main;
+/// holding it, or its ⌄ badge, opens the other ways to record (David, 2026-10-03). The options are
+/// announced as the long-press action, and a one-time tip points them out after the first recording.
+/// An Omi call, a listening pendant and a Transcribe Later pendant each keep their own answer to a tap.
 class HomeRecordButton extends StatefulWidget {
   const HomeRecordButton({super.key});
 
@@ -256,7 +256,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     );
   }
 
-  /// Once, after the first recording stops: say that holding the button offers more ways to record.
+  /// Once, after the first recording stops: say that the arrow offers more ways to record.
   void _maybeShowOptionsTip(BuildContext context) {
     final prefs = SharedPreferencesUtil();
     if (prefs.getBool(_optionsTipKey)) return;
@@ -264,10 +264,17 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     OmiFeedback.info(context, context.l10n.recordOptionsTip);
   }
 
-  static bool _callInProgress(BuildContext context) {
-    final state = context.read<PhoneCallProvider>().callState;
-    return state == PhoneCallState.connecting || state == PhoneCallState.ringing || state == PhoneCallState.active;
-  }
+  /// The phone capture is this button's own: live, paused, or interrupted while transcription
+  /// reconnects (ownership, not the recording state, says so).
+  static bool _phoneOwnsCapture(CaptureProvider capture) =>
+      capture.liveCaptureSource == 'phone' ||
+      capture.recordingState == RecordingState.record ||
+      capture.isPhoneMicPaused;
+
+  static bool _callInProgress(BuildContext context) => _isCallLive(context.read<PhoneCallProvider>().callState);
+
+  static bool _isCallLive(PhoneCallState state) =>
+      state == PhoneCallState.connecting || state == PhoneCallState.ringing || state == PhoneCallState.active;
 
   /// The pendant is recording (or paused) in realtime mode: explain, and let the user choose.
   /// A Transcribe Later pendant is excluded — its capture can't be taken over at all, so it
@@ -361,7 +368,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     return Consumer<CaptureProvider>(
       builder: (context, captureProvider, _) {
         // The phone recording is this button's own (live or paused); anything else is idle here.
-        final isRecording = captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused;
+        final isRecording = _phoneOwnsCapture(captureProvider);
         final isInitialising = captureProvider.recordingState == RecordingState.initialising;
         final canShowOptions = !isRecording && !isInitialising;
         final l10n = context.l10n;
@@ -379,33 +386,28 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
             behavior: HitTestBehavior.opaque,
             onTap: () => _startRecording(context),
             onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
-            // "Record with this phone": a neutral circle with a white dot, a stop square while the
-            // phone records. The ⌄ badge opens the other ways to record.
-            child: Container(
-              width: 62,
-              height: 62,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                shape: BoxShape.circle,
-                border: Border.all(color: OmiColors.border, width: 1),
+            // A glass circle floating over the list: a dot, a stop square while the phone records.
+            child: OmiGlass(
+              shape: const CircleBorder(),
+              blur: true,
+              child: SizedBox.square(
+                dimension: 62,
+                child: Center(
+                  child: isRecording
+                      ? Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: _stopGlyphRadius),
+                        )
+                      : isInitialising
+                          ? const OmiSpinner(size: OmiSpinnerSize.small)
+                          : Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
+                            ),
+                ),
               ),
-              child: isRecording
-                  ? Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: OmiColors.textPrimary,
-                        borderRadius: _stopGlyphRadius,
-                      ),
-                    )
-                  : isInitialising
-                      ? const OmiSpinner(size: OmiSpinnerSize.small)
-                      : Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
-                        ),
             ),
           ),
         );
@@ -485,7 +487,8 @@ class SlashLinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Ways to record, opened by holding the home record button. Shown in the shared sheet shell.
+/// Ways to record, opened by holding the home record button or tapping its ⌄ badge. Shown in the shared
+/// sheet shell.
 class RecordOptionsSheet extends StatelessWidget {
   final VoidCallback onPickPhoneMic;
   final VoidCallback onPickPhoneCall;

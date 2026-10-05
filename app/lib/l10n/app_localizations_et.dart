@@ -267,6 +267,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get askAnything => 'Küsi mida tahes';
 
   @override
+  String get askAnythingButton => 'Küsi mida tahes';
+
+  @override
   String get noMessagesYet => 'Sõnumeid pole veel!\nMiks te ei alusta vestlust?';
 
   @override

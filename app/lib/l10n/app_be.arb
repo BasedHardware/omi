@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "Спытайце што заўгодна",
     "noMessagesYet": "Пакі нета паведамленняў!\nЧаму б вам не пачаць размову?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
