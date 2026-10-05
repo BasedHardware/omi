@@ -583,11 +583,13 @@ JEV_SHADOW_LATENCY = Histogram(
     buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 5),
 )
 RELEVANCE_JEV_SHADOW_SCORE = Histogram(
-    'omi_relevance_jev_shadow_p_discard', 'Shadow P(discard).', buckets=(0.5, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99)
+    'omi_relevance_jev_shadow_p_discard',
+    'Shadow P(discard).',
+    buckets=(0.5, 0.7, 0.75, 0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99),
 )
 RELEVANCE_JEV_SHADOW_AGREEMENT = Counter(
     'omi_relevance_jev_shadow_agreement_total',
-    'Nano verdict versus Jev discard strictly above 0.95; none means nano did not answer.',
+    'Nano verdict versus Jev discard strictly above JEV_DISCARD_THRESHOLD (0.80); none means nano did not answer.',
     ['nano_verdict', 'jev_would_discard'],
 )
 OWNER_JEV_SHADOW_SCORE = Histogram('omi_owner_jev_shadow_p_user', 'Shadow P(user).', buckets=(0.5, 0.7, 0.8, 0.9, 0.95))

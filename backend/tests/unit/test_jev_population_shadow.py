@@ -211,8 +211,9 @@ def test_no_text_in_records_logs_or_metric_labels(harness, monkeypatch, caplog):
 
 
 @pytest.mark.parametrize('nano', ['keep', 'discard', None])
-@pytest.mark.parametrize('p_discard', [0.79, 0.80, 0.97])
+@pytest.mark.parametrize('p_discard', [0.79, 0.80, 0.81, 0.90, 0.97])
 def test_agreement_uses_raw_nano_and_strict_threshold(harness, monkeypatch, nano, p_discard):
+    assert JEV_DISCARD_THRESHOLD == 0.80
     agreement = MagicMock()
     monkeypatch.setattr(shadow, 'RELEVANCE_JEV_SHADOW_AGREEMENT', agreement)
     monkeypatch.setattr(shadow, 'ask_jev', lambda *a, **k: JevAnswers(None, {'worth_keeping': {'noul': 1 - p_discard}}))
@@ -226,7 +227,7 @@ def test_agreement_uses_raw_nano_and_strict_threshold(harness, monkeypatch, nano
             nano_reason='neighbor_fragment' if nano == 'discard' else None,
         )
     )
-    agreement.labels.assert_called_once_with(nano or 'none', 'true' if p_discard > JEV_DISCARD_THRESHOLD else 'false')
+    agreement.labels.assert_called_once_with(nano or 'none', 'true' if p_discard > 0.80 else 'false')
     assert harness[2][0][2]['nano_reason'] == ('neighbor_fragment' if nano == 'discard' else None)
 
 
