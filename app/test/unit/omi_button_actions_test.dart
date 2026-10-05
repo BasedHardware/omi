@@ -20,4 +20,25 @@ void main() {
     SharedPreferencesUtil().omiButtonActionsEnabled = true;
     expect(SharedPreferencesUtil().omiButtonActionsEnabled, isTrue);
   });
+
+  test('Button action gestures have expected defaults', () {
+    final prefs = SharedPreferencesUtil();
+    expect(prefs.singleTapAction, equals(3)); // Ask Question
+    expect(prefs.doubleTapAction, equals(1)); // Mute / Unmute
+    expect(prefs.tripleTapAction, equals(0)); // End & Process
+    expect(prefs.doubleTapPausesMuting, isTrue);
+  });
+
+  test('Button action gestures persist changes', () {
+    final prefs = SharedPreferencesUtil();
+    prefs.singleTapAction = 1;
+    expect(prefs.singleTapAction, equals(1));
+
+    prefs.doubleTapAction = 2;
+    expect(prefs.doubleTapAction, equals(2));
+    expect(prefs.doubleTapPausesMuting, isFalse);
+
+    prefs.tripleTapAction = 3;
+    expect(prefs.tripleTapAction, equals(3));
+  });
 }
