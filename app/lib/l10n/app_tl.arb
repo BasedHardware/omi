@@ -4207,6 +4207,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Pagre-record",
+    "settingsSectionSupport": "Suporta",
+    "settingsSectionPersonalization": "Pag-personalize",
+    "settingsSectionConnectedApps": "Mga konektadong app",
     "@account": {
         "description": "Account section label"
     },

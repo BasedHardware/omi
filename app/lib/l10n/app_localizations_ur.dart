@@ -3776,6 +3776,18 @@ class AppLocalizationsUr extends AppLocalizations {
   String get settingsHeader => 'ترتیبات';
 
   @override
+  String get settingsSectionRecording => 'ریکارڈنگ';
+
+  @override
+  String get settingsSectionSupport => 'معاونت';
+
+  @override
+  String get settingsSectionPersonalization => 'ذاتی نوعیت';
+
+  @override
+  String get settingsSectionConnectedApps => 'منسلک ایپس';
+
+  @override
   String get plansAndBilling => 'منصوبے اور بلنگ';
 
   @override

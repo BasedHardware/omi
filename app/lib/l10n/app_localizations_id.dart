@@ -3777,6 +3777,18 @@ class AppLocalizationsId extends AppLocalizations {
   String get settingsHeader => 'PENGATURAN';
 
   @override
+  String get settingsSectionRecording => 'Perekaman';
+
+  @override
+  String get settingsSectionSupport => 'Dukungan';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalisasi';
+
+  @override
+  String get settingsSectionConnectedApps => 'Aplikasi terhubung';
+
+  @override
   String get plansAndBilling => 'Paket & Penagihan';
 
   @override

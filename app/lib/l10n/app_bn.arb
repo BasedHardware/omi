@@ -4207,6 +4207,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "রেকর্ডিং",
+    "settingsSectionSupport": "সহায়তা",
+    "settingsSectionPersonalization": "ব্যক্তিগতকরণ",
+    "settingsSectionConnectedApps": "সংযুক্ত অ্যাপ",
     "@account": {
         "description": "Account section label"
     },

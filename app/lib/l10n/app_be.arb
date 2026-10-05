@@ -4207,6 +4207,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Запіс",
+    "settingsSectionSupport": "Падтрымка",
+    "settingsSectionPersonalization": "Персаналізацыя",
+    "settingsSectionConnectedApps": "Падключаныя праграмы",
     "@account": {
         "description": "Account section label"
     },

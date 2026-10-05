@@ -3777,6 +3777,18 @@ class AppLocalizationsBe extends AppLocalizations {
   String get settingsHeader => 'ПАРАМЕТРЫ';
 
   @override
+  String get settingsSectionRecording => 'Запіс';
+
+  @override
+  String get settingsSectionSupport => 'Падтрымка';
+
+  @override
+  String get settingsSectionPersonalization => 'Персаналізацыя';
+
+  @override
+  String get settingsSectionConnectedApps => 'Падключаныя праграмы';
+
+  @override
   String get plansAndBilling => 'Планы і біллінг';
 
   @override

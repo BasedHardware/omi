@@ -3798,6 +3798,18 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsHeader => 'EINSTELLUNGEN';
 
   @override
+  String get settingsSectionRecording => 'Aufnahme';
+
+  @override
+  String get settingsSectionSupport => 'Support';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalisierung';
+
+  @override
+  String get settingsSectionConnectedApps => 'Verbundene Apps';
+
+  @override
   String get plansAndBilling => 'Pläne & Abrechnung';
 
   @override

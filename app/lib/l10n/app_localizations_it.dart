@@ -3789,6 +3789,18 @@ class AppLocalizationsIt extends AppLocalizations {
   String get settingsHeader => 'IMPOSTAZIONI';
 
   @override
+  String get settingsSectionRecording => 'Registrazione';
+
+  @override
+  String get settingsSectionSupport => 'Assistenza';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizzazione';
+
+  @override
+  String get settingsSectionConnectedApps => 'App collegate';
+
+  @override
   String get plansAndBilling => 'Piani e Fatturazione';
 
   @override

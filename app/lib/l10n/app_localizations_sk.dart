@@ -3773,6 +3773,18 @@ class AppLocalizationsSk extends AppLocalizations {
   String get settingsHeader => 'NASTAVENIA';
 
   @override
+  String get settingsSectionRecording => 'Nahrávanie';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
+  String get settingsSectionPersonalization => 'Prispôsobenie';
+
+  @override
+  String get settingsSectionConnectedApps => 'Pripojené aplikácie';
+
+  @override
   String get plansAndBilling => 'Plány a Fakturácia';
 
   @override

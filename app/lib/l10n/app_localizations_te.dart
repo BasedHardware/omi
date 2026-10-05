@@ -3790,6 +3790,18 @@ class AppLocalizationsTe extends AppLocalizations {
   String get settingsHeader => 'సెట్టింగ్‌లు';
 
   @override
+  String get settingsSectionRecording => 'రికార్డింగ్';
+
+  @override
+  String get settingsSectionSupport => 'మద్దతు';
+
+  @override
+  String get settingsSectionPersonalization => 'వ్యక్తిగతీకరణ';
+
+  @override
+  String get settingsSectionConnectedApps => 'కనెక్ట్ చేసిన యాప్‌లు';
+
+  @override
   String get plansAndBilling => 'ప్లాన్‌లు & బిలింగ్';
 
   @override

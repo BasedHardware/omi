@@ -3769,6 +3769,18 @@ class AppLocalizationsLt extends AppLocalizations {
   String get settingsHeader => 'NUSTATYMAI';
 
   @override
+  String get settingsSectionRecording => 'Įrašymas';
+
+  @override
+  String get settingsSectionSupport => 'Pagalba';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizavimas';
+
+  @override
+  String get settingsSectionConnectedApps => 'Prijungtos programėlės';
+
+  @override
   String get plansAndBilling => 'Planai ir Atsiskaitymas';
 
   @override

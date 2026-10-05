@@ -4207,6 +4207,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Snimanje",
+    "settingsSectionSupport": "Podrška",
+    "settingsSectionPersonalization": "Personalizacija",
+    "settingsSectionConnectedApps": "Povezane aplikacije",
     "@account": {
         "description": "Account section label"
     },

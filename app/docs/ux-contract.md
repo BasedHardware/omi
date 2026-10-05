@@ -269,6 +269,11 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 
 ## 12. Settings
 
+- Settings is a full-screen page pushed from Home's gear (`SettingsDrawer.show`), with a back
+  button and search in its header: first the profile card (avatar, name, email; opens Account),
+  then the groups Account, Recording, Personalization, Connected Apps, Preferences, Support and
+  Developer. Every page it opens is an `OmiGroupedPage` in the same black-and-white look; colour
+  is kept for warnings, errors and destructive actions.
 - Everyday settings live in top-level Settings (D4): data & privacy, export/import, transcription,
   conversation display and timeout, payment methods, phone calls. Developer Settings keeps only
   developer tools (webhooks, MCP, API keys, firmware channels, experiments).

@@ -3769,6 +3769,18 @@ class AppLocalizationsNo extends AppLocalizations {
   String get settingsHeader => 'INNSTILLINGER';
 
   @override
+  String get settingsSectionRecording => 'Opptak';
+
+  @override
+  String get settingsSectionSupport => 'Støtte';
+
+  @override
+  String get settingsSectionPersonalization => 'Tilpasning';
+
+  @override
+  String get settingsSectionConnectedApps => 'Tilkoblede apper';
+
+  @override
   String get plansAndBilling => 'Planer og Fakturering';
 
   @override
