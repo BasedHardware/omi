@@ -19,7 +19,21 @@ logger = logging.getLogger(__name__)
 CATALOG_LIMIT = 500
 
 
-def apply_summary_speaker_labels(uid: str, conversation) -> int:
+def read_summary_people_catalog(uid: str, transaction, *, firestore_client=None):
+    """Read one bounded, unfiltered catalog inside the assignment transaction."""
+    from database._client import get_firestore_client
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return list(
+        client.collection('users')
+        .document(uid)
+        .collection('people')
+        .limit(CATALOG_LIMIT + 1)
+        .stream(transaction=transaction)
+    )
+
+
+def apply_summary_speaker_labels(uid: str, conversation, *, firestore_client=None) -> int:
     if not summary_speaker_labels_enabled():
         return 0
     candidates = getattr(conversation.structured, '_summary_speaker_candidates', [])
@@ -33,7 +47,7 @@ def apply_summary_speaker_labels(uid: str, conversation) -> int:
         # A subscription read failure declines the entire stage, including owner;
         # never infer paid eligibility and never touch manual endpoints.
         allow_named = named_speaker_prompts_allowed(uid) if any(not c.is_owner for c in candidates) else False
-        client = get_firestore_client()
+        client = firestore_client if firestore_client is not None else get_firestore_client()
         user_ref = client.collection('users').document(uid)
         conversation_ref = user_ref.collection('conversations').document(conversation.id)
         expected = transcript_identity([s.model_dump() for s in conversation.transcript_segments])
@@ -78,7 +92,7 @@ def apply_summary_speaker_labels(uid: str, conversation) -> int:
             # A truncated catalog cannot establish uniqueness, so decline all names.
             people = []
             if any(not s.is_owner for s in selected):
-                docs = list(people_ref.limit(CATALOG_LIMIT + 1).stream(transaction=transaction))
+                docs = read_summary_people_catalog(uid, transaction, firestore_client=client)
                 if len(docs) > CATALOG_LIMIT:
                     return None
                 people = [{**d.to_dict(), 'id': d.id} for d in docs]
@@ -144,18 +158,19 @@ def apply_summary_speaker_labels(uid: str, conversation) -> int:
                     },
                 )
             # Encode before staging any write: a codec error cannot leave people.
+            validated = [TranscriptSegment.model_validate(s) for s in updated]
             payload = conversations_db.encode_conversation_for_write(
                 uid, {'transcript_segments': updated}, current.get('data_protection_level', 'standard')
             )
             for pid, person in staged_people.items():
                 transaction.create(people_ref.document(pid), person)
             transaction.update(conversation_ref, payload)
-            return updated, len(assignments)
+            return validated, len(assignments)
 
         committed = commit(client.transaction())
         if committed:
             segments, count = committed
-            conversation.transcript_segments = [TranscriptSegment.model_validate(s) for s in segments]
+            conversation.transcript_segments = segments
             conversations_db.invalidate_people_stats_cache(uid)
             logger.info('summary_speaker_labels outcome=applied segments=%d', count)
             return count

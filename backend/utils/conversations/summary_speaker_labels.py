@@ -1,6 +1,7 @@
 """Conservative, deterministic admission of evidence from the saved notes call."""
 
 import unicodedata
+import re
 from collections import Counter
 from dataclasses import dataclass
 from typing import Optional
@@ -11,6 +12,22 @@ from utils.conversations.meeting_participants import MeetingRoster, looks_like_a
 
 def normalized_name(name: str) -> str:
     return ' '.join(unicodedata.normalize('NFKC', name).casefold().split())
+
+
+def introduction_matches(detection, text: str, name: str) -> bool:
+    if not detection or not detection.explicit:
+        return False
+    if normalized_name(detection.name) == name:
+        return True
+    # The shared English detector intentionally captures only a first name.
+    # Extend only its explicit lead-in, with the entire proposed name present
+    # there; a surname mentioned elsewhere cannot complete the introduction.
+    return bool(
+        name.startswith(normalized_name(detection.name) + ' ')
+        and re.search(
+            r'\bmy name is\s+' + r'\s+'.join(re.escape(part) for part in name.split()) + r'\b', normalized_name(text)
+        )
+    )
 
 
 def transcript_identity(segments: list[dict]) -> list[tuple]:
@@ -99,6 +116,10 @@ def select_candidates(
                 or str(binding.speaker_id) in (receipt.get('speakers') or {})
                 or any(s.get('id') in (receipt.get('segments') or {}) for s in cluster)
                 or any(
+                    isinstance(d, dict) and d.get('speaker_id') == binding.speaker_id
+                    for d in (receipt.get('segments') or {}).values()
+                )
+                or any(
                     not s or s.get('speaker_id') != binding.speaker_id or not (s.get('text') or '').strip()
                     for s in evidence
                 )
@@ -107,12 +128,13 @@ def select_candidates(
                 admitted = []
                 break
             introductions = [detect_speaker_introduction(s['text']) for s in evidence]
-            explicit_name = any(d and d.explicit and normalized_name(d.name) == name for d in introductions)
+            explicit_name = any(introduction_matches(d, s['text'], name) for d, s in zip(introductions, evidence))
             # Contrary self-introductions anywhere in the key invalidate the
             # whole candidate, even when the model cites a convenient subset.
             contrary = any(
-                d and d.explicit and normalized_name(d.name) != name
-                for d in (detect_speaker_introduction(s['text']) for s in cluster)
+                d and d.explicit and not introduction_matches(d, s['text'], name)
+                for s in cluster
+                for d in [detect_speaker_introduction(s['text'])]
             )
             if contrary or (binding.evidence_kind == 'self_introduction' and not explicit_name):
                 admitted = []

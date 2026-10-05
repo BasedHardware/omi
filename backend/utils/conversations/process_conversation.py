@@ -95,6 +95,7 @@ from utils.conversations.jev_shadow import (
     submit_relevance_shadow,
 )
 from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, relevance_experiment_active
+from config.summary_speaker_labels import summary_speaker_labels_enabled
 from utils.conversations.relevance_io import (
     adjacent_conversation,
     apply_relevance,
@@ -3167,9 +3168,22 @@ def process_conversation(
 
     # Notes have committed before this optional transaction. It rechecks source
     # text, manual authority and current labels; failures preserve the saved note.
-    from database.summary_speaker_labels import apply_summary_speaker_labels
+    if summary_speaker_labels_enabled():
+        try:
+            from database.summary_speaker_labels import apply_summary_speaker_labels
 
-    apply_summary_speaker_labels(uid, conversation)
+            apply_summary_speaker_labels(uid, conversation)
+        except Exception as error:
+            # Include module loading in the optional stage's failure boundary.
+            record_fallback(
+                component='conversation_notes',
+                from_mode='summary_speaker_labels',
+                to_mode='saved_note',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            logger.warning('summary_speaker_labels outcome=error exception_type=%s', type(error).__name__)
 
     # Enrollment is resolved only from backend authority plus the persisted
     # conversation source. We create the durable obligation before omitting a

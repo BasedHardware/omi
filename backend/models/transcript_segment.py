@@ -155,6 +155,8 @@ class TranscriptSegment(BaseModel):
         # the return type inferred so Pydantic retains the public field schema.
         # Omit absent internal markers to keep ordinary v1 payloads unchanged.
         data = handler(self)
+        if self.summary_speaker_evidence is None:
+            data.pop('summary_speaker_evidence', None)
         data['speaker_label_source'] = project_source(data)
         for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
             value = getattr(self, key)

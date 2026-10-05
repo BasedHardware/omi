@@ -2263,6 +2263,13 @@ _add(DriverEntry('database.user_usage.get_usage_by_plan', base={'uid': UID}, dom
 _add(DriverEntry('database.user_usage.get_yearly_history', base={'uid': UID}))
 _add(DriverEntry('database.user_usage.get_yearly_usage_stats', base={'uid': UID, 'date': T0}))
 
+_add(
+    DriverEntry(
+        'database.summary_speaker_labels.read_summary_people_catalog',
+        base={'uid': UID, 'transaction': ref_transaction()},
+    )
+)
+
 _add(DriverEntry('database.users.count_people', base={'uid': UID}))
 _add(DriverEntry('database.users.get_all_ratings', domains={'rating_type': ['memory_summary', 'other']}))
 _add(
