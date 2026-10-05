@@ -523,7 +523,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       : () async {
                           final newName = textController.text.trim();
                           if (newName.isEmpty) {
-                            OmiFeedback.error(context, 'Device name cannot be empty');
+                            OmiFeedback.error(context, context.l10n.nameCannotBeEmpty);
                             return;
                           }
 
@@ -543,7 +543,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                                 setDialogState(() => isSaving = false);
                               }
                               if (context.mounted) {
-                                OmiFeedback.error(context, 'Failed to connect to device');
+                                OmiFeedback.error(context, context.l10n.somethingWentWrong);
                               }
                               return;
                             }
@@ -566,7 +566,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                               setDialogState(() => isSaving = false);
                             }
                             if (context.mounted) {
-                              OmiFeedback.error(context, 'Failed to update device name: $e');
+                              OmiFeedback.error(context, context.l10n.somethingWentWrong);
                             }
                           }
                         },
