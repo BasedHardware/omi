@@ -1216,8 +1216,10 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
 
     Skips per-id existence reads: batch.delete() is a no-op for missing
     docs, and downstream vector + FCM cleanup are both idempotent for
-    unknown ids.
+    unknown ids. Repeated IDs are written and cleaned up only once, in the
+    order of their first occurrence; returned IDs describe unique deletions.
     """
+    action_item_ids = list(dict.fromkeys(action_item_ids))
     if not action_item_ids:
         return []
 
@@ -1345,7 +1347,8 @@ def retire_action_items_for_conversation(
 
 
 def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
-    """Mark multiple action items as sync_requested in a single batch write."""
+    """Mark each distinct action item as sync_requested using bounded batches."""
+    item_ids = list(dict.fromkeys(item_ids))
     if not item_ids:
         return
 
