@@ -422,10 +422,14 @@ def _check_pair_wallclock(
         last_segments = [s for s in segments if isinstance(s, Mapping)] if isinstance(segments, list) else []
     if live_recording_origin(last_row) != origin:
         return None
-    times = (_wall_times(survivor), _wall_times(new), _wall_times(last_row))
-    if any(item is None for item in times):
+    survivor_times = _wall_times(survivor)
+    new_times = _wall_times(new)
+    last_times = _wall_times(last_row)
+    if survivor_times is None or new_times is None or last_times is None:
         return PairCheck(SkipReason.WALLCLOCK_TIME_INVALID, same_recording=True)
-    (survivor_created, survivor_finished), (new_created, new_finished), (_, last_finished) = times
+    survivor_created, survivor_finished = survivor_times
+    new_created, new_finished = new_times
+    _, last_finished = last_times
     gap = (new_created - last_finished).total_seconds()
     if gap < 0:
         return PairCheck(SkipReason.WALLCLOCK_GAP_NEGATIVE, gap, same_recording=True)
