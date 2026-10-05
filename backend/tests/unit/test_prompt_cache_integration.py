@@ -417,11 +417,27 @@ def _test_zone_info(name: str):
     raise KeyError(name)
 
 
+_AGENTIC_MODULE_CACHE = None
+
+
 def _get_agentic_module():
-    """Load and return the real utils.retrieval.agentic module."""
-    agentic_stub = sys.modules.get("utils.retrieval.agentic")
-    if agentic_stub is not None and not hasattr(agentic_stub, "CORE_TOOLS"):
-        sys.modules.pop("utils.retrieval.agentic", None)
+    """Load and return this file's stub-graph utils.retrieval.agentic module.
+
+    The module is loaded once and cached: every call must see the same module
+    object so tests that mutate module state hold across calls. When another
+    test file in the same pytest process has already imported the production
+    ``utils.retrieval.agentic`` (``test_device_tools.py`` imports it at module
+    scope, and collection order puts it first), that real module is dropped
+    from ``sys.modules`` before loading — reusing it would bind ``CORE_TOOLS``
+    to the real tool objects, whose runtime names (``look_at_frame``, pydantic
+    ``title``-bearing schemas) do not match this harness's mock expectations.
+    Direct references captured by the other file keep working.
+    """
+    global _AGENTIC_MODULE_CACHE
+    if _AGENTIC_MODULE_CACHE is not None:
+        return _AGENTIC_MODULE_CACHE
+
+    sys.modules.pop("utils.retrieval.agentic", None)
 
     # Module-scope import in agentic.py; stub is enough for CORE_TOOLS / convert_tools tests.
     chat_scope_mod = _stub_module("utils.retrieval.chat_scope")
@@ -507,7 +523,10 @@ def _get_agentic_module():
     langsmith_mod = _stub_module("langsmith")
     langsmith_mod.traceable = lambda **kwargs: lambda func: func
 
-    return _load_module_from_file("utils.retrieval.agentic", BACKEND_DIR / "utils" / "retrieval" / "agentic.py")
+    _AGENTIC_MODULE_CACHE = _load_module_from_file(
+        "utils.retrieval.agentic", BACKEND_DIR / "utils" / "retrieval" / "agentic.py"
+    )
+    return _AGENTIC_MODULE_CACHE
 
 
 # ---------------------------------------------------------------------------
