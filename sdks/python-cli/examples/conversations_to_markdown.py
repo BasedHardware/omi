@@ -20,6 +20,18 @@ from typing import Any, Dict, List, Union
 DONE_WORDS = {"true", "yes", "1", "done", "completed"}
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    writing the rendered note raises UnicodeEncodeError on them. Dropping them keeps
+    the remaining text and lets the note export.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
+
+
 def is_completed(value: Any) -> bool:
     """Normalize completed status for loosely typed API / LLM exports.
 
@@ -88,20 +100,20 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         except Exception:
             date_str = started_at
 
-    category_tag = category.lower().replace(" ", "-")
+    category_tag = strip_surrogates(category).lower().replace(" ", "-")
 
     # Serialize YAML frontmatter scalars safely using json.dumps to prevent injection and Python 3.10/3.11 SyntaxError
     lines: List[str] = [
         "---",
-        f"id: {json.dumps(str(conv_id))}",
-        f"title: {json.dumps(str(title))}",
-        f"category: {json.dumps(str(category))}",
-        f"date: {json.dumps(str(started_at))}",
-        f"source: {json.dumps(str(source))}",
+        f"id: {json.dumps(strip_surrogates(str(conv_id)))}",
+        f"title: {json.dumps(strip_surrogates(str(title)))}",
+        f"category: {json.dumps(strip_surrogates(str(category)))}",
+        f"date: {json.dumps(strip_surrogates(str(started_at)))}",
+        f"source: {json.dumps(strip_surrogates(str(source)))}",
         "tags:",
         "  - omi",
         "  - conversation",
-        f"  - {json.dumps(category_tag)}",
+        f"  - {json.dumps(strip_surrogates(category_tag))}",
         "---",
         "",
         f"# {title}",
@@ -161,7 +173,7 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
             lines.pop()
         lines.append("")
 
-    return "\n".join(lines).rstrip() + "\n"
+    return strip_surrogates("\n".join(lines)).rstrip() + "\n"
 
 
 def export_conversations(

@@ -749,19 +749,31 @@ Live creators stamp `external_data.recording_session_id` (per server rollover
 generation) and `external_data.recording_origin_id` (the client's stable
 recording id); proof requires both stamps nonempty on both rows plus equal
 origin ids — generation ids are never equated — and the usual source,
-device-partition and lock gates still apply. Under `on`, the gap for such a
-pair is `new.created_at` minus the newest fragment's own row `finished_at`,
+device-partition and lock gates still apply. Under `on` the legacy gate runs
+first and the wall-clock path is rescue-only: a pair the legacy gate accepts
+keeps the exact legacy result (same reason, recorded and speech gaps, Jev
+state and metrics as `off`), and the wall-clock check runs only on a legacy
+skip. There the gap is `new.created_at` minus the newest fragment's own row
+`finished_at`,
 where "newest" is the maximum `finished_at` in the survivor's
 `smart_merge.fragments` ledger (the ledger stays on the drifted speech axis,
 so selection never trusts `started_at`). When that fragment is a donor
 tombstone rather than the survivor, its full row is read once at decision
-time and re-read inside the absorb transaction — reusing the flatten ancestry
+time — only when the rescue path actually runs — and re-read inside the
+absorb transaction — reusing the flatten ancestry
 read when possible — and the plan re-verifies lineage, wall times and span
 against that fresh row, so a mutation such as a moved `finished_at` is
 decided on the transaction's current data rather than the decision-time
-read. Gaps of `0..3600` s are eligible, negative or malformed wall times get
+read. The absorb transaction re-applies the same union rule — legacy pass
+or wall-clock pass — so planning and the transaction cannot disagree.
+Gaps of `0..3600` s are eligible, negative or malformed wall times get
 the bounded `wallclock_gap_negative`/`wallclock_time_invalid` reasons, and
-the 3 h span cap is measured on `created_at`/`finished_at`. `shadow` keeps
+the 3 h span cap is measured on `created_at`/`finished_at`. The existing
+`event=smart_merge` lines carry `gap_path=legacy` or `gap_path=wallclock`
+under `on` (absent otherwise): the decision-time keep line names the gate
+that admitted the pair at planning, while the absorb transaction's
+merged/kept lines name the gate that admitted it on the transaction's
+fresh rows. `shadow` keeps
 the legacy verdict but asks Jev once with corrected timing for proven pairs
 the legacy gate skipped, logging `event=smart_merge_wallclock_shadow` and
 counting `omi_conversation_smart_merge_wallclock_shadow_total`. The setting
