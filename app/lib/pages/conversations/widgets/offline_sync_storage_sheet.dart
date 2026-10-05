@@ -32,18 +32,16 @@ class OfflineSyncStorageSheet extends StatelessWidget {
           // Synced row
           _StorageRow(
             icon: FontAwesomeIcons.circleCheck,
-            iconColor: Colors.green,
             title: context.l10n.synced,
             subtitle: context.l10n.safelyBackedUp,
             count: syncedCount,
             onClear: syncedCount > 0 ? onClearSynced : null,
             clearLabel: context.l10n.clear,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: OmiSpacing.sm),
           // Pending row
           _StorageRow(
             icon: FontAwesomeIcons.clockRotateLeft,
-            iconColor: Colors.orange,
             title: context.l10n.pending,
             subtitle: context.l10n.notYetSynced,
             count: pendingCount,
@@ -51,7 +49,7 @@ class OfflineSyncStorageSheet extends StatelessWidget {
             clearLabel: context.l10n.clear,
           ),
           if (totalCount > 0) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: OmiSpacing.lg),
             OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
           ],
         ],
@@ -61,8 +59,10 @@ class OfflineSyncStorageSheet extends StatelessWidget {
 }
 
 class _StorageRow extends StatelessWidget {
+  /// Ink at 70%: quieter than the title, still 4.5:1 on the card in light and dark.
+  static Color get _muted => OmiColors.textPrimary.withValues(alpha: 0.7);
+
   final FaIconData icon;
-  final Color iconColor;
   final String title;
   final String subtitle;
   final int count;
@@ -71,7 +71,6 @@ class _StorageRow extends StatelessWidget {
 
   const _StorageRow({
     required this.icon,
-    required this.iconColor,
     required this.title,
     required this.subtitle,
     required this.count,
@@ -82,7 +81,7 @@ class _StorageRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
       child: LayoutBuilder(builder: (context, constraints) {
         final actionBelow = constraints.maxWidth < 280 || MediaQuery.textScalerOf(context).scale(1) > 1.3;
@@ -93,16 +92,9 @@ class _StorageRow extends StatelessWidget {
         );
         return Column(mainAxisSize: MainAxisSize.min, children: [
           Row(children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.15),
-                borderRadius: OmiRadius.mdAll,
-              ),
-              child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
-            ),
-            const SizedBox(width: 14),
+            // Black and white like the rest of Settings: the icon in its tile, no status colours.
+            OmiSettingsIconTile(FaIcon(icon)),
+            const SizedBox(width: OmiSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -114,25 +106,15 @@ class _StorageRow extends StatelessWidget {
                           title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                          style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: OmiColors.textPrimary.withValues(alpha: 0.08),
-                          borderRadius: OmiRadius.smAll,
-                        ),
-                        child: Text(
-                          '$count',
-                          style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7)),
-                        ),
-                      ),
+                      const SizedBox(width: OmiSpacing.xs),
+                      Text('$count', style: OmiType.subhead.copyWith(color: _muted)),
                     ],
                   ),
-                  const SizedBox(height: 3),
-                  Text(subtitle, style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: OmiType.footnote.copyWith(color: _muted)),
                 ],
               ),
             ),
