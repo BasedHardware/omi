@@ -461,13 +461,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
         if (!_isCurrent(generation)) return;
-        batteryLevel = value;
-        BatteryWidgetService().updateBatteryInfo(
-          deviceName: connectedDevice?.name ?? '',
-          batteryLevel: value,
-          deviceType: connectedDevice?.type.name ?? 'omi',
-          isConnected: true,
-        );
+        if (batteryLevel != value) {
+          batteryLevel = value;
+          BatteryWidgetService().updateBatteryInfo(
+            deviceName: connectedDevice?.name ?? '',
+            batteryLevel: value,
+            deviceType: connectedDevice?.type.name ?? 'omi',
+            isConnected: true,
+          );
+        }
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
           final ctx = globalNavigatorKey.currentContext;
