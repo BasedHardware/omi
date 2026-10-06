@@ -63,6 +63,8 @@ Full live-code debugging is also supported using the nRF Connect extension; howe
 - **Audio Capture**: Handles microphone input and audio buffering.
 - **Codec**: Processes raw audio data.
 - **Transport**: Manages Bluetooth connectivity and audio streaming.
+  - **ATT MTU Notification Constraints**: The negotiated `current_mtu` accounts for the full ATT MTU, which includes a 3-byte ATT header (1-byte opcode `0x1B` and 2-byte attribute handle). When chunking audio packets in `push_to_gatt()`, the maximum audio payload is bounded by `current_mtu - ATT_NOTIFICATION_HEADER_SIZE - NET_BUFFER_HEADER_SIZE` (`current_mtu - 6` bytes total) to guarantee that notification PDUs never exceed `current_mtu` and prevent `-EMSGSIZE` notification drops on smaller negotiated MTUs.
+  - Verification test: Run `python scripts/check_cv1_mtu.py` to validate chunk sizing against all MTU test cases.
 - **Storage**: Handles SD card operations and audio file management.
 - **LED Control**: Provides visual feedback about device status.
 
