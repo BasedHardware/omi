@@ -297,8 +297,8 @@ async def search_crossref_works(payload: SearchWorksInput):
             "/works",
             {"query": query, "rows": limited, "sort": "relevance", "order": "desc"},
         )
-    except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+    except Exception:
+        data = None
 
     if not isinstance(data, dict):
         return ChatToolResponse(result=f"No Crossref results found for '{query}'.")
@@ -329,8 +329,8 @@ async def get_crossref_work(payload: GetWorkInput):
 
     try:
         data = await crossref_get(f"/works/{quote(normalized, safe='')}", {})
-    except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+    except Exception:
+        data = None
 
     if not isinstance(data, dict):
         return ChatToolResponse(result=f"No Crossref details found for DOI {normalized}.")
@@ -374,8 +374,8 @@ async def get_crossref_works_by_author(payload: AuthorWorksInput):
                 "order": "desc",
             },
         )
-    except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+    except Exception:
+        data = None
 
     if not isinstance(data, dict):
         return ChatToolResponse(result=f"No recent works found for author '{author}'.")

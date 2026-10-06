@@ -246,7 +246,24 @@ class CrossrefToolTests(unittest.IsolatedAsyncioTestCase):
             mock_get.side_effect = Exception("Network unreachable")
             input_data = main.SearchWorksInput(query="climate change", max_results=5)
             resp = await main.search_crossref_works(input_data)
-            self.assertIn("Crossref request failed: Network unreachable", resp.error)
+            self.assertIsNone(resp.error)
+            self.assertEqual(resp.result, "No Crossref results found for 'climate change'.")
+
+    async def test_get_work_exception_handled(self):
+        with patch.object(main, "crossref_get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = Exception("HTTP 500 error")
+            input_data = main.GetWorkInput(doi="10.1038/nphys1170")
+            resp = await main.get_crossref_work(input_data)
+            self.assertIsNone(resp.error)
+            self.assertEqual(resp.result, "No Crossref details found for DOI 10.1038/nphys1170.")
+
+    async def test_get_works_by_author_exception_handled(self):
+        with patch.object(main, "crossref_get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = Exception("Timeout error")
+            input_data = main.AuthorWorksInput(author="Albert Einstein", max_results=3)
+            resp = await main.get_crossref_works_by_author(input_data)
+            self.assertIsNone(resp.error)
+            self.assertEqual(resp.result, "No recent works found for author 'Albert Einstein'.")
 
     async def test_get_work_success(self):
         mock_data = {
