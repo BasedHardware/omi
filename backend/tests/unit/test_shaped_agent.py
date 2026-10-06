@@ -2,17 +2,31 @@
 
 import asyncio
 import copy
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import google.auth.credentials  # noqa: F401
+import httpx
 import pytest
+from langchain_openai import ChatOpenAI
 
-from utils.llm import shaped_agent as shaped
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.conversation import ExternalIntegrationCreateConversation
+from models.structured import Structured
+from models.structured_extraction import StructuredExtraction
 from testing.import_isolation import stub_modules
+from utils.conversations import process_conversation as pc
+from utils.conversations.meeting_context import merge_meeting_contexts, store_meeting_context, stored_meeting_context
+from utils.llm import conversation_processing as notes
+from utils.llm import shaped_agent as shaped
+from utils.llm import shaped_notes_transport
+from utils.llm.conversation_processing import notes_mount
+from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, build_conversation_prompt_prefix
+from utils.retrieval import agentic, graph
+from utils.retrieval.agentic import chat_mount
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -61,8 +75,6 @@ def test_bucket_stable_across_requests(monkeypatch, bucket):
 
 @pytest.mark.parametrize('route', ['off', 'cohort', 'shadow', 'old', 'on'])
 def test_notes_routing_calls_real_entrypoint(monkeypatch, route):
-    from utils.llm import conversation_processing as notes
-
     uid = shaped.COHORT_UID
     if route in ('shadow', 'old'):
         uid = uid_in_bucket(monkeypatch, route)
@@ -79,8 +91,6 @@ def test_notes_routing_calls_real_entrypoint(monkeypatch, route):
 
 @pytest.mark.parametrize('route', ['off', 'cohort', 'shadow', 'old', 'on'])
 def test_chat_routing_and_shadow_sink(monkeypatch, route):
-    from utils.retrieval import agentic
-
     uid = shaped.COHORT_UID
     if route in ('shadow', 'old'):
         uid = uid_in_bucket(monkeypatch, route)
@@ -133,9 +143,6 @@ def test_notes_shadow_failure_never_replaces_old(monkeypatch):
 
 
 def test_empty_mount_and_notes_chat_isolation():
-    from utils.llm.conversation_processing import notes_mount
-    from utils.retrieval.agentic import chat_mount
-
     empty = shaped.Mount()
     assert empty.tools == empty.skills == ()
     assert empty.schema is None and empty.instructions == ''
@@ -152,10 +159,6 @@ def test_empty_mount_and_notes_chat_isolation():
 
 
 def test_notes_evidence_after_breakpoint_and_roster_unbound(monkeypatch):
-    from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
-    from utils.llm.conversation_processing import notes_mount
-
     monkeypatch.setenv(shaped.FLAG, 'on')
     context = CalendarMeetingContext(
         calendar_event_id='event',
@@ -200,9 +203,6 @@ def test_notes_evidence_after_breakpoint_and_roster_unbound(monkeypatch):
 
 @pytest.mark.parametrize('mode', [None, 'off', 'invalid'])
 def test_notes_off_provider_bytes_match_legacy(monkeypatch, mode):
-    from utils.llm import conversation_processing as notes
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
-
     if mode:
         monkeypatch.setenv(shaped.FLAG, mode)
     captured = []
@@ -286,10 +286,6 @@ def test_deadline_cancels_provider():
 
 
 def test_notes_on_uses_one_schema_turn(monkeypatch):
-    from utils.llm import conversation_processing as notes
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
-    from models.structured_extraction import StructuredExtraction
-
     monkeypatch.setenv(shaped.FLAG, 'on')
     captured = []
 
@@ -344,8 +340,6 @@ def test_notes_on_uses_one_schema_turn(monkeypatch):
 
 @pytest.mark.parametrize('shadow', [False, True])
 def test_chat_real_shared_loop_with_tools(monkeypatch, shadow):
-    from utils.retrieval import agentic
-
     captured, invocations = [], []
     count = 0
 
@@ -405,8 +399,6 @@ def test_chat_real_shared_loop_with_tools(monkeypatch, shadow):
     'mode,opt_in,new_path', [(None, True, False), ('off', True, False), ('on', True, True), ('on', False, False)]
 )
 def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_in, new_path):
-    from utils.retrieval import agentic
-
     if mode:
         monkeypatch.setenv(shaped.FLAG, mode)
     monkeypatch.setattr(agentic, '_get_agentic_qa_prompt', lambda *a, **k: 'Original prompt bytes')
@@ -450,12 +442,6 @@ def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_i
 
 @pytest.mark.parametrize('mode,expected', [('off', 'old'), ('on', 'new'), ('shadow', 'old')])
 def test_legacy_notes_configuration_obeys_shaped_mode(monkeypatch, mode, expected):
-    from contextlib import nullcontext
-    from models.conversation import ExternalIntegrationCreateConversation
-    from models.structured import Structured
-    from utils.conversations import process_conversation as pc
-    from utils.llm import conversation_processing as notes
-
     uid = uid_in_bucket(monkeypatch, 'shadow') if mode == 'shadow' else 'test'
     if mode != 'shadow':
         monkeypatch.setenv(shaped.FLAG, mode)
@@ -484,8 +470,6 @@ def test_legacy_notes_configuration_obeys_shaped_mode(monkeypatch, mode, expecte
 
 @pytest.mark.parametrize('opt_in', [False, True])
 def test_graph_only_enables_explicit_proof_mount(monkeypatch, opt_in):
-    from utils.retrieval import graph
-
     monkeypatch.setenv(shaped.FLAG, 'on')
     monkeypatch.setattr(graph, '_current_prompt_metadata', AsyncMock(return_value=('Today', 'UTC')))
     received = []
@@ -504,8 +488,6 @@ def test_graph_only_enables_explicit_proof_mount(monkeypatch, opt_in):
 
 
 def test_flag_off_chat_provider_bytes_match_legacy(monkeypatch):
-    from utils.retrieval import agentic
-
     requests = []
 
     class Model:
@@ -542,10 +524,6 @@ def test_flag_off_chat_provider_bytes_match_legacy(monkeypatch):
 
 
 def test_notes_transport_is_owned_per_worker_loop(monkeypatch):
-    import httpx
-    from langchain_openai import ChatOpenAI
-    from utils.llm import shaped_notes_transport
-
     transports, loops = [], []
     real_client = httpx.AsyncClient
 
@@ -586,14 +564,6 @@ def test_notes_transport_is_owned_per_worker_loop(monkeypatch):
 @pytest.mark.parametrize('round_trip', [False, True])
 @pytest.mark.parametrize('screen_primary', [False, True])
 def test_merged_notes_keep_calendar_and_screen_participants_separate(monkeypatch, round_trip, screen_primary):
-    from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-    from utils.conversations.meeting_context import (
-        merge_meeting_contexts,
-        store_meeting_context,
-        stored_meeting_context,
-    )
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
-
     monkeypatch.setenv(shaped.FLAG, 'on')
     start = datetime(2026, 10, 6, tzinfo=timezone.utc)
     calendar = CalendarMeetingContext(
