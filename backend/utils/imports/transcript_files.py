@@ -169,6 +169,11 @@ def _normalize(text: str) -> str:
     return text.lstrip('﻿').replace('\r\n', '\n').replace('\r', '\n')
 
 
+def _plain_cue_text(raw: str) -> str:
+    """A cue's text without SRT and WebVTT markup: tags (``<i>``, ``<font ...>``, ``<v Name>``) and entities."""
+    return re.sub(r'\s+', ' ', html.unescape(_TAG_RE.sub('', raw))).strip()
+
+
 def _blocks(text: str) -> List[List[str]]:
     blocks: List[List[str]] = []
     for raw in re.split(r'\n\s*\n', _normalize(text)):
@@ -219,6 +224,8 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
     one-line cues, one per timing line; other lines continue the cue above them.
     The line before a timing is the cue number; with ``keep_label`` (a .txt) a line
     there that is not a number (a title, "Clip", "Quote:") is kept as its own cue.
+    Formatting tags (``<i>``, ``<b>``, ``<font color=...>``) are removed from cue text
+    before any "Name: " label is looked for.
     """
     timing_index = next((index for index, line in enumerate(lines[:2]) if _CUE_TIMING_RE.match(line)), None)
     if timing_index is None:
@@ -228,7 +235,7 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
     label = lines[0] if keep_label and timing_index == 1 and not lines[0].isdigit() else ''
     labels = [TranscriptCue(text=label)] if label else []
     if _CUE_SETTINGS_RE.fullmatch(lines[timing_index], timing.end()):
-        body = ' '.join(lines[timing_index + 1 :]).strip()
+        body = _plain_cue_text(' '.join(lines[timing_index + 1 :]))
         start, end = _seconds(timing.group(1)), _seconds(timing.group(2))
         return labels + ([TranscriptCue(text=body, start=start, end=end)] if body else [])
     runs: List[tuple[re.Match[str], List[str]]] = []
@@ -240,7 +247,7 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
             runs[-1][1].append(line)
     cues: List[TranscriptCue] = labels
     for line_timing, parts in runs:
-        body = ' '.join(part for part in parts if part)
+        body = _plain_cue_text(' '.join(parts))
         if body:
             cues.append(
                 TranscriptCue(text=body, start=_seconds(line_timing.group(1)), end=_seconds(line_timing.group(2)))
@@ -285,7 +292,7 @@ def parse_vtt(text: str) -> List[TranscriptCue]:
         timing = _CUE_TIMING_RE.match(lines[timing_index])
         raw = ' '.join(lines[timing_index + 1 :])
         voice = _VOICE_RE.search(raw)
-        body = re.sub(r'\s+', ' ', html.unescape(_TAG_RE.sub('', raw))).strip()
+        body = _plain_cue_text(raw)
         if not timing or not body:
             continue
         cues.append(

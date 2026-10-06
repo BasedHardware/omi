@@ -101,6 +101,36 @@ def test_srt_parses_times_multiline_text_and_recurring_speakers():
     assert cues[1].text == 'Yes, it came in at twelve thousand for the whole year.'
 
 
+@pytest.mark.parametrize('extension', ['.srt', '.txt'])
+@pytest.mark.parametrize(
+    'srt',
+    [
+        pytest.param(
+            '1\n00:00:01,000 --> 00:00:02,000\n<i>Alice: Hello\nthere</i>\n\n'
+            '2\n00:00:02,000 --> 00:00:03,000\n<font color="#ffff00">Bob: Hi</font>\n\n'
+            '3\n00:00:03,000 --> 00:00:04,000\n<b>Alice:</b> Ok &amp; thanks\n',
+            id='text-below-timing',
+        ),
+        pytest.param(
+            '00:00:01,000 --> 00:00:02,000 <i>Alice: Hello there</i>\n'
+            '00:00:02,000 --> 00:00:03,000 <font color="#ffff00">Bob: Hi</font>\n'
+            '00:00:03,000 --> 00:00:04,000 <b>Alice:</b> Ok &amp; thanks\n',
+            id='one-line-cues',
+        ),
+    ],
+)
+def test_srt_formatting_tags_are_removed_before_speaker_labels_are_read(srt, extension):
+    """SRT allows <i>, <b>, <u> and <font> around cue text; they are markup, never words or names."""
+    parsed = tf.parse_transcript_file(f'call{extension}', srt.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.speaker, cue.text) for cue in parsed.cues] == [
+        ('Alice', 'Hello there'),
+        ('Bob', 'Hi'),
+        ('Alice', 'Ok & thanks'),
+    ]
+
+
 def test_one_off_label_in_unlabeled_file_is_text_but_speaker_n_is_a_speaker():
     srt = (
         '1\n00:00:00,000 --> 00:00:01,000\nLet us go over the plan.\n\n'
