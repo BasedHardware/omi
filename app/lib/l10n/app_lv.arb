@@ -3839,5 +3839,6 @@
     "dismiss": "Paslēpt",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Rādīt bloķēšanas ekrānā"
+    "showOnLockScreen": "Rādīt bloķēšanas ekrānā",
+    "accountDeletionInProgressSignInAgain": "Šis konts tiek dzēsts. Pierakstieties ar citu kontu vai uzgaidiet dažas minūtes un mēģiniet vēlreiz."
 }

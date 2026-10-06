@@ -12411,4 +12411,8 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Zobraziť na zamknutej obrazovke';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Tento účet sa odstraňuje. Prihláste sa iným účtom alebo počkajte niekoľko minút a skúste to znova.';
 }

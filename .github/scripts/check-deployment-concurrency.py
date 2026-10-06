@@ -103,6 +103,9 @@ LOCK_CONTRACTS = {
     "gcp_day3_reengagement_email_job_auto_dev.yml": LockContract(
         "deploy-cloud-run-day3-reengagement-email-job-development"
     ),
+    "gcp_finops_unit_cost_job.yml": LockContract(
+        "deploy-cloud-run-finops-unit-cost-job-${{ github.event.inputs.environment }}"
+    ),
     "gcp_models.yml": LockContract("deploy-gke-vad-${{ github.event.inputs.environment }}"),
     "gcp_nllb_translation.yml": LockContract("deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"),
     "gcp_notifications_job.yml": LockContract(

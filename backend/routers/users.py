@@ -26,7 +26,7 @@ from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
-from services.users.account_deletion import background_wipe_user_data, start_account_deletion
+from services.users.account_deletion import run_deletion_wipe_with_lease, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
 from database.conversation_scan import conversation_scan_budget, people_stats_scan
@@ -124,7 +124,7 @@ from utils.cloud_tasks import (
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
 )
-from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -363,13 +363,7 @@ async def run_account_deletion_wipe(
 
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
-        ok = await run_blocking(
-            cleanup_executor,
-            background_wipe_user_data,
-            uid,
-            task_authentication.retry_count,
-            terminal,
-        )
+        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token)
         if ok:
             return JSONResponse(status_code=200, content={'status': 'done'})
 

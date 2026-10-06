@@ -12419,4 +12419,8 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Näytä lukitusnäytöllä';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Tätä tiliä poistetaan. Kirjaudu sisään toisella tilillä tai odota muutama minuutti ja yritä uudelleen.';
 }

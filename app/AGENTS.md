@@ -13,10 +13,11 @@ UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 ### Version string
 `pubspec.yaml` (`1.0.543+992`) is the local placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest store version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only with no store history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER`. Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
 
+### Release
+Daily train (`scripts/mobile_daily_train.py`, 14:00 UTC): newest TestFlight build → App Review (MANUAL release), newest Play build → production draft; a human releases. `--dry-run` = plan only. Contract: `.github/agent-docs/mobile-release-process.md`.
+
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
-
-Regenerate after source changes; resolve build_runner conflicts with `--delete-conflicting-outputs`.
 
 ### Setup Sequence
 ```bash
@@ -78,8 +79,6 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Camera | — | NSCameraUsageDescription | QR/photo features |
 | Notifications | POST_NOTIFICATIONS | (automatic) | Push notifications |
 | Background | FOREGROUND_SERVICE_* (5 types) | UIBackgroundModes (7 modes) | Continuous capture |
-
-Android: 27 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
 
 ## Test Strategy
 
@@ -161,4 +160,3 @@ Key rules:
 - Refs go stale frequently — always re-snapshot before every interaction. Use `press x y` as fallback.
 - `AGENT_FLUTTER_LOG` must point to flutter run stdout (not logcat).
 - Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Add `Key('descriptive_name')` to new interactive widgets.
-- Full command reference: `agent-flutter schema`.

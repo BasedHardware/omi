@@ -3839,5 +3839,6 @@
     "dismiss": "Απόρριψη",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος"
+    "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος",
+    "accountDeletionInProgressSignInAgain": "Αυτός ο λογαριασμός διαγράφεται. Συνδεθείτε με άλλον λογαριασμό ή περιμένετε λίγα λεπτά και δοκιμάστε ξανά."
 }
