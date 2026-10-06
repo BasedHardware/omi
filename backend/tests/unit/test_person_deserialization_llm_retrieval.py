@@ -21,15 +21,12 @@ from unittest.mock import MagicMock, patch
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from models.conversation import Conversation
 from models.structured import Structured
 from models.conversation_enums import ConversationSource, ConversationStatus
-
 
 RAW_PEOPLE_FIXTURE = [
     {
@@ -64,8 +61,18 @@ def _build_test_conversation(cid: str = "c1") -> Conversation:
         status=ConversationStatus.completed,
         structured=Structured(title="Test Convo", overview="Overview text", emoji="💬"),
         transcript_segments=[
-            TranscriptSegment(id="s1", text="Hello Alice", person_id="p_valid_1", speaker_id=0, is_user=False, start=0.0, end=1.0),
-            TranscriptSegment(id="s2", text="Corrupt person segment", person_id="p_malformed_no_name", speaker_id=1, is_user=False, start=1.0, end=2.0),
+            TranscriptSegment(
+                id="s1", text="Hello Alice", person_id="p_valid_1", speaker_id=0, is_user=False, start=0.0, end=1.0
+            ),
+            TranscriptSegment(
+                id="s2",
+                text="Corrupt person segment",
+                person_id="p_malformed_no_name",
+                speaker_id=1,
+                is_user=False,
+                start=1.0,
+                end=2.0,
+            ),
         ],
     )
 
@@ -97,9 +104,9 @@ class TestPersonDeserializationLLMRetrieval(unittest.TestCase):
 
         config = {"configurable": {"user_id": "u1"}}
 
-        with patch.object(conversation_tools, "users_db", mock_users_db), \
-             patch.object(conversation_tools, "conversations_db", mock_conv_db), \
-             patch.object(conversation_tools, "notification_db", mock_notif_db):
+        with patch.object(conversation_tools, "users_db", mock_users_db), patch.object(
+            conversation_tools, "conversations_db", mock_conv_db
+        ), patch.object(conversation_tools, "notification_db", mock_notif_db):
             result = conversation_tools.get_conversations_tool.func(
                 config=config,
                 include_transcript=True,
@@ -124,11 +131,13 @@ class TestPersonDeserializationLLMRetrieval(unittest.TestCase):
 
         config = {"configurable": {"user_id": "u1"}}
 
-        with patch.object(conversation_tools, "users_db", mock_users_db), \
-             patch.object(conversation_tools, "conversations_db", mock_conv_db), \
-             patch.object(conversation_tools, "notification_db", mock_notif_db), \
-             patch.object(conversation_tools, "keyword_search_conversation_ids", return_value=["c2"]), \
-             patch.object(conversation_tools.vector_db, "query_vectors", return_value=[]):
+        with patch.object(conversation_tools, "users_db", mock_users_db), patch.object(
+            conversation_tools, "conversations_db", mock_conv_db
+        ), patch.object(conversation_tools, "notification_db", mock_notif_db), patch.object(
+            conversation_tools, "keyword_search_conversation_ids", return_value=["c2"]
+        ), patch.object(
+            conversation_tools.vector_db, "query_vectors", return_value=[]
+        ):
             result = conversation_tools.search_conversations_tool.func(
                 query="Hello",
                 config=config,
@@ -146,12 +155,15 @@ class TestPersonDeserializationLLMRetrieval(unittest.TestCase):
 
         conv = _build_test_conversation("c1")
 
-        with patch.object(rag, "users_db", mock_users_db), \
-             patch.object(chat_llm, "users_db", mock_users_db), \
-             patch.object(rag, "get_user_name", return_value="User"), \
-             patch.object(rag, "retrieve_memories_for_topics", return_value=({"c1": ["work"]}, [conv.model_dump()])), \
-             patch.object(rag, "retrieve_memory_context_params", return_value=["work"]), \
-             patch.object(rag, "get_better_conversation_chunk", return_value="Chunk"):
+        with patch.object(rag, "users_db", mock_users_db), patch.object(
+            chat_llm, "users_db", mock_users_db
+        ), patch.object(rag, "get_user_name", return_value="User"), patch.object(
+            rag, "retrieve_memories_for_topics", return_value=({"c1": ["work"]}, [conv.model_dump()])
+        ), patch.object(
+            rag, "retrieve_memory_context_params", return_value=["work"]
+        ), patch.object(
+            rag, "get_better_conversation_chunk", return_value="Chunk"
+        ):
             res_context, res_topics = rag.retrieve_rag_conversation_context("u1", conv)
             self.assertIsInstance(res_context, str)
 
@@ -163,8 +175,18 @@ class TestPersonDeserializationLLMRetrieval(unittest.TestCase):
         mock_users_db.get_people_by_ids.return_value = RAW_PEOPLE_FIXTURE
 
         segments = [
-            TranscriptSegment(id="s1", text="Hi Alice", person_id="p_valid_1", speaker_id=0, is_user=False, start=0.0, end=1.0),
-            TranscriptSegment(id="s2", text="Hi Corrupt", person_id="p_malformed_no_name", speaker_id=1, is_user=False, start=1.0, end=2.0),
+            TranscriptSegment(
+                id="s1", text="Hi Alice", person_id="p_valid_1", speaker_id=0, is_user=False, start=0.0, end=1.0
+            ),
+            TranscriptSegment(
+                id="s2",
+                text="Hi Corrupt",
+                person_id="p_malformed_no_name",
+                speaker_id=1,
+                is_user=False,
+                start=1.0,
+                end=2.0,
+            ),
         ]
 
         mock_llm = MagicMock()
@@ -172,9 +194,9 @@ class TestPersonDeserializationLLMRetrieval(unittest.TestCase):
         mock_structured.invoke.return_value = MagicMock(topics=["work", "tech"])
         mock_llm.with_structured_output.return_value = mock_structured
 
-        with patch.object(chat_llm, "users_db", mock_users_db), \
-             patch.object(chat_llm, "get_user_name", return_value="Tester"), \
-             patch.object(chat_llm, "get_llm", return_value=mock_llm):
+        with patch.object(chat_llm, "users_db", mock_users_db), patch.object(
+            chat_llm, "get_user_name", return_value="Tester"
+        ), patch.object(chat_llm, "get_llm", return_value=mock_llm):
             topics = chat_llm.retrieve_memory_context_params("u1", segments, ["p_valid_1", "p_malformed_no_name"])
             self.assertEqual(topics, ["work", "tech"])
 
@@ -190,9 +212,9 @@ class TestPersonDeserializationLLMRetrieval(unittest.TestCase):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = MagicMock(content="Summary of conversations")
 
-        with patch.object(external_integrations, "users_db", mock_users_db), \
-             patch.object(external_integrations, "get_prompt_memories", return_value=("User", "Memories")), \
-             patch.object(external_integrations, "get_llm", return_value=mock_llm):
+        with patch.object(external_integrations, "users_db", mock_users_db), patch.object(
+            external_integrations, "get_prompt_memories", return_value=("User", "Memories")
+        ), patch.object(external_integrations, "get_llm", return_value=mock_llm):
             res = external_integrations.get_conversation_summary("u1", [conv])
             self.assertEqual(res, "Summary of conversations")
 
