@@ -983,6 +983,7 @@ overlay:
         - HOSTED_PUSHER_API_URL
       x-connector-sync-job:
         flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
           --remove-env-vars: HOSTED_PUSHER_API_URL
         env:
           OMI_CUSTOMER_DATA_PROJECT:

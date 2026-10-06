@@ -8,16 +8,17 @@ Manual: `.github/workflows/gcp_x_connector_sync_job.yml` (`workflow_dispatch`, e
 
 Env contract: `cloud_run.jobs.x-connector-sync-job` in `backend/deploy/runtime_env.yaml` (compose from `_base.yaml` + overlays). Required for `run_x_sync_job()`:
 
-- Secrets: `SERVICE_ACCOUNT_JSON`, `ENCRYPTION_SECRET`, `OPENAI_API_KEY`, `PINECONE_API_KEY`, `X_OAUTH_CLIENT_SECRET`, `RAPID_API_KEY`
-- Env: `PINECONE_INDEX_NAME`, `X_OAUTH_CLIENT_ID`, `X_OAUTH_REDIRECT_URI`, `RAPID_API_HOST`, `OMI_ENV_STAGE`
+- Secrets: `SERVICE_ACCOUNT_JSON`, `ENCRYPTION_SECRET`, `OPENAI_API_KEY`, `PINECONE_API_KEY`, `X_OAUTH_CLIENT_ID`, `X_OAUTH_CLIENT_SECRET`, `X_OAUTH_REDIRECT_URI`, `RAPID_API_KEY`, `RAPID_API_HOST`
+- Env: `PINECONE_INDEX_NAME`, `OMI_ENV_STAGE`
+- Runtime identity: `dev-backend-runtime` in development, `backend-runtime` in prod. Those are the identities that already mount the X OAuth and RapidAPI secrets on the Cloud Run API. Do not switch prod to `backend-jobs-runtime` unless that account is granted the same secrets.
 
-Interactive OAuth connect/callback still lives on the GKE API; this job needs the same OAuth + RapidAPI bindings so incremental sync can refresh expired access tokens and use the public-timeline fallback.
+Interactive OAuth connect/callback still lives on the GKE API; this job needs the same OAuth + RapidAPI secret bindings so incremental sync can refresh expired access tokens and use the public-timeline fallback.
 
 ### Rollout order (no sync gap)
 
 Deploying a notifications-job image that no longer runs X sync **before** this job + Scheduler exist stops all incremental sync. Required sequence per environment:
 
-1. Ensure Secret Manager has `X_OAUTH_CLIENT_SECRET` / `RAPID_API_KEY`, and GitHub env vars `X_OAUTH_CLIENT_ID` / `X_OAUTH_REDIRECT_URI` / `RAPID_API_HOST` for the deploy environment.
+1. Ensure Secret Manager already has the X OAuth and RapidAPI secrets the Cloud Run API mounts (`X_OAUTH_CLIENT_ID`, `X_OAUTH_CLIENT_SECRET`, `X_OAUTH_REDIRECT_URI`, `RAPID_API_KEY`, `RAPID_API_HOST`). Do not invent GitHub environment variables for the client id, redirect URI, or RapidAPI host.
 2. Create Scheduler SA + `x-connector-sync-6h` (below) after the Cloud Run Job resource exists (or create the job stub first).
    If you deploy before the trigger exists, run `gcp_x_connector_sync_job.yml` with
    `allow_missing_scheduler=true` — that is the only way the scheduler-contract step

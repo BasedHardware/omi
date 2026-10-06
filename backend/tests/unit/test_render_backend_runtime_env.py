@@ -194,18 +194,16 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
 def test_render_dev_emits_x_connector_sync_job_outputs(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
-    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
-    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
-    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'])
 
     assert _MODULE['main']() == 0
     output = capsys.readouterr().out
-    assert 'X_OAUTH_CLIENT_ID=x-client-id' in output
-    assert 'X_OAUTH_REDIRECT_URI=https://api.example/v1/x/callback' in output
-    assert 'RAPID_API_HOST=twitter-api.example' in output
+    assert 'X_OAUTH_CLIENT_ID=X_OAUTH_CLIENT_ID:latest' in output
+    assert 'X_OAUTH_REDIRECT_URI=X_OAUTH_REDIRECT_URI:latest' in output
+    assert 'RAPID_API_HOST=RAPID_API_HOST:latest' in output
     assert 'X_OAUTH_CLIENT_SECRET=X_OAUTH_CLIENT_SECRET:latest' in output
     assert 'RAPID_API_KEY=RAPID_API_KEY:latest' in output
+    assert '--service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com' in output
     assert 'notifications_job_env_vars<<' not in output
 
 
@@ -346,9 +344,15 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
         'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        'X_OAUTH_CLIENT_ID',
         'X_OAUTH_CLIENT_SECRET',
+        'X_OAUTH_REDIRECT_URI',
         'RAPID_API_KEY',
+        'RAPID_API_HOST',
     }
+    assert x_sync_job['flags']['--service-account'] == (
+        'dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com'
+    )
     assert notifications_job['flags']['--memory'] == '2Gi'
     assert notifications_job['flags']['--task-timeout'] == '3600s'
 
@@ -358,6 +362,9 @@ def test_x_connector_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
 
     assert 'Verify LLM Gateway serving data plane' in workflow
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in workflow
+    assert 'vars.X_OAUTH_CLIENT_ID' not in workflow
+    assert 'vars.X_OAUTH_REDIRECT_URI' not in workflow
+    assert 'vars.RAPID_API_HOST' not in workflow
     assert '${{ steps.runtime-env.outputs.cloud_run_flags }}' in workflow
     assert '--lane omi:auto:x-memory-extraction-flex' in workflow
 

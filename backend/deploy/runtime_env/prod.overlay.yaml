@@ -1027,6 +1027,11 @@ overlay:
           PINECONE_INDEX_NAME:
             value: memories-backend
       x-connector-sync-job:
+        # backend-runtime already mounts the X OAuth and RapidAPI secrets on the
+        # Cloud Run API. backend-jobs-runtime does not, so this job cannot use
+        # the notifications identity without a new secret grant.
+        flags:
+          --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
