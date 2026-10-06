@@ -152,6 +152,9 @@ def conversations_db():
     firestore_module.Query = SimpleNamespace(DESCENDING="DESCENDING")
     firestore_v1_module = ModuleType("google.cloud.firestore_v1")
     firestore_v1_module.FieldFilter = _FieldFilter
+    # database.conversations → notes_identity → person_aliases imports
+    # ``transactional`` at module level alongside FieldFilter.
+    firestore_v1_module.transactional = _decorator
     exceptions_module = ModuleType("google.api_core.exceptions")
     exceptions_module.AlreadyExists = type("AlreadyExists", (Exception,), {})
     exceptions_module.Conflict = type("Conflict", (Exception,), {})

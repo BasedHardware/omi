@@ -9,11 +9,26 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Optional
 
-from database.notes_identity import identifier_in_text
 from models.structured import Participant, Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.conversations.meeting_participants import MeetingRoster
 
 PRESENTATION_CONTRACT_VERSION = 'v1'
+
+
+def identifier_in_text(identifier: str, text: str) -> bool:
+    """Require the complete asserted identifier, without extracting identities.
+
+    Kept local (duplicated from ``database.notes_identity``) on purpose: this
+    validation module is imported by isolated-environment tests that stub the
+    ``database`` package, and the notes-identity module legitimately pulls in
+    Firestore-bound ``person_aliases``. The corroboration check here only needs
+    the pure regex, not the persistence graph.
+    """
+    boundary = r'[\w.+@%-]' if '@' in identifier else r'\w'
+    return bool(
+        identifier.strip()
+        and re.search(r'(?<!' + boundary + ')' + re.escape(identifier.strip()) + r'(?!' + boundary + ')', text, re.I)
+    )
 
 
 @dataclass
