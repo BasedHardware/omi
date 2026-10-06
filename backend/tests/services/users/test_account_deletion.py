@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+import stripe
 
 
 class _AutoMockModule(types.ModuleType):
@@ -1527,7 +1528,6 @@ def test_billing_failure_on_retry_after_auth_deletion_stays_fenced(monkeypatch):
     'outcome', ['resource_missing', 'no such subscription', 'canceled', 'incomplete_expired', 'active']
 )
 def test_background_wipe_uses_immediate_idempotent_stripe_cancellation(monkeypatch, outcome):
-    import stripe
     from utils import stripe as real_stripe_utils
 
     _stub_wipe_steps_after_billing(monkeypatch)
