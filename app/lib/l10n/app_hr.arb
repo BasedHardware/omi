@@ -11396,6 +11396,8 @@
     "dismiss": "Sakrij",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Prikaži na zaključanom zaslonu",
+    "accountDeletionInProgressSignInAgain": "Ovaj račun se briše. Prijavite se drugim računom ili pričekajte nekoliko minuta i pokušajte ponovno.",
     "importTranscriptFiles": "Datoteke transkripata",
     "importTranscriptFilesDescription": "Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima",
     "importTooManyAttempts": "Trenutačno ima previše uvoza. Pokušajte ponovno kasnije.",

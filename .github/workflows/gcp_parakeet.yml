@@ -96,7 +96,7 @@ jobs:
 
       - name: Verify rollout
         run: |
-          rollout_timeout=600s
+          rollout_timeout=2100s
           kubectl_context=()
           if [[ "${{ github.event.inputs.environment }}" == "development" ]]; then
             rollout_timeout=2100s

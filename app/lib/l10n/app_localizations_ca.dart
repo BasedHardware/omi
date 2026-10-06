@@ -12484,6 +12484,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dismiss => 'Descarta';
 
   @override
+  String get showOnLockScreen => 'Mostra a la pantalla de bloqueig';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Aquest compte s\'està suprimint. Inicia la sessió amb un altre compte o espera uns minuts i torna-ho a provar.';
+
+  @override
   String get importTranscriptFiles => 'Fitxers de transcripció';
 
   @override

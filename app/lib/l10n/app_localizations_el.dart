@@ -12494,6 +12494,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dismiss => 'Απόρριψη';
 
   @override
+  String get showOnLockScreen => 'Εμφάνιση στην οθόνη κλειδώματος';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Αυτός ο λογαριασμός διαγράφεται. Συνδεθείτε με άλλον λογαριασμό ή περιμένετε λίγα λεπτά και δοκιμάστε ξανά.';
+
+  @override
   String get importTranscriptFiles => 'Αρχεία απομαγνητοφωνήσεων';
 
   @override

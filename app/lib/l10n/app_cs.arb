@@ -3839,6 +3839,8 @@
     "dismiss": "Skrýt",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Zobrazit na zamčené obrazovce",
+    "accountDeletionInProgressSignInAgain": "Tento účet se maže. Přihlaste se jiným účtem, nebo počkejte několik minut a zkuste to znovu.",
     "importTranscriptFiles": "Soubory přepisů",
     "importTranscriptFilesDescription": "Vyberte přepisy SRT, VTT nebo TXT, nebo jejich ZIP",
     "importTooManyAttempts": "Právě probíhá příliš mnoho importů. Zkuste to později.",

@@ -3839,6 +3839,8 @@
     "dismiss": "Ascunde",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Afișează pe ecranul de blocare",
+    "accountDeletionInProgressSignInAgain": "Acest cont este în curs de ștergere. Conectează-te cu alt cont sau așteaptă câteva minute și încearcă din nou.",
     "importTranscriptFiles": "Fișiere de transcriere",
     "importTranscriptFilesDescription": "Selectează transcrieri SRT, VTT sau TXT ori o arhivă ZIP cu ele",
     "importTooManyAttempts": "Prea multe importuri în acest moment. Încearcă din nou mai târziu.",

@@ -11396,6 +11396,8 @@
     "dismiss": "దాచు",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు",
+    "accountDeletionInProgressSignInAgain": "ఈ ఖాతా తొలగించబడుతోంది. మరో ఖాతాతో సైన్ ఇన్ చేయండి, లేదా కొన్ని నిమిషాలు వేచి ఉండి మళ్లీ ప్రయత్నించండి.",
     "importTranscriptFiles": "ట్రాన్స్‌క్రిప్ట్ ఫైల్‌లు",
     "importTranscriptFilesDescription": "SRT, VTT లేదా TXT ట్రాన్స్‌క్రిప్ట్‌లను లేదా వాటి ZIP ఫైల్‌ను ఎంచుకోండి",
     "importTooManyAttempts": "ప్రస్తుతం చాలా ఎక్కువ దిగుమతులు జరుగుతున్నాయి. తర్వాత మళ్లీ ప్రయత్నించండి.",

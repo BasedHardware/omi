@@ -73,6 +73,7 @@ Plan = Callable[
         Mapping[str, Any],
         Sequence[Mapping[str, Any]],
         Mapping[str, Optional[Mapping[str, Any]]],
+        Optional[Mapping[str, Any]],
     ],
     tuple[Optional[str], Optional[dict], Optional[dict], Mapping[str, dict]],
 ]
@@ -133,6 +134,7 @@ def _decode_row(uid: str, raw: Mapping[str, Any]) -> tuple[dict[str, Any], list[
     segments = conversations_db._decode_transcript_segments_strict(  # pyright: ignore[reportPrivateUsage]
         uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
     )
+    conversations_db._reveal_match_scores_for_read(row, uid)  # pyright: ignore[reportPrivateUsage]
     row.pop('transcript_segments', None)
     return row, list(segments)
 
@@ -162,6 +164,7 @@ def absorb_conversation(
     plan: Plan,
     expected_survivor_sync_revision: Any = _UNSET,
     expected_donor_sync_revision: Any = _UNSET,
+    last_fragment_id: Optional[str] = None,
     firestore_client: Any = None,
 ) -> AbsorbResult:
     """Atomically append the donor to the survivor and leave a redirect tombstone.
@@ -173,6 +176,13 @@ def absorb_conversation(
     declared ancestry — is re-read in this same transaction before the audit
     gate and any write, and ``ancestor_updates`` re-points each inherited
     tombstone at the survivor.
+
+    ``last_fragment_id`` names the survivor's newest-finished ledger fragment
+    when it is a different document (a donor tombstone). It is re-read inside
+    the transaction — reusing the flatten ancestry read when the fragment is
+    already in the union — strictly decoded, and handed to ``plan`` so the
+    wall-clock policy rechecks lineage against current data. ``None`` adds no
+    reads: the newest fragment is the survivor's own.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = _collection(client, uid)
@@ -217,8 +227,21 @@ def absorb_conversation(
             ancestor_rows = {}
         survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
         donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
+        last_fragment_row = None
+        if last_fragment_id is not None:
+            if last_fragment_id == survivor_id:
+                last_fragment_row = dict(survivor, transcript_segments=survivor_segments)
+            else:
+                fragment_raw = (
+                    ancestor_rows.get(last_fragment_id)
+                    if last_fragment_id in ancestor_rows
+                    else collection.document(last_fragment_id).get(transaction=transaction).to_dict()
+                )
+                if fragment_raw is not None:
+                    fragment_row, fragment_segments = _decode_row(uid, dict(fragment_raw, id=last_fragment_id))
+                    last_fragment_row = dict(fragment_row, transcript_segments=fragment_segments)
         reason, survivor_update, donor_update, ancestor_updates = plan(
-            survivor, survivor_segments, donor, donor_segments, ancestor_rows
+            survivor, survivor_segments, donor, donor_segments, ancestor_rows, last_fragment_row
         )
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
@@ -226,6 +249,15 @@ def absorb_conversation(
         audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
+        conversations_db._guard_match_score_size(payload, survivor_raw)  # pyright: ignore[reportPrivateUsage]
+        if (
+            'speaker_match_scores' in survivor_raw
+            and 'speaker_match_scores' not in payload
+            and survivor_raw.get('data_protection_level') != level
+        ):
+            # An omitted optional merge must not retain an old standard blob
+            # when a mixed-protection absorb upgrades the survivor.
+            payload['speaker_match_scores'] = firestore.DELETE_FIELD
         # The survivor transcript changed: a stored client projection described the old one.
         conversations_db._invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
         if flatten:

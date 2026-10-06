@@ -14841,6 +14841,14 @@
     "@dismiss": {
         "description": "Hide a For You card"
     },
+    "showOnLockScreen": "Show on Lock Screen",
+    "@showOnLockScreen": {
+        "description": "Setting for recording Live Activities on the lock screen and Dynamic Island"
+    },
+    "accountDeletionInProgressSignInAgain": "This account is being deleted. Sign in with another account, or wait a few minutes and try again.",
+    "@accountDeletionInProgressSignInAgain": {
+        "description": "Shown on the sign-in screen after the backend refused every request because the account's deletion is still in progress"
+    },
     "importTranscriptFiles": "Transcript files",
     "@importTranscriptFiles": {
         "description": "Import source card title for SRT, VTT or TXT transcripts exported from other apps"

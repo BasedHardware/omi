@@ -282,7 +282,9 @@ async def execute_systemone(
     request: dict[str, Any] = {'state': validated.state, 'questions': dict(validated.questions)}
     if current_attempt() is not None:
         if attempt_trace is None or attempt_trace.attempts:
-            raise GatewayInvalidRequestError('proactivity attempt already consumed')
+            raise GatewayInvalidRequestError(
+                'proactivity attempt already consumed', rejection_reason='proactivity_attempt_consumed'
+            )
         response = await execute_budgeted_provider(
             request=request,
             provider_ref=provider_ref,
@@ -605,7 +607,9 @@ async def _attempt_provider(
     """
     if current_attempt() is not None:
         if attempt_trace is None or attempt_trace.attempts:
-            return None, GatewayInvalidRequestError('proactivity attempt already consumed')
+            return None, GatewayInvalidRequestError(
+                'proactivity attempt already consumed', rejection_reason='proactivity_attempt_consumed'
+            )
         request = _provider_request(resolved_route, provider_ref, route=route)
         try:
             response = await execute_budgeted_provider(

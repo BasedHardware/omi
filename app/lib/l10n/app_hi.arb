@@ -3839,6 +3839,8 @@
     "dismiss": "हटाएँ",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ",
+    "accountDeletionInProgressSignInAgain": "यह खाता हटाया जा रहा है। किसी दूसरे खाते से साइन इन करें, या कुछ मिनट रुककर फिर से कोशिश करें।",
     "importTranscriptFiles": "ट्रांसक्रिप्ट फ़ाइलें",
     "importTranscriptFilesDescription": "SRT, VTT या TXT ट्रांसक्रिप्ट, या उनकी ZIP फ़ाइल चुनें",
     "importTooManyAttempts": "अभी बहुत अधिक आयात हो रहे हैं। बाद में फिर से प्रयास करें।",

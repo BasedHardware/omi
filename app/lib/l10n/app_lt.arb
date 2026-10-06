@@ -3839,6 +3839,8 @@
     "dismiss": "Slėpti",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Rodyti užrakinimo ekrane",
+    "accountDeletionInProgressSignInAgain": "Ši paskyra šalinama. Prisijunkite kita paskyra arba palaukite kelias minutes ir bandykite dar kartą.",
     "importTranscriptFiles": "Transkripcijų failai",
     "importTranscriptFilesDescription": "Pasirinkite SRT, VTT arba TXT transkripcijas arba jų ZIP archyvą",
     "importTooManyAttempts": "Šiuo metu per daug importavimų. Bandykite vėliau.",

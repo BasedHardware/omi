@@ -11396,6 +11396,8 @@
     "dismiss": "סגירה",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "הצגה במסך הנעילה",
+    "accountDeletionInProgressSignInAgain": "החשבון הזה נמחק כעת. היכנסו עם חשבון אחר, או המתינו כמה דקות ונסו שוב.",
     "importTranscriptFiles": "קובצי תמלול",
     "importTranscriptFilesDescription": "בחר תמלולים בפורמט SRT, VTT או TXT, או קובץ ZIP שמכיל אותם",
     "importTooManyAttempts": "יותר מדי ייבואים כרגע. נסו שוב מאוחר יותר.",

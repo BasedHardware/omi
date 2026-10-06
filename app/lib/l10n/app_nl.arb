@@ -3839,6 +3839,8 @@
     "dismiss": "Verbergen",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Toon op vergrendelscherm",
+    "accountDeletionInProgressSignInAgain": "Dit account wordt verwijderd. Log in met een ander account, of wacht een paar minuten en probeer het opnieuw.",
     "importTranscriptFiles": "Transcriptiebestanden",
     "importTranscriptFilesDescription": "Selecteer SRT-, VTT- of TXT-transcripties, of een ZIP met deze bestanden",
     "importTooManyAttempts": "Te veel imports op dit moment. Probeer het later opnieuw.",

@@ -3839,6 +3839,8 @@
     "dismiss": "Ẩn",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Hiển thị trên màn hình khóa",
+    "accountDeletionInProgressSignInAgain": "Tài khoản này đang được xóa. Hãy đăng nhập bằng tài khoản khác, hoặc chờ vài phút rồi thử lại.",
     "importTranscriptFiles": "Tệp bản chép lời",
     "importTranscriptFilesDescription": "Chọn bản chép lời SRT, VTT hoặc TXT, hoặc tệp ZIP chứa chúng",
     "importTooManyAttempts": "Hiện có quá nhiều lượt nhập dữ liệu. Vui lòng thử lại sau.",

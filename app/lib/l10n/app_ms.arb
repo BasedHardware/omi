@@ -3839,6 +3839,8 @@
     "dismiss": "Tutup",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Tunjukkan pada skrin kunci",
+    "accountDeletionInProgressSignInAgain": "Akaun ini sedang dipadamkan. Log masuk dengan akaun lain, atau tunggu beberapa minit dan cuba lagi.",
     "importTranscriptFiles": "Fail transkrip",
     "importTranscriptFilesDescription": "Pilih transkrip SRT, VTT atau TXT, atau ZIP yang mengandunginya",
     "importTooManyAttempts": "Terlalu banyak import sekarang. Cuba lagi kemudian.",

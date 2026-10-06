@@ -11396,6 +11396,8 @@
     "dismiss": "Схаваць",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Паказваць на экране блакіроўкі",
+    "accountDeletionInProgressSignInAgain": "Гэты ўліковы запіс выдаляецца. Увайдзіце з іншым уліковым запісам або пачакайце некалькі хвілін і паспрабуйце зноў.",
     "importTranscriptFiles": "Файлы стэнаграм",
     "importTranscriptFilesDescription": "Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі",
     "importTooManyAttempts": "Зараз занадта шмат імпартаванняў. Паспрабуйце пазней.",

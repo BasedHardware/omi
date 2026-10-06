@@ -3839,6 +3839,8 @@
     "dismiss": "Приховати",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Показувати на екрані блокування",
+    "accountDeletionInProgressSignInAgain": "Цей обліковий запис видаляється. Увійдіть з іншим обліковим записом або зачекайте кілька хвилин і спробуйте знову.",
     "importTranscriptFiles": "Файли розшифровок",
     "importTranscriptFilesDescription": "Виберіть розшифровки SRT, VTT або TXT чи ZIP-архів із ними",
     "importTooManyAttempts": "Зараз забагато імпортів. Спробуйте пізніше.",

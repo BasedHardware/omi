@@ -12462,6 +12462,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get dismiss => 'Elrejtés';
 
   @override
+  String get showOnLockScreen => 'Megjelenítés a zárolási képernyőn';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Ez a fiók törlés alatt áll. Jelentkezz be egy másik fiókkal, vagy várj néhány percet, és próbáld újra.';
+
+  @override
   String get importTranscriptFiles => 'Átiratfájlok';
 
   @override

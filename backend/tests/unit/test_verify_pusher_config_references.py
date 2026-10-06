@@ -197,6 +197,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
+        "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE": "shadow",
         "LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED": "true",
         "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
         "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
@@ -217,6 +218,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION": "false",
         "LIVE_CAPTURE_WINDOW_MERGE_UNION": "false",
         "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": "false",
+        "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": "false",
+        "SONIOX_WIRE_LEDGER": "false",
         "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
         "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
@@ -277,11 +280,12 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     literals = preflight.literal_pusher_values(deployment)
 
     assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT"] == "100"
     assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
     assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "2"
     assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
-    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "10"
+    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
     assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
     assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"

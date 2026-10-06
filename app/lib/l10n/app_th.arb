@@ -3839,6 +3839,8 @@
     "dismiss": "ปิด",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "แสดงบนหน้าจอล็อก",
+    "accountDeletionInProgressSignInAgain": "บัญชีนี้กำลังถูกลบ ลงชื่อเข้าใช้ด้วยบัญชีอื่น หรือรอสักครู่แล้วลองอีกครั้ง",
     "importTranscriptFiles": "ไฟล์ถอดเสียง",
     "importTranscriptFilesDescription": "เลือกไฟล์ถอดเสียง SRT, VTT หรือ TXT หรือไฟล์ ZIP ที่รวมไว้",
     "importTooManyAttempts": "มีการนำเข้ามากเกินไปในขณะนี้ โปรดลองอีกครั้งในภายหลัง",

@@ -1224,8 +1224,8 @@ return {0, 0}
 """)
 
 
-def _seconds_until_midnight_utc() -> int:
-    now = datetime.now(timezone.utc)
+def _seconds_until_next_midnight(tz: Optional[Any]) -> int:
+    now = datetime.now(tz or timezone.utc)
     tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(1, int((tomorrow - now).total_seconds()))
 
@@ -1236,6 +1236,7 @@ def check_tts_rate_limit(
     burst_limit: int = 50,
     burst_window_secs: int = 60,
     daily_char_limit: int = 10_000,
+    tz: Optional[Any] = None,
 ) -> tuple[int, int]:
     """Atomic per-user TTS rate limit check.
 
@@ -1247,11 +1248,11 @@ def check_tts_rate_limit(
     """
     try:
         burst_key = f'tts:burst:{uid}'
-        today_utc = datetime.now(timezone.utc).strftime('%Y%m%d')
-        daily_key = f'tts:chars:{uid}:{today_utc}'
+        today = datetime.now(tz or timezone.utc).strftime('%Y%m%d')
+        daily_key = f'tts:chars:{uid}:{today}'
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         window_ms = burst_window_secs * 1000
-        daily_ttl = _seconds_until_midnight_utc()
+        daily_ttl = _seconds_until_next_midnight(tz)
         result = _TTS_RATE_LIMIT_LUA(
             keys=[burst_key, daily_key],
             args=[now_ms, window_ms, burst_limit, char_count, daily_char_limit, daily_ttl],
@@ -1260,6 +1261,35 @@ def check_tts_rate_limit(
     except Exception as e:
         logger.error(f'check_tts_rate_limit: redis error uid={uid}: {e}')
         return -1, 0
+
+
+def check_tts_rate_limit_for_user(
+    uid: str,
+    char_count: int,
+    burst_limit: int = 50,
+    burst_window_secs: int = 60,
+    daily_char_limit: int = 10_000,
+) -> tuple[int, int]:
+    """check_tts_rate_limit with the user's own day resolved here.
+
+    resolve_user_timezone reads Firestore, so it must run inside the executor
+    this is handed to, never on the event loop of an async route.
+    """
+    from zoneinfo import ZoneInfo
+    from database.notifications import resolve_user_timezone
+
+    try:
+        tz = ZoneInfo(resolve_user_timezone(uid))
+    except Exception:
+        tz = timezone.utc
+    return check_tts_rate_limit(
+        uid,
+        char_count,
+        burst_limit=burst_limit,
+        burst_window_secs=burst_window_secs,
+        daily_char_limit=daily_char_limit,
+        tz=tz,
+    )
 
 
 def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
@@ -1292,16 +1322,23 @@ def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600
         return True
 
 
-def set_persona_update_timestamp(uid: str) -> None:
-    """Mark that user has updated personas (expires at 00:00 UTC)"""
-    now = datetime.now(timezone.utc)
-    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    ttl = int((tomorrow - now).total_seconds())
+def set_persona_update_timestamp(uid: str, tz: Optional[Any] = None) -> None:
+    """Mark that user has updated personas (expires at the user's next midnight).
+
+    A UTC expiry frees the gate mid-afternoon west of UTC, which hands the user a
+    second persona regeneration inside one of their days.
+    """
+    from datetime import time as _time
+
+    zone = tz or timezone.utc
+    now = datetime.now(zone)
+    tomorrow = datetime.combine(now.date() + timedelta(days=1), _time.min, tzinfo=zone)
+    ttl = max(1, int((tomorrow - now).total_seconds()))
     r.set(f'users:{uid}:persona_updated', '1', ex=ttl)
 
 
 def can_update_persona(uid: str) -> bool:
-    """Check if user can update personas (not updated since last 00:00 UTC)"""
+    """Check if user can update personas (not updated since their last midnight)"""
     return not r.exists(f'users:{uid}:persona_updated')
 
 

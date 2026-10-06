@@ -3839,6 +3839,8 @@
     "dismiss": "Ausblenden",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Auf dem Sperrbildschirm anzeigen",
+    "accountDeletionInProgressSignInAgain": "Dieses Konto wird gerade gelöscht. Melde dich mit einem anderen Konto an oder warte ein paar Minuten und versuche es erneut.",
     "importTranscriptFiles": "Transkriptdateien",
     "importTranscriptFilesDescription": "Wähle SRT-, VTT- oder TXT-Transkripte oder ein ZIP mit ihnen aus",
     "importTooManyAttempts": "Gerade zu viele Importe. Versuche es später erneut.",

@@ -3839,6 +3839,8 @@
     "dismiss": "Descartar",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Mostrar en la pantalla de bloqueo",
+    "accountDeletionInProgressSignInAgain": "Esta cuenta se está eliminando. Inicia sesión con otra cuenta o espera unos minutos e inténtalo de nuevo.",
     "importTranscriptFiles": "Archivos de transcripción",
     "importTranscriptFilesDescription": "Selecciona transcripciones SRT, VTT o TXT, o un ZIP que las contenga",
     "importTooManyAttempts": "Demasiadas importaciones en este momento. Inténtalo de nuevo más tarde.",

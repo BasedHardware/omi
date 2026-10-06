@@ -12426,6 +12426,13 @@ class AppLocalizationsSr extends AppLocalizations {
   String get dismiss => 'Сакриј';
 
   @override
+  String get showOnLockScreen => 'Прикажи на закључаном екрану';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Овај налог се брише. Пријавите се другим налогом или сачекајте неколико минута и покушајте поново.';
+
+  @override
   String get importTranscriptFiles => 'Датотеке транскрипата';
 
   @override

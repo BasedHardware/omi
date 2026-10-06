@@ -11396,6 +11396,8 @@
     "dismiss": "Сакриј",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Прикажи на закључаном екрану",
+    "accountDeletionInProgressSignInAgain": "Овај налог се брише. Пријавите се другим налогом или сачекајте неколико минута и покушајте поново.",
     "importTranscriptFiles": "Датотеке транскрипата",
     "importTranscriptFilesDescription": "Изаберите SRT, VTT или TXT транскрипте или ZIP са њима",
     "importTooManyAttempts": "Тренутно има превише увоза. Покушајте поново касније.",

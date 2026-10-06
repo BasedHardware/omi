@@ -11396,6 +11396,8 @@
     "dismiss": "Isara",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Ipakita sa lock screen",
+    "accountDeletionInProgressSignInAgain": "Binubura ang account na ito. Mag-sign in gamit ang ibang account, o maghintay ng ilang minuto at subukang muli.",
     "importTranscriptFiles": "Mga file ng transcript",
     "importTranscriptFilesDescription": "Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito",
     "importTooManyAttempts": "Masyadong maraming pag-import ngayon. Subukan ulit mamaya.",

@@ -12443,6 +12443,13 @@ class AppLocalizationsBs extends AppLocalizations {
   String get dismiss => 'Sakrij';
 
   @override
+  String get showOnLockScreen => 'Prikaži na zaključanom ekranu';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Ovaj račun se briše. Prijavite se drugim računom ili sačekajte nekoliko minuta i pokušajte ponovo.';
+
+  @override
   String get importTranscriptFiles => 'Datoteke transkripta';
 
   @override

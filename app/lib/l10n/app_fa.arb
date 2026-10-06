@@ -11396,6 +11396,8 @@
     "dismiss": "رد کردن",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "نمایش در صفحهٔ قفل",
+    "accountDeletionInProgressSignInAgain": "این حساب در حال حذف است. با حساب دیگری وارد شوید یا چند دقیقه صبر کنید و دوباره امتحان کنید.",
     "importTranscriptFiles": "فایل‌های رونوشت",
     "importTranscriptFilesDescription": "رونوشت‌های SRT، VTT یا TXT یا یک فایل ZIP از آن‌ها را انتخاب کنید",
     "importTooManyAttempts": "در حال حاضر تعداد وارد کردن‌ها بیش از حد است. بعداً دوباره تلاش کنید.",

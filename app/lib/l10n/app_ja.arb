@@ -3839,6 +3839,8 @@
     "dismiss": "非表示",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "ロック画面に表示",
+    "accountDeletionInProgressSignInAgain": "このアカウントは削除処理中です。別のアカウントでサインインするか、数分待ってからもう一度お試しください。",
     "importTranscriptFiles": "文字起こしファイル",
     "importTranscriptFilesDescription": "SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください",
     "importTooManyAttempts": "現在インポートが多すぎます。しばらくしてからもう一度お試しください。",

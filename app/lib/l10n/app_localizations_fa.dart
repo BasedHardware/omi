@@ -12412,6 +12412,13 @@ class AppLocalizationsFa extends AppLocalizations {
   String get dismiss => 'رد کردن';
 
   @override
+  String get showOnLockScreen => 'نمایش در صفحهٔ قفل';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'این حساب در حال حذف است. با حساب دیگری وارد شوید یا چند دقیقه صبر کنید و دوباره امتحان کنید.';
+
+  @override
   String get importTranscriptFiles => 'فایل‌های رونوشت';
 
   @override

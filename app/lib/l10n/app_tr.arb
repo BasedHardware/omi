@@ -3874,6 +3874,8 @@
     "dismiss": "Gizle",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Kilit ekranında göster",
+    "accountDeletionInProgressSignInAgain": "Bu hesap siliniyor. Başka bir hesapla giriş yapın ya da birkaç dakika bekleyip tekrar deneyin.",
     "importTranscriptFiles": "Transkript dosyaları",
     "importTranscriptFilesDescription": "SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin",
     "importTooManyAttempts": "Şu anda çok fazla içe aktarma var. Daha sonra tekrar deneyin.",

@@ -2275,8 +2275,16 @@ _add(
         },
     )
 )
-_add(DriverEntry('database.users.get_people', base={'uid': UID}))
-_add(DriverEntry('database.users.get_person_by_name', base={'uid': UID, 'name': 'shape-name'}))
+_add(
+    DriverEntry(
+        'database.person_aliases.list_people',
+        base={'uid': UID},
+        neutrals={
+            'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape')
+        },
+    )
+)
+_add(DriverEntry('database.person_aliases.find_person_by_name', base={'uid': UID, 'name': 'shape-name'}))
 _add(DriverEntry('database.users.get_task_integrations', base={'uid': UID}))
 _add(DriverEntry('database.users.get_user_by_stripe_customer_id', base={'customer_id': 'cus_1'}))
 _add(DriverEntry('database.users.resolve_deletion_wipe_job_id', base={'wipe_job_id': 'job-1'}))

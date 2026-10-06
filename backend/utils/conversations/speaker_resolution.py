@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from datetime import timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple, cast
 
+import config.speaker_match_scores as match_scores
+
 import httpx
 import numpy as np
 
@@ -110,11 +112,20 @@ def _max_new_embeddings() -> int:
 CacheEntries = Dict[str, Tuple[float, np.ndarray]]
 
 
-def encode_cache(entries: CacheEntries) -> bytes:
+def encode_cache(entries: CacheEntries, evidence_seconds: Optional[Mapping[str, float]] = None) -> bytes:
     ids = list(entries)
+    optional_header = {}
+    try:
+        if evidence_seconds is not None:
+            optional_header = {
+                'evidence_seconds': {k: round(v, 3) for k, v in evidence_seconds.items() if k in entries}
+            }
+    except Exception:
+        match_scores.record_failure(logger, reason='malformed_doc')
     header = json.dumps(
         {
             'v': CACHE_FORMAT_VERSION,
+            **optional_header,
             'ids': ids,
             'durations': [round(entries[i][0], 3) for i in ids],
             'dim': int(entries[ids[0]][1].size) if ids else 0,
@@ -124,7 +135,7 @@ def encode_cache(entries: CacheEntries) -> bytes:
     return struct.pack('>I', len(header)) + header + matrix
 
 
-def decode_cache(data: Optional[bytes]) -> CacheEntries:
+def decode_cache(data: Optional[bytes], evidence_seconds: Optional[Dict[str, float]] = None) -> CacheEntries:
     if not data or len(data) < 4:
         return {}
     try:
@@ -132,6 +143,11 @@ def decode_cache(data: Optional[bytes]) -> CacheEntries:
         header = json.loads(data[4 : 4 + length])
         if header.get('v') != CACHE_FORMAT_VERSION or not header.get('ids'):
             return {}
+        if evidence_seconds is not None:
+            try:
+                evidence_seconds.update(header.get('evidence_seconds') or {})
+            except Exception:
+                match_scores.record_failure(logger, reason='malformed_doc')
         dim = int(header['dim'])
         matrix = np.frombuffer(data[4 + length :], dtype='<f2').astype(np.float32).reshape(len(header['ids']), dim)
         return {sid: (float(d), matrix[i]) for i, (sid, d) in enumerate(zip(header['ids'], header['durations']))}
@@ -287,6 +303,7 @@ def _embed_missing(
     keys: Optional[Mapping[str, str]] = None,
     session: Optional[AudioChunkReadSession] = None,
     diagnostics: Optional[EmbeddingDiagnostics] = None,
+    evidence_seconds: Optional[Dict[str, float]] = None,
 ) -> Tuple[int, str]:
     """Embed ``pending`` segments from stored audio into ``cache``; returns (count, stop reason)."""
     diagnostics = diagnostics if diagnostics is not None else EmbeddingDiagnostics()
@@ -414,6 +431,11 @@ def _embed_missing(
                 continue
             failures = 0
             cache_key = keys.get(segment_id, segment_id) if keys is not None else segment_id
+            if evidence_seconds is not None:
+                try:
+                    evidence_seconds[cache_key] = len(clip) / (SAMPLE_RATE * 2)
+                except Exception:
+                    match_scores.record_failure(logger)
             cache[cache_key] = (_duration(segment), np.asarray(vector, dtype=np.float32).reshape(-1))
             done.add(segment_id)
             embedded += 1
@@ -802,6 +824,13 @@ def resolve_speakers_for_processing(uid: str, conversation: Any) -> bool:
     """Resolve voices and return whether the manual receipt was read and applied."""
     if not isinstance(conversation, Conversation) or not conversation.transcript_segments:
         return False
+    try:
+        if match_scores.enabled():
+            updates = [s.speaker_match_scores for s in conversation.transcript_segments if s.speaker_match_scores]
+            if updates:
+                conversation.speaker_match_scores = match_scores.merge(conversation.speaker_match_scores, updates)
+    except Exception:
+        match_scores.record_failure(logger, reason='malformed_doc')
     began = time.monotonic()
     receipt: Mapping[str, Any] = {}
     receipt_read = False
@@ -1038,7 +1067,8 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
             _without_resolution(conversation, 'unaligned_audio', reason=refusal)
             return
 
-    cache = decode_cache(download_speaker_embedding_cache(uid, conversation.id))
+    clip_seconds: Optional[Dict[str, float]] = {} if match_scores.enabled() else None
+    cache = decode_cache(download_speaker_embedding_cache(uid, conversation.id), clip_seconds)
     if not spans_on and any(key.startswith(CAPTURE_SPAN_KEY_PREFIX) for key in cache):
         _without_resolution(conversation, 'unaligned_audio', reason='capture_span')
         return
@@ -1155,14 +1185,17 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
             keys=keys,
             session=read_session,
             diagnostics=diagnostics,
+            evidence_seconds=clip_seconds,
         )
         if read_session is not None and read_session.limit_hit:
             _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
             return
     else:
-        new_embeddings, stop = _embed_missing(uid, conversation, pending, cache, deadline, diagnostics=diagnostics)
+        new_embeddings, stop = _embed_missing(
+            uid, conversation, pending, cache, deadline, diagnostics=diagnostics, evidence_seconds=clip_seconds
+        )
     if new_embeddings or stale:
-        upload_speaker_embedding_cache(uid, conversation.id, encode_cache(cache))
+        upload_speaker_embedding_cache(uid, conversation.id, encode_cache(cache, clip_seconds))
 
     if keys is not None:
         vectors = {
@@ -1172,11 +1205,21 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
         }
     else:
         vectors = {sid: vector for sid, (_, vector) in cache.items()}
+    score_durations = None
+    try:
+        score_durations = (
+            {s.id: clip_seconds[keys[s.id]] for s in segments if s.id in keys and keys[s.id] in clip_seconds}
+            if spans_on and keys is not None and clip_seconds is not None
+            else ({} if spans_on else clip_seconds)
+        )
+    except Exception:
+        match_scores.record_failure(logger, reason='malformed_doc')
     resolution = resolve_conversation_speakers(
         segments,
         vectors,
         manual_speakers=_manual_speakers(receipt),
         voiceprints=load_voiceprints_for_resolution(uid),
+        embedding_seconds=score_durations,
     )
     if resolution is None:
         reason, fields = _no_embeddings_diagnostics(
@@ -1185,6 +1228,12 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
         _without_resolution(conversation, 'no_embeddings', reason=reason, diagnostics=fields)
         return
 
+    try:
+        if match_scores.enabled():
+            retained = [r for r in (conversation.speaker_match_scores or []) if r['stage'] != 'resolution']
+            conversation.speaker_match_scores = match_scores.merge(retained, resolution.match_scores)
+    except Exception:
+        match_scores.record_failure(logger, reason='malformed_doc')
     apply_speaker_resolution(
         conversation, resolution.speaker_ids, resolution.voice_identities, resolution.voice_identity_statuses
     )

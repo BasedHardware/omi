@@ -11396,6 +11396,8 @@
     "dismiss": "সরিয়ে দিন",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "লক স্ক্রিনে দেখান",
+    "accountDeletionInProgressSignInAgain": "এই অ্যাকাউন্টটি মুছে ফেলা হচ্ছে। অন্য অ্যাকাউন্ট দিয়ে সাইন ইন করুন, অথবা কয়েক মিনিট অপেক্ষা করে আবার চেষ্টা করুন।",
     "importTranscriptFiles": "ট্রান্সক্রিপ্ট ফাইল",
     "importTranscriptFilesDescription": "SRT, VTT বা TXT ট্রান্সক্রিপ্ট, বা সেগুলোর একটি ZIP নির্বাচন করুন",
     "importTooManyAttempts": "এই মুহূর্তে অনেক বেশি আমদানি চলছে। পরে আবার চেষ্টা করুন।",

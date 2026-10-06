@@ -3839,6 +3839,8 @@
     "dismiss": "Peida",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Kuva lukustuskuval",
+    "accountDeletionInProgressSignInAgain": "Seda kontot kustutatakse. Logi sisse teise kontoga või oota paar minutit ja proovi uuesti.",
     "importTranscriptFiles": "Transkriptsioonifailid",
     "importTranscriptFilesDescription": "Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP",
     "importTooManyAttempts": "Praegu on liiga palju importimisi. Proovi hiljem uuesti.",

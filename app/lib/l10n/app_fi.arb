@@ -3839,6 +3839,8 @@
     "dismiss": "Hylkää",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Näytä lukitusnäytöllä",
+    "accountDeletionInProgressSignInAgain": "Tätä tiliä poistetaan. Kirjaudu sisään toisella tilillä tai odota muutama minuutti ja yritä uudelleen.",
     "importTranscriptFiles": "Litterointitiedostot",
     "importTranscriptFilesDescription": "Valitse SRT-, VTT- tai TXT-litteroinnit tai niitä sisältävä ZIP",
     "importTooManyAttempts": "Liian monta tuontia juuri nyt. Yritä myöhemmin uudelleen.",

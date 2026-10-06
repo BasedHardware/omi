@@ -12498,6 +12498,13 @@ class AppLocalizationsTa extends AppLocalizations {
   String get dismiss => 'மறை';
 
   @override
+  String get showOnLockScreen => 'பூட்டுத் திரையில் காட்டு';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'இந்தக் கணக்கு நீக்கப்பட்டு வருகிறது. வேறு கணக்கில் உள்நுழையவும், அல்லது சில நிமிடங்கள் காத்திருந்து மீண்டும் முயற்சிக்கவும்.';
+
+  @override
   String get importTranscriptFiles => 'படியெடுப்பு கோப்புகள்';
 
   @override

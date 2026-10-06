@@ -11396,6 +11396,8 @@
     "dismiss": "ಮರೆಮಾಡಿ",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ",
+    "accountDeletionInProgressSignInAgain": "ಈ ಖಾತೆಯನ್ನು ಅಳಿಸಲಾಗುತ್ತಿದೆ. ಬೇರೆ ಖಾತೆಯಿಂದ ಸೈನ್ ಇನ್ ಮಾಡಿ, ಅಥವಾ ಕೆಲವು ನಿಮಿಷ ಕಾದು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "importTranscriptFiles": "ಪ್ರತಿಲೇಖನ ಫೈಲ್‌ಗಳು",
     "importTranscriptFilesDescription": "SRT, VTT ಅಥವಾ TXT ಪ್ರತಿಲೇಖನಗಳನ್ನು ಅಥವಾ ಅವುಗಳ ZIP ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ",
     "importTooManyAttempts": "ಈಗ ತುಂಬಾ ಹೆಚ್ಚು ಆಮದುಗಳು ನಡೆಯುತ್ತಿವೆ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",

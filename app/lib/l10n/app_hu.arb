@@ -3935,6 +3935,8 @@
     "dismiss": "Elrejtés",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Megjelenítés a zárolási képernyőn",
+    "accountDeletionInProgressSignInAgain": "Ez a fiók törlés alatt áll. Jelentkezz be egy másik fiókkal, vagy várj néhány percet, és próbáld újra.",
     "importTranscriptFiles": "Átiratfájlok",
     "importTranscriptFilesDescription": "Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt",
     "importTooManyAttempts": "Jelenleg túl sok az importálás. Próbálja újra később.",
