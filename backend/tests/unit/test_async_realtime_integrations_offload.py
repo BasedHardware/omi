@@ -395,7 +395,7 @@ class TestRealtimeIntegrationsOffload:
         """The v2-only mentor section must run through run_blocking, never on the loop."""
         tracking, calls = _make_executor_tracking_run_blocking()
         admission = MagicMock(return_value=[{"text": "hi"}])
-        resolve = MagicMock(return_value="legacy")  # flag denies; no v2 dispatch
+        resolve = MagicMock(return_value=None)  # flag denies; no v2 dispatch
 
         monkeypatch.setenv("MENTOR_PIPELINE", "cohort")
         with patch.object(app_integrations, "run_blocking", tracking), patch.object(

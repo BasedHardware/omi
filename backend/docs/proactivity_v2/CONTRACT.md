@@ -579,7 +579,9 @@ revisions cannot publish a follow-up. Missing queue bindings keep scheduling off
 | --- | --- |
 | Backend API (including desktop-backend wherever feed/outcome routes are served) | Customer-data Firestore identity; shared Redis `REDIS_DB_HOST` / `REDIS_DB_PORT` / credentials; plain `PROACTIVITY_V2_POSTHOG_TOKEN` and matching `PROACTIVITY_V2_POSTHOG_HOST`; integrated routes and registry. |
 | Mentor production on listen/backend and pusher | Same customer-data/Redis/PostHog bindings; `MENTOR_PIPELINE=cohort` (true `proactivity_v2` selects v2; false/unknown/error dispatches nothing — the legacy lane was deleted); working authenticated `OMI_LLM_GATEWAY_URL`/gateway service bindings. Pusher is a separate image/release: enabling only backend does not switch it. |
+| Task create/update/reminder hosts and commitment callback worker | All five queue/project/location bindings above, plus the same PostHog, customer-data and gateway bindings on the worker. Propagate enqueue bindings to every host that invokes reminder scheduling, not just the callback host. |
 | LLM gateway | `LLM_GATEWAY_ACCOUNTING_ENABLED=true`; customer-data Firestore, shared Redis and PostHog bindings; **the same `MENTOR_PIPELINE=cohort` selection as mentor hosts for admission here too**; existing Luna and System One/Jev provider credentials and the committed routes/rate cards. No direct-provider fallback. |
+| Mobile, macOS, Windows | Updated generated clients and consumers, ordinary authenticated backend routing, existing notification preferences/permissions. No local flag or UID bypass grants server admission. Live listen sockets carry identity-only v2 wakeups; all desktop content is fetched through the feed. Offline sockets catch up through foreground/active polling. |
 
 V2 flag lookup uses **only** `PROACTIVITY_V2_POSTHOG_TOKEN`, stripped and
 required to start with `phc_`. This is the Omi project's public client token

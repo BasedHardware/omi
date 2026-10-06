@@ -156,7 +156,7 @@ def test_cohort_diagnostics_type_status_privacy_and_rate_limit(cache, monkeypatc
 def test_cohort_resolves_v2_only_for_flagged_users(cache, monkeypatch, value):
     monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
     cache.lookup.return_value = {'proactivity_v2': value}
-    assert flags.mentor_pipeline('synthetic') == ('v2' if value else 'legacy')
+    assert flags.mentor_pipeline('synthetic') == ('v2' if value else None)
     cache.lookup.assert_called_once_with('synthetic')
 
 
@@ -166,7 +166,7 @@ def test_non_cohort_env_denies_without_flag_lookup(cache, monkeypatch, pipeline)
         monkeypatch.delenv('MENTOR_PIPELINE', raising=False)
     else:
         monkeypatch.setenv('MENTOR_PIPELINE', pipeline)
-    assert flags.mentor_pipeline('synthetic') == 'legacy'
+    assert flags.mentor_pipeline('synthetic') is None
     cache.lookup.assert_not_called()
 
 

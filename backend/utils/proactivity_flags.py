@@ -125,7 +125,7 @@ def enabled(uid: str) -> bool:
     return result.enabled
 
 
-def mentor_pipeline(uid: str) -> str:
+def mentor_pipeline(uid: str) -> str | None:
     """Resolve the exclusive mentor lane for this user: 'v2' or no lane.
 
     The legacy mentor pipeline was deleted after v2 reached 100%: every
@@ -138,5 +138,5 @@ def mentor_pipeline(uid: str) -> str:
         # cohort is the only supported mode; unset, a stale legacy/v2 value, or
         # a typo is a config error that resolves no lane (and the runtime env
         # validator rejects it at deploy time).
-        return 'legacy'
-    return 'v2' if enabled(uid) else 'legacy'
+        return None
+    return 'v2' if enabled(uid) else None
