@@ -624,6 +624,9 @@ def test_the_owner_is_the_whole_name_or_the_first_name_alone(owner_name, label, 
     assert segments[1].is_user is False
     if label == 'Jane Smith':
         assert segments[0].person_id == 'person-jane-smith'
+    bound = is_owner or label == 'Jane Smith'
+    assert segments[0].text == ('Hello.' if bound else f'{label}: Hello.')
+    assert segments[1].text == 'Sam: Hi.'
 
 
 @pytest.mark.parametrize('order', [1, -1], ids=['as-stored', 'reversed'])
@@ -646,6 +649,74 @@ def test_a_name_two_people_share_binds_neither_of_them(monkeypatch, order):
         people=names,
     )
     assert [s.person_id for s in segments] == [None, 'person-jo']
+    assert [s.text for s in segments] == ['Sam: Hi.', 'Hey.'], 'the unbound name stays readable in the text'
+
+
+@pytest.mark.parametrize(
+    ('filename', 'text'),
+    [
+        pytest.param(
+            'call.srt',
+            '1\n00:00:01,000 --> 00:00:02,000\nJane Doe: Morning.\n\n'
+            '2\n00:00:02,000 --> 00:00:03,000\nSam: Hi.\n\n'
+            '3\n00:00:03,000 --> 00:00:04,000\nAlice Chen: Hello.\n',
+            id='srt-labels',
+        ),
+        pytest.param(
+            'call.vtt',
+            'WEBVTT\n\n00:01.000 --> 00:02.000\n<v Jane Doe>Morning.</v>\n\n'
+            '00:02.000 --> 00:03.000\n<v Sam>Hi.</v>\n\n00:03.000 --> 00:04.000\n<v Alice Chen>Hello.</v>\n',
+            id='vtt-voices',
+        ),
+        pytest.param(
+            'call.txt',
+            'Jane Doe  0:01\nMorning.\n\nSam  0:02\nHi.\n\nAlice Chen  0:03\nHello.\n',
+            id='speaker-headers',
+        ),
+        pytest.param(
+            'call.txt',
+            '[00:01] Jane Doe: Morning.\n[00:02] Sam: Hi.\n[00:03] Alice Chen: Hello.\n',
+            id='inline-timed-labels',
+        ),
+    ],
+)
+def test_a_name_leaves_the_text_only_when_it_binds_to_the_owner_or_a_person(filename, text):
+    """A segment can name only the owner (is_user) or a person (person_id); any other name stays in its text."""
+    parsed = tf.parse_transcript_file(filename, text.encode('utf-8'))
+    assert parsed is not None
+
+    segments = tf.segments_from_cues(parsed.cues, owner_name='Jane Doe', people={'sam': 'person-sam'})
+
+    assert [(s.text, s.speaker_id, s.is_user, s.person_id) for s in segments] == [
+        ('Morning.', 0, True, None),
+        ('Hi.', 1, False, 'person-sam'),
+        ('Alice Chen: Hello.', 2, False, None),
+    ]
+
+
+@pytest.mark.parametrize(
+    ('text', 'expected'),
+    [
+        pytest.param(
+            'Meeting notes for Tuesday.\n\nTODO: send the deck\n\nWe agreed on the scope.\n\nTODO: book the room\n',
+            ['Meeting notes for Tuesday.', 'TODO: send the deck', 'We agreed on the scope.', 'TODO: book the room'],
+            id='a-recurring-label',
+        ),
+        pytest.param(
+            # Read as speaker headers; each heading's time becomes its turn's start.
+            'Weekly sync\n9:00 Budget review\nWe went over the Q3 numbers.\n9:30 Hiring update\nTwo offers are out.\n',
+            ['Weekly sync', 'Budget review: We went over the Q3 numbers.', 'Hiring update: Two offers are out.'],
+            id='agenda-headings',
+        ),
+    ],
+)
+def test_a_label_that_is_not_a_name_never_costs_the_text_a_word(text, expected):
+    parsed = tf.parse_transcript_file('notes.txt', text.encode('utf-8'))
+    assert parsed is not None
+
+    segments = tf.segments_from_cues(parsed.cues, owner_name='Jane Doe', people={'sam': 'person-sam'})
+
+    assert [s.text for s in segments] == expected
 
 
 def test_untimed_cues_get_ordered_estimated_times():
@@ -689,9 +760,9 @@ def test_sorting_keeps_untimed_cues_after_the_timed_cue_they_follow():
     segments = tf.segments_from_cues(cues, owner_name=None, people={})
 
     assert [(s.text, s.speaker_id, s.start) for s in segments] == [
-        ('Opening turn.', 0, 1.0),
-        ('Later turn.', 1, 5.0),
-        ('Still Sam.', 1, segments[1].end),
+        ('Jane: Opening turn.', 0, 1.0),
+        ('Sam: Later turn.', 1, 5.0),
+        ('Sam: Still Sam.', 1, segments[1].end),
     ]
 
 
@@ -868,6 +939,27 @@ def test_the_owner_is_found_by_full_name_and_another_jane_is_not_the_owner(tmp_p
 
     (conversation,) = job.store.docs.values()
     assert [s['is_user'] for s in conversation['transcript_segments']] == [True, False, True]
+
+
+def test_speakers_who_are_neither_the_owner_nor_in_people_keep_their_names(tmp_path, job):
+    """Neither Alice nor Bob is the owner (Jane Doe) or in People: their names are stored with their words."""
+    srt = (
+        '1\n00:00:01,000 --> 00:00:02,000\nAlice Chen: The vendor quote came in.\n\n'
+        '2\n00:00:02,000 --> 00:00:03,000\nBob Ortiz: Twelve thousand for the year.\n\n'
+        '3\n00:00:03,000 --> 00:00:04,000\nAlice Chen: Then we sign it.\n'
+    )
+
+    _run(tmp_path, 'call.srt', srt.encode('utf-8'))
+
+    (conversation,) = job.store.docs.values()
+    assert [
+        (s['text'], s['speaker_id'], s['is_user'], s['person_id']) for s in conversation['transcript_segments']
+    ] == [
+        ('Alice Chen: The vendor quote came in.', 0, False, None),
+        ('Bob Ortiz: Twelve thousand for the year.', 1, False, None),
+        ('Alice Chen: Then we sign it.', 0, False, None),
+    ]
+    assert conversation['structured']['overview'].startswith('Alice Chen: The vendor quote came in.')
 
 
 def test_reimport_skips_conversations_already_imported(tmp_path, job):

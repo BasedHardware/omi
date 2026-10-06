@@ -108,6 +108,8 @@ class TranscriptFileSkipped(Exception):
 @dataclass(frozen=True)
 class TranscriptCue:
     text: str
+    # The speaker's name as the file wrote it (a "Name:" label, a <v Name> voice, a header).
+    # ``text`` never repeats it; ``segments_from_cues`` decides whether the segment does.
     speaker: Optional[str] = None
     start: Optional[float] = None
     end: Optional[float] = None
@@ -192,7 +194,9 @@ def _assign_speakers(cues: Sequence[TranscriptCue]) -> List[TranscriptCue]:
 
     A label is a speaker when the file is mostly speaker-labeled, when it is a
     generic ``Speaker N`` label, or when it recurs. A one-off "Note: ..." in an
-    otherwise unlabeled file stays text.
+    otherwise unlabeled file stays text. A label split off here is never lost:
+    ``segments_from_cues`` puts it back in front of the text unless it names the
+    owner or a known person.
     """
     labeled: List[Optional[tuple[str, str]]] = []
     for cue in cues:
@@ -565,6 +569,16 @@ def _owner_keys(owner_name: Optional[str]) -> frozenset[str]:
     return frozenset({full, full.split(' ')[0]}) if full else frozenset()
 
 
+def _segment_text(cue: TranscriptCue, *, bound: bool) -> str:
+    """The cue's words, led by "Name: " when its speaker's name binds to no one.
+
+    A segment can only name its speaker through ``is_user`` or ``person_id``, so any
+    other name ("Alice Chen", "Speaker 2", or a label that was never a name, such as
+    a recurring "TODO" or an agenda heading) stays in the text rather than vanish.
+    """
+    return cue.text if bound or not cue.speaker else f'{cue.speaker}: {cue.text}'
+
+
 def segments_from_cues(
     cues: Sequence[TranscriptCue],
     *,
@@ -574,9 +588,10 @@ def segments_from_cues(
     """Number speakers by first appearance and bind the owner and known people by name.
 
     ``owner_name`` is the owner's whole name when known (``get_user_full_name``).
-    ``people`` maps name keys (``_name_key``) to person IDs. Timed cues are put in
-    time order. Missing end times close at the next turn; untimed cues get ordered,
-    estimated times.
+    ``people`` maps name keys (``_name_key``) to person IDs. A speaker name that
+    binds to neither stays at the front of its text (``_segment_text``). Timed cues
+    are put in time order. Missing end times close at the next turn; untimed cues get
+    ordered, estimated times.
     """
     cues = _in_time_order(cues)
     owner_keys = _owner_keys(owner_name)
@@ -593,13 +608,14 @@ def segments_from_cues(
         if end is None or end <= start:
             end = following if following is not None and following > start else start + _estimated_seconds(cue.text)
         is_user = key in owner_keys
+        person_id = None if is_user or key is None else people.get(key)
         segments.append(
             TranscriptSegment(
-                text=cue.text,
+                text=_segment_text(cue, bound=is_user or person_id is not None),
                 speaker=f'SPEAKER_{speaker_id:02d}',
                 speaker_id=speaker_id,
                 is_user=is_user,
-                person_id=None if is_user or key is None else people.get(key),
+                person_id=person_id,
                 start=start,
                 end=end,
             )
