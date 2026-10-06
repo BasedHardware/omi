@@ -993,16 +993,28 @@ def retrieve_vad_segments(
     logger.info('event=sync_vad outcome=success segment_count=%d', len(segments))
 
     aseg = AudioSegment.from_wav(path)
-    path_dir = '/'.join(path.split('/')[:-1])
+    path_dir = os.path.dirname(path)
+    # Equal wall-clock starts do not mean equal audio. Keep each WAL's VAD
+    # outputs in its own retry-stable namespace, including concurrent workers.
+    # Retain the timestamp basename used by parsing and durable content IDs.
+    source_key = hashlib.sha256(os.path.basename(path).encode('utf-8')).hexdigest()
+    segment_dir = os.path.join(path_dir, '.vad', source_key).replace(os.sep, '/')
 
     try:
         for i, segment in enumerate(segments):
             if segment['end'] - segment['start'] < 1 and not (source_frame_map or {}).get('coverage_trimmed'):
                 continue
             segment_timestamp = start_timestamp + segment['start']
-            segment_path = f'{path_dir}/{segment_timestamp}.wav'
+            os.makedirs(segment_dir, exist_ok=True)
+            segment_path = f'{segment_dir}/{segment_timestamp}.wav'
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
-            segment_aseg.export(segment_path, format='wav')
+            try:
+                segment_aseg.export(segment_path, format='wav')
+            except FileNotFoundError:
+                # Legacy requests share a directory: another cleanup may
+                # remove this empty namespace between mkdir and opening it.
+                os.makedirs(segment_dir, exist_ok=True)
+                segment_aseg.export(segment_path, format='wav')
             segmented_paths.add(segment_path)
             if segment_source_maps is not None:
                 # Pydub's millisecond slice starts at this original WAV sample.
@@ -1642,6 +1654,18 @@ def _cleanup_files(file_paths: Iterable[str]):
         try:
             if path and os.path.exists(path):
                 os.remove(path)
+            if path:
+                directory = os.path.dirname(path)
+                source_key = os.path.basename(directory)
+                if (
+                    os.path.basename(os.path.dirname(directory)) == '.vad'
+                    and len(source_key) == 64
+                    and all(char in '0123456789abcdef' for char in source_key)
+                ):
+                    # rmdir never removes a sibling segment or a nonempty
+                    # namespace. Keep the shared root for concurrent writers.
+                    with contextlib.suppress(OSError):
+                        os.rmdir(directory)
         except Exception as e:
             logger.error('event=sync_cleanup outcome=failed exception_type=%s', type(e).__name__)
 
