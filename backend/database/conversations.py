@@ -807,6 +807,7 @@ def _collect_visible_conversation_page(
     conversations = []
     last_doc = None
     fetched = 0
+    batch_limit = limit
     try:
         for doc in budgeted_stream_iter(page_query, budget):
             fetched += 1
@@ -821,13 +822,15 @@ def _collect_visible_conversation_page(
     skipped = fetched - len(conversations)
     while (
         len(conversations) < limit
-        and fetched == limit
+        and fetched == batch_limit
         and last_doc is not None
         and skipped <= _RULE_DISCARD_PAGE_SKIP_CAP
         and hasattr(conversations_ref, 'start_after')
     ):
-        need = limit - len(conversations)
-        follow = conversations_ref.start_after(last_doc).limit(need)
+        # A shortfall-sized follow-up lets one stale row end the scan while
+        # visible rows remain. Ask for another full window; the skip cap still
+        # bounds the walk.
+        follow = conversations_ref.start_after(last_doc).limit(batch_limit)
         fetched = 0
         try:
             for doc in budgeted_stream_iter(follow, budget):
@@ -844,7 +847,7 @@ def _collect_visible_conversation_page(
                     return conversations
         except ListReadBudgetExhausted:
             return conversations
-        if fetched < need:
+        if fetched < batch_limit:
             break
     return conversations
 

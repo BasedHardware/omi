@@ -142,6 +142,44 @@ def test_limit_one_page_fills_past_a_completed_rule_discard(monkeypatch):
     assert [row['id'] for row in page] == ['visible']
 
 
+def test_mixed_page_fills_past_a_later_stale_rule_discard(monkeypatch):
+    from database import conversations as conversations_db
+
+    def _at(hour: int) -> datetime:
+        return datetime(2026, 9, 22, hour, 0, tzinfo=timezone.utc)
+
+    visible_new = {
+        'id': 'visible-new',
+        'created_at': _at(14),
+        'status': 'completed',
+        'discarded': False,
+        'deleted': False,
+        'source': 'omi',
+        'structured': {'title': 'Newer real conversation'},
+    }
+    visible_old = {
+        'id': 'visible-old',
+        'created_at': _at(11),
+        'status': 'completed',
+        'discarded': False,
+        'deleted': False,
+        'source': 'omi',
+        'structured': {'title': 'Older real conversation'},
+    }
+    _install_listing(
+        monkeypatch,
+        {
+            'visible-new': visible_new,
+            'stale-1': _incident(id='stale-1', created_at=_at(13)),
+            'stale-2': _incident(id='stale-2', created_at=_at(12)),
+            'visible-old': visible_old,
+        },
+    )
+
+    page = conversations_db.get_conversations_without_photos('u', limit=2, offset=0)
+    assert [row['id'] for row in page] == ['visible-new', 'visible-old']
+
+
 def test_read_projection_marks_the_incident_without_mutating_it(conversations_db):
     stored = _incident()
     projected = conversations_db.prepare_conversation_for_read(stored, 'u')
