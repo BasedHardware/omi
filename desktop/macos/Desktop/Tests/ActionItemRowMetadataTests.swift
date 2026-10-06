@@ -5,6 +5,8 @@ import XCTest
 
 /// An action-item row's owner, due date and context: each shown when known, absent (never
 /// "Unknown") when not, and kept across the summary cache's JSON round trip.
+/// MainActor-isolated like the promoter it exercises (ConversationSummaryTaskPromoter).
+@MainActor
 final class ActionItemRowMetadataTests: XCTestCase {
   func testSuggestedAppsDisclosureStartsCollapsed() {
     XCTAssertFalse(ConversationSuggestedAppsDisclosure.initiallyExpanded)
