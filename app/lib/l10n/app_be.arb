@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "Спытайце што заўгодна",
     "noMessagesYet": "Пакі нета паведамленняў!\nЧаму б вам не пачаць размову?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
@@ -2983,6 +2984,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Не ўдалося загрузіць больш задач. Пацягніце ўніз, каб паўтарыць.",
     "tasksLater": "Позней",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -4207,6 +4209,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Запіс",
+    "settingsSectionSupport": "Падтрымка",
+    "settingsSectionPersonalization": "Персаналізацыя",
+    "settingsSectionConnectedApps": "Падключаныя праграмы",
     "@account": {
         "description": "Account section label"
     },
@@ -4996,7 +5002,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "ВАШ API КЛЮЧ",
+    "yourApiKey": "Ваш API ключ",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5019,7 +5025,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "НАЗВА КЛЮЧА",
+    "keyNameLabel": "Назва ключа",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5027,7 +5033,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "ДАЗВОЛЫ",
+    "permissionsLabel": "Дазволы",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10493,6 +10499,7 @@
     "searchActionItems": "Шукаць задачы",
     "selectActionItems": "Выбраць некалькі",
     "selectAllTasksMenu": "Выбраць усе",
+    "selectAllTasksPartial": "Не ўдалося загрузіць усе задачы. Выбраны толькі ўжо загружаныя задачы.",
     "showCompletedTasks": "Паказаць завершаныя",
     "startCallRecording": "Пачаць запіс званка",
     "startVoiceRecording": "Пачаць галасавы запіс",
@@ -10750,6 +10757,9 @@
     "appDisabledLastError": "Апошняя памылка: {error}.",
     "prerecordedTranscript": "Папярэдне запісанае",
     "pendantRecordingSyncBlocked": "Pendant усё яшчэ запісвае, таму захаваны гук нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а потым сінхранізуйце зноў.",
+    "pendantLostConnection": "Кулон страціў сувязь з гэтым тэлефонам.",
+    "pendantReconnectsOnItsOwn": "Omi перападключыцца сам, калі кулон уключаны і побач.",
+    "pendantRecordingSafe": "Усё, што запісана да гэтага, захавана.",
     "pendantFullSyncBlocked": "Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў.",
     "conversationsNotCapturedCount": "Не запісана ({count})",
     "transcriptionNoAudio": "Транскрыпцыя не атрымлівае аўдыё",
@@ -11108,7 +11118,6 @@
     "captureStarting": "Запуск…",
     "capturePhoneStorageFull": "Памяць тэлефона запоўнена",
     "captureStorageAlmostFull": "Памяць амаль запоўнена",
-    "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
     "participantsSummaryUncounted": "{name} і іншыя",
     "deviceOnboardingVoiceReplyTitle": "Слухайце адказы Omi",
     "deviceOnboardingVoiceReplySample": "Гатова. Ваша наступная сустрэча пачнецца праз дваццаць хвілін.",

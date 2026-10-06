@@ -268,6 +268,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get askAnything => 'Jautājiet jebko';
 
   @override
+  String get askAnythingButton => 'Jautājiet jebko';
+
+  @override
   String get noMessagesYet => 'Vēl nav ziņojumu!\nKāpēc nesākt sarunu?';
 
   @override
@@ -2688,6 +2691,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get tasksNoDeadline => 'Nav termiņa';
 
   @override
+  String get tasksNextPageFailed => 'Neizdevās ielādēt vairāk uzdevumu. Pavelciet uz leju, lai mēģinātu vēlreiz.';
+
+  @override
   String get tasksLater => 'Vēlāk';
 
   @override
@@ -3778,6 +3784,18 @@ class AppLocalizationsLv extends AppLocalizations {
   String get settingsHeader => 'IESTATĪJUMI';
 
   @override
+  String get settingsSectionRecording => 'Ierakstīšana';
+
+  @override
+  String get settingsSectionSupport => 'Atbalsts';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizācija';
+
+  @override
+  String get settingsSectionConnectedApps => 'Pievienotās lietotnes';
+
+  @override
   String get plansAndBilling => 'Plāni un Norēķini';
 
   @override
@@ -4376,7 +4394,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get saveKeyWarning => 'Saglabājiet šo atslēgu tagad! Jūs to vairs nevarēsiet redzēt.';
 
   @override
-  String get yourApiKey => 'JŪSU API ATSLĒGA';
+  String get yourApiKey => 'Jūsu API atslēga';
 
   @override
   String get tapToCopy => 'Pieskarieties, lai kopētu';
@@ -4391,13 +4409,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get accessDataProgrammatically => 'Piekļūstiet saviem datiem programmatiski';
 
   @override
-  String get keyNameLabel => 'ATSLĒGAS NOSAUKUMS';
+  String get keyNameLabel => 'Atslēgas nosaukums';
 
   @override
   String get keyNamePlaceholder => 'piem., Manas lietotnes integrācija';
 
   @override
-  String get permissionsLabel => 'ATĻAUJAS';
+  String get permissionsLabel => 'Atļaujas';
 
   @override
   String get permissionsInfoNote => 'R = Lasīt, W = Rakstīt. Noklusējums tikai lasīšana, ja nekas nav atlasīts.';
@@ -9145,6 +9163,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get selectAllTasksMenu => 'Atlasīt visus';
 
   @override
+  String get selectAllTasksPartial => 'Neizdevās ielādēt visus uzdevumus. Atlasīti tikai jau ielādētie uzdevumi.';
+
+  @override
   String get connectTaskAppToExport => 'Savienojiet uzdevumu lietotni Iestatījumos, lai eksportētu';
 
   @override
@@ -9941,6 +9962,15 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant joprojām ieraksta, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.';
+
+  @override
+  String get pendantLostConnection => 'Kulons zaudēja savienojumu ar šo tālruni.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā.';
+
+  @override
+  String get pendantRecordingSafe => 'Viss, kas ierakstīts līdz šim, ir drošībā.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11277,10 +11307,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi pats atjaunos savienojumu';

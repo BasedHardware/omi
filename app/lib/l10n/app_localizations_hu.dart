@@ -269,6 +269,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get askAnything => 'Kérdezz bármit';
 
   @override
+  String get askAnythingButton => 'Kérdezz bármit';
+
+  @override
   String get noMessagesYet => 'Még nincsenek üzenetek!\nMiért nem kezdesz egy beszélgetést?';
 
   @override
@@ -2698,6 +2701,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get tasksNoDeadline => 'Nincs határidő';
 
   @override
+  String get tasksNextPageFailed => 'Nem sikerült több feladatot betölteni. Húzd le az újrapróbáláshoz.';
+
+  @override
   String get tasksLater => 'Később';
 
   @override
@@ -3790,6 +3796,18 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settingsHeader => 'BEÁLLÍTÁSOK';
 
   @override
+  String get settingsSectionRecording => 'Felvétel';
+
+  @override
+  String get settingsSectionSupport => 'Támogatás';
+
+  @override
+  String get settingsSectionPersonalization => 'Személyre szabás';
+
+  @override
+  String get settingsSectionConnectedApps => 'Csatlakoztatott alkalmazások';
+
+  @override
   String get plansAndBilling => 'Csomagok és Számlázás';
 
   @override
@@ -4389,7 +4407,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get saveKeyWarning => 'Mentse el ezt a kulcsot most! Nem fogja tudni újra megtekinteni.';
 
   @override
-  String get yourApiKey => 'AZ ÖN API KULCSA';
+  String get yourApiKey => 'Az Ön API-kulcsa';
 
   @override
   String get tapToCopy => 'Másoláshoz érintse meg';
@@ -4404,13 +4422,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get accessDataProgrammatically => 'Programozott hozzáférés az adataihoz';
 
   @override
-  String get keyNameLabel => 'KULCS NEVE';
+  String get keyNameLabel => 'Kulcs neve';
 
   @override
   String get keyNamePlaceholder => 'pl. Az én integrációm';
 
   @override
-  String get permissionsLabel => 'ENGEDÉLYEK';
+  String get permissionsLabel => 'Engedélyek';
 
   @override
   String get permissionsInfoNote =>
@@ -9162,6 +9180,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get selectAllTasksMenu => 'Összes kijelölése';
 
   @override
+  String get selectAllTasksPartial =>
+      'Nem sikerült minden feladatot betölteni. Csak a már betöltött feladatok vannak kijelölve.';
+
+  @override
   String get connectTaskAppToExport => 'Csatlakoztasson egy feladatalkalmazást a Beállításokban az exportáláshoz';
 
   @override
@@ -9956,6 +9978,16 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.';
+
+  @override
+  String get pendantLostConnection => 'A medál elvesztette a kapcsolatot ezzel a telefonnal.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van.';
+
+  @override
+  String get pendantRecordingSafe => 'Minden, amit eddig rögzített, biztonságban van.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11294,10 +11326,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'A tárhely majdnem megtelt';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
 
   @override
   String get capturePendantDisconnectedShort => 'Az Omi magától újracsatlakozik';

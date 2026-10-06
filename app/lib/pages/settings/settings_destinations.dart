@@ -134,8 +134,7 @@ Future<void> openVoiceProfile(BuildContext context) async {
   await routeToPage(
     context,
     Builder(
-      builder: (routeContext) => Scaffold(
-        appBar: AppBar(leading: const OmiBackButton()),
+      builder: (routeContext) => OmiGroupedPage(
         body: SpeechProfileWidget(
           flowSource: 'settings',
           goNext: () => Navigator.of(routeContext).pop(),

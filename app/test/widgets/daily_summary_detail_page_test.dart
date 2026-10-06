@@ -17,6 +17,7 @@ import 'package:omi/pages/conversations/day_conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart' show parseRecapDate;
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 
 class _TestEnvFields implements EnvFields {
@@ -60,7 +61,7 @@ void main() {
 
     final firstRow = find.byKey(const ValueKey('daily_summary_location_row_0'));
     final secondRow = find.byKey(const ValueKey('daily_summary_location_row_1'));
-    final contentWidth = tester.getSize(find.byType(Scaffold)).width - 40;
+    final contentWidth = tester.getSize(find.byType(Scaffold)).width - 2 * OmiSpacing.md;
 
     expect(firstRow, findsOneWidget);
     expect(secondRow, findsOneWidget);
@@ -304,6 +305,45 @@ void main() {
     expect(find.text('17m'), findsOneWidget);
     expect(find.text('9'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the counts are one line under the headline, each saying what it counts', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DailySummaryDetailPage(
+          summaryId: 'summary-counts',
+          summary: _summary(stats: DayStats(totalConversations: 3, totalDurationMinutes: 83, actionItemsCount: 2)),
+        ),
+      ),
+    );
+    await tester.pump();
+    final line = find.byKey(const ValueKey('daily_summary_counts'));
+    String? textOf(String key) =>
+        tester.widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text))).data;
+    // Conversations and tasks open their day pages (main's recap stats); the length sits between.
+    expect(textOf('recap_conversations_stat'), '3 conversations');
+    expect(textOf('recap_tasks_stat'), '2 tasks');
+    expect(find.descendant(of: line, matching: find.text('1h 23m')), findsOneWidget);
+    final top = tester.getTopLeft(find.byKey(const ValueKey('recap_conversations_stat'))).dy;
+    expect(tester.getTopLeft(find.byKey(const ValueKey('recap_tasks_stat'))).dy, top, reason: 'one line');
+    // A length of zero says nothing, so it is left out; the task count stays, as on main.
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DailySummaryDetailPage(
+          key: const ValueKey('zero'),
+          summaryId: 'summary-zero',
+          summary: _summary(stats: DayStats(totalConversations: 2, totalDurationMinutes: 0, actionItemsCount: 0)),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(textOf('recap_conversations_stat'), '2 conversations');
+    expect(textOf('recap_tasks_stat'), '0 tasks');
+    expect(find.text('0m'), findsNothing);
   });
 }
 

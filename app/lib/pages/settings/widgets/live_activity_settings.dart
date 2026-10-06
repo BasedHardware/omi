@@ -82,18 +82,18 @@ class _LiveActivitySettingsState extends State<LiveActivitySettings> with Widget
   @override
   Widget build(BuildContext context) {
     if (!_supported) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.all(OmiSpacing.md),
-      child: OmiSettingsGroup(
-        children: [
-          OmiSettingsRow.toggle(
-            key: const ValueKey('capture_live_activity_toggle'),
-            title: context.l10n.showOnLockScreen,
-            value: _enabled,
-            onChanged: _saving ? null : _setEnabled,
-          ),
-        ],
+    final group = OmiSettingsGroup(children: [
+      OmiSettingsRow.toggle(
+        key: const ValueKey('capture_live_activity_toggle'),
+        title: context.l10n.showOnLockScreen,
+        value: _enabled,
+        onChanged: _saving ? null : _setEnabled,
       ),
-    );
+    ]);
+    // On a grouped Settings page the list carries the gutter; the group only needs the gap below.
+    if (OmiGroupedScope.of(context)) {
+      return Padding(padding: const EdgeInsets.only(bottom: OmiSpacing.xl), child: group);
+    }
+    return Padding(padding: const EdgeInsets.all(OmiSpacing.md), child: group);
   }
 }

@@ -30,8 +30,9 @@ class _PhoneCallSettingsPageState extends State<PhoneCallSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.phoneCallSettingsTitle)),
+    return OmiGroupedPage(
+      // Matches the "Phone Calls" row that opens this page.
+      title: l10n.phoneCalls,
       body: Consumer<PhoneCallProvider>(
         builder: (context, provider, _) {
           if (!provider.numbersLoaded) return const OmiLoadingState();
@@ -48,7 +49,7 @@ class _PhoneCallSettingsPageState extends State<PhoneCallSettingsPage> {
             );
           }
           return ListView(
-            padding: const EdgeInsets.all(OmiSpacing.md),
+            padding: OmiGroupedPage.padding,
             children: [
               OmiSettingsGroup(
                 header: l10n.yourVerifiedNumbers,
@@ -56,11 +57,10 @@ class _PhoneCallSettingsPageState extends State<PhoneCallSettingsPage> {
                 children: [
                   for (final number in provider.verifiedNumbers)
                     OmiSettingsRow(
-                      leading: const Icon(Icons.phone),
                       title: number.phoneNumber,
                       subtitle: _formatVerifiedAt(context, number.verifiedAt),
                       trailing: OmiIconButton(
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const OmiLineIcon(OmiLineGlyph.trash),
                         label: l10n.phoneDeleteButton,
                         isDestructive: true,
                         onPressed: () => _confirmDelete(context, provider, number.id, number.phoneNumber),

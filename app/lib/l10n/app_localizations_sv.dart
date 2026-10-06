@@ -268,6 +268,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get askAnything => 'Fråga vad som helst';
 
   @override
+  String get askAnythingButton => 'Fråga vad som helst';
+
+  @override
   String get noMessagesYet => 'Inga meddelanden ännu!\nVarför inte starta en konversation?';
 
   @override
@@ -2686,6 +2689,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tasksNoDeadline => 'Ingen deadline';
 
   @override
+  String get tasksNextPageFailed => 'Kunde inte läsa in fler uppgifter. Dra nedåt för att försöka igen.';
+
+  @override
   String get tasksLater => 'Senare';
 
   @override
@@ -3775,6 +3781,18 @@ class AppLocalizationsSv extends AppLocalizations {
   String get settingsHeader => 'INSTÄLLNINGAR';
 
   @override
+  String get settingsSectionRecording => 'Inspelning';
+
+  @override
+  String get settingsSectionSupport => 'Support';
+
+  @override
+  String get settingsSectionPersonalization => 'Anpassning';
+
+  @override
+  String get settingsSectionConnectedApps => 'Anslutna appar';
+
+  @override
   String get plansAndBilling => 'Planer och Fakturering';
 
   @override
@@ -4372,7 +4390,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get saveKeyWarning => 'Spara denna nyckel nu! Du kommer inte att kunna se den igen.';
 
   @override
-  String get yourApiKey => 'DIN API-NYCKEL';
+  String get yourApiKey => 'Din API-nyckel';
 
   @override
   String get tapToCopy => 'Tryck för att kopiera';
@@ -4387,13 +4405,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get accessDataProgrammatically => 'Få programmatisk åtkomst till dina data';
 
   @override
-  String get keyNameLabel => 'NYCKELNAMN';
+  String get keyNameLabel => 'Nyckelnamn';
 
   @override
   String get keyNamePlaceholder => 't.ex., Min app-integration';
 
   @override
-  String get permissionsLabel => 'BEHÖRIGHETER';
+  String get permissionsLabel => 'Behörigheter';
 
   @override
   String get permissionsInfoNote => 'R = Läs, W = Skriv. Standard endast läsning om inget är valt.';
@@ -9127,6 +9145,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get selectAllTasksMenu => 'Välj alla';
 
   @override
+  String get selectAllTasksPartial => 'Kunde inte läsa in alla uppgifter. Bara de redan inlästa uppgifterna är valda.';
+
+  @override
   String get connectTaskAppToExport => 'Anslut en uppgiftsapp i Inställningar för att exportera';
 
   @override
@@ -9917,6 +9938,15 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant spelar fortfarande in, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera igen.';
+
+  @override
+  String get pendantLostConnection => 'Hängsmycket tappade anslutningen till den här telefonen.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ansluter igen av sig själv när hängsmycket är på och i närheten.';
+
+  @override
+  String get pendantRecordingSafe => 'Allt som spelats in innan är säkert.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11255,10 +11285,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lagringen är nästan full';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi ansluter igen av sig själv';

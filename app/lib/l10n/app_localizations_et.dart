@@ -267,6 +267,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get askAnything => 'Küsi mida tahes';
 
   @override
+  String get askAnythingButton => 'Küsi mida tahes';
+
+  @override
   String get noMessagesYet => 'Sõnumeid pole veel!\nMiks te ei alusta vestlust?';
 
   @override
@@ -2681,6 +2684,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tasksNoDeadline => 'Tähtajata';
 
   @override
+  String get tasksNextPageFailed => 'Rohkem ülesandeid ei õnnestunud laadida. Uuesti proovimiseks tõmba alla.';
+
+  @override
   String get tasksLater => 'Hiljem';
 
   @override
@@ -3769,6 +3775,18 @@ class AppLocalizationsEt extends AppLocalizations {
   String get settingsHeader => 'SEADED';
 
   @override
+  String get settingsSectionRecording => 'Salvestamine';
+
+  @override
+  String get settingsSectionSupport => 'Tugi';
+
+  @override
+  String get settingsSectionPersonalization => 'Isikupärastamine';
+
+  @override
+  String get settingsSectionConnectedApps => 'Ühendatud rakendused';
+
+  @override
   String get plansAndBilling => 'Plaanid ja Arveldus';
 
   @override
@@ -4365,7 +4383,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get saveKeyWarning => 'Salvesta see võti kohe! Sa ei näe seda enam kunagi.';
 
   @override
-  String get yourApiKey => 'TEIE API VÕTI';
+  String get yourApiKey => 'Teie API võti';
 
   @override
   String get tapToCopy => 'Puudutage kopeerimiseks';
@@ -4380,13 +4398,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get accessDataProgrammatically => 'Pääsete oma andmetele programmiliselt juurde';
 
   @override
-  String get keyNameLabel => 'VÕTME NIMI';
+  String get keyNameLabel => 'Võtme nimi';
 
   @override
   String get keyNamePlaceholder => 'nt. Minu rakenduse integratsioon';
 
   @override
-  String get permissionsLabel => 'ÕIGUSED';
+  String get permissionsLabel => 'Õigused';
 
   @override
   String get permissionsInfoNote =>
@@ -9120,6 +9138,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get selectAllTasksMenu => 'Vali kõik';
 
   @override
+  String get selectAllTasksPartial =>
+      'Kõiki ülesandeid ei õnnestunud laadida. Valitud on ainult juba laaditud ülesanded.';
+
+  @override
   String get connectTaskAppToExport => 'Eksportimiseks ühendage Seadetes ülesannete rakendus';
 
   @override
@@ -9907,6 +9929,15 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant salvestab endiselt, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja sünkrooni uuesti.';
+
+  @override
+  String get pendantLostConnection => 'Ripats kaotas ühenduse selle telefoniga.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal.';
+
+  @override
+  String get pendantRecordingSafe => 'Kõik varem salvestatu on alles.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11243,10 +11274,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Mälu on peaaegu täis';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi loob ühenduse ise uuesti';

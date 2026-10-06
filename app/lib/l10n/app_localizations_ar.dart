@@ -266,6 +266,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get askAnything => 'اسأل أي شيء';
 
   @override
+  String get askAnythingButton => 'اسأل أي شيء';
+
+  @override
   String get noMessagesYet => 'لا توجد رسائل بعد!\nلماذا لا تبدأ محادثة؟';
 
   @override
@@ -2663,6 +2666,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get tasksNoDeadline => 'بدون موعد نهائي';
 
   @override
+  String get tasksNextPageFailed => 'تعذر تحميل المزيد من المهام. اسحب للأسفل للمحاولة مرة أخرى.';
+
+  @override
   String get tasksLater => 'لاحقاً';
 
   @override
@@ -3740,6 +3746,18 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get settingsHeader => 'الإعدادات';
+
+  @override
+  String get settingsSectionRecording => 'التسجيل';
+
+  @override
+  String get settingsSectionSupport => 'الدعم';
+
+  @override
+  String get settingsSectionPersonalization => 'التخصيص';
+
+  @override
+  String get settingsSectionConnectedApps => 'التطبيقات المتصلة';
 
   @override
   String get plansAndBilling => 'الخطط والفواتير';
@@ -9063,6 +9081,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get selectAllTasksMenu => 'تحديد الكل';
 
   @override
+  String get selectAllTasksPartial => 'تعذر تحميل كل المهام. تم تحديد المهام المحمّلة فقط.';
+
+  @override
   String get connectTaskAppToExport => 'قم بربط تطبيق مهام في الإعدادات للتصدير';
 
   @override
@@ -9855,6 +9876,15 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'لا يزال Pendant يسجّل، لذا لا يمكن نقل الصوت المخزّن عليه. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
+
+  @override
+  String get pendantLostConnection => 'فقد القلادة اتصالها بهذا الهاتف.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة.';
+
+  @override
+  String get pendantRecordingSafe => 'كل ما سُجّل قبل ذلك محفوظ.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11183,10 +11213,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'المساحة ممتلئة تقريبًا';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.';
 
   @override
   String get capturePendantDisconnectedShort => 'سيعيد Omi الاتصال تلقائيًا';

@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/pages/chat/widgets/chat_bubbles.dart';
 import 'package:omi/ui/ui.dart';
 
 class ChartMessageWidget extends StatelessWidget {
@@ -26,9 +27,8 @@ class ChartMessageWidget extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.fromLTRB(12, 16, 16, 12),
       decoration: BoxDecoration(
-        color: OmiColors.surface1,
+        color: ChatInk.fill,
         borderRadius: OmiRadius.lgAll,
-        border: Border.all(color: OmiColors.textPrimary.withValues(alpha: 0.06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -267,6 +267,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get askAnything => 'Tanya apa sahaja';
 
   @override
+  String get askAnythingButton => 'Tanya apa sahaja';
+
+  @override
   String get noMessagesYet => 'Tiada mesej lagi!\nMengapa tidak mulakan perbualan?';
 
   @override
@@ -2691,6 +2694,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get tasksNoDeadline => 'Tiada tarikh akhir';
 
   @override
+  String get tasksNextPageFailed => 'Tidak dapat memuatkan lebih banyak tugasan. Tarik ke bawah untuk mencuba lagi.';
+
+  @override
   String get tasksLater => 'Kemudian';
 
   @override
@@ -3781,6 +3787,18 @@ class AppLocalizationsMs extends AppLocalizations {
   String get settingsHeader => 'TETAPAN';
 
   @override
+  String get settingsSectionRecording => 'Rakaman';
+
+  @override
+  String get settingsSectionSupport => 'Sokongan';
+
+  @override
+  String get settingsSectionPersonalization => 'Pemperibadian';
+
+  @override
+  String get settingsSectionConnectedApps => 'Apl yang disambungkan';
+
+  @override
   String get plansAndBilling => 'Pelan & Pengebilan';
 
   @override
@@ -4381,7 +4399,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get saveKeyWarning => 'Simpan kunci ini sekarang! Anda tidak akan dapat melihatnya lagi.';
 
   @override
-  String get yourApiKey => 'KUNCI API ANDA';
+  String get yourApiKey => 'Kunci API anda';
 
   @override
   String get tapToCopy => 'Ketik untuk menyalin';
@@ -4396,13 +4414,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get accessDataProgrammatically => 'Akses data anda secara programatik';
 
   @override
-  String get keyNameLabel => 'NAMA KUNCI';
+  String get keyNameLabel => 'Nama kunci';
 
   @override
   String get keyNamePlaceholder => 'cth., Integrasi Apl Saya';
 
   @override
-  String get permissionsLabel => 'KEBENARAN';
+  String get permissionsLabel => 'Kebenaran';
 
   @override
   String get permissionsInfoNote => 'R = Baca, W = Tulis. Lalai baca sahaja jika tiada yang dipilih.';
@@ -9147,6 +9165,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get selectAllTasksMenu => 'Pilih semua';
 
   @override
+  String get selectAllTasksPartial =>
+      'Tidak dapat memuatkan semua tugasan. Hanya tugasan yang sudah dimuatkan dipilih.';
+
+  @override
   String get connectTaskAppToExport => 'Sambungkan aplikasi tugas dalam Tetapan untuk mengeksport';
 
   @override
@@ -9940,6 +9962,15 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant masih merakam, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
+
+  @override
+  String get pendantLostConnection => 'Loket anda terputus sambungan dengan telefon ini.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan.';
+
+  @override
+  String get pendantRecordingSafe => 'Semua yang dirakam sebelum ini selamat.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11276,10 +11307,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Storan hampir penuh';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi akan bersambung semula sendiri';

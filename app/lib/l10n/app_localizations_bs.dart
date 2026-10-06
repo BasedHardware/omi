@@ -267,6 +267,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get askAnything => 'Pitaj šta god';
 
   @override
+  String get askAnythingButton => 'Pitaj šta god';
+
+  @override
   String get noMessagesYet => 'Nema poruka!\nZašto ne počnete razgovor?';
 
   @override
@@ -2689,6 +2692,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get tasksNoDeadline => 'Nema roka';
 
   @override
+  String get tasksNextPageFailed => 'Nije moguće učitati više zadataka. Povucite prema dolje da pokušate ponovo.';
+
+  @override
   String get tasksLater => 'Kasnije';
 
   @override
@@ -3777,6 +3783,18 @@ class AppLocalizationsBs extends AppLocalizations {
   String get settingsHeader => 'POSTAVKE';
 
   @override
+  String get settingsSectionRecording => 'Snimanje';
+
+  @override
+  String get settingsSectionSupport => 'Podrška';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizacija';
+
+  @override
+  String get settingsSectionConnectedApps => 'Povezane aplikacije';
+
+  @override
   String get plansAndBilling => 'Planovi i naplatа';
 
   @override
@@ -4372,7 +4390,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get saveKeyWarning => 'Spremi ovaj ključ sada! Nećeš ga moći vidjeti ponovno.';
 
   @override
-  String get yourApiKey => 'TVOJ API KLJUČ';
+  String get yourApiKey => 'Tvoj API ključ';
 
   @override
   String get tapToCopy => 'Dodirni za kopiranje';
@@ -4387,13 +4405,13 @@ class AppLocalizationsBs extends AppLocalizations {
   String get accessDataProgrammatically => 'Pristupi tvojim podacima programski';
 
   @override
-  String get keyNameLabel => 'IME KLJUČA';
+  String get keyNameLabel => 'Ime ključa';
 
   @override
   String get keyNamePlaceholder => 'npr. Moja integracija aplikacije';
 
   @override
-  String get permissionsLabel => 'DOZVOLE';
+  String get permissionsLabel => 'Dozvole';
 
   @override
   String get permissionsInfoNote => 'R = Čitaj, W = Napiši. Zadano je samo čitanje ako ništa nije odabrano.';
@@ -9146,6 +9164,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get selectAllTasksMenu => 'Odaberi sve';
 
   @override
+  String get selectAllTasksPartial => 'Nije moguće učitati sve zadatke. Odabrani su samo već učitani zadaci.';
+
+  @override
   String get connectTaskAppToExport => 'Povežite aplikaciju za zadatke u Postavkama za izvoz';
 
   @override
@@ -9942,6 +9963,15 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant još uvijek snima, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, zatim ponovo sinhronizujte.';
+
+  @override
+  String get pendantLostConnection => 'Privjesak je izgubio vezu s ovim telefonom.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi će se sam ponovo povezati kad je privjesak uključen i u blizini.';
+
+  @override
+  String get pendantRecordingSafe => 'Sve snimljeno do sada je sačuvano.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11277,10 +11307,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Memorija je skoro puna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi će se sam ponovo povezati';

@@ -150,8 +150,8 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
   Widget build(BuildContext context) {
     if (_isLoadingWorkspaces) {
       // Give the first load the same header as the loaded page, so it can always be left.
-      return Scaffold(
-        appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.appSettings('Asana'))),
+      return OmiGroupedPage(
+        title: context.l10n.appSettings('Asana'),
         body: const OmiLoadingState(),
       );
     }

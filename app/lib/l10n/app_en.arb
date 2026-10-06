@@ -355,6 +355,10 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "Ask anything",
+    "@askAnythingButton": {
+        "description": "Home button that opens AI chat, beside a speech-bubble icon"
+    },
     "noMessagesYet": "No messages yet!\nWhy don't you start a conversation?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
@@ -3033,6 +3037,10 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Couldn't load more tasks. Pull down to try again.",
+    "@tasksNextPageFailed": {
+        "description": "Toast on the Tasks list when the next page of tasks fails to load; pull-to-refresh retries."
+    },
     "tasksLater": "Later",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -4257,6 +4265,22 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Recording",
+    "@settingsSectionRecording": {
+        "description": "Settings section header above the Device and Recording & Transcription rows (a noun, not the live 'recording' status)."
+    },
+    "settingsSectionSupport": "Support",
+    "@settingsSectionSupport": {
+        "description": "Settings section header above the Help & About and Feedback / Bug rows."
+    },
+    "settingsSectionPersonalization": "Personalization",
+    "@settingsSectionPersonalization": {
+        "description": "Settings group header above Memories and Goals"
+    },
+    "settingsSectionConnectedApps": "Connected Apps",
+    "@settingsSectionConnectedApps": {
+        "description": "Settings group header above Integrations"
+    },
     "@account": {
         "description": "Account section label"
     },
@@ -5046,7 +5070,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "YOUR API KEY",
+    "yourApiKey": "Your API Key",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5069,7 +5093,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "KEY NAME",
+    "keyNameLabel": "Key Name",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5077,7 +5101,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "PERMISSIONS",
+    "permissionsLabel": "Permissions",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10876,6 +10900,10 @@
     "@selectAllTasksMenu": {
         "description": "Action menu entry to select every task in the action items list"
     },
+    "selectAllTasksPartial": "Couldn't load every task. Only the tasks already loaded are selected.",
+    "@selectAllTasksPartial": {
+        "description": "Toast after Select All on the Tasks list when some pages of tasks could not be loaded, so the selection is partial."
+    },
     "connectTaskAppToExport": "Connect a task app in Settings to export",
     "@connectTaskAppToExport": {
         "description": "Snackbar shown when the user taps Export but no third-party task integration is connected"
@@ -11767,6 +11795,18 @@
     "pendantRecordingSyncBlocked": "Your Pendant is still recording, so its stored audio can't be transferred. Press the Pendant's button to stop recording, then sync again.",
     "@pendantRecordingSyncBlocked": {
         "description": "Shown when offline sync stalls because the Limitless Pendant is actively recording; it cannot serve stored audio until recording stops"
+    },
+    "pendantLostConnection": "Your pendant lost its connection to this phone.",
+    "@pendantLostConnection": {
+        "description": "Disconnected sheet: first line, what happened when the pendant dropped"
+    },
+    "pendantReconnectsOnItsOwn": "Omi reconnects on its own when the pendant is on and nearby.",
+    "@pendantReconnectsOnItsOwn": {
+        "description": "Disconnected sheet: reassurance that reconnecting needs no action"
+    },
+    "pendantRecordingSafe": "Everything recorded before this is safe.",
+    "@pendantRecordingSafe": {
+        "description": "Disconnected sheet: reassurance that nothing recorded is lost"
     },
     "pendantFullSyncBlocked": "Your Pendant's storage is full and it's still in recording mode, so its stored audio can't be transferred. Press the Pendant's button to stop recording, then sync again.",
     "@pendantFullSyncBlocked": {
@@ -13381,10 +13421,6 @@
     "captureStorageAlmostFull": "Storage almost full",
     "@captureStorageAlmostFull": {
         "description": "Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full."
-    },
-    "capturePendantDisconnectedDetail": "Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.",
-    "@capturePendantDisconnectedDetail": {
-        "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
     },
     "capturePendantDisconnectedShort": "Omi reconnects on its own",
     "@capturePendantDisconnectedShort": {

@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "هر چیزی بپرسید",
     "noMessagesYet": "هنوز پیامی وجود ندارد!\nچرا یک گفتگو شروع نمی‌کنید؟",
     "@noMessagesYet": {
         "description": "Empty chat state message"
@@ -2983,6 +2984,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "بارگیری وظایف بیشتر ممکن نشد. برای تلاش دوباره به پایین بکشید.",
     "tasksLater": "بعدتر",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -4207,6 +4209,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "ضبط",
+    "settingsSectionSupport": "پشتیبانی",
+    "settingsSectionPersonalization": "شخصی‌سازی",
+    "settingsSectionConnectedApps": "برنامه‌های متصل",
     "@account": {
         "description": "Account section label"
     },
@@ -10493,6 +10499,7 @@
     "searchActionItems": "جستجوی وظایف",
     "selectActionItems": "انتخاب چندگانه",
     "selectAllTasksMenu": "انتخاب همه",
+    "selectAllTasksPartial": "بارگیری همه وظایف ممکن نشد. فقط وظایف بارگیری‌شده انتخاب شدند.",
     "showCompletedTasks": "نمایش انجام‌شده‌ها",
     "startCallRecording": "شروع ضبط تماس",
     "startVoiceRecording": "شروع ضبط صدا",
@@ -10750,6 +10757,9 @@
     "appDisabledLastError": "آخرین خطا: {error}",
     "prerecordedTranscript": "از پیش ضبط‌شده",
     "pendantRecordingSyncBlocked": "Pendant هنوز در حال ضبط است، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.",
+    "pendantLostConnection": "آویز شما اتصالش را با این تلفن از دست داد.",
+    "pendantReconnectsOnItsOwn": "وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود.",
+    "pendantRecordingSafe": "هر آنچه پیش از این ضبط شده محفوظ است.",
     "pendantFullSyncBlocked": "حافظه Pendant پر است و همچنان در حالت ضبط قرار دارد، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.",
     "conversationsNotCapturedCount": "ثبت نشده ({count})",
     "transcriptionNoAudio": "رونویسی صدا دریافت نمی‌کند",
@@ -11108,7 +11118,6 @@
     "captureStarting": "در حال شروع…",
     "capturePhoneStorageFull": "حافظه تلفن پر است",
     "captureStorageAlmostFull": "حافظه تقریباً پر است",
-    "capturePendantDisconnectedDetail": "آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.",
     "participantsSummaryUncounted": "{name} و دیگران",
     "deviceOnboardingVoiceReplyTitle": "پاسخ‌های Omi را بشنوید",
     "deviceOnboardingVoiceReplySample": "انجام شد. جلسه بعدی شما بیست دقیقه دیگر شروع می‌شود.",

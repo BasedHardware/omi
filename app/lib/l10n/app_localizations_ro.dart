@@ -269,6 +269,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get askAnything => 'Întreabă orice';
 
   @override
+  String get askAnythingButton => 'Întreabă orice';
+
+  @override
   String get noMessagesYet => 'Încă nu există mesaje!\nDe ce nu începi o conversație?';
 
   @override
@@ -2695,6 +2698,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get tasksNoDeadline => 'Fără termen limită';
 
   @override
+  String get tasksNextPageFailed => 'Nu s-au putut încărca mai multe sarcini. Trage în jos pentru a încerca din nou.';
+
+  @override
   String get tasksLater => 'Mai târziu';
 
   @override
@@ -3789,6 +3795,18 @@ class AppLocalizationsRo extends AppLocalizations {
   String get settingsHeader => 'SETĂRI';
 
   @override
+  String get settingsSectionRecording => 'Înregistrare';
+
+  @override
+  String get settingsSectionSupport => 'Asistență';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizare';
+
+  @override
+  String get settingsSectionConnectedApps => 'Aplicații conectate';
+
+  @override
   String get plansAndBilling => 'Planuri și Facturare';
 
   @override
@@ -4389,7 +4407,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get saveKeyWarning => 'Salvați această cheie acum! Nu o veți mai putea vedea.';
 
   @override
-  String get yourApiKey => 'CHEIA DVS. API';
+  String get yourApiKey => 'Cheia dvs. API';
 
   @override
   String get tapToCopy => 'Atingeți pentru a copia';
@@ -4404,13 +4422,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get accessDataProgrammatically => 'Accesați datele dvs. programatic';
 
   @override
-  String get keyNameLabel => 'NUMELE CHEII';
+  String get keyNameLabel => 'Numele cheii';
 
   @override
   String get keyNamePlaceholder => 'ex., Integrarea mea';
 
   @override
-  String get permissionsLabel => 'PERMISIUNI';
+  String get permissionsLabel => 'Permisiuni';
 
   @override
   String get permissionsInfoNote => 'R = Citire, W = Scriere. Implicit doar citire dacă nu este selectat nimic.';
@@ -9166,6 +9184,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get selectAllTasksMenu => 'Selectați tot';
 
   @override
+  String get selectAllTasksPartial =>
+      'Nu s-au putut încărca toate sarcinile. Sunt selectate doar sarcinile deja încărcate.';
+
+  @override
   String get connectTaskAppToExport => 'Conectați o aplicație de sarcini în Setări pentru a exporta';
 
   @override
@@ -9963,6 +9985,15 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant încă înregistrează, așa că sunetul stocat nu poate fi transferat. Apasă butonul Pendant pentru a opri înregistrarea, apoi sincronizează din nou.';
+
+  @override
+  String get pendantLostConnection => 'Pandantivul a pierdut conexiunea cu acest telefon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se va reconecta singur când pandantivul este pornit și în apropiere.';
+
+  @override
+  String get pendantRecordingSafe => 'Tot ce s-a înregistrat înainte este în siguranță.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11302,10 +11333,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Spațiul e aproape plin';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi se va reconecta singur';

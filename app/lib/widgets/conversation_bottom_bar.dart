@@ -919,34 +919,28 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  static BoxDecoration get _barDecoration => BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.pillAll,
-        border: Border.all(color: OmiColors.border, width: 1),
-      );
-
   void _askOmi() {
     HapticFeedback.mediumImpact();
     widget.onAskOmi?.call();
   }
 
-  /// "Ask Omi", centred in a full-width 56 pt capsule.
+  /// "Ask Omi", centred in a full-width 56 pt glass capsule.
   Widget _buildAskBar(BuildContext context) {
     final label = context.l10n.askOmi;
     return Semantics(
       button: true,
       label: label,
       excludeSemantics: true,
-      child: Material(
-        key: const ValueKey('detail_ask_omi'),
-        color: Colors.transparent,
-        child: Ink(
-          height: 56,
-          decoration: _barDecoration,
+      child: OmiGlass(
+        shape: const StadiumBorder(),
+        blur: true,
+        child: Material(
+          key: const ValueKey('detail_ask_omi'),
+          color: Colors.transparent,
           child: InkWell(
-            borderRadius: OmiRadius.pillAll,
+            customBorder: const StadiumBorder(),
             onTap: _askOmi,
-            child: Center(child: Text(label, style: OmiType.headline)),
+            child: SizedBox(height: 56, child: Center(child: Text(label, style: OmiType.headline))),
           ),
         ),
       ),
@@ -985,16 +979,19 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// scroll, Try Again after an inline failure.
   Widget _buildPlayer() {
     final controller = widget.playbackController;
-    final player = Container(
-      height: 56,
-      padding: const EdgeInsetsDirectional.only(start: 4, end: OmiSpacing.md),
-      decoration: _barDecoration,
-      child: Row(
-        children: [
-          _buildPlayPauseButton(),
-          const SizedBox(width: 8),
-          Expanded(child: _buildWaveform()),
-        ],
+    final player = OmiGlass(
+      shape: const StadiumBorder(),
+      blur: true,
+      child: Container(
+        height: 56,
+        padding: const EdgeInsetsDirectional.only(start: 4, end: OmiSpacing.md),
+        child: Row(
+          children: [
+            _buildPlayPauseButton(),
+            const SizedBox(width: 8),
+            Expanded(child: _buildWaveform()),
+          ],
+        ),
       ),
     );
     if (controller == null && _failure == null) return player;

@@ -37,6 +37,10 @@ class JourneyFixtureBackend {
   }
 
   /// Seeded, owned records served by the fixture.
+  /// JSON answered with 200 for a route the fixture does not model, keyed `METHOD /path` (the
+  /// query is ignored), on every request: how a visual audit scenario seeds a page's own data.
+  final Map<String, Object> stubs = {};
+
   final List<Map<String, dynamic>> conversations = [];
   final List<Map<String, dynamic>> memories = [];
   final List<Map<String, dynamic>> actionItems = [];
@@ -130,6 +134,14 @@ class JourneyFixtureBackend {
       req.response.statusCode = fault.status;
       req.response.headers.contentType = ContentType.json;
       req.response.write(fault.body);
+      await req.response.close();
+      return;
+    }
+    final stub = stubs['$method $path'];
+    if (stub != null) {
+      req.response.statusCode = HttpStatus.ok;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode(stub));
       await req.response.close();
       return;
     }

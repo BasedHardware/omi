@@ -387,24 +387,22 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(context.l10n.deviceDiagnostics),
-        actions: [
-          OmiIconButton(
-            icon: const Icon(Icons.support_agent),
-            label: context.l10n.sendToSupport,
-            onPressed: _isSending ? null : _sendToSupport,
-          ),
-          OmiIconButton(
-            key: _shareButtonKey,
-            icon: const Icon(Icons.ios_share),
-            label: context.l10n.share,
-            onPressed: _exportDiagnostics,
-          ),
-        ],
-      ),
+    return OmiGroupedPage(
+      title: context.l10n.deviceDiagnostics,
+      actions: [
+        // Circles, like every other grouped page's header controls.
+        OmiIconButton.filled(
+          icon: const Icon(Icons.support_agent),
+          label: context.l10n.sendToSupport,
+          onPressed: _isSending ? null : _sendToSupport,
+        ),
+        OmiIconButton.filled(
+          key: _shareButtonKey,
+          icon: const Icon(Icons.ios_share),
+          label: context.l10n.share,
+          onPressed: _exportDiagnostics,
+        ),
+      ],
       body: _isLoading
           ? const OmiLoadingState()
           : SingleChildScrollView(

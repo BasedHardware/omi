@@ -268,6 +268,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get askAnything => 'Spýtajte sa na čokoľvek';
 
   @override
+  String get askAnythingButton => 'Spýtajte sa na čokoľvek';
+
+  @override
   String get noMessagesYet => 'Zatiaľ žiadne správy!\nPrečo nespustíte konverzáciu?';
 
   @override
@@ -2688,6 +2691,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get tasksNoDeadline => 'Bez termínu';
 
   @override
+  String get tasksNextPageFailed => 'Ďalšie úlohy sa nepodarilo načítať. Potiahnutím nadol to skúste znova.';
+
+  @override
   String get tasksLater => 'Neskôr';
 
   @override
@@ -3773,6 +3779,18 @@ class AppLocalizationsSk extends AppLocalizations {
   String get settingsHeader => 'NASTAVENIA';
 
   @override
+  String get settingsSectionRecording => 'Nahrávanie';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
+  String get settingsSectionPersonalization => 'Prispôsobenie';
+
+  @override
+  String get settingsSectionConnectedApps => 'Pripojené aplikácie';
+
+  @override
   String get plansAndBilling => 'Plány a Fakturácia';
 
   @override
@@ -4366,7 +4384,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get saveKeyWarning => 'Uložte si tento kľúč teraz! Znovu ho neuvidíte.';
 
   @override
-  String get yourApiKey => 'VÁŠ API KĽÚČ';
+  String get yourApiKey => 'Váš API kľúč';
 
   @override
   String get tapToCopy => 'Klepnutím skopírujete';
@@ -4381,13 +4399,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get accessDataProgrammatically => 'Programovo pristupujte k svojim údajom';
 
   @override
-  String get keyNameLabel => 'NÁZOV KĽÚČA';
+  String get keyNameLabel => 'Názov kľúča';
 
   @override
   String get keyNamePlaceholder => 'napr., Moja integrácia aplikácie';
 
   @override
-  String get permissionsLabel => 'OPRÁVNENIA';
+  String get permissionsLabel => 'Oprávnenia';
 
   @override
   String get permissionsInfoNote => 'R = Čítanie, W = Zápis. Predvolené je iba na čítanie, ak nie je nič vybrané.';
@@ -9115,6 +9133,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get selectAllTasksMenu => 'Vybrať všetko';
 
   @override
+  String get selectAllTasksPartial => 'Nepodarilo sa načítať všetky úlohy. Vybrané sú len už načítané úlohy.';
+
+  @override
   String get connectTaskAppToExport => 'Pripojte aplikáciu úloh v Nastaveniach na export';
 
   @override
@@ -9910,6 +9931,15 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant stále nahráva, takže uložený zvuk nie je možné preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom synchronizujte znova.';
+
+  @override
+  String get pendantLostConnection => 'Prívesok stratil spojenie s týmto telefónom.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku.';
+
+  @override
+  String get pendantRecordingSafe => 'Všetko nahraté predtým je v bezpečí.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11242,10 +11272,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Úložisko je takmer plné';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Prívesok stratil spojenie s týmto telefónom. Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku. Všetko nahraté predtým je v bezpečí.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi sa znova pripojí sám';

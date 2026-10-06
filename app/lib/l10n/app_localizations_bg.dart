@@ -268,6 +268,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get askAnything => 'Попитайте каквото и да е';
 
   @override
+  String get askAnythingButton => 'Попитайте каквото и да е';
+
+  @override
   String get noMessagesYet => 'Все още няма съобщения!\nЗащо не започнете разговор?';
 
   @override
@@ -2688,6 +2691,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get tasksNoDeadline => 'Без краен срок';
 
   @override
+  String get tasksNextPageFailed => 'Не можахме да заредим още задачи. Дръпнете надолу, за да опитате отново.';
+
+  @override
   String get tasksLater => 'По-късно';
 
   @override
@@ -3780,6 +3786,18 @@ class AppLocalizationsBg extends AppLocalizations {
   String get settingsHeader => 'НАСТРОЙКИ';
 
   @override
+  String get settingsSectionRecording => 'Записване';
+
+  @override
+  String get settingsSectionSupport => 'Поддръжка';
+
+  @override
+  String get settingsSectionPersonalization => 'Персонализиране';
+
+  @override
+  String get settingsSectionConnectedApps => 'Свързани приложения';
+
+  @override
   String get plansAndBilling => 'Планове и Фактуриране';
 
   @override
@@ -4380,7 +4398,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get saveKeyWarning => 'Запазете този ключ сега! Няма да можете да го видите отново.';
 
   @override
-  String get yourApiKey => 'ВАШИЯТ API КЛЮЧ';
+  String get yourApiKey => 'Вашият API ключ';
 
   @override
   String get tapToCopy => 'Докоснете за копиране';
@@ -4395,13 +4413,13 @@ class AppLocalizationsBg extends AppLocalizations {
   String get accessDataProgrammatically => 'Достъп до данните ви програмно';
 
   @override
-  String get keyNameLabel => 'ИМЕ НА КЛЮЧА';
+  String get keyNameLabel => 'Име на ключа';
 
   @override
   String get keyNamePlaceholder => 'напр., Моята интеграция';
 
   @override
-  String get permissionsLabel => 'РАЗРЕШЕНИЯ';
+  String get permissionsLabel => 'Разрешения';
 
   @override
   String get permissionsInfoNote => 'R = Четене, W = Запис. По подразбиране само за четене, ако не е избрано нищо.';
@@ -9159,6 +9177,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get selectAllTasksMenu => 'Избиране на всички';
 
   @override
+  String get selectAllTasksPartial => 'Не можахме да заредим всички задачи. Избрани са само вече заредените.';
+
+  @override
   String get connectTaskAppToExport => 'Свържете приложение за задачи в Настройки, за да експортирате';
 
   @override
@@ -9953,6 +9974,15 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant все още записва, затова съхраненото аудио не може да бъде прехвърлено. Натиснете бутона на Pendant, за да спрете записа, и синхронизирайте отново.';
+
+  @override
+  String get pendantLostConnection => 'Висулката загуби връзка с този телефон.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ще се свърже отново сам, когато висулката е включена и наблизо.';
+
+  @override
+  String get pendantRecordingSafe => 'Всичко записано дотук е запазено.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11291,10 +11321,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Паметта е почти пълна';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi ще се свърже отново сам';

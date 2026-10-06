@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "Vprašaj karkoli",
     "noMessagesYet": "Še ni sporočil!\nZakaj ne bi začeli pogovora?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
@@ -2983,6 +2984,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Več opravil ni bilo mogoče naložiti. Povlecite navzdol za ponovni poskus.",
     "tasksLater": "Kasneje",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -4207,6 +4209,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Snemanje",
+    "settingsSectionSupport": "Podpora",
+    "settingsSectionPersonalization": "Prilagajanje",
+    "settingsSectionConnectedApps": "Povezane aplikacije",
     "@account": {
         "description": "Account section label"
     },
@@ -4996,7 +5002,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "VAŠ KLJUČ API",
+    "yourApiKey": "Vaš ključ API",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5019,7 +5025,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "IME KLJUČA",
+    "keyNameLabel": "Ime ključa",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5027,7 +5033,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "DOVOLJENJA",
+    "permissionsLabel": "Dovoljenja",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10493,6 +10499,7 @@
     "searchActionItems": "Iskanje nalog",
     "selectActionItems": "Izberi več",
     "selectAllTasksMenu": "Izberi vse",
+    "selectAllTasksPartial": "Vseh opravil ni bilo mogoče naložiti. Izbrana so samo že naložena opravila.",
     "showCompletedTasks": "Prikaži dokončane",
     "startCallRecording": "Začni snemanje klica",
     "startVoiceRecording": "Začni glasovno snemanje",
@@ -10750,6 +10757,9 @@
     "appDisabledLastError": "Zadnja napaka: {error}.",
     "prerecordedTranscript": "Vnaprej posneto",
     "pendantRecordingSyncBlocked": "Pendant še vedno snema, zato shranjenega zvoka ni mogoče prenesti. Pritisnite gumb na Pendantu, da ustavite snemanje, nato znova sinhronizirajte.",
+    "pendantLostConnection": "Obesek je izgubil povezavo s tem telefonom.",
+    "pendantReconnectsOnItsOwn": "Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini.",
+    "pendantRecordingSafe": "Vse, kar je bilo posneto prej, je varno.",
     "pendantFullSyncBlocked": "Pomnilnik Pendanta je poln in je še vedno v načinu snemanja, zato shranjenega zvoka ni mogoče prenesti. Pritisnite gumb na Pendantu, da ustavite snemanje, nato znova sinhronizirajte.",
     "conversationsNotCapturedCount": "Ni posneto ({count})",
     "transcriptionNoAudio": "Transkripcija ne prejema zvoka",
@@ -11108,7 +11118,6 @@
     "captureStarting": "Zaganjanje…",
     "capturePhoneStorageFull": "Pomnilnik telefona je poln",
     "captureStorageAlmostFull": "Pomnilnik je skoraj poln",
-    "capturePendantDisconnectedDetail": "Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.",
     "participantsSummaryUncounted": "{name} in drugi",
     "deviceOnboardingVoiceReplyTitle": "Poslušajte Omijeve odgovore",
     "deviceOnboardingVoiceReplySample": "Razumem. Vaš naslednji sestanek se začne čez dvajset minut.",

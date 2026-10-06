@@ -268,6 +268,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get askAnything => 'Pregunta qualsevol cosa';
 
   @override
+  String get askAnythingButton => 'Pregunta qualsevol cosa';
+
+  @override
   String get noMessagesYet => 'Encara no hi ha missatges!\nPer què no comenceu una conversa?';
 
   @override
@@ -2697,6 +2700,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tasksNoDeadline => 'Sense termini';
 
   @override
+  String get tasksNextPageFailed => 'No s\'han pogut carregar més tasques. Arrossega cap avall per tornar-ho a provar.';
+
+  @override
   String get tasksLater => 'Més tard';
 
   @override
@@ -3791,6 +3797,18 @@ class AppLocalizationsCa extends AppLocalizations {
   String get settingsHeader => 'CONFIGURACIÓ';
 
   @override
+  String get settingsSectionRecording => 'Enregistrament';
+
+  @override
+  String get settingsSectionSupport => 'Assistència';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalització';
+
+  @override
+  String get settingsSectionConnectedApps => 'Aplicacions connectades';
+
+  @override
   String get plansAndBilling => 'Plans i Facturació';
 
   @override
@@ -4393,7 +4411,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get saveKeyWarning => 'Desa aquesta clau ara! No la podràs veure de nou.';
 
   @override
-  String get yourApiKey => 'LA TEVA CLAU API';
+  String get yourApiKey => 'La teva clau API';
 
   @override
   String get tapToCopy => 'Toca per copiar';
@@ -4408,13 +4426,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get accessDataProgrammatically => 'Accedeix a les teves dades programàticament';
 
   @override
-  String get keyNameLabel => 'NOM DE LA CLAU';
+  String get keyNameLabel => 'Nom de la clau';
 
   @override
   String get keyNamePlaceholder => 'p. ex., La meva integració';
 
   @override
-  String get permissionsLabel => 'PERMISOS';
+  String get permissionsLabel => 'Permisos';
 
   @override
   String get permissionsInfoNote => 'R = Lectura, W = Escriptura. Per defecte només lectura si no es selecciona res.';
@@ -9179,6 +9197,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get selectAllTasksMenu => 'Selecciona tot';
 
   @override
+  String get selectAllTasksPartial =>
+      'No s\'han pogut carregar totes les tasques. Només s\'han seleccionat les ja carregades.';
+
+  @override
   String get connectTaskAppToExport => 'Connecta una aplicació de tasques a Configuració per exportar';
 
   @override
@@ -9974,6 +9996,15 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'El Pendant encara està gravant, així que el seu àudio emmagatzemat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar.';
+
+  @override
+  String get pendantLostConnection => 'El penjoll ha perdut la connexió amb aquest telèfon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop.';
+
+  @override
+  String get pendantRecordingSafe => 'Tot el que s\'ha gravat abans és segur.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11314,10 +11345,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Emmagatzematge gairebé ple';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi es tornarà a connectar sol';

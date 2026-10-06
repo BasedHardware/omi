@@ -216,6 +216,16 @@ flutter:
     - assets/competitor-logos/
     - shorebird.yaml
   fonts:
+    # Settings type (SIL OFL 1.1, assets/fonts/InstrumentSans-OFL.txt).
+    - family: "Instrument Sans"
+      fonts:
+        - asset: assets/fonts/InstrumentSans-Regular.ttf
+        - asset: assets/fonts/InstrumentSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/InstrumentSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/InstrumentSans-Bold.ttf
+          weight: 700
     - family: "SF Pro Display"
       fonts:
         - asset: assets/fonts/SFPRODISPLAYTHINITALIC.OTF

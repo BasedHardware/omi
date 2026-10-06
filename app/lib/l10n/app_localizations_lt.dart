@@ -267,6 +267,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get askAnything => 'Klauskite bet ko';
 
   @override
+  String get askAnythingButton => 'Klauskite bet ko';
+
+  @override
   String get noMessagesYet => 'Kol kas nėra žinučių!\nKodėl gi nepradėtumėte pokalbio?';
 
   @override
@@ -2683,6 +2686,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get tasksNoDeadline => 'Be termino';
 
   @override
+  String get tasksNextPageFailed => 'Nepavyko įkelti daugiau užduočių. Patraukite žemyn, kad bandytumėte dar kartą.';
+
+  @override
   String get tasksLater => 'Vėliau';
 
   @override
@@ -3769,6 +3775,18 @@ class AppLocalizationsLt extends AppLocalizations {
   String get settingsHeader => 'NUSTATYMAI';
 
   @override
+  String get settingsSectionRecording => 'Įrašymas';
+
+  @override
+  String get settingsSectionSupport => 'Pagalba';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizavimas';
+
+  @override
+  String get settingsSectionConnectedApps => 'Prijungtos programėlės';
+
+  @override
   String get plansAndBilling => 'Planai ir Atsiskaitymas';
 
   @override
@@ -4366,7 +4384,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get saveKeyWarning => 'Išsaugokite šį raktą dabar! Daugiau jo nematysite.';
 
   @override
-  String get yourApiKey => 'JŪSŲ API RAKTAS';
+  String get yourApiKey => 'Jūsų API raktas';
 
   @override
   String get tapToCopy => 'Bakstelėkite, kad nukopijuotumėte';
@@ -4381,13 +4399,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get accessDataProgrammatically => 'Pasiekite savo duomenis programiškai';
 
   @override
-  String get keyNameLabel => 'RAKTO PAVADINIMAS';
+  String get keyNameLabel => 'Rakto pavadinimas';
 
   @override
   String get keyNamePlaceholder => 'pvz., Mano programėlės integracija';
 
   @override
-  String get permissionsLabel => 'LEIDIMAI';
+  String get permissionsLabel => 'Leidimai';
 
   @override
   String get permissionsInfoNote => 'R = Skaityti, W = Rašyti. Numatytasis tik skaitymas, jei nieko nepasirinkta.';
@@ -9134,6 +9152,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get selectAllTasksMenu => 'Pasirinkti viską';
 
   @override
+  String get selectAllTasksPartial => 'Nepavyko įkelti visų užduočių. Pasirinktos tik jau įkeltos užduotys.';
+
+  @override
   String get connectTaskAppToExport => 'Prijunkite užduočių programą Nustatymuose, kad galėtumėte eksportuoti';
 
   @override
@@ -9935,6 +9956,15 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant vis dar įrašinėja, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite dar kartą.';
+
+  @override
+  String get pendantLostConnection => 'Pakabukas prarado ryšį su šiuo telefonu.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese.';
+
+  @override
+  String get pendantRecordingSafe => 'Viskas, kas įrašyta iki šiol, išsaugota.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11271,10 +11301,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Atmintis beveik pilna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi pats vėl prisijungs';

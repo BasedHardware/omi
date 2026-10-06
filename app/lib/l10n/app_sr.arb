@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "Питај шта год",
     "noMessagesYet": "Нема поруга до сада!\nЗашто не почнеш разговор?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
@@ -2983,6 +2984,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Није могуће учитати више задатака. Повуците надоле да покушате поново.",
     "tasksLater": "Касније",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -4207,6 +4209,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Снимање",
+    "settingsSectionSupport": "Подршка",
+    "settingsSectionPersonalization": "Персонализација",
+    "settingsSectionConnectedApps": "Повезане апликације",
     "@account": {
         "description": "Account section label"
     },
@@ -4996,7 +5002,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "ВАШ API КЉУЧ",
+    "yourApiKey": "Ваш API кључ",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5019,7 +5025,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "ИМЕ КЉУЧА",
+    "keyNameLabel": "Име кључа",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5027,7 +5033,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "ДОЗВОЛЕ",
+    "permissionsLabel": "Дозволе",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10493,6 +10499,7 @@
     "searchActionItems": "Претражи задатке",
     "selectActionItems": "Изабери више",
     "selectAllTasksMenu": "Изабери све",
+    "selectAllTasksPartial": "Није могуће учитати све задатке. Изабрани су само већ учитани задаци.",
     "showCompletedTasks": "Прикажи завршене",
     "startCallRecording": "Покрени снимање позива",
     "startVoiceRecording": "Покрени гласовно снимање",
@@ -10750,6 +10757,9 @@
     "appDisabledLastError": "Poslednja greška: {error}.",
     "prerecordedTranscript": "Унапред снимљено",
     "pendantRecordingSyncBlocked": "Pendant и даље снима, па сачувани звук не може да се пренесе. Притисните дугме на Pendant-у да зауставите снимање, а затим поново синхронизујте.",
+    "pendantLostConnection": "Привезак је изгубио везу са овим телефоном.",
+    "pendantReconnectsOnItsOwn": "Omi ће се сам поново повезати кад је привезак укључен и у близини.",
+    "pendantRecordingSafe": "Све снимљено до сада је безбедно.",
     "pendantFullSyncBlocked": "Меморија Pendant-а је пуна и он је и даље у режиму снимања, па сачувани звук не може да се пренесе. Притисните дугме на Pendant-у да зауставите снимање, а затим поново синхронизујте.",
     "conversationsNotCapturedCount": "Није снимљено ({count})",
     "transcriptionNoAudio": "Транскрипција не прима аудио",
@@ -11108,7 +11118,6 @@
     "captureStarting": "Покретање…",
     "capturePhoneStorageFull": "Меморија телефона је пуна",
     "captureStorageAlmostFull": "Меморија је скоро пуна",
-    "capturePendantDisconnectedDetail": "Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.",
     "participantsSummaryUncounted": "{name} и други",
     "deviceOnboardingVoiceReplyTitle": "Чујте Omi одговоре",
     "deviceOnboardingVoiceReplySample": "Разумем. Ваш следећи састанак почиње за двадесет минута.",

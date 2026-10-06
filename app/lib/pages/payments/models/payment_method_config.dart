@@ -9,7 +9,6 @@ class PaymentMethodConfig {
   final String title;
   final String subtitle;
   final Widget icon;
-  final Color backgroundColor;
   final VoidCallback onManageTap;
   final VoidCallback? onSetActiveTap;
   final bool isActive;
@@ -19,7 +18,6 @@ class PaymentMethodConfig {
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.backgroundColor,
     required this.onManageTap,
     this.onSetActiveTap,
     this.isActive = false,
@@ -40,9 +38,9 @@ class PaymentMethodConfig {
       icon: SvgPicture.asset(
         Assets.images.stripeLogo,
         width: 80,
-        colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+        // Ink on the warm tile: readable in light and dark.
+        colorFilter: ColorFilter.mode(OmiColors.textPrimary, BlendMode.srcIn),
       ),
-      backgroundColor: isActive ? OmiColors.surface2 : OmiColors.surface1,
       onManageTap: onManageTap,
       onSetActiveTap: onSetActiveTap,
       isActive: isActive,
@@ -61,8 +59,7 @@ class PaymentMethodConfig {
     return PaymentMethodConfig(
       title: title,
       subtitle: subtitle,
-      icon: const Icon(Icons.paypal, size: 32, color: Colors.white),
-      backgroundColor: isActive ? OmiColors.surface2 : OmiColors.surface1,
+      icon: Icon(Icons.paypal, size: 32, color: OmiColors.textPrimary),
       onManageTap: onManageTap,
       onSetActiveTap: onSetActiveTap,
       isActive: isActive,

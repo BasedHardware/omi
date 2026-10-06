@@ -266,6 +266,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get askAnything => '무엇이든 물어보세요';
 
   @override
+  String get askAnythingButton => '무엇이든 물어보세요';
+
+  @override
   String get noMessagesYet => '아직 메시지가 없습니다!\n대화를 시작해보는 건 어떨까요?';
 
   @override
@@ -2641,6 +2644,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tasksNoDeadline => '마감일 없음';
 
   @override
+  String get tasksNextPageFailed => '작업을 더 불러오지 못했습니다. 아래로 당겨 다시 시도하세요.';
+
+  @override
   String get tasksLater => '나중에';
 
   @override
@@ -3708,6 +3714,18 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsHeader => '설정';
+
+  @override
+  String get settingsSectionRecording => '녹음';
+
+  @override
+  String get settingsSectionSupport => '지원';
+
+  @override
+  String get settingsSectionPersonalization => '맞춤 설정';
+
+  @override
+  String get settingsSectionConnectedApps => '연결된 앱';
 
   @override
   String get plansAndBilling => '플랜 및 결제';
@@ -8988,6 +9006,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get selectAllTasksMenu => '모두 선택';
 
   @override
+  String get selectAllTasksPartial => '모든 작업을 불러오지 못했습니다. 이미 불러온 작업만 선택되었습니다.';
+
+  @override
   String get connectTaskAppToExport => '내보내려면 설정에서 작업 앱을 연결하세요';
 
   @override
@@ -9754,6 +9775,15 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant가 아직 녹음 중이어서 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 후 다시 동기화하세요.';
+
+  @override
+  String get pendantLostConnection => '펜던트와 이 휴대폰의 연결이 끊겼어요.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => '펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요.';
+
+  @override
+  String get pendantRecordingSafe => '그 전에 녹음된 내용은 안전하게 보관돼요.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11075,10 +11105,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '저장 공간 거의 참';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi가 자동으로 다시 연결해요';

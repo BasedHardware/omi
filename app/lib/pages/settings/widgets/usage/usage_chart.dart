@@ -123,10 +123,11 @@ UsageBuckets usageBuckets(List<UsageHistoryPoint> history, String period, DateTi
   return (bestStep, bestMax);
 }
 
-String formatUsageDuration(int seconds) {
+/// "42m", "8h 32m", then whole hours from 100 on, grouped in [locale] ("1,523 h").
+String formatUsageDuration(int seconds, [String? locale]) {
   final minutes = (seconds / 60).round();
   final hours = minutes ~/ 60;
-  if (hours >= 100) return '${(seconds / 3600).round()} h';
+  if (hours >= 100) return '${NumberFormat.decimalPattern(locale).format((seconds / 3600).round())} h';
   if (hours == 0) return '${minutes}m';
   return '${hours}h ${minutes % 60}m';
 }
@@ -156,8 +157,8 @@ class UsageChart extends StatelessWidget {
     final buckets = usageBuckets(history, period, today);
     final locale = context.l10n.localeName;
     final labels = [context.l10n.usageMinutes, context.l10n.usageWords, context.l10n.usageTasks, context.l10n.memories];
-    final colors = [Colors.blue.shade300, Colors.green.shade300, Colors.orange.shade300, Colors.pink.shade200];
-    final color = colors[metric.index];
+    // Black and white like the rest of Settings: every series is ink; the peak bar is solid.
+    final color = OmiColors.textPrimary;
     final peak = buckets.peakIndex(metric);
     final peakValue = peak == null ? 0.0 : metric.value(buckets.points[peak]!);
     final (tick, maxY) = niceUsageScale(peakValue);
@@ -209,7 +210,9 @@ class UsageChart extends StatelessWidget {
       key: const Key('usage_chart_card'),
       padding: const EdgeInsets.fromLTRB(OmiSpacing.sm, OmiSpacing.md, OmiSpacing.md, OmiSpacing.md),
       decoration: BoxDecoration(
-          color: OmiColors.surface1, borderRadius: OmiRadius.lgAll, border: Border.all(color: OmiColors.border)),
+          color: OmiColors.groupedCard,
+          borderRadius: OmiRadius.xlAll,
+          border: Border.all(color: OmiColors.groupedBorder)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Wrap(spacing: 5, runSpacing: 2, children: [
           for (final choice in UsageMetric.values)
@@ -229,29 +232,15 @@ class UsageChart extends StatelessWidget {
                         widthFactor: 1,
                         heightFactor: 1,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                              color:
-                                  metric == choice ? colors[choice.index].withValues(alpha: .16) : OmiColors.surface2,
-                              border: Border.all(
-                                  color: metric == choice
-                                      ? colors[choice.index].withValues(alpha: .55)
-                                      : Colors.transparent),
+                              color: metric == choice ? OmiColors.accent : OmiColors.iconTile,
+                              border: Border.all(color: metric == choice ? OmiColors.accent : OmiColors.groupedBorder),
                               borderRadius: OmiRadius.pillAll),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            if (metric == choice) ...[
-                              Container(
-                                  key: const Key('selected_metric_dot'),
-                                  width: 7,
-                                  height: 7,
-                                  decoration: BoxDecoration(color: colors[choice.index], shape: BoxShape.circle)),
-                              const SizedBox(width: 5),
-                            ],
-                            Text(labels[choice.index],
-                                style: OmiType.caption.copyWith(
-                                    color: metric == choice ? colors[choice.index] : OmiColors.textSecondary,
-                                    fontWeight: FontWeight.w600)),
-                          ]),
+                          child: Text(labels[choice.index],
+                              style: OmiType.caption.copyWith(
+                                  color: metric == choice ? OmiColors.onAccent : OmiColors.textSecondary,
+                                  fontWeight: FontWeight.w600)),
                         )),
                   ),
                 ),
@@ -324,8 +313,9 @@ class UsageChart extends StatelessWidget {
                                     style: OmiType.caption
                                         .copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.bold));
                               }
+                              // Hour ticks give way to "now" when they would touch it.
                               final show = period == 'today'
-                                  ? i % 6 == 0
+                                  ? i % 6 == 0 && (i - today.hour).abs() > 2
                                   : period == 'monthly'
                                       ? i % 7 == 0
                                       : period == 'yearly'

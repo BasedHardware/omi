@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "যেকোনো কিছু জিজ্ঞাসা করুন",
     "noMessagesYet": "এখনো কোনো বার্তা নেই!\nকেন আপনি একটি কথোপকথন শুরু করবেন না?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
@@ -2983,6 +2984,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "আরও কাজ লোড করা যায়নি। আবার চেষ্টা করতে নিচে টানুন।",
     "tasksLater": "পরে",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -4207,6 +4209,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "রেকর্ডিং",
+    "settingsSectionSupport": "সহায়তা",
+    "settingsSectionPersonalization": "ব্যক্তিগতকরণ",
+    "settingsSectionConnectedApps": "সংযুক্ত অ্যাপ",
     "@account": {
         "description": "Account section label"
     },
@@ -10493,6 +10499,7 @@
     "searchActionItems": "কাজ অনুসন্ধান করুন",
     "selectActionItems": "একাধিক নির্বাচন",
     "selectAllTasksMenu": "সমস্ত নির্বাচন",
+    "selectAllTasksPartial": "সব কাজ লোড করা যায়নি। শুধু ইতিমধ্যে লোড হওয়া কাজগুলো নির্বাচিত হয়েছে।",
     "showCompletedTasks": "সম্পন্ন দেখান",
     "startCallRecording": "কল রেকর্ডিং শুরু করুন",
     "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
@@ -10750,6 +10757,9 @@
     "appDisabledLastError": "শেষ ত্রুটি: {error}",
     "prerecordedTranscript": "প্রি-রেকর্ডেড",
     "pendantRecordingSyncBlocked": "Pendant এখনও রেকর্ড করছে, তাই এর সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।",
+    "pendantLostConnection": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে।",
+    "pendantReconnectsOnItsOwn": "পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে।",
+    "pendantRecordingSafe": "এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
     "pendantFullSyncBlocked": "Pendant-এর স্টোরেজ পূর্ণ এবং এটি এখনও রেকর্ডিং মোডে আছে, তাই সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।",
     "conversationsNotCapturedCount": "রেকর্ড করা হয়নি ({count})",
     "transcriptionNoAudio": "ট্রান্সক্রিপশন অডিও গ্রহণ করছে না",
@@ -11108,7 +11118,6 @@
     "captureStarting": "শুরু হচ্ছে…",
     "capturePhoneStorageFull": "ফোনের স্টোরেজ পূর্ণ",
     "captureStorageAlmostFull": "স্টোরেজ প্রায় পূর্ণ",
-    "capturePendantDisconnectedDetail": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
     "participantsSummaryUncounted": "{name} ও অন্যরা",
     "deviceOnboardingVoiceReplyTitle": "Omi-এর উত্তর শুনুন",
     "deviceOnboardingVoiceReplySample": "হয়ে গেছে। আপনার পরবর্তী মিটিং বিশ মিনিট পরে শুরু হবে।",

@@ -266,6 +266,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get askAnything => '何でも聞いてください';
 
   @override
+  String get askAnythingButton => '何でも聞いてください';
+
+  @override
   String get noMessagesYet => 'まだメッセージがありません！\n会話を始めてみませんか？';
 
   @override
@@ -2641,6 +2644,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tasksNoDeadline => '期限なし';
 
   @override
+  String get tasksNextPageFailed => 'タスクをさらに読み込めませんでした。下に引いて再試行してください。';
+
+  @override
   String get tasksLater => '後で';
 
   @override
@@ -3708,6 +3714,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsHeader => '設定';
+
+  @override
+  String get settingsSectionRecording => '録音';
+
+  @override
+  String get settingsSectionSupport => 'サポート';
+
+  @override
+  String get settingsSectionPersonalization => 'パーソナライズ';
+
+  @override
+  String get settingsSectionConnectedApps => '連携アプリ';
 
   @override
   String get plansAndBilling => 'プランと請求';
@@ -8987,6 +9005,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get selectAllTasksMenu => 'すべて選択';
 
   @override
+  String get selectAllTasksPartial => 'すべてのタスクを読み込めませんでした。読み込み済みのタスクのみ選択されています。';
+
+  @override
   String get connectTaskAppToExport => 'エクスポートするには設定でタスクアプリを接続してください';
 
   @override
@@ -9751,6 +9772,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pendantRecordingSyncBlocked => 'Pendantはまだ録音中のため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。';
+
+  @override
+  String get pendantLostConnection => 'ペンダントとこのスマートフォンの接続が切れました。';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。';
+
+  @override
+  String get pendantRecordingSafe => 'それまでに録音した内容は保存されています。';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11071,10 +11101,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '空き容量わずか';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
 
   @override
   String get capturePendantDisconnectedShort => 'Omiは自動で再接続します';

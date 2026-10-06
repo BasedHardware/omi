@@ -268,6 +268,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get askAnything => 'Hỏi bất cứ điều gì';
 
   @override
+  String get askAnythingButton => 'Hỏi bất cứ điều gì';
+
+  @override
   String get noMessagesYet => 'Chưa có tin nhắn nào!\nHãy bắt đầu cuộc trò chuyện nhé?';
 
   @override
@@ -2686,6 +2689,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get tasksNoDeadline => 'Không có thời hạn';
 
   @override
+  String get tasksNextPageFailed => 'Không thể tải thêm việc cần làm. Kéo xuống để thử lại.';
+
+  @override
   String get tasksLater => 'Sau này';
 
   @override
@@ -3775,6 +3781,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get settingsHeader => 'CÀI ĐẶT';
 
   @override
+  String get settingsSectionRecording => 'Ghi âm';
+
+  @override
+  String get settingsSectionSupport => 'Hỗ trợ';
+
+  @override
+  String get settingsSectionPersonalization => 'Cá nhân hóa';
+
+  @override
+  String get settingsSectionConnectedApps => 'Ứng dụng đã kết nối';
+
+  @override
   String get plansAndBilling => 'Gói và Thanh toán';
 
   @override
@@ -4372,7 +4390,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get saveKeyWarning => 'Lưu khóa này ngay bây giờ! Bạn sẽ không thể xem lại nó.';
 
   @override
-  String get yourApiKey => 'KHÓA API CỦA BẠN';
+  String get yourApiKey => 'Khóa API của bạn';
 
   @override
   String get tapToCopy => 'Nhấn để sao chép';
@@ -4387,13 +4405,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accessDataProgrammatically => 'Truy cập dữ liệu của bạn theo chương trình';
 
   @override
-  String get keyNameLabel => 'TÊN KHÓA';
+  String get keyNameLabel => 'Tên khóa';
 
   @override
   String get keyNamePlaceholder => 'vd: Tích hợp ứng dụng của tôi';
 
   @override
-  String get permissionsLabel => 'QUYỀN';
+  String get permissionsLabel => 'Quyền';
 
   @override
   String get permissionsInfoNote => 'R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì.';
@@ -9126,6 +9144,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get selectAllTasksMenu => 'Chọn tất cả';
 
   @override
+  String get selectAllTasksPartial => 'Không thể tải tất cả việc cần làm. Chỉ những việc đã tải được chọn.';
+
+  @override
   String get connectTaskAppToExport => 'Kết nối ứng dụng tác vụ trong Cài đặt để xuất';
 
   @override
@@ -9911,6 +9932,15 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant vẫn đang ghi âm nên không thể chuyển âm thanh đã lưu. Nhấn nút trên Pendant để dừng ghi âm, sau đó đồng bộ lại.';
+
+  @override
+  String get pendantLostConnection => 'Mặt dây chuyền đã mất kết nối với điện thoại này.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần.';
+
+  @override
+  String get pendantRecordingSafe => 'Mọi thứ đã ghi trước đó vẫn an toàn.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11246,10 +11276,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Bộ nhớ gần đầy';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi sẽ tự kết nối lại';

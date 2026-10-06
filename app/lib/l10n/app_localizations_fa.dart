@@ -267,6 +267,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get askAnything => 'هر چیزی بپرسید';
 
   @override
+  String get askAnythingButton => 'هر چیزی بپرسید';
+
+  @override
   String get noMessagesYet => 'هنوز پیامی وجود ندارد!\nچرا یک گفتگو شروع نمی‌کنید؟';
 
   @override
@@ -2687,6 +2690,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get tasksNoDeadline => 'بدون سررسید';
 
   @override
+  String get tasksNextPageFailed => 'بارگیری وظایف بیشتر ممکن نشد. برای تلاش دوباره به پایین بکشید.';
+
+  @override
   String get tasksLater => 'بعدتر';
 
   @override
@@ -3771,6 +3777,18 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get settingsHeader => 'تنظیمات';
+
+  @override
+  String get settingsSectionRecording => 'ضبط';
+
+  @override
+  String get settingsSectionSupport => 'پشتیبانی';
+
+  @override
+  String get settingsSectionPersonalization => 'شخصی‌سازی';
+
+  @override
+  String get settingsSectionConnectedApps => 'برنامه‌های متصل';
 
   @override
   String get plansAndBilling => 'طرح‌ها و صورت‌حساب';
@@ -9124,6 +9142,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get selectAllTasksMenu => 'انتخاب همه';
 
   @override
+  String get selectAllTasksPartial => 'بارگیری همه وظایف ممکن نشد. فقط وظایف بارگیری‌شده انتخاب شدند.';
+
+  @override
   String get connectTaskAppToExport => 'برای صادرات، یک برنامه وظایف را در تنظیمات متصل کنید';
 
   @override
@@ -9913,6 +9934,15 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant هنوز در حال ضبط است، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
+
+  @override
+  String get pendantLostConnection => 'آویز شما اتصالش را با این تلفن از دست داد.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود.';
+
+  @override
+  String get pendantRecordingSafe => 'هر آنچه پیش از این ضبط شده محفوظ است.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11244,10 +11274,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'حافظه تقریباً پر است';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi خودش دوباره وصل می‌شود';

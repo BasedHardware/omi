@@ -267,6 +267,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get askAnything => 'कुछ भी पूछें';
 
   @override
+  String get askAnythingButton => 'काहीही विचारा';
+
+  @override
   String get noMessagesYet => 'अद्याप संदेश नाही!\nका संभाषण सुरू करत नाही?';
 
   @override
@@ -2689,6 +2692,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get tasksNoDeadline => 'कोणतीही मुदत नाही';
 
   @override
+  String get tasksNextPageFailed => 'आणखी कामे लोड करता आली नाहीत. पुन्हा प्रयत्न करण्यासाठी खाली ओढा.';
+
+  @override
   String get tasksLater => 'नंतर';
 
   @override
@@ -3773,6 +3779,18 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get settingsHeader => 'सेटिंग्‍स';
+
+  @override
+  String get settingsSectionRecording => 'रेकॉर्डिंग';
+
+  @override
+  String get settingsSectionSupport => 'सहाय्य';
+
+  @override
+  String get settingsSectionPersonalization => 'वैयक्तिकरण';
+
+  @override
+  String get settingsSectionConnectedApps => 'कनेक्ट केलेले ॲप्स';
 
   @override
   String get plansAndBilling => 'योजना आणि बिलिंग';
@@ -9134,6 +9152,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get selectAllTasksMenu => 'सर्व निवडा';
 
   @override
+  String get selectAllTasksPartial => 'सर्व कामे लोड करता आली नाहीत. फक्त आधीच लोड झालेली कामे निवडली आहेत.';
+
+  @override
   String get connectTaskAppToExport => 'निर्यात करण्यासाठी सेटिंग्जमध्ये टास्क ॲप जोडा';
 
   @override
@@ -9923,6 +9944,15 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant अजूनही रेकॉर्ड करत आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.';
+
+  @override
+  String get pendantLostConnection => 'तुमच्या पेंडंटचा या फोनशी संपर्क तुटला.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल.';
+
+  @override
+  String get pendantRecordingSafe => 'याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11258,10 +11288,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'स्टोरेज जवळजवळ भरले';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi आपोआप पुन्हा कनेक्ट होईल';

@@ -268,6 +268,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get askAnything => 'Chiedi qualsiasi cosa';
 
   @override
+  String get askAnythingButton => 'Chiedi qualsiasi cosa';
+
+  @override
   String get noMessagesYet => 'Nessun messaggio ancora!\nPerché non inizi una conversazione?';
 
   @override
@@ -2694,6 +2697,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get tasksNoDeadline => 'Nessuna scadenza';
 
   @override
+  String get tasksNextPageFailed => 'Impossibile caricare altre attività. Trascina verso il basso per riprovare.';
+
+  @override
   String get tasksLater => 'Più tardi';
 
   @override
@@ -3789,6 +3795,18 @@ class AppLocalizationsIt extends AppLocalizations {
   String get settingsHeader => 'IMPOSTAZIONI';
 
   @override
+  String get settingsSectionRecording => 'Registrazione';
+
+  @override
+  String get settingsSectionSupport => 'Assistenza';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizzazione';
+
+  @override
+  String get settingsSectionConnectedApps => 'App collegate';
+
+  @override
   String get plansAndBilling => 'Piani e Fatturazione';
 
   @override
@@ -4391,7 +4409,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get saveKeyWarning => 'Salva questa chiave ora! Non potrai vederla di nuovo.';
 
   @override
-  String get yourApiKey => 'LA TUA CHIAVE API';
+  String get yourApiKey => 'La tua chiave API';
 
   @override
   String get tapToCopy => 'Tocca per copiare';
@@ -4406,13 +4424,13 @@ class AppLocalizationsIt extends AppLocalizations {
   String get accessDataProgrammatically => 'Accedi ai tuoi dati in modo programmatico';
 
   @override
-  String get keyNameLabel => 'NOME CHIAVE';
+  String get keyNameLabel => 'Nome chiave';
 
   @override
   String get keyNamePlaceholder => 'es., La mia integrazione';
 
   @override
-  String get permissionsLabel => 'PERMESSI';
+  String get permissionsLabel => 'Permessi';
 
   @override
   String get permissionsInfoNote =>
@@ -9179,6 +9197,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get selectAllTasksMenu => 'Seleziona tutto';
 
   @override
+  String get selectAllTasksPartial =>
+      'Impossibile caricare tutte le attività. Sono selezionate solo quelle già caricate.';
+
+  @override
   String get connectTaskAppToExport => 'Collega un\'app attività nelle Impostazioni per esportare';
 
   @override
@@ -9973,6 +9995,15 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Il Pendant sta ancora registrando, quindi l\'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.';
+
+  @override
+  String get pendantLostConnection => 'Il ciondolo ha perso la connessione con questo telefono.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino.';
+
+  @override
+  String get pendantRecordingSafe => 'Tutto ciò che è stato registrato prima è al sicuro.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11313,10 +11344,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Memoria quasi piena';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi si riconnetterà da solo';

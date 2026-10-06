@@ -266,6 +266,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get askAnything => 'Kysy mitä tahansa';
 
   @override
+  String get askAnythingButton => 'Kysy mitä tahansa';
+
+  @override
   String get noMessagesYet => 'Ei vielä viestejä!\nMikset aloittaisi keskustelua?';
 
   @override
@@ -2682,6 +2685,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tasksNoDeadline => 'Ei määräaikaa';
 
   @override
+  String get tasksNextPageFailed => 'Tehtävien lataaminen ei onnistunut. Yritä uudelleen vetämällä alas.';
+
+  @override
   String get tasksLater => 'Myöhemmin';
 
   @override
@@ -3772,6 +3778,18 @@ class AppLocalizationsFi extends AppLocalizations {
   String get settingsHeader => 'ASETUKSET';
 
   @override
+  String get settingsSectionRecording => 'Tallennus';
+
+  @override
+  String get settingsSectionSupport => 'Tuki';
+
+  @override
+  String get settingsSectionPersonalization => 'Personointi';
+
+  @override
+  String get settingsSectionConnectedApps => 'Yhdistetyt sovellukset';
+
+  @override
   String get plansAndBilling => 'Suunnitelmat ja Laskutus';
 
   @override
@@ -4369,7 +4387,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get saveKeyWarning => 'Tallenna tämä avain nyt! Et näe sitä enää uudelleen.';
 
   @override
-  String get yourApiKey => 'API-AVAIMESI';
+  String get yourApiKey => 'API-avaimesi';
 
   @override
   String get tapToCopy => 'Kopioi napauttamalla';
@@ -4384,13 +4402,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get accessDataProgrammatically => 'Käytä tietojasi ohjelmallisesti';
 
   @override
-  String get keyNameLabel => 'AVAIMEN NIMI';
+  String get keyNameLabel => 'Avaimen nimi';
 
   @override
   String get keyNamePlaceholder => 'esim. Oma sovellus';
 
   @override
-  String get permissionsLabel => 'OIKEUDET';
+  String get permissionsLabel => 'Oikeudet';
 
   @override
   String get permissionsInfoNote => 'R = Luku, W = Kirjoitus. Oletuksena vain luku, jos mitään ei ole valittu.';
@@ -9126,6 +9144,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get selectAllTasksMenu => 'Valitse kaikki';
 
   @override
+  String get selectAllTasksPartial => 'Kaikkia tehtäviä ei voitu ladata. Vain jo ladatut tehtävät on valittu.';
+
+  @override
   String get connectTaskAppToExport => 'Yhdistä tehtäväsovellus Asetuksissa vientiä varten';
 
   @override
@@ -9918,6 +9939,15 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant tallentaa edelleen, joten tallennettua ääntä ei voi siirtää. Pysäytä tallennus painamalla Pendantin painiketta ja synkronoi sitten uudelleen.';
+
+  @override
+  String get pendantLostConnection => 'Riipus menetti yhteyden tähän puhelimeen.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä.';
+
+  @override
+  String get pendantRecordingSafe => 'Kaikki tätä ennen tallennettu on tallessa.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11252,10 +11282,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Tallennustila melkein täynnä';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi yhdistää itsestään uudelleen';

@@ -268,6 +268,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get askAnything => 'Zeptejte se na cokoliv';
 
   @override
+  String get askAnythingButton => 'Zeptejte se na cokoliv';
+
+  @override
   String get noMessagesYet => 'Zatím žádné zprávy!\nProč nezačít konverzaci?';
 
   @override
@@ -2684,6 +2687,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tasksNoDeadline => 'Bez termínu';
 
   @override
+  String get tasksNextPageFailed => 'Další úkoly se nepodařilo načíst. Přetažením dolů to zkuste znovu.';
+
+  @override
   String get tasksLater => 'Později';
 
   @override
@@ -3770,6 +3776,18 @@ class AppLocalizationsCs extends AppLocalizations {
   String get settingsHeader => 'NASTAVENÍ';
 
   @override
+  String get settingsSectionRecording => 'Nahrávání';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
+  String get settingsSectionPersonalization => 'Přizpůsobení';
+
+  @override
+  String get settingsSectionConnectedApps => 'Připojené aplikace';
+
+  @override
   String get plansAndBilling => 'Plány a Fakturace';
 
   @override
@@ -4364,7 +4382,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get saveKeyWarning => 'Uložte si tento klíč nyní! Znovu ho neuvidíte.';
 
   @override
-  String get yourApiKey => 'VÁŠ API KLÍČ';
+  String get yourApiKey => 'Váš API klíč';
 
   @override
   String get tapToCopy => 'Klepnutím zkopírujete';
@@ -4379,13 +4397,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get accessDataProgrammatically => 'Programově přistupujte ke svým datům';
 
   @override
-  String get keyNameLabel => 'NÁZEV KLÍČE';
+  String get keyNameLabel => 'Název klíče';
 
   @override
   String get keyNamePlaceholder => 'např. Moje integrace aplikace';
 
   @override
-  String get permissionsLabel => 'OPRÁVNĚNÍ';
+  String get permissionsLabel => 'Oprávnění';
 
   @override
   String get permissionsInfoNote => 'R = Čtení, W = Zápis. Výchozí je pouze pro čtení, pokud není nic vybráno.';
@@ -9124,6 +9142,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get selectAllTasksMenu => 'Vybrat vše';
 
   @override
+  String get selectAllTasksPartial => 'Nepodařilo se načíst všechny úkoly. Vybrány jsou jen ty už načtené.';
+
+  @override
   String get connectTaskAppToExport => 'Pro export připojte aplikaci úkolů v Nastavení';
 
   @override
@@ -9921,6 +9942,15 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant stále nahrává, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu nahrávání zastavte a poté synchronizujte znovu.';
+
+  @override
+  String get pendantLostConnection => 'Přívěsek ztratil spojení s tímto telefonem.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž.';
+
+  @override
+  String get pendantRecordingSafe => 'Vše nahrané předtím je v bezpečí.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11252,10 +11282,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Úložiště je téměř plné';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi se znovu připojí sám';

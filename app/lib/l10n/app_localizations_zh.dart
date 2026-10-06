@@ -266,6 +266,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get askAnything => '随便问问';
 
   @override
+  String get askAnythingButton => '随便问问';
+
+  @override
   String get noMessagesYet => '还没有消息！\n为什么不开始一段对话呢？';
 
   @override
@@ -2636,6 +2639,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tasksNoDeadline => '无截止日期';
 
   @override
+  String get tasksNextPageFailed => '无法加载更多任务。下拉以重试。';
+
+  @override
   String get tasksLater => '稍后';
 
   @override
@@ -3703,6 +3709,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsHeader => '设置';
+
+  @override
+  String get settingsSectionRecording => '录音';
+
+  @override
+  String get settingsSectionSupport => '支持';
+
+  @override
+  String get settingsSectionPersonalization => '个性化';
+
+  @override
+  String get settingsSectionConnectedApps => '已连接的应用';
 
   @override
   String get plansAndBilling => '计划与账单';
@@ -8974,6 +8992,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectAllTasksMenu => '全选';
 
   @override
+  String get selectAllTasksPartial => '无法加载全部任务。仅选中了已加载的任务。';
+
+  @override
   String get connectTaskAppToExport => '在设置中连接任务应用以导出';
 
   @override
@@ -9734,6 +9755,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pendantRecordingSyncBlocked => 'Pendant 仍在录音，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
+
+  @override
+  String get pendantLostConnection => '吊坠与这部手机的连接已断开。';
+
+  @override
+  String get pendantReconnectsOnItsOwn => '吊坠开机并在附近时，Omi 会自动重新连接。';
+
+  @override
+  String get pendantRecordingSafe => '此前录下的内容都已保存。';
 
   @override
   String get pendantFullSyncBlocked => 'Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
@@ -11050,9 +11080,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '存储空间即将用完';
-
-  @override
-  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi 会自动重新连接';

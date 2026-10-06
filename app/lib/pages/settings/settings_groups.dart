@@ -1,9 +1,9 @@
 import 'dart:io';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -26,30 +26,22 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// Every page is opened through [openSettingsDestination], which records "Settings Page Opened"
 /// with the group's page name.
 
-/// A small coloured label after a row title ("BETA", "NEW").
+/// A quiet label after a section title ("Beta"): tertiary caption text, no fill.
 class SettingsTag extends StatelessWidget {
-  const SettingsTag(this.label, this.color, {super.key});
+  const SettingsTag(this.label, {super.key});
 
   final String label;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: OmiRadius.smAll),
-      child: Text(
-        label,
-        style: OmiType.caption.copyWith(color: color, fontWeight: FontWeight.w600),
-      ),
-    );
+    return Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary));
   }
 }
 
 /// The widget key of the row that opens [destination] on a group page (for UI harnesses).
 ValueKey<String> settingsRowKey(SettingsDestination destination) => ValueKey('settings_row_${destination.name}');
 
-/// The shared page shell: back button, title, and grouped rows on the page colour.
+/// The shared page shell: the Settings look (circled back, centred title, outlined groups).
 class _GroupPage extends StatelessWidget {
   const _GroupPage({required this.pageKey, required this.title, required this.children});
 
@@ -59,15 +51,45 @@ class _GroupPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return OmiGroupedPage(
       key: ValueKey(pageKey),
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(title)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxl),
-        children: children,
-      ),
+      title: title,
+      body: ListView(padding: OmiGroupedPage.padding, children: children),
     );
   }
+}
+
+/// A choice of a few options opened from a group page, drawn like the page under it: Instrument
+/// Sans, and an outlined card on the Settings page colour with a check on the current option.
+/// [context] has to be inside the page's [OmiGroupedPage] (a row's own), or the sheet would open
+/// in the app font: the page's State sits above the typeface.
+Future<T?> _showSettingsPicker<T>(
+  BuildContext context, {
+  required String title,
+  required List<T> options,
+  required T current,
+  required String Function(T) label,
+}) {
+  return showOmiSheet<T>(
+    context: context,
+    title: title,
+    surface: () => OmiColors.groupedPage,
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.xs, bottom: OmiSpacing.sm),
+      child: OmiSettingsGroup(
+        style: OmiSettingsGroupStyle.outlined,
+        children: [
+          for (final option in options)
+            OmiSettingsRow(
+              title: label(option),
+              trailing: option == current ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+              showChevron: false,
+              onTap: () => Navigator.of(sheetContext).pop(option),
+            ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// Opening a row from a group page, then redrawing it: row values (transcription provider, voice
@@ -87,7 +109,7 @@ mixin _GroupRows<T extends StatefulWidget> on State<T> {
   }) {
     return OmiSettingsRow(
       key: settingsRowKey(destination),
-      leading: FaIcon(icon),
+      leading: OmiSettingsIconTile(FaIcon(icon)),
       title: title,
       subtitle: subtitle,
       value: value,
@@ -205,9 +227,11 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
             row(SettingsDestination.people, icon: FontAwesomeIcons.users, title: l10n.identifyingOthers),
             OmiSettingsRow(
               key: const ValueKey('settings_row_voiceResponseMode'),
-              leading: const FaIcon(FontAwesomeIcons.volumeHigh),
+              leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.volumeHigh)),
               title: l10n.voiceResponseMode,
-              value: _voiceResponseModeLabel(_prefs.voiceResponseMode),
+              // A subtitle, not a trailing value: "Headphones only" next to the tile would wrap the title.
+              subtitle: _voiceResponseModeLabel(_prefs.voiceResponseMode),
+              showChevron: true,
               onTap: () => open(SettingsDestination.voice),
             ),
           ],
@@ -226,12 +250,12 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
         const SizedBox(height: OmiSpacing.xl),
 
         // Capture modes: two-state settings, so inline switches that apply immediately.
-        OmiSectionHeader(l10n.recording, trailing: SettingsTag(l10n.beta, OmiColors.warning)),
+        OmiSectionHeader(l10n.recording, trailing: SettingsTag(l10n.beta)),
         OmiSettingsGroup(
           children: [
             OmiSettingsRow.toggle(
               key: const ValueKey('settings_row_transcribeLater'),
-              leading: const FaIcon(FontAwesomeIcons.floppyDisk),
+              leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.floppyDisk)),
               title: l10n.transcribeLaterTitle,
               subtitle: batchStorageFull ? l10n.transcribeLaterStorageFull : l10n.transcribeLaterDescription,
               value: _prefs.batchModeEnabled,
@@ -240,7 +264,7 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
             if (PlatformService.isAndroid)
               OmiSettingsRow.toggle(
                 key: const ValueKey('settings_row_backgroundMode'),
-                leading: const FaIcon(FontAwesomeIcons.towerBroadcast),
+                leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.towerBroadcast)),
                 title: l10n.backgroundModeTitle,
                 subtitle: canEnableBackground || backgroundEnabled
                     ? l10n.backgroundModeDescription
@@ -273,22 +297,15 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
         ThemeMode.dark => context.l10n.appearanceDark,
       };
 
-  Future<void> _showAppearancePicker() async {
+  /// [rowContext] is the row's own, inside the page's typeface, so the sheet is set in it too.
+  Future<void> _showAppearancePicker(BuildContext rowContext) async {
     final provider = context.read<AppearanceProvider>();
-    final picked = await showOmiSheet<ThemeMode>(
-      context: context,
+    final picked = await _showSettingsPicker<ThemeMode>(
+      rowContext,
       title: context.l10n.appearance,
-      builder: (sheetContext) => OmiSettingsGroup(
-        children: [
-          for (final mode in ThemeMode.values)
-            OmiSettingsRow(
-              title: _appearanceLabel(mode),
-              trailing: mode == provider.mode ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
-              showChevron: false,
-              onTap: () => Navigator.of(sheetContext).pop(mode),
-            ),
-        ],
-      ),
+      options: ThemeMode.values,
+      current: provider.mode,
+      label: _appearanceLabel,
     );
     if (picked != null && mounted) await provider.setMode(picked);
   }
@@ -305,12 +322,14 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
           children: [
             row(SettingsDestination.notifications, icon: FontAwesomeIcons.solidBell, title: l10n.notifications),
             row(SettingsDestination.conversationDisplay, icon: FontAwesomeIcons.list, title: l10n.conversationDisplay),
-            OmiSettingsRow(
-              key: const ValueKey('settings_row_appearance'),
-              leading: const FaIcon(FontAwesomeIcons.circleHalfStroke),
-              title: l10n.appearance,
-              value: _appearanceLabel(appearance),
-              onTap: _showAppearancePicker,
+            Builder(
+              builder: (rowContext) => OmiSettingsRow(
+                key: const ValueKey('settings_row_appearance'),
+                leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.circleHalfStroke)),
+                title: l10n.appearance,
+                value: _appearanceLabel(appearance),
+                onTap: () => _showAppearancePicker(rowContext),
+              ),
             ),
           ],
         ),
@@ -345,7 +364,7 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
               valueListenable: DataExport.exportInProgress,
               builder: (context, exporting, _) => OmiSettingsRow(
                 key: settingsRowKey(SettingsDestination.exportData),
-                leading: const FaIcon(FontAwesomeIcons.fileExport),
+                leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.fileExport)),
                 title: l10n.exportAllData,
                 subtitle: l10n.exportConversationsToJson,
                 trailing: exporting ? const OmiSpinner(size: OmiSpinnerSize.small) : null,

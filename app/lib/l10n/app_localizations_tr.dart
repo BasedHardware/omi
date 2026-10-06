@@ -268,6 +268,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get askAnything => 'Her şeyi sor';
 
   @override
+  String get askAnythingButton => 'Her şeyi sor';
+
+  @override
   String get noMessagesYet => 'Henüz mesaj yok!\nNeden bir konuşma başlatmıyorsunuz?';
 
   @override
@@ -2688,6 +2691,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get tasksNoDeadline => 'Son tarih yok';
 
   @override
+  String get tasksNextPageFailed => 'Daha fazla görev yüklenemedi. Yeniden denemek için aşağı çekin.';
+
+  @override
   String get tasksLater => 'Daha sonra';
 
   @override
@@ -3779,6 +3785,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String get settingsHeader => 'AYARLAR';
 
   @override
+  String get settingsSectionRecording => 'Kayıt';
+
+  @override
+  String get settingsSectionSupport => 'Destek';
+
+  @override
+  String get settingsSectionPersonalization => 'Kişiselleştirme';
+
+  @override
+  String get settingsSectionConnectedApps => 'Bağlı uygulamalar';
+
+  @override
   String get plansAndBilling => 'Planlar ve Faturalama';
 
   @override
@@ -4375,7 +4393,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get saveKeyWarning => 'Bu anahtarı şimdi kaydedin! Tekrar göremeyeceksiniz.';
 
   @override
-  String get yourApiKey => 'API ANAHTARINIZ';
+  String get yourApiKey => 'API anahtarınız';
 
   @override
   String get tapToCopy => 'Kopyalamak için dokunun';
@@ -4390,13 +4408,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get accessDataProgrammatically => 'Verilerinize programatik olarak erişin';
 
   @override
-  String get keyNameLabel => 'ANAHTAR ADI';
+  String get keyNameLabel => 'Anahtar adı';
 
   @override
   String get keyNamePlaceholder => 'ör., Uygulama Entegrasyonum';
 
   @override
-  String get permissionsLabel => 'İZİNLER';
+  String get permissionsLabel => 'İzinler';
 
   @override
   String get permissionsInfoNote => 'R = Okuma, W = Yazma. Hiçbir şey seçilmezse varsayılan salt okunur.';
@@ -9137,6 +9155,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get selectAllTasksMenu => 'Tümünü seç';
 
   @override
+  String get selectAllTasksPartial => 'Tüm görevler yüklenemedi. Yalnızca zaten yüklenmiş görevler seçildi.';
+
+  @override
   String get connectTaskAppToExport => 'Dışa aktarmak için Ayarlar\'da bir görev uygulaması bağlayın';
 
   @override
@@ -9927,6 +9948,15 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant hâlâ kayıt yapıyor, bu yüzden depolanan ses aktarılamıyor. Kaydı durdurmak için Pendant\'ın düğmesine basın, ardından yeniden senkronize edin.';
+
+  @override
+  String get pendantLostConnection => 'Kolyenin bu telefonla bağlantısı kesildi.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır.';
+
+  @override
+  String get pendantRecordingSafe => 'Bundan önce kaydedilen her şey güvende.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11261,10 +11291,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Depolama neredeyse dolu';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi kendiliğinden yeniden bağlanır';

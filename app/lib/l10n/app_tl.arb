@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "Tanungin ang kahit ano",
     "noMessagesYet": "Walang mensahe pa!\nBakit hindi ka magsimula ng pag-uusap?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
@@ -2983,6 +2984,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Hindi ma-load ang iba pang mga gawain. Hilahin pababa para subukang muli.",
     "tasksLater": "Mamaya",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -4207,6 +4209,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Pagre-record",
+    "settingsSectionSupport": "Suporta",
+    "settingsSectionPersonalization": "Pag-personalize",
+    "settingsSectionConnectedApps": "Mga konektadong app",
     "@account": {
         "description": "Account section label"
     },
@@ -4996,7 +5002,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "ANG IYONG API KEY",
+    "yourApiKey": "Ang iyong API key",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5019,7 +5025,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "KEY NAME",
+    "keyNameLabel": "Key name",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5027,7 +5033,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "PERMISSIONS",
+    "permissionsLabel": "Permissions",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10493,6 +10499,7 @@
     "searchActionItems": "Maghanap ng mga gawain",
     "selectActionItems": "Pumili ng marami",
     "selectAllTasksMenu": "Piliin lahat",
+    "selectAllTasksPartial": "Hindi ma-load ang lahat ng gawain. Ang mga na-load na gawain lang ang napili.",
     "showCompletedTasks": "Ipakita ang tapos na",
     "startCallRecording": "Simulan ang pag-record ng tawag",
     "startVoiceRecording": "Simulan ang voice recording",
@@ -10750,6 +10757,9 @@
     "appDisabledLastError": "Huling error: {error}.",
     "prerecordedTranscript": "Paunang-rekord",
     "pendantRecordingSyncBlocked": "Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
+    "pendantLostConnection": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito.",
+    "pendantReconnectsOnItsOwn": "Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant.",
+    "pendantRecordingSafe": "Ligtas ang lahat ng na-record bago nito.",
     "pendantFullSyncBlocked": "Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
     "conversationsNotCapturedCount": "Hindi na-record ({count})",
     "transcriptionNoAudio": "Hindi tumatanggap ng audio ang transkripsyon",
@@ -11108,7 +11118,6 @@
     "captureStarting": "Nagsisimula…",
     "capturePhoneStorageFull": "Puno na ang storage ng telepono",
     "captureStorageAlmostFull": "Halos puno na ang storage",
-    "capturePendantDisconnectedDetail": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.",
     "participantsSummaryUncounted": "{name} at iba pa",
     "deviceOnboardingVoiceReplyTitle": "Pakinggan ang mga sagot ni Omi",
     "deviceOnboardingVoiceReplySample": "Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.",

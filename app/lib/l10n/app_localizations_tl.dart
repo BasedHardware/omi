@@ -268,6 +268,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get askAnything => 'Tanungin ang kahit ano';
 
   @override
+  String get askAnythingButton => 'Tanungin ang kahit ano';
+
+  @override
   String get noMessagesYet => 'Walang mensahe pa!\nBakit hindi ka magsimula ng pag-uusap?';
 
   @override
@@ -2705,6 +2708,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tasksNoDeadline => 'Walang Deadline';
 
   @override
+  String get tasksNextPageFailed => 'Hindi ma-load ang iba pang mga gawain. Hilahin pababa para subukang muli.';
+
+  @override
   String get tasksLater => 'Mamaya';
 
   @override
@@ -3799,6 +3805,18 @@ class AppLocalizationsTl extends AppLocalizations {
   String get settingsHeader => 'SETTINGS';
 
   @override
+  String get settingsSectionRecording => 'Pagre-record';
+
+  @override
+  String get settingsSectionSupport => 'Suporta';
+
+  @override
+  String get settingsSectionPersonalization => 'Pag-personalize';
+
+  @override
+  String get settingsSectionConnectedApps => 'Mga konektadong app';
+
+  @override
   String get plansAndBilling => 'Mga Plano & Pagbabayad';
 
   @override
@@ -4400,7 +4418,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get saveKeyWarning => 'I-save ang key na ito ngayon! Hindi mo na makikita ito ulit.';
 
   @override
-  String get yourApiKey => 'ANG IYONG API KEY';
+  String get yourApiKey => 'Ang iyong API key';
 
   @override
   String get tapToCopy => 'Itap upang kopyahin';
@@ -4415,13 +4433,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get accessDataProgrammatically => 'I-access ang iyong data nang programmatically';
 
   @override
-  String get keyNameLabel => 'KEY NAME';
+  String get keyNameLabel => 'Key name';
 
   @override
   String get keyNamePlaceholder => 'e.g., My App Integration';
 
   @override
-  String get permissionsLabel => 'PERMISSIONS';
+  String get permissionsLabel => 'Permissions';
 
   @override
   String get permissionsInfoNote => 'R = Read, W = Write. Defaults sa read-only kung walang napiling selection.';
@@ -9206,6 +9224,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get selectAllTasksMenu => 'Piliin lahat';
 
   @override
+  String get selectAllTasksPartial => 'Hindi ma-load ang lahat ng gawain. Ang mga na-load na gawain lang ang napili.';
+
+  @override
   String get connectTaskAppToExport => 'Ikonekta ang isang task app sa Settings para mag-export';
 
   @override
@@ -10004,6 +10025,15 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
+
+  @override
+  String get pendantLostConnection => 'Nawalan ng koneksyon ang iyong pendant sa teleponong ito.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant.';
+
+  @override
+  String get pendantRecordingSafe => 'Ligtas ang lahat ng na-record bago nito.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11345,10 +11375,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Halos puno na ang storage';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
 
   @override
   String get capturePendantDisconnectedShort => 'Kusang kokonekta muli ang Omi';

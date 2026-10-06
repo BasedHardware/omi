@@ -7,6 +7,8 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 
+/// A recap on Home: a glass card with the day's first place on a map along the top, then the date
+/// and headline. A recap without a place shows its emoji, headline and overview instead.
 class DailySummaryCard extends StatelessWidget {
   static const double width = 260;
   static const double height = 160;
@@ -28,8 +30,8 @@ class DailySummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final locations = summary.locations.where(_hasUsableCoordinates).toList();
-    final hasMap = locations.isNotEmpty;
+    final place = summary.locations.where(_hasUsableCoordinates).firstOrNull;
+    final hasMap = place != null;
 
     return Semantics(
       button: true,
@@ -41,40 +43,40 @@ class DailySummaryCard extends StatelessWidget {
           width: width,
           height: height,
           margin: const EdgeInsets.only(right: 12),
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: _cardRadius),
+          // A card, not a control: the page's card colour with the glass rim.
+          decoration: ShapeDecoration(shape: _cardShape, color: OmiCanvas.cardOf(context)),
+          // Over the map too, so the glass edge runs across its top.
+          foregroundDecoration: OmiGlass.rim(_cardShape),
           child: ClipRRect(
             borderRadius: _cardRadius,
             child: Stack(
               children: [
                 if (hasMap)
                   Positioned(
-                    bottom: 0,
+                    top: 0,
                     left: 0,
                     right: 0,
                     height: mapHeight,
                     child: OmiMapPreview(
                       key: ValueKey('daily_summary_map_${summary.id}'),
-                      pins: [
-                        for (final location in locations)
-                          OmiMapPin(latitude: location.latitude, longitude: location.longitude),
-                      ],
-                      backgroundColor: OmiColors.surface1,
+                      pins: [OmiMapPin(latitude: place.latitude, longitude: place.longitude)],
+                      backgroundColor: OmiCanvas.cardOf(context),
                     ),
                   ),
                 Positioned(
-                  top: 0,
+                  top: hasMap ? mapHeight : 0,
                   left: 0,
                   right: 0,
-                  bottom: hasMap ? mapHeight : 0,
+                  bottom: 0,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(14, hasMap ? 10 : 12, 14, hasMap ? 4 : 10),
+                    padding: EdgeInsets.fromLTRB(14, hasMap ? 8 : 12, 14, hasMap ? 6 : 10),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Eyebrow: the day, so the headline can carry the story.
                         Row(
                           children: [
-                            if (summary.dayEmoji.isNotEmpty) ...[
+                            if (!hasMap && summary.dayEmoji.isNotEmpty) ...[
                               Text(summary.dayEmoji, style: OmiType.footnote),
                               const SizedBox(width: 6),
                             ],
@@ -91,7 +93,7 @@ class DailySummaryCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         if (hasMap)
-                          // Above the map the band is short: whole lines only (at most two), so large
+                          // Below the map the band is short: whole lines only (at most two), so large
                           // text ends on an ellipsis instead of clipping through a line.
                           Expanded(
                             child: LayoutBuilder(builder: (context, box) {
@@ -162,6 +164,7 @@ class DailySummaryCard extends StatelessWidget {
   }
 
   static const BorderRadius _cardRadius = BorderRadius.all(Radius.circular(radius));
+  static const ShapeBorder _cardShape = RoundedRectangleBorder(borderRadius: _cardRadius);
 
   static bool _hasUsableCoordinates(LocationPin location) {
     final latitude = location.latitude;

@@ -75,14 +75,11 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        title: Text(widget.title),
-        actions: [
-          TextButton(onPressed: () => _setJson(widget.onReset()), child: Text(context.l10n.reset)),
-        ],
-      ),
+    return OmiGroupedPage(
+      title: widget.title,
+      actions: [
+        TextButton(onPressed: () => _setJson(widget.onReset()), child: Text(context.l10n.reset)),
+      ],
       body: Column(
         children: [
           Expanded(

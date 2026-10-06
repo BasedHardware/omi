@@ -37,8 +37,11 @@ Widget _app(Widget child) {
   );
 }
 
-/// The Revoke button inside the confirmation dialog (the row's own Revoke is behind it).
+/// The Revoke button inside the confirmation dialog.
 Finder _dialogRevoke() => find.descendant(of: find.byType(AlertDialog), matching: find.text('Revoke'));
+
+/// The row's own revoke control: a trash icon whose label (tooltip and screen reader) is Revoke.
+Finder _rowRevoke() => find.byTooltip('Revoke');
 
 void main() {
   final createdAt = DateTime(2026, 9, 23, 10, 43);
@@ -56,14 +59,14 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Revoke'));
+    await tester.tap(_rowRevoke());
     await tester.pumpAndSettle();
     expect(find.text('Revoke Key?'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(provider.deleted, isEmpty);
 
-    await tester.tap(find.text('Revoke'));
+    await tester.tap(_rowRevoke());
     await tester.pumpAndSettle();
     await tester.tap(_dialogRevoke());
     await tester.pumpAndSettle();
@@ -90,9 +93,9 @@ void main() {
     );
 
     expect(find.textContaining('Sep 23, 2026'), findsOneWidget);
-    expect(find.text('Read'), findsOneWidget);
+    expect(find.textContaining('Read'), findsOneWidget);
 
-    await tester.tap(find.text('Revoke'));
+    await tester.tap(_rowRevoke());
     await tester.pumpAndSettle();
     await tester.tap(_dialogRevoke());
     await tester.pumpAndSettle();

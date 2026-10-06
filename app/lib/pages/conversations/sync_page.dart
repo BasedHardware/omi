@@ -1,7 +1,7 @@
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
@@ -19,25 +19,29 @@ import 'package:omi/utils/sync/sync_card_progress_line.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'widgets/sync_error_card.dart';
 import 'widgets/offline_sync_storage_sheet.dart';
+import 'widgets/sync_list_header.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
-import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 
-Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
-  return Padding(
-    padding: const EdgeInsets.only(left: 2, top: 1),
-    child: FaIcon(icon, size: size, color: color),
-  );
-}
-
+/// One recording on the legacy sync page. Consecutive rows under one date header read as one
+/// outlined card: [isFirst] rounds and closes its top, [isLast] its bottom.
 class WalListItem extends StatelessWidget {
   final DateTime date;
   final int walIdx;
   final Wal wal;
+  final bool isFirst;
+  final bool isLast;
 
-  const WalListItem({super.key, required this.wal, required this.date, required this.walIdx});
+  const WalListItem({
+    super.key,
+    required this.wal,
+    required this.date,
+    required this.walIdx,
+    this.isFirst = true,
+    this.isLast = true,
+  });
 
   double _calcProgress(Wal wal) {
     if (!wal.isSyncing || wal.syncStartedAt == null) return 0.0;
@@ -54,37 +58,28 @@ class WalListItem extends StatelessWidget {
     return null;
   }
 
-  (Color, String) _rowStatus(BuildContext context, bool hasError) {
+  /// Subtitle colour (null: the row's tertiary default) and label. Black and white like the rest
+  /// of Settings: amber for an automatic retry, red for failed and unrecoverable recordings.
+  (Color?, String) _rowStatus(BuildContext context, bool hasError) {
     final l = context.l10n;
     final state = wal.syncDisplayState;
-    if (state == WalSyncDisplayState.syncing) {
-      return (Colors.grey.shade300, l.syncStatusBackingUp);
-    }
-    if (hasError) return (Colors.redAccent, l.failedStatus);
-    switch (state) {
-      case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, l.syncStatusConversationCreated);
-      case WalSyncDisplayState.uploaded:
-        return (Colors.grey.shade400, l.syncStatusUploaded);
-      case WalSyncDisplayState.retrying:
-        return (Colors.orangeAccent, l.syncStatusRetrying);
-      case WalSyncDisplayState.failed:
-        return (Colors.redAccent, l.syncStatusFailed);
-      case WalSyncDisplayState.corrupted:
-        return (Colors.redAccent, l.syncStatusFileUnavailable);
-      case WalSyncDisplayState.outsideRecoveryWindow:
-        return (Colors.redAccent, l.syncStatusTooOld);
-      case WalSyncDisplayState.unsupportedAudio:
-        return (Colors.redAccent, l.syncStatusUnsupportedAudio);
-      case WalSyncDisplayState.uploadRejected:
-        return (Colors.redAccent, l.failedStatus);
-      case WalSyncDisplayState.waiting:
-      case WalSyncDisplayState.syncing:
-        return (Colors.grey.shade500, l.syncStatusWaiting);
-    }
+    if (state == WalSyncDisplayState.syncing) return (null, l.syncStatusBackingUp);
+    if (hasError) return (OmiColors.danger, l.failedStatus);
+    return switch (state) {
+      WalSyncDisplayState.synced => (null, l.syncStatusConversationCreated),
+      WalSyncDisplayState.uploaded => (null, l.syncStatusUploaded),
+      WalSyncDisplayState.retrying => (OmiColors.warning, l.syncStatusRetrying),
+      WalSyncDisplayState.failed => (OmiColors.danger, l.syncStatusFailed),
+      WalSyncDisplayState.corrupted => (OmiColors.danger, l.syncStatusFileUnavailable),
+      WalSyncDisplayState.outsideRecoveryWindow => (OmiColors.danger, l.syncStatusTooOld),
+      WalSyncDisplayState.unsupportedAudio => (OmiColors.danger, l.syncStatusUnsupportedAudio),
+      WalSyncDisplayState.uploadRejected => (OmiColors.danger, l.failedStatus),
+      WalSyncDisplayState.waiting || WalSyncDisplayState.syncing => (null, l.syncStatusWaiting),
+    };
   }
 
-  Widget _trailing(BuildContext context, SyncProvider syncProvider, bool hasError) {
+  /// The row's one control; null leaves the row's chevron.
+  Widget? _trailing(BuildContext context, SyncProvider syncProvider, bool hasError) {
     final state = wal.syncDisplayState;
     if (state == WalSyncDisplayState.syncing) {
       return const OmiSpinner(size: OmiSpinnerSize.small);
@@ -117,7 +112,7 @@ class WalListItem extends StatelessWidget {
         },
       );
     }
-    return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
+    return null;
   }
 
   @override
@@ -135,9 +130,9 @@ class WalListItem extends StatelessWidget {
             wal.syncStartedAt != null &&
             wal.storage != WalStorage.flashPage;
 
-        return Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+        return OmiGroupedSlice(
+          first: isFirst,
+          last: isLast,
           child: Dismissible(
             key: Key(wal.id),
             direction:
@@ -154,84 +149,69 @@ class WalListItem extends StatelessWidget {
             },
             background: Container(
               alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 20.0),
-              color: Colors.red,
-              child: const Icon(Icons.delete, color: Colors.white),
+              padding: const EdgeInsets.only(right: OmiSpacing.lg),
+              color: OmiColors.danger,
+              child: OmiLineIcon(OmiLineGlyph.trash, size: 22, color: OmiColors.onAccent),
             ),
             onDismissed: (direction) {
               ServiceManager.instance().wal.getSyncs().deleteWal(wal);
             },
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                routeToPage(context, WalItemDetailPage(wal: wal));
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+            child: Material(
+              type: MaterialType.transparency,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  OmiSettingsRow(
+                    title: source != null ? '$timeStr · $duration · $source' : '$timeStr · $duration',
+                    subtitle: statusLabel,
+                    subtitleColor: statusColor,
+                    trailing: _trailing(context, syncProvider, hasError),
+                    onTap: () => routeToPage(context, WalItemDetailPage(wal: wal)),
+                  ),
+                  if (showBar)
+                    // The progress belongs to the row: tapping it opens the recording too.
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => routeToPage(context, WalItemDetailPage(wal: wal)),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: OmiRadius.pillAll,
+                                    child: LinearProgressIndicator(
+                                      value: _calcProgress(wal),
+                                      backgroundColor: OmiColors.surface3,
+                                      color: OmiColors.textPrimary,
+                                      minHeight: 3,
+                                    ),
+                                  ),
+                                ),
+                                if (wal.syncSpeedKBps != null && wal.syncSpeedKBps! > 0) ...[
+                                  const SizedBox(width: OmiSpacing.sm),
+                                  Text(
+                                    '${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
+                                    style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            if (wal.syncEtaSeconds != null && wal.syncEtaSeconds! > 0) ...[
+                              const SizedBox(height: OmiSpacing.xxs),
                               Text(
-                                source != null ? '$timeStr · $duration · $source' : '$timeStr · $duration',
-                                style:
-                                    TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                statusLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: statusColor, fontSize: 12),
+                                context.l10n.etaLabel(OmiDuration.compact(wal.syncEtaSeconds!, context.l10n)),
+                                style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                               ),
                             ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        _trailing(context, syncProvider, hasError),
-                      ],
-                    ),
-                    if (showBar) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(2),
-                              child: LinearProgressIndicator(
-                                value: _calcProgress(wal),
-                                backgroundColor: OmiColors.border,
-                                color: OmiColors.accent,
-                                minHeight: 3,
-                              ),
-                            ),
-                          ),
-                          if (wal.syncSpeedKBps != null && wal.syncSpeedKBps! > 0) ...[
-                            const SizedBox(width: 12),
-                            Text(
-                              '${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
-                              style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
-                            ),
                           ],
-                        ],
-                      ),
-                      if (wal.syncEtaSeconds != null && wal.syncEtaSeconds! > 0) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          context.l10n.etaLabel(OmiDuration.compact(wal.syncEtaSeconds!, context.l10n)),
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
                         ),
-                      ],
-                    ],
-                  ],
-                ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -257,98 +237,51 @@ class _SyncPageState extends State<SyncPage> {
     });
   }
 
-  Widget _buildSettingsItem({required FaIconData icon, required String title, String? status, VoidCallback? onTap}) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w400),
-              ),
-            ),
-            if (status != null) Text(status, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
-            const SizedBox(width: 10),
-            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildConversationsCreatedCard(SyncProvider syncProvider) {
     if (!syncProvider.syncCompleted || syncProvider.syncedConversationsPointers.isEmpty) {
       return const SizedBox.shrink();
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
-        child: GestureDetector(
-          onTap: () => routeToPage(context, const SyncedConversationsPage()),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                SizedBox(width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleCheck, color: Colors.green)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    context.l10n.conversationsCreated(syncProvider.syncedConversationsPointers.length),
-                    style: TextStyle(color: OmiColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                Icon(Icons.chevron_right, color: OmiColors.border, size: 20),
-              ],
-            ),
+      padding: const EdgeInsets.only(bottom: OmiSpacing.xl),
+      child: OmiSettingsGroup(
+        children: [
+          OmiSettingsRow(
+            leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.circleCheck)),
+            title: context.l10n.conversationsCreated(syncProvider.syncedConversationsPointers.length),
+            onTap: () => routeToPage(context, const SyncedConversationsPage()),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildSettingsCard() {
+    final l = context.l10n;
     final isPhoneStorageOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
 
-    return Container(
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
-      child: Column(
-        children: [
-          Builder(
-            builder: (context) {
-              return _buildSettingsItem(
-                icon: FontAwesomeIcons.mobile,
-                title: context.l10n.storeAudioOnPhone,
-                status: isPhoneStorageOn ? context.l10n.on : context.l10n.off,
-                onTap: () {
-                  routeToPage(context, const LocalStoragePage()).then((_) => setState(() {}));
-                },
-              );
-            },
-          ),
-          Divider(height: 1, color: OmiColors.border, indent: 52),
-          Consumer<UserProvider>(
-            builder: (context, userProvider, child) {
-              final isCloudOn = userProvider.privateCloudSyncEnabled;
-              return _buildSettingsItem(
-                icon: FontAwesomeIcons.cloud,
-                title: context.l10n.storeAudioOnCloud,
-                status: isCloudOn ? context.l10n.on : context.l10n.off,
-                onTap: () {
-                  routeToPage(context, const PrivateCloudSyncPage());
-                },
-              );
-            },
-          ),
-        ],
-      ),
+    return Consumer<UserProvider>(
+      builder: (context, userProvider, child) {
+        return OmiSettingsGroup(
+          header: l.storageSection,
+          children: [
+            OmiSettingsRow(
+              leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.mobile)),
+              title: l.storeAudioOnPhone,
+              value: isPhoneStorageOn ? l.on : l.off,
+              showChevron: true,
+              onTap: () => routeToPage(context, const LocalStoragePage()).then((_) => setState(() {})),
+            ),
+            OmiSettingsRow(
+              leading: const OmiSettingsIconTile(FaIcon(FontAwesomeIcons.cloud)),
+              title: l.storeAudioOnCloud,
+              value: userProvider.privateCloudSyncEnabled ? l.on : l.off,
+              showChevron: true,
+              onTap: () => routeToPage(context, const PrivateCloudSyncPage()),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -482,8 +415,15 @@ class _SyncPageState extends State<SyncPage> {
 
     String title;
     String? subtitle;
-    Color titleColor = OmiColors.textPrimary;
+    // Black and white like the rest of Settings; amber only when something is held up.
+    var warning = false;
+    var icon = FontAwesomeIcons.circleCheck;
     Widget? action;
+    Widget cancelAction() => OmiButton.secondary(
+          label: l.cancel,
+          size: OmiButtonSize.compact,
+          onPressed: () => _showCancelSyncDialog(context, syncProvider),
+        );
 
     if (isActive) {
       final speed = syncProvider.syncSpeedKBps;
@@ -492,12 +432,12 @@ class _SyncPageState extends State<SyncPage> {
         case SyncPhase.downloadingFromDevice:
           title = l.syncCardDownloadingTitle;
           subtitle = _progressLine(s, speedStr);
-          action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
+          action = cancelAction();
           break;
         case SyncPhase.uploadingToCloud:
           title = l.syncCardUploadingTitle;
           subtitle = _progressLine(s, null);
-          action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
+          action = cancelAction();
           break;
         case SyncPhase.processingOnServer:
           title = l.syncCardProcessing;
@@ -505,19 +445,19 @@ class _SyncPageState extends State<SyncPage> {
           break;
         case SyncPhase.waitingForInternet:
           title = l.syncCardWaitingInternet;
-          titleColor = Colors.orangeAccent;
+          warning = true;
+          icon = FontAwesomeIcons.clock;
           break;
         case SyncPhase.idle:
           title = l.syncCardUploadingTitle;
           subtitle = _progressLine(s, speedStr);
-          if (syncProvider.isSdCardSyncing) {
-            action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
-          }
+          if (syncProvider.isSdCardSyncing) action = cancelAction();
           break;
       }
     } else if (syncProvider.isRateLimited) {
       title = syncCooldownTitle(syncProvider.rateLimitReason, l);
-      titleColor = Colors.orangeAccent;
+      warning = true;
+      icon = FontAwesomeIcons.clock;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
       final counts = syncProvider.offlineServerProcessingCounts;
@@ -529,27 +469,32 @@ class _SyncPageState extends State<SyncPage> {
           l.syncProcessingBackgroundHint;
     } else if (readyToSync > 0) {
       title = l.syncCardReadyCount(readyToSync);
-      action = statusActionPill(l.sync, OmiColors.accent, () {
-        if (context.read<ConnectivityProvider>().isConnected) {
-          _handleSyncWals(context, syncProvider);
-        } else {
-          OmiFeedback.error(context, l.internetRequired);
-        }
-      });
+      icon = FontAwesomeIcons.cloudArrowUp;
+      action = OmiButton(
+        label: l.sync,
+        size: OmiButtonSize.compact,
+        onPressed: () {
+          if (context.read<ConnectivityProvider>().isConnected) {
+            _handleSyncWals(context, syncProvider);
+          } else {
+            OmiFeedback.error(context, l.internetRequired);
+          }
+        },
+      );
     } else {
       title = l.syncCardAllBackedUp;
-      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+    return OmiGroupedCard(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
       child: Row(
         children: [
-          if (showSpinner) ...[
-            const OmiSpinner(size: OmiSpinnerSize.small),
-            const SizedBox(width: 12),
-          ],
+          OmiSettingsIconTile(
+            showSpinner
+                ? const OmiSpinner(size: OmiSpinnerSize.small)
+                : FaIcon(icon, color: warning ? OmiColors.warning : null),
+          ),
+          const SizedBox(width: OmiSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,18 +502,23 @@ class _SyncPageState extends State<SyncPage> {
               children: [
                 Text(
                   title,
-                  style: TextStyle(color: titleColor, fontSize: 15, fontWeight: FontWeight.w500, height: 1.25),
+                  style: OmiType.body.copyWith(color: warning ? OmiColors.warning : OmiColors.textPrimary),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (subtitle != null) ...[
-                  const SizedBox(height: 3),
-                  Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                  ),
                 ],
               ],
             ),
           ),
-          if (action != null) ...[const SizedBox(width: 10), action],
+          if (action != null) ...[const SizedBox(width: OmiSpacing.sm), action],
         ],
       ),
     );
@@ -592,43 +542,15 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   Widget _buildStatusChips(SyncProvider syncProvider) {
-    Widget chip(WalStatusFilter filter, String label, int count) {
-      final selected = syncProvider.statusFilter == filter;
-      return Expanded(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => syncProvider.setStatusFilter(filter),
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: selected ? OmiColors.textPrimary.withValues(alpha: 0.08) : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              count > 0 ? '$label  $count' : label,
-              style: TextStyle(
-                color: selected ? OmiColors.textPrimary : Colors.grey.shade500,
-                fontSize: 13,
-                fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(10)),
-      child: Row(
-        children: [
-          chip(WalStatusFilter.pending, context.l10n.pending, syncProvider.pendingStatusCount),
-          chip(WalStatusFilter.synced, context.l10n.synced, syncProvider.syncedStatusCount),
-          chip(WalStatusFilter.corrupted, context.l10n.failedStatus, syncProvider.corruptedStatusCount),
-        ],
-      ),
+    String label(String name, int count) => count > 0 ? '$name $count' : name;
+    return OmiSegmentedControl<WalStatusFilter>(
+      value: syncProvider.statusFilter,
+      segments: {
+        WalStatusFilter.pending: label(context.l10n.pending, syncProvider.pendingStatusCount),
+        WalStatusFilter.synced: label(context.l10n.synced, syncProvider.syncedStatusCount),
+        WalStatusFilter.corrupted: label(context.l10n.failedStatus, syncProvider.corruptedStatusCount),
+      },
+      onChanged: syncProvider.setStatusFilter,
     );
   }
 
@@ -636,13 +558,11 @@ class _SyncPageState extends State<SyncPage> {
     final isPending = filter == WalStatusFilter.pending;
     final isCorrupted = filter == WalStatusFilter.corrupted;
     return OmiEmptyState(
-      glyph: FaIcon(
-        isPending
-            ? FontAwesomeIcons.circleCheck
-            : isCorrupted
-                ? FontAwesomeIcons.triangleExclamation
-                : FontAwesomeIcons.clockRotateLeft,
-      ),
+      glyph: OmiLineIcon(isPending
+          ? OmiLineGlyph.check
+          : isCorrupted
+              ? OmiLineGlyph.info
+              : OmiLineGlyph.clock),
       title: isPending
           ? context.l10n.noPendingRecordings
           : isCorrupted
@@ -677,48 +597,32 @@ class _SyncPageState extends State<SyncPage> {
 
     // Build a single flattened list with source headers interleaved
     final List<_PendingListItem> items = [];
-    void addSection(String label, FaIconData icon, Color color, List<Wal> wals) {
-      items.add(_PendingListItem.header(label, icon, color, wals.length));
-      for (final wal in wals) {
-        items.add(_PendingListItem.wal(wal));
+    void addSection(String label, List<Wal> wals) {
+      items.add(_PendingListItem.header(label, wals.length));
+      for (var i = 0; i < wals.length; i++) {
+        items.add(_PendingListItem.wal(wals[i], isFirst: i == 0, isLast: i == wals.length - 1));
       }
     }
 
-    if (phoneWals.isNotEmpty) addSection(context.l10n.phone, FontAwesomeIcons.mobileScreen, Colors.grey, phoneWals);
-    if (sdCardWals.isNotEmpty) {
-      addSection(context.l10n.sdCard, FontAwesomeIcons.sdCard, OmiColors.textSecondary, sdCardWals);
-    }
-    if (limitlessWals.isNotEmpty) {
-      addSection(context.l10n.limitless, FontAwesomeIcons.bolt, Colors.teal, limitlessWals);
-    }
+    if (phoneWals.isNotEmpty) addSection(context.l10n.phone, phoneWals);
+    if (sdCardWals.isNotEmpty) addSection(context.l10n.sdCard, sdCardWals);
+    if (limitlessWals.isNotEmpty) addSection(context.l10n.limitless, limitlessWals);
 
     return SliverList.builder(
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
         if (item.isHeader) {
-          return Padding(
-            padding: EdgeInsets.fromLTRB(20, index == 0 ? 0 : 20, 20, 8),
-            child: Row(
-              children: [
-                _buildFaIcon(item.icon!, size: 14, color: item.color!),
-                const SizedBox(width: 8),
-                Text(
-                  item.label!,
-                  style: TextStyle(color: item.color, fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(width: 6),
-                Text('${item.count}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-              ],
-            ),
-          );
+          return SyncListHeader(label: item.label!, count: item.count, first: index == 0);
         }
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
           child: WalListItem(
             wal: item.wal!,
             walIdx: index,
             date: DateTime.fromMillisecondsSinceEpoch(item.wal!.timerStart * 1000),
+            isFirst: item.isFirst,
+            isLast: item.isLast,
           ),
         );
       },
@@ -727,7 +631,7 @@ class _SyncPageState extends State<SyncPage> {
 
   Widget _buildEmptyState(BuildContext context) {
     return OmiEmptyState(
-      glyph: const FaIcon(FontAwesomeIcons.microphone),
+      glyph: const OmiLineIcon(OmiLineGlyph.microphone),
       title: context.l10n.noRecordings,
       message: context.l10n.audioFromOmiWillAppearHere,
     );
@@ -738,39 +642,35 @@ class _SyncPageState extends State<SyncPage> {
     // Sync result persists until the next sync starts.
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
-        return Scaffold(
-          appBar: AppBar(
-            leading: const OmiBackButton(),
-            title: Text(context.l10n.offlineSync),
-            actions: [
-              OmiIconButton(
-                icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 18),
-                label: context.l10n.manageStorage,
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  _showManageStorageSheet(context, syncProvider);
-                },
-              ),
-              const SizedBox(width: OmiSpacing.xxs),
-            ],
-          ),
+        return OmiGroupedPage(
+          title: context.l10n.offlineSync,
+          actions: [
+            OmiIconButton.filled(
+              icon: const OmiLineIcon(OmiLineGlyph.more, size: 20),
+              label: context.l10n.manageStorage,
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                _showManageStorageSheet(context, syncProvider);
+              },
+            ),
+          ],
           body: CustomScrollView(
             slivers: [
               // Settings + Process card + status chips
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SizedBox(height: 16),
+                      const SizedBox(height: OmiSpacing.sm),
                       _buildProcessCard(syncProvider),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: OmiSpacing.xl),
                       _buildConversationsCreatedCard(syncProvider),
                       _buildSettingsCard(),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: OmiSpacing.xl),
                       _buildStatusChips(syncProvider),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: OmiSpacing.lg),
                     ],
                   ),
                 ),
@@ -799,7 +699,7 @@ class _SyncPageState extends State<SyncPage> {
                   return OptimizedWalsListWidget(wals: wals);
                 },
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.xxl)),
             ],
           ),
         );
@@ -879,17 +779,19 @@ class _OptimizedWalsListWidgetState extends State<OptimizedWalsListWidget> {
         final item = flattenedItems[index];
 
         if (item is DateHeaderItem) {
-          return Padding(
-            padding: EdgeInsets.fromLTRB(20, index == 0 ? 0 : 24, 20, 8),
-            child: Text(
-              '${OmiDateFormat.of(context).dayHeader(item.date)} · ${OmiDateFormat.of(context).time(item.date)}',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
-            ),
-          );
+          final dates = OmiDateFormat.of(context);
+          return SyncListHeader(label: '${dates.dayHeader(item.date)} · ${dates.time(item.date)}', first: index == 0);
         } else if (item is WalItem) {
+          final isLast = index + 1 >= flattenedItems.length || flattenedItems[index + 1] is DateHeaderItem;
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-            child: WalListItem(wal: item.wal, walIdx: item.index, date: item.date),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+            child: WalListItem(
+              wal: item.wal,
+              walIdx: item.index,
+              date: item.date,
+              isFirst: item.index == 0,
+              isLast: isLast,
+            ),
           );
         }
         return const SizedBox.shrink();
@@ -915,19 +817,19 @@ class WalItem extends ListItem {
 class _PendingListItem {
   final bool isHeader;
   final String? label;
-  final FaIconData? icon;
-  final Color? color;
   final int? count;
   final Wal? wal;
+  final bool isFirst;
+  final bool isLast;
 
-  _PendingListItem.header(this.label, this.icon, this.color, this.count)
+  _PendingListItem.header(this.label, this.count)
       : isHeader = true,
-        wal = null;
+        wal = null,
+        isFirst = false,
+        isLast = false;
 
-  _PendingListItem.wal(this.wal)
+  _PendingListItem.wal(this.wal, {required this.isFirst, required this.isLast})
       : isHeader = false,
         label = null,
-        icon = null,
-        color = null,
         count = null;
 }

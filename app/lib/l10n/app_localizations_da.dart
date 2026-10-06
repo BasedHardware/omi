@@ -268,6 +268,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get askAnything => 'Spørg om hvad som helst';
 
   @override
+  String get askAnythingButton => 'Spørg om hvad som helst';
+
+  @override
   String get noMessagesYet => 'Ingen beskeder endnu!\nHvorfor starter du ikke en samtale?';
 
   @override
@@ -2667,6 +2670,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get tasksNoDeadline => 'Ingen frist';
 
   @override
+  String get tasksNextPageFailed => 'Kunne ikke indlæse flere opgaver. Træk ned for at prøve igen.';
+
+  @override
   String get tasksLater => 'Senere';
 
   @override
@@ -3757,6 +3763,18 @@ class AppLocalizationsDa extends AppLocalizations {
   String get settingsHeader => 'INDSTILLINGER';
 
   @override
+  String get settingsSectionRecording => 'Optagelse';
+
+  @override
+  String get settingsSectionSupport => 'Support';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalisering';
+
+  @override
+  String get settingsSectionConnectedApps => 'Forbundne apps';
+
+  @override
   String get plansAndBilling => 'Planer og Fakturering';
 
   @override
@@ -4355,7 +4373,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get saveKeyWarning => 'Gem denne nøgle nu! Du vil ikke kunne se den igen.';
 
   @override
-  String get yourApiKey => 'DIN API-NØGLE';
+  String get yourApiKey => 'Din API-nøgle';
 
   @override
   String get tapToCopy => 'Tryk for at kopiere';
@@ -4370,13 +4388,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get accessDataProgrammatically => 'Få adgang til dine data programmatisk';
 
   @override
-  String get keyNameLabel => 'NØGLENAVN';
+  String get keyNameLabel => 'Nøglenavn';
 
   @override
   String get keyNamePlaceholder => 'f.eks. Min app-integration';
 
   @override
-  String get permissionsLabel => 'TILLADELSER';
+  String get permissionsLabel => 'Tilladelser';
 
   @override
   String get permissionsInfoNote => 'R = Læs, W = Skriv. Standard kun læsning, hvis intet er valgt.';
@@ -9116,6 +9134,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get selectAllTasksMenu => 'Vælg alle';
 
   @override
+  String get selectAllTasksPartial => 'Kunne ikke indlæse alle opgaver. Kun de allerede indlæste er valgt.';
+
+  @override
   String get connectTaskAppToExport => 'Forbind en opgaveapp i Indstillinger for at eksportere';
 
   @override
@@ -9904,6 +9925,16 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Din Pendant optager stadig, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser igen.';
+
+  @override
+  String get pendantLostConnection => 'Dit vedhæng mistede forbindelsen til denne telefon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden.';
+
+  @override
+  String get pendantRecordingSafe => 'Alt optaget før dette er i sikkerhed.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11238,10 +11269,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lageret er næsten fuldt';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi genopretter forbindelsen af sig selv';

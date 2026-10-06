@@ -266,6 +266,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get askAnything => 'ถามอะไรก็ได้';
 
   @override
+  String get askAnythingButton => 'ถามอะไรก็ได้';
+
+  @override
   String get noMessagesYet => 'ยังไม่มีข้อความ!\nลองเริ่มบทสนทนาสิ';
 
   @override
@@ -2666,6 +2669,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get tasksNoDeadline => 'ไม่มีกำหนดเวลา';
 
   @override
+  String get tasksNextPageFailed => 'โหลดงานเพิ่มเติมไม่ได้ ดึงลงเพื่อลองอีกครั้ง';
+
+  @override
   String get tasksLater => 'ภายหลัง';
 
   @override
@@ -3745,6 +3751,18 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get settingsHeader => 'การตั้งค่า';
+
+  @override
+  String get settingsSectionRecording => 'การบันทึก';
+
+  @override
+  String get settingsSectionSupport => 'ฝ่ายสนับสนุน';
+
+  @override
+  String get settingsSectionPersonalization => 'การปรับให้เป็นส่วนตัว';
+
+  @override
+  String get settingsSectionConnectedApps => 'แอปที่เชื่อมต่อ';
 
   @override
   String get plansAndBilling => 'แผนและการเรียกเก็บเงิน';
@@ -9078,6 +9096,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get selectAllTasksMenu => 'เลือกทั้งหมด';
 
   @override
+  String get selectAllTasksPartial => 'โหลดงานทั้งหมดไม่ได้ เลือกเฉพาะงานที่โหลดแล้วเท่านั้น';
+
+  @override
   String get connectTaskAppToExport => 'เชื่อมต่อแอปงานในการตั้งค่าเพื่อส่งออก';
 
   @override
@@ -9857,6 +9878,15 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant ยังบันทึกอยู่ จึงไม่สามารถถ่ายโอนเสียงที่จัดเก็บไว้ได้ กดปุ่มของ Pendant เพื่อหยุดบันทึก แล้วซิงค์อีกครั้ง';
+
+  @override
+  String get pendantLostConnection => 'จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้';
+
+  @override
+  String get pendantRecordingSafe => 'ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11188,10 +11218,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'พื้นที่ใกล้เต็ม';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi จะเชื่อมต่อใหม่เอง';

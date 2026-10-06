@@ -82,21 +82,19 @@ class _OmiWebPageState extends State<OmiWebPage> {
         final canGoBack = await _controller.canGoBack();
         if (mounted) setState(() => _canGoBack = canGoBack);
       },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: const OmiBackButton(),
-          title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
+      child: OmiGroupedPage(
+        title: widget.title,
         body: Stack(
           children: [
             WebViewWidget(controller: _controller),
             if (_failed)
               ColoredBox(
-                color: OmiColors.surface0,
+                // The grouped page's own colour, so no seam shows under the header.
+                color: OmiColors.groupedPage,
                 child: OmiErrorState(message: context.l10n.couldNotLoadPage, onRetry: _retry),
               )
             else if (_loading)
-              ColoredBox(color: OmiColors.surface0, child: const OmiLoadingState()),
+              ColoredBox(color: OmiColors.groupedPage, child: const OmiLoadingState()),
           ],
         ),
       ),

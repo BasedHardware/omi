@@ -1,14 +1,18 @@
 // Settings subpages reached from the settings group pages: developer, plan and usage, account
 // deletion, transcription, language, notifications, integrations, phone calls, people, payments
 // and the guided voice profile.
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/backend/http/api/assistant_voices.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/goals/goals_page.dart';
@@ -27,6 +31,7 @@ import 'package:omi/pages/settings/person_detail_page.dart';
 import 'package:omi/pages/settings/phone_call_settings_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/settings/voice_settings_page.dart';
 import 'package:omi/pages/settings/widgets/leave_flow_widgets.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -150,6 +155,40 @@ final settingsPagesScenarios = <AuditScenario>[
     run: (a) async {
       await a.pump(const LanguageSettingsPage());
       await a.shot('Open Language settings');
+    },
+  ),
+  AuditScenario(
+    id: 'settings-voice',
+    title: 'Voice settings, the voice picker and the voice response sheet',
+    page: 'lib/pages/settings/voice_settings_page.dart (VoiceSettingsPage)',
+    state: 'Three voices, Kore chosen; previews do nothing',
+    run: (a) async {
+      final api = AssistantVoicesApi(
+        send: (request) async {
+          if (request.url.endsWith('v1/tts/voices')) {
+            return http.Response(
+                jsonEncode({
+                  'voices': [
+                    {'id': 'Charon', 'name': 'Charon'},
+                    {'id': 'Kore', 'name': 'Kore'},
+                    {'id': 'Puck', 'name': 'Puck'},
+                  ],
+                  'default_voice_id': 'Charon',
+                }),
+                200);
+          }
+          if (request.url.endsWith('v1/users/voice')) return http.Response(jsonEncode({'voice_id': 'Kore'}), 200);
+          return http.Response('{}', 404);
+        },
+      );
+      await a.pump(VoiceSettingsPage(api: api, onPreview: (_) async {}, onStopPreview: () async {}));
+      await a.shot('Open Voice settings', step: 'page');
+      await a.tap(find.byKey(const ValueKey('settings_row_assistantVoice')));
+      await a.shot('Tap Assistant Voice: the picker', step: 'voices');
+      Navigator.of(a.tester.element(find.byKey(const ValueKey('settings_voice_Kore')))).pop();
+      await a.settle();
+      await a.tap(find.byKey(const ValueKey('settings_row_voiceResponseMode')));
+      await a.shot('Tap Voice Response: the mode sheet', step: 'mode');
     },
   ),
   AuditScenario(

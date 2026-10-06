@@ -268,6 +268,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get askAnything => 'Vraag wat je wilt';
 
   @override
+  String get askAnythingButton => 'Vraag wat je wilt';
+
+  @override
   String get noMessagesYet => 'Nog geen berichten!\nWaarom begin je geen gesprek?';
 
   @override
@@ -2689,6 +2692,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get tasksNoDeadline => 'Geen deadline';
 
   @override
+  String get tasksNextPageFailed => 'Kon geen taken meer laden. Trek omlaag om het opnieuw te proberen.';
+
+  @override
   String get tasksLater => 'Later';
 
   @override
@@ -3780,6 +3786,18 @@ class AppLocalizationsNl extends AppLocalizations {
   String get settingsHeader => 'INSTELLINGEN';
 
   @override
+  String get settingsSectionRecording => 'Opname';
+
+  @override
+  String get settingsSectionSupport => 'Ondersteuning';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalisatie';
+
+  @override
+  String get settingsSectionConnectedApps => 'Gekoppelde apps';
+
+  @override
   String get plansAndBilling => 'Plannen & Facturering';
 
   @override
@@ -4379,7 +4397,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get saveKeyWarning => 'Sla deze sleutel nu op! U kunt hem niet meer zien.';
 
   @override
-  String get yourApiKey => 'UW API-SLEUTEL';
+  String get yourApiKey => 'Uw API-sleutel';
 
   @override
   String get tapToCopy => 'Tik om te kopiëren';
@@ -4394,13 +4412,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get accessDataProgrammatically => 'Toegang tot uw gegevens via programmering';
 
   @override
-  String get keyNameLabel => 'SLEUTELNAAM';
+  String get keyNameLabel => 'Sleutelnaam';
 
   @override
   String get keyNamePlaceholder => 'bijv., Mijn app-integratie';
 
   @override
-  String get permissionsLabel => 'MACHTIGINGEN';
+  String get permissionsLabel => 'Machtigingen';
 
   @override
   String get permissionsInfoNote => 'R = Lezen, W = Schrijven. Standaard alleen lezen als niets is geselecteerd.';
@@ -9148,6 +9166,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get selectAllTasksMenu => 'Alles selecteren';
 
   @override
+  String get selectAllTasksPartial => 'Kon niet alle taken laden. Alleen de al geladen taken zijn geselecteerd.';
+
+  @override
   String get connectTaskAppToExport => 'Verbind een taken-app in Instellingen om te exporteren';
 
   @override
@@ -9940,6 +9961,16 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Je Pendant is nog aan het opnemen, dus de opgeslagen audio kan niet worden overgezet. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer opnieuw.';
+
+  @override
+  String get pendantLostConnection => 'Je hanger heeft de verbinding met deze telefoon verloren.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is.';
+
+  @override
+  String get pendantRecordingSafe => 'Alles wat eerder is opgenomen, is veilig.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11280,10 +11311,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Opslag bijna vol';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi maakt vanzelf opnieuw verbinding';

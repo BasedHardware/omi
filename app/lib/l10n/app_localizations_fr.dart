@@ -269,6 +269,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get askAnything => 'Demandez n\'importe quoi';
 
   @override
+  String get askAnythingButton => 'Demandez n\'importe quoi';
+
+  @override
   String get noMessagesYet => 'Pas encore de messages !\nPourquoi ne pas commencer une conversation ?';
 
   @override
@@ -2706,6 +2709,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get tasksNoDeadline => 'Sans échéance';
 
   @override
+  String get tasksNextPageFailed => 'Impossible de charger plus de tâches. Tirez vers le bas pour réessayer.';
+
+  @override
   String get tasksLater => 'Plus tard';
 
   @override
@@ -3803,6 +3809,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get settingsHeader => 'PARAMÈTRES';
 
   @override
+  String get settingsSectionRecording => 'Enregistrement';
+
+  @override
+  String get settingsSectionSupport => 'Assistance';
+
+  @override
+  String get settingsSectionPersonalization => 'Personnalisation';
+
+  @override
+  String get settingsSectionConnectedApps => 'Apps connectées';
+
+  @override
   String get plansAndBilling => 'Plans et Facturation';
 
   @override
@@ -4407,7 +4425,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get saveKeyWarning => 'Enregistrez cette clé maintenant ! Vous ne pourrez plus la voir.';
 
   @override
-  String get yourApiKey => 'VOTRE CLÉ API';
+  String get yourApiKey => 'Votre clé API';
 
   @override
   String get tapToCopy => 'Appuyez pour copier';
@@ -4422,13 +4440,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get accessDataProgrammatically => 'Accédez à vos données par programmation';
 
   @override
-  String get keyNameLabel => 'NOM DE LA CLÉ';
+  String get keyNameLabel => 'Nom de la clé';
 
   @override
   String get keyNamePlaceholder => 'ex., Mon intégration';
 
   @override
-  String get permissionsLabel => 'AUTORISATIONS';
+  String get permissionsLabel => 'Autorisations';
 
   @override
   String get permissionsInfoNote => 'R = Lecture, W = Écriture. Lecture seule par défaut si rien n\'est sélectionné.';
@@ -9207,6 +9225,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get selectAllTasksMenu => 'Tout sélectionner';
 
   @override
+  String get selectAllTasksPartial =>
+      'Impossible de charger toutes les tâches. Seules les tâches déjà chargées sont sélectionnées.';
+
+  @override
   String get connectTaskAppToExport => 'Connectez une application de tâches dans les Paramètres pour exporter';
 
   @override
@@ -10003,6 +10025,16 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Votre Pendant est encore en train d\'enregistrer, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
+
+  @override
+  String get pendantLostConnection => 'Votre pendentif a perdu la connexion avec ce téléphone.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité.';
+
+  @override
+  String get pendantRecordingSafe => 'Tout ce qui a été enregistré avant est en sécurité.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11345,10 +11377,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Stockage presque plein';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi se reconnectera tout seul';

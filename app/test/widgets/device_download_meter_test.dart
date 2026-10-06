@@ -5,8 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/device_download_meter.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
-import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/ui/components/omi_button.dart';
 import 'package:omi/ui/components/omi_spinner.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
@@ -57,7 +57,7 @@ void main() {
                               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, height: 1.25),
                             ),
                           ),
-                          statusActionPill('Cancel', Colors.redAccent, () {}),
+                          OmiButton.secondary(label: 'Cancel', size: OmiButtonSize.compact, onPressed: () {}),
                         ],
                       ),
                       const SizedBox(height: 10),

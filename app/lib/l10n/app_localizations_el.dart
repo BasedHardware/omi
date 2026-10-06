@@ -269,6 +269,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get askAnything => 'Ρωτήστε οτιδήποτε';
 
   @override
+  String get askAnythingButton => 'Ρωτήστε οτιδήποτε';
+
+  @override
   String get noMessagesYet => 'Δεν υπάρχουν μηνύματα ακόμα!\nΓιατί δεν ξεκινάτε μια συνομιλία;';
 
   @override
@@ -2703,6 +2706,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tasksNoDeadline => 'Χωρίς προθεσμία';
 
   @override
+  String get tasksNextPageFailed =>
+      'Δεν ήταν δυνατή η φόρτωση περισσότερων εργασιών. Τραβήξτε προς τα κάτω για να δοκιμάσετε ξανά.';
+
+  @override
   String get tasksLater => 'Αργότερα';
 
   @override
@@ -3797,6 +3804,18 @@ class AppLocalizationsEl extends AppLocalizations {
   String get settingsHeader => 'ΡΥΘΜΙΣΕΙΣ';
 
   @override
+  String get settingsSectionRecording => 'Εγγραφή';
+
+  @override
+  String get settingsSectionSupport => 'Υποστήριξη';
+
+  @override
+  String get settingsSectionPersonalization => 'Εξατομίκευση';
+
+  @override
+  String get settingsSectionConnectedApps => 'Συνδεδεμένες εφαρμογές';
+
+  @override
   String get plansAndBilling => 'Πλάνα & Χρέωση';
 
   @override
@@ -4401,7 +4420,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get saveKeyWarning => 'Αποθηκεύστε αυτό το κλειδί τώρα! Δεν θα μπορείτε να το δείτε ξανά.';
 
   @override
-  String get yourApiKey => 'ΤΟ ΚΛΕΙΔΙ API ΣΑΣ';
+  String get yourApiKey => 'Το κλειδί API σας';
 
   @override
   String get tapToCopy => 'Πατήστε για αντιγραφή';
@@ -4416,13 +4435,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get accessDataProgrammatically => 'Πρόσβαση στα δεδομένα σας μέσω προγραμματισμού';
 
   @override
-  String get keyNameLabel => 'ΟΝΟΜΑ ΚΛΕΙΔΙΟΥ';
+  String get keyNameLabel => 'Όνομα κλειδιού';
 
   @override
   String get keyNamePlaceholder => 'π.χ., Η ενσωμάτωσή μου';
 
   @override
-  String get permissionsLabel => 'ΔΙΚΑΙΩΜΑΤΑ';
+  String get permissionsLabel => 'Δικαιώματα';
 
   @override
   String get permissionsInfoNote => 'R = Ανάγνωση, W = Εγγραφή. Προεπιλογή μόνο ανάγνωση αν δεν επιλεγεί τίποτα.';
@@ -9188,6 +9207,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get selectAllTasksMenu => 'Επιλογή όλων';
 
   @override
+  String get selectAllTasksPartial =>
+      'Δεν ήταν δυνατή η φόρτωση όλων των εργασιών. Επιλέχθηκαν μόνο όσες έχουν ήδη φορτωθεί.';
+
+  @override
   String get connectTaskAppToExport => 'Συνδέστε μια εφαρμογή εργασιών στις Ρυθμίσεις για εξαγωγή';
 
   @override
@@ -9985,6 +10008,16 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Το Pendant εξακολουθεί να ηχογραφεί, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την ηχογράφηση και συγχρονίστε ξανά.';
+
+  @override
+  String get pendantLostConnection => 'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά.';
+
+  @override
+  String get pendantRecordingSafe => 'Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11324,10 +11357,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Ο χώρος σχεδόν γέμισε';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 
   @override
   String get capturePendantDisconnectedShort => 'Το Omi θα επανασυνδεθεί μόνο του';

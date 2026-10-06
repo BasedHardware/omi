@@ -268,6 +268,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get askAnything => 'Спросите что угодно';
 
   @override
+  String get askAnythingButton => 'Спросите что угодно';
+
+  @override
   String get noMessagesYet => 'Сообщений пока нет!\nПочему бы не начать разговор?';
 
   @override
@@ -2689,6 +2692,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tasksNoDeadline => 'Без срока';
 
   @override
+  String get tasksNextPageFailed => 'Не удалось загрузить больше задач. Потяните вниз, чтобы попробовать снова.';
+
+  @override
   String get tasksLater => 'Позже';
 
   @override
@@ -3779,6 +3785,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsHeader => 'НАСТРОЙКИ';
 
   @override
+  String get settingsSectionRecording => 'Запись';
+
+  @override
+  String get settingsSectionSupport => 'Поддержка';
+
+  @override
+  String get settingsSectionPersonalization => 'Персонализация';
+
+  @override
+  String get settingsSectionConnectedApps => 'Подключённые приложения';
+
+  @override
   String get plansAndBilling => 'Планы и Оплата';
 
   @override
@@ -4379,7 +4397,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get saveKeyWarning => 'Сохраните этот ключ сейчас! Вы больше не сможете его увидеть.';
 
   @override
-  String get yourApiKey => 'ВАШ API КЛЮЧ';
+  String get yourApiKey => 'Ваш API-ключ';
 
   @override
   String get tapToCopy => 'Нажмите, чтобы скопировать';
@@ -4394,13 +4412,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get accessDataProgrammatically => 'Программный доступ к вашим данным';
 
   @override
-  String get keyNameLabel => 'НАЗВАНИЕ КЛЮЧА';
+  String get keyNameLabel => 'Название ключа';
 
   @override
   String get keyNamePlaceholder => 'напр., Моя интеграция';
 
   @override
-  String get permissionsLabel => 'РАЗРЕШЕНИЯ';
+  String get permissionsLabel => 'Разрешения';
 
   @override
   String get permissionsInfoNote => 'R = Чтение, W = Запись. По умолчанию только чтение, если ничего не выбрано.';
@@ -9155,6 +9173,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get selectAllTasksMenu => 'Выбрать все';
 
   @override
+  String get selectAllTasksPartial => 'Не удалось загрузить все задачи. Выбраны только уже загруженные задачи.';
+
+  @override
   String get connectTaskAppToExport => 'Подключите приложение задач в Настройках для экспорта';
 
   @override
@@ -9954,6 +9975,15 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant всё ещё ведёт запись, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.';
+
+  @override
+  String get pendantLostConnection => 'Кулон потерял связь с этим телефоном.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi переподключится сам, когда кулон будет включён и рядом.';
+
+  @override
+  String get pendantRecordingSafe => 'Всё, что записано до этого, сохранено.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11289,10 +11319,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Память почти заполнена';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi переподключится сам';

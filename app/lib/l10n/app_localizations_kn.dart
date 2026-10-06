@@ -268,6 +268,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get askAnything => 'ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ';
 
   @override
+  String get askAnythingButton => 'ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ';
+
+  @override
   String get noMessagesYet => 'ಇನ್ನೂ ಯಾವ ಸಂದೇಶ ಇಲ್ಲ!\nನೀವು ಸಂವಾದ ಪ್ರಾರಂಭಿಸಿರಿ?';
 
   @override
@@ -2694,6 +2697,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get tasksNoDeadline => 'ಮುಕ್ತಾಯ ಮಿತಿ ಇಲ್ಲ';
 
   @override
+  String get tasksNextPageFailed => 'ಇನ್ನಷ್ಟು ಕಾರ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು ಕೆಳಗೆ ಎಳೆಯಿರಿ.';
+
+  @override
   String get tasksLater => 'ನಂತರ';
 
   @override
@@ -3781,6 +3787,18 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get settingsHeader => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
+
+  @override
+  String get settingsSectionRecording => 'ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get settingsSectionSupport => 'ಬೆಂಬಲ';
+
+  @override
+  String get settingsSectionPersonalization => 'ವೈಯಕ್ತೀಕರಣ';
+
+  @override
+  String get settingsSectionConnectedApps => 'ಸಂಪರ್ಕಿತ ಆ್ಯಪ್‌ಗಳು';
 
   @override
   String get plansAndBilling => 'ಯೋಜನೆಗಳು ಮತ್ತು ಬಿಲ್ಲಿಂಗ್';
@@ -9154,6 +9172,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get selectAllTasksMenu => 'ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ';
 
   @override
+  String get selectAllTasksPartial =>
+      'ಎಲ್ಲಾ ಕಾರ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ಈಗಾಗಲೇ ಲೋಡ್ ಆದ ಕಾರ್ಯಗಳನ್ನು ಮಾತ್ರ ಆಯ್ಕೆ ಮಾಡಲಾಗಿದೆ.';
+
+  @override
   String get connectTaskAppToExport => 'ರಫ್ತು ಮಾಡಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕಾರ್ಯ ಅಪ್ಲಿಕೇಶನ್ ಸಂಪರ್ಕಿಸಿ';
 
   @override
@@ -9946,6 +9968,15 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.';
+
+  @override
+  String get pendantLostConnection => 'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ.';
+
+  @override
+  String get pendantRecordingSafe => 'ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11283,10 +11314,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ';

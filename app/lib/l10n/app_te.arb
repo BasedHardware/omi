@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "ఏదైనా అడగండి",
     "noMessagesYet": "ఇంకా సందేశాలు లేవు!\nసంభాషణను ప్రారంభించడానికి ఎందుకు?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
@@ -2983,6 +2984,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "మరిన్ని పనులను లోడ్ చేయలేకపోయాము. మళ్లీ ప్రయత్నించడానికి కిందికి లాగండి.",
     "tasksLater": "తరువాత",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -4207,6 +4209,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "రికార్డింగ్",
+    "settingsSectionSupport": "మద్దతు",
+    "settingsSectionPersonalization": "వ్యక్తిగతీకరణ",
+    "settingsSectionConnectedApps": "కనెక్ట్ చేసిన యాప్‌లు",
     "@account": {
         "description": "Account section label"
     },
@@ -10493,6 +10499,7 @@
     "searchActionItems": "పనులను వెతకండి",
     "selectActionItems": "బహుళ ఎంపిక",
     "selectAllTasksMenu": "అన్నీ ఎంచుకోండి",
+    "selectAllTasksPartial": "అన్ని పనులను లోడ్ చేయలేకపోయాము. ఇప్పటికే లోడ్ అయిన పనులు మాత్రమే ఎంచుకోబడ్డాయి.",
     "showCompletedTasks": "పూర్తయినవి చూపించు",
     "startCallRecording": "కాల్ రికార్డింగ్ ప్రారంభించండి",
     "startVoiceRecording": "వాయిస్ రికార్డింగ్ ప్రారంభించండి",
@@ -10750,6 +10757,9 @@
     "appDisabledLastError": "చివరి లోపం: {error}",
     "prerecordedTranscript": "ముందుగా రికార్డ్ చేసినది",
     "pendantRecordingSyncBlocked": "Pendant ఇంకా రికార్డ్ చేస్తోంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయలేము. రికార్డింగ్ ఆపడానికి Pendant బటన్ నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.",
+    "pendantLostConnection": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది.",
+    "pendantReconnectsOnItsOwn": "పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది.",
+    "pendantRecordingSafe": "దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
     "pendantFullSyncBlocked": "Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.",
     "conversationsNotCapturedCount": "రికార్డ్ కాలేదు ({count})",
     "transcriptionNoAudio": "ట్రాన్స్‌క్రిప్షన్ ఆడియో స్వీకరించడం లేదు",
@@ -11108,7 +11118,6 @@
     "captureStarting": "ప్రారంభమవుతోంది…",
     "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
     "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
-    "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
     "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
     "deviceOnboardingVoiceReplyTitle": "Omi సమాధానాలను వినండి",
     "deviceOnboardingVoiceReplySample": "అర్థమైంది. మీ తదుపరి సమావేశం ఇరవై నిమిషాల్లో ప్రారంభమవుతుంది.",

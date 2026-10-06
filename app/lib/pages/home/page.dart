@@ -7,6 +7,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
@@ -505,7 +506,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   /// Opens Settings, and once the reader is back on Home restarts capture if they changed the
-  /// language, speech profile or transcription model (onboarding-home #25: compare after the sheet
+  /// language, speech profile or transcription model (onboarding-home #25: compare after Settings
   /// closes, not the moment it opens).
   Future<void> _openSettings() async {
     final prefs = SharedPreferencesUtil();
@@ -743,7 +744,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               });
             }
           }
-          return child!;
+          // Home and Tasks paint the canvas: a white page in light mode, set in Instrument Sans like
+          // Settings.
+          return OmiCanvas(child: OmiTypeface(child: child!));
         },
         child: Selector<HomeProvider, int>(
           selector: (_, homeProvider) => homeProvider.selectedIndex,
@@ -759,7 +762,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 _schedulePageInitialization(HomeProvider.homeTab);
               },
               child: Scaffold(
-                backgroundColor: OmiColors.surface0,
+                backgroundColor: OmiColors.canvas,
                 resizeToAvoidBottomInset: false,
                 appBar: _buildAppBar(context, onHome),
                 body: GestureDetector(
@@ -820,13 +823,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           child: Stack(
                             children: [
                               const HomeChatBarBackdrop(),
+                              const HomeWarmBlend(),
                               Positioned(
                                 left: 16,
                                 right: 16,
                                 bottom: homeChatBarOffset(context),
                                 child: Row(
                                   children: [
-                                    Expanded(child: _buildChatBar(context)),
+                                    Expanded(
+                                        child:
+                                            HomeAskOmiButton(onTap: _openChat, onVoice: () => _openChat(voice: true))),
                                     const SizedBox(width: 10),
                                     const HomeRecordButton(),
                                   ],
@@ -857,97 +863,65 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     openChatSheet(context, ChatPage(isPivotBottom: false, autoStartVoice: voice));
   }
 
-  Widget _buildChatBar(BuildContext context) {
-    return Semantics(
-      container: true,
-      button: true,
-      label: context.l10n.askOmi,
-      onTap: _openChat,
-      child: GestureDetector(
-        key: const ValueKey('home_ask_omi_bar'),
-        behavior: HitTestBehavior.opaque,
-        onTap: _openChat,
-        child: Container(
-          height: kHomeChatBarHeight,
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.pillAll,
-            border: Border.all(color: OmiColors.border, width: 1),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 18),
-              Expanded(
-                child: ExcludeSemantics(
-                  child: Text(
-                    context.l10n.askOmi,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                // The mic sits inside the chat bar's own tap target, so a near miss
-                // does not do nothing: it opens text chat instead of voice. Own the
-                // bar's full height and its rounded end, not just the 42pt circle.
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openChat(voice: true),
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  label: context.l10n.voiceMode,
-                  child: Container(
-                    height: kHomeChatBarHeight,
-                    padding: const EdgeInsets.only(left: 8, right: 6),
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                      child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Export and the completed toggle, beside the switcher while Tasks is showing.
+  /// One ⋯ beside the switcher while Tasks is showing: the same anchored menu as the conversation
+  /// page, with Task Integrations (export) and the multi-select entries.
   Widget _buildTasksActions(BuildContext context) {
     return Consumer<ActionItemsProvider>(
-      builder: (context, actionItemsProvider, _) {
-        final showCompleted = actionItemsProvider.showCompletedView;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            HeaderCircleButton(
-              semanticLabel: context.l10n.exportButton,
-              icon: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: OmiColors.textSecondary),
+      builder: (context, tasks, _) {
+        // Paywalled tasks can't be acted on, so they don't count towards "all".
+        final hasItems = tasks.selectableItems.isNotEmpty;
+        final allSelected = tasks.allSelectableSelected;
+        return PullDownButton(
+          itemBuilder: (context) => [
+            PullDownMenuItem(
+              title: context.l10n.taskIntegrations,
+              iconWidget: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 18),
               onTap: () {
                 OmiHaptics.selection();
                 PlatformManager.instance.analytics.exportTasksBannerClicked();
                 routeToPage(context, const TaskIntegrationsPage());
               },
             ),
-            HeaderCircleButton(
-              semanticLabel: context.l10n.completed,
-              color: showCompleted ? OmiColors.surface3 : OmiColors.surface1,
-              icon: FaIcon(
-                FontAwesomeIcons.solidCircleCheck,
-                size: 16,
-                color: showCompleted ? OmiColors.textPrimary : OmiColors.textSecondary,
-              ),
+            const PullDownMenuDivider.large(),
+            PullDownMenuItem(
+              title: context.l10n.selectActionItems,
+              icon: Icons.check_box_outlined,
+              enabled: hasItems,
               onTap: () {
                 OmiHaptics.light();
-                actionItemsProvider.toggleShowCompletedView();
+                primaryFocus?.unfocus();
+                tasks.startSelection();
+              },
+            ),
+            PullDownMenuItem(
+              title: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
+              icon: allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
+              enabled: hasItems,
+              onTap: () {
+                OmiHaptics.light();
+                primaryFocus?.unfocus();
+                if (allSelected) {
+                  tasks.clearSelection();
+                } else {
+                  // Every page, not just the loaded one; paywalled tasks stay out. A page that does
+                  // not load leaves the selection partial, and the toast says so.
+                  unawaited(tasks.selectAllTasks().then((complete) {
+                    if (!complete && context.mounted) {
+                      OmiFeedback.info(context, context.l10n.selectAllTasksPartial);
+                    }
+                  }));
+                }
               },
             ),
           ],
+          buttonBuilder: (context, showMenu) => HeaderCircleButton(
+            semanticLabel: context.l10n.moreOptions,
+            icon: OmiLineIcon(OmiLineGlyph.more, size: 20, color: OmiColors.textSecondary),
+            onTap: () {
+              OmiHaptics.selection();
+              showMenu();
+            },
+          ),
         );
       },
     );
@@ -973,7 +947,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   PreferredSizeWidget _buildAppBar(BuildContext context, bool onHome) {
     return AppBar(
       automaticallyImplyLeading: false,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: OmiColors.canvas,
       // The trailing buttons paint 36pt circles inside 44pt touch targets, so the
       // title gives up the 4pt the last target overhangs by. The circles stay on
       // the 16pt margin the rest of the screen uses.
@@ -1013,13 +987,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               HeaderCircleButton(
                 key: const ValueKey('home_search_button'),
                 semanticLabel: context.l10n.search,
-                icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
+                icon: OmiLineIcon(OmiLineGlyph.search, size: 20, color: OmiColors.textSecondary),
                 onTap: () => unawaited(_openSearch()),
               ),
               // Settings button - always visible
               HeaderCircleButton(
                 semanticLabel: context.l10n.settings,
-                icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+                icon: OmiLineIcon(OmiLineGlyph.settings, size: 20, color: OmiColors.textSecondary),
                 onTap: () {
                   OmiHaptics.selection();
                   PlatformManager.instance.analytics.pageOpened('Settings');
@@ -1095,12 +1069,12 @@ class _TabLoadingSkeleton extends StatelessWidget {
         itemBuilder: (context, index) => Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: ShimmerWithTimeout(
-            baseColor: OmiColors.surface1,
+            baseColor: OmiColors.canvasCard,
             highlightColor: OmiColors.surface2,
             child: Container(
               height: index == 0 ? 34 : 76,
               width: double.infinity,
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              decoration: BoxDecoration(color: OmiColors.canvasCard, borderRadius: OmiRadius.lgAll),
             ),
           ),
         ),

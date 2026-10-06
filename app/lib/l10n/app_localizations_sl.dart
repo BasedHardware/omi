@@ -267,6 +267,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get askAnything => 'Vprašaj kaj koli';
 
   @override
+  String get askAnythingButton => 'Vprašaj karkoli';
+
+  @override
   String get noMessagesYet => 'Še ni sporočil!\nZakaj ne bi začeli pogovora?';
 
   @override
@@ -2689,6 +2692,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get tasksNoDeadline => 'Brez roka';
 
   @override
+  String get tasksNextPageFailed => 'Več opravil ni bilo mogoče naložiti. Povlecite navzdol za ponovni poskus.';
+
+  @override
   String get tasksLater => 'Kasneje';
 
   @override
@@ -3775,6 +3781,18 @@ class AppLocalizationsSl extends AppLocalizations {
   String get settingsHeader => 'NASTAVITVE';
 
   @override
+  String get settingsSectionRecording => 'Snemanje';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
+  String get settingsSectionPersonalization => 'Prilagajanje';
+
+  @override
+  String get settingsSectionConnectedApps => 'Povezane aplikacije';
+
+  @override
   String get plansAndBilling => 'Načrti in obračun';
 
   @override
@@ -4372,7 +4390,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get saveKeyWarning => 'Shranite ta ključ zdaj! Ga ne boste mogli videti znova.';
 
   @override
-  String get yourApiKey => 'VAŠ KLJUČ API';
+  String get yourApiKey => 'Vaš ključ API';
 
   @override
   String get tapToCopy => 'Tapnite za kopiranje';
@@ -4387,13 +4405,13 @@ class AppLocalizationsSl extends AppLocalizations {
   String get accessDataProgrammatically => 'Dostopajte do podatkov programsko';
 
   @override
-  String get keyNameLabel => 'IME KLJUČA';
+  String get keyNameLabel => 'Ime ključa';
 
   @override
   String get keyNamePlaceholder => 'npr. Moja integracija aplikacije';
 
   @override
-  String get permissionsLabel => 'DOVOLJENJA';
+  String get permissionsLabel => 'Dovoljenja';
 
   @override
   String get permissionsInfoNote => 'R = Branje, W = Pisanje. Privzeto samo za branje, če ničesar ni izbrano.';
@@ -9147,6 +9165,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get selectAllTasksMenu => 'Izberi vse';
 
   @override
+  String get selectAllTasksPartial => 'Vseh opravil ni bilo mogoče naložiti. Izbrana so samo že naložena opravila.';
+
+  @override
   String get connectTaskAppToExport => 'Povežite aplikacijo za naloge v Nastavitvah za izvoz';
 
   @override
@@ -9945,6 +9966,15 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant še vedno snema, zato shranjenega zvoka ni mogoče prenesti. Pritisnite gumb na Pendantu, da ustavite snemanje, nato znova sinhronizirajte.';
+
+  @override
+  String get pendantLostConnection => 'Obesek je izgubil povezavo s tem telefonom.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini.';
+
+  @override
+  String get pendantRecordingSafe => 'Vse, kar je bilo posneto prej, je varno.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11279,10 +11309,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Pomnilnik je skoraj poln';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi se bo sam znova povezal';

@@ -687,6 +687,12 @@ abstract class AppLocalizations {
   /// **'Ask anything'**
   String get askAnything;
 
+  /// Home button that opens AI chat, beside a speech-bubble icon
+  ///
+  /// In en, this message translates to:
+  /// **'Ask anything'**
+  String get askAnythingButton;
+
   /// Empty chat state message
   ///
   /// In en, this message translates to:
@@ -5199,6 +5205,12 @@ abstract class AppLocalizations {
   /// **'No Deadline'**
   String get tasksNoDeadline;
 
+  /// Toast on the Tasks list when the next page of tasks fails to load; pull-to-refresh retries.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load more tasks. Pull down to try again.'**
+  String get tasksNextPageFailed;
+
   /// Category label for tasks due later
   ///
   /// In en, this message translates to:
@@ -7269,6 +7281,30 @@ abstract class AppLocalizations {
   /// **'SETTINGS'**
   String get settingsHeader;
 
+  /// Settings section header above the Device and Recording & Transcription rows (a noun, not the live 'recording' status).
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get settingsSectionRecording;
+
+  /// Settings section header above the Help & About and Feedback / Bug rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Support'**
+  String get settingsSectionSupport;
+
+  /// Settings group header above Memories and Goals
+  ///
+  /// In en, this message translates to:
+  /// **'Personalization'**
+  String get settingsSectionPersonalization;
+
+  /// Settings group header above Integrations
+  ///
+  /// In en, this message translates to:
+  /// **'Connected Apps'**
+  String get settingsSectionConnectedApps;
+
   /// Plans and billing section
   ///
   /// In en, this message translates to:
@@ -8346,7 +8382,7 @@ abstract class AppLocalizations {
   /// Label for API key display section
   ///
   /// In en, this message translates to:
-  /// **'YOUR API KEY'**
+  /// **'Your API Key'**
   String get yourApiKey;
 
   /// Hint text for tap to copy action
@@ -8376,7 +8412,7 @@ abstract class AppLocalizations {
   /// Label for key name input field
   ///
   /// In en, this message translates to:
-  /// **'KEY NAME'**
+  /// **'Key Name'**
   String get keyNameLabel;
 
   /// Placeholder text for key name input
@@ -8388,7 +8424,7 @@ abstract class AppLocalizations {
   /// Label for permissions section
   ///
   /// In en, this message translates to:
-  /// **'PERMISSIONS'**
+  /// **'Permissions'**
   String get permissionsLabel;
 
   /// Info note explaining permission toggles
@@ -17025,6 +17061,12 @@ abstract class AppLocalizations {
   /// **'Select All'**
   String get selectAllTasksMenu;
 
+  /// Toast after Select All on the Tasks list when some pages of tasks could not be loaded, so the selection is partial.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load every task. Only the tasks already loaded are selected.'**
+  String get selectAllTasksPartial;
+
   /// Snackbar shown when the user taps Export but no third-party task integration is connected
   ///
   /// In en, this message translates to:
@@ -18452,6 +18494,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
   String get pendantRecordingSyncBlocked;
+
+  /// Disconnected sheet: first line, what happened when the pendant dropped
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone.'**
+  String get pendantLostConnection;
+
+  /// Disconnected sheet: reassurance that reconnecting needs no action
+  ///
+  /// In en, this message translates to:
+  /// **'Omi reconnects on its own when the pendant is on and nearby.'**
+  String get pendantReconnectsOnItsOwn;
+
+  /// Disconnected sheet: reassurance that nothing recorded is lost
+  ///
+  /// In en, this message translates to:
+  /// **'Everything recorded before this is safe.'**
+  String get pendantRecordingSafe;
 
   /// Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped
   ///
@@ -20504,12 +20564,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Storage almost full'**
   String get captureStorageAlmostFull;
-
-  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
-  ///
-  /// In en, this message translates to:
-  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
-  String get capturePendantDisconnectedDetail;
 
   /// Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation.
   ///

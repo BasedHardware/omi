@@ -163,7 +163,7 @@ class _ConfidenceSheet extends StatelessWidget {
                   ? [(Icons.help_outline, l10n.unknown, _Effect.none)]
                   : _evidence(context))
                 OmiSettingsRow(
-                  leading: Icon(icon),
+                  leading: OmiSettingsIconTile(Icon(icon)),
                   title: text,
                   trailing: effect == _Effect.none ? null : _EffectLabel(effect: effect),
                 ),

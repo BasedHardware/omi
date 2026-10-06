@@ -267,6 +267,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get askAnything => 'Tanyakan apa saja';
 
   @override
+  String get askAnythingButton => 'Tanyakan apa saja';
+
+  @override
   String get noMessagesYet => 'Belum ada pesan!\nMengapa tidak memulai percakapan?';
 
   @override
@@ -2688,6 +2691,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get tasksNoDeadline => 'Tanpa tenggat';
 
   @override
+  String get tasksNextPageFailed => 'Tidak dapat memuat tugas lainnya. Tarik ke bawah untuk mencoba lagi.';
+
+  @override
   String get tasksLater => 'Nanti';
 
   @override
@@ -3777,6 +3783,18 @@ class AppLocalizationsId extends AppLocalizations {
   String get settingsHeader => 'PENGATURAN';
 
   @override
+  String get settingsSectionRecording => 'Perekaman';
+
+  @override
+  String get settingsSectionSupport => 'Dukungan';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalisasi';
+
+  @override
+  String get settingsSectionConnectedApps => 'Aplikasi terhubung';
+
+  @override
   String get plansAndBilling => 'Paket & Penagihan';
 
   @override
@@ -4375,7 +4393,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get saveKeyWarning => 'Simpan kunci ini sekarang! Anda tidak akan bisa melihatnya lagi.';
 
   @override
-  String get yourApiKey => 'KUNCI API ANDA';
+  String get yourApiKey => 'Kunci API Anda';
 
   @override
   String get tapToCopy => 'Ketuk untuk menyalin';
@@ -4390,13 +4408,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get accessDataProgrammatically => 'Akses data Anda secara terprogram';
 
   @override
-  String get keyNameLabel => 'NAMA KUNCI';
+  String get keyNameLabel => 'Nama kunci';
 
   @override
   String get keyNamePlaceholder => 'mis., Integrasi Aplikasi Saya';
 
   @override
-  String get permissionsLabel => 'IZIN';
+  String get permissionsLabel => 'Izin';
 
   @override
   String get permissionsInfoNote => 'R = Baca, W = Tulis. Default hanya baca jika tidak ada yang dipilih.';
@@ -9133,6 +9151,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get selectAllTasksMenu => 'Pilih semua';
 
   @override
+  String get selectAllTasksPartial => 'Tidak dapat memuat semua tugas. Hanya tugas yang sudah dimuat yang dipilih.';
+
+  @override
   String get connectTaskAppToExport => 'Hubungkan aplikasi tugas di Pengaturan untuk mengekspor';
 
   @override
@@ -9925,6 +9946,16 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant masih merekam, jadi audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
+
+  @override
+  String get pendantLostConnection => 'Liontin kehilangan koneksi dengan ponsel ini.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda.';
+
+  @override
+  String get pendantRecordingSafe => 'Semua yang direkam sebelumnya aman.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11259,10 +11290,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Penyimpanan hampir penuh';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi akan menyambung kembali sendiri';

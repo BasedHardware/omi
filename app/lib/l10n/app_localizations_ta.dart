@@ -268,6 +268,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get askAnything => 'எதையும் கேளுங்கள்';
 
   @override
+  String get askAnythingButton => 'எதையும் கேளுங்கள்';
+
+  @override
   String get noMessagesYet => 'இன்னும் செய்திகள் இல்லை!\nநீங்கள் ஒரு உரையாடலைத் தொடங்க ஏன் வேண்டாம்?';
 
   @override
@@ -2704,6 +2707,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get tasksNoDeadline => 'நিலுவையில் இல்லை';
 
   @override
+  String get tasksNextPageFailed => 'மேலும் பணிகளை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்க கீழே இழுக்கவும்.';
+
+  @override
   String get tasksLater => 'பிற்பாடு';
 
   @override
@@ -3795,6 +3801,18 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get settingsHeader => 'அமைப்புகள்';
+
+  @override
+  String get settingsSectionRecording => 'பதிவு';
+
+  @override
+  String get settingsSectionSupport => 'ஆதரவு';
+
+  @override
+  String get settingsSectionPersonalization => 'தனிப்பயனாக்கம்';
+
+  @override
+  String get settingsSectionConnectedApps => 'இணைக்கப்பட்ட ஆப்ஸ்';
 
   @override
   String get plansAndBilling => 'திட்டங்கள் மற்றும் பில்லிங்';
@@ -9193,6 +9211,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get selectAllTasksMenu => 'அனைத்தையும் தேர்ந்தெடு';
 
   @override
+  String get selectAllTasksPartial =>
+      'எல்லா பணிகளையும் ஏற்ற முடியவில்லை. ஏற்கனவே ஏற்றப்பட்ட பணிகள் மட்டுமே தேர்ந்தெடுக்கப்பட்டுள்ளன.';
+
+  @override
   String get connectTaskAppToExport => 'ஏற்றுமதி செய்ய அமைப்புகளில் ஒரு பணி செயலியை இணைக்கவும்';
 
   @override
@@ -9988,6 +10010,16 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'Pendant இன்னும் பதிவு செய்து கொண்டிருக்கிறது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant பொத்தானை அழுத்தி, பிறகு மீண்டும் ஒத்திசைக்கவும்.';
+
+  @override
+  String get pendantLostConnection => 'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும்.';
+
+  @override
+  String get pendantRecordingSafe => 'இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11329,10 +11361,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi தானாகவே மீண்டும் இணையும்';

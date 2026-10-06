@@ -143,7 +143,7 @@
       "widget": "SettingsDrawer",
       "root": "omi.settings.root",
       "reach": {
-        "kind": "sheet",
+        "kind": "push",
         "tab": null
       },
       "fixture": "identity-empty",

@@ -266,6 +266,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get askAnything => 'שאל כל דבר';
 
   @override
+  String get askAnythingButton => 'שאל כל דבר';
+
+  @override
   String get noMessagesYet => 'אין הודעות עדיין!\nלמה לא תתחיל שיחה?';
 
   @override
@@ -2668,6 +2671,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get tasksNoDeadline => 'אין תאריך יעד';
 
   @override
+  String get tasksNextPageFailed => 'לא ניתן לטעון משימות נוספות. משכו למטה כדי לנסות שוב.';
+
+  @override
   String get tasksLater => 'מאוחר יותר';
 
   @override
@@ -3744,6 +3750,18 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get settingsHeader => 'הגדרות';
+
+  @override
+  String get settingsSectionRecording => 'הקלטה';
+
+  @override
+  String get settingsSectionSupport => 'תמיכה';
+
+  @override
+  String get settingsSectionPersonalization => 'התאמה אישית';
+
+  @override
+  String get settingsSectionConnectedApps => 'אפליקציות מחוברות';
 
   @override
   String get plansAndBilling => 'תוכניות וחיוב';
@@ -9055,6 +9073,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get selectAllTasksMenu => 'בחר הכל';
 
   @override
+  String get selectAllTasksPartial => 'לא ניתן לטעון את כל המשימות. נבחרו רק המשימות שכבר נטענו.';
+
+  @override
   String get connectTaskAppToExport => 'חבר אפליקציית משימות בהגדרות כדי לייצא';
 
   @override
@@ -9836,6 +9857,15 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get pendantRecordingSyncBlocked =>
       'ה-Pendant עדיין מקליט, ולכן לא ניתן להעביר את השמע השמור בו. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ואז סנכרנו שוב.';
+
+  @override
+  String get pendantLostConnection => 'התליון איבד את החיבור לטלפון הזה.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב.';
+
+  @override
+  String get pendantRecordingSafe => 'כל מה שהוקלט עד עכשיו שמור.';
 
   @override
   String get pendantFullSyncBlocked =>
@@ -11164,10 +11194,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'האחסון כמעט מלא';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi יתחבר מחדש מעצמו';

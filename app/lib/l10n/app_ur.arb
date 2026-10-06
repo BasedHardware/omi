@@ -346,6 +346,7 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "کچھ بھی پوچھیں",
     "noMessagesYet": "ابھی کوئی پیغام نہیں!\nکیا آپ بات چیت شروع نہیں کریں گے?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
@@ -2983,6 +2984,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "مزید کام لوڈ نہیں ہو سکے۔ دوبارہ کوشش کرنے کے لیے نیچے کھینچیں۔",
     "tasksLater": "بعد میں",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -4207,6 +4209,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "ریکارڈنگ",
+    "settingsSectionSupport": "معاونت",
+    "settingsSectionPersonalization": "ذاتی نوعیت",
+    "settingsSectionConnectedApps": "منسلک ایپس",
     "@account": {
         "description": "Account section label"
     },
@@ -10493,6 +10499,7 @@
     "searchActionItems": "کام تلاش کریں",
     "selectActionItems": "متعدد منتخب کریں",
     "selectAllTasksMenu": "سب منتخب کریں",
+    "selectAllTasksPartial": "تمام کام لوڈ نہیں ہو سکے۔ صرف پہلے سے لوڈ شدہ کام منتخب کیے گئے ہیں۔",
     "showCompletedTasks": "مکمل شدہ دکھائیں",
     "startCallRecording": "کال ریکارڈنگ شروع کریں",
     "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",
@@ -10750,6 +10757,9 @@
     "appDisabledLastError": "آخری خرابی: {error}",
     "prerecordedTranscript": "پہلے سے ریکارڈ شدہ",
     "pendantRecordingSyncBlocked": "Pendant ابھی بھی ریکارڈ کر رہا ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔",
+    "pendantLostConnection": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔",
+    "pendantReconnectsOnItsOwn": "پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔",
+    "pendantRecordingSafe": "اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
     "pendantFullSyncBlocked": "Pendant کی اسٹوریج بھر گئی ہے اور یہ ابھی بھی ریکارڈنگ موڈ میں ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔",
     "conversationsNotCapturedCount": "ریکارڈ نہیں ہوا ({count})",
     "transcriptionNoAudio": "ٹرانسکرپشن آڈیو وصول نہیں کر رہی",
@@ -11108,7 +11118,6 @@
     "captureStarting": "شروع ہو رہا ہے…",
     "capturePhoneStorageFull": "فون اسٹوریج بھر گئی",
     "captureStorageAlmostFull": "اسٹوریج تقریباً بھر گئی",
-    "capturePendantDisconnectedDetail": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
     "participantsSummaryUncounted": "{name} اور دیگر",
     "deviceOnboardingVoiceReplyTitle": "Omi کے جوابات سنیں",
     "deviceOnboardingVoiceReplySample": "سمجھ گیا۔ آپ کی اگلی میٹنگ بیس منٹ میں شروع ہوگی۔",

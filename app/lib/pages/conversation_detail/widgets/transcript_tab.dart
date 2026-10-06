@@ -398,7 +398,10 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               controller != null && controller.isFollowing && (controller.isPlaying || controller.followRequest > 0),
           playbackFollowRequest: controller?.followRequest ?? 0,
           onUserScroll: controller?.suspendFollowing,
-          onTopVisibleSegmentChanged: controller?.readerMovedTo,
+          // A page just opened marks no line; once playback has a point, its line (the last spoken one
+          // through silence) stays marked.
+          highlightedSegmentId: controller != null && controller.hasPlayPoint ? controller.markedSegmentId : null,
+          onReadingSegmentChanged: controller?.readerMovedTo,
         );
       },
     );
