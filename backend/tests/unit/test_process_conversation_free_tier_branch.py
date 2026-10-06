@@ -146,6 +146,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     meeting_context.MAX_SCREEN_CONTEXT_ROWS = 80
     meeting_context.MEETING_SEARCH_TOLERANCE_MINUTES = 5
     add('utils.conversations.factory', AutoMockModule('utils.conversations.factory'))
+    add('utils.conversations.summary_speaker_labels', AutoMockModule('utils.conversations.summary_speaker_labels'))
     lifecycle = add('utils.conversations.lifecycle', AutoMockModule('utils.conversations.lifecycle'))
     lifecycle.persist_processed_conversation = MagicMock(return_value=True)
     lifecycle.create_completed_conversation = MagicMock(return_value=True)
@@ -1807,3 +1808,28 @@ def test_eager_extraction_switch_off_first_open_basic_reaches_structured_without
 
     spies['get_structured'].assert_called_once()
     assert auth_calls == []
+
+
+def test_summary_speaker_label_stage_keeps_enrichment_refresh_inside_fail_open_boundary(pc):
+    """Source invariant: the optional summary-label stage must not fail finalization.
+
+    After the conversation is completed and persisted, the stage calls
+    ``apply_summary_speaker_labels`` and (when it applied labels) refreshes the
+    in-memory people snapshot with ``users_db.get_people_by_ids``. Both the
+    transaction and that enrichment read must sit inside the same ``try`` so a
+    transient Firestore failure degrades to the saved note instead of failing
+    the finalization/retry after the note is already durable.
+    """
+    import inspect
+
+    source = inspect.getsource(pc.process_conversation)
+    marker = 'apply_summary_speaker_labels(uid, conversation)'
+    start = source.index(marker)
+    # The try that owns the stage begins before the call...
+    try_start = source.rindex('try:', 0, start)
+    # ...and its except must come after the people refresh, not before it.
+    except_start = source.index('except Exception as error:', try_start)
+    refresh = source.index('get_people_by_ids', try_start)
+    assert try_start < start < refresh < except_start, (
+        'summary_speaker_labels stage: the people refresh read drifted outside ' 'the fail-open try/except boundary'
+    )

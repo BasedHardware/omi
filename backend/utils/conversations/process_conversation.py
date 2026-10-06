@@ -73,7 +73,7 @@ from utils.conversations.deterministic_minimum import (
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
-from utils.conversations.summary_speaker_labels import note_generation_digest
+from utils.conversations.summary_speaker_labels import apply_summary_speaker_labels, note_generation_digest
 from utils.conversations.recovery import (
     RecoveryStructureUnavailableError,
     recovery_minimum_terminal_enabled,
@@ -2549,15 +2549,16 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
     else:
         payload['processing_state'] = None
     payload = clear_summary_retryable(strip_client_processing(payload))
-    # Persist the note-generation digest beside the note it fences: the stage's
-    # transaction compares this value so a stale reprocessing generation (same
-    # title/overview, different private candidates) cannot apply older labels.
-    digest = note_generation_digest(
-        getattr(conversation.structured, '_summary_speaker_candidates', None),
-        getattr(conversation.structured, '_summary_speaker_roster', None),
-    )
-    if digest is not None:
-        payload['summary_speaker_note_digest'] = digest
+    # Persist the note-generation digest beside the note it fences: a stale
+    # reprocessing generation (same title/overview, different candidates)
+    # cannot apply older labels. No-candidate generations CLEAR the digest —
+    # merge=True omission keeps the stale fence; structured that never carried
+    # the evidence omit the key entirely (like processing_state's null rule).
+    if hasattr(conversation.structured, '_summary_speaker_candidates'):
+        payload['summary_speaker_note_digest'] = note_generation_digest(
+            getattr(conversation.structured, '_summary_speaker_candidates', None),
+            getattr(conversation.structured, '_summary_speaker_roster', None),
+        )
     return payload
 
 
@@ -3185,11 +3186,24 @@ def process_conversation(
     segments_before_summary_labels = [segment.model_copy(deep=True) for segment in conversation.transcript_segments]
     if summary_speaker_labels_enabled():
         try:
-            from utils.conversations.summary_speaker_labels import apply_summary_speaker_labels
-
             applied = apply_summary_speaker_labels(uid, conversation)
+            if applied:
+                # The in-memory people snapshot was loaded before note generation;
+                # renderers below resolve names through it, so append the people
+                # this stage just created before any derived effect reads it.
+                # The enrichment refresh read stays inside the optional stage's
+                # fail-open boundary: a transient Firestore failure here must not
+                # turn a completed, persisted note into a failed finalization.
+                known_person_ids = {person.id for person in people}
+                created_ids = {
+                    segment.person_id
+                    for segment in conversation.transcript_segments
+                    if segment.person_id and segment.person_id not in known_person_ids
+                }
+                if created_ids:
+                    created_data = users_db.get_people_by_ids(uid, list(created_ids))
+                    people.extend(Person.deserialize_many_safe(created_data))
         except Exception as error:
-            # Include module loading in the optional stage's failure boundary.
             record_fallback(
                 component='conversation_notes',
                 from_mode='summary_speaker_labels',
@@ -3199,20 +3213,6 @@ def process_conversation(
                 log=logger,
             )
             logger.warning('summary_speaker_labels outcome=error exception_type=%s', type(error).__name__)
-            applied = 0
-        if applied:
-            # The in-memory people snapshot was loaded before note generation;
-            # renderers below resolve names through it, so append the people
-            # this stage just created before any derived effect reads it.
-            known_person_ids = {person.id for person in people}
-            created_ids = {
-                segment.person_id
-                for segment in conversation.transcript_segments
-                if segment.person_id and segment.person_id not in known_person_ids
-            }
-            if created_ids:
-                created_data = users_db.get_people_by_ids(uid, list(created_ids))
-                people.extend(Person.deserialize_many_safe(created_data))
 
     # Enrollment is resolved only from backend authority plus the persisted
     # conversation source. We create the durable obligation before omitting a

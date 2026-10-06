@@ -184,6 +184,11 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
             segment.pop('audio_capture_start', None)
             segment.pop('audio_capture_end', None)
             segment.pop('audio_source', None)
+            # Note-inferred identity receipts (confidence, evidence segment ids,
+            # speaker scope) are private backend evidence — the payload reaches
+            # developer webhooks and installed third-party apps, and Python-mode
+            # dumps otherwise retain this nested field.
+            segment.pop('summary_speaker_evidence', None)
     if not conv.get('is_locked', False):
         return conv
     if 'structured' in conv:

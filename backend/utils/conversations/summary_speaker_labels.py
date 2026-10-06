@@ -26,6 +26,14 @@ from models.summary_speaker_labels import SpeakerCandidate
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.conversations.meeting_participants import MeetingRoster, looks_like_ai_agent_name
 from utils.conversations.transcript_hash import canonicalize_segment_for_storage
+from utils.observability.fallback import record_fallback
+from utils.speaker_identification import (
+    PATTERN_TO_LANG,
+    SPEAKER_NAME_STOPWORDS,
+    is_explicit_introduction,
+    is_valid_cjk_speaker_name,
+    patterns_to_check,
+)
 from utils.speaker_permissions import named_speaker_prompts_allowed
 
 logger = logging.getLogger(__name__)
@@ -72,14 +80,6 @@ def explicit_introduction_names(text: str) -> list[Optional[str]]:
     filtering. A bare copula cannot hide a later explicit introduction. Never
     trim discourse or clause words to guess where a name starts or ends.
     """
-    from utils.speaker_identification import (
-        PATTERN_TO_LANG,
-        SPEAKER_NAME_STOPWORDS,
-        is_explicit_introduction,
-        is_valid_cjk_speaker_name,
-        patterns_to_check,
-    )
-
     names: list[Optional[str]] = []
     for pattern in patterns_to_check:
         for match in re.finditer(pattern, text):
@@ -170,7 +170,6 @@ def select_candidates(
     """
     if not roster or len(candidates) > 32:
         return []
-    from utils.speaker_identification import SPEAKER_NAME_STOPWORDS
 
     by_key: dict[int, list[dict]] = {}
     by_id: dict[str, dict] = {}
@@ -191,8 +190,14 @@ def select_candidates(
     owner_names = {normalized_name(e.display_name) for e in roster.entries if e.kind == 'owner' and e.display_name}
     # A roster that knows the owner only by first name still owns full-name
     # variants of it: admitting "David Nguyen" as another human while the owner
-    # is "David" mislabels the account owner's own voice.
+    # is "David" mislabels the account owner's own voice. Symmetrically, a full
+    # roster name ("David Nguyen") still owns shortened candidates ("David"):
+    # with the owner known by their full name, a single-token "David" candidate
+    # is ambiguous between the owner's own voice and another attendee, and the
+    # user's catalog may legitimately contain another person named David — so
+    # the shortened variant is declined rather than bound to a non-owner person.
     owner_first_names = {next(iter(n.split()), '') for n in owner_names if len(n.split()) == 1}
+    owner_full_first_tokens = {n.split()[0] for n in owner_names if len(n.split()) > 1}
     human_entries = [e for e in roster.entries if e.kind == 'human' and e.display_name]
     agent_names = {normalized_name(e.display_name) for e in roster.entries if e.kind == 'ai_agent' and e.display_name}
     result = []
@@ -216,6 +221,13 @@ def select_candidates(
             # The roster's owner entry is only a first name; a multi-token
             # candidate starting with it is treated as an owner variant, not
             # another human.
+            continue
+        elif owner_full_first_tokens and name in owner_full_first_tokens:
+            # The roster knows the owner by a full name ("David Nguyen"), so a
+            # shortened non-owner candidate ("David") is ambiguous between the
+            # owner's own voice and another attendee who shares that given
+            # name — including one already in the user's catalog. Decline
+            # rather than attach the owner's voice to a non-owner person.
             continue
         if (
             not name
@@ -465,6 +477,10 @@ def apply_summary_speaker_labels(uid: str, conversation, *, firestore_client=Non
                         if (
                             person.get('deleted')
                             or person.get('status') in {'merged', 'dismissed'}
+                            # Dismissal is is_dismissed=True (database/person_aliases.py),
+                            # not a status value; a dismissed person must stay hidden
+                            # rather than resurface through a new inferred binding.
+                            or person.get('is_dismissed') is True
                             or person.get('is_ai_agent')
                         ):
                             continue
@@ -500,8 +516,6 @@ def apply_summary_speaker_labels(uid: str, conversation, *, firestore_client=Non
             return count
         logger.info('summary_speaker_labels outcome=declined')
     except Exception as error:
-        from utils.observability.fallback import record_fallback
-
         record_fallback(
             component='conversation_notes',
             from_mode='summary_speaker_labels',

@@ -178,6 +178,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     put(meeting_context, 'MAX_SCREEN_CONTEXT_ROWS', 80)
     put(meeting_context, 'MEETING_SEARCH_TOLERANCE_MINUTES', 5)
     add('utils.conversations.factory', AutoMockModule('utils.conversations.factory'))
+    add('utils.conversations.summary_speaker_labels', AutoMockModule('utils.conversations.summary_speaker_labels'))
     lifecycle = add('utils.conversations.lifecycle', AutoMockModule('utils.conversations.lifecycle'))
     put(lifecycle, 'persist_processed_conversation', MagicMock(return_value=True))
     put(lifecycle, 'create_completed_conversation', MagicMock(return_value=True))

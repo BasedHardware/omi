@@ -161,6 +161,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     meeting_context.MAX_SCREEN_CONTEXT_ROWS = 80
     meeting_context.MEETING_SEARCH_TOLERANCE_MINUTES = 5
     add('utils.conversations.factory', AutoMockModule('utils.conversations.factory'))
+    add('utils.conversations.summary_speaker_labels', AutoMockModule('utils.conversations.summary_speaker_labels'))
     lifecycle = add('utils.conversations.lifecycle', AutoMockModule('utils.conversations.lifecycle'))
     lifecycle.persist_processed_conversation = MagicMock(return_value=True)
     lifecycle.create_completed_conversation = MagicMock(return_value=True)
@@ -796,6 +797,33 @@ def test_persist_without_projection_omits_client_processing_key(stack) -> None:
     omitted = pc.strip_client_processing({'client_processing': None, 'structured': {'title': 't'}})
     assert 'client_processing' not in omitted
     assert omitted['structured'] == {'title': 't'}
+
+
+def test_persist_clears_stale_note_digest_when_generation_has_no_candidates(stack, monkeypatch) -> None:
+    # Validation can remove every private candidate while the conversation keeps
+    # the attrs; the lifecycle write is merge=True, so the only way to retire a
+    # previous generation's fence is an explicit null. (The stack stubs this
+    # module's heavy import graph; the digest function's own None-on-empty
+    # contract is covered in test_summary_speaker_labels.py.)
+    pc, _dev = stack
+    monkeypatch.setattr(pc, 'note_generation_digest', lambda candidates, roster: None)
+    conv = _conversation()
+    structured = Structured(title=_SEGMENT_TEXT, overview='')
+    structured._summary_speaker_candidates = []
+    structured._summary_speaker_roster = None
+    conv.structured = structured
+    payload = pc._normal_persist_payload(conv, clear_terminal_marker=False)
+    assert 'summary_speaker_note_digest' in payload
+    assert payload['summary_speaker_note_digest'] is None
+
+
+def test_persist_omits_note_digest_when_structured_never_carried_evidence(stack) -> None:
+    # Flag-off / plain extraction paths must not stamp the key at all:
+    # missing versus explicit-null is a real Firestore distinction.
+    pc, _dev = stack
+    conv = _conversation()
+    payload = pc._normal_persist_payload(conv, clear_terminal_marker=False)
+    assert 'summary_speaker_note_digest' not in payload
 
 
 # red-proof: keep a present client_processing key in `_terminal_persist_payload` / `_normal_persist_payload`

@@ -232,6 +232,22 @@ class TestRedactForIntegration:
         for field in ('audio_capture_start', 'audio_capture_end', 'audio_source'):
             assert field not in segment
 
+    def test_strips_summary_speaker_evidence_from_segments(self):
+        # Python-mode Conversation dumps (conversation_to_dict) retain this
+        # internal identity receipt; the integration boundary must remove it
+        # before third-party webhooks/apps see the payload.
+        conv = _make_conv_dict(is_locked=False)
+        conv['transcript_segments'] = [
+            {
+                'text': 'hi',
+                'speaker_id': 2,
+                'summary_speaker_evidence': {'confidence': 'high', 'evidence_segment_ids': ['s1']},
+            }
+        ]
+        result = redact_conversation_for_integration(conv)
+        segment = result['transcript_segments'][0]
+        assert 'summary_speaker_evidence' not in segment
+
 
 class TestSerializeDatetimes:
     def test_datetime_to_iso(self):

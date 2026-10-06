@@ -276,6 +276,43 @@ def test_contextual_owner_does_not_treat_missing_or_failed_matches_as_not_user(s
     assert bool(select([c], [{**segment(text='We should ship this.'), 'speaker_identity_status': status}])) == expected
 
 
+def test_full_roster_owner_name_still_declines_shortened_non_owner_candidate():
+    # The roster knows the owner as "David Nguyen", but the model emitted a
+    # NON-owner participant named "David" whose introduction matches: without
+    # the shortened-variant guard a catalog person named David would receive
+    # the owner's own voice.
+    r = MeetingRoster((entry('David Nguyen', 'owner'), entry('Eddie Thai')), 'Intro', False)
+    admitted = select_candidates([candidate('David')], [segment(text='My name is David.')], {}, r, allow_named=True)
+    assert not admitted
+
+
+def test_full_roster_owner_name_still_declines_shortened_contextual_candidate():
+    # Same decline for a contextual binding with no literal introduction.
+    r = MeetingRoster((entry('David Nguyen', 'owner'), entry('Eddie Thai')), 'Intro', False)
+    c = candidate('David')
+    c.bindings[0].evidence_kind = 'contextual'
+    admitted = select_candidates([c], [segment(text='We should ship this.')], {}, r, allow_named=True)
+    assert not admitted
+
+
+def test_non_owner_name_sharing_no_owner_token_still_admits():
+    # Guard must not over-reach: "Eddie Thai" admits as before when the roster
+    # owner is the full name "David Nguyen".
+    r = MeetingRoster((entry('David Nguyen', 'owner'), entry('Eddie Thai')), 'Intro', False)
+    admitted = select_candidates([candidate('Eddie Thai')], [segment()], {}, r, allow_named=True)
+    assert admitted and admitted[0].may_create
+
+
+def test_single_token_owner_roster_still_declines_full_name_variant():
+    # Inverse direction, already shipped: roster owner "David" declines the
+    # non-owner candidate "David Nguyen".
+    r = MeetingRoster((entry('David', 'owner'), entry('Eddie Thai')), 'Intro', False)
+    admitted = select_candidates(
+        [candidate('David Nguyen')], [segment(text='My name is David Nguyen.')], {}, r, allow_named=True
+    )
+    assert not admitted
+
+
 def test_contextual_owner_declines_when_another_key_has_owner_resolution():
     c = candidate('David', is_owner=True)
     c.bindings[0].evidence_kind = 'contextual'
@@ -587,6 +624,25 @@ def test_ambiguous_people_and_catalog_overflow_decline(world):
     before = deepcopy(store.rows)
     assert stage.apply_summary_speaker_labels('u', conv) == 0
     assert store.rows == before
+
+
+@pytest.mark.parametrize(
+    'person',
+    [
+        dict(name='Eddie Thai', is_dismissed=True),
+        dict(name='Eddie Thai', status='dismissed'),
+        dict(name='Eddie Thai', status='merged'),
+        dict(name='Eddie Thai', deleted=True),
+        dict(name='Eddie Thai', is_ai_agent=True),
+    ],
+)
+def test_hidden_or_dismissed_people_are_never_resurfaced(world, person):
+    stage, db, store, path, conv = world
+    store.rows[('users', 'u', 'people', 'p1')] = person
+    before = deepcopy(store.rows)
+    assert stage.apply_summary_speaker_labels('u', conv) == 0
+    assert store.rows == before
+    assert conv.transcript_segments[0].person_id is None
 
 
 def test_malformed_stored_segment_declines_before_any_write(world):
