@@ -11395,5 +11395,6 @@
     "stopThese": "یہ روکیں",
     "dismiss": "چھپائیں",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "زیادہ سے زیادہ 25 بائٹس ({count} بائٹس، نان ASCII ایک سے زیادہ بائٹس استعمال کرتے ہیں)"
 }

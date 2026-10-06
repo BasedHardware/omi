@@ -11395,5 +11395,6 @@
     "stopThese": "הפסקת אלה",
     "dismiss": "סגירה",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "מקסימום 25 בתים ({count} בתים, תווי non-ASCII משתמשים במספר בתים)"
 }

@@ -3838,5 +3838,6 @@
     "stopThese": "Спри тези",
     "dismiss": "Скрий",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Максимум 25 байта ({count} байта, символите извън ASCII използват няколко байта)"
 }

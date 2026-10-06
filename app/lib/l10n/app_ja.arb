@@ -3838,5 +3838,6 @@
     "stopThese": "この種類を停止",
     "dismiss": "非表示",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "最大25バイト（現在{count}バイト、非ASCII文字は複数バイトを使用します）"
 }

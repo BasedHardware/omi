@@ -3838,5 +3838,6 @@
     "stopThese": "Oprește acestea",
     "dismiss": "Ascunde",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Maxim 25 de octeți ({count} octeți, caracterele non-ASCII folosesc mai mulți octeți)"
 }

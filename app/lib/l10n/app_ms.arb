@@ -3838,5 +3838,6 @@
     "stopThese": "Hentikan Ini",
     "dismiss": "Tutup",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Maksimum 25 bait ({count} bait, bukan ASCII menggunakan berbilang bait)"
 }

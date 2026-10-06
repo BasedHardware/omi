@@ -3873,5 +3873,6 @@
     "stopThese": "Zatrzymaj te",
     "dismiss": "Ukryj",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Maksymalnie 25 bajtów ({count} bajtów, znaki spoza ASCII używają wielu bajtów)"
 }

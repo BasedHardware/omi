@@ -11395,5 +11395,6 @@
     "stopThese": "توقف این موارد",
     "dismiss": "رد کردن",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "حداکثر ۲۵ بایت ({count} بایت، کاراکترهای غیر ASCII از چندین بایت استفاده می‌کنند)"
 }

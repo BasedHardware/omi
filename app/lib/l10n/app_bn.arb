@@ -11395,5 +11395,6 @@
     "stopThese": "এগুলো বন্ধ করুন",
     "dismiss": "সরিয়ে দিন",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "সর্বোচ্চ ২৫ বাইট ({count} বাইট, নন-ASCII একাধিক বাইট ব্যবহার করে)"
 }

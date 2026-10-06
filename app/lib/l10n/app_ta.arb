@@ -11395,5 +11395,6 @@
     "stopThese": "இவற்றை நிறுத்து",
     "dismiss": "மறை",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "அதிகபட்சம் 25 பைட்டுகள் ({count} பைட்டுகள், ASCII அல்லாதவை பல பைட்டுகளைப் பயன்படுத்துகின்றன)"
 }

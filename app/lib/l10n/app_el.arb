@@ -3838,5 +3838,6 @@
     "stopThese": "Διακοπή αυτών",
     "dismiss": "Απόρριψη",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Μέγιστο 25 byte ({count} byte, οι χαρακτήρες εκτός ASCII χρησιμοποιούν πολλαπλά byte)"
 }

@@ -3838,5 +3838,6 @@
     "stopThese": "Dừng Loại Này",
     "dismiss": "Ẩn",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Tối đa 25 byte ({count} byte, ký tự không phải ASCII sử dụng nhiều byte)"
 }

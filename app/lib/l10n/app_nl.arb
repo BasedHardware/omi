@@ -3838,5 +3838,6 @@
     "stopThese": "Deze stoppen",
     "dismiss": "Verbergen",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Max. 25 bytes ({count} bytes, niet-ASCII gebruikt meerdere bytes)"
 }

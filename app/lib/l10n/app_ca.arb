@@ -3838,5 +3838,6 @@
     "stopThese": "Atura aquests",
     "dismiss": "Descarta",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Màxim 25 bytes ({count} bytes, els caràcters no ASCII utilitzen diversos bytes)"
 }

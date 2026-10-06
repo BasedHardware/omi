@@ -11395,5 +11395,6 @@
     "stopThese": "Запри ги овие",
     "dismiss": "Сокриј",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Максимум 25 бајти ({count} бајти, знаците што не се ASCII користат повеќе бајти)"
 }

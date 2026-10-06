@@ -3838,5 +3838,6 @@
     "stopThese": "Zastavit tyto",
     "dismiss": "Skrýt",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Maximálně 25 bajtů ({count} bajtů, znaky mimo ASCII používají více bajtů)"
 }

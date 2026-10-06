@@ -11395,5 +11395,6 @@
     "stopThese": "हे थांबवा",
     "dismiss": "लपवा",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "कमाल २५ बाइट्स ({count} बाइट्स, नॉन-ASCII अनेक बाइट्स वापरतात)"
 }

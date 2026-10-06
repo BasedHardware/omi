@@ -3873,5 +3873,6 @@
     "stopThese": "Отключить такие",
     "dismiss": "Скрыть",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Максимум 25 байт ({count} байт, не-ASCII символы используют несколько байт)"
 }

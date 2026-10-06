@@ -14840,5 +14840,15 @@
     "dismiss": "Dismiss",
     "@dismiss": {
         "description": "Hide a For You card"
+    },
+    "maxDeviceNameBytesExceeded": "Max 25 bytes ({count} bytes, non-ASCII uses multiple bytes)",
+    "@maxDeviceNameBytesExceeded": {
+        "description": "Error message shown when device name exceeds 25 UTF-8 bytes limit in rename dialog",
+        "placeholders": {
+            "count": {
+                "type": "int",
+                "example": "26"
+            }
+        }
     }
 }

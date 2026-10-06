@@ -3838,5 +3838,6 @@
     "stopThese": "Apturēt šos",
     "dismiss": "Paslēpt",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Maksimums 25 baiti ({count} baiti, ne-ASCII rakstzīmes izmanto vairākus baitus)"
 }

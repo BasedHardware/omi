@@ -3873,5 +3873,6 @@
     "stopThese": "Bunları Durdur",
     "dismiss": "Gizle",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Maksimum 25 bayt ({count} bayt, ASCII olmayan karakterler birden fazla bayt kullanır)"
 }

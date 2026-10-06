@@ -3838,5 +3838,6 @@
     "stopThese": "이 유형 중지",
     "dismiss": "닫기",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "최대 25바이트(현재 {count}바이트, 비ASCII 문자는 여러 바이트를 사용합니다)"
 }

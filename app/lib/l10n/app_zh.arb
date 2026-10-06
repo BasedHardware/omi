@@ -3838,5 +3838,6 @@
     "stopThese": "停止此类推荐",
     "dismiss": "忽略",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "最多 25 个字节（当前 {count} 个字节，非 ASCII 字符占用多个字节）"
 }

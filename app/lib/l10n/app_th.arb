@@ -3838,5 +3838,6 @@
     "stopThese": "หยุดรายการแบบนี้",
     "dismiss": "ปิด",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "สูงสุด 25 ไบต์ ({count} ไบต์, อักขระที่ไม่ใช่ ASCII ใช้หลายไบต์)"
 }

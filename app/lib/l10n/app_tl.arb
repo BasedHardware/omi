@@ -11395,5 +11395,6 @@
     "stopThese": "Itigil Ang Mga Ito",
     "dismiss": "Isara",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Maximum na 25 byte ({count} byte, gumagamit ang non-ASCII ng maraming byte)"
 }

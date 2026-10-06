@@ -11395,5 +11395,6 @@
     "stopThese": "Ustavi te",
     "dismiss": "Skrij",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "maxDeviceNameBytesExceeded": "Največ 25 bajtov ({count} bajtov, znaki, ki niso ASCII, uporabljajo več bajtov)"
 }

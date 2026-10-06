@@ -482,7 +482,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         setDialogState(() {
                           final bytes = utf8.encode(val.trim()).length;
                           if (bytes > 25) {
-                            errorMessage = 'Max 25 bytes ($bytes bytes, non-ASCII uses multiple bytes)';
+                            errorMessage = context.l10n.maxDeviceNameBytesExceeded(bytes);
                           } else {
                             errorMessage = null;
                           }
@@ -530,7 +530,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                           final byteCount = utf8.encode(newName).length;
                           if (byteCount > 25) {
                             setDialogState(() {
-                              errorMessage = 'Max 25 bytes ($byteCount bytes, non-ASCII uses multiple bytes)';
+                              errorMessage = context.l10n.maxDeviceNameBytesExceeded(byteCount);
                             });
                             return;
                           }
