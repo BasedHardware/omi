@@ -707,6 +707,12 @@ class SharedPreferencesUtil {
 
   bool get useCustomStt => customSttConfig.isEnabled;
 
+  /// sttConfigId of the on-device config the paywall's "switch to free" saved, or ''.
+  /// Lets a later paid plan release exactly that pin and never a user's own Custom STT.
+  String get paywallOnDeviceSttConfigId => getString('paywallOnDeviceSttConfigId');
+
+  set paywallOnDeviceSttConfigId(String value) => saveString('paywallOnDeviceSttConfigId', value);
+
   // Whether offline recordings auto-sync to Omi when the device connects.
   // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
   bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);
