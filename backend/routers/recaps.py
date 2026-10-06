@@ -152,6 +152,8 @@ def _period_people(
     The ranking samples the period's newest RECAP_PEOPLE_SCAN_CAP conversations.
     Filling that cap is the documented sample, not a truncation: only a budget
     cut (marked by the scan itself) or a failure makes the response partial.
+    A dismissed person keeps their history but is left out, as the People list
+    leaves them out.
     """
     try:
         conversations = recap_people_scan(uid, start_date=start_utc, end_date=end_utc, budget=budget)
@@ -161,7 +163,8 @@ def _period_people(
         for person in users_db.get_people_by_ids(uid, rank_people(stats)[: MAX_TOP_PEOPLE * 3]):
             person_id = person.get('id') if isinstance(person, dict) else None
             name = person.get('name') if isinstance(person, dict) else None
-            if isinstance(person_id, str) and person_id in stats and isinstance(name, str):
+            dismissed = isinstance(person, dict) and person.get('is_dismissed') is True
+            if isinstance(person_id, str) and person_id in stats and isinstance(name, str) and not dismissed:
                 names[person_id] = name
         return stats, names
     except Exception:

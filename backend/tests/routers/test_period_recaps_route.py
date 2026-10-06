@@ -305,6 +305,18 @@ def test_names_come_from_the_top_ranked_people_only(deps, monkeypatch):
     assert [p.person_id for p in recap.top_people] == expected[:5]
 
 
+def test_dismissed_people_are_left_out_like_the_people_list(deps, monkeypatch):
+    # get_people_by_ids returns dismissed people on purpose; the recap lists people, so it drops them.
+    def people_by_ids(_uid, _person_ids):
+        return [{'id': 'p-sam', 'name': 'Sam', 'is_dismissed': True}, {'id': 'p-ana', 'name': 'Ana'}]
+
+    monkeypatch.setattr(recaps_mod.users_db, 'get_people_by_ids', people_by_ids)
+
+    recap = _get('week', '2026-10-01')
+
+    assert [p.name for p in recap.top_people] == ['Ana']
+
+
 def test_a_full_read_of_daily_recaps_drops_the_comparison(deps):
     summaries, _ = deps
     summaries.return_value = [_summary('2026-10-01', 1, 10)] * recaps_mod.RECAP_SUMMARY_READ_LIMIT
