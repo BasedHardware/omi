@@ -3839,5 +3839,6 @@
     "dismiss": "닫기",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "잠금 화면에 표시"
+    "showOnLockScreen": "잠금 화면에 표시",
+    "accountDeletionInProgressSignInAgain": "이 계정은 삭제 중입니다. 다른 계정으로 로그인하거나 몇 분 후 다시 시도해 주세요."
 }

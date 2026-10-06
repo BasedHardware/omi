@@ -3839,5 +3839,6 @@
     "dismiss": "Skryť",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Zobraziť na zamknutej obrazovke"
+    "showOnLockScreen": "Zobraziť na zamknutej obrazovke",
+    "accountDeletionInProgressSignInAgain": "Tento účet sa odstraňuje. Prihláste sa iným účtom alebo počkajte niekoľko minút a skúste to znova."
 }
