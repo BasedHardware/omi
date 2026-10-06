@@ -159,4 +159,26 @@ void main() {
       expect(provider.getLanguageName('zz'), 'zz');
     });
   });
+
+  group('onboarding guard for primary language setup', () {
+    test('does not run setupUserPrimaryLanguage while onboarding is incomplete', () async {
+      SharedPreferencesUtil().onboardingCompleted = false;
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.loadLanguagesThenSetupPrimary(fetch: () async => {'English': 'en'});
+      expect(provider.hasSetPrimaryLanguage, isFalse);
+    });
+
+    test('runs setupUserPrimaryLanguage when onboarding is complete', () async {
+      SharedPreferencesUtil().onboardingCompleted = true;
+      SharedPreferencesUtil().userPrimaryLanguage = 'en';
+      SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.setupUserPrimaryLanguage();
+      expect(provider.hasSetPrimaryLanguage, isTrue);
+    });
+  });
 }

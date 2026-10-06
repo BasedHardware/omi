@@ -252,6 +252,7 @@ class HomeProvider extends ChangeNotifier {
   /// generation when it starts, which is too late to notice a sign-out that
   /// happened while the options were still loading.
   Future<void> loadLanguagesThenSetupPrimary({Future<Map<String, String>?> Function()? fetch}) async {
+    if (!SharedPreferencesUtil().onboardingCompleted) return;
     final generation = _sessionGeneration;
     await loadAvailableLanguages(fetch: fetch);
     if (generation != _sessionGeneration) return;
@@ -259,6 +260,9 @@ class HomeProvider extends ChangeNotifier {
   }
 
   Future<void> setupUserPrimaryLanguage() async {
+    if (!SharedPreferencesUtil().onboardingCompleted) {
+      return;
+    }
     if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
       return;
     }
@@ -300,6 +304,7 @@ class HomeProvider extends ChangeNotifier {
   /// The sheet is closable; closing it keeps the default language and this
   /// does not reopen it on the next Home rebuild.
   void showLanguageDialogIfNeeded(BuildContext context) {
+    if (!SharedPreferencesUtil().onboardingCompleted) return;
     if (hasSetPrimaryLanguage || _languageDialogOffered) return;
     _languageDialogOffered = true;
     LanguageSelectionDialog.show(context);
