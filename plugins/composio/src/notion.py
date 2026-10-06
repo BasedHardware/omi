@@ -269,22 +269,19 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
         workspace_name = token_data.get("workspace_name", "Notion Workspace")
         store_notion_credentials(uid, access_token, workspace_id, workspace_name)
         background_tasks.add_task(extract_all_pages, access_token, uid)
-        session_token = ""
-        try:
-            session_token = create_composio_session_token(uid)
-        except Exception:
-            pass
-        return templates.TemplateResponse(
-            "notion_success.html",
-            {
-                "request": request,
-                "uid": uid,
-                "session_token": session_token,
-            },
-        )
     except Exception as e:
         logger.error(f"Error in notion_callback: {type(e).__name__}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to complete Notion OAuth")
+
+    session_token = create_composio_session_token(uid)
+    return templates.TemplateResponse(
+        "notion_success.html",
+        {
+            "request": request,
+            "uid": uid,
+            "session_token": session_token,
+        },
+    )
 
 
 @router.get("/import", response_class=HTMLResponse)
