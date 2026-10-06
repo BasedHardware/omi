@@ -1,4 +1,4 @@
-"""Approved screen frames as notes evidence: roster names, SCREEN MOMENTS, images.
+"""Approved screen frames as notes evidence: SCREEN MOMENTS and images, without a roster join.
 
 Pins the three consumption paths and, most importantly, that frame images reach
 the provider as image parts through every hop of the notes call (LangChain
@@ -36,10 +36,7 @@ from utils.conversations.screen_frame_evidence import (  # noqa: E402
     ScreenFrameEvidence,
     load_notes_frame_images,
     load_screen_frame_evidence,
-    screen_frame_agent_names,
-    screen_frame_names,
     screen_moment_lines,
-    with_screen_frame_participants,
 )
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, screen_frames_message  # noqa: E402
 
@@ -89,138 +86,6 @@ def _jpeg(width=1200, height=700) -> bytes:
     out = io.BytesIO()
     Image.new('RGB', (width, height), (40, 90, 160)).save(out, format='JPEG')
     return out.getvalue()
-
-
-class TestFrameNames:
-    def test_owner_tile_and_ai_agents_never_become_participants(self):
-        evidence = [
-            _evidence('a', 1, ['Jordan Rivera', 'You', 'Boardy Boardman', 'Fireflies Notetaker']),
-            _evidence('b', 5, ['Jordan Rivera (Presenting)', 'Omi Agent', 'ash@fulcra.com']),
-        ]
-        assert screen_frame_names(evidence) == ['Jordan Rivera']
-
-    def test_most_frequent_first_and_deduplicated(self):
-        evidence = [_evidence('a', 1, ['Priya Natarajan', 'Jordan Rivera']), _evidence('b', 2, ['Jordan  Rivera'])]
-        assert screen_frame_names(evidence) == ['Jordan Rivera', 'Priya Natarajan']
-
-
-class TestRosterEnrichment:
-    def test_frames_alone_create_a_screen_activity_context(self):
-        context = with_screen_frame_participants(None, ['Jordan Rivera'], started_at=START, duration_minutes=30)
-        assert context is not None
-        assert context.calendar_source == 'screen_activity'
-        assert [p.name for p in context.participants] == ['Jordan Rivera']
-
-    def test_a_name_the_calendar_already_has_is_not_duplicated(self):
-        calendar = CalendarMeetingContext(
-            calendar_event_id='evt',
-            title='Sync',
-            participants=[MeetingParticipant(name='Jordan Rivera', email='jordan@acme.com')],
-            start_time=START,
-            duration_minutes=30,
-            calendar_source='google',
-        )
-        assert with_screen_frame_participants(calendar, ['Jordan Rivera'], started_at=START, duration_minutes=30) is (
-            calendar
-        )
-
-    def test_a_shared_first_name_is_not_an_email_match(self):
-        calendar = CalendarMeetingContext(
-            calendar_event_id='evt',
-            title='Sync',
-            participants=[MeetingParticipant(email='john.smith@acme.com')],
-            start_time=START,
-            duration_minutes=30,
-            calendar_source='google',
-        )
-        merged = with_screen_frame_participants(calendar, ['John Doe'], started_at=START, duration_minutes=30)
-        assert [(p.name, p.email) for p in merged.participants] == [
-            (None, 'john.smith@acme.com'),
-            ('John Doe', None),
-        ]
-
-    def test_a_nameless_invitee_gets_the_tile_name_instead_of_a_twin(self):
-        calendar = CalendarMeetingContext(
-            calendar_event_id='evt',
-            title='Sync',
-            participants=[MeetingParticipant(email='jordan.rivera@acme.com')],
-            start_time=START,
-            duration_minutes=30,
-            calendar_source='google',
-        )
-        merged = with_screen_frame_participants(calendar, ['Jordan Rivera'], started_at=START, duration_minutes=30)
-        assert [(p.name, p.email) for p in merged.participants] == [('Jordan Rivera', 'jordan.rivera@acme.com')]
-        assert merged.calendar_source == 'google'
-
-
-class TestSpeakerBindingWithScreenRoster:
-    """conversation_prompt_prefix binds the one remote voice to the one remote human."""
-
-    def _prefix(self, names, extra_participants=()):
-        from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
-
-        context = with_screen_frame_participants(
-            (
-                CalendarMeetingContext(
-                    calendar_event_id='screen-activity',
-                    title='Meet - abc-defg-hij',
-                    participants=list(extra_participants),
-                    start_time=START,
-                    duration_minutes=30,
-                    calendar_source='screen_activity',
-                )
-                if extra_participants
-                else None
-            ),
-            names,
-            started_at=START,
-            duration_minutes=30,
-        )
-        roster = normalize_meeting_participants(context, 'desktop', 'David Zhang', ['david@example.com'], [])
-        return build_conversation_prompt_prefix(
-            conversation_id='c',
-            transcript='[s1 0] hi\n[s2 1] hello',
-            started_at=START,
-            timezone_name='UTC',
-            language_code='en',
-            calendar_context=context,
-            speaker_map={0: 'David Zhang', 1: None},
-            roster=roster,
-            desktop_meeting_capture=True,
-        )
-
-    def test_one_screen_derived_human_names_the_remote_voice(self):
-        prefix = self._prefix(screen_frame_names([_evidence('a', 1, ['Jordan Rivera', 'You'])]))
-        assert 'spk 1 Jordan Rivera' in prefix.context
-        assert '- Jordan Rivera | - | human | via screen_activity' in prefix.context
-
-    def _frame_roster_names(self, names):
-        evidence = [_evidence('a', 1, names)]
-        return screen_frame_names(evidence) + screen_frame_agent_names(evidence)
-
-    def test_a_speaking_agent_tile_keeps_the_ambiguity_guard(self):
-        # Boardy talks on calls: with Jordan and Boardy on screen the remote channel may be
-        # either, so it must not bind to the one visible human.
-        prefix = self._prefix(self._frame_roster_names(['Jordan Rivera', 'Boardy Boardman']))
-        assert 'spk 1 Jordan Rivera' not in prefix.context
-        assert '- Boardy Boardman | - | ai agent | via screen_activity' in prefix.context
-
-    def test_a_silent_notetaker_tile_does_not_block_binding(self):
-        # Incident 449565eb: a NoteTaker bot records and never speaks, so the one remote
-        # voice is the one remote human.
-        prefix = self._prefix(self._frame_roster_names(['Tristan Jensen', 'You', 'Tomorrow Inc - NoteTaker']))
-        assert 'spk 1 Tristan Jensen' in prefix.context
-        assert '- Tomorrow Inc - NoteTaker | - | ai agent | via screen_activity' in prefix.context
-
-    def test_an_agent_the_roster_would_not_classify_is_not_added(self):
-        # "Read Ai" trips the tile marker but not the roster catalog; adding it would make a human.
-        assert screen_frame_agent_names([_evidence('a', 1, ['Read Ai'])]) == []
-
-    def test_an_ai_agent_already_on_the_roster_still_blocks_the_guess(self):
-        # Boardy on the OCR roster may be the remote voice: no binding.
-        prefix = self._prefix(['Jordan Rivera'], extra_participants=[MeetingParticipant(name='Boardy Boardman')])
-        assert 'spk 1 Jordan Rivera' not in prefix.context
-        assert '| ai agent |' in prefix.context
 
 
 class TestScreenMoments:
@@ -439,7 +304,10 @@ class TestWiringFlags:
 
         def pack(uid, conversation, roster, **kwargs):
             captured.update(kwargs)
-            return None
+            return MeetingContextPack(
+                screen_text='synthetic OCR digest' if kwargs['include_screen_text'] else '',
+                screen_moments=kwargs['screen_moments'],
+            )
 
         monkeypatch.setattr(wiring, 'gather_meeting_context_pack', pack)
         conversation = SimpleNamespace(
@@ -450,22 +318,27 @@ class TestWiringFlags:
             finished_at=START + timedelta(minutes=30),
             transcript_segments=[],
         )
-        roster, _block, _desktop, images = wiring.rich_notes_inputs(
+        roster, block, _desktop, images = wiring.rich_notes_inputs(
             'u', conversation, None, 'UTC', include_background=True, include_screen_text=screen_text
         )
         names = [entry.display_name for entry in roster.entries if entry.kind == 'human']
-        return names, images, captured.get('screen_moments'), loaded
+        return names, images, captured.get('screen_moments'), loaded, block
 
     def test_everything_off_reads_no_frames(self, monkeypatch):
-        names, images, moments, loaded = self._run(monkeypatch, screen_text=False, frames=False)
+        names, images, moments, loaded, _block = self._run(monkeypatch, screen_text=False, frames=False)
         assert (names, images, moments, loaded) == ([], (), (), [])
 
-    def test_screen_text_flag_adds_names_and_moments_but_no_images(self, monkeypatch):
-        names, images, moments, _loaded = self._run(monkeypatch, screen_text=True, frames=False)
-        assert names == ['Jordan Rivera'] and images == ()
+    def test_screen_text_flag_adds_moments_without_roster_names(self, monkeypatch):
+        names, images, moments, _loaded, _block = self._run(monkeypatch, screen_text=True, frames=False)
+        assert names == [] and images == ()
         assert moments == ('- [+02:00] Google Meet call (on screen: Jordan Rivera)',)
 
     def test_frames_flag_alone_attaches_images_only(self, monkeypatch):
-        names, images, moments, _loaded = self._run(monkeypatch, screen_text=False, frames=True)
-        # The image-derived names still reach the roster, so the notes validator keeps them.
-        assert names == ['Jordan Rivera'] and images == FRAMES and moments == ()
+        names, images, moments, _loaded, _block = self._run(monkeypatch, screen_text=False, frames=True)
+        assert names == [] and images == FRAMES and moments == ()
+
+    def test_frames_and_ocr_digest_survive_without_roster_join(self, monkeypatch):
+        names, images, moments, _, block = self._run(monkeypatch, screen_text=True, frames=True)
+        assert names == [] and images == FRAMES
+        assert moments == ('- [+02:00] Google Meet call (on screen: Jordan Rivera)',)
+        assert 'synthetic OCR digest' in block and 'SCREEN MOMENTS' in block

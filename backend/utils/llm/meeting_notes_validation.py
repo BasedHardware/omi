@@ -246,6 +246,21 @@ def _name_in_transcript(name: str, transcript_body: str) -> bool:
     return re.search(r'(?<!\w)' + re.escape(name) + r'(?!\w)', transcript_body, re.IGNORECASE) is not None
 
 
+def attach_notes_identity_context(structured: Structured, roster: Optional[MeetingRoster], frame_count: int) -> None:
+    """Carry server context to the note-save seam, outside the client/model schema."""
+    owners = [e for e in roster.entries if e.kind == 'owner'] if roster else []
+    setattr(
+        structured,
+        '_notes_identity',
+        {
+            'catalog_ids': list(roster.catalog_person_ids) if roster else [],
+            'owner_names': [e.display_name for e in owners if e.display_name],
+            'owner_emails': [e.email for e in owners if e.email],
+            'frame_count': frame_count,
+        },
+    )
+
+
 def validate_rich_meeting_notes(
     structured: Structured,
     *,
@@ -253,12 +268,13 @@ def validate_rich_meeting_notes(
     roster: Optional[MeetingRoster],
     has_background_context: bool,
     background_body: str = '',
+    has_identity_evidence: bool = False,
 ) -> Structured:
     """Server-side guardrails for rich-only fields; the flag-off path never runs this.
 
-    Participants must be corroborated (roster name/email or a whole-name transcript
-    match), the account owner is never a participant, and nameless participants
-    survive only on a roster email. Insights exist only with background context,
+    The notes model may read identities from supplied frames, screen moments, or
+    attendees. Without that evidence, names still require textual corroboration.
+    The account owner is never a participant. Insights exist only with background context,
     capped at 4 entries of <=30 words. At most one side_notes section survives,
     forced last with heading "Side notes" and 1-4 bullets.
     """
@@ -285,27 +301,31 @@ def validate_rich_meeting_notes(
             # Screen text (a call's participant list, a profile opened during the
             # call) is a legitimate identity source alongside the transcript.
             if (
-                matched_entry is None
+                not has_identity_evidence
+                and matched_entry is None
                 and not _name_in_transcript(name, transcript_body)
                 and not (background_body and _name_in_transcript(name, background_body))
             ):
                 continue
         elif email:
             matched_entry = roster_by_email.get(email.casefold())
-            if matched_entry is None:
+            if matched_entry is None and not has_identity_evidence:
                 continue
         else:
             continue
-        # Keep an email only when it belongs to the same roster entry that
-        # corroborated the participant — a name match must not inherit someone
-        # else's roster email, and untrusted emails are dropped.
+        # Visual/attendee evidence allows the model's own name/email link.
+        # Without it, only the same roster entry may corroborate that email.
         if (
-            email
+            has_identity_evidence
+            and email
+            or email
             and matched_entry is not None
             and matched_entry.email
             and matched_entry.email.casefold() == email.casefold()
         ):
             participant.email = email
+        elif not email and matched_entry is not None and matched_entry.email:
+            participant.email = matched_entry.email
         else:
             participant.email = None
         if name:

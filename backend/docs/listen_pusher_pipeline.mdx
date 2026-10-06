@@ -3394,3 +3394,30 @@ level migrations. Standard protection stores compressed JSON. Both segment and
 conversation fields are excluded from OpenAPI, JSON responses, list/detail dict
 views and integration/webhook payloads; backend Python
 models retain the evidence before relevance and for offline reads. No backfill runs.
+
+
+### Provisional identities from meeting notes
+
+The rich notes call receives approved screenshots (at most four), screen moments,
+the OCR digest, and matched calendar context. Frame tile names do not become
+roster entries. The notes model can retain a non-owner name and the email shown
+on the same card without requiring transcript or email-local-part overlap.
+Recent people context includes names, exact aliases and emails within its existing
+character cap, including meetings with no counterpart on the roster.
+
+The completed-note transaction upserts the model's human participants as
+unverified people and stores its numeric speaker bindings with public source
+`auto` and internal match source `notes_inferred`. Only exact email, display name
+or stored alias resolves an existing person; this path never merges first names.
+It creates no speech samples, voice embeddings, or learning obligations. A later
+notes call may rewrite these bindings. Current manual receipts (including
+unassignments and rejections) win in the commit transaction. Rejecting a notes
+label retracts the identifiers that note added; dismissal also removes those
+identifiers and hides the provisional person.
+
+The existing 20-second client evidence pass and 25-second configured server wait
+are unchanged. When an adjudication marker arrives after a note saved without
+frames, one automatic notes-only refresh is claimed. A user title prevents both
+the claim and a concurrent refresh commit. An all-rejected pass may still refresh
+late OCR/calendar context, but rejected frame bytes never reach notes. This
+refresh does not run derived memory, app, embedding, or speech-learning jobs.

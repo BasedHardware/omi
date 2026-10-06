@@ -580,7 +580,7 @@ class TestRichConversationNotes:
             'participants': [
                 {'name': 'David', 'email': 'david@acme.com', 'source': 'roster'},
                 {'name': 'Ash Kalb', 'email': 'ash@fulcra.com', 'source': 'roster'},
-                {'name': 'Nobody Invented', 'source': 'transcript'},
+                {'name': 'Morgan Reed', 'email': 'cloudberry42@gmail.com', 'source': 'screen'},
                 {'name': 'Priya Rao', 'source': 'transcript'},
             ],
             'insights': [{'text': 'Short insight', 'kind': 'prior_meeting'}],
@@ -592,9 +592,10 @@ class TestRichConversationNotes:
             roster=roster,
         )
         assert structured.meeting_type == 'one_on_one'
-        # Owner dropped; uncorroborated name dropped; roster and transcript names kept.
+        # Owner dropped; model identities survive when attendees were supplied.
         names = [p.name for p in structured.participants]
-        assert names == ['Ash Kalb', 'Priya Rao']
+        assert names == ['Ash Kalb', 'Morgan Reed', 'Priya Rao']
+        assert structured.participants[1].email == 'cloudberry42@gmail.com'
         assert structured.insights[0].kind == 'prior_meeting'
         assert structured.sections[-1].kind == 'side_notes'
         assert structured.sections[-1].heading == 'Side notes'
