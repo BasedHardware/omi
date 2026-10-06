@@ -1317,6 +1317,7 @@ def get_public_shared_conversation_bounded(
         field_paths=[
             'visibility',
             'is_locked',
+            'deleted',
             'transcript_segments_compressed',
             'transcript_segments',
             'has_transcript_corrections',
@@ -1325,15 +1326,12 @@ def get_public_shared_conversation_bounded(
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict()
-    if not isinstance(raw, dict):
+    if not isinstance(raw, dict) or is_soft_deleted(raw):
         return None
 
     visibility = raw.get('visibility')
     is_locked = raw.get('is_locked', False)
-    public_conversation: Dict[str, Any] = {
-        'visibility': visibility,
-        'is_locked': is_locked,
-    }
+    public_conversation: Dict[str, Any] = {'visibility': visibility, 'is_locked': is_locked}
     if not isinstance(visibility, str) or visibility not in {'shared', 'public'} or is_locked:
         return public_conversation
 
