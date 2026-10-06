@@ -15,3 +15,9 @@ Build logic lives in `omi/firmware/scripts/ci/`.
 ## Formatting
 
 C/C++ files: `clang-format -i <files>` (the repo pre-commit hook covers this).
+
+## DevKit audio routing verification
+
+Run `python3 omi/firmware/devkit/tests/offline_routing/run.py` when changing
+DevKit audio routing. The local/CI test executes the production pusher for live,
+connected-unsubscribed, storage-sync and disconnected states.
