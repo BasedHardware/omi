@@ -1148,6 +1148,7 @@ class CaptureController extends ChangeNotifier
   Future<void> _transcriptionSettingsChangedBody() async {
     Logger.debug("Transcription settings changed, refreshing socket connection...");
     await _reconcileNativeBackgroundStreamingPolicy();
+    if (isPaused && !_phoneMicPaused) return;
 
     final device = _recordingDevice;
     final stagedPhase = _capture.stagedReadModel.phase;
@@ -2012,7 +2013,7 @@ class CaptureController extends ChangeNotifier
     final device = _recordingDevice;
     final staged = _capture.stagedReadModel;
     final pendantStreamPhase = staged.phase == CapturePhase.pendantLive || staged.phase == CapturePhase.pendantPaused;
-    if (device == null || _pendantSuspension != null || staged.callActive || !pendantStreamPhase) {
+    if (isPaused || device == null || _pendantSuspension != null || staged.callActive || !pendantStreamPhase) {
       return;
     }
     final deviceRevision = _deviceIdentityRevision;
@@ -3927,6 +3928,7 @@ class CaptureController extends ChangeNotifier
     await _preferences.saveBool('nativeBleStreamingEnabled', false);
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    await _abandonTranscriptionSocket(reason: 'device capture paused');
     notifyListeners();
   }
 
@@ -3942,6 +3944,8 @@ class CaptureController extends ChangeNotifier
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return;
     await BatteryWidgetService().updateMuteState(false);
+    if (!_admitsCapture(revision)) return;
+    await _ensureDeviceSocketConnection();
     if (!_admitsCapture(revision)) return;
     await _initiateDeviceAudioStreaming();
     if (!_admitsCapture(revision)) return;
