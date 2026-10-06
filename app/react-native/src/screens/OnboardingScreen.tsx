@@ -13,7 +13,7 @@ import {
 import { Redirect } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { useAuthStore } from '@/state/authStore';
-import { DEV_LOGIN_WITHOUT_ACCOUNT } from '@/devFlags';
+import { GUEST_MODE } from '@/devFlags';
 
 const BG = require('../../assets/images/onboarding-bg.webp');
 
@@ -67,11 +67,11 @@ export default function OnboardingScreen() {
             </View>
 
             {/*
-              Dev only, and gated on __DEV__ so it cannot exist in a shipped
-              binary. It sets a local session with no token: enough to reach the
+              Guest mode. Sets a local session with no token: enough to reach the
               tabs and the on-device router, not enough to touch any account.
+              Off in a shipped build via expo.extra.guestModeEnabled = false.
             */}
-            {DEV_LOGIN_WITHOUT_ACCOUNT && (
+            {GUEST_MODE && (
               <TouchableOpacity
                 style={styles.ghostButton}
                 onPress={loginWithoutAccount}

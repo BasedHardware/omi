@@ -15,15 +15,42 @@
  */
 
 /**
- * Shows the "continue without account" button on the sign-in screen.
+ * Guest mode: the "continue without an account" button on the sign-in screen.
  *
- * Gated on __DEV__ alone, with no env var. A local session with no account behind
- * it must never exist in a shipped binary, and __DEV__ already guarantees that;
- * requiring an extra opt-in would only make the thing awkward to use for the dev
- * workflow it exists for.
+ * Deliberately NOT gated on __DEV__. A release build is a legitimate place for
+ * this -- guest and trial sessions are ordinary product patterns -- and gating it
+ * on __DEV__ meant the release APK, which is the one build that opens on its own
+ * without a dev server, was the one build you could not get into.
+ *
+ * It is still not a way to impersonate anyone: the session carries no token, so
+ * every server-backed call returns 401. What it buys is the local surface --
+ * routing, the device, the tab shell.
+ *
+ * Turn it off for a shipped build with expo.extra.guestModeEnabled = false in
+ * app.json; no code change.
  */
-export const DEV_LOGIN_WITHOUT_ACCOUNT: boolean =
-  typeof __DEV__ !== 'undefined' && __DEV__
+export const GUEST_MODE: boolean = readGuestMode();
+
+function readGuestMode(): boolean {
+  try {
+    const flag = expoExtra()?.guestModeEnabled;
+    // Default on: an app that cannot be opened at all without an account is
+    // harder to evaluate, and the session grants nothing either way.
+    return flag === undefined ? true : flag === true;
+  } catch {
+    // If the config cannot be read, do not claim a capability we cannot verify.
+    return false;
+  }
+}
+
+function expoExtra(): Record<string, unknown> | undefined {
+  // Required lazily: this module is imported by unit tests that should not pull
+  // in expo's native config, and a static import would make one boolean a
+  // native-module dependency.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const Constants = require('expo-constants').default;
+  return Constants.expoConfig?.extra as Record<string, unknown> | undefined;
+}
 
 /**
  * Whether the dev-only screens under app/dev-* should be reachable.

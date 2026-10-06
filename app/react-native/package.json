@@ -28,6 +28,7 @@
     "@react-navigation/native-stack": "^7.0.0",
     "axios": "^1.7.7",
     "expo": "~56.0.16",
+    "expo-audio": "^56.0.13",
     "expo-constants": "~56.0.21",
     "expo-dev-client": "^56.0.23",
     "expo-font": "^56.0.7",

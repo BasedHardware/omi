@@ -35,7 +35,8 @@
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "expo-font",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-audio"
     ],
     "extra": {
       "apiBaseUrl": "https://api.omi.me",

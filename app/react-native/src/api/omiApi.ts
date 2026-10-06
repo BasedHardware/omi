@@ -70,6 +70,54 @@ export async function listConversations(limit = 50, offset = 0): Promise<Convers
   return asList<Conversation>(res.data);
 }
 
+/**
+ * Full-text search over conversation transcripts.
+ *
+ * Server-side, not client-side: transcripts are paginated and a substring filter
+ * over one page would silently miss matches on the next. The port of
+ * searchConversationsServer() in the Flutter client.
+ *
+ * `speakerId` is the part that makes "did marco say brown bread or white bread"
+ * answerable. Transcripts are diarized, so the same sentence exists under several
+ * speaker labels; filtering server-side is what stops results from another
+ * speaker burying the one you asked about.
+ *
+ * @param page 1-based, matching the backend. Not an offset.
+ */
+export interface ConversationSearchPage {
+  items: Conversation[];
+  currentPage: number;
+  totalPages: number;
+}
+
+export async function searchConversations(
+  query: string,
+  opts: { page?: number; limit?: number; includeDiscarded?: boolean; speakerId?: string } = {}
+): Promise<ConversationSearchPage> {
+  const { page = 1, limit = 10, includeDiscarded = true, speakerId } = opts;
+  const res = await omiApi.post<{
+    items?: Conversation[];
+    currentPage?: number;
+    totalPages?: number;
+  }>(
+    '/v1/conversations/search',
+    {
+      query,
+      page,
+      per_page: limit,
+      include_discarded: includeDiscarded,
+      // Omitted rather than sent as null: the backend treats an explicit null
+      // speaker_id as a filter for the speaker named "null".
+      ...(speakerId ? { speaker_id: speakerId } : {}),
+    }
+  );
+  return {
+    items: asList<Conversation>(res.data?.items ?? [], 'items'),
+    currentPage: res.data?.currentPage ?? page,
+    totalPages: res.data?.totalPages ?? 0,
+  };
+}
+
 export async function getConversation(id: string): Promise<Conversation> {
   const res = await omiApi.get<Conversation>(`/v1/conversations/${id}`);
   return res.data;
