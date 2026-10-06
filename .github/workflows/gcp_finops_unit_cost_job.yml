@@ -5,16 +5,6 @@ name: Deploy FinOps Unit Cost Job to Cloud Run
 # Rollback path: re-enable that cron job — this workflow does not touch it.
 
 on:
-  # Push on this branch deploys prod and runs the producer once. The entrypoint
-  # gap-fills missing settled days, which is how 2026-09-27 gets reloaded.
-  # Further pushes to this branch redeploy; do not use it as a general feature branch.
-  push:
-    branches: [finops/unit-cost-reliability]
-    paths:
-      - backend/scripts/finops/**
-      - backend/modal/Dockerfile.finops_unit_cost_job
-      - .github/workflows/gcp_finops_unit_cost_job.yml
-      - backend/scripts/provision_finops_unit_cost_scheduler.py
   workflow_dispatch:
     inputs:
       environment:
@@ -56,7 +46,7 @@ concurrency:
 
 jobs:
   deploy:
-    environment: ${{ github.event_name == 'push' && 'prod' || (github.event.inputs.environment == 'prod' && 'prod' || 'development') }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -65,7 +55,7 @@ jobs:
     steps:
       - name: Validate Environment Input
         env:
-          INPUT_ENV: ${{ github.event_name == 'push' && 'prod' || github.event.inputs.environment }}
+          INPUT_ENV: ${{ github.event.inputs.environment }}
         run: |
           if [[ "$INPUT_ENV" != "development" && "$INPUT_ENV" != "prod" ]]; then
             echo "Invalid environment: $INPUT_ENV. Must be 'development' or 'prod'."
@@ -78,11 +68,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'push' && github.sha || github.event.inputs.branch }}
+          ref: ${{ github.event.inputs.branch }}
 
       - name: Google Auth (development WIF)
         id: auth-wif
-        if: github.event_name != 'push' && github.event.inputs.environment == 'development'
+        if: github.event.inputs.environment == 'development'
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-notif-dev/providers/github
@@ -90,7 +80,7 @@ jobs:
 
       - name: Google Auth (prod JSON, until prod WIF slice)
         id: auth
-        if: github.event_name == 'push' || github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod'
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
@@ -164,7 +154,7 @@ jobs:
             --quiet
 
       - name: Run producer once so a missed settled day is filled
-        if: github.event_name == 'push' || github.event.inputs.run_after_deploy == 'true'
+        if: github.event.inputs.run_after_deploy == 'true'
         timeout-minutes: 45
         run: |
           gcloud run jobs execute "${{ env.SERVICE }}" \

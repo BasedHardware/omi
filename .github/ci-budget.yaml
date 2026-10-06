@@ -4011,19 +4011,8 @@
     "gcp_finops_unit_cost_job.yml": {
       "name": "Deploy FinOps Unit Cost Job to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Deploys the finops unit-cost Cloud Run job. Push is limited to one reliability branch; routine runs are workflow_dispatch.",
+      "rationale": "Manual workflow_dispatch deploy of the finops unit-cost Cloud Run job. Not a pull-request check.",
       "triggers": {
-        "push": {
-          "branches": [
-            "finops/unit-cost-reliability"
-          ],
-          "paths": [
-            "backend/scripts/finops/**",
-            "backend/modal/Dockerfile.finops_unit_cost_job",
-            ".github/workflows/gcp_finops_unit_cost_job.yml",
-            "backend/scripts/provision_finops_unit_cost_scheduler.py"
-          ]
-        },
         "workflow_dispatch": {
           "inputs": {
             "branch": {
