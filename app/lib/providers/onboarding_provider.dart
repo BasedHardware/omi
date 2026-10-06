@@ -11,6 +11,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -21,6 +22,7 @@ import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
@@ -338,6 +340,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       isClicked = false; // Allow clicks again after finishing the operation
       connectingToDeviceId = null; // Reset the connecting device
       deviceProvider!.setIsConnected(false);
+      // The Connect page's MessageListener shows this; without it the device just vanished (#20790).
+      final message = globalNavigatorKey.currentContext?.l10n.connectionFailed;
+      if (message != null) notifyError(message);
       notifyListeners();
     }
 
