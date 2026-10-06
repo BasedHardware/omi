@@ -142,7 +142,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   String? _lastRetentionRiskFingerprint;
   int _nextSessionHandle = 0;
 
-  static bool isCaptureSourceInScope(String? source) => source == 'omi' || source == 'friend_com';
+  static bool isCaptureSourceInScope(String? source) =>
+      source == 'omi' || source == 'friend_com' || source == 'rayban_meta';
 
   _DeviceWedgeState _stateFor(String deviceId) => _devices.putIfAbsent(deviceId, _DeviceWedgeState.new);
 
