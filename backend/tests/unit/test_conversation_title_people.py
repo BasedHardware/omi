@@ -11,7 +11,8 @@ name is the account owner. These tests pin the contract:
   speakers excluded) and the owner names;
 - title rules are static (cacheable) while the names stay in the volatile suffix;
 - a title that omits every identified person is deterministically led by their
-  name(s); titles that already name them, and rich meeting notes, are untouched.
+  name(s); titles that already name any of them (however many), and rich
+  meeting notes, are untouched.
 """
 
 from datetime import datetime, timezone
@@ -588,6 +589,54 @@ def test_title_that_already_names_the_person_is_kept(monkeypatch, title):
     assert structured.title == title
 
 
+@pytest.mark.parametrize(
+    ('title', 'expected'),
+    [
+        pytest.param('Sarah, John and Mike Plan Trip', 'Sarah, John and Mike Plan Trip', id='names-three'),
+        pytest.param('Road Trip Planning', 'Sarah Chen & John Park: Road Trip Planning', id='names-none'),
+    ],
+)
+def test_the_model_title_is_kept_whenever_it_names_a_listed_person(monkeypatch, title, expected):
+    """How many people a title names is the prompt's job; the repair only leads a title naming nobody."""
+    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+
+    prefix = ConversationPromptPrefix(
+        conversation_id='conv-three',
+        context='CONVERSATION METADATA\n- Captured at: now (UTC)\n\nFULL TRANSCRIPT\n[s1 0] trip talk',
+        transcript_segment_ids=frozenset({'s1'}),
+        title_people=('Sarah Chen', 'John Park', 'Mike Ross'),
+        owner_names=('David',),
+    )
+
+    structured, _ = _notes(prefix, monkeypatch, title=title)
+
+    assert structured.title == expected
+
+
+@pytest.mark.parametrize(
+    ('title', 'people'),
+    [
+        ('Sarah, John and Mike Plan Trip', ('Sarah Chen', 'John Park', 'Mike Ross')),
+        # Ordinary words that the inflection rule reads as names must never rewrite a title.
+        ('Sarah Reviews Annual General Meeting', ('Anna', 'Gene', 'Sarah')),
+        ('Sarah and John Review Market Strategy', ('Mark Lee', 'Sarah Chen', 'John Park')),
+        ('Sarah and John Plan January Launch', ('Sarah', 'John', 'Jane')),
+    ],
+)
+def test_a_title_naming_listed_people_is_never_rewritten(title, people):
+    from utils.llm.meeting_notes_validation import lead_title_with_people
+
+    assert lead_title_with_people(title, people) == (title, False)
+
+
+def test_a_title_naming_nobody_is_still_led():
+    from utils.llm.meeting_notes_validation import lead_title_with_people
+
+    people = ('Sarah Chen', 'John Park', 'Mike Ross')
+
+    assert lead_title_with_people('Road Trip Planning', people) == ('Sarah Chen & John Park: Road Trip Planning', True)
+
+
 def test_lead_is_language_neutral_and_joins_at_most_two_people():
     from utils.llm.meeting_notes_validation import lead_title_with_people
 
@@ -601,7 +650,7 @@ def test_lead_is_language_neutral_and_joins_at_most_two_people():
     )
 
 
-def test_lead_drops_second_person_rather_than_exceeding_title_length():
+def test_lead_keeps_only_the_first_name_when_two_would_pass_the_two_name_threshold():
     from utils.llm.meeting_notes_validation import TWO_NAME_LEAD_MAX_CHARACTERS, lead_title_with_people
 
     title = 'Quarterly Vendor Spend Review and Offsite Rescheduling'

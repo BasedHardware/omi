@@ -296,7 +296,9 @@ def _name_mentions(name: str) -> list[str]:
     One unspaced-script character (a common family name such as 王) or a
     two-letter surname ("Li") is too common to count as a mention on its own.
     A single-token mention of 4+ characters also matches inflected forms; that
-    over-matches some words ("Mark" in "Market"), which only suppresses a lead.
+    over-matches some ordinary words ("Mark" in "Market", "Anna" in "Annual").
+    A false match only keeps a title without a lead, so the matcher must never
+    drive a change to a title the model wrote.
     """
     tokens = name.split()
     mentions = [name]
@@ -343,9 +345,13 @@ def presentable_title_people(people: Sequence[str], transcript_segment_ids: Opti
 def lead_title_with_people(title: str, people: Sequence[str]) -> tuple[str, bool]:
     """Lead a title that names none of the identified people with their names (#3602).
 
-    The prompt asks the model to name them; this deterministic repair holds the
-    contract when it does not. ``Name: Title`` reads the same in every response
-    language, joins at most two people, and never invents a title or a name.
+    The prompt asks the model to name the one or two most central of them; this
+    deterministic repair covers only the case where it names nobody. A title that
+    already names any of them is kept as written, however many it names: names
+    cannot be removed from the model's prose without rewriting it, and replacing
+    the title would lose its topic. ``Name: Title`` reads the same in every
+    response language, joins at most two people, and never invents a title or a
+    name.
     """
     stripped = title.strip()
     names = [name.strip() for name in people if name and name.strip()]

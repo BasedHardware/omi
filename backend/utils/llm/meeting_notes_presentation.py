@@ -71,7 +71,8 @@ def enforce_conversation_note_presentation(
     """Apply static repair, one targeted revision, then a sanitized fallback.
 
     ``title_people`` (general-path notes only) holds the title-naming contract
-    (#3602): a title that names none of them is led by their names.
+    (#3602): a title that names none of them is led by their names, and one that
+    names any of them is kept as written; how many it names is left to the prompt.
     """
 
     report = enforce_structured_presentation_contract(structured, transcript_segment_ids)
