@@ -22278,7 +22278,7 @@ abstract class AppLocalizations {
   /// Store rating pre-prompt body
   ///
   /// In en, this message translates to:
-  /// **'Rating us 5 stars really helps us out 🤍'**
+  /// **'Rating us 5 stars really helps us out ❤️'**
   String get onboardingRatingPromptBody;
 
   /// Store rating pre-prompt: open the store review sheet

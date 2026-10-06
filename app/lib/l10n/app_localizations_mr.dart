@@ -12448,7 +12448,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'वाट पाहत असताना सांगा, Omi वापरायला छान वाटतंय का?';
 
   @override
-  String get onboardingRatingPromptBody => '५ स्टार रेटिंग दिल्याने आम्हाला खरोखर खूप मदत होते 🤍';
+  String get onboardingRatingPromptBody => '५ स्टार रेटिंग दिल्याने आम्हाला खरोखर खूप मदत होते ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'हो, मला तुम्हाला पाठिंबा द्यायचा आहे!';

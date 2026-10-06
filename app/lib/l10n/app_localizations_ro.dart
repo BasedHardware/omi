@@ -12496,7 +12496,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Cât aștepți, ți-a plăcut să folosești Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'O evaluare de 5 stele ne ajută cu adevărat 🤍';
+  String get onboardingRatingPromptBody => 'O evaluare de 5 stele ne ajută cu adevărat ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Da, vreau să vă susțin!';

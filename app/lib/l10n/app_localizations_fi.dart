@@ -12445,7 +12445,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Odotellessasi: onko Omin käyttö ollut mukavaa?';
 
   @override
-  String get onboardingRatingPromptBody => '5 tähteä auttaa meitä todella paljon 🤍';
+  String get onboardingRatingPromptBody => '5 tähteä auttaa meitä todella paljon ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Kyllä, haluan tukea teitä!';

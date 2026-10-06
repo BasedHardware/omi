@@ -12429,7 +12429,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'While you wait, has Omi been nice to use?';
 
   @override
-  String get onboardingRatingPromptBody => 'Rating us 5 stars really helps us out 🤍';
+  String get onboardingRatingPromptBody => 'Rating us 5 stars really helps us out ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Yes, I want to support you!';

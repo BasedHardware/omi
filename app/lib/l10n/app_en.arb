@@ -14877,7 +14877,7 @@
     "@onboardingRatingPromptTitle": {
         "description": "Store rating pre-prompt title shown on the onboarding setup page"
     },
-    "onboardingRatingPromptBody": "Rating us 5 stars really helps us out 🤍",
+    "onboardingRatingPromptBody": "Rating us 5 stars really helps us out ❤️",
     "@onboardingRatingPromptBody": {
         "description": "Store rating pre-prompt body"
     },

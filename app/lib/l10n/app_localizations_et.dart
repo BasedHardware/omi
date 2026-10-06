@@ -12435,7 +12435,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Kuni ootad, kas Omi kasutamine on meeldiv olnud?';
 
   @override
-  String get onboardingRatingPromptBody => '5 tärni aitavad meid tõesti palju 🤍';
+  String get onboardingRatingPromptBody => '5 tärni aitavad meid tõesti palju ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Jah, tahan teid toetada!';

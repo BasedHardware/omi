@@ -12471,7 +12471,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Medtem ko čakate, ali vam je Omi všeč?';
 
   @override
-  String get onboardingRatingPromptBody => 'Ocena s 5 zvezdicami nam res zelo pomaga 🤍';
+  String get onboardingRatingPromptBody => 'Ocena s 5 zvezdicami nam res zelo pomaga ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Ja, želim vas podpreti!';

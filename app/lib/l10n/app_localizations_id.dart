@@ -12453,7 +12453,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Sambil menunggu, apakah Omi menyenangkan digunakan?';
 
   @override
-  String get onboardingRatingPromptBody => 'Memberi kami bintang 5 sangat membantu kami 🤍';
+  String get onboardingRatingPromptBody => 'Memberi kami bintang 5 sangat membantu kami ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Ya, saya ingin mendukung kalian!';

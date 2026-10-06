@@ -12429,7 +12429,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Mens du venter, har Omi været rar at bruge?';
 
   @override
-  String get onboardingRatingPromptBody => '5 stjerner hjælper os virkelig meget 🤍';
+  String get onboardingRatingPromptBody => '5 stjerner hjælper os virkelig meget ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Ja, jeg vil gerne støtte jer!';

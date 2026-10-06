@@ -12477,7 +12477,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Terwijl je wacht: vind je Omi fijn om te gebruiken?';
 
   @override
-  String get onboardingRatingPromptBody => '5 sterren helpen ons echt enorm 🤍';
+  String get onboardingRatingPromptBody => '5 sterren helpen ons echt enorm ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Ja, ik wil jullie steunen!';

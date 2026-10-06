@@ -12484,7 +12484,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Пока вы ждёте, приятно ли вам пользоваться Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Оценка в 5 звёзд очень нам поможет 🤍';
+  String get onboardingRatingPromptBody => 'Оценка в 5 звёзд очень нам поможет ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Да, хочу вас поддержать!';

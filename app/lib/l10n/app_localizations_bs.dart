@@ -12470,7 +12470,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Dok čekaš, je li ti ugodno koristiti Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Ocjena od 5 zvjezdica nam zaista puno pomaže 🤍';
+  String get onboardingRatingPromptBody => 'Ocjena od 5 zvjezdica nam zaista puno pomaže ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Da, želim vas podržati!';

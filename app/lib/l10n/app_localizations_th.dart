@@ -12375,7 +12375,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'ระหว่างรอ Omi ใช้งานแล้วถูกใจไหม';
 
   @override
-  String get onboardingRatingPromptBody => 'การให้ 5 ดาวช่วยเราได้มากจริงๆ 🤍';
+  String get onboardingRatingPromptBody => 'การให้ 5 ดาวช่วยเราได้มากจริงๆ ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'ใช่ ฉันอยากสนับสนุนคุณ!';

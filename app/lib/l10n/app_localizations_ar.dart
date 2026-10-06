@@ -12370,7 +12370,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'بينما تنتظر، هل كان استخدام Omi ممتعًا؟';
 
   @override
-  String get onboardingRatingPromptBody => 'تقييمك لنا بخمس نجوم يساعدنا كثيرًا 🤍';
+  String get onboardingRatingPromptBody => 'تقييمك لنا بخمس نجوم يساعدنا كثيرًا ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'نعم، أريد أن أدعمكم!';

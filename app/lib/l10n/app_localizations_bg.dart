@@ -12486,7 +12486,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Докато чакате, приятно ли ви е да използвате Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Оценка от 5 звезди наистина ни помага 🤍';
+  String get onboardingRatingPromptBody => 'Оценка от 5 звезди наистина ни помага ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Да, искам да ви подкрепя!';

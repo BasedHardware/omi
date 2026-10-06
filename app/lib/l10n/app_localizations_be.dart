@@ -12473,7 +12473,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Пакуль вы чакаеце, ці прыемна вам карыстацца Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Ацэнка ў 5 зорак вельмі нам дапаможа 🤍';
+  String get onboardingRatingPromptBody => 'Ацэнка ў 5 зорак вельмі нам дапаможа ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Так, хачу вас падтрымаць!';

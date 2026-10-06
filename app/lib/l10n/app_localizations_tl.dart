@@ -12542,7 +12542,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Habang naghihintay, masarap bang gamitin ang Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Malaking tulong sa amin ang 5 stars 🤍';
+  String get onboardingRatingPromptBody => 'Malaking tulong sa amin ang 5 stars ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Oo, gusto ko kayong suportahan!';

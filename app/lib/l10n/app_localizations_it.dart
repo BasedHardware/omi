@@ -12510,7 +12510,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Mentre aspetti, ti sta piacendo usare Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Una valutazione di 5 stelle ci aiuta davvero tanto 🤍';
+  String get onboardingRatingPromptBody => 'Una valutazione di 5 stelle ci aiuta davvero tanto ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Sì, voglio supportarvi!';

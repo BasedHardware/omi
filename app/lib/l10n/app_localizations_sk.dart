@@ -12437,7 +12437,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Kým čakáte, páči sa vám používanie Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Hodnotenie 5 hviezdičiek nám naozaj veľmi pomáha 🤍';
+  String get onboardingRatingPromptBody => 'Hodnotenie 5 hviezdičiek nám naozaj veľmi pomáha ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Áno, chcem vás podporiť!';

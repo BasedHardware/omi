@@ -12350,7 +12350,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'בזמן שמחכים, נעים לכם להשתמש ב-Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'דירוג של 5 כוכבים עוזר לנו מאוד 🤍';
+  String get onboardingRatingPromptBody => 'דירוג של 5 כוכבים עוזר לנו מאוד ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'כן, אני רוצה לתמוך בכם!';

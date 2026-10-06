@@ -12436,7 +12436,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Trong lúc chờ, bạn thấy dùng Omi có thích không?';
 
   @override
-  String get onboardingRatingPromptBody => 'Đánh giá 5 sao thực sự giúp ích cho chúng tôi rất nhiều 🤍';
+  String get onboardingRatingPromptBody => 'Đánh giá 5 sao thực sự giúp ích cho chúng tôi rất nhiều ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Có, tôi muốn ủng hộ các bạn!';

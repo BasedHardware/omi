@@ -12251,7 +12251,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'お待ちの間に、Omiは使いやすいですか？';
 
   @override
-  String get onboardingRatingPromptBody => '星5つの評価は私たちの大きな励みになります 🤍';
+  String get onboardingRatingPromptBody => '星5つの評価は私たちの大きな励みになります ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'はい、応援します！';

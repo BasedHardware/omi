@@ -12463,7 +12463,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Kol laukiate, ar Omi buvo malonu naudoti?';
 
   @override
-  String get onboardingRatingPromptBody => '5 žvaigždučių įvertinimas mums labai padeda 🤍';
+  String get onboardingRatingPromptBody => '5 žvaigždučių įvertinimas mums labai padeda ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Taip, noriu jus palaikyti!';

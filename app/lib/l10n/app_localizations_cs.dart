@@ -12445,7 +12445,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Než to doběhne, líbí se vám Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Hodnocení 5 hvězdiček nám opravdu hodně pomůže 🤍';
+  String get onboardingRatingPromptBody => 'Hodnocení 5 hvězdiček nám opravdu hodně pomůže ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Ano, chci vás podpořit!';

@@ -12492,7 +12492,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'వేచి ఉన్నప్పుడు, Omi వాడటం బాగుందా?';
 
   @override
-  String get onboardingRatingPromptBody => '5 స్టార్ రేటింగ్ ఇస్తే మాకు నిజంగా చాలా సహాయం 🤍';
+  String get onboardingRatingPromptBody => '5 స్టార్ రేటింగ్ ఇస్తే మాకు నిజంగా చాలా సహాయం ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'అవును, నేను మీకు మద్దతు ఇవ్వాలనుకుంటున్నాను!';

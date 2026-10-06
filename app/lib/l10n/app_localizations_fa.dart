@@ -12439,7 +12439,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'تا آماده شدن، استفاده از Omi برایتان خوشایند بوده؟';
 
   @override
-  String get onboardingRatingPromptBody => 'امتیاز ۵ ستاره واقعاً به ما کمک می‌کند 🤍';
+  String get onboardingRatingPromptBody => 'امتیاز ۵ ستاره واقعاً به ما کمک می‌کند ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'بله، می‌خواهم از شما حمایت کنم!';

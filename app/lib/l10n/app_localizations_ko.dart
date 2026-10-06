@@ -12255,7 +12255,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingRatingPromptTitle => '기다리는 동안 Omi가 마음에 드셨나요?';
 
   @override
-  String get onboardingRatingPromptBody => '별 5개를 주시면 큰 힘이 됩니다 🤍';
+  String get onboardingRatingPromptBody => '별 5개를 주시면 큰 힘이 됩니다 ❤️';
 
   @override
   String get onboardingRatingPromptYes => '네, 응원할게요!';

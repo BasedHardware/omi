@@ -12478,7 +12478,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'ಕಾಯುತ್ತಿರುವಾಗ, Omi ಬಳಸುವುದು ಚೆನ್ನಾಗಿದೆಯೇ?';
 
   @override
-  String get onboardingRatingPromptBody => '5 ಸ್ಟಾರ್ ರೇಟಿಂಗ್ ನೀಡಿದರೆ ನಮಗೆ ತುಂಬಾ ಸಹಾಯವಾಗುತ್ತದೆ 🤍';
+  String get onboardingRatingPromptBody => '5 ಸ್ಟಾರ್ ರೇಟಿಂಗ್ ನೀಡಿದರೆ ನಮಗೆ ತುಂಬಾ ಸಹಾಯವಾಗುತ್ತದೆ ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'ಹೌದು, ನಾನು ನಿಮ್ಮನ್ನು ಬೆಂಬಲಿಸಲು ಬಯಸುತ್ತೇನೆ!';

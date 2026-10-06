@@ -12489,7 +12489,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Amíg vársz, jó élmény volt az Omi használata?';
 
   @override
-  String get onboardingRatingPromptBody => 'Az 5 csillagos értékelés nagyon sokat segít nekünk 🤍';
+  String get onboardingRatingPromptBody => 'Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Igen, szeretnék támogatni titeket!';

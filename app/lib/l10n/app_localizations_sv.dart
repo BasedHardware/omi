@@ -12446,7 +12446,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Medan du väntar, har Omi varit trevlig att använda?';
 
   @override
-  String get onboardingRatingPromptBody => '5 stjärnor hjälper oss verkligen mycket 🤍';
+  String get onboardingRatingPromptBody => '5 stjärnor hjälper oss verkligen mycket ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Ja, jag vill stötta er!';

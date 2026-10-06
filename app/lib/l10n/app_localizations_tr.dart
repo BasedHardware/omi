@@ -12453,7 +12453,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Beklerken, Omi\'yi kullanmak hoşunuza gitti mi?';
 
   @override
-  String get onboardingRatingPromptBody => '5 yıldız vermeniz bize gerçekten çok yardımcı olur 🤍';
+  String get onboardingRatingPromptBody => '5 yıldız vermeniz bize gerçekten çok yardımcı olur ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Evet, size destek olmak istiyorum!';

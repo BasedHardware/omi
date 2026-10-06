@@ -12230,7 +12230,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingRatingPromptTitle => '等待的时候，Omi 用起来还顺手吗？';
 
   @override
-  String get onboardingRatingPromptBody => '给我们 5 星好评对我们真的很有帮助 🤍';
+  String get onboardingRatingPromptBody => '给我们 5 星好评对我们真的很有帮助 ❤️';
 
   @override
   String get onboardingRatingPromptYes => '好的，我想支持你们！';

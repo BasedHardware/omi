@@ -12469,7 +12469,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onboardingRatingPromptTitle => 'Поки чекаєте, вам приємно користуватися Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Оцінка в 5 зірок дуже нам допоможе 🤍';
+  String get onboardingRatingPromptBody => 'Оцінка в 5 зірок дуже нам допоможе ❤️';
 
   @override
   String get onboardingRatingPromptYes => 'Так, хочу вас підтримати!';
