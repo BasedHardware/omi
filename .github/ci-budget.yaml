@@ -2135,6 +2135,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "mobile_daily_train.yml/dispatch": {
+      "budget_p50_minutes": 5,
+      "display_name": "dispatch",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "mobile_internal_build.yml/dispatch": {
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
@@ -4706,6 +4724,27 @@
           }
         ],
         "workflow_dispatch": ""
+      }
+    },
+    "mobile_daily_train.yml": {
+      "name": "Mobile daily train",
+      "owner": "CI maintainers",
+      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row.",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "0 14 * * *"
+          }
+        ],
+        "workflow_dispatch": {
+          "inputs": {
+            "dry_run": {
+              "default": "false",
+              "description": "Read store state and print the plan without submitting or drafting",
+              "type": "boolean"
+            }
+          }
+        }
       }
     },
     "mobile_internal_build.yml": {

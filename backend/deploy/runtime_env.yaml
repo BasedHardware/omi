@@ -2846,6 +2846,9 @@ environments:
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout
+          OMI_SHAPED_AGENT_MODE:
+            value: cohort
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -3080,6 +3083,9 @@ environments:
             category: rollout
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
+            category: rollout
+          OMI_SHAPED_AGENT_MODE:
+            value: cohort
             category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -3554,6 +3560,9 @@ environments:
               category: rollout
             SPEAKER_MATCH_SCORES_ENABLED:
               value: 'true'
+              category: rollout
+            OMI_SHAPED_AGENT_MODE:
+              value: cohort
               category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
