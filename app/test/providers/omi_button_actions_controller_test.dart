@@ -79,6 +79,18 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
   }
 }
 
+class _NoSpeechCaptureExternalActions extends NoopCaptureExternalActions {
+  @override
+  Future<void> sendVoiceMessageStreamToServer(
+    List<List<int>> data, {
+    required void Function() onFirstChunkRecived,
+    required Future<void> Function() onNoSpeech,
+    required BleAudioCodec codec,
+    required bool playResponseAudio,
+  }) =>
+      onNoSpeech();
+}
+
 BtDevice _device(DeviceType type) => BtDevice(name: 'test-device', id: 'test-id', type: type, rssi: -40);
 
 void main() {
@@ -126,10 +138,58 @@ void main() {
     expect(onboarding.voiceSessionActive, isTrue);
     expect(provider.hasVoiceCommandSessionForTesting, isTrue);
 
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
     provider.handleButtonEventForTesting('test-id', 1);
     expect(onboarding.questionSent, isTrue);
     expect(onboarding.voiceSessionActive, isFalse);
 
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('a tutorial question with no audio goes back to the press prompt (#20789)', () {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(externalActions: actions, speakerHaptic: (_, __) async => true);
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    // Press twice with nothing said in between: capture drops the empty question.
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.handleButtonEventForTesting('test-id', 1);
+
+    expect(actions.sendCount, 0);
+    expect(onboarding.questionSent, isFalse);
+    expect(onboarding.questionNotHeard, isTrue);
+
+    // The next press starts a new question and clears the hint.
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(onboarding.voiceSessionActive, isTrue);
+    expect(onboarding.questionNotHeard, isFalse);
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('a tutorial question the server heard no speech in goes back to the press prompt (#20789)', () async {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: _NoSpeechCaptureExternalActions(),
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(onboarding.questionSent, isTrue);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(onboarding.questionSent, isFalse);
+    expect(onboarding.questionNotHeard, isTrue);
     provider.dispose();
     onboarding.dispose();
   });

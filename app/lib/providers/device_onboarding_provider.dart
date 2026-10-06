@@ -29,6 +29,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool voiceSessionActive = false;
   bool questionSent = false;
   String? aiResponse;
+  bool questionNotHeard = false;
 
   // Step 2: Voice reply preference. Null until the step is visited so a user
   // who skips the tutorial before this point keeps their existing preference.
@@ -59,6 +60,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     voiceSessionActive = false;
     questionSent = false;
     aiResponse = null;
+    questionNotHeard = false;
     selectedVoiceResponseMode = null;
     powerCycleState = PowerCycleSubState.waitingForOff;
     selectedDoubleTapAction = -1;
@@ -140,6 +142,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
     if (!voiceSessionActive) {
       voiceSessionActive = true;
+      questionNotHeard = false;
       notifyListeners();
     } else {
       // Second press — question is being sent
@@ -147,6 +150,15 @@ class DeviceOnboardingProvider extends ChangeNotifier {
       questionSent = true;
       notifyListeners();
     }
+  }
+
+  /// Capture sent nothing (no audio) or the server heard no speech: back to the
+  /// press prompt with a retry hint instead of "Processing…" forever (#20789).
+  void onQuestionNotHeard() {
+    if (!isOnboardingActive || currentStep != askQuestionStep || !questionSent || aiResponse != null) return;
+    questionSent = false;
+    questionNotHeard = true;
+    notifyListeners();
   }
 
   void onVoiceResponseReceived(String response) {
