@@ -3,7 +3,7 @@ import importlib.machinery
 import sys
 import types
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -1428,7 +1428,7 @@ def test_background_wipe_parks_transient_billing_failure_before_auth(monkeypatch
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
 
 
-def test_background_wipe_skips_stripe_without_stored_subscription_id(monkeypatch):
+def test_background_wipe_skips_stripe_cancel_without_plan_or_app_subscription_ids(monkeypatch):
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setattr(
         account_deletion.users_db,
@@ -1439,9 +1439,66 @@ def test_background_wipe_skips_stripe_without_stored_subscription_id(monkeypatch
     monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription_for_account_deletion', cancel)
     assert account_deletion.background_wipe_user_data('uid1') is True
     cancel.assert_not_called()
-    account_deletion.stripe_utils.find_billable_app_subscription_ids.assert_not_called()
+    account_deletion.stripe_utils.find_billable_app_subscription_ids.assert_called_once_with('uid1')
     account_deletion.auth.delete_account.assert_called_once_with('uid1')
     account_deletion.users_db.get_user_subscription.assert_not_called()
+
+
+@pytest.mark.parametrize('plan_id', [None, 'sub_plan', 'sub_app_1'])
+def test_background_wipe_immediately_cancels_apps_before_plan_without_duplicate_cancel(monkeypatch, plan_id):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'get_existing_user_subscription',
+        MagicMock(return_value=SimpleNamespace(stripe_subscription_id=plan_id)),
+    )
+    monkeypatch.setattr(
+        account_deletion.stripe_utils,
+        'find_billable_app_subscription_ids',
+        MagicMock(return_value=['sub_app_1', 'sub_app_2']),
+    )
+    cancel = MagicMock()
+    period_end_cancel = MagicMock()
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription_for_account_deletion', cancel)
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', period_end_cancel)
+
+    assert account_deletion.background_wipe_user_data('uid1') is True
+
+    expected = [call('sub_app_1'), call('sub_app_2')]
+    if plan_id == 'sub_plan':
+        expected.append(call('sub_plan'))
+    assert cancel.call_args_list == expected
+    period_end_cancel.assert_not_called()
+    account_deletion.stripe_utils.find_billable_app_subscription_ids.assert_called_once_with('uid1')
+    account_deletion.users_db.get_user_subscription.assert_not_called()
+    account_deletion.auth.delete_account.assert_called_once_with('uid1')
+
+
+@pytest.mark.parametrize('failure_at', ['search', 'app_cancel'])
+def test_background_wipe_parks_app_billing_transport_errors_without_deleting_auth(monkeypatch, failure_at):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(account_deletion, 'sanitize', lambda value: value)
+    error = ConnectionError('Stripe transport unavailable')
+    search = MagicMock(return_value=['sub_app_1'])
+    cancel = MagicMock()
+    if failure_at == 'search':
+        search.side_effect = error
+    else:
+        cancel.side_effect = error
+    monkeypatch.setattr(account_deletion.stripe_utils, 'find_billable_app_subscription_ids', search)
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription_for_account_deletion', cancel)
+
+    assert account_deletion.background_wipe_user_data('uid1') is False
+
+    account_deletion.auth.delete_account.assert_not_called()
+    account_deletion.users_db.delete_user_data.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once_with(
+        'uid1', None if failure_at == 'search' else 'sub_app_1', str(error)
+    )
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
+    account_deletion.users_db.get_user_subscription.assert_not_called()
+    if failure_at == 'search':
+        cancel.assert_not_called()
 
 
 def test_billing_failure_on_retry_after_auth_deletion_stays_fenced(monkeypatch):

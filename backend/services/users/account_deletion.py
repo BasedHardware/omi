@@ -575,8 +575,11 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
     subscription_id = None
     try:
         sub = users_db.get_existing_user_subscription(uid)
+        app_subscription_ids = stripe_utils.find_billable_app_subscription_ids(uid)
+        for subscription_id in app_subscription_ids:
+            stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
         subscription_id = getattr(sub, 'stripe_subscription_id', None) if sub else None
-        if subscription_id:
+        if subscription_id and subscription_id not in app_subscription_ids:
             stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
     except Exception as error:
         raise DeletionBillingError(subscription_id, error) from error
