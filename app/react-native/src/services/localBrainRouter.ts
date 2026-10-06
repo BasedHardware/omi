@@ -32,6 +32,20 @@
 import { interpretCommand, minutesFrom, type AgentAction } from './localAgent'
 
 /** The routing decision, which is all this module owns. */
+/**
+ * The native router's non-answer. Not a Route: it means "out of domain", which is
+ * a decline, not a fourth destination.
+ */
+export const NO_ACTION = 'no_action'
+
+/**
+ * What a provider may return: a real destination, or the non-answer.
+ * `no_action` is deliberately outside `Route` -- it is not a fourth destination,
+ * it is a decline, and keeping it out of `Route` is what stops it being treated
+ * as one.
+ */
+export type RouterRoute = Route | typeof NO_ACTION
+
 export type Route = 'create_task' | 'create_reminder' | 'chat'
 
 /**
@@ -41,7 +55,7 @@ export type Route = 'create_task' | 'create_reminder' | 'chat'
  */
 export interface RouteProvider {
   /** Resolves the utterance to one of `Route`, or null if it declined. */
-  route(text: string): Promise<{ route: Route; margin: number; declined: boolean } | null>
+  route(text: string): Promise<{ route: RouterRoute; margin: number; declined: boolean } | null>
 }
 
 export type RouteOutcome =
@@ -70,7 +84,7 @@ export async function routeWithProvider(
 
   if (!provider) return fallback('no provider')
 
-  let routed: { route: Route; margin: number; declined: boolean } | null = null
+  let routed: { route: RouterRoute; margin: number; declined: boolean } | null = null
   try {
     routed = await provider.route(text)
   } catch {
@@ -78,6 +92,17 @@ export async function routeWithProvider(
   }
   if (!routed) return fallback('provider returned null')
   if (routed.declined) return fallback(`declined (margin ${routed.margin.toFixed(3)})`)
+
+  // no_action is the router's own "this is not one of my routes" answer, and it
+  // arrives with declined=false when the router was confident: measured on an
+  // SM-A145F, "what is the weather" returned {route: 'no_action', margin: 0.93}.
+  // A high margin on no_action means "confidently out of domain", not "committed
+  // to task-or-reminder", so it must fall back rather than fall through to slot
+  // filling. Checking the flag alone let the most confident correct answer --
+  // the abstention -- be treated as a commitment.
+  if (routed.route === NO_ACTION) {
+    return fallback(`no_action (margin ${routed.margin.toFixed(3)})`)
+  }
 
   // Slot filling is the regex layer's job, not the router's.
   const heuristic = interpretCommand(text)

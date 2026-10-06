@@ -1,4 +1,5 @@
 import {
+  NO_ACTION,
   routeWithProvider,
   ROUTE_PROTOTYPES,
   type Route,
@@ -90,5 +91,22 @@ describe('prototype bank', () => {
     // taught it "don't ..." the two guards would disagree.
     const all = Object.values(ROUTE_PROTOTYPES).flat().join(' ').toLowerCase()
     expect(all).not.toMatch(/don'?t|do not|never/)
+  })
+
+  // Found on device, not by reasoning: the native router returned
+  // {route: 'no_action', margin: 0.93, declined: false} for "what is the weather".
+  // A high margin on no_action is a confident abstention; treating it as a
+  // commitment sent the utterance into slot filling instead of the heuristic.
+  it('treats a confident no_action as a decline, not a route', async () => {
+    const out = await routeWithProvider(
+      'what is the weather',
+      fixed(NO_ACTION as unknown as Route, 0.93)
+    )
+    // Narrowed first: `reason` only exists on the heuristic variant of the union,
+    // so reading it without the check does not type-check.
+    expect(out.source).toBe('heuristic')
+    if (out.source !== 'heuristic') throw new Error('expected heuristic')
+    expect(out.reason).toMatch(/no_action/)
+    expect(out.decision.kind).toBe('chat')
   })
 })

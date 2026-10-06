@@ -171,6 +171,17 @@ class IntentRouter(
                 else "ambiguous between ${top.key} and ${ranked[1].key}"
             return Decision(top.key, margin, true, false, ranked[1].key, ms, why)
         }
+
+        // no_action winning outright is a decline, whatever the margin says.
+        // Measured on an SM-A145F: "what is the weather" scored no_action 0.93
+        // over the runner-up, so it cleared ABSTAIN_MARGIN and fell through to the
+        // line below with declined=false -- i.e. the router's most confident correct
+        // answer, the abstention, was reported to JS as a route commitment.
+        if (top.key == NO_ACTION) {
+            return Decision(NO_ACTION, margin, true, false, ranked[1].key, ms,
+                "out of domain")
+        }
+
         return Decision(top.key, margin, false, false, ranked[1].key, ms, "")
     }
 

@@ -10,7 +10,7 @@ import {
 // Imported lazily-by-module rather than at the top so the app still renders when
 // the native module is absent (Expo Go, tests, iOS). Both wrappers already return
 // null / false in that state; this only adds the "why" to the UI.
-import { isLocalBrainAvailable } from '../../modules/local-brain';
+import { isLocalBrainAvailable, warmUp } from '../../modules/local-brain';
 import {
   isCallDetectionAvailable,
   isSupportedPlatform,
@@ -69,12 +69,31 @@ export function LocalBrainBar({
   const theme = useTheme();
   const styles = makeStyles(theme);
 
-  const [state] = useState<BrainState>(() =>
+  const [state, setState] = useState<BrainState>(() =>
     isLocalBrainAvailable ? 'not-loaded' : 'absent'
   );
   const [canAnswer, setCanAnswer] = useState(false);
   const [ringing, setRinging] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+
+  // Pay the ~19.5 s model load now, while nobody is waiting, rather than inside
+  // the user's first command where it is indistinguishable from a hang. The label
+  // reflects the real outcome: a failed warm-up leaves the router declining, and
+  // saying "ready" there would be a lie.
+  useEffect(() => {
+    if (!isLocalBrainAvailable) return
+    let cancelled = false
+    warmUp()
+      .then((ok) => {
+        if (!cancelled) setState(ok ? 'ready' : 'not-loaded')
+      })
+      .catch(() => {
+        if (!cancelled) setState('not-loaded')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Permission state is informational: detection and answering are separate
   // grants, and the UI should say which one is missing rather than implying

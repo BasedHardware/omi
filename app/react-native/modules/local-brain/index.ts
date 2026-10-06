@@ -19,6 +19,7 @@ interface LocalBrainNative {
     reason: string
   }>
   isReady(): Promise<boolean>
+  warmUp(): Promise<boolean>
 }
 
 // requireNativeModule throws when the module is absent, so probe first. This is
@@ -43,6 +44,25 @@ export const isLocalBrainAvailable = native != null
  * in TypeScript. That is why the banks cross the bridge on every call path rather
  * than being read natively once.
  */
+/**
+ * Loads the model without routing anything.
+ *
+ * The first route on an SM-A145F costs ~19.5 s against ~600 ms steady state, so
+ * this exists to move that cost to a moment where nobody is waiting. Safe to call
+ * repeatedly and safe to call with no router in hand: returns false rather than
+ * throwing when the model is missing, leaving every route to decline to the
+ * heuristic.
+ */
+export async function warmUp(): Promise<boolean> {
+  if (!native) return false
+  try {
+    await native.warmUp()
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function createNativeRouter(
   prototypes: Record<Route, string[]>,
   outOfDomain: string[]
