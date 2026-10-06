@@ -160,6 +160,8 @@ class FleetHealth(CostHealthMixin):
         self._interests: dict[tuple[str, str], float] = {}
         self._cached_scores: dict[tuple[str, str], ProviderState] = {}
         self._cached_benches: dict[str, tuple[str, float]] = {}
+        # Retain endpoint evidence even when account state wins or OFF skips it.
+        self._cached_selection_benches: dict[str, tuple[str, float]] = {}
         self._cache_at: float | None = None
         self._probe_ready: dict[str, float] = {}
         self._probe_pending: set[str] = set()
@@ -193,6 +195,7 @@ class FleetHealth(CostHealthMixin):
             self._interests.clear()
             self._cached_scores.clear()
             self._cached_benches.clear()
+            self._cached_selection_benches.clear()
             self._cache_at = None
             self._probe_ready.clear()
             self._probe_pending.clear()
@@ -261,7 +264,7 @@ class FleetHealth(CostHealthMixin):
         family = scope_family(scope)
         account_until = 0.0
         selection_until = 0.0
-        for benches in (self._benches, self._cached_benches):
+        for benches in (self._benches, self._cached_benches, self._cached_selection_benches):
             kind, until = benches.get(scope, ('', 0.0))
             if kind == 'account':
                 account_until = max(account_until, until)
@@ -685,6 +688,7 @@ class FleetHealth(CostHealthMixin):
                         (successes + 1) / (successes + failures + 2), successes + failures
                     )
             benches: dict[str, tuple[str, float]] = {}
+            selections: dict[str, tuple[str, float]] = {}
             for bench_identity in identities:
                 if routing_off:
                     raw_endpoint, raw_account = None, values[cursor]
@@ -699,6 +703,8 @@ class FleetHealth(CostHealthMixin):
                         parsed[account_flag] = state[0], float(state[1])
                 account_bench = parsed.get(True)
                 selection_bench = parsed.get(False)
+                if selection_bench is not None:
+                    selections[bench_identity] = selection_bench
                 if account_bench is not None and account_bench[1] > now:
                     benches[bench_identity] = account_bench
                 elif selection_bench is not None:
@@ -710,6 +716,8 @@ class FleetHealth(CostHealthMixin):
                     return
                 self._cached_scores = scores
                 self._cached_benches = benches
+                if not routing_off:
+                    self._cached_selection_benches = selections
                 self._cache_at = self._clock()
                 if routing_off:
                     # Off mode loads shared benches only to enforce account
