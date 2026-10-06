@@ -114,22 +114,25 @@ export default function DevOmiDeviceScreen() {
 
   const startAudio = useCallback(async () => {
     try {
-      const started = await omiBle.startAudio();
-      say(started ? 'notify enabled' : 'CCCD write FAILED');
-      if (!started) return;
+      const enabled = await omiBle.startAudio();
+      if (!enabled) {
+        say(`CCCD write FAILED: ${omiBle.startAudioError() ?? 'unknown'}`);
+        return;
+      }
+      say('CCCD written (notify)');
       omiBle.onAudio(
         (bytes) => {
           setAudioChunks((c) => c + 1);
           setAudioBytes((b) => b + bytes.length);
         },
-        (e) => say(`audio error: ${String(e)}`)
+        (e) => say(`audio error: ${e instanceof Error ? e.message : String(e)}`)
       );
       setListening(true);
-      say(`streaming @ ${SAMPLE_RATE} Hz`);
+      say(`subscribed, codec ${identity?.codec ?? '?'} @ ${SAMPLE_RATE} Hz`);
     } catch (e) {
       say(`startAudio failed: ${String(e)}`);
     }
-  }, [say]);
+  }, [say, identity?.codec]);
 
   const stopAudio = useCallback(() => {
     omiBle.stopAudio();

@@ -85,7 +85,7 @@ export const OMI = {
   serialNumber: '00002a25-0000-1000-8000-00805f9b34fb',
 } as const;
 
-/** Client Characteristic Configuration descriptor: the write that turns on notifications. */
+/** Client Characteristic Configuration descriptor -- the write that turns on notifications. */
 const CCCD_UUID = '00002902-0000-1000-8000-00805f9b34fb';
 
 /** Codec ids as written by the firmware. Mirrors the Flutter switch. */
@@ -124,6 +124,7 @@ export class OmiBle {
   private manager: BleManager | null = null;
   private device: Device | null = null;
   private scanning = false;
+  private lastAudioError: string | null = null;
   private batterySub: Subscription | null = null;
   private audioSub: Subscription | null = null;
 
@@ -328,6 +329,7 @@ export class OmiBle {
       OMI.audioDataStream,
       (error, chunk) => {
         if (error) {
+          this.lastAudioError = error.message || String(error);
           onError?.(error);
           return;
         }
@@ -337,17 +339,45 @@ export class OmiBle {
     );
   }
 
+  /**
+   * Enables audio notifications by writing the Client Characteristic
+   * Configuration descriptor.
+   *
+   * This write is required, and the library does not make it for us: on Android
+   * monitorCharacteristicForService calls
+   * BluetoothGatt.setCharacteristicNotification(true) -- which only flips the
+   * *local* flag -- and never writes 0x2902. Verified in logcat against a real Omi
+   * CV 1: the setCharacteristicNotification line appears and no descriptor write
+   * follows, so the device stays silent.
+   *
+   * The value is base64 because that is what this API takes. My first attempt
+   * passed the literal string '0100', which is the ASCII characters '0','1','0',
+   * '0' -- four bytes of 0x30 0x31 0x30 0x30 rather than the two bytes
+   * 0x01 0x00 the firmware expects. toBase64 avoids hand-writing that.
+   *
+   *   0x0100 = notifications only
+   *   0x0200 = indications only
+   */
   async startAudio(): Promise<boolean> {
     const d = this.requireDevice();
     try {
-      // Indicate + notify. Without the CCCD write the device will not stream,
-      // and it fails silently rather than reporting an error. 0x2902 is the
-      // Client Characteristic Configuration descriptor.
-      await d.writeDescriptorForService(OMI.service, OMI.audioDataStream, CCCD_UUID, '0100');
+      await d.writeDescriptorForService(
+        OMI.service,
+        OMI.audioDataStream,
+        CCCD_UUID,
+        toBase64(new Uint8Array([0x01, 0x00]))
+      );
+      this.lastAudioError = null;
       return true;
-    } catch {
+    } catch (e) {
+      this.lastAudioError = e instanceof Error ? e.message : String(e);
       return false;
     }
+  }
+
+  /** The real reason startAudio failed, rather than a flattened boolean. */
+  startAudioError(): string | null {
+    return this.lastAudioError;
   }
 
   stopAudio(): void {
