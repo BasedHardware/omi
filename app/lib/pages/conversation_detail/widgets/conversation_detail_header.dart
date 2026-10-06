@@ -27,18 +27,19 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// The conversation page's header (v3), shared by both tabs so switching between Summary and
 /// Transcript never loses the title or the facts.
 ///
-/// The title in large type (tap to rename), then outlined chips: when it started and how long it
-/// ran with its folder (only a filed conversation shows one; Move to Folder is in the ⋯ menu), on
-/// one line, and below them — when they apply — who spoke and the event's recordings. Visibility
-/// lives in the ⋯ menu ([ConversationVisibilitySheet]).
+/// The title in large type (tap to rename), then one line of outlined chips: when it started and how
+/// long it ran, and — when they apply — its folder (only a filed conversation shows one; Move to
+/// Folder is in the ⋯ menu), who spoke and the event's recordings. Visibility lives in the ⋯ menu
+/// ([ConversationVisibilitySheet]).
 class ConversationDetailHeader extends StatelessWidget {
   const ConversationDetailHeader({super.key, required this.onOpenRecordings});
 
   /// Opens the recordings sheet for an event several devices recorded.
   final void Function(List<CaptureRecording> recordings) onOpenRecordings;
 
-  /// The most of the when/folder row a folder name may take before it is cut short.
-  static const double folderShare = 0.45;
+  /// The most of the chip line a folder name, or the names of who spoke, may take before it is cut
+  /// short.
+  static const double labelShare = 0.45;
 
   @override
   Widget build(BuildContext context) {
@@ -65,39 +66,30 @@ class ConversationDetailHeader extends StatelessWidget {
                 summary: (first, others) => context.l10n.participantsSummary(first, others),
                 uncountedSummary: context.l10n.participantsSummaryUncounted,
               );
-              final more = [
-                if (peopleLabel != null)
-                  _peopleChip(
-                    context,
-                    conversation,
-                    peopleLabel,
-                    ConversationDetailMeta.avatars(people.named, people.unnamed, uncounted: people.uncounted),
-                  ),
-                if (recordings.isNotEmpty)
-                  CaptureRecordingsChip(
-                    recordings: recordings,
-                    onTap: () {
-                      trackConversationAction(
-                        ConversationActionAction.recordingsOpen,
-                        ConversationActionSurface.detailBody,
-                      );
-                      onOpenRecordings(recordings);
-                    },
-                  ),
-              ];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _OneLineChips(
-                    when: _whenChip(context, conversation),
-                    // Only a filed conversation shows its folder; Move to Folder is in the ⋯ menu.
-                    folder: folder == null ? null : _FolderChip(conversation: conversation, folder: folder),
-                  ),
-                  if (more.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: more),
-                  ],
-                ],
+              return _ChipLine(
+                when: _whenChip(context, conversation),
+                // Only a filed conversation shows its folder; Move to Folder is in the ⋯ menu.
+                folder: folder == null ? null : _FolderChip(conversation: conversation, folder: folder),
+                people: peopleLabel == null
+                    ? null
+                    : _peopleChip(
+                        context,
+                        conversation,
+                        peopleLabel,
+                        ConversationDetailMeta.avatars(people.named, people.unnamed, uncounted: people.uncounted),
+                      ),
+                recordings: recordings.isEmpty
+                    ? null
+                    : CaptureRecordingsChip(
+                        recordings: recordings,
+                        onTap: () {
+                          trackConversationAction(
+                            ConversationActionAction.recordingsOpen,
+                            ConversationActionSurface.detailBody,
+                          );
+                          onOpenRecordings(recordings);
+                        },
+                      ),
               );
             },
           ),
@@ -194,32 +186,38 @@ class ConversationDetailHeader extends StatelessWidget {
   }
 }
 
-/// When it started and the folder, always on one line: a long folder name ends in an ellipsis,
-/// and if the pair still does not fit (large text on a small phone) both shrink together.
-class _OneLineChips extends StatelessWidget {
-  const _OneLineChips({required this.when, this.folder});
+/// The header's chips, always on one line: a long folder name or list of people ends in an
+/// ellipsis, and if the line still does not fit (large text on a small phone) every chip shrinks
+/// together.
+class _ChipLine extends StatelessWidget {
+  const _ChipLine({required this.when, this.folder, this.people, this.recordings});
 
   final Widget when;
   final Widget? folder;
+  final Widget? people;
+  final Widget? recordings;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
+        Widget capped(Widget chip, double share) =>
+            ConstrainedBox(constraints: BoxConstraints(maxWidth: width * share), child: chip);
+        final chips = [
+          capped(when, 1),
+          if (folder case final folder?) capped(folder, ConversationDetailHeader.labelShare),
+          if (people case final people?) capped(people, ConversationDetailHeader.labelShare),
+          if (recordings case final recordings?) recordings,
+        ];
         return FittedBox(
-          key: const Key('conversation_when_folder_row'),
+          key: const Key('conversation_chip_line'),
           fit: BoxFit.scaleDown,
           alignment: AlignmentDirectional.centerStart,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ConstrainedBox(constraints: BoxConstraints(maxWidth: width), child: when),
-              if (folder != null) ...[
-                const SizedBox(width: 8),
-                ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: width * ConversationDetailHeader.folderShare), child: folder),
-              ],
+              for (var i = 0; i < chips.length; i++) ...[if (i > 0) const SizedBox(width: 8), chips[i]],
             ],
           ),
         );

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_header.dart';
@@ -14,7 +15,13 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 void main() {
-  Future<void> pumpHeader(WidgetTester tester, {required double width, double textScale = 1, Folder? folder}) async {
+  Future<void> pumpHeader(
+    WidgetTester tester, {
+    required double width,
+    double textScale = 1,
+    Folder? folder,
+    bool youSpoke = false,
+  }) async {
     tester.view.physicalSize = Size(width, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -26,6 +33,19 @@ void main() {
       finishedAt: DateTime(2026, 9, 28, 19, 52, 42),
       structured: Structured('A title', ''),
       folderId: folder?.id,
+      transcriptSegments: [
+        if (youSpoke)
+          TranscriptSegment(
+            id: 's1',
+            text: 'Hello',
+            speaker: 'SPEAKER_00',
+            isUser: true,
+            personId: null,
+            start: 0,
+            end: 2,
+            translations: [],
+          ),
+      ],
     );
     final detail = ConversationDetailProvider()
       ..selectedDate = conversationLocalDayKey(conversation.createdAt)
@@ -58,12 +78,18 @@ void main() {
     await tester.pump();
   }
 
+  /// Every chip shown sits on the time's line, after the one before it, inside the page gutter.
   void expectOneLine(WidgetTester tester, double width) {
-    final when = tester.getRect(find.byKey(const Key('conversation_when')));
-    final folder = tester.getRect(find.byKey(const Key('conversation_folder')));
-    expect(folder.center.dy, closeTo(when.center.dy, 0.5), reason: 'the folder sits beside the time, never below');
-    expect(folder.left, greaterThan(when.right));
-    expect(folder.right, lessThanOrEqualTo(width - OmiSpacing.md + 0.5), reason: 'inside the page gutter');
+    final rects = [
+      for (final key in ['conversation_when', 'conversation_folder', 'conversation_people'])
+        if (find.byKey(Key(key)).evaluate().isNotEmpty) tester.getRect(find.byKey(Key(key))),
+    ];
+    expect(rects.length, greaterThan(1), reason: 'a line of chips to check');
+    for (var i = 1; i < rects.length; i++) {
+      expect(rects[i].center.dy, closeTo(rects[0].center.dy, 0.5), reason: 'beside the time, never below');
+      expect(rects[i].left, greaterThan(rects[i - 1].right));
+    }
+    expect(rects.last.right, lessThanOrEqualTo(width - OmiSpacing.md + 0.5), reason: 'inside the page gutter');
     expect(tester.takeException(), isNull);
   }
 
@@ -91,6 +117,17 @@ void main() {
     expect(tester.getRect(when).width, lessThan(tester.getSize(when).width), reason: 'the pair shrank to fit');
   });
 
+  testWidgets('who spoke shares the line with the time and the folder', (tester) async {
+    await pumpHeader(tester, width: 1000, folder: workFolder(), youSpoke: true);
+    expect(find.byKey(const Key('conversation_people')), findsOneWidget);
+    expectOneLine(tester, 1000);
+  });
+
+  testWidgets('with large text on a small phone, who spoke stays on the line too', (tester) async {
+    await pumpHeader(tester, width: 375, textScale: 1.35, folder: workFolder(), youSpoke: true);
+    expectOneLine(tester, 375);
+  });
+
   testWidgets('when the pair fits, nothing shrinks', (tester) async {
     // Test text is Ahem, a square per glyph, so "fits" needs more room than SF Pro would.
     await pumpHeader(tester, width: 1000, folder: workFolder());
@@ -114,8 +151,8 @@ void main() {
     );
     await pumpHeader(tester, width: 375, folder: folder);
     expectOneLine(tester, 375);
-    // The chip stops at its share of the row (the header's gutters, then the folder's share)...
-    const cap = (375 - 2 * OmiSpacing.md) * ConversationDetailHeader.folderShare;
+    // The chip stops at its share of the line (the header's gutters, then the folder's share)...
+    const cap = (375 - 2 * OmiSpacing.md) * ConversationDetailHeader.labelShare;
     expect(tester.getSize(find.byKey(const Key('conversation_folder'))).width, closeTo(cap, 0.5));
     // ...and its label is cut there with an ellipsis, not clipped.
     final label = tester.renderObject<RenderParagraph>(
