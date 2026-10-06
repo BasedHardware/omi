@@ -648,3 +648,49 @@ __all__ = [
     'looks_like_ai_agent_name',
     'normalize_meeting_participants',
 ]
+
+
+def bind_speakers_with_roster(
+    speaker_names: dict[int, Optional[str]],
+    roster: MeetingRoster,
+    desktop_meeting_capture: bool,
+) -> None:
+    """Mutate ``speaker_names`` per the roster binding rules.
+
+    On a desktop meeting capture the remote channel is mixed audio: when more
+    than one remote participant could share it, every remote-bound cluster is
+    demoted to ``?`` first and no binding runs — the channel can carry several
+    people, so any remote attribution would be a guess.
+
+    Otherwise a cluster earns a name only under the strict guard: exactly one
+    unresolved cluster AND exactly one unbound named non-owner human AND no AI
+    agent and no nameless human on the roster (either could be the cluster's
+    true identity).
+
+    A silent recorder (a note-taking bot: present on the call, never a voice)
+    is not a candidate identity for any cluster, so it neither mixes the remote
+    channel nor blocks binding. Every other agent does both.
+    """
+    remote = [entry for entry in roster.entries if entry.kind != 'owner' and not is_silent_recorder(entry)]
+    if desktop_meeting_capture and len(remote) > 1:
+        owner_name = next(
+            (entry.display_name for entry in roster.entries if entry.kind == 'owner' and entry.display_name),
+            None,
+        )
+        owner_label = owner_name.casefold() if owner_name else ''
+        remote_names = {entry.display_name.casefold() for entry in remote if entry.display_name}
+        for key, name in list(speaker_names.items()):
+            if name and name.casefold() != owner_label and name.casefold() in remote_names:
+                speaker_names[key] = None
+        return
+    bound_names = {name.casefold() for name in speaker_names.values() if name}
+    unresolved_keys = [key for key, name in speaker_names.items() if not name]
+    unbound_named_humans = [
+        entry
+        for entry in remote
+        if entry.kind == 'human' and entry.display_name and entry.display_name.casefold() not in bound_names
+    ]
+    has_ai = any(entry.kind == 'ai_agent' for entry in remote)
+    has_nameless_human = any(entry.kind == 'human' and not entry.display_name for entry in remote)
+    if len(unresolved_keys) == 1 and len(unbound_named_humans) == 1 and not has_ai and not has_nameless_human:
+        speaker_names[unresolved_keys[0]] = unbound_named_humans[0].display_name

@@ -26,6 +26,8 @@ from models.conversation_enums import (
 )
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
+from models.note_claims import compact_claim_projection, current_note_claims
+from pydantic import field_serializer
 from models.other import Person
 from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
@@ -454,6 +456,14 @@ class Conversation(BaseModel):
     uses_custom_stt: bool = False
 
     structured: Structured
+
+    @field_serializer('structured', mode='wrap')
+    def _serialize_current_note_claims(self, structured, handler):
+        data = handler(structured)
+        if isinstance(data, dict) and isinstance(data.get('note_claims'), list):
+            data['note_claims'] = compact_claim_projection(current_note_claims(data))
+        return data
+
     # Untrusted client-authored display projection. Sibling of structured, never
     # inside it or external_data. Display only — never an input to intelligence.
     client_processing: Optional[ClientProcessing] = None

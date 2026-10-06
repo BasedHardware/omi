@@ -55,6 +55,23 @@ SIDE NOTES AND BACKGROUND
 - Prior-meeting links and goal relevance go ONLY in insights, never in sections or overview. Insights are private: at most four, each at most 30 words, each grounded in supplied background context. An insight must be specific and useful to act on (an open item from a prior meeting with this person, a concrete link between what was said and a named goal or fact); never restate a goal generically or say a topic "aligns with" a goal. Return [] when nothing specific qualifies or no background context exists.'''
 
 
+# Shared person rules only: keep the legacy rich prompt bytes unchanged.
+RICH_PERSON_RULES = '\n'.join(
+    line.split(' Set meeting_type only')[0]
+    for line in _RICH_MEETING_RULES.splitlines()
+    if line.startswith(
+        (
+            "- A person's",
+            '- Refer to non-owner',
+            "- Set a participant's",
+            '- Fill participants',
+            '- A request the account owner',
+            "- When the transcript makes an action",
+        )
+    )
+)
+
+
 def rich_static_instructions(format_instructions: str, legacy_static: Callable[[str], str]) -> str:
     base = legacy_static(format_instructions)
     # Rewrites anchor on exact legacy wording. If that wording drifts, keep producing a
@@ -123,7 +140,7 @@ def rich_volatile_instructions(
     return text
 
 
-def screen_frames_message(frames: Sequence[NotesFrameImage]) -> dict[str, Any]:
+def screen_frames_message(frames: Sequence[NotesFrameImage], *, episode_mode: bool = False) -> dict[str, Any]:
     """The approved call screenshots as one user message: a caption line, then image parts.
 
     Every frame must reach the provider as an ``image_url`` part; a gateway or
@@ -140,7 +157,10 @@ def screen_frames_message(frames: Sequence[NotesFrameImage]) -> dict[str, Any]:
             ),
         }
     ]
-    content.extend({'type': 'image_url', 'image_url': {'url': frame.data_url}} for frame in frames)
+    for frame in frames:
+        if episode_mode:
+            content.append({'type': 'text', 'text': f'Evidence screen_frame:{frame.frame_id} at {frame.offset_label}'})
+        content.append({'type': 'image_url', 'image_url': {'url': frame.data_url}})
     # A role/content dict: LangChain chat models accept it as a user message, and
     # this module stays free of client imports.
     return {'role': 'user', 'content': content}

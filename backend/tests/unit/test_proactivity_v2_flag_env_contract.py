@@ -112,6 +112,10 @@ def test_cloud_run_render_and_desktop_workflow_bind_plain_token(stage, monkeypat
     for entry in config['cloud_run']['network']['flags'].values():
         if isinstance(entry, dict) and 'env_var' in entry:
             monkeypatch.setenv(entry['env_var'], 'offline-network')
+    for job in (config['cloud_run'].get('jobs') or {}).values():
+        for entry in (job.get('env') or {}).values():
+            if isinstance(entry, dict) and 'env_var' in entry:
+                monkeypatch.setenv(entry['env_var'], str(entry.get('default', 'offline-value')))
     for renderer in (_render_cloud_run_state, _render_desktop_backend_state):
         for host in renderer(config)['services'].values():
             actual = {entry['name']: entry for entry in host['env']}

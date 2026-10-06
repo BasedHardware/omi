@@ -103,22 +103,26 @@ Future onStart(ServiceInstance service) async {
   MicRecorderService? recorder;
   service.on('recorder.start').listen((event) async {
     recorder = MicRecorderService(isInBG: Platform.isAndroid ? true : false);
-    recorder?.start(
-      onByteReceived: (bytes) {
-        Uint8List audioBytes = bytes;
-        List<dynamic> audioBytesList = audioBytes.toList();
-        service.invoke("recorder.ui.audioBytes", {"data": audioBytesList});
-      },
-      onStop: () {
-        service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
-      },
-      onRecording: () {
-        service.invoke("recorder.ui.stateUpdate", {"state": 'recording'});
-      },
-      onStalled: () {
-        service.invoke("recorder.ui.stalled");
-      },
-    );
+    try {
+      await recorder?.start(
+        onByteReceived: (bytes) {
+          Uint8List audioBytes = bytes;
+          List<dynamic> audioBytesList = audioBytes.toList();
+          service.invoke("recorder.ui.audioBytes", {"data": audioBytesList});
+        },
+        onStop: () {
+          service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
+        },
+        onRecording: () {
+          service.invoke("recorder.ui.stateUpdate", {"state": 'recording'});
+        },
+        onStalled: () {
+          service.invoke("recorder.ui.stalled");
+        },
+      );
+    } catch (e) {
+      service.invoke("recorder.ui.stateUpdate", {"state": 'error', "error": e.toString()});
+    }
   });
 
   service.on('recorder.stop').listen((event) async {
@@ -353,7 +357,7 @@ class MicRecorderService implements IMicRecorderService {
   RecorderServiceStatus? _status;
 
   late FlutterSoundRecorder _recorder;
-  late StreamController<Uint8List> _controller;
+  StreamController<Uint8List>? _controller;
 
   Function(Uint8List bytes)? _onByteReceived;
   Function? _onRecording;
@@ -396,44 +400,63 @@ class MicRecorderService implements IMicRecorderService {
     _onStop = onStop;
     _onRecording = onRecording;
     _onStalled = onStalled;
-    if (_onRecording != null) {
-      _onRecording!();
-    }
 
-    // new record
-    await _recorder.openRecorder(isBGService: _isInBG);
-    _controller = StreamController<Uint8List>();
+    try {
+      // new record
+      await _recorder.openRecorder(isBGService: _isInBG);
+      final controller = StreamController<Uint8List>();
+      _controller = controller;
 
-    await _recorder.startRecorder(
-      toStream: _controller.sink,
-      codec: Codec.pcm16,
-      numChannels: 1,
-      sampleRate: 16000,
-      bufferSize: 8192,
-    );
-    _lastByteAt = DateTime.now();
-    _stallReported = false;
-    _controller.stream.listen((buffer) {
+      await _recorder.startRecorder(
+        toStream: controller.sink,
+        codec: Codec.pcm16,
+        numChannels: 1,
+        sampleRate: 16000,
+        bufferSize: 8192,
+      );
       _lastByteAt = DateTime.now();
       _stallReported = false;
-      if (_onByteReceived != null) {
-        _onByteReceived!(buffer);
-      }
-    });
+      controller.stream.listen((buffer) {
+        _lastByteAt = DateTime.now();
+        _stallReported = false;
+        if (_onByteReceived != null) {
+          _onByteReceived!(buffer);
+        }
+      });
 
-    _stallTimer?.cancel();
-    _stallTimer = Timer.periodic(_stallCheckInterval, (_) {
-      // The stream going silent for longer than the threshold means the native
-      // audio engine has stopped delivering bytes — on iOS this happens when
-      // AVAudioSession is interrupted (incoming call) and is not resumed.
-      if (_stallReported || _lastByteAt == null) return;
-      if (DateTime.now().difference(_lastByteAt!) >= _stallThreshold) {
-        _stallReported = true;
-        _onStalled?.call();
-      }
-    });
+      _stallTimer?.cancel();
+      _stallTimer = Timer.periodic(_stallCheckInterval, (_) {
+        // The stream going silent for longer than the threshold means the native
+        // audio engine has stopped delivering bytes — on iOS this happens when
+        // AVAudioSession is interrupted (incoming call) and is not resumed.
+        if (_stallReported || _lastByteAt == null) return;
+        if (DateTime.now().difference(_lastByteAt!) >= _stallThreshold) {
+          _stallReported = true;
+          _onStalled?.call();
+        }
+      });
 
-    _status = RecorderServiceStatus.recording;
+      _status = RecorderServiceStatus.recording;
+      if (_onRecording != null) {
+        _onRecording!();
+      }
+    } catch (_) {
+      _status = RecorderServiceStatus.stop;
+      _stallTimer?.cancel();
+      _stallTimer = null;
+      _lastByteAt = null;
+      _stallReported = false;
+      try {
+        await _recorder.stopRecorder();
+      } catch (_) {}
+      try {
+        await _recorder.closeRecorder();
+      } catch (_) {}
+      try {
+        _controller?.close();
+      } catch (_) {}
+      rethrow;
+    }
     return;
   }
 
@@ -456,7 +479,7 @@ class MicRecorderService implements IMicRecorderService {
 
     _recorder.stopRecorder();
     _recorder.closeRecorder();
-    _controller.close();
+    _controller?.close();
 
     // callback
     _status = RecorderServiceStatus.stop;
