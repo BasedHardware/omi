@@ -1394,7 +1394,7 @@ def _get_conversation_notes_legacy(
         messages, episode_settings, run
     ):
         return import_module('utils.llm.episode_writer').baseline_budget_fallback(
-            get_conversation_notes.__wrapped__, run, prefix, locals()
+            getattr(_get_conversation_notes_legacy, '__wrapped__'), run, prefix, locals()
         )
     model = get_llm(
         'conv_structure',
