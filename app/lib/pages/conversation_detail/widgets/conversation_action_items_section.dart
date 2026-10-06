@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/action_items.dart' show deleteActionItem;
 import 'package:omi/backend/http/api/conversations.dart' show setConversationActionItemState;
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -61,6 +62,7 @@ typedef ConversationTaskCreator = Future<String?> Function(
   required String idempotencyKey,
 });
 typedef ConversationTaskUpdater = Future<bool> Function(String taskId, bool completed);
+typedef ConversationTaskDeleter = Future<bool> Function(String taskId);
 typedef ConversationItemStateWriter = Future<bool> Function(int itemIndex, bool completed);
 
 /// Owns task identity for one open conversation detail. The stable idempotency key protects a
@@ -74,6 +76,7 @@ class ConversationActionItemTaskSession {
     required this.createTask,
     required this.updateTask,
     required this.updateConversationItem,
+    this.deleteTask,
     String Function()? newIdempotencyKey,
     Future<Map<String, String>> Function()? readPersistedTaskIds,
     Future<void> Function(Map<String, String>)? writePersistedTaskIds,
@@ -130,6 +133,7 @@ class ConversationActionItemTaskSession {
   final ConversationTaskCreator createTask;
   final ConversationTaskUpdater updateTask;
   final ConversationItemStateWriter updateConversationItem;
+  final ConversationTaskDeleter? deleteTask;
   final String Function()? _newIdempotencyKey;
   final Future<Map<String, String>> Function() _readPersistedTaskIds;
   final Future<void> Function(Map<String, String>) _writePersistedTaskIds;
@@ -147,17 +151,19 @@ class ConversationActionItemTaskSession {
   });
 
   /// Content-stable identity for one extracted row. Segment IDs are evidence
-  /// references, not identities: one segment can carry several commitments, and the
-  /// backend allows multiple identical items in a conversation, so the item's own
-  /// description and due date disambiguate rows that share evidence.
-  static String identity(ActionItem item) =>
-      '${item.sourceSegmentIds.join('|')}|${item.description}|${item.dueAt?.millisecondsSinceEpoch ?? ''}';
+  /// references, not identities: one segment can carry several commitments, and
+  /// the backend allows multiple identical items in a conversation, so the item's
+  /// own description and due date disambiguate rows that share evidence. The
+  /// row's position disambiguates remaining twins: two rows with equal
+  /// description, due date and evidence are two commitments, not one.
+  static String identity(ActionItem item, {int? row}) =>
+      '${row ?? ''}|${item.sourceSegmentIds.join('|')}|${item.description}|${item.dueAt?.millisecondsSinceEpoch ?? ''}';
 
-  String? taskIdFor(ActionItem item) => item.targetTaskId ?? _taskIds[identity(item)];
+  String? taskIdFor(ActionItem item, {int? row}) => item.targetTaskId ?? _taskIds[identity(item, row: row)];
   bool get pending => _pending.isNotEmpty;
-  bool isPending(ActionItem item) => _pending.contains(identity(item));
+  bool isPending(ActionItem item, {int? row}) => _pending.contains(identity(item, row: row));
 
-  String idempotencyKeyFor(ActionItem item) => _key(identity(item));
+  String idempotencyKeyFor(ActionItem item, {int? row}) => _key(identity(item, row: row));
 
   String _key(String identity) => _idempotencyKeys.putIfAbsent(
       identity,
@@ -176,9 +182,9 @@ class ConversationActionItemTaskSession {
     _writePersistedTaskIds(Map<String, String>.of(_taskIds));
   }
 
-  Future<bool> addToTasks(ActionItem item) async {
+  Future<bool> addToTasks(ActionItem item, {int? row}) async {
     await _restored;
-    final identity = identityFor(item);
+    final identity = identityFor(item, row: row);
     if (item.targetTaskId != null || _taskIds.containsKey(identity)) return true;
     if (!_pending.add(identity)) return false;
     try {
@@ -191,26 +197,69 @@ class ConversationActionItemTaskSession {
     }
   }
 
-  Future<bool> setCompleted(ActionItem item, int itemIndex, bool completed) async {
+  /// Sets one row's completion and returns the conversation row index that was
+  /// patched, or null on failure. The row's position is re-resolved against
+  /// [currentRows] just before the conversation PATCH, so a reprocessed note
+  /// cannot redirect the write onto a different extracted row; when the row is
+  /// gone, nothing is mutated and the call reports failure.
+  Future<int?> setCompleted(ActionItem item, int itemIndex, bool completed,
+      {int? row, List<ActionItem>? currentRows}) async {
     await _restored;
-    final identity = identityFor(item);
-    if (!_pending.add(identity)) return false;
+    final identity = identityFor(item, row: row);
+    if (!_pending.add(identity)) return null;
+    String? createdTaskId;
     try {
-      var taskId = taskIdFor(item);
+      var taskId = taskIdFor(item, row: row);
       if (taskId == null && completed) {
         taskId = await createTask(item, completed: true, idempotencyKey: _key(identity));
-        if (taskId == null) return false;
+        if (taskId == null) return null;
+        createdTaskId = taskId;
         _rememberTaskId(identity, taskId);
       } else if (taskId != null && !await updateTask(taskId, completed)) {
-        return false;
+        return null;
       }
-      return updateConversationItem(itemIndex, completed);
+      var index = itemIndex;
+      if (currentRows != null) {
+        final resolved = _resolveRow(item, row: row, rows: currentRows);
+        if (resolved == null) return null;
+        index = resolved;
+      }
+      final saved = await updateConversationItem(index, completed);
+      if (!saved) {
+        // The task mutation took effect but the note did not absorb it. Undo the
+        // task side so Tasks and the summary cannot disagree across refreshes:
+        // a task minted by this call is removed; an existing task is restored.
+        if (createdTaskId != null) {
+          if (deleteTask != null) {
+            await deleteTask!(createdTaskId);
+          }
+          _taskIds.remove(identity);
+          _writePersistedTaskIds(Map<String, String>.of(_taskIds));
+        } else if (taskId != null) {
+          await updateTask(taskId, !completed);
+        }
+        return null;
+      }
+      return index;
     } finally {
       _pending.remove(identity);
     }
   }
 
-  String identityFor(ActionItem item) => identity(item);
+  /// Finds the row's current position in [rows]: the recorded index when the
+  /// row still holds the same item, otherwise the unique row matching this
+  /// item's identity. Null when the note no longer contains the row.
+  int? _resolveRow(ActionItem item, {int? row, required List<ActionItem> rows}) {
+    bool sameRow(ActionItem candidate) =>
+        candidate.description == item.description &&
+        candidate.dueAt == item.dueAt &&
+        candidate.targetTaskId == item.targetTaskId;
+    if (row != null && row < rows.length && sameRow(rows[row])) return row;
+    final matches = rows.where(sameRow).toList();
+    return matches.length == 1 ? rows.indexOf(matches.single) : null;
+  }
+
+  String identityFor(ActionItem item, {int? row}) => identity(item, row: row);
 }
 
 /// The note's action items, after its sections: the mobile twin of the Mac's Action Items card.
@@ -250,33 +299,42 @@ class _ConversationActionItemsSectionState extends State<ConversationActionItems
     updateTask: (id, value) => context.read<ActionItemsProvider>().updateActionItemStateById(id, value),
     updateConversationItem: (index, value) async =>
         setConversationActionItemState(widget.conversationId, [index], [value]),
+    deleteTask: (id) => deleteActionItem(id),
   );
 
-  String _identity(ActionItem item) => ConversationActionItemTaskSession.identity(item);
+  String _identity(ActionItem item, int row) => ConversationActionItemTaskSession.identity(item, row: row);
 
   Future<void> _setCompleted(ActionItem item, int index, bool value) async {
-    final identity = _identity(item);
-    if (_taskSession.isPending(item)) return;
+    final identity = _identity(item, index);
+    if (_taskSession.isPending(item, row: index)) return;
     setState(() => _adding.add(identity));
-    final saved = await _taskSession.setCompleted(item, index, value);
+    final patchedIndex = await _taskSession.setCompleted(
+      item,
+      index,
+      value,
+      row: index,
+      currentRows: context.read<ConversationDetailProvider>().conversationOrNull?.structured.actionItems,
+    );
     if (!mounted) return;
     setState(() => _adding.remove(identity));
-    if (saved) {
+    if (patchedIndex != null) {
       _failed.remove(identity);
-      context.read<ConversationDetailProvider>().updateActionItemState(value, index);
+      context.read<ConversationDetailProvider>().updateActionItemState(value, patchedIndex);
     } else {
       setState(() => _failed.add(identity));
     }
   }
 
-  Future<void> _addToTasks(ActionItem item) async {
-    final identity = _identity(item);
-    if (item.targetTaskId != null || _taskSession.taskIdFor(item) != null || _adding.contains(identity)) return;
+  Future<void> _addToTasks(ActionItem item, int index) async {
+    final identity = _identity(item, index);
+    if (item.targetTaskId != null || _taskSession.taskIdFor(item, row: index) != null || _adding.contains(identity)) {
+      return;
+    }
     setState(() {
       _adding.add(identity);
       _failed.remove(identity);
     });
-    final created = await _taskSession.addToTasks(item);
+    final created = await _taskSession.addToTasks(item, row: index);
     if (!mounted) return;
     setState(() {
       _adding.remove(identity);
@@ -288,8 +346,8 @@ class _ConversationActionItemsSectionState extends State<ConversationActionItems
     });
   }
 
-  Future<void> _openTask(ActionItem item) async {
-    final taskId = _taskSession.taskIdFor(item);
+  Future<void> _openTask(ActionItem item, int index) async {
+    final taskId = _taskSession.taskIdFor(item, row: index);
     if (taskId == null) return;
     final task = await context.read<ActionItemsProvider>().getActionItemById(taskId);
     if (task != null && mounted) showActionItemFormSheet(context, actionItem: task);
@@ -337,16 +395,18 @@ class _ConversationActionItemsSectionState extends State<ConversationActionItems
                   for (var i = 0; i < active.length; i++) ...[
                     if (i > 0) Divider(height: 1, thickness: 1, color: OmiColors.border),
                     _ActionItemRow(
-                      key: Key('conversation-action-item-row-${_identity(active[i])}'),
+                      key: Key('conversation-action-item-row-${_identity(active[i], indexed[i].$1)}'),
                       item: active[i],
                       meta: ActionItemMeta.of(active[i], l10n: l10n, dates: dates),
-                      adding: _adding.contains(_identity(active[i])) || _taskSession.isPending(active[i]),
-                      failed: _failed.contains(_identity(active[i])),
+                      adding: _adding.contains(_identity(active[i], indexed[i].$1)) ||
+                          _taskSession.isPending(active[i], row: indexed[i].$1),
+                      failed: _failed.contains(_identity(active[i], indexed[i].$1)),
                       linked: active[i].targetTaskId != null,
-                      added: _taskSession.taskIdFor(active[i]) != null && active[i].targetTaskId == null,
+                      added: _taskSession.taskIdFor(active[i], row: indexed[i].$1) != null &&
+                          active[i].targetTaskId == null,
                       onToggle: (value) => _setCompleted(active[i], indexed[i].$1, value),
-                      onAddToTasks: () => _addToTasks(active[i]),
-                      onOpenTask: () => _openTask(active[i]),
+                      onAddToTasks: () => _addToTasks(active[i], indexed[i].$1),
+                      onOpenTask: () => _openTask(active[i], indexed[i].$1),
                       onShowInTranscript: () => widget.onShowInTranscript(active[i].sourceSegmentIds),
                     ),
                   ],

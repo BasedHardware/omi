@@ -138,6 +138,7 @@ void main() {
       required Future<String?> Function(ActionItem item, bool completed, String idempotencyKey) onCreate,
       required Future<bool> Function(String taskId, bool completed) onUpdate,
       required Future<bool> Function(int index, bool completed) onItemUpdate,
+      Future<bool> Function(String taskId)? onDelete,
       String Function()? newIdempotencyKey,
       Map<String, String>? persisted,
       Future<Map<String, String>> Function()? readPersistedTaskIds,
@@ -149,6 +150,7 @@ void main() {
               onCreate(item, completed, idempotencyKey),
           updateTask: (id, completed) async => onUpdate(id, completed),
           updateConversationItem: (index, completed) async => onItemUpdate(index, completed),
+          deleteTask: onDelete == null ? null : (id) => onDelete(id),
           newIdempotencyKey: newIdempotencyKey,
           readPersistedTaskIds: readPersistedTaskIds ?? () async => persisted ?? {},
           writePersistedTaskIds: writePersistedTaskIds ?? (_) async {},
@@ -177,9 +179,9 @@ void main() {
       );
       final item = ActionItem('Send the proposal', sourceSegmentIds: const ['segment-1']);
 
-      expect(await session.setCompleted(item, 0, true), isTrue);
-      expect(await session.setCompleted(item, 0, false), isTrue);
-      expect(await session.setCompleted(item, 0, true), isTrue);
+      expect(await session.setCompleted(item, 0, true), 0);
+      expect(await session.setCompleted(item, 0, false), 0);
+      expect(await session.setCompleted(item, 0, true), 0);
 
       expect(createdStates, [true]);
       expect(taskUpdates, [('task-1', false), ('task-1', true)]);
@@ -220,8 +222,8 @@ void main() {
           ..clear()
           ..addAll(taskIds),
       );
-      await first.setCompleted(item, 0, true);
-      expect(stored[ConversationActionItemTaskSession.identity(item)], 'task-1');
+      await first.setCompleted(item, 0, true, row: 0);
+      expect(stored[ConversationActionItemTaskSession.identity(item, row: 0)], 'task-1');
 
       var creates = 0;
       final taskUpdates = <(String, bool)>[];
@@ -237,7 +239,7 @@ void main() {
         onItemUpdate: (_, __) async => true,
         readPersistedTaskIds: () async => Map.of(stored),
       );
-      expect(await second.setCompleted(item, 0, false), isTrue);
+      expect(await second.setCompleted(item, 0, false, row: 0), 0);
       expect(creates, 0, reason: 'the restored link must address the existing task');
       expect(taskUpdates, [('task-1', false)]);
     });
@@ -270,13 +272,63 @@ void main() {
       final b = ActionItem('Follow up with Eddie', sourceSegmentIds: const ['seg-1']);
       expect(ConversationActionItemTaskSession.identity(a), isNot(ConversationActionItemTaskSession.identity(b)));
 
-      // Identical twins are still one item: identity stays stable across calls.
-      expect(
-          ConversationActionItemTaskSession.identity(a),
-          ConversationActionItemTaskSession.identity(ActionItem(
-            'Send the proposal',
-            sourceSegmentIds: const ['seg-1'],
-          )));
+      // Identical twins are two commitments: the row index disambiguates them.
+      final twin = ActionItem(
+        'Send the proposal',
+        sourceSegmentIds: const ['seg-1'],
+      );
+      expect(ConversationActionItemTaskSession.identity(a, row: 0),
+          isNot(ConversationActionItemTaskSession.identity(twin, row: 1)));
+      // Without a row, identity still matches for legacy callers and stable keys.
+      expect(ConversationActionItemTaskSession.identity(a), ConversationActionItemTaskSession.identity(twin));
+    });
+
+    test('identical twins get separate pending state, tasks and summary rows', () async {
+      // The backend allows two identical extracted rows; promoting one must not
+      // make the other look added, and each toggle must drive its own task.
+      final twin = ActionItem('Send the proposal', sourceSegmentIds: const ['seg-1']);
+      final created = <String>[];
+      final updates = <(String, bool)>[];
+      final patched = <int>[];
+      final session = sessionWith(
+        // No key override: the production default derives the key from the
+        // conversation and the row identity, so twins mint distinct keys.
+        onCreate: (item, completed, idempotencyKey) async {
+          created.add(idempotencyKey);
+          return 'task-${created.length}';
+        },
+        onUpdate: (id, completed) async {
+          updates.add((id, completed));
+          return true;
+        },
+        onItemUpdate: (index, completed) async {
+          patched.add(index);
+          return true;
+        },
+      );
+
+      expect(await session.setCompleted(twin, 0, true, row: 0), 0);
+      expect(await session.setCompleted(twin, 1, true, row: 1), 1);
+
+      expect(created, hasLength(2), reason: 'each row mints its own task');
+      expect(created[0], isNot(created[1]));
+      expect(patched, [0, 1]);
+      // One row's task never addresses the other's.
+      expect(await session.setCompleted(twin, 0, false, row: 0), 0);
+      expect(updates, [('task-1', false)]);
+    });
+
+    test('a task created for one twin is not reused by its sibling', () async {
+      final twin = ActionItem('Send the proposal', sourceSegmentIds: const ['seg-1']);
+      final session = sessionWith(
+        newIdempotencyKey: () => 'stable-key',
+        onCreate: (item, completed, idempotencyKey) async => 'task-1',
+        onUpdate: (_, __) async => true,
+        onItemUpdate: (_, __) async => true,
+      );
+      await session.setCompleted(twin, 0, true, row: 0);
+      expect(session.taskIdFor(twin, row: 0), 'task-1');
+      expect(session.taskIdFor(twin, row: 1), isNull, reason: 'the sibling row has no task yet');
     });
 
     test('check-off failures do not mark the summary item complete', () async {
@@ -290,7 +342,82 @@ void main() {
       );
       final item = ActionItem('Send the proposal', sourceSegmentIds: const ['segment-1']);
 
-      expect(await session.setCompleted(item, 0, true), isFalse);
+      expect(await session.setCompleted(item, 0, true), isNull);
+    });
+
+    test('a conversation PATCH failure rolls back the task it just created', () async {
+      // The create succeeded but the note never absorbed it: the task minted by
+      // this call is deleted and its link forgotten, so no orphan completes
+      // silently and a retry mints a fresh task.
+      final deleted = <String>[];
+      final stored = <String, String>{};
+      final session = sessionWith(
+        newIdempotencyKey: () => 'stable-key',
+        onCreate: (item, completed, idempotencyKey) async => 'task-1',
+        onUpdate: (_, __) async => true,
+        onItemUpdate: (_, __) async => false,
+        onDelete: (id) async {
+          deleted.add(id);
+          return true;
+        },
+        readPersistedTaskIds: () async => Map.of(stored),
+        writePersistedTaskIds: (taskIds) async => stored
+          ..clear()
+          ..addAll(taskIds),
+      );
+      final item = ActionItem('Send the proposal', sourceSegmentIds: const ['segment-1']);
+
+      expect(await session.setCompleted(item, 0, true), isNull);
+      expect(deleted, ['task-1']);
+      expect(stored, isEmpty);
+      expect(session.taskIdFor(item), isNull);
+    });
+
+    test('a conversation PATCH failure restores the task it toggled', () async {
+      // The linked task was completed but the note stayed open: the previous
+      // state is restored so Tasks and the summary cannot disagree.
+      final updates = <(String, bool)>[];
+      final session = sessionWith(
+        newIdempotencyKey: () => 'stable-key',
+        onCreate: (item, completed, idempotencyKey) async => 'task-1',
+        onUpdate: (id, completed) async {
+          updates.add((id, completed));
+          return true;
+        },
+        onItemUpdate: (_, __) async => false,
+      );
+      final item = ActionItem('Send the proposal', sourceSegmentIds: const ['segment-1'], targetTaskId: 'task-1');
+
+      expect(await session.setCompleted(item, 0, true), isNull);
+      expect(updates, [('task-1', true), ('task-1', false)]);
+    });
+
+    test('a reprocessed note resolves the row before patching, or refuses', () async {
+      // The captured index went stale after reprocessing: the write targets the
+      // row's current position, and a vanished or ambiguous row patches nothing.
+      final patched = <int>[];
+      final session = sessionWith(
+        newIdempotencyKey: () => 'stable-key',
+        onCreate: (item, completed, idempotencyKey) async => 'task-1',
+        onUpdate: (_, __) async => true,
+        onItemUpdate: (index, completed) async {
+          patched.add(index);
+          return true;
+        },
+      );
+      final item = ActionItem('Send the proposal', sourceSegmentIds: const ['segment-1'], targetTaskId: 'task-1');
+
+      // A new row was inserted above ours: index 0 now belongs to another item.
+      final reprocessed = [
+        ActionItem('A new commitment'),
+        ActionItem('Send the proposal', sourceSegmentIds: const ['segment-1'], targetTaskId: 'task-1'),
+      ];
+      expect(await session.setCompleted(item, 0, true, row: 0, currentRows: reprocessed), 1);
+      expect(patched, [1]);
+
+      // The row is gone entirely: nothing is patched.
+      expect(await session.setCompleted(item, 1, false, row: 1, currentRows: [ActionItem('A new commitment')]), isNull);
+      expect(patched, [1]);
     });
   });
 }

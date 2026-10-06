@@ -90,6 +90,28 @@ test('structured Markdown preserves public facts and marks unknown action facts'
   assert.match(shareLinkHeader(fixture.id), /rel="alternate"; type="text\/markdown"/);
 });
 
+test('Markdown keeps a tentative due date distinct from a confirmed one', () => {
+  const withCertainty = (certainty) => ({
+    ...fixture,
+    structured: {
+      ...fixture.structured,
+      action_items: [
+        {
+          description: 'Send the release plan',
+          completed: false,
+          owner_name: 'Ada Example',
+          due_at: '2026-10-05T16:00:00Z',
+          due_certainty: certainty,
+        },
+      ],
+    },
+  });
+  const tentative = sharedConversationMarkdown(withCertainty('tentative'), fixture.id);
+  const confirmed = sharedConversationMarkdown(withCertainty(null), fixture.id);
+  assert.match(tentative, /Due: 2026-10-05T16:00:00\.000Z \(.*tentative\)/);
+  assert.doesNotMatch(confirmed, /tentative/);
+});
+
 test('speaker identity uses explicit evidence, including owner person links, without roster-order guesses', () => {
   const people = fixture.people;
   const participants = fixture.structured.participants;

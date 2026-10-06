@@ -944,6 +944,7 @@ class ActionItemsProvider extends ChangeNotifier {
           title: item.description,
           notes: 'From Omi',
           dueDate: item.dueAt,
+          completed: item.completed,
         );
 
         if (calendarItemId != null) {

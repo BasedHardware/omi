@@ -645,10 +645,11 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     store.overdueTasks = [ownerBDashboard]
     store.error = nil
     await gate.release()
-    // The toggle completed under the captured lease even though the visible
-    // arrays were swapped mid-flight; it must report that it took effect.
+    // The backend call returned after the owner swap made the captured lease
+    // stale; the toggle bails before syncing or touching arrays, so it reports
+    // that it did not take effect (callers must not mirror the summary).
     let tookEffect = await operation.value
-    XCTAssertTrue(tookEffect)
+    XCTAssertFalse(tookEffect)
 
     XCTAssertEqual(probe.localWrites, 1)
     XCTAssertEqual(probe.remoteRequests, 1)

@@ -67,8 +67,10 @@ struct ConversationActionItemsSection: View {
 
   private func row(_ index: Int) -> some View {
     var item = conversation.structured.actionItems[index]
-    item.completed = completedOverrides[item.id] ?? item.completed
     let identity = actionItemIdentity(item)
+    // Keyed by the row's identity, not ActionItem.id (the description): two rows
+    // that share a description are separate commitments with separate overrides.
+    item.completed = completedOverrides[identity] ?? item.completed
     let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
       item.sourceSegmentIDs, segments: conversation.transcriptSegments)
     let linkedTaskID = item.targetTaskID
@@ -150,13 +152,25 @@ struct ConversationActionItemsSection: View {
         taskIsCompleted = task?.completed
       }
       if task == nil && next {
-        task = await TasksStore.shared.createTask(
-          description: item.description, dueAt: item.dueAt, priority: nil, completed: true)
-        guard let created = task else {
+        // Completion-created tasks go through the canonical promoter, exactly
+        // like "Add to Tasks": the backend mints the task and persists the
+        // conversation's targetTaskID link in one transaction. The canonical
+        // path creates open tasks (completed: false), so a check-off promotes
+        // first and then toggles the durable, backend-addressable task.
+        let selected = OmiAPI.SummaryTaskReference(
+          actionItemIndex: index, conversationId: conversation.id, expectedDescription: item.description)
+        guard let taskID = await promoter.promote(selected) else {
           // The summary must not show completed when no completed task exists.
           failedActionItemIDs.insert(identity)
           return
         }
+        onTaskAdded(selected, taskID)
+        let fetched = try? await APIClient.shared.getActionItem(id: taskID)
+        guard let created = fetched else {
+          failedActionItemIDs.insert(identity)
+          return
+        }
+        task = created
         taskIsCompleted = created.completed
         createdTasks[identity] = created
         createdTaskCompletion[identity] = created.completed
@@ -180,8 +194,18 @@ struct ConversationActionItemsSection: View {
         let _: ConversationActionItemStatusResponse = try await APIClient.shared.patch(
           "v1/conversations/\(conversation.id)/action-items", body: body)
         if let task { createdTasks[identity] = task }
-        completedOverrides[item.id] = next
+        completedOverrides[identity] = next
       } catch {
+        // The task mutation took effect but the conversation PATCH failed; put
+        // the task back so Tasks and the summary cannot disagree after reload.
+        if let task, let taskIsCompleted, taskIsCompleted != next {
+          let rollbackInput = TaskActionItem(
+            id: task.id, description: task.description, completed: next, createdAt: task.createdAt,
+            dueAt: task.dueAt, conversationId: task.conversationId, source: task.source, priority: task.priority)
+          if await TasksStore.shared.toggleTask(rollbackInput) {
+            createdTaskCompletion[identity] = taskIsCompleted
+          }
+        }
         failedActionItemIDs.insert(identity)
       }
     }
