@@ -2238,7 +2238,8 @@ CaptureTransition _reduceResume(CaptureCoordinatorState state, CaptureEnvironmen
         state.copyWith(suspended: _withPendantWasPaused(state.suspended, false)),
         const [],
       ),
-    _ when state.connectedDevice != null && !state.phoneOwns && !state.callActive => CaptureTransition(state, const [
+    _ when env.policyMuted && state.connectedDevice != null && !state.phoneOwns && !state.callActive =>
+      CaptureTransition(state, const [
         PolicyWrite(false),
       ]),
     _ => CaptureTransition(state, const []),

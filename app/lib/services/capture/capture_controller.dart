@@ -783,6 +783,8 @@ class CaptureController extends ChangeNotifier
 
   CaptureCoordinator? _captureInstance;
   bool _captureControllerDisposed = false;
+  bool _uplinkReconcileNeeded = false;
+  bool _uplinkReconcileRunning = false;
   CaptureCoordinator get _capture {
     if (_captureControllerDisposed) {
       throw StateError('capture coordinator requested after dispose');
@@ -1234,7 +1236,7 @@ class CaptureController extends ChangeNotifier
     bool force = false,
     String? source,
   }) async {
-    if (SyncWakeScope.syncOnly || (isPaused && _capture.stagedReadModel.pendantOwns)) return;
+    if (_fenceUplinkForSync() || (isPaused && _capture.stagedReadModel.pendantOwns)) return;
     // Resolve the defaults here so two callers that spell the same
     // configuration differently (null vs the value it defaults to) share a key.
     final effectiveSampleRate = sampleRate ?? mapCodecToSampleRate(audioCodec);
@@ -1451,7 +1453,7 @@ class CaptureController extends ChangeNotifier
       effectiveConfig = null;
     }
 
-    // Connect to the transcript socket
+    if (_fenceUplinkForSync()) return null;
     final socket = await openConversationSocket(
       codec: codec,
       sampleRate: sampleRate,
@@ -2024,6 +2026,7 @@ class CaptureController extends ChangeNotifier
     if (connection == null) {
       return Future.value(null);
     }
+    if (_fenceUplinkForSync()) return null;
     return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
 
@@ -2075,7 +2078,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _initiateDeviceAudioStreaming() async {
-    if (SyncWakeScope.syncOnly) return;
+    if (_fenceUplinkForSync()) return;
     final device = _recordingDevice;
     final staged = _capture.stagedReadModel;
     if (device == null || _pendantSuspension != null || !staged.pendantOwns || staged.callActive) {
@@ -2392,7 +2395,7 @@ class CaptureController extends ChangeNotifier
     await _audioSubscriptionErrors?.cancel();
     _audioSubscriptionErrors = null;
     await _setIngressAuthorized(false);
-    await _bleBytesStream?.cancel();
+    await _cancelUplinkAudio();
     await _blePhotoStream?.cancel();
     await _bleButtonStream?.cancel();
     _stopMetricsTracking();
