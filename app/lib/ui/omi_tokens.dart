@@ -11,7 +11,7 @@ import 'package:flutter/services.dart';
 /// Accents and primary actions are neutral: white on black in dark mode, black on white in light mode.
 /// Status colours use the corresponding iOS light and dark system variants.
 ///
-/// `AppStyles` and `ResponsiveHelper` predate these tokens. Do not add new uses of them.
+/// `AppStyles` predates these tokens. Do not add new uses of it.
 ///
 /// Resolved values for one appearance. The dark values are the original Omi tokens.
 @immutable
@@ -27,6 +27,11 @@ class OmiPalette {
       required this.conversationCard,
       required this.sourceBadgeSurface,
       required this.border,
+      required this.groupedPage,
+      required this.groupedCard,
+      required this.groupedBorder,
+      required this.iconTile,
+      required this.iconTileGlyph,
       required this.textPrimary,
       required this.textSecondary,
       required this.textTertiary,
@@ -37,7 +42,21 @@ class OmiPalette {
       required this.successSurface,
       required this.warning,
       required this.danger,
-      required this.dangerSurface});
+      required this.dangerSurface,
+      required this.canvas,
+      required this.canvasCard,
+      required this.canvasBlend,
+      required this.glass,
+      required this.glassEdge,
+      required this.glassRim,
+      required this.glassShadow,
+      required this.floatGlass,
+      required this.floatEdge,
+      required this.floatRim,
+      required this.floatOutline,
+      required this.floatShadow,
+      required this.deviceTile,
+      required this.deviceTileInk});
 
   final Color surface0;
   final Color surface1;
@@ -51,6 +70,16 @@ class OmiPalette {
   final Color conversationCard;
   final Color sourceBadgeSurface;
   final Color border;
+
+  /// Top-level Settings: the page under outlined groups, the group card and its hairline border.
+  final Color groupedPage;
+  final Color groupedCard;
+  final Color groupedBorder;
+
+  /// The warm tile behind a settings row's line glyph, and the glyph itself.
+  final Color iconTile;
+  final Color iconTileGlyph;
+
   final Color textPrimary;
   final Color textSecondary;
   final Color textTertiary;
@@ -63,6 +92,36 @@ class OmiPalette {
   final Color danger;
   final Color dangerSurface;
 
+  /// The canvas page (Home, Tasks, a conversation) and a card on it: white with grouped-grey cards
+  /// in light mode, the usual surfaces in dark. Read through `OmiCanvas`, never directly.
+  final Color canvas;
+  final Color canvasCard;
+
+  /// The warm tint Home's page blends into toward the bottom of the screen (Omi v8); clear in dark.
+  final Color canvasBlend;
+
+  /// A control on the canvas (`OmiGlass`): a translucent fill, its rim lit along the top
+  /// ([glassEdge]) and quieter below ([glassRim]).
+  final Color glass;
+  final Color glassEdge;
+  final Color glassRim;
+
+  /// The small soft shadow under a control on the canvas; clear in dark.
+  final Color glassShadow;
+
+  /// A control floating over the list, blurred (`OmiGlass(blur: true)`): its fill, its rim from top
+  /// ([floatEdge]) to bottom ([floatRim]), a hairline outside it ([floatOutline]) and a soft shadow
+  /// under it ([floatShadow]). In dark it is the same glass as [glass], with no outline or shadow.
+  final Color floatGlass;
+  final Color floatEdge;
+  final Color floatRim;
+  final Color floatOutline;
+  final Color floatShadow;
+
+  /// The tile behind a device glyph on a list row (`DeviceTile`).
+  final Color deviceTile;
+  final Color deviceTileInk;
+
   static const dark = OmiPalette(
     surface0: Color(0xFF000000),
     surface1: Color(0xFF1C1C1E),
@@ -74,6 +133,11 @@ class OmiPalette {
     conversationCard: Color(0xFF1F1F25),
     sourceBadgeSurface: Color(0xFF2A2A31),
     border: Color(0xFF3C3C43),
+    groupedPage: Color(0xFF0A0A0A),
+    groupedCard: Color(0xFF141414),
+    groupedBorder: Color(0x14FFFFFF),
+    iconTile: Color(0xFF1B1A17),
+    iconTileGlyph: Color(0xFFB3AEA6),
     textPrimary: Color(0xFFFFFFFF),
     textSecondary: Color(0xFFAEAEB2),
     textTertiary: Color(0xFF8E8E93),
@@ -85,6 +149,20 @@ class OmiPalette {
     warning: Color(0xFFFF9F0A),
     danger: Color(0xFFFF453A),
     dangerSurface: Color(0x26FF453A),
+    canvas: Color(0xFF000000),
+    canvasCard: Color(0xFF1C1C1E),
+    canvasBlend: Color(0x00000000),
+    glass: Color(0x803A3A3C),
+    glassEdge: Color(0x29FFFFFF),
+    glassRim: Color(0x12FFFFFF),
+    glassShadow: Color(0x00000000),
+    floatGlass: Color(0x803A3A3C),
+    floatEdge: Color(0x29FFFFFF),
+    floatRim: Color(0x12FFFFFF),
+    floatOutline: Color(0x00000000),
+    floatShadow: Color(0x00000000),
+    deviceTile: Color(0xFF1A1A1A),
+    deviceTileInk: Color(0xFF8E8982),
   );
 
   static const light = OmiPalette(
@@ -98,6 +176,11 @@ class OmiPalette {
     conversationCard: Color(0xFFFFFFFF),
     sourceBadgeSurface: Color(0xFFE5E5EA),
     border: Color(0xFFC6C6C8),
+    groupedPage: Color(0xFFFDFDFD),
+    groupedCard: Color(0xFFFFFFFF),
+    groupedBorder: Color(0x120A0A0A),
+    iconTile: Color(0xFFFAF8F4),
+    iconTileGlyph: Color(0xFF5F5B55),
     textPrimary: Color(0xFF000000),
     textSecondary: Color(0x993C3C43),
     textTertiary: Color(0xFF636366),
@@ -109,6 +192,23 @@ class OmiPalette {
     warning: Color(0xFFFF9500),
     danger: Color(0xFFFF3B30),
     dangerSurface: Color(0x26FF3B30),
+    canvas: Color(0xFFFFFFFF),
+    canvasCard: Color(0xFFF2F2F7),
+    // #C9B89A at 10%: over the white page, #FAF8F4.
+    canvasBlend: Color(0x1AC9B89A),
+    // Omi v8 in light: circles are frosted white (55%) with a 9% hairline and a faint 6% shadow; the
+    // Ask bar and record button are frosted white with a white edge, a faint outline and a soft shadow.
+    glass: Color(0x8CFFFFFF),
+    glassEdge: Color(0x17000000),
+    glassRim: Color(0x17000000),
+    glassShadow: Color(0x0F000000),
+    floatGlass: Color(0x9EFFFFFF),
+    floatEdge: Color(0xF2FFFFFF),
+    floatRim: Color(0xD9FFFFFF),
+    floatOutline: Color(0x12000000),
+    floatShadow: Color(0x1A000000),
+    deviceTile: Color(0xFFFAF8F4),
+    deviceTileInk: Color(0xFF8C877F),
   );
 }
 
@@ -129,6 +229,11 @@ abstract final class OmiColors {
   static Color get conversationCard => active.conversationCard;
   static Color get sourceBadgeSurface => active.sourceBadgeSurface;
   static Color get border => active.border;
+  static Color get groupedPage => active.groupedPage;
+  static Color get groupedCard => active.groupedCard;
+  static Color get groupedBorder => active.groupedBorder;
+  static Color get iconTile => active.iconTile;
+  static Color get iconTileGlyph => active.iconTileGlyph;
   static Color get textPrimary => active.textPrimary;
   static Color get textSecondary => active.textSecondary;
   static Color get textTertiary => active.textTertiary;
@@ -140,6 +245,20 @@ abstract final class OmiColors {
   static Color get warning => active.warning;
   static Color get danger => active.danger;
   static Color get dangerSurface => active.dangerSurface;
+  static Color get canvas => active.canvas;
+  static Color get canvasCard => active.canvasCard;
+  static Color get canvasBlend => active.canvasBlend;
+  static Color get glass => active.glass;
+  static Color get glassEdge => active.glassEdge;
+  static Color get glassRim => active.glassRim;
+  static Color get glassShadow => active.glassShadow;
+  static Color get floatGlass => active.floatGlass;
+  static Color get floatEdge => active.floatEdge;
+  static Color get floatRim => active.floatRim;
+  static Color get floatOutline => active.floatOutline;
+  static Color get floatShadow => active.floatShadow;
+  static Color get deviceTile => active.deviceTile;
+  static Color get deviceTileInk => active.deviceTileInk;
 }
 
 /// Omi's type ramp, modelled on iOS text styles so that sizes land where the app's text already

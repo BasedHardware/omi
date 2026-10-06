@@ -232,6 +232,9 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const ValueKey('day_load_more')), 200);
+    // Fully on screen, not just its top edge: taller rows can leave its centre below the view.
+    await tester.ensureVisible(find.byKey(const ValueKey('day_load_more')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('day_load_more')));
     await tester.pump();
     await tester.pumpAndSettle();
@@ -239,6 +242,9 @@ void main() {
 
     fetch.ok = false;
     await tester.scrollUntilVisible(find.byKey(const ValueKey('day_load_more')), 200);
+    // Fully on screen, not just its top edge: taller rows can leave its centre below the view.
+    await tester.ensureVisible(find.byKey(const ValueKey('day_load_more')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('day_load_more')));
     await tester.pump();
     await tester.pumpAndSettle();
@@ -271,6 +277,12 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(find.byKey(const ValueKey('day_load_more')), 200);
+
+    // Fully on screen, not just its top edge: taller rows can leave its centre below the view.
+
+    await tester.ensureVisible(find.byKey(const ValueKey('day_load_more')));
+
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('day_load_more')));
     await tester.pump();
     await tester.pumpAndSettle();
@@ -293,6 +305,9 @@ void main() {
 
     fetch.gate = gate;
     await tester.scrollUntilVisible(find.byKey(const ValueKey('day_load_more')), 200);
+    // Fully on screen, not just its top edge: taller rows can leave its centre below the view.
+    await tester.ensureVisible(find.byKey(const ValueKey('day_load_more')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('day_load_more')));
     await tester.pump();
     expect(find.byType(OmiSpinner), findsOneWidget);

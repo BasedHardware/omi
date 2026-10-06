@@ -12,6 +12,7 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/device_tile.dart';
 
 const _title = 'Planning the next team meeting';
 const _upgrade = 'Upgrade to Unlimited';
@@ -214,7 +215,8 @@ void main() {
       tester,
       body: LockedConversationRun(conversations: run, date: run.first.createdAt),
     );
-    await tester.longPress(find.text('$_title 1'));
+    // On the second row's tile: the run's upgrade button sits over the middle of the rows.
+    await tester.longPress(find.byType(DeviceTile).at(1));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('conversation_action_delete')), findsOneWidget);
   });

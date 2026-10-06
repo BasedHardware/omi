@@ -134,7 +134,7 @@ void main() {
 
   testWidgets('a long swipe asks straight away; Delete Conversation deletes with Undo', (tester) async {
     await pumpRow(tester);
-    await swipe(tester, -340);
+    await swipe(tester, -tester.getSize(card).width / 2);
     expect(deleteItem, findsOneWidget);
 
     await tester.tap(deleteItem);
@@ -149,7 +149,7 @@ void main() {
 
   testWidgets('with "Don\'t ask me again" ticked, the next swipe deletes without asking', (tester) async {
     await pumpRow(tester);
-    await swipe(tester, -340);
+    await swipe(tester, -tester.getSize(card).width / 2);
     expect(find.byIcon(Icons.check_rounded), findsNothing);
     await tester.tap(find.text("Don't ask me again"));
     await tester.pump();
@@ -160,7 +160,7 @@ void main() {
     await tester.tap(find.text('Undo'));
     await tester.pumpAndSettle();
 
-    await swipe(tester, -340);
+    await swipe(tester, -tester.getSize(card).width / 2);
     expect(deleteItem, findsNothing);
     expect(provider.conversations, isEmpty);
     await tester.tap(find.text('Undo'));
