@@ -11397,6 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ",
+    "accountDeletionInProgressSignInAgain": "ಈ ಖಾತೆಯನ್ನು ಅಳಿಸಲಾಗುತ್ತಿದೆ. ಬೇರೆ ಖಾತೆಯಿಂದ ಸೈನ್ ಇನ್ ಮಾಡಿ, ಅಥವಾ ಕೆಲವು ನಿಮಿಷ ಕಾದು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "onboardingSetupTitle": "ನಿಮ್ಮ Omi ಅನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ",
     "onboardingSetupSubtitle": "ವೈಯಕ್ತೀಕರಿಸಲು Omi ಗೆ ಒಂದು ಕ್ಷಣ ನೀಡಿ",
     "onboardingSetupStepWorkspace": "ನಿಮ್ಮ ವರ್ಕ್‌ಸ್ಪೇಸ್ ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ",

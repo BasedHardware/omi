@@ -12411,6 +12411,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get showOnLockScreen => 'Kuva lukustuskuval';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Seda kontot kustutatakse. Logi sisse teise kontoga või oota paar minutit ja proovi uuesti.';
+
+  @override
   String get onboardingSetupTitle => 'Sinu Omi seadistamine';
 
   @override

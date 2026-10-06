@@ -11397,6 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Прикажи на заклучениот екран",
+    "accountDeletionInProgressSignInAgain": "Оваа сметка се брише. Најавете се со друга сметка или почекајте неколку минути и обидете се повторно.",
     "onboardingSetupTitle": "Го подесуваме вашиот Omi",
     "onboardingSetupSubtitle": "Дајте му на Omi момент да се прилагоди",
     "onboardingSetupStepWorkspace": "Го подготвуваме вашиот работен простор",

@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Visa på låsskärmen",
+    "accountDeletionInProgressSignInAgain": "Det här kontot håller på att raderas. Logga in med ett annat konto, eller vänta några minuter och försök igen.",
     "onboardingSetupTitle": "Din Omi ställs in",
     "onboardingSetupSubtitle": "Ge Omi en stund att anpassa sig",
     "onboardingSetupStepWorkspace": "Din arbetsyta förbereds",

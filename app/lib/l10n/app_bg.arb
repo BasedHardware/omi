@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Показване на заключения екран",
+    "accountDeletionInProgressSignInAgain": "Този акаунт се изтрива. Влезте с друг акаунт или изчакайте няколко минути и опитайте отново.",
     "onboardingSetupTitle": "Настройване на вашия Omi",
     "onboardingSetupSubtitle": "Дайте на Omi малко време да се персонализира",
     "onboardingSetupStepWorkspace": "Подготвяне на работното ви пространство",

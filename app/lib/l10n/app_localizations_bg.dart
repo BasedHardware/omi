@@ -12462,6 +12462,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get showOnLockScreen => 'Показване на заключения екран';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Този акаунт се изтрива. Влезте с друг акаунт или изчакайте няколко минути и опитайте отново.';
+
+  @override
   String get onboardingSetupTitle => 'Настройване на вашия Omi';
 
   @override

@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Zobrazit na zamčené obrazovce",
+    "accountDeletionInProgressSignInAgain": "Tento účet se maže. Přihlaste se jiným účtem, nebo počkejte několik minut a zkuste to znovu.",
     "onboardingSetupTitle": "Nastavujeme váš Omi",
     "onboardingSetupSubtitle": "Dejte Omi chvilku na přizpůsobení",
     "onboardingSetupStepWorkspace": "Připravujeme váš pracovní prostor",

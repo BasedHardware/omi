@@ -11397,6 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "הצגה במסך הנעילה",
+    "accountDeletionInProgressSignInAgain": "החשבון הזה נמחק כעת. היכנסו עם חשבון אחר, או המתינו כמה דקות ונסו שוב.",
     "onboardingSetupTitle": "מגדירים את ה-Omi שלך",
     "onboardingSetupSubtitle": "תנו ל-Omi רגע להתאים את עצמו אליכם",
     "onboardingSetupStepWorkspace": "מכינים את סביבת העבודה שלך",

@@ -12453,6 +12453,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get showOnLockScreen => 'Toon op vergrendelscherm';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Dit account wordt verwijderd. Log in met een ander account, of wacht een paar minuten en probeer het opnieuw.';
+
+  @override
   String get onboardingSetupTitle => 'Je Omi wordt ingesteld';
 
   @override

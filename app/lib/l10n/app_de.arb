@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Auf dem Sperrbildschirm anzeigen",
+    "accountDeletionInProgressSignInAgain": "Dieses Konto wird gerade gelöscht. Melde dich mit einem anderen Konto an oder warte ein paar Minuten und versuche es erneut.",
     "onboardingSetupTitle": "Dein Omi wird eingerichtet",
     "onboardingSetupSubtitle": "Gib Omi einen Moment zum Personalisieren",
     "onboardingSetupStepWorkspace": "Dein Arbeitsbereich wird vorbereitet",

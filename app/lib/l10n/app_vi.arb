@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Hiển thị trên màn hình khóa",
+    "accountDeletionInProgressSignInAgain": "Tài khoản này đang được xóa. Hãy đăng nhập bằng tài khoản khác, hoặc chờ vài phút rồi thử lại.",
     "onboardingSetupTitle": "Đang thiết lập Omi của bạn",
     "onboardingSetupSubtitle": "Hãy cho Omi một chút thời gian để cá nhân hóa",
     "onboardingSetupStepWorkspace": "Đang chuẩn bị không gian làm việc của bạn",

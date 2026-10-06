@@ -12421,6 +12421,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get showOnLockScreen => 'Zobrazit na zamčené obrazovce';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Tento účet se maže. Přihlaste se jiným účtem, nebo počkejte několik minut a zkuste to znovu.';
+
+  @override
   String get onboardingSetupTitle => 'Nastavujeme váš Omi';
 
   @override

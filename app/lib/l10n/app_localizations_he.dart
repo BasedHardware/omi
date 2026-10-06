@@ -12326,6 +12326,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get showOnLockScreen => 'הצגה במסך הנעילה';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'החשבון הזה נמחק כעת. היכנסו עם חשבון אחר, או המתינו כמה דקות ונסו שוב.';
+
+  @override
   String get onboardingSetupTitle => 'מגדירים את ה-Omi שלך';
 
   @override

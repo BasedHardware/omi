@@ -12400,6 +12400,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get showOnLockScreen => 'लॉक स्क्रीन पर दिखाएँ';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'यह खाता हटाया जा रहा है। किसी दूसरे खाते से साइन इन करें, या कुछ मिनट रुककर फिर से कोशिश करें।';
+
+  @override
   String get onboardingSetupTitle => 'आपका Omi सेट हो रहा है';
 
   @override

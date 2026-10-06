@@ -11397,6 +11397,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "लॉक स्क्रीनवर दाखवा",
+    "accountDeletionInProgressSignInAgain": "हे खाते हटवले जात आहे. दुसऱ्या खात्याने साइन इन करा, किंवा काही मिनिटे थांबून पुन्हा प्रयत्न करा.",
     "onboardingSetupTitle": "तुमचा Omi सेट केला जात आहे",
     "onboardingSetupSubtitle": "Omi ला वैयक्तिकरणासाठी थोडा वेळ द्या",
     "onboardingSetupStepWorkspace": "तुमचे वर्कस्पेस तयार केले जात आहे",

@@ -3875,6 +3875,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Показывать на экране блокировки",
+    "accountDeletionInProgressSignInAgain": "Этот аккаунт удаляется. Войдите с другим аккаунтом или подождите несколько минут и попробуйте снова.",
     "onboardingSetupTitle": "Настраиваем ваш Omi",
     "onboardingSetupSubtitle": "Дайте Omi минутку, чтобы подстроиться под вас",
     "onboardingSetupStepWorkspace": "Подготовка вашего рабочего пространства",

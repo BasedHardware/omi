@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Vis på låseskjermen",
+    "accountDeletionInProgressSignInAgain": "Denne kontoen slettes. Logg inn med en annen konto, eller vent noen minutter og prøv igjen.",
     "onboardingSetupTitle": "Setter opp Omi",
     "onboardingSetupSubtitle": "Gi Omi et øyeblikk til å tilpasse seg",
     "onboardingSetupStepWorkspace": "Forbereder arbeidsområdet ditt",

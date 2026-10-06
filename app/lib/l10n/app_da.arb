@@ -3882,6 +3882,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Vis på låseskærmen",
+    "accountDeletionInProgressSignInAgain": "Denne konto er ved at blive slettet. Log ind med en anden konto, eller vent et par minutter og prøv igen.",
     "onboardingSetupTitle": "Gør din Omi klar",
     "onboardingSetupSubtitle": "Giv Omi et øjeblik til at tilpasse sig",
     "onboardingSetupStepWorkspace": "Forbereder dit arbejdsområde",

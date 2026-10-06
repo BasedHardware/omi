@@ -12453,6 +12453,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get showOnLockScreen => 'Prikaži na zaključanom zaslonu';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Ovaj račun se briše. Prijavite se drugim računom ili pričekajte nekoliko minuta i pokušajte ponovno.';
+
+  @override
   String get onboardingSetupTitle => 'Postavljamo tvoj Omi';
 
   @override

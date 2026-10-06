@@ -12421,6 +12421,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get showOnLockScreen => 'Näytä lukitusnäytöllä';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Tätä tiliä poistetaan. Kirjaudu sisään toisella tilillä tai odota muutama minuutti ja yritä uudelleen.';
+
+  @override
   String get onboardingSetupTitle => 'Omia otetaan käyttöön';
 
   @override

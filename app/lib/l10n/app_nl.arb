@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Toon op vergrendelscherm",
+    "accountDeletionInProgressSignInAgain": "Dit account wordt verwijderd. Log in met een ander account, of wacht een paar minuten en probeer het opnieuw.",
     "onboardingSetupTitle": "Je Omi wordt ingesteld",
     "onboardingSetupSubtitle": "Geef Omi even de tijd om te personaliseren",
     "onboardingSetupStepWorkspace": "Je werkruimte wordt voorbereid",

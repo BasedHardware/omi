@@ -12460,6 +12460,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get showOnLockScreen => 'Показывать на экране блокировки';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Этот аккаунт удаляется. Войдите с другим аккаунтом или подождите несколько минут и попробуйте снова.';
+
+  @override
   String get onboardingSetupTitle => 'Настраиваем ваш Omi';
 
   @override

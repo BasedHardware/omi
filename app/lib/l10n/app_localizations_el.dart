@@ -12497,6 +12497,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get showOnLockScreen => 'Εμφάνιση στην οθόνη κλειδώματος';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Αυτός ο λογαριασμός διαγράφεται. Συνδεθείτε με άλλον λογαριασμό ή περιμένετε λίγα λεπτά και δοκιμάστε ξανά.';
+
+  @override
   String get onboardingSetupTitle => 'Ρύθμιση του Omi σας';
 
   @override

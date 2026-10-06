@@ -12501,6 +12501,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get showOnLockScreen => 'பூட்டுத் திரையில் காட்டு';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'இந்தக் கணக்கு நீக்கப்பட்டு வருகிறது. வேறு கணக்கில் உள்நுழையவும், அல்லது சில நிமிடங்கள் காத்திருந்து மீண்டும் முயற்சிக்கவும்.';
+
+  @override
   String get onboardingSetupTitle => 'உங்கள் Omi அமைக்கப்படுகிறது';
 
   @override

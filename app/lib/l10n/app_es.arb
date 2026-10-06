@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Mostrar en la pantalla de bloqueo",
+    "accountDeletionInProgressSignInAgain": "Esta cuenta se está eliminando. Inicia sesión con otra cuenta o espera unos minutos e inténtalo de nuevo.",
     "onboardingSetupTitle": "Configurando tu Omi",
     "onboardingSetupSubtitle": "Dale un momento a Omi para personalizarse",
     "onboardingSetupStepWorkspace": "Preparando tu espacio de trabajo",

@@ -12405,6 +12405,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get showOnLockScreen => 'Show on Lock Screen';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'This account is being deleted. Sign in with another account, or wait a few minutes and try again.';
+
+  @override
   String get onboardingSetupTitle => 'Setting up your Omi';
 
   @override

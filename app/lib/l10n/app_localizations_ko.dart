@@ -12231,6 +12231,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get showOnLockScreen => '잠금 화면에 표시';
 
   @override
+  String get accountDeletionInProgressSignInAgain => '이 계정은 삭제 중입니다. 다른 계정으로 로그인하거나 몇 분 후 다시 시도해 주세요.';
+
+  @override
   String get onboardingSetupTitle => 'Omi 설정 중';
 
   @override

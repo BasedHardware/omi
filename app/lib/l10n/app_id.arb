@@ -3875,6 +3875,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Tampilkan di layar kunci",
+    "accountDeletionInProgressSignInAgain": "Akun ini sedang dihapus. Masuk dengan akun lain, atau tunggu beberapa menit lalu coba lagi.",
     "onboardingSetupTitle": "Menyiapkan Omi Anda",
     "onboardingSetupSubtitle": "Beri Omi waktu sejenak untuk personalisasi",
     "onboardingSetupStepWorkspace": "Menyiapkan ruang kerja Anda",

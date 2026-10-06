@@ -12472,6 +12472,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get showOnLockScreen => 'Afișează pe ecranul de blocare';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Acest cont este în curs de ștergere. Conectează-te cu alt cont sau așteaptă câteva minute și încearcă din nou.';
+
+  @override
   String get onboardingSetupTitle => 'Se configurează Omi';
 
   @override

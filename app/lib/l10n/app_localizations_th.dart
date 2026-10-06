@@ -12351,6 +12351,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get showOnLockScreen => 'แสดงบนหน้าจอล็อก';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'บัญชีนี้กำลังถูกลบ ลงชื่อเข้าใช้ด้วยบัญชีอื่น หรือรอสักครู่แล้วลองอีกครั้ง';
+
+  @override
   String get onboardingSetupTitle => 'กำลังตั้งค่า Omi ของคุณ';
 
   @override

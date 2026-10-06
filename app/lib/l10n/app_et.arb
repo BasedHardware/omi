@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Kuva lukustuskuval",
+    "accountDeletionInProgressSignInAgain": "Seda kontot kustutatakse. Logi sisse teise kontoga või oota paar minutit ja proovi uuesti.",
     "onboardingSetupTitle": "Sinu Omi seadistamine",
     "onboardingSetupSubtitle": "Anna Omile hetk kohandamiseks",
     "onboardingSetupStepWorkspace": "Sinu tööruumi ettevalmistamine",

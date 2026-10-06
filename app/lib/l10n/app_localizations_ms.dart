@@ -12448,6 +12448,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get showOnLockScreen => 'Tunjukkan pada skrin kunci';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Akaun ini sedang dipadamkan. Log masuk dengan akaun lain, atau tunggu beberapa minit dan cuba lagi.';
+
+  @override
   String get onboardingSetupTitle => 'Menyediakan Omi anda';
 
   @override

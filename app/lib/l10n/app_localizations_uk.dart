@@ -12445,6 +12445,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get showOnLockScreen => 'Показувати на екрані блокування';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Цей обліковий запис видаляється. Увійдіть з іншим обліковим записом або зачекайте кілька хвилин і спробуйте знову.';
+
+  @override
   String get onboardingSetupTitle => 'Налаштовуємо ваш Omi';
 
   @override

@@ -12413,6 +12413,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get showOnLockScreen => 'Zobraziť na zamknutej obrazovke';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Tento účet sa odstraňuje. Prihláste sa iným účtom alebo počkajte niekoľko minút a skúste to znova.';
+
+  @override
   String get onboardingSetupTitle => 'Nastavujeme váš Omi';
 
   @override

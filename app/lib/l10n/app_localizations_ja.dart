@@ -12227,6 +12227,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get showOnLockScreen => 'ロック画面に表示';
 
   @override
+  String get accountDeletionInProgressSignInAgain => 'このアカウントは削除処理中です。別のアカウントでサインインするか、数分待ってからもう一度お試しください。';
+
+  @override
   String get onboardingSetupTitle => 'Omiをセットアップ中';
 
   @override

@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Afișează pe ecranul de blocare",
+    "accountDeletionInProgressSignInAgain": "Acest cont este în curs de ștergere. Conectează-te cu alt cont sau așteaptă câteva minute și încearcă din nou.",
     "onboardingSetupTitle": "Se configurează Omi",
     "onboardingSetupSubtitle": "Dă-i lui Omi un moment să se personalizeze",
     "onboardingSetupStepWorkspace": "Se pregătește spațiul tău de lucru",

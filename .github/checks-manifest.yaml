@@ -509,6 +509,16 @@ checks:
     triggers: ["app/scripts/mobile_store_promote.py", "app/scripts/mobile_store_promote_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manual public promotion requires exact already-processed build, matching release notes and roll-forward checks"
+  - id: mobile-daily-train-contract
+    command: ["python3", "app/scripts/mobile_daily_train_test.py"]
+    triggers: ["app/scripts/mobile_daily_train.py", "app/scripts/mobile_daily_train_test.py", "app/scripts/mobile_store_promote.py", "codemagic.yaml", ".github/workflows/mobile_daily_train.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the daily store train may only queue builds for a human release: hold while a submission is in flight, replace only an unreleased approval, iOS MANUAL release type, Play production draft never completed"
+  - id: mobile-daily-train-dispatch
+    command: ["python3", ".github/scripts/test_dispatch_mobile_daily_train.py"]
+    triggers: [".github/scripts/dispatch_mobile_daily_train.py", ".github/scripts/test_dispatch_mobile_daily_train.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/workflows/mobile_daily_train.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Codemagic drops a variables object holding an empty string, so the daily dispatch must always send a non-empty TRAIN_DRY_RUN and target the train workflow on main"
   - id: omi-macos-dev-cli
     command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
     triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]

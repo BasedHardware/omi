@@ -12513,6 +12513,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get showOnLockScreen => 'Auf dem Sperrbildschirm anzeigen';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Dieses Konto wird gerade gelöscht. Melde dich mit einem anderen Konto an oder warte ein paar Minuten und versuche es erneut.';
+
+  @override
   String get onboardingSetupTitle => 'Dein Omi wird eingerichtet';
 
   @override

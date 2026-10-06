@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Näytä lukitusnäytöllä",
+    "accountDeletionInProgressSignInAgain": "Tätä tiliä poistetaan. Kirjaudu sisään toisella tilillä tai odota muutama minuutti ja yritä uudelleen.",
     "onboardingSetupTitle": "Omia otetaan käyttöön",
     "onboardingSetupSubtitle": "Anna Omille hetki mukautua",
     "onboardingSetupStepWorkspace": "Työtilaasi valmistellaan",

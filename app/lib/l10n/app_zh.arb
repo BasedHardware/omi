@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "在锁定屏幕上显示",
+    "accountDeletionInProgressSignInAgain": "此账号正在删除中。请使用其他账号登录，或等待几分钟后重试。",
     "onboardingSetupTitle": "正在设置你的 Omi",
     "onboardingSetupSubtitle": "请稍等片刻，Omi 正在为你个性化设置",
     "onboardingSetupStepWorkspace": "正在准备你的工作区",

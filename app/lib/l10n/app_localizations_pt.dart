@@ -12435,6 +12435,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get showOnLockScreen => 'Mostrar na tela de bloqueio';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Esta conta está sendo excluída. Entre com outra conta ou aguarde alguns minutos e tente novamente.';
+
+  @override
   String get onboardingSetupTitle => 'Configurando seu Omi';
 
   @override

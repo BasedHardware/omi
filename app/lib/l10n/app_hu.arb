@@ -3936,6 +3936,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Megjelenítés a zárolási képernyőn",
+    "accountDeletionInProgressSignInAgain": "Ez a fiók törlés alatt áll. Jelentkezz be egy másik fiókkal, vagy várj néhány percet, és próbáld újra.",
     "onboardingSetupTitle": "Az Omi beállítása",
     "onboardingSetupSubtitle": "Adj egy pillanatot az Ominak a testreszabásra",
     "onboardingSetupStepWorkspace": "A munkaterületed előkészítése",

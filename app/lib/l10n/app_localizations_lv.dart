@@ -12445,6 +12445,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get showOnLockScreen => 'Rādīt bloķēšanas ekrānā';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Šis konts tiek dzēsts. Pierakstieties ar citu kontu vai uzgaidiet dažas minūtes un mēģiniet vēlreiz.';
+
+  @override
   String get onboardingSetupTitle => 'Tiek iestatīts jūsu Omi';
 
   @override

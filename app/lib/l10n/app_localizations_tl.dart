@@ -12518,6 +12518,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get showOnLockScreen => 'Ipakita sa lock screen';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Binubura ang account na ito. Mag-sign in gamit ang ibang account, o maghintay ng ilang minuto at subukang muli.';
+
+  @override
   String get onboardingSetupTitle => 'Sine-set up ang iyong Omi';
 
   @override

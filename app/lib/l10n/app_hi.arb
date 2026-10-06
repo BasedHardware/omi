@@ -3840,6 +3840,7 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ",
+    "accountDeletionInProgressSignInAgain": "यह खाता हटाया जा रहा है। किसी दूसरे खाते से साइन इन करें, या कुछ मिनट रुककर फिर से कोशिश करें।",
     "onboardingSetupTitle": "आपका Omi सेट हो रहा है",
     "onboardingSetupSubtitle": "Omi को पर्सनलाइज़ होने के लिए थोड़ा समय दें",
     "onboardingSetupStepWorkspace": "आपका वर्कस्पेस तैयार हो रहा है",

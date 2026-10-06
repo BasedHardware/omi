@@ -12346,6 +12346,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get showOnLockScreen => 'إظهار على شاشة القفل';
 
   @override
+  String get accountDeletionInProgressSignInAgain =>
+      'يجري حذف هذا الحساب. سجّل الدخول بحساب آخر، أو انتظر بضع دقائق ثم حاول مرة أخرى.';
+
+  @override
   String get onboardingSetupTitle => 'إعداد Omi الخاص بك';
 
   @override
