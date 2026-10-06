@@ -755,6 +755,13 @@ def _count_matching_tombstones(
     return matching
 
 
+# Legacy completed rule-discards still match ``discarded == False``. Skip at
+# most this many of them while filling one page: one stale row must not empty
+# the page, and a pile must not walk the collection. Past the cap the page
+# may be short; that bound is preferable to an unbounded scan or a new index.
+_RULE_DISCARD_PAGE_SKIP_CAP = 64
+
+
 def _collect_visible_conversation_page(
     conversations_ref: Any,
     *,
@@ -763,48 +770,33 @@ def _collect_visible_conversation_page(
     include_discarded: bool,
     budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
-    """Page visible rows. `include_discarded=True` cannot use Firestore offset.
+    """Page visible rows. Offset counts visible rows, not stored slots.
 
-    Flutter lists with `include_discarded=True`, so donor tombstones would steal
-    page slots if we `limit`/`offset` then drop `deleted` in Python. Scan and
-    fill visible rows instead. `include_discarded=False` keeps server-side
-    offset so the list-read budget still charges the skipped prefix without
-    iterating it; `discarded=True` on donors, discarded fragments, and the
-    relevance backfill keeps those rows out of that indexed query.
+    A Firestore ``limit``/``offset`` on ``discarded == False`` then a Python
+    drop lets one completed rule-discard empty the page and makes the next
+    offset repeat or skip. Fill ``limit`` visible rows after skipping
+    ``offset`` visible rows instead. ``include_discarded=False`` still cannot
+    express the decision check in the indexed query, so those skips are capped.
+    The list-read budget stops the scan when it is present.
     """
-    if include_discarded:
-        skipped_visible = 0
-        conversations: List[Dict[str, Any]] = []
-        try:
-            for doc in budgeted_stream_iter(conversations_ref, budget):
-                conversation = document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded
-                ):
-                    continue
-                if skipped_visible < offset:
-                    skipped_visible += 1
-                    continue
-                conversations.append(conversation)
-                if len(conversations) >= limit:
-                    break
-        except ListReadBudgetExhausted:
-            pass
-        return conversations
-
-    if budget is not None and offset > 0:
-        try:
-            budget.charge(offset)
-        except ListReadBudgetExhausted:
-            return []
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
+    skipped_visible = 0
+    skipped_hidden = 0
     conversations: List[Dict[str, Any]] = []
     try:
         for doc in budgeted_stream_iter(conversations_ref, budget):
             conversation = document_data_with_revision(doc)
             if conversation is None or not is_visible_conversation(conversation, include_discarded=include_discarded):
+                if not include_discarded:
+                    skipped_hidden += 1
+                    if skipped_hidden > _RULE_DISCARD_PAGE_SKIP_CAP:
+                        break
+                continue
+            if skipped_visible < offset:
+                skipped_visible += 1
                 continue
             conversations.append(conversation)
+            if len(conversations) >= limit:
+                break
     except ListReadBudgetExhausted:
         pass
     return conversations

@@ -122,6 +122,29 @@ def test_default_list_omits_a_completed_rule_discard(conversations_db):
     assert incident['discarded'] is True
 
 
+def test_limit_one_page_fills_past_a_completed_rule_discard(monkeypatch):
+    from database import conversations as conversations_db
+
+    newer = datetime(2026, 9, 22, 13, 0, tzinfo=timezone.utc)
+    older = datetime(2026, 9, 22, 11, 0, tzinfo=timezone.utc)
+    visible = {
+        'id': 'visible',
+        'created_at': older,
+        'status': 'completed',
+        'discarded': False,
+        'deleted': False,
+        'source': 'omi',
+        'structured': {'title': 'Real conversation'},
+    }
+    _install_listing(monkeypatch, {'incident': _incident(created_at=newer), 'visible': visible})
+
+    page = conversations_db.get_conversations_without_photos('u', limit=1, offset=0)
+    assert [row['id'] for row in page] == ['visible']
+
+    next_page = conversations_db.get_conversations_without_photos('u', limit=1, offset=1)
+    assert next_page == []
+
+
 def test_read_projection_marks_the_incident_without_mutating_it(conversations_db):
     stored = _incident()
     projected = conversations_db.prepare_conversation_for_read(stored, 'u')
