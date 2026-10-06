@@ -1,3 +1,4 @@
+import Combine
 import OmiTheme
 import SwiftUI
 
@@ -52,6 +53,7 @@ struct ConversationsPage: View {
   @AppStorage(DefaultsKey.meetingMemoryBriefsEnabled.rawValue) private var meetingMemoryBriefsEnabled = false
   @AppStorage(DefaultsKey.meetingMemoryBriefDismissedKey.rawValue) private var dismissedMeetingBriefKey = ""
   @State private var meetingBrief: MeetingMemoryBrief?
+  @State private var meetingBriefOwner: RuntimeOwnerAuthorizationSnapshot?
   @State private var meetingBriefLoadGeneration = 0
 
   /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
@@ -175,6 +177,9 @@ struct ConversationsPage: View {
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         Task { await refreshMeetingBrief() }
       }
+      .onReceive(Timer.publish(every: 300, on: .main, in: .common).autoconnect()) { _ in
+        Task { await refreshMeetingBrief() }
+      }
       .onReceive(automation.$pendingOpenRequest.compactMap { $0 }) { _ in
         consumePendingAutomationOpenConversation()
       }
@@ -214,6 +219,7 @@ struct ConversationsPage: View {
         isLiveTranscriptExpanded = false
         meetingBriefLoadGeneration += 1
         meetingBrief = nil
+        meetingBriefOwner = nil
       }
       .onReceive(appState.$conversations) { conversations in
         guard let selectedConversation,
@@ -451,7 +457,7 @@ struct ConversationsPage: View {
       {
         TimelineView(.periodic(from: .now, by: 30)) { context in
           if meetingBrief.startsAt > context.date,
-            let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+            let owner = meetingBriefOwner, RuntimeOwnerIdentity.isAuthorizationCurrent(owner),
             dismissedMeetingBriefKey != meetingBriefDismissalKey(meetingBrief, ownerID: owner.ownerID)
           {
             MeetingMemoryBriefCard(
@@ -499,17 +505,26 @@ struct ConversationsPage: View {
   private func refreshMeetingBrief() async {
     meetingBriefLoadGeneration += 1
     let generation = meetingBriefLoadGeneration
-    meetingBrief = nil
     guard meetingMemoryBriefsEnabled,
       let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
-    else { return }
+    else {
+      meetingBrief = nil
+      meetingBriefOwner = nil
+      return
+    }
 
     let now = Date()
     let events = await SystemCalendarMeetingContextService.shared.upcomingAuthorizedEvents(
       now: now, horizon: MeetingMemoryBriefComposer.leadWindow)
     guard generation == meetingBriefLoadGeneration, RuntimeOwnerIdentity.isAuthorizationCurrent(owner),
       !events.isEmpty
-    else { return }
+    else {
+      if generation == meetingBriefLoadGeneration {
+        meetingBrief = nil
+        meetingBriefOwner = nil
+      }
+      return
+    }
 
     do {
       let conversations = try await APIClient.shared.getConversations(
@@ -520,6 +535,7 @@ struct ConversationsPage: View {
         RuntimeOwnerIdentity.isAuthorizationCurrent(owner), meetingMemoryBriefsEnabled
       else { return }
       meetingBrief = MeetingMemoryBriefComposer.compose(events: events, conversations: conversations, now: now)
+      meetingBriefOwner = meetingBrief == nil ? nil : owner
     } catch {
       // This is optional context, not a reason to interrupt the user or block Conversations.
       guard generation == meetingBriefLoadGeneration else { return }
@@ -530,7 +546,7 @@ struct ConversationsPage: View {
   @MainActor
   private func openMeetingBriefSource(_ fact: MeetingMemoryBriefFact) async {
     let conversationID = fact.sourceConversationID
-    guard let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+    guard let owner = meetingBriefOwner, RuntimeOwnerIdentity.isAuthorizationCurrent(owner),
       meetingBrief?.sourceConversationID == conversationID, !fact.sourceSegmentIDs.isEmpty
     else { return }
     do {
