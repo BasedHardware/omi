@@ -12,9 +12,17 @@ from models.other import Person
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
+from models.note_claims import current_note_claims
 from utils.conversations.summary_selection import select_primary_summary
 
 logger = logging.getLogger(__name__)
+
+
+def _omit_list_note_claims(conv: Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(conv.get('structured'), dict) and 'note_claims' in conv['structured']:
+        conv['structured'] = dict(conv['structured'])
+        conv['structured'].pop('note_claims', None)
+    return conv
 
 
 def resolve_display_tz(tz: Optional[str]) -> Any:
@@ -140,7 +148,8 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
     _strip_match_scores(conv)
     if not conv.get('is_locked', False):
-        return conv
+        return _omit_list_note_claims(conv)
+    _omit_list_note_claims(conv)
     if 'structured' in conv:
         conv['structured'] = (
             dict(conv['structured']) if not isinstance(conv['structured'], dict) else conv['structured']
@@ -153,7 +162,7 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv['transcript_segments'] = []
     # Search may attach transcript match_snippets before list redaction; never leak evidence for locked rows.
     conv['match_snippets'] = []
-    return conv
+    return _omit_list_note_claims(conv)
 
 
 def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
@@ -194,6 +203,8 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
         conv['structured']['overview'] = ''
         conv['structured']['action_items'] = []
         conv['structured']['events'] = []
+        if isinstance(conv['structured'].get('note_claims'), list):
+            conv['structured']['note_claims'] = current_note_claims(conv['structured'])
     conv['apps_results'] = []
     conv['plugins_results'] = []
     conv['suggested_summarization_apps'] = []

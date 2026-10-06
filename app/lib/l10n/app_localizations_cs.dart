@@ -12425,6 +12425,39 @@ class AppLocalizationsCs extends AppLocalizations {
       'Tento účet se maže. Přihlaste se jiným účtem, nebo počkejte několik minut a zkuste to znovu.';
 
   @override
+  String get onboardingSetupTitle => 'Nastavujeme váš Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Dejte Omi chvilku na přizpůsobení';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Připravujeme váš pracovní prostor';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Ladíme přepis na váš jazyk';
+
+  @override
+  String get onboardingSetupStepMemory => 'Nastavujeme vaši paměť';
+
+  @override
+  String get onboardingSetupStepDevices => 'Připojujeme vaše zařízení';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Přizpůsobujeme váš zážitek';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Než to doběhne, líbí se vám Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Hodnocení 5 hvězdiček nám opravdu hodně pomůže ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Ano, chci vás podpořit!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Moc ne';
+
+  @override
   String get thisWeek => 'Tento týden';
 
   @override

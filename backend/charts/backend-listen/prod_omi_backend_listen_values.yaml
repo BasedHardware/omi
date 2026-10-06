@@ -229,7 +229,7 @@ env:
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
     value: "100"
   - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
-    value: "2"
+    value: "20"
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
@@ -441,6 +441,8 @@ env:
     value: "false"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
+  - name: SONIOX_IDLE_CLOSE_SECONDS
+    value: "45"
   - name: STT_ROUTING_MODE
     value: "shadow"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS

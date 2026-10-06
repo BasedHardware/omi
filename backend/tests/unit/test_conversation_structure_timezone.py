@@ -10,205 +10,29 @@ Covers:
 3. get_transcript_structure and get_reprocess_transcript_structure pass the local time + a non-None tz
 """
 
-import importlib.util
-import os
-import sys
-import types
 from datetime import datetime, timedelta, timezone, tzinfo
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+from testing.import_isolation import stub_modules
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+conv_proc = None
 
 
-def _stub_module(name):
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
-    return mod
+@pytest.fixture(scope='module', autouse=True)
+def isolated_processing():
+    global conv_proc
+    with stub_modules({}):
+        from utils.llm import conversation_processing, usage_tracker
 
+        conv_proc = conversation_processing
+        with patch.object(conv_proc, 'ZoneInfo', _test_zone_info), patch.object(
+            usage_tracker, 'track_usage', MagicMock()
+        ):
+            yield
+    conv_proc = None
 
-def _stub_package(name):
-    mod = types.ModuleType(name)
-    mod.__path__ = []
-    sys.modules[name] = mod
-    return mod
-
-
-def _load_module_from_file(module_name, file_path):
-    if module_name in sys.modules:
-        return sys.modules[module_name]
-    spec = importlib.util.spec_from_file_location(module_name, str(file_path))
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-# Stub heavy dependencies so conversation_processing.py imports without external services.
-for mod_name in [
-    "firebase_admin",
-    "firebase_admin.firestore",
-    "firebase_admin.auth",
-    "firebase_admin.messaging",
-    "firebase_admin.credentials",
-    "google.cloud.firestore",
-    "google.cloud.firestore_v1",
-    "google.cloud.firestore_v1.base_query",
-    "google.auth",
-    "google.auth.transport",
-    "google.auth.transport.requests",
-    "google.cloud.storage",
-    "opuslib",
-    "sentry_sdk",
-    "database._client",
-    "database.redis_db",
-    "database.auth",
-]:
-    if mod_name not in sys.modules:
-        _stub_module(mod_name)
-
-_stub_package("database")
-sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
-
-# Stub langchain core pieces used at import time.
-_stub_package("langchain_core")
-langchain_output_parsers = _stub_module("langchain_core.output_parsers")
-langchain_output_parsers.PydanticOutputParser = MagicMock()
-langchain_messages = _stub_module("langchain_core.messages")
-langchain_messages.SystemMessage = MagicMock()
-langchain_messages.HumanMessage = MagicMock()
-langchain_prompts = _stub_module("langchain_core.prompts")
-langchain_prompts.ChatPromptTemplate = MagicMock()
-langchain_openai = _stub_package("langchain_openai")
-langchain_openai.ChatOpenAI = MagicMock()
-language_models = _stub_module("langchain_core.language_models")
-language_models.BaseChatModel = object
-
-# Stub utils packages and the LLM client module.
-_stub_package("utils")
-_stub_package("utils.llm")
-_stub_package("utils.conversations")
-llm_clients_stub = _stub_module("utils.llm.clients")
-llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
-llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
-llm_clients_stub.parser = MagicMock()
-usage_tracker_stub = _stub_module("utils.llm.usage_tracker")
-
-
-class _Features:
-    CONVERSATION_STRUCTURE = "conversation_structure"
-
-
-usage_tracker_stub.Features = _Features
-usage_tracker_stub.track_usage = MagicMock()
-conversation_folder_stub = _stub_module("utils.llm.conversation_folder")
-conversation_folder_stub.FolderAssignment = MagicMock
-conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=None)
-conversation_folder_stub.build_folders_context = MagicMock(return_value="")
-
-byok_stub = _stub_module("utils.byok")
-byok_stub.has_byok_keys = MagicMock(return_value=False)
-
-gateway_stub = _stub_module("utils.llm.gateway_client")
-gateway_stub.invoke_chat_structured_gateway = MagicMock(return_value=None)
-gateway_stub.record_chat_extraction_gateway_result = MagicMock()
-gateway_stub.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
-
-gateway_observability_stub = _stub_module("utils.llm.gateway_observability")
-gateway_observability_stub.record_gateway_shadow_comparison = MagicMock()
-
-conversation_folder_stub = _stub_module("utils.llm.conversation_folder")
-conversation_folder_stub.FolderAssignment = MagicMock()
-conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=(None, 0.0, "test stub"))
-conversation_folder_stub.build_folders_context = MagicMock(return_value="")
-
-# Stub utils.llm.gateway_error_contract (conversation_processing imports from it)
-gateway_error_contract_stub = _stub_module("utils.llm.gateway_error_contract")
-gateway_error_contract_stub.is_byok_rate_limit_gateway_error = MagicMock(return_value=False)
-
-# Real models (pure pydantic) resolve from the models package directory.
-_stub_package("models")
-sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
-
-_conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")
-if _conversation_processing_stub is not None and not hasattr(_conversation_processing_stub, "_local_started_at_iso"):
-    sys.modules.pop("utils.llm.conversation_processing", None)
-
-# discard_parser only needs pydantic and langchain_core, so load the real module.
-_load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm" / "discard_parser.py")
-
-# prompt_cache only needs tiktoken, so load the real module rather than stub the
-# cache floor the preflight assertions below depend on.
-_load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
-
-# conversation_processing imports the shaped loop at module scope. The stubbed
-# utils.llm package cannot resolve it, so load the real stdlib module first.
-_load_module_from_file("utils.llm.shaped_agent", BACKEND_DIR / "utils" / "llm" / "shaped_agent.py")
-_load_module_from_file("utils.llm.shaped_notes_transport", BACKEND_DIR / "utils" / "llm" / "shaped_notes_transport.py")
-
-# model_config pulls in gateway_client; stub the one constant conversation_processing
-# imports so the isolated load does not need the real module tree.
-model_config_stub = _stub_module("utils.llm.model_config")
-model_config_stub.FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
-
-prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
-prompt_prefix_stub.ConversationPromptPrefix = MagicMock
-prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
-prompt_prefix_stub.SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the account owner.'
-
-# wake_word is stdlib-only; load the real trust-boundary helper before the
-# isolated conversation-processing module imports it.
-_load_module_from_file(
-    "utils.conversations.wake_word",
-    BACKEND_DIR / "utils" / "conversations" / "wake_word.py",
-)
-_load_module_from_file(
-    "utils.conversations.summary_selection",
-    BACKEND_DIR / "utils" / "conversations" / "summary_selection.py",
-)
-# relevance_rules is stdlib-only; load the real module so conversation_processing's
-# module-scope `from utils.conversations.relevance_rules import KEEP_WORD_COUNT`
-# resolves against production's threshold, not a stub package.
-_load_module_from_file(
-    "utils.conversations.relevance_rules",
-    BACKEND_DIR / "utils" / "conversations" / "relevance_rules.py",
-)
-
-# Pure helpers imported by conversation_processing; load the real modules so
-# the isolated import chain exercises production code. meeting_participants and
-# meeting_notes_validation resolve models/* through the real models.__path__.
-_load_module_from_file(
-    "utils.conversations.meeting_participants",
-    BACKEND_DIR / "utils" / "conversations" / "meeting_participants.py",
-)
-_load_module_from_file(
-    "utils.llm.meeting_notes_rich_prompts",
-    BACKEND_DIR / "utils" / "llm" / "meeting_notes_rich_prompts.py",
-)
-_load_module_from_file(
-    "utils.llm.meeting_notes_validation",
-    BACKEND_DIR / "utils" / "llm" / "meeting_notes_validation.py",
-)
-_load_module_from_file(
-    "utils.llm.meeting_notes_presentation",
-    BACKEND_DIR / "utils" / "llm" / "meeting_notes_presentation.py",
-)
-_load_module_from_file(
-    "utils.llm.action_item_normalization",
-    BACKEND_DIR / "utils" / "llm" / "action_item_normalization.py",
-)
-
-conv_proc = _load_module_from_file(
-    "utils.llm.conversation_processing",
-    BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
-)
 
 # Keep timezone assertions independent of host OS tzdata, which is often absent on Windows test environments.
 
@@ -234,9 +58,6 @@ def _test_zone_info(name):
     if name == "UTC":
         return timezone.utc
     raise KeyError(name)
-
-
-conv_proc.ZoneInfo = _test_zone_info
 
 
 # ===========================================================================

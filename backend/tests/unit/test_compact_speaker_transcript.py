@@ -95,7 +95,7 @@ def test_speaker_map_binds_only_evidence_backed_names(monkeypatch):
 
 def test_prefix_renders_spk_map_and_never_speaker_labels(monkeypatch):
     from utils.conversations import transcript_for_llm
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_a, **_k: 'David')
     conversation = SimpleNamespace(
@@ -122,7 +122,7 @@ def test_prefix_renders_spk_map_and_never_speaker_labels(monkeypatch):
 
 
 def test_calendar_guard_resolves_single_unresolved_cluster_from_map():
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-1',
@@ -139,7 +139,7 @@ def test_calendar_guard_resolves_single_unresolved_cluster_from_map():
 
 def test_calendar_guard_requires_exactly_one_unresolved_and_one_remaining_name():
     from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     context = CalendarMeetingContext(
         calendar_event_id='evt-1',
@@ -214,7 +214,7 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
     """11s hardware scrap, unresolved cluster, model that copies Speaker 0 anyway."""
     from utils.conversations import transcript_for_llm
     from utils.llm import conversation_processing
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_a, **_k: 'David')
     conversation = SimpleNamespace(
@@ -271,7 +271,7 @@ def _summary_app() -> App:
 
 def test_get_app_result_strips_speaker_and_spk_placeholders(monkeypatch):
     from utils.llm import conversation_processing
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
     monkeypatch.setattr(
         conversation_processing,

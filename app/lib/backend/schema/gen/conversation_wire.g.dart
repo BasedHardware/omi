@@ -358,6 +358,82 @@ class GeneratedInsight {
   }
 }
 
+class GeneratedNoteEvidenceRef {
+  final String? actor;
+  final String? diarizationKey;
+  final String id;
+  final String sourceKind;
+  final String? sourceRef;
+  final String? time;
+
+  const GeneratedNoteEvidenceRef({
+    this.actor,
+    this.diarizationKey,
+    required this.id,
+    required this.sourceKind,
+    this.sourceRef,
+    this.time,
+  });
+
+  factory GeneratedNoteEvidenceRef.fromJson(Map<String, dynamic> json) {
+    return GeneratedNoteEvidenceRef(
+      actor: _readFieldValue<String>(_readField(json, const ["actor"]), "actor", _readString, requiredField: false, nullable: true),
+      diarizationKey: _readFieldValue<String>(_readField(json, const ["diarization_key"]), "diarization_key", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      sourceKind: _required(_readFieldValue<String>(_readField(json, const ["source_kind"]), "source_kind", _readString, requiredField: true, nullable: false), "source_kind"),
+      sourceRef: _readFieldValue<String>(_readField(json, const ["source_ref"]), "source_ref", _readString, requiredField: false, nullable: true),
+      time: _readFieldValue<String>(_readField(json, const ["time"]), "time", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'actor': actor,
+      'diarization_key': diarizationKey,
+      'id': id,
+      'source_kind': sourceKind,
+      'source_ref': sourceRef,
+      'time': time,
+    };
+  }
+}
+
+class GeneratedNoteClaim {
+  final List<String> evidenceIds;
+  final List<GeneratedNoteEvidenceRef>? evidenceSources;
+  final String provenance;
+  final String target;
+  final String text;
+
+  const GeneratedNoteClaim({
+    required this.evidenceIds,
+    this.evidenceSources,
+    required this.provenance,
+    required this.target,
+    required this.text,
+  });
+
+  factory GeneratedNoteClaim.fromJson(Map<String, dynamic> json) {
+    return GeneratedNoteClaim(
+      evidenceIds: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence_ids"]), "evidence_ids", _readStringList, requiredField: true, nullable: false), "evidence_ids"),
+      evidenceSources: _readFieldValue<List<GeneratedNoteEvidenceRef>>(_readField(json, const ["evidence_sources"]), "evidence_sources", (value) => _readObjectList(value, GeneratedNoteEvidenceRef.fromJson), requiredField: false, nullable: true),
+      provenance: _required(_readFieldValue<String>(_readField(json, const ["provenance"]), "provenance", _readString, requiredField: true, nullable: false), "provenance"),
+      target: _required(_readFieldValue<String>(_readField(json, const ["target"]), "target", _readString, requiredField: true, nullable: false), "target"),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'evidence_ids': evidenceIds,
+      'evidence_sources': evidenceSources?.map((value) => value.toJson()).toList(),
+      'provenance': provenance,
+      'target': target,
+      'text': text,
+    };
+  }
+}
+
 class GeneratedStructured {
   final List<GeneratedActionItem>? actionItems;
   final String category;
@@ -365,6 +441,7 @@ class GeneratedStructured {
   final List<GeneratedEvent>? events;
   final List<GeneratedInsight>? insights;
   final String? meetingType;
+  final List<GeneratedNoteClaim>? noteClaims;
   final String overview;
   final List<GeneratedParticipant>? participants;
   final List<GeneratedSection>? sections;
@@ -377,6 +454,7 @@ class GeneratedStructured {
     this.events,
     this.insights,
     this.meetingType,
+    this.noteClaims,
     this.overview = "",
     this.participants,
     this.sections,
@@ -391,6 +469,7 @@ class GeneratedStructured {
       events: _readFieldValue<List<GeneratedEvent>>(_readField(json, const ["events"]), "events", (value) => _readObjectList(value, GeneratedEvent.fromJson), requiredField: false, nullable: true),
       insights: _readFieldValue<List<GeneratedInsight>>(_readField(json, const ["insights"]), "insights", (value) => _readObjectList(value, GeneratedInsight.fromJson), requiredField: false, nullable: true),
       meetingType: _readFieldValue<String>(_readField(json, const ["meeting_type"]), "meeting_type", _readString, requiredField: false, nullable: true),
+      noteClaims: _readFieldValue<List<GeneratedNoteClaim>>(_readField(json, const ["note_claims"]), "note_claims", (value) => _readObjectList(value, GeneratedNoteClaim.fromJson), requiredField: false, nullable: true),
       overview: _required(_readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString, requiredField: false, nullable: false, defaultValue: ""), "overview"),
       participants: _readFieldValue<List<GeneratedParticipant>>(_readField(json, const ["participants"]), "participants", (value) => _readObjectList(value, GeneratedParticipant.fromJson), requiredField: false, nullable: true),
       sections: _readFieldValue<List<GeneratedSection>>(_readField(json, const ["sections"]), "sections", (value) => _readObjectList(value, GeneratedSection.fromJson), requiredField: false, nullable: true),
@@ -406,6 +485,7 @@ class GeneratedStructured {
       'events': events?.map((value) => value.toJson()).toList(),
       'insights': insights?.map((value) => value.toJson()).toList(),
       'meeting_type': meetingType,
+      'note_claims': noteClaims?.map((value) => value.toJson()).toList(),
       'overview': overview,
       'participants': participants?.map((value) => value.toJson()).toList(),
       'sections': sections?.map((value) => value.toJson()).toList(),

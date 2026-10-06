@@ -14,6 +14,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
 from models.audio_file import AudioFile, ChunkSpan
+from models.note_claims import claim_references_segment
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -2541,6 +2542,12 @@ def _summary_source_reference_invalidations(structured: Any, segment_id: str) ->
                 changed = True
         if changed:
             invalidations[f'structured.{field}'] = copied_items
+
+    claims = structured.get('note_claims')
+    if isinstance(claims, list):
+        kept = [claim for claim in claims if not claim_references_segment(claim, segment_id)]
+        if len(kept) != len(claims):
+            invalidations['structured.note_claims'] = kept
 
     return invalidations
 

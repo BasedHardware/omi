@@ -54,8 +54,12 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
     for raw_entry in (cloud_run.get('network') or {}).get('flags', {}).values():
         if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
             monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-flag')))
-    for service in (cloud_run.get('services') or {}).values():
-        for raw_entry in (service.get('env') or {}).values():
+    runtime_targets = [
+        *(cloud_run.get('services') or {}).values(),
+        *(cloud_run.get('jobs') or {}).values(),
+    ]
+    for target in runtime_targets:
+        for raw_entry in (target.get('env') or {}).values():
             if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
                 monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-value')))
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='runtime_env_state_test_renderer')
@@ -2839,6 +2843,49 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     )
 
 
+def test_x_connector_sync_job_workflow_is_listed_and_targets_job():
+    workflow = ROOT.parent / '.github/workflows/gcp_x_connector_sync_job.yml'
+    text = workflow.read_text(encoding='utf-8')
+    assert 'SERVICE: x-connector-sync-job' in text
+    assert 'SCHEDULER_JOB: x-connector-sync-6h' in text
+    assert 'Dockerfile.x_connector_sync_job' in text
+    assert "id-token: 'write'" in text
+    assert 'verify-llm-gateway-serving' in text
+    assert (
+        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
+        '${{ steps.runtime-env.outputs.x_connector_sync_job_flags }}'
+    ) in text
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    for env_name in ('dev', 'prod'):
+        assert (
+            '.github/workflows/gcp_x_connector_sync_job.yml'
+            in manifest['environments'][env_name]['cloud_run']['workflow_files']
+        )
+        assert 'x-connector-sync-job' in manifest['environments'][env_name]['cloud_run']['jobs']
+        notifications = manifest['environments'][env_name]['cloud_run']['jobs']['notifications-job']
+        x_sync = manifest['environments'][env_name]['cloud_run']['jobs']['x-connector-sync-job']
+        assert 'X_OAUTH_CLIENT_SECRET' not in notifications.get('secrets', {})
+        assert 'RAPID_API_KEY' not in notifications.get('secrets', {})
+        assert 'X_OAUTH_CLIENT_ID' not in notifications.get('env', {})
+        assert 'X_OAUTH_REDIRECT_URI' not in notifications.get('env', {})
+        assert 'RAPID_API_HOST' not in notifications.get('env', {})
+        assert 'X_OAUTH_CLIENT_SECRET' in x_sync.get('secrets', {})
+        assert 'RAPID_API_KEY' in x_sync.get('secrets', {})
+        assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in x_sync.get('secrets', {})
+        assert 'X_OAUTH_CLIENT_ID' in x_sync.get('env', {})
+        assert 'X_OAUTH_REDIRECT_URI' in x_sync.get('env', {})
+        assert 'RAPID_API_HOST' in x_sync.get('env', {})
+        assert (
+            x_sync.get('flags', {}).get('--service-account')
+            == {
+                'dev': 'dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com',
+                'prod': 'backend-runtime@based-hardware.iam.gserviceaccount.com',
+            }[env_name]
+        )
+        assert x_sync.get('env', {}).get('OMI_BACKGROUND_FLEX_CAPABLE', {}).get('value') == 'true'
+        assert x_sync.get('env', {}).get('OMI_LLM_GATEWAY_URL', {}).get('env_var') == 'OMI_LLM_GATEWAY_URL'
+
+
 def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
     validator = load_validator()
     values_file = tmp_path / 'backend_listen.yaml'
@@ -3354,7 +3401,7 @@ def test_prod_jev_stage_contract_enables_stage_values_only_on_process_hosts():
         expected = {
             'CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT': '100',
             'MEMORY_OWNER_JEV_SHADOW_PERCENT': '100',
-            'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT': '2',
+            'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT': '20',
             'CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP': '60000',
             'MEMORY_OWNER_JEV_SHADOW_DAILY_CAP': '60000',
         }
@@ -3362,7 +3409,7 @@ def test_prod_jev_stage_contract_enables_stage_values_only_on_process_hosts():
     assert hosts == _JEV_PROCESS_CONVERSATION_HOSTS
     # backend-sync-backfill is not a shadow host but also processes conversations.
     backfill = dict(_manifest_env_blocks(prod))['cloud_run/backend-sync-backfill']
-    assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '2'
+    assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '20'
     assert backfill[CONVERSATION_RELEVANCE_JEV_ENABLED_ENV]['value'] == 'true'
     assert backfill['CONVERSATION_RELEVANCE_JEV_PERCENT']['value'] in {'1', '10', '50', '100'}
 
