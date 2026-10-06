@@ -288,12 +288,27 @@ def build_conversation_prompt_prefix(
             'photo_descriptions': photo_descriptions,
         }
         if calendar_context:
-            key = (
+            primary_key = (
                 'observed_screen_listing'
                 if calendar_context.calendar_source == 'screen_activity'
                 else 'expected_calendar'
             )
-            evidence[key] = calendar_context.model_dump(mode='json')
+            sources = calendar_context.participants_by_source()
+            for key, participants in (
+                ('expected_calendar', sources.expected_calendar),
+                ('observed_screen_listing', sources.observed_screen_listing),
+            ):
+                if participants is None:
+                    continue
+                # Scalar metadata describes the winning source only. Never copy
+                # the legacy participant union into either source's evidence.
+                source_context = (
+                    calendar_context.model_dump(mode='json', exclude={'participants', 'participant_sources'})
+                    if key == primary_key
+                    else {}
+                )
+                source_context['participants'] = [participant.model_dump(mode='json') for participant in participants]
+                evidence[key] = source_context
         shaped_context = json.dumps(evidence, ensure_ascii=False) + f'\nFULL TRANSCRIPT\n{transcript.strip()}'
 
     source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)

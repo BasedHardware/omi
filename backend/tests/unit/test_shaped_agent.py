@@ -581,3 +581,64 @@ def test_notes_transport_is_owned_per_worker_loop(monkeypatch):
     assert loops[0] is not loops[1]
     assert len(transports) == 2 and all(transport.is_closed for transport in transports)
     assert cached.root_async_client is original_client and not original_client.is_closed()
+
+
+@pytest.mark.parametrize('round_trip', [False, True])
+@pytest.mark.parametrize('screen_primary', [False, True])
+def test_merged_notes_keep_calendar_and_screen_participants_separate(monkeypatch, round_trip, screen_primary):
+    from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+    from utils.conversations.meeting_context import (
+        merge_meeting_contexts,
+        store_meeting_context,
+        stored_meeting_context,
+    )
+    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+
+    monkeypatch.setenv(shaped.FLAG, 'on')
+    start = datetime(2026, 10, 6, tzinfo=timezone.utc)
+    calendar = CalendarMeetingContext(
+        calendar_event_id='calendar',
+        title='Calendar meeting',
+        start_time=start,
+        duration_minutes=30,
+        calendar_source='system_calendar',
+        participants=[MeetingParticipant(name='Expected Alice'), MeetingParticipant(name='Shared Sam')],
+    )
+    screen = CalendarMeetingContext(
+        calendar_event_id='screen',
+        title='Screen listing',
+        start_time=start,
+        duration_minutes=30,
+        calendar_source='screen_activity',
+        participants=[MeetingParticipant(name='Observed Bob'), MeetingParticipant(name='Shared Sam')],
+    )
+    primary, fallback = (screen, calendar) if screen_primary else (calendar, screen)
+    merged = merge_meeting_contexts(primary, fallback)
+    # Keep the legacy union and source priority intact; only shaped evidence uses
+    # provenance. Independent sets retain a person present in both inputs.
+    assert merged.calendar_source == primary.calendar_source
+    assert {person.name for person in merged.participants} == {'Expected Alice', 'Observed Bob', 'Shared Sam'}
+    assert [person.name for person in calendar.participants] == ['Expected Alice', 'Shared Sam']
+    if round_trip:
+        conversation = SimpleNamespace(external_data={})
+        store_meeting_context(conversation, merged)
+        conversation.external_data = json.loads(json.dumps(conversation.external_data))
+        merged = stored_meeting_context(conversation)
+    # A subsequent resolver pass must not reclassify the legacy union under the
+    # winning source or multiply participants already present in that set.
+    merged = merge_meeting_contexts(merged, calendar)
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='mixed-sources',
+        transcript='[s1 0] Discuss the plan.',
+        started_at=start,
+        timezone_name='UTC',
+        language_code='en',
+        calendar_context=merged,
+        speaker_map={0: None},
+        transcript_segment_ids=['s1'],
+        uid='test',
+    )
+    packet = json.loads(prefix.shaped_context.split('\nFULL TRANSCRIPT\n')[0])
+    assert [p['name'] for p in packet['expected_calendar']['participants']] == ['Expected Alice', 'Shared Sam']
+    assert [p['name'] for p in packet['observed_screen_listing']['participants']] == ['Observed Bob', 'Shared Sam']
+    assert packet['speaker_map'] == {'0': None}
