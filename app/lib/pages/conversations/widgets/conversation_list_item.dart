@@ -31,9 +31,9 @@ import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/device_tile.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
-/// The conversation list's text runs 5% larger than the app's type scale: row titles, the time
+/// The conversation list's text runs 2.5% larger than the app's type scale: row titles, the time
 /// line and snippets, and the day headers.
-const double kConversationListTextScale = 1.05;
+const double kConversationListTextScale = 1.025;
 
 /// [style] at the conversation list's size.
 TextStyle conversationListText(TextStyle style) =>
