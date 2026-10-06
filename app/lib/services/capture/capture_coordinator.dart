@@ -526,6 +526,8 @@ class CaptureEnvironment {
     required this.callActive,
     required this.deviceRecording,
     required this.micCapturing,
+    this.silencePaused = false,
+    this.uplinkSilenceExpired = false,
     this.systemAudioRecording = false,
     this.systemSurfaceRecordingId,
     this.systemSurfaceConversationRevision = 0,
@@ -533,6 +535,8 @@ class CaptureEnvironment {
 
   /// `_preferences.capturePolicy.muted`.
   final bool policyMuted;
+  final bool silencePaused;
+  final bool uplinkSilenceExpired;
 
   /// `_preferences.deviceMuted` — the user pause flag.
   final bool paused;
@@ -674,6 +678,22 @@ class DevicePauseRequested extends CaptureEvent {
 
 class DeviceResumeRequested extends CaptureEvent {
   const DeviceResumeRequested();
+}
+
+/// Timer events are fenced to the recording that armed them, then checked
+/// against the current deadline when the serialized reducer runs.
+class UplinkSilenceElapsed extends CaptureEvent {
+  const UplinkSilenceElapsed(this.recordingId);
+  final String? recordingId;
+}
+
+class ResumeSilencePaused extends CaptureEvent {
+  const ResumeSilencePaused();
+}
+
+class SilencePauseMarkerStage extends CaptureStage {
+  const SilencePauseMarkerStage(this.paused);
+  final bool paused;
 }
 
 /// `_onOmiCallStateChanged` — the reducer re-reads the call state from the
@@ -1673,6 +1693,8 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       DeviceStopRequested() => _reduceDeviceStop(state, event),
       DeviceUpdated() => _reduceDeviceUpdated(state, event),
       PhoneBatchStartRequested() => _reducePhoneBatchStart(state, event),
+      UplinkSilenceElapsed() => _reduceUplinkSilence(state, event, env),
+      ResumeSilencePaused() => _reduceSilenceResume(state, env),
       DevicePauseRequested() => _reduceDevicePause(state, env),
       DeviceResumeRequested() => _reduceDeviceResume(state, env),
       CallStateChanged() => _reduceCall(state, env),
@@ -2160,7 +2182,60 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
   );
 }
 
+CaptureTransition _reduceUplinkSilence(
+  CaptureCoordinatorState state,
+  UplinkSilenceElapsed event,
+  CaptureEnvironment env,
+) {
+  if (state.phase != CapturePhase.pendantLive ||
+      env.policyMuted ||
+      !env.uplinkSilenceExpired ||
+      state.active?.recordingId != event.recordingId) {
+    return CaptureTransition(state, const []);
+  }
+  return CaptureTransition(state.copyWith(phase: CapturePhase.pendantPaused), const [
+    PolicyWrite(true),
+    RunStage(SilencePauseMarkerStage(true)),
+    RunStage(PauseDeviceTailStage()),
+    WalFinalize(),
+    RunStage(ProcessConversationStage()),
+  ]);
+}
+
+CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (!env.silencePaused || state.phoneOwns || state.callActive) {
+    return CaptureTransition(state, const []);
+  }
+  final device = state.connectedDevice;
+  if (device == null) {
+    // Link reconnect remains immediate and will start capture under this intent.
+    return CaptureTransition(state, const [PolicyWrite(false)]);
+  }
+  final seq = state.sessionSeq + 1;
+  final key = 'pendant-$seq';
+  return CaptureTransition(
+    state.copyWith(
+      phase: CapturePhase.pendantLive,
+      sessionSeq: seq,
+      active: () => ActiveCaptureSession(
+          source: CaptureSource.pendant,
+          mode: CaptureTransport.live,
+          sessionKey: key,
+          deviceId: device.id,
+          deviceType: device.type),
+    ),
+    [
+      const PolicyWrite(false),
+      MintRecording(sessionKey: key, telemetrySource: 'pendant_live'),
+      const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)),
+    ],
+  );
+}
+
 CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (env.silencePaused) {
+    return CaptureTransition(state, const [RunStage(SilencePauseMarkerStage(false))]);
+  }
   return switch (state.phase) {
     CapturePhase.phoneLive => CaptureTransition(state.copyWith(phase: CapturePhase.phonePaused), const [
         PolicyWrite(true),
@@ -2202,6 +2277,7 @@ CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment
 }
 
 CaptureTransition _reduceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (env.silencePaused) return _reduceSilenceResume(state, env);
   return switch (state.phase) {
     CapturePhase.phonePaused => CaptureTransition(state.copyWith(phase: CapturePhase.phoneLive), const [
         PolicyWrite(false),
@@ -2476,6 +2552,9 @@ CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpda
 }
 
 CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (env.silencePaused) {
+    return CaptureTransition(state, const [RunStage(SilencePauseMarkerStage(false))]);
+  }
   if (state.phase == CapturePhase.phoneLive || state.phase == CapturePhase.phoneBatchLive) {
     return _reducePause(state, env);
   }
@@ -2503,6 +2582,7 @@ CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvir
 }
 
 CaptureTransition _reduceDeviceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (env.silencePaused) return _reduceSilenceResume(state, env);
   if (state.phase == CapturePhase.phonePaused || state.phase == CapturePhase.phoneBatchPaused) {
     return _reduceResume(state, env);
   }

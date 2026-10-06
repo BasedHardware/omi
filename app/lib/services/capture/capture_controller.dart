@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:omi/services/capture/uplink_silence_timer.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -144,6 +146,31 @@ class CaptureController extends ChangeNotifier
   Future<void>? _peopleRefreshFuture;
 
   TranscriptSegmentSocketService? _socket;
+  static const _silencePausedKey = 'uplinkSilencePaused';
+  bool get silencePaused => _preferences.getBool(_silencePausedKey);
+  late final _uplinkSilence = UplinkSilenceTimer(
+    scheduling: lifetime,
+    now: _now,
+    timeout: () => Duration(seconds: _preferences.conversationSilenceDuration),
+    onTimeout: () => unawaited(_dispatchLogged(UplinkSilenceElapsed(activeRecordingId))),
+  );
+
+  void _armUplinkSilence() {
+    if (_capture.stagedReadModel.phase == CapturePhase.pendantLive && !isPaused && !_preferences.batchModeEnabled) {
+      _uplinkSilence.speechOrStart();
+    }
+  }
+
+  Future<void> resumeAfterSilence() async {
+    final outcome = await _capture.dispatch(const ResumeSilencePaused());
+    outcome.throwIfFailed();
+  }
+
+  /// Charging wakes capture only when the timer paused it; manual mute wins.
+  void onChargingStarted() {
+    unawaited(_dispatchLogged(const ResumeSilencePaused()));
+  }
+
   Timer? _keepAliveTimer;
 
   static const Duration _rejectedTokenRefreshInterval = Duration(seconds: 30);
@@ -450,6 +477,7 @@ class CaptureController extends ChangeNotifier
   /// the stall clock so suspended timers don't false-trigger stop→start (which
   /// would race native recovery and restart a healthy session).
   void onAppResumed() {
+    unawaited(_dispatchLogged(const ResumeSilencePaused()));
     unawaited(_dispatchLogged(const AppForegrounded()));
   }
 
@@ -593,6 +621,8 @@ class CaptureController extends ChangeNotifier
   /// The shared policy is the admission authority for Dart and native sinks.
   /// Persistence completion acknowledges the durable intent, not OS teardown.
   Future<int> _setCaptureMuted(bool muted) async {
+    _uplinkSilence.cancel();
+    if (!muted && silencePaused) await _preferences.saveBool(_silencePausedKey, false);
     final pending = _preferences.setCaptureMuted(muted);
     notifyListeners();
     try {
@@ -2127,6 +2157,7 @@ class CaptureController extends ChangeNotifier
     }
     if (_deviceIdentityStale(deviceRevision)) return;
     updateRecordingState(isPaused ? RecordingState.pause : RecordingState.deviceRecord);
+    _armUplinkSilence();
     notifyListeners();
   }
 
@@ -2369,6 +2400,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future _closeBleStream({bool disableNativeBackground = false}) async {
+    _uplinkSilence.cancel();
     await _audioSubscriptionErrors?.cancel();
     _audioSubscriptionErrors = null;
     await _setIngressAuthorized(false);
@@ -2393,6 +2425,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void dispose() {
+    _uplinkSilence.cancel();
     _captureControllerDisposed = true;
     unawaited(_setIngressAuthorized(false));
     _captureInstance?.dispose();
@@ -3790,6 +3823,7 @@ class CaptureController extends ChangeNotifier
     if (deviceOnboardingProvider?.isOnboardingActive == true && deviceOnboardingProvider!.currentStep == 0) {
       deviceOnboardingProvider!.onTranscriptSegments(newSegments);
     }
+    if (newSegments.any((segment) => segment.text.trim().isNotEmpty)) _armUplinkSilence();
     _processNewSegmentReceived(newSegments);
   }
 
@@ -3965,6 +3999,8 @@ class CaptureController extends ChangeNotifier
 
   CaptureEnvironment _readCaptureEnvironment() => CaptureEnvironment(
         policyMuted: _preferences.capturePolicy.muted,
+        silencePaused: silencePaused,
+        uplinkSilenceExpired: _uplinkSilence.expired,
         paused: isPaused,
         batchModeEnabled: _preferences.batchModeEnabled,
         batchModeSuspendedForOnboarding: _preferences.batchModeSuspendedForOnboarding,
@@ -4041,6 +4077,7 @@ class CaptureController extends ChangeNotifier
               promptLocation: stage.promptLocation,
             ),
           StopDeviceSessionStage() => _stopDeviceSessionBody(cleanDevice: stage.cleanDevice),
+          SilencePauseMarkerStage() => _preferences.saveBool(_silencePausedKey, stage.paused),
           PauseDeviceTailStage() => _pauseDeviceTailBody(),
           ResumeDeviceTailStage() => _resumeDeviceTailBody(),
           SuspendPendantStage() => _suspendPendantBody(reason: stage.reason, wasPaused: stage.wasPaused),

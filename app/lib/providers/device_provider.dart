@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:omi/services/devices/charge_start_tracker.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -88,6 +90,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   StreamSubscription? _bleChargingStatusListener;
   int batteryLevel = -1;
   bool isCharging = false;
+  final _chargeStarts = ChargeStartTracker();
   int _lastNotifiedBatteryLevel = -1;
   DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
@@ -522,8 +525,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     final currentStatus = await connection.readChargingStatus();
     if (!_isCurrent(generation)) return;
+    if (_chargeStarts.observe(connectedDevice!.id, currentStatus)) captureProvider?.onChargingStarted();
     if (isCharging != currentStatus) {
       isCharging = currentStatus;
+
       notifyListeners();
     }
     BatteryWidgetService().updateChargingState(currentStatus);
@@ -531,8 +536,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleChargingStatusListener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
         if (!_isCurrent(generation)) return;
+        if (_chargeStarts.observe(connectedDevice!.id, charging)) captureProvider?.onChargingStarted();
         if (isCharging != charging) {
           isCharging = charging;
+
           BatteryWidgetService().updateChargingState(charging);
           if (!charging) {
             _hasFullyChargedAlerted = false;

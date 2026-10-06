@@ -453,6 +453,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
+      if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        await context.read<CaptureProvider>().resumeAfterSilence();
+      }
       if (mounted) {
         await Provider.of<CaptureProvider>(
           context,
