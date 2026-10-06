@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
@@ -388,6 +389,9 @@ class DeviceService {
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
     clearStaleBondRecoveryRequirement();
+    // Disconnecting leaves a Watch recording; forgetting it must stop its microphone (#20780).
+    final connection = _connections[deviceId];
+    if (connection is AppleWatchDeviceConnection) await connection.stopRecording();
     await _teardownConnection(deviceId);
 
     _devices.removeWhere((d) => d.id == deviceId);
