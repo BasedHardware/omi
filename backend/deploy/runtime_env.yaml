@@ -2680,13 +2680,13 @@ environments:
             value: 'true'
             category: rollout
           STT_ROUTING_MODE:
-            value: shadow
+            value: 'on'
             category: rollout
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
           STT_ROUTING_ON_PERCENT:
-            value: '0'
+            value: '5'
             category: rollout
           STT_ROUTING_TARGETS_JSON:
             value: ''
