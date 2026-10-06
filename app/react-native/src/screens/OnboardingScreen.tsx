@@ -13,11 +13,13 @@ import {
 import { Redirect } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { useAuthStore } from '@/state/authStore';
+import { DEV_LOGIN_WITHOUT_ACCOUNT } from '@/devFlags';
 
 const BG = require('../../assets/images/onboarding-bg.webp');
 
 export default function OnboardingScreen() {
-  const { uid, loading, error, loginWithGoogle, loginWithApple } = useAuthStore();
+  const { uid, loading, error, loginWithGoogle, loginWithApple, loginWithoutAccount } =
+    useAuthStore();
 
   if (uid) {
     return <Redirect href="/(tabs)/home" />;
@@ -63,6 +65,27 @@ export default function OnboardingScreen() {
                 <Text style={styles.buttonText}>Sign in with Google</Text>
               </TouchableOpacity>
             </View>
+
+            {/*
+              Dev only, and gated on __DEV__ so it cannot exist in a shipped
+              binary. It sets a local session with no token: enough to reach the
+              tabs and the on-device router, not enough to touch any account.
+            */}
+            {DEV_LOGIN_WITHOUT_ACCOUNT && (
+              <TouchableOpacity
+                style={styles.ghostButton}
+                onPress={loginWithoutAccount}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel="Continue without an account"
+                testID="login-without-account"
+              >
+                <Text style={styles.ghostButtonText}>Continue without an account</Text>
+                <Text style={styles.ghostButtonNote}>
+                  Local session, no account. Server-backed screens will fail.
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {error && <Text style={styles.error}>{error}</Text>}
 
@@ -126,6 +149,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 14,
   },
+  ghostButton: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  ghostButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  ghostButtonNote: { color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center' },
   legal: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 11,

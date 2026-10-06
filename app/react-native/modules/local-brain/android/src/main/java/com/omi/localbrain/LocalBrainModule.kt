@@ -102,13 +102,20 @@ class LocalBrainModule : Module() {
      * rather than fatal.
      */
     AsyncFunction("warmUp") { promise: Promise ->
-      worker.execute {
-        try {
-          ensureLoaded()
-          promise.resolve(true)
-        } catch (t: Throwable) {
-          promise.resolve(false)
-        }
+      try {
+        // Called directly, NOT via worker.execute. ensureLoaded() already submits
+        // the load to the single-threaded worker and waits on a latch, so wrapping
+        // this call in worker.execute would occupy that one thread and then queue
+        // the load behind itself -- a self-deadlock that always timed out after
+        // LOAD_TIMEOUT_SECONDS and left the UI reporting "model not loaded" forever.
+        //
+        // AsyncFunction bodies already run off the JS thread, so this blocks the
+        // caller, not the UI.
+        ensureLoaded()
+        promise.resolve(true)
+      } catch (t: Throwable) {
+        Log.w(TAG, "warmUp failed: ${t.message}", t)
+        promise.resolve(false)
       }
     }
 

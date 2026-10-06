@@ -53,9 +53,16 @@ export const isLocalBrainAvailable = native != null
  * throwing when the model is missing, leaving every route to decline to the
  * heuristic.
  */
-export async function warmUp(): Promise<boolean> {
+export async function warmUp(
+  prototypes: Record<Route, string[]>,
+  outOfDomain: string[]
+): Promise<boolean> {
   if (!native) return false
   try {
+    // configure first: the router refuses to load without prototypes, and it is
+    // right to. Configuring here rather than lazily inside route() is what lets the
+    // load happen without pretending to route anything.
+    await native.configure(prototypes, outOfDomain)
     await native.warmUp()
     return true
   } catch {

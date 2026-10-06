@@ -21,7 +21,11 @@ import {
   hangUp,
   type CallState,
 } from '../../modules/local-calls';
-import { ROUTE_PROTOTYPES, type Route } from '../services/localBrainRouter';
+import {
+  ROUTE_PROTOTYPES,
+  OUT_OF_DOMAIN_PROTOTYPES,
+  type Route,
+} from '../services/localBrainRouter';
 import { useTheme } from '../hooks/use-theme';
 import { Spacing } from '../constants/theme';
 
@@ -83,7 +87,7 @@ export function LocalBrainBar({
   useEffect(() => {
     if (!isLocalBrainAvailable) return
     let cancelled = false
-    warmUp()
+    warmUp(ROUTE_PROTOTYPES, OUT_OF_DOMAIN_PROTOTYPES)
       .then((ok) => {
         if (!cancelled) setState(ok ? 'ready' : 'not-loaded')
       })
