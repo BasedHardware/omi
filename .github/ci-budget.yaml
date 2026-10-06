@@ -201,13 +201,13 @@
       "budget_p50_minutes": 3,
       "display_name": "Backend unit guardrails",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 72,
+      "expected_runs_per_day": 73,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "PR M workflow/action coverage widening: forecast ceil(65 * 1.10) = 72 daily executions from the prior sample; the 3-minute p50 budget and CI-tier condition are unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 72 until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -219,7 +219,7 @@
       "budget_p50_minutes": 9,
       "display_name": "Backend unit shard ${{ matrix.shard }}/4",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 118,
+      "expected_runs_per_day": 119,
       "if": null,
       "matrix": {
         "shard": [
@@ -232,7 +232,7 @@
       "matrix_size": 4,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "PR M workflow/action coverage widening: forecast ceil(107 * 1.10) = 118 daily executions from the prior sample; four shards and the 9-minute p50 budget are unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 118 until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -244,7 +244,7 @@
       "budget_p50_minutes": 1,
       "display_name": "Backend unit suite",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 116,
+      "expected_runs_per_day": 117,
       "if": "${{ always() && !cancelled() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -254,7 +254,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "PR M workflow/action coverage widening: forecast ceil(105 * 1.10) = 116 daily executions from the prior sample; the 1-minute aggregate-job budget and success dependency are unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -266,13 +266,13 @@
       "budget_p50_minutes": 1,
       "display_name": "Resolve CI Tier",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 118,
+      "expected_runs_per_day": 119,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "PR M workflow/action coverage widening: forecast ceil(107 * 1.10) = 118 daily executions from the prior sample; the 1-minute tier-resolution budget is unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1643,6 +1643,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_x_connector_sync_job.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend maintainers",
+      "rationale": "#11183 manual-only X connector job deploy; allow five minutes per operator-triggered deployment and no routine daily run",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "jit_qa_cloud_run.yml/admit": {
       "budget_p50_minutes": 5,
       "display_name": "Admit exact proven main source",
@@ -2815,7 +2833,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "PR M widens workflow/action path coverage so a new backend-image shipment cannot omit Firestore readiness. Forecast 10% more selected job executions than the existing September sample, rounded upward; job duration budgets and global caps remain unchanged. Re-seed from the next weekly audit.",
+      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -2855,6 +2873,7 @@
             ".github/workflows/gcp_memory_maintenance_job.yml",
             ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
+            ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
             ".github/scripts/verify_auto_backend_release_admission.py",
             ".github/scripts/verify_backend_release_admission.py",
@@ -2910,6 +2929,7 @@
             ".github/workflows/gcp_memory_maintenance_job.yml",
             ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
+            ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
             ".github/scripts/verify_auto_backend_release_admission.py",
             ".github/scripts/verify_backend_release_admission.py",
@@ -4543,6 +4563,40 @@
               "description": "Exact current main SHA (prod only)",
               "required": "false",
               "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "gcp_x_connector_sync_job.yml": {
+      "name": "Deploy X Connector Sync Job to Cloud RUN",
+      "owner": "Backend maintainers",
+      "rationale": "#11183 manual-only deployment workflow for the dedicated X connector sync Cloud Run Job",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "allow_missing_scheduler": {
+              "default": "false",
+              "description": "First deploy only: the x-connector-sync-6h Scheduler job does not exist yet",
+              "required": "false",
+              "type": "boolean"
+            },
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true",
+              "type": "string"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "required": "true",
+              "type": "string"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
             }
           }
         }

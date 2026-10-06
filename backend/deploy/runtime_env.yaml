@@ -2109,6 +2109,62 @@ environments:
               value: based-hardware
           forbidden_env:
           - HOSTED_PUSHER_API_URL
+        x-connector-sync-job:
+          flags:
+            --task-timeout: 3600s
+            --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
+            --remove-env-vars: HOSTED_PUSHER_API_URL
+          secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
+              version: latest
+            X_OAUTH_CLIENT_SECRET:
+              secret: X_OAUTH_CLIENT_SECRET
+              version: latest
+            RAPID_API_KEY:
+              secret: RAPID_API_KEY
+              version: latest
+          env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              category: integrations
+              value: memories-backend-dev
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+          forbidden_env:
+          - HOSTED_PUSHER_API_URL
         memory-maintenance-job:
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
@@ -2386,6 +2442,7 @@ environments:
       - .github/workflows/gcp_backend_auto_dev.yml
       - .github/workflows/gcp_backend.yml
       - .github/workflows/gcp_notifications_job.yml
+      - .github/workflows/gcp_x_connector_sync_job.yml
       - .github/workflows/gcp_memory_maintenance_job.yml
       - .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
       - .github/workflows/gcp_frame_request_retention_job.yml
@@ -2858,6 +2915,9 @@ environments:
           PARAKEET_WINDOW_MAX_EMPTY_STREAK:
             value: '4'
             category: reliability
+          SONIOX_IDLE_CLOSE_SECONDS:
+            value: '45'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BUCKET_SCREEN_FRAMES:
@@ -2923,7 +2983,7 @@ environments:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '20'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
@@ -3117,7 +3177,7 @@ environments:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '20'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
@@ -3648,7 +3708,7 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '2'
+              value: '20'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
@@ -3962,7 +4022,7 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '2'
+              value: '20'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
@@ -4245,7 +4305,7 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '2'
+              value: '20'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
@@ -4515,6 +4575,57 @@ environments:
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
+        x-connector-sync-job:
+          flags:
+            --task-timeout: 3600s
+            --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
+          secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
+              version: latest
+            X_OAUTH_CLIENT_SECRET:
+              secret: X_OAUTH_CLIENT_SECRET
+              version: latest
+            RAPID_API_KEY:
+              secret: RAPID_API_KEY
+              version: latest
+          env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              category: integrations
+              value: memories-backend
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -4801,6 +4912,7 @@ environments:
       workflow_files:
       - .github/workflows/gcp_backend.yml
       - .github/workflows/gcp_notifications_job.yml
+      - .github/workflows/gcp_x_connector_sync_job.yml
       - .github/workflows/gcp_memory_maintenance_job.yml
       - .github/workflows/gcp_frame_request_retention_job.yml
       - .github/workflows/gcp_daily_memory_sweep_job.yml

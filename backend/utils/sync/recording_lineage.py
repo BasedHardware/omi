@@ -52,6 +52,7 @@ from utils.capture_evidence import parse_sync_file_claims
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.sync.lineage_diagnostics import classify_generation_row, probe_token
+from utils.sync.lineage_frame_evidence import unique_committed_canonical
 from utils.sync.lineage_intervals import pick_overlapping
 from utils.sync.recording_session_target import (
     START_SKEW_SECONDS,
@@ -101,6 +102,8 @@ class _Generation:
     end: float
     canonical: str
     deleted: bool
+    discarded: bool = False
+    evidence: Any = None
 
 
 @dataclass
@@ -304,7 +307,7 @@ def _generations(
     wanted_source = source_value(source)
     device_id = clean_text(client_device_id)
     redirects: dict[str, str] = {}
-    candidates: list[tuple[str, float, float, bool]] = []
+    candidates: list[tuple[str, float, float, bool, Mapping[str, Any]]] = []
     for row in rows:
         row_id = clean_text(row.get('id'))
         reason = classify_generation_row(
@@ -333,10 +336,18 @@ def _generations(
         end = unix_seconds(row.get('finished_at'))
         if start is None or end is None:
             continue
-        candidates.append((row_id, start, end, bool(row.get('deleted'))))
+        candidates.append((row_id, start, end, bool(row.get('deleted')), row))
     generations = [
-        _Generation(row_id, start, end, _chain_end(row_id, redirects), deleted)
-        for row_id, start, end, deleted in sorted(candidates)
+        _Generation(
+            row_id,
+            start,
+            end,
+            _chain_end(row_id, redirects),
+            deleted,
+            bool(row.get('discarded')),
+            row.get('capture_evidence') if isinstance(row.get('capture_evidence'), Mapping) else None,
+        )
+        for row_id, start, end, deleted, row in sorted(candidates, key=lambda item: item[:4])
     ]
     if diagnostics is not None:
         diagnostics['candidate_count_after'] = len(generations)
@@ -357,6 +368,49 @@ def _unique(matches: list[_Generation]) -> Optional[str]:
     return min(generation.id for generation in matches)
 
 
+def _visible_canonicals(matches: list[_Generation]) -> set[str]:
+    """Canonicals established by a visible covering row inside this pass's matches.
+
+    Only a row that IS its canonical — present, not deleted, not discarded —
+    proves the canonical has a live surface competing for the segment. A donor
+    redirect or a canonical id not matched this pass establishes nothing.
+    """
+    return {
+        generation.canonical
+        for generation in matches
+        if generation.id == generation.canonical and not generation.deleted and not generation.discarded
+    }
+
+
+def _decide_overlap(
+    matches: list[_Generation],
+    stamp: Optional[str],
+    start: float,
+    end: float,
+    source_position_map: Any,
+) -> tuple[Optional[str], bool]:
+    """Safe-overlap tiebreak inside one pass's multi-canonical match set.
+
+    The stamp can only choose among canonicals a visible covering row proves;
+    a hidden (discarded or donor-only) canonical never wins against visible
+    covering rows. Failing the stamp, exactly one canonical backed by a
+    validated committed live run covering or exactly adjoining the segment's
+    source coordinates wins; failing that, exactly one visible canonical
+    wins regardless of frame evidence. Anything else stays undecidable.
+    """
+    visible = _visible_canonicals(matches)
+    eligible = [g for g in matches if g.canonical in visible] if visible else list(matches)
+    pick = pick_overlapping(eligible, stamp)
+    if pick is not None:
+        return _unique([pick]), False
+    supported = unique_committed_canonical(eligible, start, end, source_position_map)
+    if supported is not None:
+        return _unique([g for g in eligible if g.canonical == supported]), False
+    if len(visible) == 1:
+        return _unique([g for g in matches if g.canonical == next(iter(visible))]), False
+    return None, True
+
+
 def _bind(
     generations: list[_Generation],
     start: float,
@@ -364,6 +418,7 @@ def _bind(
     *,
     stamp: Optional[str] = None,
     safe_overlap: bool = False,
+    source_position_map: Any = None,
 ) -> tuple[Optional[str], bool]:
     """The explicit target, plus whether several distinct canonicals stayed undecidable."""
     strict = [g for g in generations if g.start <= start and end <= g.end]
@@ -373,8 +428,7 @@ def _bind(
             return unique, False
         if not safe_overlap:
             return None, False
-        pick = pick_overlapping(strict, stamp)
-        return (_unique([pick]) if pick is not None else None), pick is None
+        return _decide_overlap(strict, stamp, start, end, source_position_map)
     tolerant = [
         g
         for g in generations
@@ -390,8 +444,7 @@ def _bind(
         return unique, False
     if not safe_overlap:
         return None, False
-    pick = pick_overlapping(tolerant, stamp)
-    return (_unique([pick]) if pick is not None else None), pick is None
+    return _decide_overlap(tolerant, stamp, start, end, source_position_map)
 
 
 def ambiguous_binding_pending(uid: Optional[str], binding: Optional[str]) -> bool:
@@ -411,6 +464,7 @@ def select_segment_targets(
     truncated_before: Optional[float] = None,
     lookup_failed: bool = False,
     safe_overlap: Optional[bool] = None,
+    segment_source_maps: Optional[Mapping[str, Any]] = None,
 ) -> LineagePlan:
     """Pure per-segment plan: unique generation or stamp-disambiguated overlap, else the stamp or unbound."""
     if safe_overlap is None:
@@ -451,7 +505,14 @@ def select_segment_targets(
         elif truncated_before is not None:
             misses.add('truncated')
         else:
-            bound, pending = _bind(generations, start, end, stamp=stamp, safe_overlap=safe_overlap)
+            bound, pending = _bind(
+                generations,
+                start,
+                end,
+                stamp=stamp,
+                safe_overlap=safe_overlap,
+                source_position_map=(segment_source_maps or {}).get(key),
+            )
             if bound is None:
                 misses.add('ambiguous_overlap' if pending else 'interval_miss')
         if bound is not None:
@@ -617,6 +678,7 @@ def resolve_segment_targets(
     job_id: Optional[str] = None,
     firestore_client: Any = None,
     binding_reasons: Optional[dict] = None,
+    segment_source_maps: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Optional[str]]:
     """Per-segment explicit targets; blocking (one bounded indexed query, sometimes two)."""
     if not spans:
@@ -624,6 +686,13 @@ def resolve_segment_targets(
     truncated_before: Optional[float] = None
     failed = True
     lineage_module: list = []
+    safe_overlap = sync_live_dedupe_active_for(uid)
+    want_capture_evidence = bool(
+        safe_overlap
+        and capture_evidence_dark_write_enabled()
+        and segment_source_maps
+        and any(mapping is not None for mapping in segment_source_maps.values())
+    )
     try:
         try:
             started_before = datetime.fromtimestamp(
@@ -637,6 +706,7 @@ def resolve_segment_targets(
                 firestore_client,
                 finished_after,
                 on_module=lineage_module.append,
+                include_capture_evidence=want_capture_evidence,
             )
             failed = False
         except Exception as exc:
@@ -652,7 +722,8 @@ def resolve_segment_targets(
             is_locked=is_locked,
             truncated_before=truncated_before,
             lookup_failed=failed,
-            safe_overlap=sync_live_dedupe_active_for(uid),
+            safe_overlap=safe_overlap,
+            segment_source_maps=segment_source_maps if want_capture_evidence else None,
         )
     except Exception as exc:
         _warning('event=sync_lineage_plan outcome=failed exception_type=%s', bounded_exception_class(exc))
@@ -708,6 +779,8 @@ def plan_segment_targets(
     is_locked: bool,
     job_id: Optional[str],
     binding_reasons: Optional[dict],
+    *,
+    segment_source_maps: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Optional[str]]:
     """Blocking span construction plus per-segment lineage resolution for one upload.
 
@@ -735,6 +808,7 @@ def plan_segment_targets(
             is_locked=is_locked,
             job_id=job_id,
             binding_reasons=pass_reasons,
+            segment_source_maps=segment_source_maps,
         )
         proven_pending |= {key for key, token in pass_reasons.items() if token == 'ambiguous_pending'}
         if 'ambiguous_pending' not in pass_reasons.values():

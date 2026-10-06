@@ -283,7 +283,7 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT"] == "100"
     assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
-    assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "2"
+    assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "20"
     assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
     assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals

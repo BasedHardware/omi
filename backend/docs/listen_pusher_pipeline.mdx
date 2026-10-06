@@ -18,10 +18,18 @@ rollover, while the phone tags all WALs with `client_conversation_id`, stored
 on each live generation as `external_data.recording_origin_id`. Sync binds each
 VAD segment to the one generation whose source, device, lock and interval
 (5 s early, 60 s past its last word) hold it; donors resolve to their survivor,
-overlaps bind only when the phone's stamp names one strict canonical row —
-otherwise the segment keeps no target under `ambiguous_pending`, rechecked
-against a fresh lineage read at most three times before the retryable
-failed-segment path — and straddles split. Otherwise a segment keeps the phone's
+and a strictly contained multi-canonical overlap decides in a fixed order — the
+phone's stamp among rows a visible (not deleted, not discarded) covering
+canonical proves, then the single canonical backed by a validated committed
+live run covering or exactly adjoining the segment's decoded source frames
+(ownership evidence only; the segment is still transcribed), then a lone
+visible canonical — otherwise the segment keeps no target under
+`ambiguous_pending`, rechecked against a fresh lineage read at most three
+times before the retryable
+failed-segment path — and straddles split. Missing or non-deciding frame
+evidence (no decoded map, or none projected) is an ordinary abstain, not a
+failure: two visible covering canonicals stay pending while a lone visible
+canonical wins. Otherwise a segment keeps the phone's
 `conversation_id` stamp or the unbound path, which never adopts a live row.
 Bound segments lexically repeating a live window drop only when independent
 source-frame evidence proves the repeat — a unique `sync_vad` receipt per
@@ -93,7 +101,10 @@ The full API `backend-integration` image also mounts sync and listen routes and 
 
 The bounded lookup filters by both start and finish so an old stamp-extended
 row cannot hide behind newer generations; a truncated overlap set proves no
-binding. With lineage enabled, sync defers enrichment for an open live row,
+binding. The read projects the lineage routing field paths only — widened to
+each row's `capture_evidence` envelope solely when the tiebreak could decide
+(safe-overlap admitted, dark write on, a decoded segment map present), under
+the same document ceiling. With lineage enabled, sync defers enrichment for an open live row,
 and fresh live speech advances the revision fence after sync has enriched it.
 Sync preserves a pinned live origin when the WAL begins earlier; pre-pin
 speech is retained but marked unplaced for playback. The index must include
@@ -741,6 +752,30 @@ any error keeps both. Every answered pair stores a server-only
 `smart_merge_decision` (numbers and ids, no text) on the new conversation.
 For a merge verdict, the decision is persisted before the absorb transaction
 so a retry reuses the same score.
+
+One more deterministic gate never reaches Jev: a discarded capture of the same
+source and `client_device_id` whose `started_at`/`finished_at` interval
+intersects the open gap — survivor `finished_at` to the donor's
+`max(started_at, created_at)`, so the wall-clock rescue gap is covered too —
+refuses the fold with `event=smart_merge decision=skip
+reason=intervening_discarded`. Endpoint touches and rows wholly outside the
+gap do not block, so a tombstone ending exactly at the survivor's finish still
+lets future chains merge. One verified exemption: a deleted donor tombstone
+that already redirected into this survivor, carries the donor ledger entry for
+it, and is listed in the survivor's own fragment ledger or `sync_merged_from`
+set is a constituent of the predecessor — its absorbed content is not an
+independent discarded capture, and a drifted finish on it cannot fence the
+survivor off forever. Every other discarded row, deleted or not, counts. The
+scan reuses the same registered preceding query (and its
+`conversations_discarded_source_status_created` index) with `discarded=True`,
+no page limit, and a `created_at` upper bound of `datetime.max`, so barriers
+older than the predecessor page still count and a capture whose ingestion
+landed after the donor's `created_at` cannot hide — the gate never assumes
+`created_at` ordering matches speech times.
+The absorb transaction re-runs the identical interval check on its freshly
+read rows before planning or any write, so a discard committed between the
+decision and the absorb still rejects with the same reason. No flags or
+thresholds changed.
 
 `CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` (`off` default, `shadow`, `on`;
 unset/blank/unknown = `off`) relaxes the recorded/speech-gap window for one
@@ -1457,6 +1492,24 @@ meetings, people facts, goals, memories, and — under
 best-effort and appended only to the notes volatile suffix as BACKGROUND
 CONTEXT; it never enters the shared prefix, the memory extractor, or app
 prompts, and no single source failure can block the note.
+
+The default-off `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` switch also requires
+sticky percentage admission (default0). Kept captures gather the existing rich
+inputs only after relevance; discard behavior and consent gates stay unchanged.
+Typed speech, screen/OCR, messages and background evidence share source IDs,
+times and actors. Connected non-speech evidence can explain the episode but
+must never be presented as speech; unrelated screen content stays excluded.
+Claims are optional and default off; sharing is the owner's whole-note decision.
+David locked deterministic selection with C7/no effort override and C6/xhigh at
+1500 speech words and two admitted source kinds. One bounded repair addresses
+vacuity/provenance/presentation; residual violations retain the best usable note.
+Detail reads filter stale claim spans; list/search omit the metadata. Memory and
+app prompts retain their existing gates. See `utils/conversations/EPISODE_EVIDENCE.md`
+and `utils/conversations/EPISODE_ROLLOUT.md` for mapping, acceptance and ramp.
+Extended writer budgets apply only in existing leased finalizers; synchronous
+requests keep their prior bound. C6 is clamped115s by the shared gateway, with
+one C7 fallback. No outer lifecycle, lease or request deadline changes; see
+[`EPISODE_DEADLINES.md`](../utils/conversations/EPISODE_DEADLINES.md).
 
 Meeting-context merges retain `participant_sources` alongside the legacy combined
 participant list. Shaped notes consume its separate `expected_calendar` and
@@ -3156,11 +3209,12 @@ provider outages. The existing `omi-journey-capture-fail` alert
 uses the durable terminal projection; inspect the current alert manifest for
 its 30-minute denominator and dwell rather than adding a raw-count page.
 
-### Soniox idle transport canary
+### Soniox idle transport
 
 `SONIOX_IDLE_CLOSE_SECONDS` is default-off (unset, zero, invalid or negative
-values preserve the existing adapter and keepalive wire behavior). Suggested
-first canary value: `45`. Positive values below `20` seconds clamp to `20`, with
+values preserve the existing adapter and keepalive wire behavior). Prod listen
+sets `45` after a 3h51m canary; every other service leaves it unset. Positive
+values below `20` seconds clamp to `20`, with
 one warning per process. `SONIOX_IDLE_REARM_SECONDS` defaults to `60` seconds
 and cannot be set below `60`: after a successful reopen, the socket stays
 connected for at least that interval even if VAD flaps. Non-finite or invalid

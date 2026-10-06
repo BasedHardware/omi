@@ -448,6 +448,9 @@ def _decide(
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
+    if smart_merge_db.has_intervening_discarded(uid, survivor, new_row):
+        _skip(mode, SkipReason.INTERVENING_DISCARDED, uid, conversation_id)
+        return None
     wall_mode = smart_merge_wallclock_gap_mode()
     newest = newest_wallclock_fragment(survivor) if wall_mode is not SmartMergeWallclockGapMode.OFF else None
     last_fragment_id = (
@@ -671,6 +674,9 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             smart_merge_db.record_decision(uid, conversation_id, kept)
         except Exception:
             logger.warning('event=smart_merge outcome=record_failed uid=%s conversation=%s', uid, conversation_id)
+        if reason == SkipReason.INTERVENING_DISCARDED:
+            _skip(mode, reason, uid, conversation_id, plan.gap)
+            return False
         record_conversation_smart_merge(mode=mode.value, decision='keep', reason=reason, gap_seconds=plan.gap)
         logger.info(
             'event=smart_merge mode=%s decision=kept reason=%s uid=%s conversation=%s candidate=%s flattened_ancestor_count=%s%s',

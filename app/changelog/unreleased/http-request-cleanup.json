@@ -1,3 +1,0 @@
-{
-  "change": "Handled request and upload failures no longer trigger spurious crash reports."
-}

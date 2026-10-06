@@ -25,6 +25,19 @@ class PostHogError extends Error {
   }
 }
 
+const POSTHOG_MAX_ATTEMPTS = 3;
+
+function isRetryablePostHogStatus(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+// attempt is 1-based (the attempt that just failed). Jitter spreads retries
+// when half-hour precompute runs pile onto the same PostHog concurrency slot.
+function retryDelayMs(attempt: number): number {
+  const jitter = Math.floor(Math.random() * 250);
+  return 1000 * attempt + jitter;
+}
+
 // The funnel's step list and ordering live in @/lib/onboarding-funnel, whose
 // source of truth is desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift.
 // Renaming, adding, or removing a step there must be mirrored in that file.
@@ -33,6 +46,11 @@ function funnelQuery(days: number): string {
   const escapedEventNames = ALL_EVENT_NAMES.map(
     (name) => `'${name.replace(/'/g, "\\'")}'`
   ).join(", ");
+  // Entrants are still actors whose first event falls inside `days`. The
+  // events reads use a wider window (days + 60) so someone who enters inside
+  // the funnel window and finishes up to 60 days later is still scanned, and
+  // neither read walks every macOS onboarding event ever stored.
+  const entryWindow = days + 60;
 
   return `
     WITH entrant_actors AS (
@@ -46,6 +64,7 @@ function funnelQuery(days: number): string {
         FROM events
         WHERE event IN (${escapedEventNames})
           AND properties.$os = 'macOS'
+          AND timestamp >= now() - INTERVAL ${entryWindow} DAY
         GROUP BY actor_id
       )
       WHERE first_event_name = '${ENTRY_EVENT_NAME}'
@@ -59,6 +78,7 @@ function funnelQuery(days: number): string {
     FROM events
     WHERE event IN (${escapedEventNames})
       AND properties.$os = 'macOS'
+      AND timestamp >= now() - INTERVAL ${entryWindow} DAY
       AND COALESCE(person_id, distinct_id) IN (SELECT actor_id FROM entrant_actors)
     GROUP BY actor_id, event, property_value
     LIMIT ${POSTHOG_SERVED_MAX_ROWS}
@@ -87,15 +107,28 @@ export async function computeOnboarding(days: number) {
     },
   };
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  let response!: Response;
+  for (let attempt = 1; attempt <= POSTHOG_MAX_ATTEMPTS; attempt++) {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (
+      response.ok ||
+      !isRetryablePostHogStatus(response.status) ||
+      attempt === POSTHOG_MAX_ATTEMPTS
+    ) {
+      break;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs(attempt)));
+  }
 
   if (!response.ok) {
     const text = await response.text();

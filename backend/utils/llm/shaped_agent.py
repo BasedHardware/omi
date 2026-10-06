@@ -53,13 +53,14 @@ class Mount:
     skills: tuple[str, ...] = ()
     schema: Any = None
     budget: Budget = Budget()
+    cache_breakpoint: bool = False
 
     def prefix(self) -> str:
         return '\n\n'.join(part for part in (SHARED_CONTRACT, self.instructions, *self.skills) if part)
 
     def messages(self, evidence: list[Any], *, explicit_cache: bool = False) -> list[Any]:
         block: dict[str, Any] = {'type': 'text', 'text': self.prefix()}
-        if explicit_cache:
+        if explicit_cache and self.cache_breakpoint:
             block['prompt_cache_breakpoint'] = dict(EXPLICIT_CACHE_BREAKPOINT)
         # Even without provider caching, the message boundary separates evidence.
         return [{'role': 'system', 'content': [block]}, *evidence]

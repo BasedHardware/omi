@@ -129,7 +129,9 @@
     "appleRemindersSyncCompleted",
     "wrappedGenerationCompleted",
     "voiceReplyPlayback",
-    "pendantVoiceQuestionDropped"
+    "pendantVoiceQuestionDropped",
+    "onboardingSetupRatingPromptShown",
+    "onboardingSetupRatingPromptAnswered"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

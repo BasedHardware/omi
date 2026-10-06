@@ -12457,6 +12457,39 @@ class AppLocalizationsEs extends AppLocalizations {
       'Esta cuenta se está eliminando. Inicia sesión con otra cuenta o espera unos minutos e inténtalo de nuevo.';
 
   @override
+  String get onboardingSetupTitle => 'Configurando tu Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Dale un momento a Omi para personalizarse';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Preparando tu espacio de trabajo';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Ajustando la transcripción a tu idioma';
+
+  @override
+  String get onboardingSetupStepMemory => 'Configurando tu memoria';
+
+  @override
+  String get onboardingSetupStepDevices => 'Conectando tus dispositivos';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Personalizando tu experiencia';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Mientras esperas, ¿te ha gustado usar Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Valorarnos con 5 estrellas nos ayuda muchísimo ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => '¡Sí, quiero apoyaros!';
+
+  @override
+  String get onboardingRatingPromptNo => 'No mucho';
+
+  @override
   String get importTranscriptFiles => 'Archivos de transcripción';
 
   @override
