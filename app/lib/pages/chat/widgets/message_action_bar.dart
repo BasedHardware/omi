@@ -153,6 +153,10 @@ class MessageActionBar extends StatefulWidget {
 }
 
 class _MessageActionBarState extends State<MessageActionBar> {
+  /// Each action's touch target, and its glyph inside it.
+  static const double _target = 44;
+  static const double _glyph = 15;
+
   int? _selectedNps;
   bool _copied = false;
   Timer? _copyTimer;
@@ -210,8 +214,10 @@ class _MessageActionBarState extends State<MessageActionBar> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Padding(
-      padding: const EdgeInsets.only(left: OmiSpacing.xxs),
+    // The first glyph lines up with the answer's first letter (4 pt in); each target stays 44 pt.
+    const shift = OmiSpacing.xxs - (_target - _glyph) / 2;
+    return Transform.translate(
+      offset: Offset(Directionality.of(context) == TextDirection.rtl ? -shift : shift, 0),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -295,12 +301,12 @@ class _MessageActionBarState extends State<MessageActionBar> {
         selected: isSelected,
         child: InkWell(
           borderRadius: OmiRadius.mdAll,
-          splashColor: Colors.white24,
-          highlightColor: Colors.white10,
+          splashColor: OmiColors.textPrimary.withValues(alpha: 0.08),
+          highlightColor: OmiColors.textPrimary.withValues(alpha: 0.04),
           onTap: onTap,
           child: SizedBox(
-            width: 48,
-            height: 48,
+            width: _target,
+            height: _target,
             child: Center(
               child: ExcludeSemantics(
                 child: AnimatedSwitcher(
@@ -308,8 +314,8 @@ class _MessageActionBarState extends State<MessageActionBar> {
                   child: FaIcon(
                     icon,
                     key: ValueKey(icon),
-                    color: isSelected ? OmiColors.textPrimary : OmiColors.textSecondary,
-                    size: 16,
+                    color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary,
+                    size: _glyph,
                   ),
                 ),
               ),

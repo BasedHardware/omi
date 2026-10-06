@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/chat/widgets/chat_entrance.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/pages/chat/widgets/chat_bubbles.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -141,9 +142,10 @@ class ChatSuggestions extends StatelessWidget {
                     key: ValueKey('chat_starter_${prompt.key}'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: OmiColors.textPrimary,
+                      backgroundColor: ChatInk.fill,
                       minimumSize: const Size(44, 44),
                       maximumSize: Size(constraints.maxWidth - OmiSpacing.md * 2, double.infinity),
-                      side: BorderSide(color: OmiColors.border),
+                      side: BorderSide.none,
                       shape: const StadiumBorder(),
                     ),
                     onPressed: () => onSelected(prompt.value),

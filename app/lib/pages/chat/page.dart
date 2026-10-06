@@ -39,6 +39,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/pages/apps/widgets/app_actions.dart';
 import 'package:omi/pages/chat/widgets/chat_apps_drawer.dart';
+import 'package:omi/pages/chat/widgets/chat_bubbles.dart';
 import 'package:omi/pages/chat/widgets/chat_composer_parts.dart';
 import 'package:omi/pages/chat/widgets/chat_chrome.dart';
 import 'package:omi/pages/chat/widgets/chat_entrance.dart';
@@ -77,6 +78,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   ChatScrollMode _chatScrollMode = ChatScrollMode.followingBottom;
   bool _showLatestJump = false;
+
+  /// The thread has scrolled up under the composer, which then turns solid.
   Timer? _latestJumpIdleTimer;
   final List<Timer> _pendingScrollTimers = [];
   final List<Timer> _ownedLifecycleTimers = [];
@@ -255,7 +258,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    // Chat paints the canvas: a white page in light mode, as Home and the conversation page do.
+    return OmiCanvas(child: _buildChat());
+  }
 
+  Widget _buildChat() {
     return ChatEntrance(
       child: Consumer2<MessageProvider, ConnectivityProvider>(
         builder: (context, provider, connectivityProvider, child) {
@@ -266,7 +273,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
           return AnimatedContainer(
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOut,
-            color: isGlass ? Colors.transparent : OmiColors.surface0,
+            color: isGlass ? Colors.transparent : OmiCanvas.pageOf(context),
             child: Scaffold(
               key: scaffoldKey,
               backgroundColor: Colors.transparent,
@@ -372,7 +379,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                         }
 
                         final message = provider.messages[chatIndex];
-                        double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                        // A question opens a turn with room above it; the answer sits closer under it.
+                        final topPadding = message.sender == MessageSender.ai ? 10.0 : 24.0;
                         double bottomPadding = chatIndex == 0 ? 16 : 0;
 
                         final messageBody = message.sender == MessageSender.ai
@@ -444,6 +452,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       builder: (context, voiceRecorderProvider, child) {
         final voiceActive = voiceRecorderProvider.isActive;
         final recording = voiceRecorderProvider.state == VoiceRecorderState.recording;
+        // A recording that failed to transcribe, or one found from last time: kept, waiting on
+        // Try Again.
+        final voiceWaiting = voiceRecorderProvider.state == VoiceRecorderState.transcribeFailed ||
+            voiceRecorderProvider.state == VoiceRecorderState.pendingRecovery;
         final latest = provider.messages.isEmpty ? null : provider.messages.last;
         final followUp = latest != null &&
                 latest.sender == MessageSender.ai &&
@@ -511,15 +523,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
             ChatComposerEntrance(
               bottom: true,
               maintainBottomViewPadding: false,
+              // One filled field, the same whether the thread is at its live edge or scrolled: a
+              // composer that changed with the scroll read as a blink.
               child: Container(
+                key: const Key('chat_composer_card'),
                 margin: EdgeInsets.fromLTRB(10, provider.selectedFiles.isNotEmpty ? 0 : 8, 10, 10),
                 padding: const EdgeInsets.fromLTRB(16, 8, 6, 4),
-                decoration: BoxDecoration(
-                  color: OmiColors.surface1,
-                  borderRadius: const BorderRadius.all(Radius.circular(24)),
-                  border: Border.all(color: OmiColors.border),
-                  boxShadow: kChatComposerShadow,
-                ),
+                decoration: BoxDecoration(color: ChatInk.fill, borderRadius: OmiRadius.xlAll),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -619,6 +629,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                               voiceRecorderProvider.processRecording();
                             },
                           ),
+                        // Try Again takes Send's place: the one action a kept recording wants.
+                        if (voiceWaiting)
+                          ChatComposerRoundButton(
+                            buttonKey: const ValueKey('omi.chat.voice.retry'),
+                            icon: const FaIcon(FontAwesomeIcons.arrowsRotate),
+                            label: context.l10n.tryAgain,
+                            onPressed: () {
+                              OmiHaptics.light();
+                              voiceRecorderProvider.retry();
+                            },
+                          ),
                         if (!voiceActive && textController.text.isEmpty)
                           ChatComposerRoundButton(
                             icon: const FaIcon(FontAwesomeIcons.microphone),
@@ -698,7 +719,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       ],
       position: PullDownMenuPosition.automatic,
       buttonBuilder: (context, showMenu) => ChatComposerSideButton(
-        icon: const FaIcon(FontAwesomeIcons.paperclip),
+        icon: const FaIcon(FontAwesomeIcons.plus),
         label: context.l10n.chatAddAttachment,
         onPressed: () async {
           OmiHaptics.light();

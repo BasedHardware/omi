@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:collection/collection.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/widgets/chat_apps_drawer.dart';
+import 'package:omi/pages/chat/widgets/chat_bubbles.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -25,7 +27,7 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       automaticallyImplyLeading: false,
-      leading: const Center(child: OmiCloseButton.circled(key: Key('chat_close'))),
+      leading: Center(child: OmiCloseButton.circled(key: const Key('chat_close'), fillColor: ChatInk.fill)),
       centerTitle: true,
       title: _ChatDismissRegion(
           child: app == null
@@ -36,11 +38,7 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(color: OmiColors.border, borderRadius: OmiRadius.pillAll)))
-              : Row(mainAxisSize: MainAxisSize.min, children: [
-                  ChatAppAvatar(app: app),
-                  const SizedBox(width: OmiSpacing.xs),
-                  Flexible(child: Text(app.getName(), overflow: TextOverflow.ellipsis, style: OmiType.callout)),
-                ])),
+              : _AppCapsule(app: app)),
       // Balance the close control so the dismissal handle stays centered without a history button.
       actions: const [SizedBox(width: kToolbarHeight)],
       bottom: provider.isLoadingMessages
@@ -55,6 +53,52 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
                   ])),
             )
           : null,
+    );
+  }
+}
+
+/// The chat app answering this thread, in a filled capsule. Tapping it opens
+/// Chat Apps, the same as the app pill in the composer.
+class _AppCapsule extends StatelessWidget {
+  const _AppCapsule({required this.app});
+
+  final App app;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = app.getName();
+    return Semantics(
+      button: true,
+      label: context.l10n.chatAppsTitle,
+      value: name,
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: const Key('chat_app_capsule'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          OmiHaptics.selection();
+          Scaffold.maybeOf(context)?.openEndDrawer();
+        },
+        child: Container(
+          decoration: BoxDecoration(color: ChatInk.fill, borderRadius: OmiRadius.pillAll),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(6, 6, OmiSpacing.sm, 6),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              ChatAppAvatar(app: app),
+              const SizedBox(width: OmiSpacing.xs),
+              Flexible(
+                child: Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textTertiary),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 }
