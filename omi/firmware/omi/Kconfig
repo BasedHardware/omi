@@ -82,7 +82,33 @@ config OMI_VAD_ABS_THRESHOLD
     help
         "An average absolute amplitude at or above this value resets the
          silence timer used to decide when to enter T5838 hardware AAD sleep.
-         This does not gate or drop streamed audio while the mic is active."
+         With connected-quiet enabled it also detects voice for the software
+         pre-roll gate; otherwise active audio is forwarded continuously."
+
+config OMI_ENABLE_AAD_CONNECTED_QUIET
+    bool "Enable draft connected-live quiet AAD with wake pre-roll"
+    depends on OMI_ENABLE_T5838_AAD
+    default n
+    help
+        Allow T5838 hardware sleep in explicitly selected live capture mode
+        while BLE remains connected and audio CCC remains subscribed. Reuses
+        a 500 ms software pre-roll while PDM runs; forwards hardware wake
+        immediately without debounce. Audio during hardware sleep cannot be
+        recovered. Requires hardware qualification before shipping.
+        Sessions default to continuous recording to protect Transcribe Later;
+        the draft encrypted audio-mode characteristic must opt live mode in.
+        Charging retains the existing hardware AAD behavior.
+
+config OMI_AAD_SILENCE_TIMEOUT_MS
+    int "Connected-live silence timeout before hardware AAD sleep (ms)"
+    depends on OMI_ENABLE_AAD_CONNECTED_QUIET
+    range 1000 3600000
+    default 120000
+    help
+        Continuous below-threshold silence required in connected live mode.
+        Connection, CCC and mode transitions restart this interval. Offline
+        and charging paths retain OMI_VAD_HOLD_MS. This long timeout is
+        separate from the software gate hold and the offline hardware hold.
 
 config OMI_VAD_HOLD_MS
     int "AAD silence hold time before hardware sleep (ms)"
@@ -90,9 +116,9 @@ config OMI_VAD_HOLD_MS
     default 3000
     depends on OMI_ENABLE_T5838_AAD
     help
-        "Amount of continuous below-threshold silence before entering T5838
-         hardware AAD sleep. This does not gate or drop streamed audio while
-         the mic is active."
+        "Offline/charging hardware AAD silence hold. With connected-quiet
+         enabled, also the awake software gate hold; connected-live hardware
+         sleep uses OMI_AAD_SILENCE_TIMEOUT_MS instead."
 
 config OMI_AAD_SETTLE_MS
     int "T5838 AAD settle time before arming WAKE (ms)"

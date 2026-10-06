@@ -20,6 +20,13 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
 
 ## WIP
 
+### Draft connected-quiet audio wake
+
+The opt-in connected AAD policy, behavior matrix, mode protocol, pre-roll limits,
+and build/test commands are documented in [connected-aad.md](docs/connected-aad.md).
+`CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET` defaults to `n`, including in `omi.conf`.
+It requires T5838 hardware; devkit firmware and the P1.02 WAKE pin mapping are unchanged.
+
 - Status: running on production, missing some enhancement.
 
 - TODOs:
