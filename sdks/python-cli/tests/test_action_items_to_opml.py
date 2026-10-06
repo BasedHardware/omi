@@ -99,5 +99,71 @@ class TestActionItemsToOpml(unittest.TestCase):
             
         os.remove("test_input.json")
 
+    def test_strip_surrogates_in_description_and_fields(self):
+        data = [
+            {"description": "Task with lone surrogate \ud800 here", "completed": False, "created_at": "2024-01-01T00:00:00Z\ud800"}
+        ]
+        opml = create_opml(data)
+        xml_str = get_opml_string(opml)
+        self.assertNotIn("\ud800", xml_str)
+        root = ET.fromstring(xml_str.encode("utf-8"))
+        outline = root.find(".//outline")
+        self.assertIsNotNone(outline)
+        self.assertEqual(outline.attrib["text"], "Task with lone surrogate  here")
+
+    def test_strip_control_characters(self):
+        data = [
+            {"description": "Task with control \x00\x08\x1b\x0c chars", "completed": False}
+        ]
+        opml = create_opml(data)
+        xml_str = get_opml_string(opml)
+        root = ET.fromstring(xml_str.encode("utf-8"))
+        outline = root.find(".//outline")
+        self.assertIsNotNone(outline)
+        self.assertNotIn("\x00", outline.attrib["text"])
+        self.assertNotIn("\x08", outline.attrib["text"])
+
+    def test_envelope_unwrapping_action_items_and_data(self):
+        envelope_action_items = {"action_items": [{"description": "Action item envelope task", "completed": True}]}
+        envelope_data = {"data": [{"description": "Data envelope task", "completed": False}]}
+        
+        # Test CLI invocation handles envelope formats
+        with open("test_env_ai.json", "w", encoding="utf-8") as f:
+            json.dump(envelope_action_items, f)
+        subprocess.run([sys.executable, str(recipe_path), "test_env_ai.json", self.test_output], check=True)
+        with open(self.test_output, "r", encoding="utf-8") as f:
+            content = f.read()
+            self.assertIn("Action item envelope task", content)
+            self.assertIn('_status="completed"', content)
+        os.remove("test_env_ai.json")
+
+        with open("test_env_data.json", "w", encoding="utf-8") as f:
+            json.dump(envelope_data, f)
+        subprocess.run([sys.executable, str(recipe_path), "test_env_data.json", self.test_output], check=True)
+        with open(self.test_output, "r", encoding="utf-8") as f:
+            content = f.read()
+            self.assertIn("Data envelope task", content)
+            self.assertIn('_status="open"', content)
+        os.remove("test_env_data.json")
+
+    def test_loosely_typed_completed_and_description(self):
+        data = [
+            {"description": {"title": "Structured object task"}, "completed": 1},
+            {"description": ["List task"], "completed": "done"},
+            {"description": "Falsy task", "completed": "0"},
+            {"description": "False string task", "completed": "false"}
+        ]
+        opml = create_opml(data)
+        xml_str = get_opml_string(opml)
+        root = ET.fromstring(xml_str.encode("utf-8"))
+        outlines = root.findall(".//outline")
+        self.assertEqual(len(outlines), 4)
+        self.assertEqual(outlines[0].attrib["_status"], "completed")
+        self.assertIn("Structured object task", outlines[0].attrib["text"])
+        self.assertEqual(outlines[1].attrib["_status"], "completed")
+        self.assertEqual(outlines[2].attrib["_status"], "open")
+        self.assertEqual(outlines[3].attrib["_status"], "open")
+
 if __name__ == '__main__':
     unittest.main()
+
