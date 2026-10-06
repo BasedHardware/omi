@@ -719,6 +719,43 @@ def test_a_label_that_is_not_a_name_never_costs_the_text_a_word(text, expected):
     assert [s.text for s in segments] == expected
 
 
+@pytest.mark.parametrize(
+    ('label', 'text'),
+    [
+        pytest.param('Speaker 2', 'hi', id='speaker-n'),
+        pytest.param('Speaker 10', 'hi', id='two-digits'),
+        pytest.param('SPEAKER_01', 'hi', id='diarization-token'),
+        pytest.param('spk 3', 'hi', id='spk'),
+        pytest.param('Participant 1', 'hi', id='participant-n'),
+        pytest.param('unknown speaker', 'hi', id='unknown-speaker'),
+        pytest.param('Speakers', 'Speakers: hi', id='plural-is-a-word'),
+        pytest.param('Speaker of the House', 'Speaker of the House: hi', id='a-title'),
+        pytest.param('Speaker 2 and Bob', 'Speaker 2 and Bob: hi', id='more-than-a-placeholder'),
+        pytest.param('Unknown', 'Unknown: hi', id='unknown-alone'),
+    ],
+)
+def test_a_generic_speaker_placeholder_is_not_kept_in_the_text(label, text):
+    """A placeholder names no one: the segment's SPEAKER_NN already records the turn."""
+    cues = [tf.TranscriptCue(text='hello', speaker='Alice Chen'), tf.TranscriptCue(text='hi', speaker=label)]
+
+    segments = tf.segments_from_cues(cues, owner_name='Jane Doe', people={'sam': 'person-sam'})
+
+    assert [(s.text, s.speaker_id, s.is_user, s.person_id) for s in segments] == [
+        ('Alice Chen: hello', 0, False, None),
+        (text, 1, False, None),
+    ]
+
+
+def test_a_placeholder_labeled_file_keeps_its_turns_apart_without_repeating_the_labels():
+    text = 'Speaker 1: Morning everyone.\nSpeaker 2: Hi.\nSpeaker 1: Let us start.\n'
+
+    parsed = tf.parse_transcript_file('call.txt', text.encode('utf-8'))
+    assert parsed is not None
+    segments = tf.segments_from_cues(parsed.cues, owner_name='Jane Doe', people={})
+
+    assert [(s.text, s.speaker_id) for s in segments] == [('Morning everyone.', 0), ('Hi.', 1), ('Let us start.', 0)]
+
+
 def test_untimed_cues_get_ordered_estimated_times():
     segments = tf.segments_from_cues(tf.parse_text_transcript(PARAGRAPHS_TXT), owner_name=None, people={})
 

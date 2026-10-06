@@ -129,7 +129,13 @@ _TIMESTAMP = r'(?:\d{1,3}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?'
 _TIMESTAMP_RE = re.compile(r'(?:(\d{1,3}):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?')
 _CUE_TIMING_RE = re.compile(rf'^\s*({_TIMESTAMP})\s*-->\s*({_TIMESTAMP})')
 _LABEL_RE = re.compile(r"^(?P<label>[^\W\d_][^:\n]{0,39}?)\s*:\s+(?P<rest>\S.*)$")
-_SPEAKER_N_RE = re.compile(r'^(?:speaker|participant|person|spk)\s*\d+$', re.IGNORECASE)
+# A whole label that is a generic placeholder, not a name: "Speaker 2", "SPEAKER_01",
+# "spk 3", "Participant 1", "Unknown Speaker". It is a speaker even as a one-off, and
+# it names no one, so it never stays in the text. "Speakers" or "Speaker of the House" is not one.
+_GENERIC_SPEAKER_RE = re.compile(
+    r'^(?:(?:speaker|participant|person|spk)[\s_]*\d+|(?:unknown|unidentified)\s+(?:speaker|participant))$',
+    re.IGNORECASE,
+)
 # These run on uploaded lines of up to a few MB while holding the GIL, so each
 # must stay linear: no two adjacent unbounded runs that can trade characters
 # (a tag or voice ends at the next '<', and a header name is capped).
@@ -194,9 +200,9 @@ def _assign_speakers(cues: Sequence[TranscriptCue]) -> List[TranscriptCue]:
 
     A label is a speaker when the file is mostly speaker-labeled, when it is a
     generic ``Speaker N`` label, or when it recurs. A one-off "Note: ..." in an
-    otherwise unlabeled file stays text. A label split off here is never lost:
+    otherwise unlabeled file stays text. A name split off here is never lost:
     ``segments_from_cues`` puts it back in front of the text unless it names the
-    owner or a known person.
+    owner or a known person, or is a generic placeholder that names no one.
     """
     labeled: List[Optional[tuple[str, str]]] = []
     for cue in cues:
@@ -213,7 +219,7 @@ def _assign_speakers(cues: Sequence[TranscriptCue]) -> List[TranscriptCue]:
             counts[label[0].casefold()] = counts.get(label[0].casefold(), 0) + 1
     result: List[TranscriptCue] = []
     for cue, label in zip(cues, labeled):
-        if label and (mostly_labeled or _SPEAKER_N_RE.match(label[0]) or counts[label[0].casefold()] > 1):
+        if label and (mostly_labeled or _GENERIC_SPEAKER_RE.match(label[0]) or counts[label[0].casefold()] > 1):
             result.append(TranscriptCue(text=label[1], speaker=label[0], start=cue.start, end=cue.end))
         else:
             result.append(cue)
@@ -573,10 +579,14 @@ def _segment_text(cue: TranscriptCue, *, bound: bool) -> str:
     """The cue's words, led by "Name: " when its speaker's name binds to no one.
 
     A segment can only name its speaker through ``is_user`` or ``person_id``, so any
-    other name ("Alice Chen", "Speaker 2", or a label that was never a name, such as
-    a recurring "TODO" or an agenda heading) stays in the text rather than vanish.
+    other name ("Alice Chen", or a label that was never a name, such as a recurring
+    "TODO" or an agenda heading) stays in the text rather than vanish. A generic
+    placeholder ("Speaker 2") names no one: the segment's ``SPEAKER_NN`` already
+    records the turn, and repeating it would only duplicate the app's own label.
     """
-    return cue.text if bound or not cue.speaker else f'{cue.speaker}: {cue.text}'
+    if bound or not cue.speaker or _GENERIC_SPEAKER_RE.match(cue.speaker):
+        return cue.text
+    return f'{cue.speaker}: {cue.text}'
 
 
 def segments_from_cues(
