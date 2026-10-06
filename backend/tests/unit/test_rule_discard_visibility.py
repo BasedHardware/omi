@@ -19,7 +19,26 @@ from fastapi import HTTPException
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import chunk, intake
+from tests.unit.test_sync_donor_tombstone_visibility import (
+    _ListingQuery as _ListingSpy,
+)
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
+
+
+def _at(hour: int) -> datetime:
+    return datetime(2026, 9, 22, hour, 0, tzinfo=timezone.utc)
+
+
+def _visible_row(when: datetime, row_id: str = 'visible') -> dict:
+    return {
+        'id': row_id,
+        'created_at': when,
+        'status': 'completed',
+        'discarded': False,
+        'deleted': False,
+        'source': 'omi',
+        'structured': {'title': 'Real conversation'},
+    }
 
 
 def _incident(**overrides):
@@ -178,6 +197,57 @@ def test_mixed_page_fills_past_a_later_stale_rule_discard(monkeypatch):
 
     page = conversations_db.get_conversations_without_photos('u', limit=2, offset=0)
     assert [row['id'] for row in page] == ['visible-new', 'visible-old']
+
+
+def test_default_list_sends_limit_then_offset_and_refill_stays_capped(monkeypatch):
+    """Desktop parity: the first query must carry server limit+offset, and the
+    refill must give up after the 64-skip cap instead of walking the collection."""
+    from database import conversations as conversations_db
+
+    calls = []
+    real_limit = _ListingSpy.limit
+    real_offset = _ListingSpy.offset
+    real_stream = _ListingSpy.stream
+
+    def limit(self, value):
+        calls.append(('limit', value))
+        return real_limit(self, value)
+
+    def offset(self, value):
+        calls.append(('offset', value))
+        return real_offset(self, value)
+
+    def stream(self, **kwargs):
+        calls.append(('stream', self._offset, self._limit, self._start_after_id))
+        return real_stream(self, **kwargs)
+
+    monkeypatch.setattr(_ListingSpy, 'limit', limit)
+    monkeypatch.setattr(_ListingSpy, 'offset', offset)
+    monkeypatch.setattr(_ListingSpy, 'stream', stream)
+
+    # First page: one visible row then 70 consecutive stale rule-discards.
+    # The visible row is newest so the first window is full; the refill must
+    # stop at the cap instead of scanning all 70.
+    rows = {'visible': _visible_row(_at(20))}
+    for hour in range(19, 0, -1):
+        rows[f'stale-{hour}'] = _incident(id=f'stale-{hour}', created_at=_at(hour))
+    rows['deep-visible'] = _visible_row(_at(0))
+    _install_listing(monkeypatch, rows)
+
+    page = conversations_db.get_conversations_without_photos('u', limit=2, offset=0)
+    ids = [row['id'] for row in page]
+
+    # limit+offset order on the first query (desktop backend contract)
+    first_limit = next(i for i, c in enumerate(calls) if c[0] == 'limit')
+    assert calls[first_limit] == ('limit', 2)
+    assert calls[first_limit + 1] == ('offset', 0)
+    # the refill read is bounded: it never streams past the cap window
+    # (70 skips at a window of 2 = 35 batches; the cap stops it near 32)
+    refill_streams = [c for c in calls if c[0] == 'stream' and c[3] is not None]
+    assert len(refill_streams) <= 36
+    # the deep visible row stays unreached; the page is short, not wrong
+    assert 'visible' in ids
+    assert 'deep-visible' not in ids
 
 
 def test_read_projection_marks_the_incident_without_mutating_it(conversations_db):
