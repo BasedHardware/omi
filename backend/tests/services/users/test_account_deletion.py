@@ -1549,19 +1549,22 @@ def test_background_wipe_uses_immediate_idempotent_stripe_cancellation(monkeypat
                 code='resource_missing' if outcome == 'resource_missing' else None,
             )
         )
+        delete = MagicMock()
     else:
-        retrieve = MagicMock(return_value={'status': outcome})
+        delete = MagicMock(return_value={'status': 'canceled'})
+        subscription = MagicMock()
+        subscription.get.side_effect = lambda key, default=None: outcome if key == 'status' else default
+        subscription.delete = delete
+        retrieve = MagicMock(return_value=subscription)
     monkeypatch.setattr(stripe.Subscription, 'retrieve', retrieve)
-    delete = MagicMock(return_value={'status': 'canceled'})
     modify = MagicMock()
-    monkeypatch.setattr(stripe.Subscription, 'delete', delete)
     monkeypatch.setattr(stripe.Subscription, 'modify', modify)
     assert account_deletion.background_wipe_user_data('uid1') is True
     account_deletion.auth.delete_account.assert_called_once_with('uid1')
     account_deletion.users_db.get_user_subscription.assert_not_called()
     modify.assert_not_called()
     if outcome == 'active':
-        delete.assert_called_once_with('sub_123')
+        delete.assert_called_once_with()
     else:
         delete.assert_not_called()
 
