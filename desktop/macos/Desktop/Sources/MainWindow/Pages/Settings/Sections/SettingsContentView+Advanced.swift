@@ -458,6 +458,7 @@ extension SettingsContentView {
                   let generation = meetingBriefAccessRequestGeneration
                   if !enabled {
                     meetingMemoryBriefsEnabled = false
+                    meetingBriefCalendarAccessUnavailable = false
                     return
                   }
                   Task {
@@ -465,7 +466,9 @@ extension SettingsContentView {
                     guard generation == meetingBriefAccessRequestGeneration else { return }
                     if allowed {
                       meetingMemoryBriefsEnabled = true
+                      meetingBriefCalendarAccessUnavailable = false
                     } else {
+                      meetingBriefCalendarAccessUnavailable = true
                       OmiToastCenter.shared.notice(
                         "Allow Calendar access in macOS System Settings to see meeting briefs.",
                         systemImage: "calendar.badge.exclamationmark")
@@ -484,6 +487,15 @@ extension SettingsContentView {
           )
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
+
+          if meetingBriefCalendarAccessUnavailable {
+            Text(
+              "Calendar access is off. Open System Settings → Privacy & Security → Calendars, allow this app, then turn Meeting Briefs on again."
+            )
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .accessibilityIdentifier("meeting-brief-calendar-access-help")
+          }
         }
       }
     }

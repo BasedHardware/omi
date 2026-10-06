@@ -196,6 +196,7 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.meetingMemoryBriefsEnabled.rawValue)
   var meetingMemoryBriefsEnabled: Bool = false
   @State var meetingBriefAccessRequestGeneration = 0
+  @State var meetingBriefCalendarAccessUnavailable = false
 
   // Guards against the read-on-appear (`loadMeetingNoteScreenshotsSetting`) reconciling
   // `meetingNoteScreenshotsEnabled` with the server's value from also being mistaken for a user
