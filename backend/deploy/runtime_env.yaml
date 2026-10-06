@@ -2929,7 +2929,7 @@ environments:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '50'
+            value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -3123,7 +3123,7 @@ environments:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '50'
+            value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -3654,7 +3654,7 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '50'
+              value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3968,7 +3968,7 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '50'
+              value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -4251,7 +4251,7 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '50'
+              value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
