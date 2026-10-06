@@ -9,7 +9,7 @@ import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
 class WatchTransport extends DeviceTransport {
-  final WatchRecorderHostAPI _hostAPI = WatchRecorderHostAPI();
+  final WatchRecorderHostAPI _hostAPI;
   final StreamController<DeviceTransportState> _connectionStateController;
   final Map<String, StreamController<List<int>>> _streamControllers = {};
   final Map<String, Timer> _periodicTimers = {};
@@ -20,7 +20,9 @@ class WatchTransport extends DeviceTransport {
   static final List<StreamController<List<int>>> _audioControllers = [];
   static final List<StreamController<List<int>>> _batteryControllers = [];
 
-  WatchTransport() : _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
+  WatchTransport({WatchRecorderHostAPI? hostAPI})
+      : _hostAPI = hostAPI ?? WatchRecorderHostAPI(),
+        _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
     _ensureWatchBridgeSetup();
   }
 
@@ -126,6 +128,12 @@ class WatchTransport extends DeviceTransport {
     }
 
     _updateState(DeviceTransportState.disconnecting);
+
+    try {
+      await stopRecording();
+    } catch (e) {
+      Logger.debug('Watch Transport: Best effort stopRecording on disconnect failed: $e');
+    }
 
     for (final timer in _periodicTimers.values) {
       timer.cancel();
@@ -306,6 +314,12 @@ class WatchTransport extends DeviceTransport {
 
   @override
   Future<void> dispose() async {
+    try {
+      await stopRecording();
+    } catch (e) {
+      Logger.debug('Watch Transport: Best effort stopRecording on dispose failed: $e');
+    }
+
     for (final timer in _periodicTimers.values) {
       timer.cancel();
     }
