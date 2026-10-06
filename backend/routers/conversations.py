@@ -993,8 +993,10 @@ def get_conversation_by_id(
             raise HTTPException(
                 status_code=400, detail="Only source=omi is supported for provenance-constrained detail reads"
             )
-        if conversation.get('source') != 'omi' or (not include_discarded and conversation.get('discarded', False)):
+        if conversation.get('source') != 'omi':
             raise HTTPException(status_code=404, detail="Conversation not found")
+    if not conversations_db.is_visible_conversation(conversation, include_discarded=include_discarded):
+        raise HTTPException(status_code=404, detail="Conversation not found")
     # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred'):

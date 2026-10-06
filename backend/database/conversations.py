@@ -20,6 +20,7 @@ from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
+from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
@@ -491,6 +492,8 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
 
     data = copy.deepcopy(conversation_data)
     data.pop('live_transcript_replay_receipt', None)
+    if is_completed_rule_discard(data):
+        data['discarded'] = True
     # User titles are durable overrides. Conversation processing owns the
     # generated title, but must never erase an explicit user edit.
     user_title = effective_user_title(data.get('user_title'))
@@ -675,8 +678,9 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
         return False
     if is_soft_deleted(conversation):
         return False
-    if conversation.get('discarded') and not include_discarded:
-        return False
+    if not include_discarded:
+        if conversation.get('discarded') or is_completed_rule_discard(conversation):
+            return False
     return True
 
 
@@ -2272,7 +2276,13 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     _sync_conversation_search_index(uid, conversation_id)
 
 
-def discard_by_relevance(uid: str, conversation_id: str, relevance_decision: dict) -> bool:
+def discard_by_relevance(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict,
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> bool:
     """Hide a row the relevance rules settled after the fact (backfill).
 
     Transactional so it never overrides what happened since the scan: a
@@ -2287,7 +2297,13 @@ def discard_by_relevance(uid: str, conversation_id: str, relevance_decision: dic
         if not getattr(snapshot, 'exists', False):
             return False
         current = snapshot.to_dict() or {}
-        if is_soft_deleted(current) or current.get('discarded') or current.get('sync_relevance_user_kept'):
+        status = getattr(current.get('status'), 'value', current.get('status'))
+        if is_soft_deleted(current) or current.get('discarded') or status != 'completed' or is_user_curated(current):
+            return False
+        if (
+            expected_sync_content_revision is not None
+            and current.get('sync_content_revision') != expected_sync_content_revision
+        ):
             return False
         transaction.update(conversation_ref, {'discarded': True, 'relevance_decision': relevance_decision})
         return True
