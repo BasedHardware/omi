@@ -3839,5 +3839,13 @@
     "dismiss": "تجاهل",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "إظهار على شاشة القفل"
+    "showOnLockScreen": "إظهار على شاشة القفل",
+    "singlePress": "ضغطة واحدة",
+    "singlePressAction": "إجراء الضغطة الواحدة",
+    "triplePress": "ثلاث ضغطات",
+    "triplePressAction": "إجراء الثلاث ضغطات",
+    "longPress": "ضغط مطول",
+    "turnOnOff": "تشغيل / إيقاف",
+    "askQuestion": "طرح سؤال",
+    "longPressPowerWarning": "الضغط المطول يقوم بتشغيل/إيقاف الجهاز ولا يمكن تخصيصه."
 }

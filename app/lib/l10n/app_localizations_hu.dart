@@ -12463,4 +12463,28 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Megjelenítés a zárolási képernyőn';
+
+  @override
+  String get singlePress => 'Egyszeri megnyomás';
+
+  @override
+  String get singlePressAction => 'Egyszeri megnyomás művelet';
+
+  @override
+  String get triplePress => 'Háromszori megnyomás';
+
+  @override
+  String get triplePressAction => 'Háromszori megnyomás művelet';
+
+  @override
+  String get longPress => 'Hosszú megnyomás';
+
+  @override
+  String get turnOnOff => 'Be- / Kikapcsolás';
+
+  @override
+  String get askQuestion => 'Kérdés feltevése';
+
+  @override
+  String get longPressPowerWarning => 'A hosszú megnyomás be-/kikapcsolja az eszközt, és nem szabható testre.';
 }

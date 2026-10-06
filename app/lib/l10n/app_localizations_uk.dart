@@ -12443,4 +12443,28 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Показувати на екрані блокування';
+
+  @override
+  String get singlePress => 'Одинарне натискання';
+
+  @override
+  String get singlePressAction => 'Дія одинарного натискання';
+
+  @override
+  String get triplePress => 'Потрійне натискання';
+
+  @override
+  String get triplePressAction => 'Дія потрійного натискання';
+
+  @override
+  String get longPress => 'Тривале натискання';
+
+  @override
+  String get turnOnOff => 'Увімкнути/Вимкнути';
+
+  @override
+  String get askQuestion => 'Поставити запитання';
+
+  @override
+  String get longPressPowerWarning => 'Тривале натискання вмикає/вимикає пристрій і не налаштовується.';
 }

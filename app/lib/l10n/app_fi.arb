@@ -3839,5 +3839,13 @@
     "dismiss": "Hylkää",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Näytä lukitusnäytöllä"
+    "showOnLockScreen": "Näytä lukitusnäytöllä",
+    "singlePress": "Kertapainallus",
+    "singlePressAction": "Kertapainalluksen toiminto",
+    "triplePress": "Kolmoispainallus",
+    "triplePressAction": "Kolmoispainalluksen toiminto",
+    "longPress": "Pitkä painallus",
+    "turnOnOff": "Kytke päälle/pois",
+    "askQuestion": "Esitä kysymys",
+    "longPressPowerWarning": "Pitkä painallus kytkee laitteen päälle/pois, eikä sitä voi mukauttaa."
 }

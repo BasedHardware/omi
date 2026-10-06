@@ -3839,5 +3839,13 @@
     "dismiss": "Ausblenden",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Auf dem Sperrbildschirm anzeigen"
+    "showOnLockScreen": "Auf dem Sperrbildschirm anzeigen",
+    "singlePress": "Einfaches Drücken",
+    "singlePressAction": "Einfaches Drücken Aktion",
+    "triplePress": "Dreifaches Drücken",
+    "triplePressAction": "Dreifaches Drücken Aktion",
+    "longPress": "Langes Drücken",
+    "turnOnOff": "Ein- / Ausschalten",
+    "askQuestion": "Frage stellen",
+    "longPressPowerWarning": "Langes Drücken schaltet das Gerät ein/aus und kann nicht angepasst werden."
 }

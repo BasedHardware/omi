@@ -3874,5 +3874,13 @@
     "dismiss": "Gizle",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Kilit ekranında göster"
+    "showOnLockScreen": "Kilit ekranında göster",
+    "singlePress": "Tek Basma",
+    "singlePressAction": "Tek Basma Eylemi",
+    "triplePress": "Üç Kez Basma",
+    "triplePressAction": "Üç Kez Basma Eylemi",
+    "longPress": "Uzun Basma",
+    "turnOnOff": "Aç / Kapat",
+    "askQuestion": "Soru Sor",
+    "longPressPowerWarning": "Uzun basma cihazı açar/kapatır ve özelleştirilemez."
 }

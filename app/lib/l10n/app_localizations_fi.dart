@@ -12419,4 +12419,28 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Näytä lukitusnäytöllä';
+
+  @override
+  String get singlePress => 'Kertapainallus';
+
+  @override
+  String get singlePressAction => 'Kertapainalluksen toiminto';
+
+  @override
+  String get triplePress => 'Kolmoispainallus';
+
+  @override
+  String get triplePressAction => 'Kolmoispainalluksen toiminto';
+
+  @override
+  String get longPress => 'Pitkä painallus';
+
+  @override
+  String get turnOnOff => 'Kytke päälle/pois';
+
+  @override
+  String get askQuestion => 'Esitä kysymys';
+
+  @override
+  String get longPressPowerWarning => 'Pitkä painallus kytkee laitteen päälle/pois, eikä sitä voi mukauttaa.';
 }

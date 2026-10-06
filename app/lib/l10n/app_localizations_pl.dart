@@ -12454,4 +12454,28 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Pokaż na ekranie blokady';
+
+  @override
+  String get singlePress => 'Pojedyncze naciśnięcie';
+
+  @override
+  String get singlePressAction => 'Akcja pojedynczego naciśnięcia';
+
+  @override
+  String get triplePress => 'Potrójne naciśnięcie';
+
+  @override
+  String get triplePressAction => 'Akcja potrójnego naciśnięcia';
+
+  @override
+  String get longPress => 'Długie naciśnięcie';
+
+  @override
+  String get turnOnOff => 'Włącz / Wyłącz';
+
+  @override
+  String get askQuestion => 'Zadaj pytanie';
+
+  @override
+  String get longPressPowerWarning => 'Długie naciśnięcie włącza/wyłącza urządzenie i nie można go dostosować.';
 }

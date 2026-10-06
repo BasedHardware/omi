@@ -3839,5 +3839,13 @@
     "dismiss": "Приховати",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Показувати на екрані блокування"
+    "showOnLockScreen": "Показувати на екрані блокування",
+    "singlePress": "Одинарне натискання",
+    "singlePressAction": "Дія одинарного натискання",
+    "triplePress": "Потрійне натискання",
+    "triplePressAction": "Дія потрійного натискання",
+    "longPress": "Тривале натискання",
+    "turnOnOff": "Увімкнути/Вимкнути",
+    "askQuestion": "Поставити запитання",
+    "longPressPowerWarning": "Тривале натискання вмикає/вимикає пристрій і не налаштовується."
 }

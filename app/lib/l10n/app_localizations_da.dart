@@ -12403,4 +12403,28 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Vis på låseskærmen';
+
+  @override
+  String get singlePress => 'Enkelt tryk';
+
+  @override
+  String get singlePressAction => 'Handling for enkelt tryk';
+
+  @override
+  String get triplePress => 'Tredobbelt tryk';
+
+  @override
+  String get triplePressAction => 'Handling for tredobbelt tryk';
+
+  @override
+  String get longPress => 'Langt tryk';
+
+  @override
+  String get turnOnOff => 'Tænd/sluk';
+
+  @override
+  String get askQuestion => 'Stil spørgsmål';
+
+  @override
+  String get longPressPowerWarning => 'Langt tryk tænder/slukker for enheden og kan ikke tilpasses.';
 }

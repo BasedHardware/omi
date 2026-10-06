@@ -3839,5 +3839,13 @@
     "dismiss": "Ascunde",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Afișează pe ecranul de blocare"
+    "showOnLockScreen": "Afișează pe ecranul de blocare",
+    "singlePress": "Apăsare unică",
+    "singlePressAction": "Acțiune apăsare unică",
+    "triplePress": "Apăsare triplă",
+    "triplePressAction": "Acțiune apăsare triplă",
+    "longPress": "Apăsare lungă",
+    "turnOnOff": "Pornire / Oprire",
+    "askQuestion": "Pune o întrebare",
+    "longPressPowerWarning": "Apăsarea lungă pornește/oprește dispozitivul și nu poate fi personalizată."
 }

@@ -3839,5 +3839,13 @@
     "dismiss": "ปิด",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "แสดงบนหน้าจอล็อก"
+    "showOnLockScreen": "แสดงบนหน้าจอล็อก",
+    "singlePress": "กดครั้งเดียว",
+    "singlePressAction": "การทำงานเมื่อกดครั้งเดียว",
+    "triplePress": "กดสามครั้ง",
+    "triplePressAction": "การทำงานเมื่อกดสามครั้ง",
+    "longPress": "กดค้าง",
+    "turnOnOff": "เปิด / ปิด",
+    "askQuestion": "ถามคำถาม",
+    "longPressPowerWarning": "การกดค้างใช้เปิด/ปิดอุปกรณ์และไม่สามารถปรับแต่งได้"
 }

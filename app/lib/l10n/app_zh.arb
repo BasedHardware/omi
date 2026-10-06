@@ -3839,5 +3839,13 @@
     "dismiss": "忽略",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "在锁定屏幕上显示"
+    "showOnLockScreen": "在锁定屏幕上显示",
+    "singlePress": "单击",
+    "singlePressAction": "单击操作",
+    "triplePress": "三击",
+    "triplePressAction": "三击操作",
+    "longPress": "长按",
+    "turnOnOff": "开/关机",
+    "askQuestion": "提问",
+    "longPressPowerWarning": "长按用于开关机，无法自定义。"
 }

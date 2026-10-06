@@ -12349,4 +12349,28 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'แสดงบนหน้าจอล็อก';
+
+  @override
+  String get singlePress => 'กดครั้งเดียว';
+
+  @override
+  String get singlePressAction => 'การทำงานเมื่อกดครั้งเดียว';
+
+  @override
+  String get triplePress => 'กดสามครั้ง';
+
+  @override
+  String get triplePressAction => 'การทำงานเมื่อกดสามครั้ง';
+
+  @override
+  String get longPress => 'กดค้าง';
+
+  @override
+  String get turnOnOff => 'เปิด / ปิด';
+
+  @override
+  String get askQuestion => 'ถามคำถาม';
+
+  @override
+  String get longPressPowerWarning => 'การกดค้างใช้เปิด/ปิดอุปกรณ์และไม่สามารถปรับแต่งได้';
 }

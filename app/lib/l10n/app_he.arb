@@ -11396,5 +11396,13 @@
     "dismiss": "סגירה",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "הצגה במסך הנעילה"
+    "showOnLockScreen": "הצגה במסך הנעילה",
+    "singlePress": "לחיצה בודדת",
+    "singlePressAction": "פעולת לחיצה בודדת",
+    "triplePress": "לחיצה משולשת",
+    "triplePressAction": "פעולת לחיצה משולשת",
+    "longPress": "לחיצה ארוכה",
+    "turnOnOff": "הפעלה / כיבוי",
+    "askQuestion": "שאל שאלה",
+    "longPressPowerWarning": "לחיצה ארוכה מפעילה/מכבה את המכשיר ואינה ניתנת להתאמה אישית."
 }

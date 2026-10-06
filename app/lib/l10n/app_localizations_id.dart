@@ -12427,4 +12427,28 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Tampilkan di layar kunci';
+
+  @override
+  String get singlePress => 'Tekan Sekali';
+
+  @override
+  String get singlePressAction => 'Aksi Tekan Sekali';
+
+  @override
+  String get triplePress => 'Tekan Tiga Kali';
+
+  @override
+  String get triplePressAction => 'Aksi Tekan Tiga Kali';
+
+  @override
+  String get longPress => 'Tekan Lama';
+
+  @override
+  String get turnOnOff => 'Nyalakan / Matikan';
+
+  @override
+  String get askQuestion => 'Ajukan Pertanyaan';
+
+  @override
+  String get longPressPowerWarning => 'Tekan lama menyalakan/mematikan perangkat dan tidak dapat disesuaikan.';
 }

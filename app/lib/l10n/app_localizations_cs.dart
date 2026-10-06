@@ -12419,4 +12419,28 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Zobrazit na zamčené obrazovce';
+
+  @override
+  String get singlePress => 'Jedno stisknutí';
+
+  @override
+  String get singlePressAction => 'Akce jednoho stisknutí';
+
+  @override
+  String get triplePress => 'Trojité stisknutí';
+
+  @override
+  String get triplePressAction => 'Akce trojitého stisknutí';
+
+  @override
+  String get longPress => 'Dlouhé stisknutí';
+
+  @override
+  String get turnOnOff => 'Zapnout / Vypnout';
+
+  @override
+  String get askQuestion => 'Položit otázku';
+
+  @override
+  String get longPressPowerWarning => 'Dlouhé stisknutí zapíná/vypíná zařízení a nelze jej přizpůsobit.';
 }

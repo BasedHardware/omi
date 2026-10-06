@@ -742,8 +742,19 @@ class CaptureController extends ChangeNotifier
   List<List<int>> _commandBytes = [];
   int _voiceCommandSubmissionGeneration = 0;
   bool _voiceCommandStartedDuringOnboarding = false;
+  bool _voiceCommandStartedDuringLongPress = false;
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
+  Timer? _pendingDoubleTapTimer; // Debounce timer to suppress double tap when followed by triple tap
+
+  /// Multi-tap debounce window aligned with firmware's [DOUBLE_TAP_WINDOW] (600ms).
+  ///
+  /// In firmware (`omi/firmware/devkit/src/button.c` and `omi/firmware/omi/src/lib/core/button.c`),
+  /// DOUBLE_TAP_WINDOW is 600ms. State 6 (triple tap) is only emitted after the 3rd tap release
+  /// which can occur up to 600ms after the 2nd tap release (state 2). To prevent a triple tap
+  /// from firing both double-tap and triple-tap actions, pending double-tap execution is debounced
+  /// by this window.
+  static const Duration doubleTapDebounceWindow = Duration(milliseconds: 600);
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
 
   RecordingState recordingState = RecordingState.stop;
@@ -1649,6 +1660,7 @@ class CaptureController extends ChangeNotifier
     final allowWhenDisabled =
         _voiceCommandStartedDuringOnboarding && deviceOnboardingProvider?.isOnboardingActive == true;
     _voiceCommandStartedDuringOnboarding = false;
+    _voiceCommandStartedDuringLongPress = false;
     var data = List<List<int>>.from(_commandBytes);
     _commandBytes = [];
     _processVoiceCommandBytes(deviceId, data, allowWhenDisabled: allowWhenDisabled);
@@ -1665,6 +1677,7 @@ class CaptureController extends ChangeNotifier
     _voiceCommandTrigger = null;
 
     _voiceCommandStartedDuringOnboarding = false;
+    _voiceCommandStartedDuringLongPress = false;
     _commandBytes = [];
   }
 
@@ -1717,6 +1730,9 @@ class CaptureController extends ChangeNotifier
     _handleButtonEvent(deviceId, buttonState);
   }
 
+  @visibleForTesting
+  bool get hasPendingDoubleTapForTesting => _pendingDoubleTapTimer?.isActive ?? false;
+
   void _handleButtonEvent(String deviceId, int buttonState) {
     // Intercept for interactive device onboarding
     if (deviceOnboardingProvider?.isOnboardingActive == true) {
@@ -1736,24 +1752,22 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
-    // double tap
-    if (buttonState == 2) {
-      Logger.debug("Double tap detected");
-
-      // Guard: ignore if already processing a button event
+    void handleAction(int action, {required String gesture}) {
       if (_isProcessingButtonEvent) {
-        Logger.debug("Double tap: already processing, ignoring");
+        Logger.debug("Button event: already processing, ignoring");
         return;
       }
 
-      int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
-
-      if (doubleTapAction == 1) {
-        // Pause/resume recording
-        Logger.debug("Double tap: toggling pause/mute");
+      if (action == 1) {
+        // Pause/resume recording (Mute/Unmute)
+        Logger.debug("Button action: toggling pause/mute");
         _isProcessingButtonEvent = true;
         if (isPaused) {
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+          if (gesture == 'double_tap') {
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+          } else {
+            PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'unmute'});
+          }
           resumeDeviceRecording().then((_) {
             _isProcessingButtonEvent = false;
           }).catchError((e) {
@@ -1761,7 +1775,11 @@ class CaptureController extends ChangeNotifier
             _isProcessingButtonEvent = false;
           });
         } else {
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+          if (gesture == 'double_tap') {
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+          } else {
+            PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'mute'});
+          }
           pauseDeviceRecording().then((_) {
             _isProcessingButtonEvent = false;
           }).catchError((e) {
@@ -1769,59 +1787,100 @@ class CaptureController extends ChangeNotifier
             _isProcessingButtonEvent = false;
           });
         }
-      } else if (doubleTapAction == 2) {
+      } else if (action == 2) {
         // Star ongoing conversation (doesn't end it)
-        Logger.debug("Double tap: marking conversation for starring");
+        Logger.debug("Button action: marking conversation for starring");
         if (!_starOngoingConversation) {
           markConversationForStarring();
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-          // Haptic feedback to confirm
+          if (gesture == 'double_tap') {
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+          } else {
+            PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'star_conversation'});
+          }
           HapticFeedback.mediumImpact();
         } else {
-          // Toggle off if already marked
           unmarkConversationForStarring();
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+          if (gesture == 'double_tap') {
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+          } else {
+            PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'unstar_conversation'});
+          }
           HapticFeedback.lightImpact();
         }
+      } else if (action == 3) {
+        // Toggle voice question mode (Ask Question)
+        Logger.debug("Button action: toggling voice question mode");
+        if (gesture == 'double_tap') {
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'ask_question');
+        } else {
+          PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'ask_question'});
+        }
+        if (_voiceCommandSession == null) {
+          final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
+          if (autoSubmittedAt != null && _now().difference(autoSubmittedAt) <= _voiceCommandAutoSubmitGrace) {
+            _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.autoEndGrace);
+            return;
+          }
+          if (OmiVoicePlaybackService.instance.isSpeaking) {
+            OmiVoicePlaybackService.instance.interrupt(
+              source: VoiceReplyPlaybackInterruptSource.newVoiceQuery,
+            );
+          }
+          _lastVoiceCommandAutoSubmitAt = null;
+          _voiceCommandSession = _now();
+          _voiceCommandTrigger = _VoiceCommandTrigger.toggle;
+          _commandBytes = [];
+          _voiceCommandStartedDuringLongPress = false;
+          _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
+          _startVoiceCommandTimeout(deviceId);
+          _playSpeakerHaptic(deviceId, 1);
+        } else {
+          _endVoiceCommandSession(deviceId);
+        }
       } else {
-        // End conversation and process (default)
-        Logger.debug("Double tap: processing conversation");
-        PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+        // End conversation and process (action == 0 or default)
+        Logger.debug("Button action: processing conversation");
+        if (gesture == 'double_tap') {
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+        } else {
+          PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'process_conversation'});
+        }
         forceProcessingCurrentConversation();
       }
+    }
+
+    // Triple tap (buttonState == 6)
+    if (buttonState == 6) {
+      Logger.debug("Triple tap detected");
+      if (_pendingDoubleTapTimer?.isActive == true) {
+        _pendingDoubleTapTimer?.cancel();
+        _pendingDoubleTapTimer = null;
+        Logger.debug("Triple tap: suppressed pending double tap action");
+      }
+      handleAction(_preferences.tripleTapAction, gesture: 'triple_tap');
       return;
     }
 
-    // Single tap (buttonState == 1) - toggle voice question mode
-    // Tap once to start, tap again to end
-    if (buttonState == 1) {
-      debugPrint("Single tap detected");
-      if (_voiceCommandSession == null) {
-        final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
-        if (autoSubmittedAt != null && _now().difference(autoSubmittedAt) <= _voiceCommandAutoSubmitGrace) {
-          _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.autoEndGrace);
-          return;
-        }
-        // Start voice question session (new toggle mode)
-        debugPrint("Starting voice question session (toggle mode)");
-        // Cut off any in-flight voice playback from a prior reply so the
-        // new recording starts clean.
-        if (OmiVoicePlaybackService.instance.isSpeaking) {
-          OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.newVoiceQuery);
-        }
-        _lastVoiceCommandAutoSubmitAt = null;
-        _voiceCommandSession = _now();
-        _voiceCommandTrigger = _VoiceCommandTrigger.toggle;
-        _commandBytes = [];
-        _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
+    // Double tap (buttonState == 2)
+    // Debounce by doubleTapDebounceWindow (600ms, matching firmware DOUBLE_TAP_WINDOW contract)
+    // so that if a third tap arrives (state 6), the double-tap action is suppressed.
+    if (buttonState == 2) {
+      Logger.debug("Double tap detected; debouncing to guard against triple tap");
+      _pendingDoubleTapTimer?.cancel();
+      _pendingDoubleTapTimer = _scheduling.once(doubleTapDebounceWindow, () {
+        _pendingDoubleTapTimer = null;
+        if (_captureControllerDisposed) return;
+        handleAction(_preferences.doubleTapAction, gesture: 'double_tap');
+      });
+      return;
+    }
 
-        _startVoiceCommandTimeout(deviceId);
-        _playSpeakerHaptic(deviceId, 1);
-      } else {
-        // End on second tap
-        debugPrint("Ending voice question session (toggle mode)");
-        _endVoiceCommandSession(deviceId);
-      }
+    // Single tap (buttonState == 1)
+    if (buttonState == 1) {
+      Logger.debug("Single tap detected");
+      _pendingDoubleTapTimer?.cancel();
+      _pendingDoubleTapTimer = null;
+      handleAction(_preferences.singleTapAction, gesture: 'single_tap');
       return;
     }
 
@@ -1831,6 +1890,7 @@ class CaptureController extends ChangeNotifier
       _voiceCommandSession = _now();
       _voiceCommandTrigger = _VoiceCommandTrigger.legacyLongPress;
       _commandBytes = [];
+      _voiceCommandStartedDuringLongPress = true;
       _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
 
       _startVoiceCommandTimeout(deviceId);
@@ -1838,10 +1898,11 @@ class CaptureController extends ChangeNotifier
     }
 
     // Legacy support: release (end voice command) - older firmware
-    // End on release if a voice command session is active
+    // Only end on release if the voice command session was actually started by a long-press (state 3)
     if (buttonState == 5 &&
         _voiceCommandSession != null &&
-        _voiceCommandTrigger == _VoiceCommandTrigger.legacyLongPress) {
+        (_voiceCommandTrigger == _VoiceCommandTrigger.legacyLongPress || _voiceCommandStartedDuringLongPress)) {
+      debugPrint("Legacy: Release detected - ending long-press voice command");
       _endVoiceCommandSession(deviceId);
     }
   }
@@ -2408,6 +2469,8 @@ class CaptureController extends ChangeNotifier
     // synchronously).
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    _pendingDoubleTapTimer?.cancel();
+    _pendingDoubleTapTimer = null;
     unawaited(_sessionOwner?.close());
     unawaited(lifetime.close());
     super.dispose();

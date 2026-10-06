@@ -12470,4 +12470,28 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Afișează pe ecranul de blocare';
+
+  @override
+  String get singlePress => 'Apăsare unică';
+
+  @override
+  String get singlePressAction => 'Acțiune apăsare unică';
+
+  @override
+  String get triplePress => 'Apăsare triplă';
+
+  @override
+  String get triplePressAction => 'Acțiune apăsare triplă';
+
+  @override
+  String get longPress => 'Apăsare lungă';
+
+  @override
+  String get turnOnOff => 'Pornire / Oprire';
+
+  @override
+  String get askQuestion => 'Pune o întrebare';
+
+  @override
+  String get longPressPowerWarning => 'Apăsarea lungă pornește/oprește dispozitivul și nu poate fi personalizată.';
 }

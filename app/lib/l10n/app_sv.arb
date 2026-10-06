@@ -3839,5 +3839,13 @@
     "dismiss": "Avvisa",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Visa på låsskärmen"
+    "showOnLockScreen": "Visa på låsskärmen",
+    "singlePress": "Enkeltryck",
+    "singlePressAction": "Åtgärd för enkeltryck",
+    "triplePress": "Tretryck",
+    "triplePressAction": "Åtgärd för tretryck",
+    "longPress": "Långt tryck",
+    "turnOnOff": "Slå på/av",
+    "askQuestion": "Ställ fråga",
+    "longPressPowerWarning": "Långt tryck slår på/stänger av enheten och kan inte anpassas."
 }

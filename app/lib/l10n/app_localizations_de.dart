@@ -12511,4 +12511,28 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Auf dem Sperrbildschirm anzeigen';
+
+  @override
+  String get singlePress => 'Einfaches Drücken';
+
+  @override
+  String get singlePressAction => 'Einfaches Drücken Aktion';
+
+  @override
+  String get triplePress => 'Dreifaches Drücken';
+
+  @override
+  String get triplePressAction => 'Dreifaches Drücken Aktion';
+
+  @override
+  String get longPress => 'Langes Drücken';
+
+  @override
+  String get turnOnOff => 'Ein- / Ausschalten';
+
+  @override
+  String get askQuestion => 'Frage stellen';
+
+  @override
+  String get longPressPowerWarning => 'Langes Drücken schaltet das Gerät ein/aus und kann nicht angepasst werden.';
 }

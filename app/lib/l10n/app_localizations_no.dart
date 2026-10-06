@@ -12415,4 +12415,28 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Vis på låseskjermen';
+
+  @override
+  String get singlePress => 'Enkelttrykk';
+
+  @override
+  String get singlePressAction => 'Handling for enkelttrykk';
+
+  @override
+  String get triplePress => 'Trippeltrykk';
+
+  @override
+  String get triplePressAction => 'Handling for trippeltrykk';
+
+  @override
+  String get longPress => 'Langt trykk';
+
+  @override
+  String get turnOnOff => 'Slå på/av';
+
+  @override
+  String get askQuestion => 'Still spørsmål';
+
+  @override
+  String get longPressPowerWarning => 'Langt trykk slår enheten på/av og kan ikke tilpasses.';
 }
