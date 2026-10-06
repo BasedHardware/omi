@@ -11397,5 +11397,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Prikaži na zaključanom zaslonu",
-    "accountDeletionInProgressSignInAgain": "Ovaj račun se briše. Prijavite se drugim računom ili pričekajte nekoliko minuta i pokušajte ponovno."
+    "accountDeletionInProgressSignInAgain": "Ovaj račun se briše. Prijavite se drugim računom ili pričekajte nekoliko minuta i pokušajte ponovno.",
+    "onboardingSetupTitle": "Postavljamo tvoj Omi",
+    "onboardingSetupSubtitle": "Daj Omiju trenutak da se prilagodi",
+    "onboardingSetupStepWorkspace": "Pripremamo tvoj radni prostor",
+    "onboardingSetupStepLanguage": "Prilagođavamo transkripciju tvom jeziku",
+    "onboardingSetupStepMemory": "Postavljamo tvoju memoriju",
+    "onboardingSetupStepDevices": "Povezujemo tvoje uređaje",
+    "onboardingSetupStepPersonalize": "Personaliziramo tvoje iskustvo",
+    "onboardingRatingPromptTitle": "Dok čekaš, je li ti ugodno koristiti Omi?",
+    "onboardingRatingPromptBody": "Ocjena od 5 zvjezdica nam stvarno puno pomaže ❤️",
+    "onboardingRatingPromptYes": "Da, želim vas podržati!",
+    "onboardingRatingPromptNo": "Ne baš"
 }

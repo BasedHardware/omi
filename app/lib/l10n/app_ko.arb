@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "잠금 화면에 표시",
-    "accountDeletionInProgressSignInAgain": "이 계정은 삭제 중입니다. 다른 계정으로 로그인하거나 몇 분 후 다시 시도해 주세요."
+    "accountDeletionInProgressSignInAgain": "이 계정은 삭제 중입니다. 다른 계정으로 로그인하거나 몇 분 후 다시 시도해 주세요.",
+    "onboardingSetupTitle": "Omi 설정 중",
+    "onboardingSetupSubtitle": "Omi가 맞춤 설정을 하는 동안 잠시만 기다려 주세요",
+    "onboardingSetupStepWorkspace": "작업 공간 준비 중",
+    "onboardingSetupStepLanguage": "사용하는 언어에 맞게 음성 인식 조정 중",
+    "onboardingSetupStepMemory": "메모리 설정 중",
+    "onboardingSetupStepDevices": "기기 연결 중",
+    "onboardingSetupStepPersonalize": "맞춤 환경 설정 중",
+    "onboardingRatingPromptTitle": "기다리는 동안 Omi가 마음에 드셨나요?",
+    "onboardingRatingPromptBody": "별 5개를 주시면 큰 힘이 됩니다 ❤️",
+    "onboardingRatingPromptYes": "네, 응원할게요!",
+    "onboardingRatingPromptNo": "별로예요"
 }

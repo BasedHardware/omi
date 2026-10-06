@@ -240,13 +240,19 @@ overlay:
           value: '100'
           category: rollout
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-          value: '2'
+          value: '20'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_ENABLED:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
+          category: rollout
+        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+          value: 'true'
+          category: rollout
+        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+          value: '1'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -369,13 +375,19 @@ overlay:
           value: '100'
           category: rollout
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-          value: '2'
+          value: '20'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_ENABLED:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
+          category: rollout
+        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+          value: 'true'
+          category: rollout
+        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+          value: '1'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -658,13 +670,19 @@ overlay:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '20'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -820,13 +838,19 @@ overlay:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '20'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -958,13 +982,19 @@ overlay:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '20'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -1082,6 +1112,17 @@ overlay:
             value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend
+      x-connector-sync-job:
+        # backend-runtime already mounts the X OAuth and RapidAPI secrets on the
+        # Cloud Run API. backend-jobs-runtime does not, so this job cannot use
+        # the notifications identity without a new secret grant.
+        flags:
+          --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          PINECONE_INDEX_NAME:
+            value: memories-backend
       memory-maintenance-job:
         secrets:
           SERVICE_ACCOUNT_JSON:
@@ -1169,6 +1210,7 @@ overlay:
     workflow_files:
     - .github/workflows/gcp_backend.yml
     - .github/workflows/gcp_notifications_job.yml
+    - .github/workflows/gcp_x_connector_sync_job.yml
     - .github/workflows/gcp_memory_maintenance_job.yml
     - .github/workflows/gcp_frame_request_retention_job.yml
     - .github/workflows/gcp_daily_memory_sweep_job.yml

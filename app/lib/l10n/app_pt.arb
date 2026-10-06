@@ -3875,5 +3875,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Mostrar na tela de bloqueio",
-    "accountDeletionInProgressSignInAgain": "Esta conta está sendo excluída. Entre com outra conta ou aguarde alguns minutos e tente novamente."
+    "accountDeletionInProgressSignInAgain": "Esta conta está sendo excluída. Entre com outra conta ou aguarde alguns minutos e tente novamente.",
+    "onboardingSetupTitle": "Configurando seu Omi",
+    "onboardingSetupSubtitle": "Dê um momento ao Omi para personalizar",
+    "onboardingSetupStepWorkspace": "Preparando seu espaço de trabalho",
+    "onboardingSetupStepLanguage": "Ajustando a transcrição ao seu idioma",
+    "onboardingSetupStepMemory": "Configurando sua memória",
+    "onboardingSetupStepDevices": "Conectando seus dispositivos",
+    "onboardingSetupStepPersonalize": "Personalizando sua experiência",
+    "onboardingRatingPromptTitle": "Enquanto você espera, o Omi tem sido legal de usar?",
+    "onboardingRatingPromptBody": "Avaliar com 5 estrelas nos ajuda muito ❤️",
+    "onboardingRatingPromptYes": "Sim, quero apoiar vocês!",
+    "onboardingRatingPromptNo": "Nem tanto"
 }

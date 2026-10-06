@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Näytä lukitusnäytöllä",
-    "accountDeletionInProgressSignInAgain": "Tätä tiliä poistetaan. Kirjaudu sisään toisella tilillä tai odota muutama minuutti ja yritä uudelleen."
+    "accountDeletionInProgressSignInAgain": "Tätä tiliä poistetaan. Kirjaudu sisään toisella tilillä tai odota muutama minuutti ja yritä uudelleen.",
+    "onboardingSetupTitle": "Omia otetaan käyttöön",
+    "onboardingSetupSubtitle": "Anna Omille hetki mukautua",
+    "onboardingSetupStepWorkspace": "Työtilaasi valmistellaan",
+    "onboardingSetupStepLanguage": "Tekstitystä mukautetaan kielellesi",
+    "onboardingSetupStepMemory": "Muistiasi otetaan käyttöön",
+    "onboardingSetupStepDevices": "Laitteitasi yhdistetään",
+    "onboardingSetupStepPersonalize": "Kokemustasi personoidaan",
+    "onboardingRatingPromptTitle": "Odotellessasi: onko Omin käyttö ollut mukavaa?",
+    "onboardingRatingPromptBody": "5 tähteä auttaa meitä todella paljon ❤️",
+    "onboardingRatingPromptYes": "Kyllä, haluan tukea teitä!",
+    "onboardingRatingPromptNo": "Ei oikeastaan"
 }

@@ -12407,4 +12407,37 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Denne konto er ved at blive slettet. Log ind med en anden konto, eller vent et par minutter og prøv igen.';
+
+  @override
+  String get onboardingSetupTitle => 'Gør din Omi klar';
+
+  @override
+  String get onboardingSetupSubtitle => 'Giv Omi et øjeblik til at tilpasse sig';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Forbereder dit arbejdsområde';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Tilpasser transskription til dit sprog';
+
+  @override
+  String get onboardingSetupStepMemory => 'Sætter din hukommelse op';
+
+  @override
+  String get onboardingSetupStepDevices => 'Forbinder dine enheder';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Tilpasser din oplevelse';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Mens du venter, har Omi været rar at bruge?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 stjerner hjælper os virkelig meget ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Ja, jeg vil gerne støtte jer!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Ikke rigtig';
 }

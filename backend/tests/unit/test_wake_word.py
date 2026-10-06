@@ -19,7 +19,7 @@ from utils.conversations.wake_word import (
     has_structural_wake_word_marker,
 )
 from utils.llm import conversation_processing
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 from utils.llm import wake_word_adjudication
 from utils.llm.wake_word_adjudication import (
     WakeWordAdjudication,

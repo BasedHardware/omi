@@ -3333,6 +3333,23 @@ export interface NormalizedRect {
   y: number;
 }
 
+export interface NoteClaim {
+  evidence_ids: Array<string>;
+  evidence_sources?: Array<NoteEvidenceRef> | null;
+  provenance: "said" | "shown" | "written" | "inferred";
+  target: string;
+  text: string;
+}
+
+export interface NoteEvidenceRef {
+  actor?: string | null;
+  diarization_key?: string | null;
+  id: string;
+  source_kind: string;
+  source_ref?: string | null;
+  time?: string | null;
+}
+
 export interface NotificationSettingsResponse {
   enabled: boolean;
   frequency: number;
@@ -4514,6 +4531,7 @@ export interface Structured {
   events?: Array<Event>;
   insights?: Array<Insight>;
   meeting_type?: "interview" | "intro" | "sales" | "customer" | "one_on_one" | "team_sync" | "planning" | "demo" | "social" | "other" | null;
+  note_claims?: Array<NoteClaim> | null;
   overview?: string;
   participants?: Array<Participant>;
   sections?: Array<Section>;
@@ -5870,6 +5888,8 @@ export interface OmiApiSchemas {
   "NormalizedContextMatch": NormalizedContextMatch;
   "NormalizedContextSnapshot": NormalizedContextSnapshot;
   "NormalizedRect": NormalizedRect;
+  "NoteClaim": NoteClaim;
+  "NoteEvidenceRef": NoteEvidenceRef;
   "NotificationSettingsResponse": NotificationSettingsResponse;
   "OAuthUrlResponse": OAuthUrlResponse;
   "OfflineQueueInstruction": OfflineQueueInstruction;

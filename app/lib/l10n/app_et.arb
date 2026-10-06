@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Kuva lukustuskuval",
-    "accountDeletionInProgressSignInAgain": "Seda kontot kustutatakse. Logi sisse teise kontoga või oota paar minutit ja proovi uuesti."
+    "accountDeletionInProgressSignInAgain": "Seda kontot kustutatakse. Logi sisse teise kontoga või oota paar minutit ja proovi uuesti.",
+    "onboardingSetupTitle": "Sinu Omi seadistamine",
+    "onboardingSetupSubtitle": "Anna Omile hetk kohandamiseks",
+    "onboardingSetupStepWorkspace": "Sinu tööruumi ettevalmistamine",
+    "onboardingSetupStepLanguage": "Transkriptsiooni häälestamine sinu keelele",
+    "onboardingSetupStepMemory": "Sinu mälu seadistamine",
+    "onboardingSetupStepDevices": "Sinu seadmete ühendamine",
+    "onboardingSetupStepPersonalize": "Sinu kogemuse isikupärastamine",
+    "onboardingRatingPromptTitle": "Kuni ootad, kas Omi kasutamine on meeldiv olnud?",
+    "onboardingRatingPromptBody": "5 tärni aitavad meid tõesti palju ❤️",
+    "onboardingRatingPromptYes": "Jah, tahan teid toetada!",
+    "onboardingRatingPromptNo": "Pigem mitte"
 }

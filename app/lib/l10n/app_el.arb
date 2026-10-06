@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος",
-    "accountDeletionInProgressSignInAgain": "Αυτός ο λογαριασμός διαγράφεται. Συνδεθείτε με άλλον λογαριασμό ή περιμένετε λίγα λεπτά και δοκιμάστε ξανά."
+    "accountDeletionInProgressSignInAgain": "Αυτός ο λογαριασμός διαγράφεται. Συνδεθείτε με άλλον λογαριασμό ή περιμένετε λίγα λεπτά και δοκιμάστε ξανά.",
+    "onboardingSetupTitle": "Ρύθμιση του Omi σας",
+    "onboardingSetupSubtitle": "Δώστε στο Omi λίγο χρόνο για να προσαρμοστεί",
+    "onboardingSetupStepWorkspace": "Προετοιμασία του χώρου εργασίας σας",
+    "onboardingSetupStepLanguage": "Προσαρμογή της μεταγραφής στη γλώσσα σας",
+    "onboardingSetupStepMemory": "Ρύθμιση της μνήμης σας",
+    "onboardingSetupStepDevices": "Σύνδεση των συσκευών σας",
+    "onboardingSetupStepPersonalize": "Προσαρμογή της εμπειρίας σας",
+    "onboardingRatingPromptTitle": "Όσο περιμένετε, σας αρέσει να χρησιμοποιείτε το Omi;",
+    "onboardingRatingPromptBody": "Μια βαθμολογία 5 αστέρων μας βοηθά πραγματικά ❤️",
+    "onboardingRatingPromptYes": "Ναι, θέλω να σας στηρίξω!",
+    "onboardingRatingPromptNo": "Όχι ακριβώς"
 }

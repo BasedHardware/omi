@@ -20886,6 +20886,123 @@
         "title": "NormalizedRect",
         "type": "object"
       },
+      "NoteClaim": {
+        "properties": {
+          "evidence_ids": {
+            "description": "Smallest sufficient episode evidence IDs",
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "evidence_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/NoteEvidenceRef"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Server-authored source metadata; model may omit",
+            "title": "Evidence Sources"
+          },
+          "provenance": {
+            "enum": [
+              "said",
+              "shown",
+              "written",
+              "inferred"
+            ],
+            "title": "Provenance",
+            "type": "string"
+          },
+          "target": {
+            "description": "JSON pointer to a visible field, e.g. /sections/0/body_markdown",
+            "title": "Target",
+            "type": "string"
+          },
+          "text": {
+            "description": "Exact factual clause within that field",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text",
+          "evidence_ids",
+          "provenance"
+        ],
+        "title": "NoteClaim",
+        "type": "object"
+      },
+      "NoteEvidenceRef": {
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "diarization_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diarization Key"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          }
+        },
+        "required": [
+          "id",
+          "source_kind"
+        ],
+        "title": "NoteEvidenceRef",
+        "type": "object"
+      },
       "NotificationSettingsResponse": {
         "properties": {
           "enabled": {
@@ -27502,6 +27619,21 @@
             ],
             "description": "The kind of meeting, when the capture is a meeting",
             "title": "Meeting Type"
+          },
+          "note_claims": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/NoteClaim"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Episode claim provenance; absent on legacy notes",
+            "title": "Note Claims"
           },
           "overview": {
             "default": "",

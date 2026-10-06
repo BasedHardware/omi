@@ -24,7 +24,7 @@ from utils.llm import conversation_processing as notes
 from utils.llm import shaped_agent as shaped
 from utils.llm import shaped_notes_transport
 from utils.llm.conversation_processing import notes_mount
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, build_conversation_prompt_prefix
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.retrieval import agentic, graph
 from utils.retrieval.agentic import chat_mount
 
@@ -184,7 +184,7 @@ def test_notes_evidence_after_breakpoint_and_roster_unbound(monkeypatch):
     assert packet['expected_calendar']['participants'][0]['name'] == 'Expected Alice'
     assert packet['observed_screen_listing'] is None
     messages = notes_mount().messages([{'role': 'user', 'content': prefix.shaped_context}], explicit_cache=True)
-    assert 'prompt_cache_breakpoint' in messages[0]['content'][0]
+    assert 'prompt_cache_breakpoint' not in messages[0]['content'][0]
     assert 'Expected Alice' not in messages[0]['content'][0]['text']
     assert 'observed speech' in messages[1]['content']
     context.calendar_source = 'screen_activity'
@@ -290,27 +290,15 @@ def test_notes_on_uses_one_schema_turn(monkeypatch):
     captured = []
 
     class Model:
-        def with_structured_output(self, schema, **kwargs):
-            assert schema is StructuredExtraction
-            assert kwargs == {'method': 'json_schema'}
-            return self
-
         def bind(self, **kwargs):
             assert 'tools' not in kwargs
+            assert 'response_format' not in kwargs
             return self
 
         async def ainvoke(self, messages):
             captured.append(messages)
-            return StructuredExtraction.model_validate(
-                {
-                    'title': 'One turn',
-                    'overview': 'Grounded note',
-                    'emoji': '🧠',
-                    'category': 'work',
-                    'sections': [],
-                    'action_items': [],
-                    'events': [],
-                }
+            return SimpleNamespace(
+                content='{"title":"One turn","overview":"Grounded note","emoji":"🧠","category":"work","sections":[],"action_items":[],"events":[]}'
             )
 
     monkeypatch.setattr(notes, 'get_llm', lambda *a, **k: Model())
@@ -320,7 +308,7 @@ def test_notes_on_uses_one_schema_turn(monkeypatch):
         yield model
 
     monkeypatch.setattr(notes, 'isolated_notes_model', isolated_fake)
-    monkeypatch.setattr(notes, 'shared_conversation_cache_supported', lambda: True)
+    monkeypatch.setattr(notes, 'shared_conversation_cache_supported', lambda: False)
     monkeypatch.setattr(notes, '_get_conversation_notes_legacy', lambda *a, **k: pytest.fail('old writer called'))
     prefix = ConversationPromptPrefix('c', 'FULL TRANSCRIPT\nThis is unique evidence.')
     result = notes.get_conversation_notes(
@@ -335,7 +323,7 @@ def test_notes_on_uses_one_schema_turn(monkeypatch):
     assert result.title == 'One turn' and len(captured) == 1
     assert 'unique evidence' not in str(captured[0][0])
     assert 'unique evidence' in str(captured[0][1])
-    assert 'prompt_cache_breakpoint' in captured[0][0]['content'][0]
+    assert 'prompt_cache_breakpoint' not in captured[0][0]['content'][0]
 
 
 @pytest.mark.parametrize('shadow', [False, True])

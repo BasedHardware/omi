@@ -12417,4 +12417,37 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'این حساب در حال حذف است. با حساب دیگری وارد شوید یا چند دقیقه صبر کنید و دوباره امتحان کنید.';
+
+  @override
+  String get onboardingSetupTitle => 'در حال راه‌اندازی Omi شما';
+
+  @override
+  String get onboardingSetupSubtitle => 'کمی به Omi فرصت دهید تا شخصی‌سازی شود';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'آماده‌سازی فضای کاری شما';
+
+  @override
+  String get onboardingSetupStepLanguage => 'تنظیم رونویسی برای زبان شما';
+
+  @override
+  String get onboardingSetupStepMemory => 'راه‌اندازی حافظه شما';
+
+  @override
+  String get onboardingSetupStepDevices => 'اتصال دستگاه‌های شما';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'شخصی‌سازی تجربه شما';
+
+  @override
+  String get onboardingRatingPromptTitle => 'تا آماده شدن، استفاده از Omi برایتان خوشایند بوده؟';
+
+  @override
+  String get onboardingRatingPromptBody => 'امتیاز ۵ ستاره واقعاً به ما کمک می‌کند ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'بله، می‌خواهم از شما حمایت کنم!';
+
+  @override
+  String get onboardingRatingPromptNo => 'نه چندان';
 }

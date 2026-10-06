@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Rādīt bloķēšanas ekrānā",
-    "accountDeletionInProgressSignInAgain": "Šis konts tiek dzēsts. Pierakstieties ar citu kontu vai uzgaidiet dažas minūtes un mēģiniet vēlreiz."
+    "accountDeletionInProgressSignInAgain": "Šis konts tiek dzēsts. Pierakstieties ar citu kontu vai uzgaidiet dažas minūtes un mēģiniet vēlreiz.",
+    "onboardingSetupTitle": "Tiek iestatīts jūsu Omi",
+    "onboardingSetupSubtitle": "Dodiet Omi brīdi, lai personalizētos",
+    "onboardingSetupStepWorkspace": "Tiek sagatavota jūsu darbvieta",
+    "onboardingSetupStepLanguage": "Transkripcija tiek pielāgota jūsu valodai",
+    "onboardingSetupStepMemory": "Tiek iestatīta jūsu atmiņa",
+    "onboardingSetupStepDevices": "Tiek savienotas jūsu ierīces",
+    "onboardingSetupStepPersonalize": "Tiek personalizēta jūsu pieredze",
+    "onboardingRatingPromptTitle": "Kamēr gaidāt, vai Omi ir bijis patīkami lietot?",
+    "onboardingRatingPromptBody": "5 zvaigžņu vērtējums mums ļoti palīdz ❤️",
+    "onboardingRatingPromptYes": "Jā, es vēlos jūs atbalstīt!",
+    "onboardingRatingPromptNo": "Ne gluži"
 }

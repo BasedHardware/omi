@@ -1,0 +1,3 @@
+{
+  "change": "Surface microphone start errors with retry during guided voice introduction instead of indefinitely showing the recording state."
+}

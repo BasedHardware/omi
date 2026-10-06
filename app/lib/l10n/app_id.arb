@@ -3875,5 +3875,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Tampilkan di layar kunci",
-    "accountDeletionInProgressSignInAgain": "Akun ini sedang dihapus. Masuk dengan akun lain, atau tunggu beberapa menit lalu coba lagi."
+    "accountDeletionInProgressSignInAgain": "Akun ini sedang dihapus. Masuk dengan akun lain, atau tunggu beberapa menit lalu coba lagi.",
+    "onboardingSetupTitle": "Menyiapkan Omi Anda",
+    "onboardingSetupSubtitle": "Beri Omi waktu sejenak untuk personalisasi",
+    "onboardingSetupStepWorkspace": "Menyiapkan ruang kerja Anda",
+    "onboardingSetupStepLanguage": "Menyesuaikan transkripsi dengan bahasa Anda",
+    "onboardingSetupStepMemory": "Menyiapkan memori Anda",
+    "onboardingSetupStepDevices": "Menghubungkan perangkat Anda",
+    "onboardingSetupStepPersonalize": "Mempersonalisasi pengalaman Anda",
+    "onboardingRatingPromptTitle": "Sambil menunggu, apakah Omi menyenangkan digunakan?",
+    "onboardingRatingPromptBody": "Memberi kami bintang 5 sangat membantu kami ❤️",
+    "onboardingRatingPromptYes": "Ya, saya ingin mendukung kalian!",
+    "onboardingRatingPromptNo": "Kurang"
 }
