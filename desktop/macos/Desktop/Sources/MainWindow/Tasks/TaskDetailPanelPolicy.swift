@@ -137,10 +137,13 @@ enum TaskDetailSourceLinkPolicy {
 
       switch evidence.kind {
       case .conversation:
-        let destinationID = normalizedOptional(task.conversationId) ?? evidenceID
-        route = conversationRoute(task: task, id: destinationID)
+        // Each conversation evidence ref is independently navigable. A task can
+        // intentionally coalesce the same commitment across conversations, while
+        // `conversationId` remains the original/canonical source. Routing every
+        // ref through that one field makes later provenance open the wrong row.
+        route = conversationRoute(task: task, id: evidenceID)
         title = task.source == "transcription:omi" ? "Omi capture" : "Conversation"
-        subtitle = destinationID
+        subtitle = evidenceID
         systemImage = "bubble.left.and.bubble.right"
       case .chat_message:
         // A message ref is only navigable when the task's canonical

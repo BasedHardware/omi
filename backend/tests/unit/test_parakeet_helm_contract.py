@@ -104,6 +104,32 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
     )
     assert hpa['spec']['minReplicas'] == 3
     assert hpa['spec']['maxReplicas'] == 7
+    assert hpa['spec']['metrics'] == [
+        {
+            'type': 'Pods',
+            'pods': {
+                'metric': {'name': 'parakeet_active_requests_total'},
+                'target': {'type': 'AverageValue', 'averageValue': '2'},
+            },
+        },
+        {
+            'type': 'External',
+            'external': {
+                'metric': {'name': 'parakeet_gpu_utilization'},
+                'target': {'type': 'Value', 'value': '35'},
+            },
+        },
+    ]
+    assert hpa['spec']['behavior'] == {
+        'scaleUp': {
+            'stabilizationWindowSeconds': 0,
+            'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 60}],
+        },
+        'scaleDown': {
+            'stabilizationWindowSeconds': 600,
+            'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 600}],
+        },
+    }
     assert 'progressDeadlineSeconds' not in deployment['spec']
     container = deployment['spec']['template']['spec']['containers'][0]
     assert container['readinessProbe']['httpGet']['path'] == '/health'

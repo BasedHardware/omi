@@ -4,6 +4,53 @@ from enum import Enum
 
 from llm_gateway.gateway.schemas import FailureClass, ProviderRejection
 
+# Closed vocabulary for diagnostics. Never derive a log value from an exception
+# message, caller-supplied key, or provider response.
+PROACTIVITY_ADMISSION_REASONS = frozenset(
+    {
+        'accounting_disabled',
+        'unsupported_model',
+        'invalid_lane',
+        'invalid_request',
+        'invalid_output_bound',
+        'input_bound',
+        'unpriced',
+        'unavailable',
+        'disabled',
+        'flag_unavailable',
+        'health_unavailable',
+        'not_paid',
+        'producer_disabled',
+        'unknown_plan',
+        'invalid_envelope',
+        'duplicate',
+        'not_found',
+        'expired',
+        'cost_unsettled',
+        'call_limit',
+        'budget_exhausted',
+        'invalid_owner',
+        'unknown',
+    }
+)
+INVALID_REQUEST_REJECTION_CODES = frozenset(
+    {
+        'proactivity_identity',
+        'proactivity_item',
+        'proactivity_attribution',
+        'proactivity_step',
+        'proactivity_authority_missing',
+        'proactivity_deadline',
+        'proactivity_provider_failed',
+        'proactivity_settlement_unavailable',
+        'proactivity_settlement_rejected',
+        'proactivity_attempt_consumed',
+        'proactivity_streaming',
+        'request_body_json',
+        'request_body_object',
+    }
+) | {f'proactivity_admission.{reason}' for reason in PROACTIVITY_ADMISSION_REASONS}
+
 
 class GatewayErrorCode(str, Enum):
     INVALID_REQUEST = 'invalid_request'
@@ -30,6 +77,7 @@ class GatewayError(Exception):
         self.code = code
         self.failure_class = failure_class
         self.param = param
+        self.rejection_reason: str | None = None
         self.provider = 'none'
         self.model = 'none'
         self.provider_rejection = ProviderRejection.NONE
@@ -56,8 +104,9 @@ class GatewayError(Exception):
 
 
 class GatewayInvalidRequestError(GatewayError):
-    def __init__(self, message: str, *, param: str | None = None) -> None:
+    def __init__(self, message: str, *, param: str | None = None, rejection_reason: str | None = None) -> None:
         super().__init__(message, code=GatewayErrorCode.INVALID_REQUEST, param=param)
+        self.rejection_reason = rejection_reason
 
 
 class GatewayModelNotFoundError(GatewayError):

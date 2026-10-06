@@ -224,9 +224,10 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
-      body: Column(children: [
-        const LiveActivitySettings(),
-        Expanded(
+      body: Column(
+        children: [
+          const LiveActivitySettings(),
+          Expanded(
             child: _isLoading
                 ? const NotificationsSettingsLoadingShimmer()
                 : ListView(
@@ -240,8 +241,10 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                       const SizedBox(height: OmiSpacing.xxl),
                       _buildDailySummaryGroup(),
                     ],
-                  )),
-      ]),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 

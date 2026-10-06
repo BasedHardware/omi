@@ -3839,5 +3839,6 @@
     "dismiss": "忽略",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "在锁定屏幕上显示"
+    "showOnLockScreen": "在锁定屏幕上显示",
+    "accountDeletionInProgressSignInAgain": "此账号正在删除中。请使用其他账号登录，或等待几分钟后重试。"
 }

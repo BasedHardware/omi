@@ -8,9 +8,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 import database.candidates as candidates_db
 import database.task_recommendations as recommendation_db
 import database.task_intelligence_control as task_control_db
+from database.summary_task_links import SummaryTaskConflictError, SummaryTaskNotFoundError
 from models.action_item import TaskCreatePayload
 from models.candidate import (
     CandidateAction,
+    CandidateAcceptanceRequest,
     CandidateCreate,
     CandidateListResponse,
     CandidateMigrationReport,
@@ -20,6 +22,7 @@ from models.candidate import (
     CandidateResolutionRequest,
     CandidateStatus,
     CandidateSubjectKind,
+    SummaryTaskReference,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 from utils.other import endpoints as auth
@@ -30,6 +33,7 @@ from utils.task_intelligence.chat_first_eligibility import resolve_task_intellig
 from utils.task_intelligence import chat_first_e2e_fixture
 from utils.task_intelligence.task_links import TaskLinkValidationError
 from utils.task_intelligence.staged_migration import migrate_staged_tasks
+from utils.task_intelligence.summary_tasks import prepare_summary_task
 
 router = APIRouter()
 
@@ -307,6 +311,30 @@ def drain_candidate_integrations(
     }
 
 
+@router.post('/v1/candidates/from-conversation', response_model=CandidateRecord, tags=['candidates'])
+def prepare_conversation_task_candidate(
+    request: SummaryTaskReference,
+    account_generation: AccountGenerationHeader,
+    idempotency_key: IdempotencyHeader,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Prepare only; the reader must separately accept to materialize a task."""
+    _require_candidate_write_control(uid, account_generation)
+    try:
+        return prepare_summary_task(
+            uid,
+            request,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+    except SummaryTaskNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Summary action item not found') from exc
+    except SummaryTaskConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except candidates_db.CandidateStoreError as exc:
+        _raise_store_error(exc)
+
+
 @router.get('/v1/candidates/{candidate_id}', response_model=CandidateRecord, tags=['candidates'])
 def get_candidate(candidate_id: str, uid: str = Depends(auth.get_current_user_uid)):
     rollout = _require_suggested_rollout(uid)
@@ -321,10 +349,14 @@ def accept_candidate(
     candidate_id: str,
     account_generation: AccountGenerationHeader,
     uid: str = Depends(auth.get_current_user_uid),
+    request: Optional[CandidateAcceptanceRequest] = None,
 ):
     _require_candidate_write_control(uid, account_generation)
     try:
-        return candidate_service.accept_candidate(uid, candidate_id, account_generation=account_generation)
+        summary_arguments = {'summary_item': request.summary_item} if request and request.summary_item else {}
+        return candidate_service.accept_candidate(
+            uid, candidate_id, account_generation=account_generation, **summary_arguments
+        )
     except TaskLinkValidationError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except candidates_db.CandidateStoreError as exc:

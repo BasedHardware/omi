@@ -11396,5 +11396,6 @@
     "dismiss": "Sakrij",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Prikaži na zaključanom zaslonu"
+    "showOnLockScreen": "Prikaži na zaključanom zaslonu",
+    "accountDeletionInProgressSignInAgain": "Ovaj račun se briše. Prijavite se drugim računom ili pričekajte nekoliko minuta i pokušajte ponovno."
 }

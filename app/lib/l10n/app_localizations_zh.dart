@@ -12204,4 +12204,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get showOnLockScreen => '在锁定屏幕上显示';
+
+  @override
+  String get accountDeletionInProgressSignInAgain => '此账号正在删除中。请使用其他账号登录，或等待几分钟后重试。';
 }

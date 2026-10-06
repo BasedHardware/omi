@@ -12437,4 +12437,8 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Rodyti užrakinimo ekrane';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Ši paskyra šalinama. Prisijunkite kita paskyra arba palaukite kelias minutes ir bandykite dar kartą.';
 }

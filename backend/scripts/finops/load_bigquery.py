@@ -19,6 +19,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -27,7 +28,15 @@ import tempfile
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from assemble_unit_cost import COMPS  # noqa: E402
-from gcpauth import PROJECT, assert_writer_identity  # noqa: E402
+
+AUTH_MODE = os.environ.get("FINOPS_AUTH", "local")  # 'local' (laptop cron) | 'cloudrun'
+if AUTH_MODE == "cloudrun":
+    import cloudrun  # noqa: E402
+
+    PROJECT = cloudrun.PROJECT
+    assert_writer_identity = cloudrun.assert_runtime_identity
+else:
+    from gcpauth import PROJECT, assert_writer_identity  # noqa: E402
 
 DATASET = "omi_finops"
 LOCATION = "US"  # same location as gcp_billing_export, so the two can be joined
@@ -93,9 +102,16 @@ CLUSTER = {
 }
 
 
+def _bq_cmd() -> list[str]:
+    """The `bq` command prefix: real CLI locally, the ADC stub on Cloud Run."""
+    if AUTH_MODE == "cloudrun":
+        return [sys.executable, str(HERE / "bq_stub.py")]
+    return ["bq"]
+
+
 def bq(args: list[str], stdin: str | None = None, timeout: int = 1800) -> str:
     p = subprocess.run(
-        ["bq", "--project_id=" + PROJECT] + args, input=stdin, capture_output=True, text=True, timeout=timeout
+        _bq_cmd() + ["--project_id=" + PROJECT] + args, input=stdin, capture_output=True, text=True, timeout=timeout
     )
     if p.returncode != 0:
         raise SystemExit("bq %s failed:\n%s\n%s" % (" ".join(args[:3]), p.stdout[-1500:], p.stderr[-2000:]))
@@ -104,7 +120,7 @@ def bq(args: list[str], stdin: str | None = None, timeout: int = 1800) -> str:
 
 def ensure_dataset() -> None:
     p = subprocess.run(
-        ["bq", "--project_id=" + PROJECT, "show", "--format=json", "--dataset", "%s:%s" % (PROJECT, DATASET)],
+        _bq_cmd() + ["--project_id=" + PROJECT, "show", "--format=json", "--dataset", "%s:%s" % (PROJECT, DATASET)],
         capture_output=True,
         text=True,
     )
@@ -129,7 +145,9 @@ def ensure_dataset() -> None:
 
 def ensure_table(name: str) -> None:
     ref = "%s:%s.%s" % (PROJECT, DATASET, name)
-    p = subprocess.run(["bq", "--project_id=" + PROJECT, "show", "--format=json", ref], capture_output=True, text=True)
+    p = subprocess.run(
+        _bq_cmd() + ["--project_id=" + PROJECT, "show", "--format=json", ref], capture_output=True, text=True
+    )
     if p.returncode == 0:
         sys.stderr.write("table %s exists\n" % name)
         return
@@ -172,7 +190,9 @@ def load_replace(name: str, rows: list[dict], dates: list[str]) -> int:
         ).format(p=PROJECT, ds=DATASET, t=name, dates=in_list, cols=", ".join(cols), stage=stage)
         bq(["query", "--use_legacy_sql=false", "--format=none"], stdin=sql)
     finally:
-        subprocess.run(["bq", "--project_id=" + PROJECT, "rm", "-f", "-t", stage_ref], capture_output=True, text=True)
+        subprocess.run(
+            _bq_cmd() + ["--project_id=" + PROJECT, "rm", "-f", "-t", stage_ref], capture_output=True, text=True
+        )
         pathlib.Path(path).unlink(missing_ok=True)
     sys.stderr.write("  %s: replaced %d dates, inserted %d rows\n" % (name, len(dates), len(rows)))
     return len(rows)

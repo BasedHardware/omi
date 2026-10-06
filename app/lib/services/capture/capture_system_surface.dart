@@ -186,9 +186,11 @@ class CaptureSystemSurface {
       _busy = true;
       _changed(force: true);
       try {
-        await capture.performSystemSurfaceAction(action as String,
-            recordingId: current['recordingId'] as String,
-            conversationRevision: current['conversationRevision'] as int);
+        await capture.performSystemSurfaceAction(
+          action as String,
+          recordingId: current['recordingId'] as String,
+          conversationRevision: current['conversationRevision'] as int,
+        );
       } finally {
         _busy = false;
       }
