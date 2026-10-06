@@ -16,6 +16,8 @@ UNRELEASED_CHANGELOG_PREFIX = "app/changelog/unreleased/"
 NONE_KIND = "none"
 EXEMPT_APP_PATHS = {
     "app/AGENTS.md",
+    "app/scripts/mobile_daily_train.py",
+    "app/scripts/mobile_daily_train_test.py",
     "app/scripts/mobile_play_build_number.py",
     "app/scripts/mobile_play_build_number_test.py",
     "app/scripts/mobile_release_identity.py",
