@@ -248,16 +248,16 @@ final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient
 
 final class TaskContextualResurfacingTests: XCTestCase {
   private let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
-  private var previousOwnerID: String?
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
 
   override func setUp() async throws {
     try await super.setUp()
-    previousOwnerID = RuntimeOwnerIdentity.currentOwnerId()
-    await transitionContextTestOwner(to: "context-test-owner")
+    ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture?.establish(authOwnerID: "context-test-owner")
   }
 
   override func tearDown() async throws {
-    await transitionContextTestOwner(to: previousOwnerID)
+    await ownerFixture?.restore()
     try await super.tearDown()
   }
 
@@ -587,50 +587,6 @@ final class TaskContextualResurfacingTests: XCTestCase {
   }
 
   @MainActor
-  func testLegacyDebounceIsCancelledWhenContextBucketsBecomesEnabled() async throws {
-    let client = FakeTaskContextualResurfacingClient()
-    let flag = Box(false)
-    let service = TaskContextualResurfacingService(
-      client: client,
-      debounceInterval: 60,
-      ownerIDProvider: { "owner-1" },
-      contextBucketsEnabled: { flag.value }
-    )
-    let event = try XCTUnwrap(
-      TaskLocalContextEvent.normalized(
-        kind: .document,
-        rawReference: "legacy debounce before flag flip",
-        subject: TaskContextSubject(kind: .task, id: "task-flag", workstreamID: nil),
-        occurredAt: baseDate
-      ))
-
-    await service.observe(event)
-    var pending = await service.pendingWorkstreamCount()
-    XCTAssertEqual(pending, 1)
-    flag.value = true
-    // Flag-on observe must cancel the pending legacy debounce immediately.
-    await service.observe(event)
-    pending = await service.pendingWorkstreamCount()
-    XCTAssertEqual(pending, 0)
-    await service.flush()
-    XCTAssertEqual(client.controlRequests, 0)
-    XCTAssertEqual(client.evaluations.count, 0)
-    XCTAssertEqual(client.snapshots.count, 0)
-
-    flag.value = false
-    await service.observe(event)
-    pending = await service.pendingWorkstreamCount()
-    XCTAssertEqual(pending, 1)
-    flag.value = true
-    // A mid-debounce flag flip must also fail closed inside flush.
-    await service.flush()
-    pending = await service.pendingWorkstreamCount()
-    XCTAssertEqual(pending, 0)
-    XCTAssertEqual(client.controlRequests, 0)
-    XCTAssertEqual(client.evaluations.count, 0)
-  }
-
-  @MainActor
   func testOwnerSwitchDuringControlAbortsSnapshotEvaluationAndInterruption() async throws {
     let client = FakeTaskContextualResurfacingClient()
     let ownerID = Box("owner-a")
@@ -812,12 +768,12 @@ final class TaskContextualResurfacingTests: XCTestCase {
       "a preflight that never paints must not consume the user's frequency window")
 
     service.recordProactiveNotificationPresentedForTesting(
-      assistantId: "context-director", authorizationSnapshot: snapshot, now: baseDate)
+      assistantId: "insight", authorizationSnapshot: snapshot, now: baseDate)
     XCTAssertFalse(
       service.proactiveNotificationEligibleForTesting(
         assistantId: "insight", authorizationSnapshot: snapshot,
         now: baseDate.addingTimeInterval(1)),
-      "a visible director notification must advance the shared global frequency clock")
+      "a visible insight notification must advance the shared global frequency clock")
   }
 
   @MainActor

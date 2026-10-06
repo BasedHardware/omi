@@ -1,6 +1,12 @@
+import logging
+import re
 from datetime import datetime
 from collections.abc import Mapping
-from typing import Annotated, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+
+from pydantic.json_schema import SkipJsonSchema
+
+import config.speaker_match_scores as match_scores
 
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
@@ -62,6 +68,7 @@ __all__ = [
     'SharedParticipant',
     'SharedPerson',
     'SharedPluginResult',
+    'SharedSection',
     'SharedStructured',
     'SharedTranscriptSegment',
     'project_shared_conversation',
@@ -118,6 +125,9 @@ class SharedConversationChatResponse(BaseModel):
     remaining_free_questions: int | None = Field(default=None, ge=0)
 
 
+_EMAIL_RE = re.compile(r'[^\s@]+@[^\s@]+\.[^\s@]+')
+
+
 class SharedActionItem(BaseModel):
     """Public share projection of an action item."""
 
@@ -125,6 +135,27 @@ class SharedActionItem(BaseModel):
 
     description: str
     completed: bool = False
+    owner_name: Optional[str] = None
+    due_at: Optional[datetime] = None
+    context: Optional[str] = None
+
+    @field_validator('owner_name', mode='before')
+    @classmethod
+    def drop_email_shaped_owner(cls, value):
+        # owner_name is a display name. An address here is not a public name.
+        if isinstance(value, str) and _EMAIL_RE.search(value):
+            return None
+        return value
+
+
+class SharedSection(BaseModel):
+    """Public note content, without internal transcript evidence IDs."""
+
+    model_config = {'extra': 'ignore'}
+
+    heading: str
+    body_markdown: str
+    kind: Literal['main', 'side_notes'] = 'main'
 
 
 class SharedEvent(BaseModel):
@@ -160,6 +191,7 @@ class SharedStructured(BaseModel):
     overview: str = ''
     emoji: str = '🧠'
     category: CategoryEnum = CategoryEnum.other
+    sections: List[SharedSection] = Field(default_factory=list)
     action_items: List[SharedActionItem] = Field(default_factory=list)
     events: List[SharedEvent] = Field(default_factory=list)
     meeting_type: Optional[MeetingType] = None
@@ -382,6 +414,24 @@ class ConversationSpeakers(BaseModel):
     participant_speaker_ids: List[int] = []
 
 
+class CaptureEvidenceMetadata(BaseModel):
+    """Internal S1 receipt. Missing source positions are explicitly unknown."""
+
+    version: Literal[1] = 1
+    capability: Literal['source_position', 'stable_artifact', 'unknown']
+    coverage: Optional[Literal['unknown', 'incomplete', 'mapped']] = None
+    origin: Optional[str] = None
+    reason: Optional[str] = None
+    capture_root: Optional[str] = None
+    channel: Optional[str] = None
+    clock_epoch: Optional[str] = None
+    source_start: Optional[int] = None
+    source_end: Optional[int] = None
+    runs: Optional[List[Dict[str, Any]]] = None
+    receipts: Optional[List[Dict[str, Any]]] = None
+    conflicts: Optional[int] = None
+
+
 class Conversation(BaseModel):
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
@@ -411,6 +461,14 @@ class Conversation(BaseModel):
     # enriched summary. Server-authored; absent on every enriched conversation.
     # Clients read `client_processing` first — see the enum's docstring.
     processing_state: Optional[ConversationProcessingState] = None
+    # Server-authored. True only when durable finalization exhausted its retry
+    # budget on a transient provider/parser/worker failure and the row has
+    # transcript or photos, so ``POST /v1/conversations/{id}/reprocess`` can
+    # still produce a summary. ``structured.title`` then holds the
+    # deterministic title. Never set when the model ran and found nothing to
+    # summarize. Successful enrichment clears it. A separate field rather than
+    # a ``processing_state`` value: released clients decode that enum strictly.
+    summary_retryable: Optional[bool] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -420,8 +478,49 @@ class Conversation(BaseModel):
     private_cloud_sync_enabled: bool = False
     # Audio-timeline v2 provenance (absent on legacy and ineligible rows).
     audio_timeline: Optional[AudioTimelineProvenance] = None
+    # S1 internal receipt is written explicitly at existing persistence seams.
+    capture_evidence: Optional[CaptureEvidenceMetadata] = Field(default=None, exclude=True)
     # Absent on conversations processed before speakers were resolved: count no ids as people.
     speaker_resolution: Optional[ConversationSpeakers] = None
+    speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
+
+    @field_validator('speaker_match_scores', mode='before')
+    @classmethod
+    def _validate_match_scores(cls, value):
+        # Some mutation owners return a stored document with a readable
+        # transcript. Without a uid this model must omit, never decrypt, its
+        # optional raw score blob. Covers factory and direct model callers.
+        if value is None:
+            return None
+        try:
+            return match_scores.normalize(value)
+        except Exception:
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+            return None
+
+    @model_validator(mode='after')
+    def _collect_match_scores(self):
+        try:
+            updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
+            if updates and match_scores.enabled():
+                self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
+        except Exception:
+            self.speaker_match_scores = None
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+        return self
+
+    @model_serializer(mode='wrap')
+    def _serialize_match_scores(self, handler, info):
+        data = handler(self)
+        if info.mode == 'python' and self.speaker_match_scores is not None:
+            excluded = info.exclude or ()
+            included = info.include
+            if 'speaker_match_scores' not in excluded and (included is None or 'speaker_match_scores' in included):
+                try:
+                    data['speaker_match_scores'] = match_scores.merge(None, self.speaker_match_scores)
+                except Exception:
+                    match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+        return data
 
     # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
     # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read

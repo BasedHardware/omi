@@ -13,25 +13,23 @@ import 'package:omi/pages/conversation_detail/share.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/calendar_event_sheets.dart';
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/widgets/capture_sources.dart';
 
-Color get _metaColor => OmiColors.textSecondary;
-
-/// The conversation page's header, shared by every tab so switching between
-/// Summary, Transcript and Action items never loses the title or the facts.
+/// The conversation page's header (v3), shared by both tabs so switching between Summary and
+/// Transcript never loses the title or the facts.
 ///
-/// Three compact rows: emoji and title (tap to rename); one line of facts
-/// (when, how long, category, and the device when only one recorded it); then
-/// the controls a reader reaches for — the event's recordings, who spoke, the
-/// folder and the visibility.
+/// The title in large type (tap to rename), then one row of outlined chips: when it started and how
+/// long it ran, and — when they apply — its folder, who spoke and the event's recordings. Visibility
+/// lives in the ⋯ menu ([ConversationVisibilitySheet]).
 class ConversationDetailHeader extends StatelessWidget {
   const ConversationDetailHeader({super.key, required this.onOpenRecordings});
 
@@ -50,9 +48,7 @@ class ConversationDetailHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _titleRow(context, provider, conversation),
-          const SizedBox(height: 6),
-          _metaLine(context, conversation, isGroupedEvent: recordings.isNotEmpty),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Consumer<FolderProvider>(
             builder: (context, folderProvider, _) {
               final folderId = conversation.folderId;
@@ -66,22 +62,31 @@ class ConversationDetailHeader extends StatelessWidget {
                 uncountedSummary: context.l10n.participantsSummaryUncounted,
               );
               return Wrap(
-                spacing: 6,
-                runSpacing: 6,
+                spacing: 8,
+                runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  _whenChip(context, conversation),
+                  // Only a filed conversation shows its folder; Move to Folder is in the ⋯ menu.
+                  if (folder != null) _FolderChip(conversation: conversation, folder: folder),
+                  if (peopleLabel != null)
+                    _peopleChip(
+                      context,
+                      conversation,
+                      peopleLabel,
+                      ConversationDetailMeta.avatars(people.named, people.unnamed, uncounted: people.uncounted),
+                    ),
                   if (recordings.isNotEmpty)
                     CaptureRecordingsChip(
                       recordings: recordings,
                       onTap: () {
                         trackConversationAction(
-                            ConversationActionAction.recordingsOpen, ConversationActionSurface.detailBody);
+                          ConversationActionAction.recordingsOpen,
+                          ConversationActionSurface.detailBody,
+                        );
                         onOpenRecordings(recordings);
                       },
                     ),
-                  if (peopleLabel != null) _peopleChip(context, conversation, peopleLabel),
-                  _FolderChip(conversation: conversation, folder: folder),
-                  _VisibilityChip(conversation: conversation),
                 ],
               );
             },
@@ -92,88 +97,41 @@ class ConversationDetailHeader extends StatelessWidget {
   }
 
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
-    final titleStyle = OmiType.title3.copyWith(height: 1.25);
-    // The title is one line, so the emoji centres on it.
-    return Row(
-      children: [
-        if (!conversation.discarded) ...[
-          ExcludeSemantics(child: Text(conversation.structured.getEmoji(), style: titleStyle)),
-          const SizedBox(width: 10),
-        ],
-        Expanded(
-          child: conversation.discarded
-              ? Text(context.l10n.discardedConversation, style: titleStyle)
-              : ConversationTitleField(
-                  focusNode: provider.titleFocusNode,
-                  controller: provider.titleController,
-                  style: titleStyle,
-                ),
-        ),
-      ],
+    final titleStyle = OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4);
+    if (conversation.discarded) return Text(context.l10n.discardedConversation, style: titleStyle);
+    return ConversationTitleField(
+      focusNode: provider.titleFocusNode,
+      controller: provider.titleController,
+      style: titleStyle,
+      hintText: transcriptFallbackTitle(conversation) ??
+          recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
     );
   }
 
-  /// "Today · 1:57 PM – 2:59 PM · 1h 2m · Business". A linked calendar event
-  /// leads with its logo and opens the event on tap.
-  Widget _metaLine(BuildContext context, ServerConversation conversation, {required bool isGroupedEvent}) {
+  /// "Today 12:40 PM · 14m": when it started and how long it ran, the list row's length rule. A
+  /// linked calendar event shows its logo and opens the event.
+  Widget _whenChip(BuildContext context, ServerConversation conversation) {
     final dates = OmiDateFormat.of(context);
     final start = conversation.startedAt ?? conversation.createdAt;
-    final end = conversation.finishedAt;
-    final time = end != null && end.isAfter(start) && conversation.source != ConversationSource.sdcard
-        ? dates.timeRange(start, end)
-        : dates.time(start);
-    // The list row's rule and format, so the page and the row never disagree.
     final duration = conversationDurationLabel(conversation, context.l10n);
-    final category = conversation.structured.category.trim();
-    final facts = [
-      '${dates.dayHeader(start)} · $time',
-      if (duration.isNotEmpty) duration,
-      if (!conversation.discarded && category.isNotEmpty && category != 'other')
-        category[0].toUpperCase() + category.substring(1),
-    ];
-    // A grouped event names its devices in the recordings control; naming one here
-    // would single out whichever recording happens to be open.
-    final source = isGroupedEvent ? null : conversation.source?.name;
+    final label = ['${dates.dayHeader(start)} ${dates.time(start)}', if (duration.isNotEmpty) duration].join(' · ');
     final calendarEvent = conversation.calendarEvent;
-    final style = OmiType.footnote.copyWith(color: _metaColor, height: 1.35);
-    final line = Text.rich(
-      TextSpan(
-        style: style,
-        children: [
-          if (calendarEvent != null)
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.all(Radius.circular(3)),
-                  child: Image.asset('assets/integration_app_logos/google-calendar.png', width: 14, height: 14),
-                ),
-              ),
+    final chip = ConversationDetailChip(
+      key: const Key('conversation_when'),
+      icon: calendarEvent == null
+          ? const Icon(Icons.calendar_today_outlined)
+          : ClipRRect(
+              borderRadius: const BorderRadius.all(Radius.circular(3)),
+              child: Image.asset('assets/integration_app_logos/google-calendar.png', width: 15, height: 15),
             ),
-          TextSpan(text: facts.join(' · ')),
-          if (source != null) ...[
-            const TextSpan(text: ' · '),
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 3),
-                child: Icon(CaptureSources.icon(source), size: 14, color: _metaColor),
-              ),
-            ),
-            TextSpan(text: CaptureSources.label(context, source)),
-          ],
-        ],
-      ),
+      label: label,
     );
-    if (calendarEvent == null) return line;
+    if (calendarEvent == null) return Semantics(label: label, excludeSemantics: true, child: chip);
     return Semantics(
       button: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _showCalendarEvent(context, calendarEvent),
-        child: line,
-      ),
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(onTap: () => _showCalendarEvent(context, calendarEvent), child: chip),
     );
   }
 
@@ -202,11 +160,13 @@ class ConversationDetailHeader extends StatelessWidget {
     return attendee.split(' ')[0];
   }
 
-  Widget _peopleChip(BuildContext context, ServerConversation conversation, String label) {
-    final chip = _HeaderChip(
-      icon: Icon(Icons.people_outline, size: 15, color: OmiColors.textSecondary),
+  /// Who spoke: their avatars, overlapping, then "You + 1 other".
+  Widget _peopleChip(BuildContext context, ServerConversation conversation, String label, List<String> avatars) {
+    final chip = ConversationDetailChip(
+      key: const Key('conversation_people'),
+      icon: _PeopleAvatars(avatars),
       label: label,
-      color: OmiColors.textSecondary,
+      startPadding: 6,
     );
     final calendarEvent = conversation.calendarEvent;
     if (calendarEvent == null) return Semantics(label: label, excludeSemantics: true, child: chip);
@@ -224,55 +184,65 @@ class ConversationDetailHeader extends StatelessWidget {
   }
 }
 
-class _HeaderChip extends StatelessWidget {
-  const _HeaderChip({required this.icon, required this.label, required this.color, this.background, this.trailing});
+/// Overlapping 22 pt circles, the first on top: the first person in the primary ink with a ring of
+/// the page colour, the rest in a quieter grey.
+class _PeopleAvatars extends StatelessWidget {
+  const _PeopleAvatars(this.glyphs);
 
-  final Widget icon;
-  final String label;
-  final Color color;
-  final Color? background;
-  final bool? trailing;
+  final List<String> glyphs;
+
+  static const double _diameter = 22;
+  static const double _step = 15;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 30),
-      padding: EdgeInsets.only(left: 10, right: trailing == true ? 6 : 10, top: 4, bottom: 4),
-      decoration: BoxDecoration(color: background ?? OmiColors.chipSurface, borderRadius: OmiRadius.pillAll),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          icon,
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              label,
-              style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w500),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+    if (glyphs.isEmpty) return const Icon(Icons.people_outline);
+    Widget circle(int index) {
+      final first = index == 0;
+      return Positioned(
+        left: index * _step,
+        child: Container(
+          width: _diameter,
+          height: _diameter,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: first ? OmiColors.accent : OmiColors.textPrimary.withValues(alpha: 0.32),
+            border: first
+                ? Border.all(color: OmiColors.surface0, width: 2, strokeAlign: BorderSide.strokeAlignOutside)
+                : null,
+          ),
+          child: Text(
+            glyphs[index],
+            style: OmiType.caption.copyWith(
+              color: first ? OmiColors.onAccent : OmiColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              height: 1,
             ),
           ),
-          if (trailing == true) ...[
-            const SizedBox(width: 2),
-            Icon(Icons.keyboard_arrow_down, size: 16, color: color),
-          ],
-        ],
-      ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: _diameter + _step * (glyphs.length - 1),
+      height: _diameter,
+      // Painted last to first so the first person sits on top.
+      child: Stack(clipBehavior: Clip.none, children: [for (var i = glyphs.length - 1; i >= 0; i--) circle(i)]),
     );
   }
 }
 
-/// Opens the move-to-folder sheet; tinted with the folder's colour when filed.
+/// The conversation's folder; opens the move-to-folder sheet. The folder glyph keeps its colour.
 class _FolderChip extends StatelessWidget {
   const _FolderChip({required this.conversation, required this.folder});
 
   final ServerConversation conversation;
-  final Folder? folder;
+  final Folder folder;
 
   @override
   Widget build(BuildContext context) {
-    final color = folder?.colorValue ?? OmiColors.textSecondary;
-    final label = folder?.name ?? context.l10n.noFolder;
+    final label = folder.name;
     return Semantics(
       button: true,
       label: '${context.l10n.moveToFolder}: $label',
@@ -282,12 +252,10 @@ class _FolderChip extends StatelessWidget {
           trackConversationAction(ConversationActionAction.moveFolder, ConversationActionSurface.detailBody);
           showConversationFolderSheet(context, conversation, source: 'detail_page_sheet');
         },
-        child: _HeaderChip(
-          icon: FaIcon(folderIconToFa(folder?.icon), size: 12, color: color),
+        child: ConversationDetailChip(
+          key: const Key('conversation_folder'),
+          icon: FaIcon(folderIconToFa(folder.icon), size: 13, color: folder.colorValue),
           label: label,
-          color: color,
-          background: folder?.colorValue.withValues(alpha: 0.2),
-          trailing: true,
         ),
       ),
     );
@@ -316,51 +284,38 @@ Future<void> showConversationFolderSheet(
     context,
     conversationId: conversation.id,
     currentFolderId: currentFolderId,
+    move: false,
   );
-  // Update locally at once for instant feedback.
-  if (newFolderId != null && context.mounted) {
-    context.read<ConversationDetailProvider>().updateFolderIdLocally(newFolderId);
-    PlatformManager.instance.analytics.conversationMovedToFolder(
-      conversationId: conversation.id,
-      fromFolderId: currentFolderId,
-      toFolderId: newFolderId,
-      source: source,
+  if (newFolderId == null || !context.mounted) return;
+  // Update locally at once for instant feedback; a failed move puts the old folder back and says so.
+  final detailProvider = context.read<ConversationDetailProvider>();
+  detailProvider.updateFolderIdLocally(newFolderId);
+  final moved = await folderProvider.moveConversation(conversation.id, newFolderId);
+  if (!context.mounted) return;
+  if (!moved) {
+    if (detailProvider.conversationOrNull?.id == conversation.id &&
+        detailProvider.conversationOrNull?.folderId == newFolderId) {
+      detailProvider.updateFolderIdLocally(currentFolderId);
+    }
+    OmiFeedback.error(
+      context,
+      context.l10n.failedToUpdateFolder,
+      actionLabel: context.l10n.tryAgain,
+      onAction: () => showConversationFolderSheet(context, conversation, source: source),
     );
+    return;
   }
+  PlatformManager.instance.analytics.conversationMovedToFolder(
+    conversationId: conversation.id,
+    fromFolderId: currentFolderId,
+    toFolderId: newFolderId,
+    source: source,
+  );
 }
 
-class _VisibilityChip extends StatelessWidget {
-  const _VisibilityChip({required this.conversation});
-
-  final ServerConversation conversation;
-
-  @override
-  Widget build(BuildContext context) {
-    final isPrivate = conversation.visibility == ConversationVisibility.private_;
-    final color = isPrivate ? OmiColors.textSecondary : OmiColors.success;
-    final label = isPrivate ? context.l10n.private : context.l10n.shared;
-    return Semantics(
-      button: true,
-      label: '${context.l10n.visibility}: $label',
-      excludeSemantics: true,
-      child: GestureDetector(
-        onTap: () {
-          OmiHaptics.selection();
-          trackConversationAction(ConversationActionAction.visibility, ConversationActionSurface.detailBody);
-          _showVisibilitySheet(context, conversation);
-        },
-        child: _HeaderChip(
-          icon: Icon(isPrivate ? Icons.lock_outline : Icons.public, size: 14, color: color),
-          label: label,
-          color: color,
-          background: isPrivate ? null : OmiColors.successSurface,
-          trailing: true,
-        ),
-      ),
-    );
-  }
-
-  static void _showVisibilitySheet(BuildContext context, ServerConversation conversation) {
+/// Private or Shared, opened from the conversation's ⋯ menu.
+abstract final class ConversationVisibilitySheet {
+  static void show(BuildContext context, ServerConversation conversation) {
     final provider = context.read<ConversationDetailProvider>();
 
     Future<void> choose(BuildContext sheetContext, ConversationVisibility target) async {
@@ -374,6 +329,7 @@ class _VisibilityChip extends StatelessWidget {
       final success = await setConversationVisibility(conversation.id, visibility: target.value);
       if (!success) {
         provider.updateVisibilityLocally(previousVisibility);
+        if (context.mounted) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
         return;
       }
       PlatformManager.instance.analytics.conversationVisibilityChanged(

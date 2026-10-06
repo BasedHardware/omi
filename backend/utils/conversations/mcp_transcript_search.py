@@ -12,12 +12,17 @@ always runs on returned conversations so clients get evidence even for summary h
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import unicodedata
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
+from utils.conversations.transcript_chunks import build_transcript_chunks
+from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +30,121 @@ logger = logging.getLogger(__name__)
 # can still extract lexical snippets after a semantic transcript hit.
 _TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 _MAX_SNIPPET_CHARS = 2000
+
+TRANSCRIPT_EMBED_TIMEOUT_SECONDS = 5.0
+TRANSCRIPT_CHUNK_TIMEOUT_SECONDS = 5.0
+TRANSCRIPT_SEARCH_TIMEOUT_SECONDS = 8.0
+
+
+@dataclass(frozen=True)
+class ChatTranscriptSearch:
+    """Bounded transcript candidates and whether the chunk index was queried."""
+
+    rows: List[Dict[str, Any]]
+    searched: bool
+
+    @property
+    def conversation_ids(self) -> List[str]:
+        return merge_summary_and_transcript_ids(
+            [str(row['conversation_id']) for row in self.rows if row.get('conversation_id')], [], len(self.rows)
+        )
+
+
+def merge_chat_conversation_ids(
+    keyword_ids: Sequence[str], transcript_ids: Sequence[str], vector_ids: Sequence[str], limit: int
+) -> List[str]:
+    """Preserve exact keyword rank while reserving space for transcript and summary evidence."""
+    limit = max(1, min(limit, 20))
+    cap = limit * 2
+    merged = list(dict.fromkeys(keyword_ids))[:limit]
+    vector_reserve = min(len(vector_ids), max(1, (limit + 1) // 2))
+    transcript_budget = min(limit, max(0, cap - len(merged) - vector_reserve))
+    merged = merge_summary_and_transcript_ids(merged, transcript_ids[:transcript_budget], cap)
+    merged = merge_summary_and_transcript_ids(merged, vector_ids, cap)
+    return merge_summary_and_transcript_ids(merged, transcript_ids[transcript_budget:], cap)
+
+
+def search_chat_transcript_chunks(
+    uid: str,
+    query: str,
+    *,
+    limit: int,
+    starts_at: Optional[int],
+    ends_at: Optional[int],
+    query_vector: Optional[List[float]],
+    index_available: bool,
+    search_transcript_chunks: Callable[..., Any],
+) -> ChatTranscriptSearch:
+    """Search the optional chunk index without making summary retrieval fail."""
+    if not index_available or not query_vector or not query.strip():
+        return ChatTranscriptSearch([], False)
+    try:
+        rows = search_transcript_chunks(
+            uid,
+            query,
+            limit=min(max(limit * 3, limit), 60),
+            starts_at=starts_at,
+            ends_at=ends_at,
+            query_vector=query_vector,
+            timeout_seconds=TRANSCRIPT_CHUNK_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # noqa: BLE001 - optional index must not break chat
+        logger.warning('chat transcript search failed uid=%s: %s', uid, sanitize(str(exc)))
+        record_fallback(
+            component='other',
+            from_mode='none',
+            to_mode='none',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return ChatTranscriptSearch([], False)
+    return ChatTranscriptSearch(
+        [row for row in rows if isinstance(row, dict) and row.get('conversation_id')] if isinstance(rows, list) else [],
+        True,
+    )
+
+
+def chat_transcript_excerpts(
+    conversations: Sequence[Dict[str, Any]],
+    search: ChatTranscriptSearch,
+    *,
+    max_excerpts: int = 5,
+    max_chars: int = 1200,
+) -> Dict[str, str]:
+    """Rebuild only authorized, non-discarded chunk hits from hydrated conversations."""
+    allowed = {
+        str(conv['id']): conv
+        for conv in conversations
+        if conv.get('id') and not conv.get('is_locked') and not conv.get('discarded')
+    }
+    excerpts: Dict[str, str] = {}
+    chunks_by_id: Dict[str, Dict[int, str]] = {}
+    for row in search.rows:
+        cid = str(row['conversation_id'])
+        chunk_index = row.get('chunk_index')
+        if cid not in allowed or cid in excerpts or not isinstance(chunk_index, int) or chunk_index < 0:
+            continue
+        if cid not in chunks_by_id:
+            conv = allowed[cid]
+            chunks_by_id[cid] = {
+                chunk['chunk_index']: chunk['text']
+                for chunk in build_transcript_chunks(
+                    conv.get('transcript_segments') or [], conv.get('started_at') or conv.get('created_at')
+                )
+            }
+        excerpt = chunks_by_id[cid].get(chunk_index)
+        if excerpt:
+            excerpts[cid] = excerpt[:max_chars]
+            if len(excerpts) >= max_excerpts:
+                break
+    return excerpts
+
+
+def chat_transcript_coverage_note(searched: bool) -> str:
+    if searched:
+        return 'Search covered conversation titles/summaries and indexed transcript excerpts; older or unindexed transcripts may still contain the detail.'
+    return 'Transcript text was not searched because its index was unavailable; title/summary search cannot establish that a detail is absent.'
 
 
 def _normalize_text(value: str) -> str:
@@ -169,7 +289,7 @@ def merge_summary_and_transcript_ids(
     return out
 
 
-def search_transcript_conversation_ids(
+async def search_transcript_conversation_ids(
     uid: str,
     query: str,
     *,
@@ -177,6 +297,7 @@ def search_transcript_conversation_ids(
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
     search_transcript_chunks: Callable[..., Any],
+    embed_query: Callable[[str], Awaitable[List[float]]],
 ) -> List[str]:
     """Fail-open transcript-chunk → conversation ids (empty when index off / errors)."""
     limit = max(1, min(int(limit or 10), 250))
@@ -184,9 +305,24 @@ def search_transcript_conversation_ids(
         return []
     transcript_ids: List[str] = []
     try:
-        # Over-fetch chunks so multiple hits in one conversation still leave room for others.
-        chunk_limit = min(max(limit * 3, limit), 60)
-        rows_raw: Any = search_transcript_chunks(uid, query, limit=chunk_limit, starts_at=starts_at, ends_at=ends_at)
+        async with asyncio.timeout(TRANSCRIPT_SEARCH_TIMEOUT_SECONDS):
+            vector = await asyncio.wait_for(embed_query(query), timeout=TRANSCRIPT_EMBED_TIMEOUT_SECONDS)
+            # Over-fetch chunks so multiple hits in one conversation still leave room for others.
+            chunk_limit = min(max(limit * 3, limit), 60)
+            rows_raw: Any = await asyncio.wait_for(
+                run_blocking(
+                    db_executor,
+                    search_transcript_chunks,
+                    uid,
+                    query,
+                    limit=chunk_limit,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                    query_vector=vector,
+                    timeout_seconds=TRANSCRIPT_CHUNK_TIMEOUT_SECONDS,
+                ),
+                timeout=TRANSCRIPT_CHUNK_TIMEOUT_SECONDS,
+            )
         rows: List[Any] = rows_raw if isinstance(rows_raw, list) else []
         for row in rows:
             if not isinstance(row, dict):
@@ -199,6 +335,14 @@ def search_transcript_conversation_ids(
             "conversation search: transcript chunk search failed uid=%s: %s",
             uid,
             sanitize(str(e)),
+        )
+        record_fallback(
+            component='other',
+            from_mode='none',
+            to_mode='none',
+            reason='other',
+            outcome='degraded',
+            log=logger,
         )
     return merge_summary_and_transcript_ids(transcript_ids, [], limit)
 

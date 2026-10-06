@@ -71,4 +71,35 @@ void main() {
     expect(AnnouncementOutcome.none.marksSeen, isFalse);
     expect(AnnouncementOutcome.cta.marksSeen, isTrue);
   });
+
+  group('call to action', () {
+    test('navigate: opens an in-app route, as the backend model documents', () {
+      final action = AnnouncementAction.parse('navigate:/memories');
+      expect(action, isA<AnnouncementRoute>());
+      expect((action! as AnnouncementRoute).route, '/memories');
+      expect(
+        (AnnouncementAction.parse('navigate:settings/data-privacy')! as AnnouncementRoute).route,
+        '/settings/data-privacy',
+      );
+      expect((AnnouncementAction.parse('/apps/abc')! as AnnouncementRoute).route, '/apps/abc');
+    });
+
+    test('url: and bare web links open externally; anything else is ignored', () {
+      expect(
+        (AnnouncementAction.parse('url:https://omi.me/blog')! as AnnouncementUrl).uri.toString(),
+        'https://omi.me/blog',
+      );
+      expect((AnnouncementAction.parse('https://omi.me')! as AnnouncementUrl).uri.host, 'omi.me');
+      expect(AnnouncementAction.parse('navigate:'), isNull);
+      expect(AnnouncementAction.parse('memories'), isNull);
+    });
+
+    test('only http(s) links with a host are opened', () {
+      expect(AnnouncementAction.parse('url:tel:12345'), isNull);
+      expect(AnnouncementAction.parse('url:file:///sdcard/secret.txt'), isNull);
+      expect(AnnouncementAction.parse('url:someapp://open'), isNull);
+      expect(AnnouncementAction.parse('url:https:'), isNull);
+      expect(AnnouncementAction.parse('http://omi.me'), isA<AnnouncementUrl>());
+    });
+  });
 }

@@ -113,11 +113,11 @@ def test_wire_text_is_byte_identical_to_the_single_string_prompt():
     expected = pn.GATE_PROMPT.format(
         user_name='Alex',
         user_facts=BIG_FACTS,
-        goals_text=pn._format_goals([{'title': 'ship the gate fix'}]),
-        current_conversation=pn._format_current_conversation(
+        goals_text=pn.format_goals([{'title': 'ship the gate fix'}]),
+        current_conversation=pn.format_current_conversation(
             [{'text': 'we should ship on friday', 'is_user': True}], 'Alex'
         ),
-        recent_notifications=pn._format_recent_notifications(
+        recent_notifications=pn.format_recent_notifications(
             [{'created_at': '2026-09-09T10:00:00', 'text': 'call Mike'}]
         ),
         current_date='2026-09-09',

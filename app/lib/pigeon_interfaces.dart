@@ -111,7 +111,7 @@ class BleDisconnectEvent {
   /// RSSI trajectory over the ~15s before this event. One of:
   ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
   ///   "sudden"  — signal stable then link died (interference/stall/device off)
-  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "gap"     — no recent RSSI samples (radio read unavailable)
   ///   "unknown" — insufficient samples to classify
   /// Empty string on legacy records written before this field existed.
   final String rssiTrend;
@@ -193,11 +193,16 @@ abstract class BleHostApi {
   @SwiftFunction('writeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:data:)')
   void writeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List data);
 
+  @async
   @SwiftFunction('subscribeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
   void subscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid);
 
   @SwiftFunction('unsubscribeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
   void unsubscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid);
+
+  /// iOS Omi ingress recovery; Android leaves this cut disabled.
+  @SwiftFunction('setCaptureAuthorized(uuid:authorized:)')
+  void setCaptureAuthorized(String uuid, bool authorized);
 
   // State
   @SwiftFunction('getBluetoothState()')
@@ -222,6 +227,11 @@ abstract class BleHostApi {
   @async
   @SwiftFunction('getDeviceDiagnostics(uuid:)')
   BleDeviceDiagnostics getDeviceDiagnostics(String uuid);
+
+  /// Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads.
+  @async
+  @SwiftFunction('getExtendedDeviceDiagnostics(uuid:)')
+  String getExtendedDeviceDiagnostics(String uuid);
 
   @async
   @SwiftFunction('getBatteryHistory(uuid:)')
@@ -257,6 +267,9 @@ abstract class BleFlutterApi {
   void onRssiUpdate(String peripheralUuid, int rssi);
 
   void onStateRestored(List<String> peripheralUuids);
+
+  /// Native ingress evidence and bounded recovery. Contains no audio payload.
+  void onCaptureHealth(String peripheralUuid, String snapshot);
 
   /// Native batch writer finalized a recording file (rotation / gap / stop) so
   /// Dart can rescan the recordings dir without waiting for a disconnect.

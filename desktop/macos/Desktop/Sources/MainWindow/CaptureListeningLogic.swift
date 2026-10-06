@@ -30,6 +30,7 @@ enum CaptureListeningLogic {
   /// mode control still shows Always On / Only Meetings while transcription is gated.
   static func listeningStatus(appState: AppState) -> HomeStatusState {
     if appState.transcriptionServiceError != nil { return .blocked }
+    if appState.isWaitingForMicrophone { return .armed }
     if appState.isLiveCapturing { return .active }
     return appState.isAwaitingMeeting ? .armed : .inactive
   }
@@ -81,6 +82,7 @@ enum CaptureListeningLogic {
   }
 
   static func listeningModeTitle(appState: AppState, raw: String) -> String {
+    if appState.isWaitingForMicrophone { return "Waiting for Microphone" }
     // Surface the explicitly-chosen mic as the visible capture source. Meta
     // glasses advertise a Bluetooth codename (e.g. "EL AI 000F"), so product-
     // name matching alone can't identify them — an explicit user selection is

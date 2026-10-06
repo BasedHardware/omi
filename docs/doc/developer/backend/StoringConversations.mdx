@@ -78,6 +78,16 @@ flowchart TD
 
 ## Firestore Structure
 
+### Folder deletion and concurrent conversation changes
+
+`DELETE /v1/folders/{folder_id}` rechecks each discovered conversation's current
+folder membership before rehoming it. A newer move or unfile decision is preserved,
+and a conversation deleted during cleanup is not recreated. Cleanup uses bounded
+transactions, not one all-or-nothing transaction across a large folder. A failed
+chunk leaves the source folder available for retry. This protects discovered
+candidates; it does not serialize new assignments into the source folder or
+concurrent deletion of the destination folder.
+
 ```
 users/
 ├── {uid}/

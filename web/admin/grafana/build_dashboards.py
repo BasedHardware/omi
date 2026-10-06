@@ -251,20 +251,18 @@ def user_growth_series(panel, scope: str, field: str, series_name: str) -> None:
 
 
 RELEASES_PATH = "/api/omi/stats/releases?days=30"
-RELEASES_CHART_TITLE = "Releases / day — macOS vs iOS"
+RELEASES_CHART_TITLE = "Releases / day — macOS vs mobile"
 
 
 def releases_chart_panel(panel_id: int) -> dict:
-    """All-board timeline: one chart, two series — release cadence per
-    platform. A multi-day flat zero on either line is the alarm."""
+    """All-board timeline: one chart, three series — release cadence per
+    platform. A multi-day flat zero on any series is the alarm."""
     return {
         "id": panel_id,
         "type": "timeseries",
         "title": RELEASES_CHART_TITLE,
-        "description": "macOS: GitHub releases tagged -macos (candidates included). "
-                       "iOS: first day a version clears 200 daily App Store users "
-                       "(TestFlight noise excluded); latest verified against the "
-                       "App Store lookup API.",
+        "description": "macOS = GitHub -macos tags; iOS/Android = distinct $app_build "
+                       "first seen per day (TestFlight/Play builds included).",
         "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
         "gridPos": {"x": 0, "y": 999, "w": 24, "h": 6},
         "timeFrom": "30d",
@@ -286,6 +284,8 @@ def releases_chart_panel(panel_id: int) -> dict:
                  "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#3b82f6"}}]},
                 {"matcher": {"id": "byName", "options": "iOS releases"},
                  "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#22c55e"}}]},
+                {"matcher": {"id": "byName", "options": "Android releases"},
+                 "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#f59e0b"}}]},
             ],
         },
         "options": {
@@ -304,6 +304,7 @@ def releases_chart_panel(panel_id: int) -> dict:
                  "timestampFormat": "2006-01-02"},
                 {"selector": "macos", "text": "macOS releases", "type": "number"},
                 {"selector": "ios", "text": "iOS releases", "type": "number"},
+                {"selector": "android", "text": "Android releases", "type": "number"},
             ],
         }],
     }

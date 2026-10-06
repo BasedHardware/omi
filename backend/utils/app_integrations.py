@@ -18,6 +18,7 @@ from utils.http_client import (
     latest_wins_check,
 )
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils import proactivity_flags
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 import database.mentor_gate_state as mentor_gate_state
@@ -42,6 +43,7 @@ from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
 from database.users import get_user_language_preference
 from utils.subscription import is_trial_paywalled
+from utils.mentor_admission import mentor_plan_allows_evaluation
 from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
@@ -674,16 +676,7 @@ def _mentor_gate_debounce_skip_reason(
     return None
 
 
-def _process_mentor_proactive_notification(uid: str, conversation_messages: list[dict]) -> str | None:
-    """
-    Three-step proactive notification pipeline:
-      1. Gate  — is this conversation worth evaluating? (cheap, rejects most)
-      2. Generate — produce the actual notification (only if gate passes)
-      3. Critic — would a human actually want this on their phone? (final check)
-
-    Returns:
-        The notification text if sent, None otherwise.
-    """
+def admit_mentor_evaluation(uid: str, conversation_messages: list[dict]) -> tuple[int, float] | None:
     # 1. Get frequency setting
     frequency = get_mentor_notification_frequency(uid)
     if frequency == 0:
@@ -709,7 +702,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         logger.info(f"mentor_proactive daily_cap_reached uid={uid}")
         return None
 
-    # 3b. Debounce the LLM evaluation itself (dark by default). The checks above
+    # 3b. Debounce the LLM evaluation itself (on by default). The checks above
     # only bound what is SENT; without this the gate is evaluated on every buffered
     # segment batch even when nothing new was said.
     gate_state = None
@@ -753,6 +746,10 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             if skip_reason:
                 logger.info(f"mentor_gate_debounce skipped uid={uid} reason={skip_reason} words={gate_word_count}")
                 return None
+            # Resolve entitlement only after every cheap rejection. Free users
+            # consume neither a gate evaluation nor any context/model work.
+            if not mentor_plan_allows_evaluation(uid):
+                return None
             _record_mentor_gate_evaluation(
                 uid,
                 now=gate_now,
@@ -762,18 +759,38 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             )
         finally:
             mentor_gate_state.release(uid)
+    elif not mentor_plan_allows_evaluation(uid):
+        return None
+
+    return frequency, base_threshold
+
+
+def _process_mentor_proactive_notification(uid: str, conversation_messages: list[dict]) -> str | None:
+    """
+    Three-step proactive notification pipeline:
+      1. Gate  — is this conversation worth evaluating? (cheap, rejects most)
+      2. Generate — produce the actual notification (only if gate passes)
+      3. Critic — would a human actually want this on their phone? (final check)
+
+    Returns:
+        The notification text if sent, None otherwise.
+    """
+    admission = admit_mentor_evaluation(uid, conversation_messages)
+    if admission is None:
+        return None
+    frequency, base_threshold = admission
 
     # 4. Gather lightweight context (no vector search yet — save for step 2)
     try:
         user_name, user_facts = get_prompt_memories(uid)
-    except Exception as e:
-        logger.error(f"mentor_proactive memories_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive memories_failed uid={uid} reason=operation_failed")
         user_name, user_facts = 'User', ''
 
     try:
         goals = get_user_goals(uid, limit=3)
-    except Exception as e:
-        logger.error(f"mentor_proactive goals_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive goals_failed uid={uid} reason=operation_failed")
         goals = []
 
     # The pipeline's date anchor: without it the prompts fall back to UTC, which is
@@ -783,8 +800,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     try:
         recent_notifications = get_app_messages(uid, 'mentor', limit=20)
-    except Exception as e:
-        logger.error(f"mentor_proactive recent_notis_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive recent_notis_failed uid={uid} reason=operation_failed")
         recent_notifications = []
 
     # ── Step 1: Gate ─────────────────────────────────────────────────────
@@ -802,20 +819,19 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 # session and its facts/goals prefix does not change between them.
                 uid=uid,
             )
-    except Exception as e:
-        logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive gate_failed uid={uid} reason=operation_failed")
         return None
 
     if not relevance.is_relevant or relevance.relevance_score < base_threshold:
         logger.info(
             f"mentor_proactive gate_rejected uid={uid} score={relevance.relevance_score:.2f} "
-            f"context={relevance.context_summary[:100]}"
+            f"reason={'not_relevant' if not relevance.is_relevant else 'below_threshold'}"
         )
         return None
 
     logger.info(
-        f"mentor_proactive gate_passed uid={uid} score={relevance.relevance_score:.2f} "
-        f"reason={relevance.reasoning[:100]}"
+        f"mentor_proactive gate_passed uid={uid} score={relevance.relevance_score:.2f} " f"threshold={base_threshold}"
     )
 
     # ── Gather full context (expensive: vector search + recent convos) ───
@@ -840,8 +856,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
                 if vector_convos:
                     all_past.extend([c for c in vector_convos if not c.get('is_locked')])
-    except Exception as e:
-        logger.error(f"mentor_proactive vector_search_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive vector_search_failed uid={uid} reason=operation_failed")
 
     # Also fetch recent conversations by time for additional context
     try:
@@ -851,21 +867,21 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             for rc in recent_convos:
                 if rc.get('id') not in existing_ids and not rc.get('is_locked'):
                     all_past.append(rc)
-    except Exception as e:
-        logger.error(f"mentor_proactive recent_conversations_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive recent_conversations_failed uid={uid} reason=operation_failed")
 
     try:
         if all_past:
             past_conversations_str = conversations_to_string(deserialize_conversations(all_past[:5]))
-    except Exception as e:
-        logger.error(f"mentor_proactive past_conversations_render_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive past_conversations_render_failed uid={uid} reason=operation_failed")
 
     # Resolve the user's output language once so the notification is generated in it, not English
     # (the daily summary already respects this setting) (#5214).
     try:
         output_language = get_user_language_preference(uid) or 'en'
-    except Exception as e:
-        logger.error(f"mentor_proactive language_lookup_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive language_lookup_failed uid={uid} reason=operation_failed")
         output_language = 'en'
 
     # ── Step 2: Generate ─────────────────────────────────────────────────
@@ -883,8 +899,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 output_language=output_language,
                 current_date=current_date,
             )
-    except Exception as e:
-        logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive generate_failed uid={uid} reason=operation_failed")
         return None
 
     notification_text = draft.notification_text
@@ -911,14 +927,13 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 output_language=output_language,
                 current_date=current_date,
             )
-    except Exception as e:
-        logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
+    except Exception:
+        logger.error(f"mentor_proactive critic_failed uid={uid} reason=operation_failed")
         return None
 
     if not validation.approved:
         logger.info(
-            f"mentor_proactive critic_rejected uid={uid} "
-            f"notification={notification_text[:80]} reason={validation.reasoning[:100]}"
+            f"mentor_proactive critic_rejected uid={uid} " f"chars={len(notification_text)} reason=not_approved"
         )
         return None
 
@@ -928,7 +943,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     logger.info(
         f"mentor_proactive sending uid={uid} confidence={draft.confidence:.2f} "
-        f"category={draft.category} reasoning={draft.reasoning[:100]}"
+        f"chars={len(notification_text)} reason=critic_approved"
     )
     send_app_notification(uid, 'Omi', 'mentor', notification_text)
 
@@ -1140,20 +1155,27 @@ async def _async_trigger_realtime_integrations(
     if await run_blocking(db_executor, is_trial_paywalled, uid, source):
         return {}
 
-    # Process mentor notification first (built-in feature) — sync, runs in thread
+    # Both paths share buffering and deterministic admission. Invalid flips invoke neither.
     mentor_results = {}
-    conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
-    if conversation_messages:
-        with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-            mentor_message = await run_blocking(
-                postprocess_executor,
-                _process_mentor_proactive_notification,
-                uid,
-                conversation_messages,
-            )
-        if mentor_message:
-            mentor_results['mentor'] = mentor_message
-            logger.info(f"Sent mentor notification to user {uid}")
+    pipeline = os.getenv('MENTOR_PIPELINE', 'legacy')
+    if pipeline in {'legacy', 'v2', 'cohort'}:
+        conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
+        if conversation_messages:
+            # Cohort selection can call PostHog: only resolve it after the shared
+            # paid/opt-in/buffering/debounce gate has admitted actual messages.
+            if pipeline == 'cohort':
+                pipeline = await run_blocking(db_executor, proactivity_flags.mentor_pipeline, uid)
+            if pipeline == 'legacy':
+                with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+                    mentor_message = await run_blocking(
+                        postprocess_executor, _process_mentor_proactive_notification, uid, conversation_messages
+                    )
+                if mentor_message:
+                    mentor_results['mentor'] = mentor_message
+            elif pipeline == 'v2' and conversation_id:
+                from utils.proactivity_producers import evaluate_mentor_event
+
+                await evaluate_mentor_event(uid, conversation_id, conversation_messages)
 
     apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]

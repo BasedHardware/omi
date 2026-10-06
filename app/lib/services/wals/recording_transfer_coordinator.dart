@@ -267,7 +267,7 @@ class RecordingTransferCoordinator {
       if (lateWake != null) {
         unawaited(wake(lateWake));
       }
-    });
+    }).ignore();
     return pass;
   }
 

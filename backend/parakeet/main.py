@@ -16,13 +16,13 @@ from typing import Any, Dict, List, Optional, cast
 
 gc.disable()
 
-from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Form, UploadFile, File, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram
 from prometheus_client import make_asgi_app  # type: ignore[reportUnknownVariableType]  # prometheus_client partially typed
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
-from batch_engine import BatchEngine, QueueFullError
+from batch_engine import BatchEngine, QueueFullError, QueueTimeoutError
 from transcribe import (
     transcribe_file,
     transcribe_file_v2,
@@ -46,6 +46,16 @@ _AUDIO_LEN_BUCKETS = (1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 18000, 
 ACTIVE_STREAMS = Gauge('parakeet_active_streams', 'Active /v3/stream WebSocket connections')
 ACTIVE_BATCH = Gauge('parakeet_active_batch_requests', 'Active batch transcription requests')
 PENDING_REQUESTS = Gauge('parakeet_batch_pending_requests', 'Pending requests in batch engine queue')
+LANE_PENDING = Gauge('parakeet_batch_lane_pending_requests', 'Pending batch requests by lane', ['lane'])
+LANE_QUEUE_WAIT = Histogram(
+    'parakeet_batch_lane_queue_wait_seconds',
+    'Time waiting before GPU batch assembly by lane',
+    ['lane'],
+    buckets=_ASR_BUCKETS,
+)
+LANE_REFUSALS = Counter(
+    'parakeet_batch_lane_refusals_total', 'Batch queue refusals by lane and reason', ['lane', 'reason']
+)
 REQUEST_DURATION = Histogram(
     'parakeet_request_duration_seconds',
     'Request latency',
@@ -84,6 +94,9 @@ GPU_FATAL_ERRORS_TOTAL = Counter(
     'Fatal CUDA errors that make a Parakeet GPU worker unavailable',
 )
 REQUESTS_TOTAL = Counter('parakeet_requests_total', 'Total requests by status', ['endpoint', 'status'])
+PRERECORDED_REQUESTS = Counter(
+    'parakeet_prerecorded_requests_total', 'Pre-recorded requests excluding live windowed TDT', ['status']
+)
 
 gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
@@ -92,6 +105,8 @@ start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
 _max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
+_LIVE_QUEUE_BUDGET_CAP_SECONDS = 8.0
+_TIMEOUT_HEADER = "X-Omi-STT-Timeout-Seconds"
 
 
 def _get_audio_duration_from_bytes(data: bytes) -> float:
@@ -149,6 +164,7 @@ async def lifespan(app: FastAPI):
             max_wait_seconds=float(os.getenv("PARAKEET_BATCH_WAIT_SECONDS", "0.002")),
             max_queue_depth=int(os.getenv("PARAKEET_MAX_QUEUE_DEPTH", "4096")),
             on_batch_complete=_on_batch_complete,
+            on_queue_wait=lambda lane, seconds: LANE_QUEUE_WAIT.labels(lane=lane).observe(seconds),
             on_gpu_oom=_on_gpu_oom,
             vram_safety_factor=float(os.getenv("PARAKEET_VRAM_SAFETY_FACTOR", "0.8")),
             vram_bytes_per_t2=float(os.getenv("PARAKEET_VRAM_BYTES_PER_T2", "136.6")),
@@ -187,10 +203,31 @@ def _remove_file(path: str) -> None:
 
 
 @app.post("/v1/transcribe", response_model=None)
-async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
+async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
+    lane = 'live' if request.headers.get('X-Omi-STT-Surface') == 'live-window' else 'backfill'
+    prerecorded = lane == 'backfill'
+    request_start = time.monotonic()
     if gpu_worker is not None and not gpu_worker.is_ready:
+        LANE_REFUSALS.labels(lane=lane, reason='not_ready').inc()
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
+        if prerecorded:
+            PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
+    queue_deadline: Optional[float] = None
+    if lane == 'live':
+        budget = _LIVE_QUEUE_BUDGET_CAP_SECONDS
+        supplied_raw = request.headers.get(_TIMEOUT_HEADER)
+        if supplied_raw is not None:
+            try:
+                supplied = float(supplied_raw)
+            except ValueError:
+                supplied = float('nan')
+            if not math.isfinite(supplied) or supplied <= 0:
+                LANE_REFUSALS.labels(lane=lane, reason='invalid_timeout').inc()
+                REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
+                return JSONResponse(status_code=400, content={"detail": f"Invalid {_TIMEOUT_HEADER} budget"})
+            budget = min(budget, supplied)
+        queue_deadline = request_start + budget
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
@@ -198,33 +235,59 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
     audio_dur = 0.0
     status = "success"
     loop = asyncio.get_running_loop()
+    file_written = False
+    submit_called = False
+    write_orphaned = False
     try:
         data = await file.read()
         audio_dur = _get_audio_duration_from_bytes(data)
         if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
             status = "rejected"
+            LANE_REFUSALS.labels(lane=lane, reason='duration').inc()
             return JSONResponse(
                 status_code=413,
                 content={"detail": _duration_limit_detail(audio_dur)},
             )
         if audio_dur > 0 and math.isfinite(audio_dur):
             AUDIO_DURATION.observe(audio_dur)
-        await loop.run_in_executor(_io_pool, _write_file, file_path, data)
+        write_work = _io_pool.submit(_write_file, file_path, data)
+        try:
+            await asyncio.wrap_future(write_work)
+            file_written = True
+        except asyncio.CancelledError:
+            write_orphaned = True
+            write_work.add_done_callback(lambda _f, p=file_path: _remove_file(p))
+            raise
+        except Exception:
+            file_written = True
+            raise
 
         if batch_engine is not None:
-            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
-            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            submit_called = True
+            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True, lane=lane, queue_deadline=queue_deadline))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
             return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
             return result
     except QueueFullError:
         status = "error"
+        LANE_REFUSALS.labels(lane=lane, reason='queue_full').inc()
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
+    except QueueTimeoutError:
+        status = "error"
+        LANE_REFUSALS.labels(lane=lane, reason='queue_timeout').inc()
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Queued transcription request expired — try again", "error": "queue_timeout"},
+            headers={"X-Omi-STT-Error": "queue_timeout"},
+        )
     except AudioDurationExceededError as e:
         status = "rejected"
+        LANE_REFUSALS.labels(lane=lane, reason='duration').inc()
         return JSONResponse(status_code=413, content={"detail": str(e)})
+    except asyncio.CancelledError:
+        status = "cancelled"
+        raise
     except Exception:
         status = "error"
         raise
@@ -232,10 +295,14 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
         elapsed = time.monotonic() - t0
         REQUEST_DURATION.labels(endpoint="v1_transcribe").observe(elapsed)
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status=status).inc()
+        if prerecorded:
+            PRERECORDED_REQUESTS.labels(status=status).inc()
         if status == "success" and audio_dur > 0 and elapsed > 0:
             RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
-        if batch_engine is None:
+        if batch_engine is not None:
+            PENDING_REQUESTS.set(batch_engine.pressure_snapshot()['pending_requests'])
+        if not submit_called and not write_orphaned and (file_written or batch_engine is None):
             await loop.run_in_executor(_io_pool, _remove_file, file_path)
 
 
@@ -249,9 +316,11 @@ async def transcribe_v2(
 ) -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(
             status_code=422,
             content={"detail": f"min_speakers ({min_speakers}) cannot exceed max_speakers ({max_speakers})"},
@@ -261,6 +330,7 @@ async def transcribe_v2(
         # consistent with min > max above; silently preferring one would leave the
         # caller believing a bound they set was honoured.
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(
             status_code=422,
             content={"detail": "num_speakers cannot be combined with min_speakers or max_speakers"},
@@ -328,6 +398,7 @@ async def transcribe_v2(
         elapsed = time.monotonic() - t0
         REQUEST_DURATION.labels(endpoint="v2_transcribe").observe(elapsed)
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status=status).inc()
+        PRERECORDED_REQUESTS.labels(status=status).inc()
         if status == "success" and audio_dur > 0 and elapsed > 0:
             RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
@@ -444,6 +515,10 @@ async def health_check() -> JSONResponse | Dict[str, Any]:
 @app.get("/batch/metrics")
 async def batch_metrics() -> Dict[str, Any]:
     if batch_engine is not None:
-        PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-        return cast(Dict[str, Any], batch_engine.metrics)  # type: ignore[reportUnknownMemberType]  # batch_engine.metrics partially typed
+        metrics = dict(batch_engine.metrics)
+        metrics.update(batch_engine.pressure_snapshot())
+        PENDING_REQUESTS.set(metrics['pending_requests'])
+        for lane in ('live', 'backfill'):
+            LANE_PENDING.labels(lane=lane).set(metrics[f'{lane}_pending_requests'])
+        return metrics
     return {}

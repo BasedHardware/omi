@@ -9,8 +9,9 @@ from typing import Any, Dict, Optional, cast
 
 from google.cloud import firestore
 
-from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
+from config.sync_telemetry import SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS
 from database._client import get_firestore_client
+from utils.sync import stage as sync_stage
 
 LEDGER_RETENTION_DAYS = 45
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
@@ -23,14 +24,14 @@ _INVALID_AUDIO_FINGERPRINT = 'decode:sync_invalid_audio'
 def _validated_failure_fingerprint(key: str | None, fingerprint: str | None) -> str | None:
     if key == 'invalid_audio':
         return _INVALID_AUDIO_FINGERPRINT
-    if key == 'persistent_persistence' and fingerprint in {
-        f'persistence:{subtype}' for subtype in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
-    }:
+    if key == 'persistent_persistence' and fingerprint in SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS:
         return fingerprint
     return None
 
 
 def _repeat_failure_capped(existing: Dict[str, Any], now: datetime) -> bool:
+    # The pause is always bounded: once ``repeat_failure_pause_until`` passes,
+    # the same content is admitted again without operator action.
     until = existing.get('repeat_failure_pause_until')
     return isinstance(until, datetime) and until > now
 
@@ -91,7 +92,8 @@ class SyncContentRunBinding:
 
 
 def _ledger_ref(client: Any, uid: str, content_id: str) -> Any:
-    return client.collection('users').document(uid).collection('sync_content_ledger').document(content_id)
+    collection = sync_stage.collection_name('sync_content_ledger')
+    return client.collection('users').document(uid).collection(collection).document(content_id)
 
 
 def _ledger_owner_matches(

@@ -27,6 +27,7 @@ ERROR_CLASS_BUDGET = 'budget'
 ERROR_CLASS_AUTH = 'auth'
 ERROR_CLASS_SERVER_ERROR = 'server_error'
 ERROR_CLASS_TIMEOUT = 'timeout'
+ERROR_CLASS_RATE_LIMITED = 'rate_limited'
 ERROR_CLASS_CAPABILITY = 'capability'
 ERROR_CLASS_OTHER = 'other'
 ERROR_CLASS_NONE = 'none'
@@ -37,6 +38,7 @@ STT_CONNECT_ERROR_CLASSES = frozenset(
         ERROR_CLASS_AUTH,
         ERROR_CLASS_SERVER_ERROR,
         ERROR_CLASS_TIMEOUT,
+        ERROR_CLASS_RATE_LIMITED,
         ERROR_CLASS_CAPABILITY,
         ERROR_CLASS_OTHER,
         ERROR_CLASS_NONE,
@@ -56,7 +58,7 @@ _REASON_ERROR_CLASS = {
     'timeout': ERROR_CLASS_TIMEOUT,
     'provider_5xx': ERROR_CLASS_SERVER_ERROR,
     'server_error': ERROR_CLASS_SERVER_ERROR,
-    'provider_429': ERROR_CLASS_SERVER_ERROR,
+    'provider_429': ERROR_CLASS_RATE_LIMITED,
     'modulate_serve_error': ERROR_CLASS_SERVER_ERROR,
     'config_incomplete': ERROR_CLASS_CAPABILITY,
     'capability_mismatch': ERROR_CLASS_CAPABILITY,

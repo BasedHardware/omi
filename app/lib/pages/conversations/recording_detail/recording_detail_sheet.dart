@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/services/app_review_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/waveform_painter.dart';
@@ -295,8 +296,10 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
       case LocalUploadOutcome.fairUseLimited:
         OmiFeedback.error(context, context.l10n.fairUseBudgetExhausted);
       case LocalUploadOutcome.backendBusy:
+        unawaited(AppReviewService().recordBadExperience(AppReviewBadExperience.captureFailure));
         OmiFeedback.error(context, context.l10n.msgUploadFileFailed);
       case LocalUploadOutcome.failed:
+        unawaited(AppReviewService().recordBadExperience(AppReviewBadExperience.captureFailure));
         OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
       case LocalUploadOutcome.busy:
         break;

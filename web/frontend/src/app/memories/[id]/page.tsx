@@ -1,4 +1,5 @@
 import getSharedMemory from '@/src/actions/memories/get-shared-memory';
+import getSharedScreenshots from '@/src/actions/memories/get-shared-screenshots';
 import Memory from '@/src/components/memories/memory';
 import MemoryHeader from '@/src/components/memories/memory-header';
 import SharedConversationInstallCta, {
@@ -12,11 +13,11 @@ import envConfig from '@/src/constants/envConfig';
 import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
 import { markdownToPlainText } from '@/src/lib/markdown-to-plain-text.mjs';
 import { getOmiInstallLink } from '@/src/lib/conversation-share-platform-link.mjs';
-import { sharedApiUrl } from '@/src/lib/shared-api-url.mjs';
 import {
   capturePreviewRequest,
   previewAttribution,
 } from '@/src/lib/share-preview-analytics.mjs';
+import { shareAlternates } from '@/src/lib/shared-export.mjs';
 import { firstSectionBulletPlainText } from '@/src/lib/shared-note.mjs';
 import { ParamsTypes, SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
@@ -45,33 +46,9 @@ export async function generateMetadata(
     attribution,
   );
   const prevData = (await parent) as Metadata;
-  let memory: {
-    structured?: {
-      title?: string;
-      overview?: string;
-      sections?: unknown;
-    };
-  } | null = null;
-
-  try {
-    const response = await fetch(
-      sharedApiUrl(envConfig.API_URL, 'v1', 'conversations', params.id, 'shared'),
-      {
-        next: {
-          revalidate: 60,
-        },
-      },
-    );
-
-    if (response.ok) {
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        memory = await response.json();
-      }
-    }
-  } catch {
-    // Silently handle errors in metadata generation
-  }
+  // Same uncached read as the page body. Caching this fetch keeps the title
+  // and overview in the document head after the share is revoked.
+  const memory = (await getSharedMemory(params.id)) ?? null;
 
   const title = !memory
     ? 'Shared Conversation Not Found'
@@ -106,6 +83,12 @@ export async function generateMetadata(
 
   return {
     title,
+    alternates: {
+      types: {
+        'text/markdown': shareAlternates(params.id).markdown,
+        'application/json': shareAlternates(params.id).json,
+      },
+    },
     metadataBase: prevData.metadataBase,
     description,
     robots: {
@@ -137,7 +120,12 @@ export default async function MemoryPage(props: MemoryPageProps) {
   const searchParams = await props.searchParams;
   const params = await props.params;
   const memoryId = params.id;
-  const memory = await getSharedMemory(memoryId);
+  // Screenshots are fetched per request, never cached: their signed URLs
+  // expire after 60 minutes (see get-shared-screenshots).
+  const [memory, screenshots] = await Promise.all([
+    getSharedMemory(memoryId),
+    getSharedScreenshots(memoryId),
+  ]);
   if (!memory) {
     notFound();
   }
@@ -153,7 +141,7 @@ export default async function MemoryPage(props: MemoryPageProps) {
         <ShareTopbar installHref={installHref} />
         <section className="sn-page">
           <MemoryHeader />
-          <Memory memory={memory} searchParams={searchParams} />
+          <Memory memory={memory} searchParams={searchParams} screenshots={screenshots} />
           <SharedConversationInstallCta openInOmiHref={openInOmiHref} />
           <p className="sn-footer">Captured and summarized by Omi</p>
         </section>

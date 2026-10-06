@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-detached-async-cleanup-error",
+  "violated_contract": "An asynchronous request whose error is handled by its caller must not emit an additional unhandled error through a discarded cleanup future. Request cleanup must complete on the same future observed by callers, including callers sharing a deduplicated request.",
+  "canonical_prevention": "Return and share the future that includes cleanup, or await the operation inside try/finally and await asynchronous cleanup there. Exercise the production request path with failing transports and capture uncaught zone errors; also prove successful completion, pending-request eviction, deduplication and resource cancellation.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/http_pool_cleanup_test.dart",
+    "app/test/unit/multipart_cleanup_test.dart"
+  ],
+  "evidence_prs": [3818, 7507],
+  "scope_hints": [
+    "app/lib/backend/http/http_pool_manager.dart",
+    "app/lib/backend/http/shared.dart"
+  ],
+  "status": "open"
+}

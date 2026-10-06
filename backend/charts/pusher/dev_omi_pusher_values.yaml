@@ -116,6 +116,25 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
+  - name: MENTOR_GATE_DEBOUNCE_ENABLED
+    value: "true"
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
+    value: "shadow"
+  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+    value: "true"
+  - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "shadow"
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
@@ -139,6 +158,8 @@ env:
         # this, a pusher rollout that races the backend lane's first ConfigMap
         # write fails to start instead of starting dark.
         optional: true
+  - name: BUCKET_SCREEN_FRAMES
+    value: "based-hardware-dev-screen-frames"
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles-dev"
   - name: GITHUB_TOKEN
@@ -169,6 +190,27 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
+  - name: AUDIO_TIMELINE_SPANS
+    value: "false"
+  - name: LIVE_SPEAKER_SPAN_RESOLUTION
+    value: "false"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "false"
+  - name: SONIOX_WIRE_LEDGER
+    value: "false"
+  - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
+    value: "false"
+  # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
+  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
+    value: "true"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -194,12 +236,32 @@ env:
     value: "true"
   - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "true"
+  - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
+    value: "true"
+  - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
+    value: "25"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: MEMORY_OWNER_JEV_FLIP_ENABLED
     value: "true"
+  - name: MEMORY_OWNER_JEV_FLIP_PERCENT
+    value: "0"
+  - name: CONVERSATION_RELEVANCE_JEV_PERCENT
+    value: "0"
+  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
+    value: "100"
+  - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
+    value: "100"
+  - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
+    value: "0"
+  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
+    value: "60000"
+  - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
+    value: "60000"
+  - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
+    value: ""
   - name: CAPTURE_JEV_SHADOW_ENABLED
     value: "true"
   - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -14,6 +15,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
@@ -48,6 +50,7 @@ class AuthenticationProvider extends BaseProvider {
   int _sessionExpirationGeneration = 0;
   StreamSubscription<User?>? _authStateSubscription;
   StreamSubscription<User?>? _idTokenSubscription;
+  StreamSubscription<User?>? _siriIdTokenSubscription;
   StreamSubscription<AuthSessionExpiredEvent>? _sessionExpiredSubscription;
   @override
   bool get loading => _loading;
@@ -65,8 +68,9 @@ class AuthenticationProvider extends BaseProvider {
     );
 
     Future.microtask(() {
-      _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+      _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
+        unawaited(ProactivityRuntime.outbox.bindOwner(user != null && !user.isAnonymous ? user.uid : null));
         AuthService.instance.handleAuthUserChanged(user?.uid);
         Logger.debug(
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
@@ -82,9 +86,16 @@ class AuthenticationProvider extends BaseProvider {
         final cutoverOwner = (user != null && !user.isAnonymous) ? user.uid : null;
         unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(cutoverOwner));
         notifyListeners();
+        await SiriIntegration.instance.accountChanged(user);
+      });
+      // Token refreshes are Siri-only. Keep the app's original UID-distinct
+      // listener so a token refresh does not replay its auth/UI side effects.
+      _siriIdTokenSubscription = _auth.idTokenChanges().listen((User? user) async {
+        if (user != null) await SiriIntegration.instance.refreshSession(user);
       });
       _idTokenSubscription = _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
+        unawaited(ProactivityRuntime.outbox.bindOwner(user != null && !user.isAnonymous ? user.uid : null));
         AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
           Logger.debug('User is currently signed out or the token has been revoked!');
@@ -109,7 +120,7 @@ class AuthenticationProvider extends BaseProvider {
         }
         notifyListeners();
       });
-      _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) {
+      _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) async {
         _requiresReauthentication = true;
         _sessionExpirationGeneration++;
         user = null;
@@ -119,6 +130,7 @@ class AuthenticationProvider extends BaseProvider {
           clearAllUserState(rootContext);
         }
         notifyListeners();
+        await SiriIntegration.instance.accountChanged(null);
       });
     });
   }
@@ -133,6 +145,7 @@ class AuthenticationProvider extends BaseProvider {
   void dispose() {
     _authStateSubscription?.cancel();
     _idTokenSubscription?.cancel();
+    _siriIdTokenSubscription?.cancel();
     _sessionExpiredSubscription?.cancel();
     super.dispose();
   }
@@ -339,8 +352,7 @@ class AuthenticationProvider extends BaseProvider {
           final sourceToken = await FirebaseAuth.instance.currentUser?.getIdToken();
 
           // Sign out current anonymous user
-          AuthService.instance.handleAuthUserChanged(null);
-          await FirebaseAuth.instance.signOut();
+          await AuthService.instance.signOutForAccountSwitch();
 
           // Sign in with existing account
           await FirebaseAuth.instance.signInWithCredential(existingCred!);

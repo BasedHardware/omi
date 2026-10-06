@@ -7,6 +7,7 @@ the OpenAI-compatible chat-completions contract; direct specialist traffic keeps
 Anthropic's native streaming contract.
 """
 
+import base64
 import json
 import uuid
 import asyncio
@@ -65,6 +66,7 @@ from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_mess
 from utils.retrieval.tools.conversation_jit_gate import (
     append_jit_conversation_retrieval_prompt,
 )
+from utils.device_tools import DEVICE_TOOL_NAMES, build_device_tools, device_tool_timeout_for_stream_budget
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.chat_scope import build_chat_scope
 from utils.retrieval.safety import (
@@ -155,23 +157,26 @@ class _PerplexityWebSearchToolProxy:
 
     @property
     def args_schema(self):
+        class _FallbackArgsSchema:
+            @classmethod
+            def schema(cls):
+                return {
+                    'properties': {'query': {'type': 'string'}},
+                    'required': ['query'],
+                }
+
         try:
             from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
-
-            return perplexity_web_search_tool.args_schema
         except ModuleNotFoundError as error:
             if error.name != 'langchain_core.tools':
                 raise
-
-            class _FallbackArgsSchema:
-                @classmethod
-                def schema(cls):
-                    return {
-                        'properties': {'query': {'type': 'string'}},
-                        'required': ['query'],
-                    }
-
             return _FallbackArgsSchema
+
+        # Under the LangChain-stub harness the @tool decorator is a passthrough, so the
+        # imported object is a bare function with no args_schema. The real decorator always
+        # supplies one, so falling back here cannot mask a production schema loss.
+        schema = getattr(perplexity_web_search_tool, 'args_schema', None)
+        return schema if schema is not None else _FallbackArgsSchema
 
     async def ainvoke(self, tool_input, config=None):
         from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
@@ -315,8 +320,10 @@ JIT_ONLY_TOOL_NAMES = frozenset(
     )
 )
 
-# Standard tool names (used to detect app tools by exclusion)
-STANDARD_TOOL_NAMES = {t.name for t in CORE_TOOLS}
+# Standard tool names (used to detect app tools by exclusion). Device tools are
+# included because they are named like core tools (propose_message), and
+# _extract_app_id would otherwise read "propose" as an app id.
+STANDARD_TOOL_NAMES = {t.name for t in CORE_TOOLS} | set(DEVICE_TOOL_NAMES)
 
 
 def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str:
@@ -408,6 +415,10 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         else:
             await self.queue.put(f"think: {text}")
 
+    async def put_memory_action(self, action: str):
+        if action in {'saved', 'updated'}:
+            await self.queue.put(f"memory: {action}")
+
     def put_thought_nowait(self, text, app_id: Optional[str] = None):
         if app_id:
             self._put_nowait_threadsafe(f"think: {text}|app_id:{app_id}")
@@ -416,6 +427,16 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 
     def put_data_nowait(self, text):
         self._put_nowait_threadsafe(f"data: {text}")
+
+    async def put_device_tool_request(self, request: dict):
+        """Ask the client to run a tool that only exists on their device.
+
+        Emitted on the stream that is already open for this turn, so the turn
+        stays live while the user answers instead of being suspended and resumed.
+        Base64 keeps arbitrary message text off the line-delimited SSE grammar.
+        """
+        encoded = base64.b64encode(json.dumps(request).encode('utf-8')).decode('utf-8')
+        await self.queue.put(f"tool: {encoded}")
 
     async def end(self):
         await self.queue.put(None)
@@ -583,6 +604,11 @@ async def _execute_independent_tool_calls(
     for call, result in zip(validated, results_text):
         tool_name = name_of(call)
         logger.info('Tool ended: %s', tool_name)
+        if tool_name == 'save_user_preference_tool':
+            if result.startswith('Preference updated (memory_id='):
+                await callback.put_memory_action('updated')
+            elif result.startswith('Preference saved (memory_id='):
+                await callback.put_memory_action('saved')
         await _emit_calendar_status(callback, tool_name, result)
         try:
             safety_guard.check_context_size(result)
@@ -724,12 +750,83 @@ async def _emit_calendar_status(callback: AsyncStreamingCallback, tool_name: str
 # ---------------------------------------------------------------------------
 
 
+_CONTINUATION_REQUESTS = frozenset(
+    {
+        'carry on',
+        'continue',
+        'continue from where you left off please',
+        'continue please',
+        'continue where you left off please',
+        'continue from where you left off',
+        'continue where you left off',
+        'continue with the next part',
+        'go on',
+        'keep going',
+        'next part',
+        'please continue',
+        'please continue from where you left off',
+        'please continue where you left off',
+        'please resume',
+        'resume',
+        'resume from where you left off',
+        'resume from where you left off please',
+        'resume please',
+        'resume where you left off',
+        'resume where you left off please',
+    }
+)
+_CONTINUATION_CONTRACT = """<continuation_request>
+Resume the immediately preceding assistant response at its exact endpoint. Treat
+that response as already delivered, complete any unfinished sentence or
+structure, and keep following the original request and formatting constraints.
+Do not restart, summarize, restate, or repeat content already delivered.
+</continuation_request>"""
+
+
+def _is_explicit_continuation_request(text: str) -> bool:
+    """Match only short, unambiguous commands that refer to the prior answer."""
+    normalized = ' '.join(text.casefold().strip().strip(',.!?…').split())
+    return normalized in _CONTINUATION_REQUESTS
+
+
+def _with_continuation_contract(messages: list) -> list:
+    """Annotate a bare continuation turn when it directly follows an answer.
+
+    A plain ``Continue`` previously reached the model as ordinary user text. On
+    long, multipart answers that left the model free to reinterpret the original
+    request and start again. Keep the user's text intact, but add a narrow resume
+    contract only when the immediately preceding provider turn is a non-empty
+    assistant answer. More specific requests continue through unchanged.
+    """
+    if len(messages) < 2:
+        return messages
+
+    previous = messages[-2]
+    latest = messages[-1]
+    if previous.get('role') != 'assistant' or latest.get('role') != 'user':
+        return messages
+
+    previous_content = previous.get('content')
+    latest_content = latest.get('content')
+    if not isinstance(previous_content, str) or not previous_content.strip():
+        return messages
+    if not isinstance(latest_content, str) or not _is_explicit_continuation_request(latest_content):
+        return messages
+
+    marked = list(messages)
+    marked[-1] = {**latest, 'content': f'{latest_content}\n\n{_CONTINUATION_CONTRACT}'}
+    return marked
+
+
 def _messages_to_anthropic(messages: List[Message]) -> list:
     """Convert chat messages to Anthropic API format."""
     anthropic_messages = []
     for msg in messages:
         role = "assistant" if msg.sender == "ai" else "user"
-        anthropic_messages.append({"role": role, "content": msg.text})
+        content = msg.text
+        if msg.sender != 'ai' and msg.files_id:
+            content += f"\n[Files attached to this turn: {', '.join(msg.files_id)}]"
+        anthropic_messages.append({"role": role, "content": content})
     return anthropic_messages
 
 
@@ -1374,10 +1471,11 @@ async def execute_agentic_chat_stream(
     current_datetime_block: Optional[str] = None,
     tz: Optional[str] = None,
     setup_deadline_at: Optional[float] = None,
+    device_tool_names: Optional[set] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
-    Yields formatted chunks with "data: " or "think: " prefixes.
+    Yields formatted chunks with "data: ", "think: " or "tool: " prefixes.
     ``setup_deadline_at`` is an absolute loop-clock deadline shared with the
     chat router so metadata + prompt/tool load use one setup budget.
     """
@@ -1513,6 +1611,18 @@ Available app tool names: {app_tool_names}
 IMPORTANT: Always call a matching integration tool when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
 </available_app_tools>"""
 
+    system_prompt += """
+<chat_memory_and_files>
+Every turn keeps the conversation history and memory tools. A file attached to
+an earlier turn is relevant only when the user's current request refers to it;
+use search_files_tool with the IDs shown in that turn's history when needed.
+When the user corrects a saved preference, look up its memory ID and call
+save_user_preference_tool with replace_memory_id. Set user_stated=true only
+for a preference the user directly asserted, not one inferred from context.
+Say a memory was updated only when the tool reports "Preference updated";
+an additional save is not an update. Do not claim a write after a tool error.
+</chat_memory_and_files>"""
+
     # Instruct the model to use fetch_url_tool for any direct URL in the conversation.
     system_prompt += """
 
@@ -1525,9 +1635,45 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # the visible text below and delivered as one structured chip instead.
     system_prompt += FOLLOWUP_PROMPT_SECTION
 
+    # The callback is created before tool conversion because device tools close
+    # over it: their execution is a round trip to the client on this stream.
+    callback = AsyncStreamingCallback()
+
+    stream_started_at = asyncio.get_running_loop().time()
+
+    def device_tool_timeout() -> int:
+        remaining = AGENT_STREAM_MAX_DURATION_SECONDS - (asyncio.get_running_loop().time() - stream_started_at)
+        return min(
+            max(0, int(remaining)),
+            device_tool_timeout_for_stream_budget(remaining),
+        )
+
+    # Device tools the client declared it can run. Appended after the fixed core
+    # list so the cached tools prefix stays byte-stable for clients that declare
+    # none, and stable per-client for those that do. Unlike app tools these are
+    # immediately visible — the model cannot discover them via tool search.
+    device_tools = build_device_tools(
+        uid,
+        set(device_tool_names or ()),
+        callback,
+        timeout_seconds=device_tool_timeout,
+    )
+    if device_tools:
+        device_tool_list = ', '.join(sorted(t.name for t in device_tools))
+        logger.info('Device tools available uid=%s tools=%s', uid, device_tool_list)
+        system_prompt += f"""
+
+<device_tools>
+These tools run on the user's own device, not on the server: {device_tool_list}
+
+propose_message opens the system compose sheet — it does NOT send. Only report a
+message as sent when the tool result says status=sent. If it says cancelled, the
+user chose not to send; acknowledge that rather than retrying.
+</device_tools>"""
+
     # Live chat-agent tools are OpenAI chat-completions functions. Perplexity
     # covers web search; Anthropic server tools are not on this lane.
-    tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
+    tool_schemas, tool_registry = _convert_tools(core_tools + device_tools, app_tools)
     tool_registry = dict(tool_registry)
     tool_registry[perplexity_web_search_tool.name] = perplexity_web_search_tool
     tool_schemas = [*tool_schemas, _langchain_tool_to_openai(perplexity_web_search_tool)]
@@ -1535,12 +1681,12 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Build the provider-neutral role/content message shape. The current datetime is injected
     # into the user turn (not the system prompt) so the direct Anthropic cache prefix stays stable.
     anthropic_messages = _messages_to_anthropic(messages)
+    anthropic_messages = _with_continuation_contract(anthropic_messages)
     anthropic_messages = _inject_current_datetime(
         anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
     )
 
-    callback = AsyncStreamingCallback()
-
+    # Conversations collected by tools for citation
     conversations_collected = []
     evidence_references = []
 
@@ -1561,7 +1707,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "chat_session_id": chat_session.id if chat_session else None,
         "client_kind": client_kind,
         "jit_conversation_retrieval_enabled": jit_conversation_retrieval_enabled,
-        "tools": core_tools + app_tools,
+        "tools": core_tools + device_tools + app_tools,
         "chat_scope": chat_scope,
     }
 
@@ -1630,7 +1776,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # client, but the first-event clock below still bounds silence from the producer
     # (post-setup TTFT) separately from that setup progress.
     try:
-        started_at = asyncio.get_running_loop().time()
+        started_at = stream_started_at
         received_first_event = False
         while True:
             remaining_seconds = AGENT_STREAM_MAX_DURATION_SECONDS - (asyncio.get_running_loop().time() - started_at)

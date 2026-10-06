@@ -34,7 +34,8 @@ Color get _infoIconColor => OmiColors.textSecondary;
 ///   "not undone", so its caller commits).
 /// * The surface stays neutral (the theme's snackbar colour); colour lives on the icon only, so
 ///   text keeps its contrast.
-/// * Floating, clear of the home shell's tab bar and chat bar via [bottomClearance].
+/// * Floating, clear of the home shell's tab bar and chat bar via [bottomClearance], and of a
+///   pushed page's pinned bottom action via [OmiFeedbackClearance].
 ///
 /// ```dart
 /// OmiFeedback.confirm(context, l10n.memoryUpdated);
@@ -74,7 +75,8 @@ abstract final class OmiFeedback {
   /// when it timed out, was swiped away or was replaced — the caller commits the delete then.
   ///
   /// There is deliberately no close button: nothing on an undo toast means "destroy this sooner".
-  static Future<bool> undo(BuildContext context, String message, {required VoidCallback onUndo}) async {
+  /// [icon] replaces the delete glyph when the deferred action is not a delete (a label, a mark).
+  static Future<bool> undo(BuildContext context, String message, {required VoidCallback onUndo, IconData? icon}) async {
     final controller = _show(
       context,
       message,
@@ -82,6 +84,7 @@ abstract final class OmiFeedback {
       duration: OmiFeedbackTiming.undo,
       actionLabel: context.l10n.undo,
       onAction: onUndo,
+      icon: icon,
     );
     if (controller == null) return false;
     final reason = await controller.closed;
@@ -99,6 +102,7 @@ abstract final class OmiFeedback {
     String? actionLabel,
     VoidCallback? onAction,
     bool showClose = false,
+    IconData? icon,
   }) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return null;
@@ -112,6 +116,7 @@ abstract final class OmiFeedback {
         actionLabel: actionLabel,
         onAction: onAction,
         showClose: showClose,
+        icon: icon,
       ),
     );
   }
@@ -126,6 +131,7 @@ abstract final class OmiFeedback {
     String? actionLabel,
     VoidCallback? onAction,
     bool showClose = false,
+    IconData? icon,
   }) {
     return SnackBar(
       behavior: SnackBarBehavior.floating,
@@ -141,7 +147,7 @@ abstract final class OmiFeedback {
         liveRegion: true,
         child: Row(
           children: [
-            _icon(kind),
+            _icon(kind, icon),
             const SizedBox(width: 12),
             Expanded(child: Text(message)),
           ],
@@ -154,6 +160,8 @@ abstract final class OmiFeedback {
   }
 
   static double _extraBottom(BuildContext context) {
+    final local = context.getInheritedWidgetOfExactType<OmiFeedbackClearance>();
+    if (local != null) return local.bottom;
     final clearance = bottomClearance;
     if (clearance == null) return 0;
     final navigator = Navigator.maybeOf(context, rootNavigator: true);
@@ -161,7 +169,8 @@ abstract final class OmiFeedback {
     return clearance(navigator.context);
   }
 
-  static Widget _icon(OmiFeedbackKind kind) {
+  static Widget _icon(OmiFeedbackKind kind, IconData? icon) {
+    if (icon != null) return Icon(icon, size: 20, color: _infoIconColor);
     return switch (kind) {
       OmiFeedbackKind.confirm => Icon(Icons.check_circle_rounded, size: 20, color: _successIconColor),
       OmiFeedbackKind.error => Icon(Icons.error_rounded, size: 20, color: _errorIconColor),
@@ -176,4 +185,18 @@ abstract final class OmiFeedback {
         ),
     };
   }
+}
+
+/// Lifts toasts shown from inside [child] by [bottom] points, clear of a pinned bottom action the
+/// page draws over its content (the conversation page's Ask Omi bar). Takes precedence over
+/// [OmiFeedback.bottomClearance] for those toasts. A sheet shown from the page is not inside it; pass
+/// the page's context to [OmiFeedback] when such a toast lands on the page.
+class OmiFeedbackClearance extends InheritedWidget {
+  const OmiFeedbackClearance({super.key, required this.bottom, required super.child});
+
+  /// Extra space above the safe area.
+  final double bottom;
+
+  @override
+  bool updateShouldNotify(OmiFeedbackClearance oldWidget) => bottom != oldWidget.bottom;
 }

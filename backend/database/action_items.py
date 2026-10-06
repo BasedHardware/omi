@@ -221,6 +221,10 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial:
         action_item_data.setdefault('provenance', [])
         action_item_data.setdefault('sort_order', 0)
         action_item_data.setdefault('indent_level', 0)
+    else:
+        for field in ('description', 'owner', 'source', 'provenance', 'sort_order', 'indent_level', 'exported'):
+            if field in action_item_data and action_item_data.get(field) is None:
+                action_item_data.pop(field)
     # Normalize date fields to timezone-aware UTC datetimes. These can arrive as
     # ISO strings or datetime objects from tool-/LLM-created action items (extraction
     # models use plain ``datetime``, not ``AwareDatetime``). Firestore rejects
@@ -404,7 +408,7 @@ def create_action_items_batch(
     uid: str,
     action_items_data: List[Dict[str, Any]],
     *,
-    document_ids: Optional[List[str]] = None,
+    document_ids: Optional[List[Optional[str]]] = None,
 ) -> List[str]:
     """
     Create multiple action items in a batch operation.
@@ -412,6 +416,7 @@ def create_action_items_batch(
     Args:
         uid: User ID
         action_items_data: List of action item data dictionaries
+        document_ids: Optional per-item ids; a None entry gets a fresh Firestore id
 
     Returns:
         List of created action item IDs
@@ -439,9 +444,8 @@ def create_action_items_batch(
         if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
-        doc_ref = (
-            action_items_ref.document(document_ids[index]) if document_ids is not None else action_items_ref.document()
-        )
+        reserved_id = document_ids[index] if document_ids is not None else None
+        doc_ref = action_items_ref.document(reserved_id) if reserved_id is not None else action_items_ref.document()
         prepared_items.append(action_item_data)
         document_refs.append(doc_ref)
         doc_refs.append(doc_ref.id)
@@ -547,6 +551,7 @@ ACTION_ITEMS_LIST_SELECT_FIELDS = (
     'export_date',
     'export_platform',
     'apple_reminder_id',
+    'sync_requested',
 )
 
 
@@ -572,6 +577,7 @@ def _stream_action_items_bounded(
     *,
     max_docs: int,
     budget: Optional[ListReadBudget] = None,
+    extra_fields: tuple[str, ...] = (),
 ) -> tuple[List[Dict[str, Any]], int]:
     """Stream at most max_docs Firestore documents; skip soft-deleted rows.
 
@@ -586,7 +592,7 @@ def _stream_action_items_bounded(
     document_count = 0
     if max_docs <= 0:
         return action_items, 0
-    query = query.select(list(ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(max_docs)
+    query = query.select([*ACTION_ITEMS_LIST_SELECT_FIELDS, *extra_fields]).limit(max_docs)
     if budget is None:
         iterator = query.stream()
     else:
@@ -721,6 +727,66 @@ def _probe_legacy_completion_rows(
     )
 
 
+def _harvest_legacy_docs(base_query_fn, budget, need, seen, active, can_probe_legacy):
+    should_scan_legacy = True
+    total_docs = 0
+
+    if can_probe_legacy:
+        probe_ledger = _LegacyCompletionProbeLedger()
+        try:
+            legacy_probe = _probe_legacy_completion_rows(
+                base_query_fn(),
+                budget=budget,
+                ledger=probe_ledger,
+            )
+            should_scan_legacy = legacy_probe.has_legacy_rows
+        except ListReadBudgetExhausted:
+            should_scan_legacy = False
+        except FirestoreDeadlineExceeded:
+            if budget is not None:
+                budget.mark_exhausted('deadline')
+                should_scan_legacy = False
+            else:
+                record_fallback(
+                    component='firestore_read',
+                    from_mode='legacy_completion_probe',
+                    to_mode='bounded_legacy_scan',
+                    reason='timeout',
+                    outcome='recovered',
+                    log=logger,
+                )
+        except (AttributeError, GoogleAPICallError, IndexError, TypeError, ValueError):
+            record_fallback(
+                component='firestore_read',
+                from_mode='legacy_completion_probe',
+                to_mode='bounded_legacy_scan',
+                reason='other',
+                outcome='recovered',
+                log=logger,
+            )
+        finally:
+            total_docs += probe_ledger.billed_reads
+
+    if should_scan_legacy and (budget is None or not budget.truncated):
+        legacy_scan = min(
+            _ACTION_ITEMS_LIST_HARD_MAX,
+            max(need * 8, 128),
+        )
+        raw_legacy, docs = _stream_action_items_bounded(base_query_fn(), max_docs=legacy_scan, budget=budget)
+        total_docs += docs
+        for item in raw_legacy:
+            if item['id'] in seen:
+                continue
+            if item.get('completed'):
+                continue
+            active.append(item)
+            seen.add(item['id'])
+
+    active.sort(key=_action_item_list_sort_key)
+    active = active[:need]
+    return active, total_docs
+
+
 def get_action_items(
     uid: str,
     conversation_id: Optional[str] = None,
@@ -732,6 +798,7 @@ def get_action_items(
     limit: Optional[int] = None,
     offset: int = 0,
     budget: Optional[ListReadBudget] = None,
+    extra_fields: tuple[str, ...] = (),
 ) -> List[Dict[str, Any]]:
     """
     Get action items for a user with optional filters.
@@ -784,7 +851,9 @@ def get_action_items(
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        items, docs = _stream_action_items_bounded(q, max_docs=_list_scan_budget(row_budget), budget=budget)
+        items, docs = _stream_action_items_bounded(
+            q, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
+        )
         total_docs += docs
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
@@ -798,10 +867,6 @@ def get_action_items(
         # Legacy/partial docs: completed missing or null. Equality filters exclude them; harvest
         # with a bounded unfiltered scan and keep only those that prepare to active and are new.
         if len(active) < need and not _out_of_budget():
-            should_scan_legacy = True
-            # The measured hot path is the unfiltered default list. Scoped date /
-            # conversation queries retain their old single-query shapes rather than
-            # adding new composite-index requirements to a compatibility optimization.
             can_probe_legacy = (
                 conversation_id is None
                 and start_date is None
@@ -809,69 +874,8 @@ def get_action_items(
                 and due_start_date is None
                 and due_end_date is None
             )
-            if can_probe_legacy:
-                probe_ledger = _LegacyCompletionProbeLedger()
-                try:
-                    legacy_probe = _probe_legacy_completion_rows(
-                        _base_query(),
-                        budget=budget,
-                        ledger=probe_ledger,
-                    )
-                    should_scan_legacy = legacy_probe.has_legacy_rows
-                except ListReadBudgetExhausted:
-                    should_scan_legacy = False
-                except FirestoreDeadlineExceeded:
-                    if budget is not None:
-                        budget.mark_exhausted('deadline')
-                        should_scan_legacy = False
-                    else:
-                        # Without a request-derived timeout, an aggregation
-                        # deadline is an optimization failure, not proof that
-                        # legacy rows are absent. Preserve the released scan.
-                        record_fallback(
-                            component='firestore_read',
-                            from_mode='legacy_completion_probe',
-                            to_mode='bounded_legacy_scan',
-                            reason='timeout',
-                            outcome='recovered',
-                            log=logger,
-                        )
-                except (AttributeError, GoogleAPICallError, IndexError, TypeError, ValueError):
-                    # Aggregation is an optimization boundary. If it is unavailable,
-                    # retain the exact released behavior and make that recovery visible.
-                    record_fallback(
-                        component='firestore_read',
-                        from_mode='legacy_completion_probe',
-                        to_mode='bounded_legacy_scan',
-                        reason='other',
-                        outcome='recovered',
-                        log=logger,
-                    )
-                finally:
-                    # A successful first count is billable even if the second
-                    # count fails or a budget charge raises. Keep family
-                    # attribution complete on fallback and truncation paths.
-                    total_docs += probe_ledger.billed_reads
-
-            if should_scan_legacy and not _out_of_budget():
-                # Bound unfiltered scan generously enough to product-sort before capping:
-                # early-stopping mid-stream would freeze Firestore order instead of due-date order.
-                legacy_scan = min(
-                    _ACTION_ITEMS_LIST_HARD_MAX,
-                    max(need * 8, 128),
-                )
-                raw_legacy, docs = _stream_action_items_bounded(_base_query(), max_docs=legacy_scan, budget=budget)
-                total_docs += docs
-                for item in raw_legacy:
-                    if item['id'] in seen:
-                        continue
-                    # Only pull true actives from the unfiltered scan into the active bucket.
-                    if item.get('completed'):
-                        continue
-                    active.append(item)
-                    seen.add(item['id'])
-            active.sort(key=_action_item_list_sort_key)
-            active = active[:need]
+            active, docs_billed = _harvest_legacy_docs(_base_query, budget, need, seen, active, can_probe_legacy)
+            total_docs += docs_billed
 
         if len(active) >= need or _out_of_budget():
             action_items = active
@@ -949,18 +953,13 @@ def get_active_action_item_by_description(uid: str, description: str) -> Optiona
     return None
 
 
-def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
-    """
-    Get all action items for a specific conversation.
+def get_action_items_by_conversation(
+    uid: str, conversation_id: str, *, extra_fields: tuple[str, ...] = ()
+) -> List[Dict[str, Any]]:
+    """A conversation's live action items; ``extra_fields`` widens the projection of its bucket reads.
 
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-
-    Returns:
-        List of action items for the conversation
-    """
-    return get_action_items(uid, conversation_id=conversation_id)
+    Legacy rows harvested for a missing ``completed`` keep the plain list projection."""
+    return get_action_items(uid, conversation_id=conversation_id, extra_fields=extra_fields)
 
 
 def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Dict[str, int]:
@@ -1095,6 +1094,8 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
         )
         if updated:
             bump_action_items_list_version(uid)
+            if update_data.get('completed') is True:
+                _record_followup_completion(uid, action_item_id)
         return updated
 
     # Check if exists
@@ -1106,6 +1107,8 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
 
     # Update the document
     action_item_ref.update(update_data)
+    if update_data.get('completed') is True:
+        _record_followup_completion(uid, action_item_id)
     bump_action_items_list_version(uid)
 
     return True
@@ -1174,6 +1177,12 @@ def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = 
 # *****************************
 
 
+def _purge_proactivity_source(uid: str, item_id: str) -> None:
+    from database.proactivity import purge_source_items
+
+    purge_source_items(uid=uid, source_kind='action_item', source_id=item_id, firestore_client=db)
+
+
 def delete_action_item(uid: str, action_item_id: str) -> bool:
     """
     Delete an action item.
@@ -1190,10 +1199,12 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
 
     # Check if exists
     if not action_item_ref.get().exists:
+        _purge_proactivity_source(uid, action_item_id)
         return False
 
     # Delete the document
     action_item_ref.delete()
+    _purge_proactivity_source(uid, action_item_id)
     bump_action_items_list_version(uid)
 
     return True
@@ -1227,6 +1238,8 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     if count > 0:
         batch.commit()
 
+    for item_id in action_item_ids:
+        _purge_proactivity_source(uid, item_id)
     bump_action_items_list_version(uid)
     return list(action_item_ids)
 
@@ -1250,16 +1263,28 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     docs = query.stream()
     batch = db.batch()
     count = 0
+    total = 0
+    removed_ids = []
 
     for doc in docs:
         batch.delete(doc.reference)
+        removed_ids.append(doc.id)
         count += 1
+        total += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
     if count > 0:
         batch.commit()
+
+    for item_id in removed_ids:
+        _purge_proactivity_source(uid, item_id)
+    if total > 0:
         bump_action_items_list_version(uid)
 
-    return count
+    return total
 
 
 def retire_action_items_for_conversation(
@@ -1280,6 +1305,8 @@ def retire_action_items_for_conversation(
     )
     batch = db.batch()
     count = 0
+    total = 0
+    removed_ids = []
     now = datetime.now(timezone.utc)
     for doc in query.stream():
         if doc.id in active_id_set:
@@ -1296,11 +1323,20 @@ def retire_action_items_for_conversation(
                 'updated_at': now,
             },
         )
+        removed_ids.append(doc.id)
         count += 1
-    if count:
+        total += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    if count > 0:
         batch.commit()
+    for item_id in removed_ids:
+        _purge_proactivity_source(uid, item_id)
+    if total > 0:
         bump_action_items_list_version(uid)
-    return count
+    return total
 
 
 # *****************************
@@ -1318,11 +1354,18 @@ def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
     now = datetime.now(timezone.utc)
 
     batch = db.batch()
+    count = 0
     for item_id in item_ids:
         doc_ref = action_items_ref.document(item_id)
         batch.update(doc_ref, {'sync_requested': True, 'updated_at': now})
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
     bump_action_items_list_version(uid)
 
 
@@ -1396,6 +1439,8 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
             result.missing_ids.append(entry['id'])
             continue
         result.updated_ids.append(entry['id'])
+        if update_data.get('completed') is True:
+            _record_followup_completion(uid, entry['id'])
 
     if result.updated_ids:
         bump_action_items_list_version(uid)
@@ -1577,3 +1622,12 @@ def get_scores(
         'default_tab': default_tab,
         'date': day.strftime('%Y-%m-%d'),
     }
+
+
+def _record_followup_completion(uid: str, task_id: str) -> None:
+    from database.proactivity_producers import record_task_completion
+
+    try:
+        record_task_completion(uid, task_id, firestore_client=db)
+    except Exception:
+        logger.info('commitment_followup outcome_unavailable')

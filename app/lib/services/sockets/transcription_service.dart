@@ -17,6 +17,7 @@ import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/hard_secret_detector.dart';
 import 'package:omi/utils/logger.dart';
@@ -230,6 +231,31 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       _binaryAudioBytesSent += audioFrame.length;
     }
     return;
+  }
+
+  /// S1 optional source unit. WebSocket ordering binds this control record to
+  /// exactly the next binary frame; the server verifies its byte digest.
+  void sendEvidenceFrame(WalFrame frame) {
+    final root = frame.captureRoot;
+    final ordinal = frame.sourceFramePosition;
+    final epoch = frame.sourceClockEpoch;
+    if (root == null || ordinal == null || epoch == null) {
+      send(frame.payload);
+      return;
+    }
+    if (_socket.status != PureSocketStatus.connected) return;
+    _socket.send(jsonEncode({
+      'type': 'capture_evidence_frame',
+      'version': 1,
+      'capture_root': root,
+      'clock_epoch': epoch,
+      'source_frame': ordinal,
+      'byte_length': frame.payload.length,
+    }));
+    _socket.send(frame.payload);
+    if (_socket.status == PureSocketStatus.connected) {
+      _binaryAudioBytesSent += frame.payload.length;
+    }
   }
 
   Future sendText(String message) async {

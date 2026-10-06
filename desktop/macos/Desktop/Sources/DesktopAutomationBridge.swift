@@ -746,6 +746,7 @@ final class DesktopAutomationActionRegistry {
     guard !didRegisterBuiltins else { return }
     didRegisterBuiltins = true
     registerOpenOmiShortcutActionsForQA()
+    registerProactiveCaptureStatusSnapshot()
     register(
       name: "set_automation_ui_presentation",
       effects: [.localState],
@@ -1072,7 +1073,6 @@ final class DesktopAutomationActionRegistry {
       )
     }
 
-    registerContextBucketDirectorProbe()
     register(
       name: "set_contextual_task_focus",
       effects: [.localState],
@@ -2619,6 +2619,15 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "device_tools_probe",
+      effects: [],
+      summary: "Probe the on-device tool surface without reading real messages or sending anything",
+      params: ["messagesDbPath"]
+    ) { params in
+      await DeviceToolsProbe.run(messagesDbPath: params["messagesDbPath"])
+    }
+
+    register(
       name: "delete_conversation",
       effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Delete conversation with cascade (API + conversationDeleted notification)",
@@ -3314,7 +3323,7 @@ final class DesktopAutomationActionRegistry {
         source: params["source"] ?? "harness"
       )
       if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
-        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+        _ = try? await MemoryStorage.shared.syncServerMemories(page.memories)
       }
       let memoryCount = (try? await MemoryStorage.shared.getLocalMemoriesCount()) ?? 0
       return [
@@ -3351,7 +3360,7 @@ final class DesktopAutomationActionRegistry {
       }
       try await APIClient.shared.editMemory(id: id, content: content)
       if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
-        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+        _ = try? await MemoryStorage.shared.syncServerMemories(page.memories)
       }
       return [
         "edited": id,
@@ -3383,7 +3392,7 @@ final class DesktopAutomationActionRegistry {
       try await APIClient.shared.deleteMemory(id: id)
       try? await MemoryStorage.shared.deleteMemoryByBackendId(id)
       if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
-        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+        _ = try? await MemoryStorage.shared.syncServerMemories(page.memories)
       }
       let memoryCount = (try? await MemoryStorage.shared.getLocalMemoriesCount()) ?? 0
       return [
@@ -3989,13 +3998,11 @@ final class DesktopAutomationActionRegistry {
       params: []
     ) { _ in
       let task = TaskAssistantSettings.shared
-      let insight = InsightAssistantSettings.shared
       let memory = MemoryAssistantSettings.shared
       let assistant = AssistantSettings.shared
       return [
         "task_enabled": task.isEnabled ? "true" : "false",
         "task_chat_agent_enabled": TaskAgentSettings.shared.isChatEnabled ? "true" : "false",
-        "insight_enabled": insight.isEnabled ? "true" : "false",
         "memory_enabled": memory.isEnabled ? "true" : "false",
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
         "transcription_enabled": assistant.audioRecordingMode != .off ? "true" : "false",

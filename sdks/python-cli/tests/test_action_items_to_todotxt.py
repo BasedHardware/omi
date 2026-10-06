@@ -159,6 +159,136 @@ class TestActionItemsToTodoTxt(unittest.TestCase):
         # real-done control item
         self.assertIn("x done task omi:real-done", lines)
 
+    def test_extract_action_items_envelopes(self):
+        item1 = {"id": "a1", "description": "Item 1", "completed": False}
+        item2 = {"id": "a2", "description": "Item 2", "completed": True}
+
+        # Bare list
+        self.assertEqual(ai2todo.extract_action_items([item1, item2]), [item1, item2])
+        self.assertEqual(ai2todo.extract_action_items([]), [])
+
+        # Wrapped envelopes
+        self.assertEqual(ai2todo.extract_action_items({"action_items": [item1, item2]}), [item1, item2])
+        self.assertEqual(ai2todo.extract_action_items({"items": [item1]}), [item1])
+        self.assertEqual(ai2todo.extract_action_items({"data": [item2]}), [item2])
+
+        # Precedence: action_items > items > data
+        self.assertEqual(
+            ai2todo.extract_action_items({"action_items": [item1], "items": [item2]}),
+            [item1],
+        )
+
+        # Empty envelopes
+        self.assertEqual(ai2todo.extract_action_items({"action_items": []}), [])
+        self.assertEqual(ai2todo.extract_action_items({"items": []}), [])
+        self.assertEqual(ai2todo.extract_action_items({"data": []}), [])
+
+        # Non-envelope dictionary returns None (raises ValueError on convert)
+        self.assertIsNone(ai2todo.extract_action_items(item1))
+        self.assertIsNone(ai2todo.extract_action_items({"action_items": "not-a-list"}))
+        self.assertIsNone(ai2todo.extract_action_items("not-a-dict"))
+        self.assertIsNone(ai2todo.extract_action_items(123))
+        self.assertIsNone(ai2todo.extract_action_items(None))
+
+    def test_export_wrapped_envelope(self):
+        for key in ("action_items", "items", "data"):
+            destination = self.tmp / f"todo_{key}.txt"
+            source = self.tmp / f"{key}.json"
+            source.write_text(
+                json.dumps({key: [{"id": f"task_{key}", "description": f"Test {key}", "completed": False}]}),
+                encoding="utf-8",
+            )
+            counts = ai2todo.convert(source, destination, JST)
+            lines = destination.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(counts, (1, 1))
+            self.assertEqual(lines, [f"Test {key} omi:task_{key}"])
+
+    def test_export_empty_envelope_produces_empty_file(self):
+        for key in ("action_items", "items", "data"):
+            destination = self.tmp / f"todo_empty_{key}.txt"
+            source = self.tmp / f"empty_{key}.json"
+            source.write_text(json.dumps({key: []}), encoding="utf-8")
+            counts = ai2todo.convert(source, destination, JST)
+            lines = destination.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(counts, (0, 0))
+            self.assertEqual(lines, [])
+            self.assertTrue(destination.exists())
+
+    def test_utf8_bom_handling(self):
+        destination = self.tmp / "todo_bom.txt"
+        source = self.tmp / "bom.json"
+        payload = json.dumps([{"id": "bom1", "description": "BOM test", "completed": False}]).encode("utf-8-sig")
+        source.write_bytes(payload)
+        counts = ai2todo.convert(source, destination, JST)
+        lines = destination.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(counts, (1, 1))
+        self.assertEqual(lines, ["BOM test omi:bom1"])
+
+
+    def test_strip_surrogates_keeps_valid_text(self):
+        """Only unpaired surrogates are dropped; all other text is preserved."""
+        self.assertEqual(ai2todo.strip_surrogates("plain"), "plain")
+        self.assertEqual(ai2todo.strip_surrogates("中文 ok"), "中文 ok")
+        self.assertEqual(ai2todo.strip_surrogates("emoji \U0001F600 ok"), "emoji \U0001F600 ok")
+        self.assertEqual(ai2todo.strip_surrogates("a\ud800b"), "ab")
+        self.assertEqual(ai2todo.strip_surrogates("\udfff"), "")
+
+    def test_lone_surrogate_in_description_does_not_abort_conversion(self):
+        """Regression: a lone surrogate must not abort the export.
+
+        json.loads accepts an escaped lone surrogate (e.g. "\\ud800") from a malformed
+        export. It reached the rendered file verbatim, so `payload.encode("utf-8")`
+        raised UnicodeEncodeError and the whole export was lost.
+        """
+        items = [
+            {
+                "id": "t1",
+                "description": "do \ud800 it",
+                "completed": False,
+                "created_at": "2026-09-20T10:00:00Z",
+                "due_at": "2026-09-25T15:00:00Z",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "surrogate.json"
+            dst = Path(tmp) / "surrogate.out"
+            src.write_text(json.dumps(items), encoding="utf-8")
+            ai2todo.convert(str(src), str(dst), timezone.utc)
+            written = dst.read_text(encoding="utf-8")
+        self.assertIn("do it", written)
+
+    def test_leading_surrogate_does_not_hide_syntax_guards(self):
+        """A leading surrogate must not smuggle unescaped todo.txt syntax through.
+
+        Stripping only at the payload boundary left the marker invisible to
+        `task_text`, which then skipped its escaping; removing the surrogate
+        afterwards exposed a bare "x " and exported an open item as completed.
+        """
+        zwsp = "\u200b"
+        self.assertTrue(ai2todo.task_text("\ud800x task").startswith(zwsp))
+        self.assertTrue(ai2todo.task_text("\ud800(A) task").startswith(zwsp))
+        self.assertTrue(ai2todo.task_text("\ud8002026-09-25 task").startswith(zwsp))
+        self.assertEqual(ai2todo.task_text("buy milk"), "buy milk")
+
+    def test_open_item_with_leading_surrogate_stays_open(self):
+        """The written line must not read as a completed task."""
+        items = [
+            {
+                "id": "t1",
+                "description": "\ud800x task",
+                "completed": False,
+                "created_at": "2026-09-20T10:00:00Z",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "in.json"
+            dst = Path(tmp) / "out.txt"
+            src.write_text(json.dumps(items), encoding="utf-8")
+            ai2todo.convert(str(src), str(dst), timezone.utc)
+            line = dst.read_text(encoding="utf-8").strip()
+        self.assertFalse(line.startswith("x "), "open item was exported as completed: %r" % line)
+        self.assertIn("task", line)
+
 
 if __name__ == "__main__":
     unittest.main()

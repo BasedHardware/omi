@@ -158,6 +158,7 @@ async def test_accepted_live_attempt_terminals_once_with_the_same_failure_phase(
         )
     )
     monkeypatch.setattr(live_failure, 'record_live_stt_failure', lambda **_labels: None)
+    monkeypatch.setattr(live_failure, '_open_serving_provider_circuit', lambda *_args: False)
 
     await terminate_live_stt_session(
         websocket,

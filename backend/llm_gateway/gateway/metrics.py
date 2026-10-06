@@ -10,7 +10,7 @@ from prometheus_client import Counter, Gauge, Histogram
 
 from llm_gateway.gateway.accounting import AccountingEvent
 from llm_gateway.gateway.config_loader import GatewayConfig
-from llm_gateway.gateway.errors import GatewayError
+from llm_gateway.gateway.errors import GatewayError, GatewayErrorCode, INVALID_REQUEST_REJECTION_CODES
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, output_budget_bucket
 from llm_gateway.gateway.schemas import FailureClass, ProviderRejection, RouteServingClass
 
@@ -193,6 +193,7 @@ def observe_error(
         api_surface=api_surface,
         streaming=streaming,
         phase='before_output',
+        rejection_reason=invalid_request_reason(error),
     )
 
 
@@ -222,6 +223,7 @@ def observe_route_result(
     output_budget: str = 'none',
     completion_size: str = 'unknown',
     finish_reason: str = 'unknown',
+    rejection_reason: str = 'none',
 ) -> None:
     labels = {
         'lane_id': _bounded(lane_id),
@@ -260,7 +262,7 @@ def observe_route_result(
         'model=%s credential_source=%s outcome=%s error_class=%s route_serving_class=%s failure_class=%s '
         'fallback_used=%s fallback_from=%s fallback_to=%s '
         'provider_rejection=%s '
-        'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s',
+        'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s rejection_reason=%s',
         request_id,
         _bounded(api_surface),
         _bool_label(streaming),
@@ -283,6 +285,7 @@ def observe_route_result(
         labels['completion_size'],
         labels['finish_reason'],
         f'{ttfb_seconds:.6f}' if ttfb_seconds is not None else 'none',
+        _safe_rejection_reason(rejection_reason) if error_class == 'invalid_request' else 'none',
     )
 
 
@@ -290,15 +293,22 @@ def observe_auth_rejection(reason: str) -> None:
     AUTH_REJECTIONS_TOTAL.labels(reason=_bounded(reason)).inc()
 
 
-def observe_request_rejection(*, api_surface: str, error_class: str, request_id: str) -> None:
+def observe_request_rejection(
+    *, api_surface: str, error_class: str, request_id: str, error: GatewayError | None = None
+) -> None:
     surface_label = _bounded(api_surface)
     error_label = _bounded(error_class)
     REQUEST_REJECTIONS_TOTAL.labels(api_surface=surface_label, error_class=error_label).inc()
     logger.warning(
-        'llm_gateway_request_rejected request_id=%s surface=%s error_class=%s',
+        'llm_gateway_request_rejected request_id=%s surface=%s error_class=%s rejection_reason=%s',
         request_id,
         surface_label,
         error_label,
+        (
+            invalid_request_reason(error)
+            if error is not None
+            else ('unknown' if error_class == 'invalid_request' else 'none')
+        ),
     )
 
 
@@ -351,6 +361,44 @@ def report_observation_failure(*, api_surface: str, request_id: str) -> None:
 
 def time_request() -> float:
     return time.monotonic()
+
+
+_REJECTION_PARAM_ROOTS = frozenset(
+    {
+        'model',
+        'messages',
+        'response_format',
+        'stream',
+        'max_tokens',
+        'max_completion_tokens',
+        'state',
+        'questions',
+        'input',
+        'reasoning_effort',
+        'service_tier',
+        'prompt_cache_options',
+        'prompt_cache_breakpoint',
+        'task_type',
+        'title',
+    }
+)
+REJECTION_REASON_MAX_LENGTH = 64
+
+
+def _safe_rejection_reason(value: str) -> str:
+    allowed = INVALID_REQUEST_REJECTION_CODES | {f'parameter_{root}' for root in _REJECTION_PARAM_ROOTS}
+    return value[:REJECTION_REASON_MAX_LENGTH] if value in allowed else 'unknown'
+
+
+def invalid_request_reason(error: GatewayError) -> str:
+    if error.code != GatewayErrorCode.INVALID_REQUEST:
+        return 'none'
+    if error.rejection_reason is not None:
+        return _safe_rejection_reason(error.rejection_reason)
+    # Validators sometimes put caller-supplied question names or unsupported
+    # keys in param. Only emit a recognized root, never that dynamic suffix.
+    root = re.split(r'[.\[]', error.param or '', maxsplit=1)[0]
+    return _safe_rejection_reason(f'parameter_{root}')
 
 
 def _enum_label(value: object, *, default: str = 'unknown') -> str:

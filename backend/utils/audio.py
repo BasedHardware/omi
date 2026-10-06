@@ -1,6 +1,11 @@
 from collections import deque
 from typing import Deque, Optional, Tuple
 
+# Highest rate /v4/listen admits (utils.transcribe_decisions.SUPPORTED_SAMPLE_RATES). The ring
+# buffer never sizes itself past this rate, so a caller that skips validation cannot make it
+# allocate an unbounded bytearray.
+MAX_RING_BUFFER_SAMPLE_RATE = 48000
+
 
 class AudioRingBuffer:
     """Circular buffer storing last N seconds of PCM16 mono audio.
@@ -15,12 +20,13 @@ class AudioRingBuffer:
     def __init__(self, duration_seconds: float, sample_rate: int):
         self.sample_rate = sample_rate
         self.bytes_per_second = sample_rate * 2  # PCM16 mono
-        # A non-positive sample_rate or duration yields a zero (or, unclamped, negative) capacity.
-        # sample_rate reaches here straight from the /v4/listen query param, which is only range
-        # checked for opus codecs, so a pcm client can send 0 or a negative value. Clamp so
-        # bytearray() cannot raise "negative count" at construction. Mirrors resample_pcm, which
-        # guards the same non-positive rate.
-        self.capacity = max(0, int(duration_seconds * self.bytes_per_second))
+        # sample_rate comes from the /v4/listen query param. validate_audio_format restricts it to
+        # standard rates, but this buffer is the allocation an unchecked rate would blow up, so it
+        # also guards itself: a non-positive rate or duration yields a zero capacity (bytearray()
+        # cannot raise "negative count"; mirrors resample_pcm), and an oversized rate is capped at
+        # MAX_RING_BUFFER_SAMPLE_RATE (the buffer then retains fewer seconds rather than OOM the pod).
+        capped_bytes_per_second = min(self.bytes_per_second, MAX_RING_BUFFER_SAMPLE_RATE * 2)
+        self.capacity = max(0, int(duration_seconds * capped_bytes_per_second))
         self.buffer = bytearray(self.capacity)
         self.write_pos = 0
         self.total_bytes_written = 0
@@ -33,10 +39,18 @@ class AudioRingBuffer:
         self._buffered_bytes = 0
 
     def _append_bytes(self, data: bytes) -> None:
-        for byte in data:
-            self.buffer[self.write_pos] = byte
-            self.write_pos = (self.write_pos + 1) % self.capacity
-        self.total_bytes_written += len(data)
+        n = len(data)
+        copy = min(n, self.capacity)
+        source_offset = n - copy
+        start = (self.write_pos + source_offset) % self.capacity
+        dest = memoryview(self.buffer)
+        source = memoryview(data)[source_offset:]
+        first = min(copy, self.capacity - start)
+        dest[start : start + first] = source[:first]
+        if first < copy:
+            dest[: copy - first] = source[first:]
+        self.write_pos = (self.write_pos + n) % self.capacity
+        self.total_bytes_written += n
 
     def _record_span(self, start_ts: float, n_bytes: int) -> None:
         if n_bytes <= 0:

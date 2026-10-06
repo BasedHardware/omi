@@ -16,7 +16,9 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -27,7 +29,10 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// Asks before deleting one conversation. The "Don't ask again" row is allowed because every
 /// conversation delete is backed by an Undo toast; once ticked, this returns `true` without asking.
 /// Offline it explains why the delete cannot happen and returns `false`.
-Future<bool> confirmConversationDelete(BuildContext context) async {
+///
+/// With an [anchor] (a swiped row's delete button) the question is a menu that pops from it;
+/// without one it is the dialog card.
+Future<bool> confirmConversationDelete(BuildContext context, {Rect? anchor}) async {
   final l10n = context.l10n;
   if (!context.read<ConnectivityProvider>().isConnected) {
     await showOmiAlert(
@@ -39,13 +44,23 @@ Future<bool> confirmConversationDelete(BuildContext context) async {
   }
   final prefs = SharedPreferencesUtil();
   if (!prefs.showConversationDeleteConfirmation) return true;
-  final result = await showOmiConfirmWithOptOut(
-    context,
-    title: l10n.deleteConversationTitle,
-    message: l10n.deleteConversationMessage,
-    confirmLabel: l10n.delete,
-    destructive: true,
-  );
+  final result = anchor != null
+      ? await showOmiConfirmMenu(
+          context,
+          anchor: anchor,
+          title: l10n.deleteConversationTitle,
+          message: l10n.deleteConversationMessage,
+          confirmLabel: l10n.deleteConversation,
+          confirmIcon: const FaIcon(FontAwesomeIcons.trashCan),
+          offerOptOut: true,
+        )
+      : await showOmiConfirmWithOptOut(
+          context,
+          title: l10n.deleteConversationTitle,
+          message: l10n.deleteConversationMessage,
+          confirmLabel: l10n.delete,
+          destructive: true,
+        );
   if (result.confirmed && result.dontAskAgain) prefs.showConversationDeleteConfirmation = false;
   return result.confirmed;
 }
@@ -59,18 +74,19 @@ Future<void> deleteConversationsWithUndo(BuildContext context, List<ServerConver
   if (conversations.isEmpty) return;
   final provider = context.read<ConversationProvider>();
   final l10n = context.l10n;
-  for (final conversation in conversations) {
-    provider.deleteConversationLocally(conversation);
-  }
+  final pendingIndexDeletes = conversations.map(provider.deleteConversationLocally).toList();
+  final pendingRestores = <Future<void>>[];
   final undone = await OmiFeedback.undo(
     context,
     conversations.length == 1 ? l10n.conversationDeleted : l10n.conversationsDeletedCount(conversations.length),
     onUndo: () {
       for (final conversation in conversations) {
-        provider.undoDeletedConversation(conversation);
+        pendingRestores.add(provider.undoDeletedConversation(conversation));
       }
     },
   );
+  await Future.wait(pendingIndexDeletes);
+  await Future.wait(pendingRestores);
   if (undone) return;
   for (final conversation in conversations) {
     provider.commitPendingDelete(conversation.id);
@@ -182,8 +198,10 @@ Future<void> shareConversation(BuildContext context, ServerConversation conversa
     sharePositionOrigin: box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size,
   );
   if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-    final reverted =
-        await setConversationVisibility(conversation.id, visibility: ConversationVisibility.private_.value);
+    final reverted = await setConversationVisibility(
+      conversation.id,
+      visibility: ConversationVisibility.private_.value,
+    );
     if (reverted) conversation.visibility = ConversationVisibility.private_;
   }
 }
@@ -224,10 +242,14 @@ Future<ConversationRowAction?> showConversationActionsSheet(
   bool canSelect = true,
 }) {
   final l10n = context.l10n;
-  final title = conversation.structured.title.trim();
   return showOmiSheet<ConversationRowAction>(
     context: context,
-    title: title.isEmpty ? l10n.untitledConversation : title,
+    title: conversationDisplayTitle(
+      conversation,
+      l10n,
+      surface: ConversationUntitledRenderedSurface.actions,
+      dates: OmiDateFormat.of(context),
+    ),
     padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
     builder: (sheetContext) {
       // FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.

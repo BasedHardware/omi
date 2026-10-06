@@ -103,6 +103,9 @@ LOCK_CONTRACTS = {
     "gcp_day3_reengagement_email_job_auto_dev.yml": LockContract(
         "deploy-cloud-run-day3-reengagement-email-job-development"
     ),
+    "gcp_finops_unit_cost_job.yml": LockContract(
+        "deploy-cloud-run-finops-unit-cost-job-${{ github.event.inputs.environment }}"
+    ),
     "gcp_models.yml": LockContract("deploy-gke-vad-${{ github.event.inputs.environment }}"),
     "gcp_nllb_translation.yml": LockContract("deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"),
     "gcp_notifications_job.yml": LockContract(
@@ -116,12 +119,7 @@ LOCK_CONTRACTS = {
 }
 
 
-# This workflow writes a run-ID-scoped Kubernetes Job and does not mutate the
-# persistent Parakeet release. The required marker makes the exemption fail
-# closed if that isolation is removed.
-RUN_SCOPED_EXEMPTIONS = {
-    "parakeet_gpu_tests.yml": "JOB_NAME: parakeet-gpu-test-${{ github.run_id }}",
-}
+RUN_SCOPED_EXEMPTIONS: dict[str, str] = {}
 
 READ_ONLY_WORKFLOW_EXEMPTIONS: dict[str, str] = {}
 

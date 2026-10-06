@@ -43,14 +43,14 @@ void main() {
     test('ordinary runtime diagnostics need no platform plugins', () async {
       await PhysicalQualification.runtimeEvent('ignored', error: StateError('private'), stack: StackTrace.current);
     });
-    test('ordinary startup returns original future without platform or diagnostic work', () {
+    test('ordinary startup runs the operation through the boot journal', () async {
       final original = Future<int>.value(42);
       var calls = 0;
       final observed = PhysicalQualification.startupStage('ordinary', () {
         calls++;
         return original;
       });
-      expect(identical(observed, original), isTrue);
+      expect(await observed, 42);
       expect(calls, 1);
     });
   } else {

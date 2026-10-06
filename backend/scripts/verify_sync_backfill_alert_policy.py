@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Fail deployment if a same-name sequencer alert has drifted from its contract.
+"""Strictly verify the sync-backfill alert contract after bounded reconciliation.
 
-The lifecycle action owns creation but intentionally does not overwrite an
-existing operator-managed policy. A stale policy must not silently satisfy the
-alert gate before Cloud Run traffic promotion.
+The lifecycle action may repair notification channels after checking policy
+identity and every condition field. This verifier remains read-only and fails
+for any policy that still differs from the declared contract before promotion.
 """
 
 from __future__ import annotations
@@ -15,7 +15,14 @@ from typing import Any
 
 
 def check_policy(
-    policy: dict[str, Any], *, condition: str, filter_text: str, duration_seconds: int, channels: list[str]
+    policy: dict[str, Any],
+    *,
+    condition: str,
+    filter_text: str,
+    duration_seconds: int,
+    channels: list[str],
+    threshold_value: float | None = None,
+    alignment_period: str | None = None,
 ) -> list[str]:
     errors: list[str] = []
     conditions = policy.get('conditions')
@@ -30,6 +37,12 @@ def check_policy(
     duration = actual.get('duration', '0s')
     if duration != f'{duration_seconds}s':
         errors.append('condition duration differs')
+    if threshold_value is not None and float(actual.get('thresholdValue', 0)) != threshold_value:
+        errors.append('condition threshold differs')
+    if alignment_period is not None:
+        aggregations = actual.get('aggregations') or [{}]
+        if aggregations[0].get('alignmentPeriod') != alignment_period:
+            errors.append('condition alignment period differs')
     actual_channels = policy.get('notificationChannels')
     if not isinstance(actual_channels, list) or sorted(actual_channels) != sorted(channels):
         errors.append('notification channels differ')
@@ -44,6 +57,8 @@ def main() -> int:
     parser.add_argument('--filter', required=True)
     parser.add_argument('--duration-seconds', type=int, required=True)
     parser.add_argument('--channels', required=True, help='comma-separated notification-channel resource names')
+    parser.add_argument('--threshold-value', type=float)
+    parser.add_argument('--alignment-period')
     args = parser.parse_args()
     channels = [channel.strip() for channel in args.channels.split(',') if channel.strip()]
     if not channels or len(channels) != len(set(channels)):
@@ -55,6 +70,8 @@ def main() -> int:
         filter_text=args.filter,
         duration_seconds=args.duration_seconds,
         channels=channels,
+        threshold_value=args.threshold_value,
+        alignment_period=args.alignment_period,
     )
     if errors:
         print('Sync backfill alert policy drift: ' + '; '.join(errors), file=sys.stderr)

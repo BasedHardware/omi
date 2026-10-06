@@ -154,6 +154,74 @@ class GeneratedStatusResponse {
   }
 }
 
+class GeneratedTtsVoice {
+  final String id;
+  final String name;
+
+  const GeneratedTtsVoice({
+    required this.id,
+    required this.name,
+  });
+
+  factory GeneratedTtsVoice.fromJson(Map<String, dynamic> json) {
+    return GeneratedTtsVoice(
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+    };
+  }
+}
+
+class GeneratedTtsVoiceCatalog {
+  final String defaultVoiceId;
+  final List<GeneratedTtsVoice> voices;
+
+  const GeneratedTtsVoiceCatalog({
+    required this.defaultVoiceId,
+    required this.voices,
+  });
+
+  factory GeneratedTtsVoiceCatalog.fromJson(Map<String, dynamic> json) {
+    return GeneratedTtsVoiceCatalog(
+      defaultVoiceId: _required(_readFieldValue<String>(_readField(json, const ["default_voice_id"]), "default_voice_id", _readString, requiredField: true, nullable: false), "default_voice_id"),
+      voices: _required(_readFieldValue<List<GeneratedTtsVoice>>(_readField(json, const ["voices"]), "voices", (value) => _readObjectList(value, GeneratedTtsVoice.fromJson), requiredField: true, nullable: false), "voices"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'default_voice_id': defaultVoiceId,
+      'voices': voices.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedAssistantVoicePreference {
+  final String voiceId;
+
+  const GeneratedAssistantVoicePreference({
+    required this.voiceId,
+  });
+
+  factory GeneratedAssistantVoicePreference.fromJson(Map<String, dynamic> json) {
+    return GeneratedAssistantVoicePreference(
+      voiceId: _required(_readFieldValue<String>(_readField(json, const ["voice_id"]), "voice_id", _readString, requiredField: true, nullable: false), "voice_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'voice_id': voiceId,
+    };
+  }
+}
+
 class _WireField {
   final bool present;
   final dynamic value;

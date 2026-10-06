@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
+import database.conversation_scan as conversation_scan_db
 import database.conversations as conversations_db
 import database._client as db_client_module
 import database.action_items as action_items_db
@@ -13,7 +14,7 @@ import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
+from utils.other.storage import delete_conversation_audio_files
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -43,6 +44,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
+from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
     merge_typesense_page_with_transcript_hits,
@@ -71,7 +73,7 @@ from utils.conversations.process_conversation import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 from utils.conversations import share_email
-from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
@@ -82,14 +84,16 @@ from utils import byok
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
+    parse_search_date_range,
     conversation_matches_date_range,
     conversation_matches_speaker,
+    browse_conversations_by_speaker,
     parse_exact_conversation_reference,
     search_conversations,
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
-from utils.manual_speaker_assignments import teaching_segment_ids
-from utils.speaker_identification import extract_speaker_samples
+from utils.speaker_assignment_teaching import commit_manual_assignment
+from utils.speaker_learning_jobs import schedule_reprocessed_learning
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -101,6 +105,7 @@ from services.conversation_frame_evidence import delete_conversation_and_frame_e
 from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
+    finish_list_budget,
     list_read_budget_for_request,
 )
 from utils.conversations.calendar_linking import (
@@ -120,7 +125,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
+def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync_bridge: bool = False) -> dict:
     conversation = conversations_db.get_conversation(
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
     )
@@ -128,7 +133,16 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversations_db.is_soft_deleted(conversation):
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        if not follow_sync_bridge or not conversation.get('sync_merged_into'):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        survivor_id = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+        if not survivor_id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        conversation = conversations_db.get_conversation(
+            uid, survivor_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+        )
+        if not conversation or conversations_db.is_soft_deleted(conversation):
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -224,7 +238,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
                 try:
-                    record_and_persist_finalized_meeting_receipt(uid, enriched)
+                    record_finalized_meeting_receipt(uid, enriched)
                 except Exception:
                     logger.exception('lazy enrich receipt publish failed uid=%s conv=%s', uid, conversation_id)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
@@ -509,7 +523,11 @@ def process_in_progress_conversation(
                 outcome='degraded',
                 log=logger,
             )
-            conversation.geolocation = resolve_geolocation(Geolocation(**geolocation))
+            cached_geo = Geolocation.deserialize_safe(geolocation)
+            if cached_geo:
+                conversation.geolocation = resolve_geolocation(cached_geo)
+            else:
+                logger.warning('Skipping malformed cached user geolocation for uid=%s', uid)
 
     # Winner owns ingress. The accepted projection rides the admission CAS:
     # status→processing and client_processing are one write. A later request
@@ -735,6 +753,8 @@ def reprocess_conversation(
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+    response: Response = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -759,6 +779,8 @@ def reprocess_conversation(
 
     explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
+    receipt_applied: list = []
+
     processed_conversation = process_conversation(
         uid,
         language_code,
@@ -769,6 +791,7 @@ def reprocess_conversation(
         app_usage_attribution=(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
+        speaker_receipt_observer=receipt_applied.append,
     )
 
     # Reprocessing a hidden conversation is an explicit recovery: persist it as
@@ -779,7 +802,13 @@ def reprocess_conversation(
         if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'
 
-    return processed_conversation
+    return schedule_reprocessed_learning(
+        uid,
+        processed_conversation,
+        background_tasks,
+        response=response,
+        receipt_applied=bool(receipt_applied and receipt_applied[-1]),
+    )
 
 
 def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
@@ -953,9 +982,12 @@ def get_conversation_by_id(
     source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
     include_discarded: bool = Query(True),
     uid: str = Depends(auth.get_current_user_uid),
+    include_translations: bool = Query(False),
+    translation_cursor: Optional[str] = Query(None),
+    response: Response = None,
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
     if source is not None:
         if source != 'omi':
             raise HTTPException(
@@ -969,6 +1001,18 @@ def get_conversation_by_id(
         conversation = _enrich_deferred_conversation(uid, conversation)
     else:
         _dispatch_first_open_work(uid, conversation)
+    if include_translations is True:
+        try:
+            conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail='Invalid translation cursor') from error
+        except Exception as error:
+            logger.error('On-open translation unavailable type=%s', type(error).__name__)
+            translation_status, next_cursor = 'unavailable', None
+        if response is not None:
+            response.headers['X-Translation-Status'] = translation_status
+            if next_cursor is not None:
+                response.headers['X-Translation-Cursor'] = next_cursor
     return conversation
 
 
@@ -1173,6 +1217,7 @@ def separate_conversation_from_capture_group(conversation_id: str, uid: str = De
 def patch_conversation_summary(
     conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_summary(uid, conversation_id, data.app_id, data.content)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -1193,6 +1238,7 @@ def patch_conversation_summary(
 def patch_conversation_segment_text(
     conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_segment_text(uid, conversation_id, data.segment_id, data.text)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -1487,7 +1533,7 @@ def _assign_manual_speaker(
     is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
     person_id = value if assign_type == 'person_id' else None
     try:
-        raw, resolved, removed, before = conversations_db.assign_conversation_speaker(
+        raw, resolved, removed, before = commit_manual_assignment(
             uid,
             conversation_id,
             person_id=person_id,
@@ -1496,6 +1542,8 @@ def _assign_manual_speaker(
             speaker_id=speaker_id,
             segment_index=segment_index,
             use_for_speech_training=use_for_speech_training,
+            rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
+            background_tasks=background_tasks,
         )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -1504,21 +1552,11 @@ def _assign_manual_speaker(
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     conversation = deserialize_conversation(raw)
+    resolved_conversation_id = raw.get('id') or conversation_id
     _drop_display_projection(conversation)
-    if background_tasks is not None:
-        for path in removed:
-            background_tasks.add_task(delete_speech_profile_blob, path)
-        if person_id and use_for_speech_training:
-            background_tasks.add_task(
-                extract_speaker_samples,
-                uid=uid,
-                person_id=person_id,
-                conversation_id=conversation_id,
-                segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
-            )
     _emit_speaker_identity_confirmed(
         uid=uid,
-        conversation_id=conversation_id,
+        conversation_id=resolved_conversation_id,
         scope='speaker' if speaker_id is not None else 'segment' if segment_index is not None else 'bulk',
         before=[_speaker_assignment(TranscriptSegment(**{'is_user': False, **s})) for s in before],
         after=[_speaker_assignment(s) for s in conversation.transcript_segments if s.id in resolved],
@@ -1562,6 +1600,7 @@ def set_assignee_conversation_speaker(
     speaker_id: int,
     assign_type: str,
     value: Optional[str] = None,
+    data: Optional[BulkAssignSegmentsRequest] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
     background_tasks: BackgroundTasks = None,
@@ -1573,6 +1612,7 @@ def set_assignee_conversation_speaker(
         uid,
         background_tasks,
         speaker_id=speaker_id,
+        segment_ids=data.segment_ids if data else None,
         use_for_speech_training=use_for_speech_training,
     )
 
@@ -1777,17 +1817,23 @@ def send_conversation_share_email(
         # resolves would block the address until its TTL expires. Quota stands
         # and the link stays published. The caller still gets 504 — we do not
         # know that it arrived, and only the ledger pretends otherwise.
+        logger.warning('share email: ambiguous delivery: %s', e)
         try:
             conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:
             logger.exception('share email: failed to record ambiguous dispatch')
-        raise HTTPException(status_code=504, detail=str(e))
+        raise HTTPException(
+            status_code=504,
+            detail="Email delivery timed out or is pending confirmation. Please check back shortly.",
+        )
     except ValueError as e:
+        logger.warning('share email: invalid recipient or configuration: %s', e)
         _release_reservation_and_quota()
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail="Invalid email recipient or configuration.")
     except RuntimeError as e:
+        logger.warning('share email: delivery service temporarily unavailable: %s', e)
         _release_reservation_and_quota()
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Email delivery service temporarily unavailable.")
     except HTTPException:
         raise
     except Exception:
@@ -1828,7 +1874,7 @@ def get_shared_conversation_by_id(conversation_id: str):
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, person_ids)
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     # Public unauthenticated surface: return only the explicit allowlist.
     # SharedConversationResponse does not inherit Conversation and ignores extras,
@@ -1877,99 +1923,162 @@ async def generate_conversation_topic_endpoint(
     return ConversationTopicResponse(emoji=topic.emoji or "", title=topic.title or "")
 
 
+async def _search_exact_conversation_reference(
+    exact_conversation_id: str,
+    search_request: SearchRequest,
+    uid: str,
+    start_timestamp: Optional[int],
+    end_timestamp: Optional[int],
+) -> Dict[str, Any]:
+    exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
+    conversations = await run_blocking(
+        db_executor,
+        conversations_db.get_conversations_by_id_without_photos,
+        uid,
+        [exact_conversation_id],
+        include_discarded=bool(search_request.include_discarded),
+    )
+    conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    conversations = [
+        conversation
+        for conversation in conversations
+        if conversation_matches_speaker(conversation, search_request.speaker_id)
+        and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
+    ]
+    if exact_page != 1:
+        conversations = []
+    redact_conversations_for_list(conversations)
+    return {
+        'items': conversations[:exact_per_page],
+        'total_pages': 1,
+        'current_page': exact_page,
+        'per_page': exact_per_page,
+    }
+
+
+async def _browse_speaker_conversations(
+    search_request: SearchRequest,
+    uid: str,
+    start_timestamp: Optional[int],
+    end_timestamp: Optional[int],
+    request: Request,
+    response: Response,
+) -> Dict[str, Any]:
+    # Browsing one speaker's conversations: Typesense cannot filter by speaker, so walk Firestore
+    # (a post-filter over Typesense's first page only ever found the latest 20 conversations).
+    browse_page, browse_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
+    include_discarded = bool(search_request.include_discarded)
+    start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
+    end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
+    budget = await run_blocking(
+        db_executor, conversation_scan_db.conversation_scan_budget, request, route='speaker-browse'
+    )
+    # One bounded snapshot-cursor pass (never offset): invisible rows advance the cursor (#19908).
+    browse_results = await run_blocking(
+        db_executor,
+        lambda: browse_conversations_by_speaker(
+            conversation_scan_db.speaker_browse_scan(
+                uid, include_discarded=include_discarded, start_date=start_dt, end_date=end_dt, budget=budget
+            ),
+            search_request.speaker_id,
+            page=browse_page,
+            per_page=browse_per_page,
+            include_discarded=include_discarded,
+            budget=budget,
+        ),
+    )
+    redact_conversations_for_list(browse_results['items'])
+    finish_list_budget(response, budget)
+    return browse_results
+
+
 @router.post("/v1/conversations/search", response_model=SearchConversationsResponse, tags=['conversations'])
-def search_conversations_endpoint(
+async def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     if search_request.speaker_id and search_request.speaker_id != 'user':
-        person = users_db.get_person(uid, search_request.speaker_id)
+        person = await run_blocking(db_executor, users_db.get_person, uid, search_request.speaker_id)
         if person is None:
             raise HTTPException(status_code=404, detail="Speaker not found")
 
-    # Convert ISO datetime strings to Unix timestamps if provided
-    start_timestamp = None
-    end_timestamp = None
-
-    if search_request.start_date:
-        try:
-            start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid start_date; expected an ISO 8601 datetime string")
-
-    if search_request.end_date:
-        try:
-            end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
+    try:
+        start_timestamp, end_timestamp = parse_search_date_range(search_request.start_date, search_request.end_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     exact_conversation_id = parse_exact_conversation_reference(search_request.query)
     if exact_conversation_id:
-        exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
-        conversations = conversations_db.get_conversations_by_id_without_photos(
-            uid,
-            [exact_conversation_id],
-            include_discarded=bool(search_request.include_discarded),
+        return await _search_exact_conversation_reference(
+            exact_conversation_id, search_request, uid, start_timestamp, end_timestamp
         )
-        conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
-        conversations = [
-            conversation
-            for conversation in conversations
-            if conversation_matches_speaker(conversation, search_request.speaker_id)
-            and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
-        ]
-        if exact_page != 1:
-            conversations = []
-        redact_conversations_for_list(conversations)
-        return {
-            'items': conversations[:exact_per_page],
-            'total_pages': 1,
-            'current_page': exact_page,
-            'per_page': exact_per_page,
-        }
 
-    try:
+    if search_request.speaker_id and not (search_request.query or '').strip():
+        return await _browse_speaker_conversations(
+            search_request, uid, start_timestamp, end_timestamp, request, response
+        )
+
+    effective_page, effective_per_page = clamp_conversation_search_pagination(
+        search_request.page, search_request.per_page
+    )
+
+    def _typesense_page() -> Dict[str, Any]:
         search_results = search_conversations(
             query=search_request.query,
-            page=search_request.page,
-            per_page=search_request.per_page,
+            page=effective_page,
+            per_page=effective_per_page,
             uid=uid,
             include_discarded=search_request.include_discarded,
             start_date=start_timestamp,
             end_date=end_timestamp,
             speaker_id=search_request.speaker_id,
         )
-    except ConversationSearchUnavailableError:
-        raise HTTPException(status_code=503, detail="Search temporarily unavailable")
-    typesense_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
-    effective_page = search_results.get('current_page', 1)
-    effective_per_page = search_results.get('per_page', 10)
+        return search_results
+
     # Spoken-word hits (optional transcript-chunk index) are merged on page 1 only so
     # Typesense pagination stays stable. Snippets still attach for every hydrated hit.
     # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page
     # without permanently dropping displaced Typesense hits that lost the merge race.
-    transcript_ids: List[str] = []
     merge_cap = effective_per_page
     if effective_page == 1 and (search_request.query or '').strip():
-        merge_cap = min(max(effective_per_page * 3, effective_per_page), 250)
-        transcript_ids = search_transcript_conversation_ids(
-            uid,
-            search_request.query,
-            limit=merge_cap,
-            starts_at=start_timestamp,
-            ends_at=end_timestamp,
-            search_transcript_chunks=vector_db.search_transcript_chunks,
-        )
+        merge_cap = min(effective_per_page * 2, 250)
+    try:
+        async with asyncio.TaskGroup() as tg:
+            tasks = [tg.create_task(run_blocking(db_executor, _typesense_page))]
+            if effective_page == 1 and (search_request.query or '').strip() and vector_db.index is not None:
+                tasks.append(
+                    tg.create_task(
+                        search_transcript_conversation_ids(
+                            uid,
+                            search_request.query,
+                            limit=merge_cap,
+                            starts_at=start_timestamp,
+                            ends_at=end_timestamp,
+                            search_transcript_chunks=vector_db.search_transcript_chunks,
+                            embed_query=vector_db.embeddings.aembed_query,
+                        )
+                    )
+                )
+    except* ConversationSearchUnavailableError:
+        raise HTTPException(status_code=503, detail="Search temporarily unavailable")
+    search_results = tasks[0].result()
+    transcript_ids: List[str] = tasks[1].result() if len(tasks) > 1 else []
+    typesense_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    effective_page = search_results.get('current_page', 1)
+    effective_per_page = search_results.get('per_page', 10)
     conversation_ids = merge_typesense_page_with_transcript_hits(
         typesense_ids,
         transcript_ids,
         page=effective_page,
         per_page=merge_cap,
     )
-    conversations = conversations_db.get_conversations_by_id_without_photos(
-        uid,
-        conversation_ids,
-        include_discarded=bool(search_request.include_discarded),
+    conversations = await run_blocking(
+        db_executor,
+        lambda: conversations_db.get_conversations_by_id_without_photos(
+            uid, conversation_ids, include_discarded=bool(search_request.include_discarded)
+        ),
     )
     # Preserve merge order (transcript-first on page 1); Firestore fetch may reshuffle.
     by_id = {c.get('id'): c for c in conversations if c.get('id')}
@@ -1988,11 +2097,11 @@ def search_conversations_endpoint(
         if conversation_matches_speaker(conversation, search_request.speaker_id)
         and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
     ]
+    conversations = conversations[:effective_per_page]
     # Attach grep-style transcript snippets (start/end for seek-to-moment) before list redaction
     # clears segments on locked rows.
     if (search_request.query or '').strip():
         conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
-    conversations = conversations[:effective_per_page]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the

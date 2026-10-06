@@ -283,7 +283,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get reportMessage => 'Bericht melden';
 
   @override
-  String get reportMessageConfirm => 'Weet je zeker dat je dit bericht wilt rapporteren?';
+  String get reportMessageConfirm => 'Dit bericht melden?';
 
   @override
   String get messageReported => 'Bericht succesvol gerapporteerd.';
@@ -295,8 +295,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearChat => 'Chat wissen';
 
   @override
-  String get clearChatConfirm =>
-      'Weet je zeker dat je de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get clearChatConfirm => 'Alle berichten in deze chat worden verwijderd. Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get maxFilesLimit => 'Je kunt maximaal 4 bestanden tegelijk uploaden';
@@ -360,10 +359,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get cannotBeUndone => 'Dit kan niet ongedaan worden gemaakt.';
 
   @override
-  String get allDataErased => 'Al je herinneringen en gesprekken worden permanent verwijderd.';
+  String get allDataErased => 'Je herinneringen en gesprekken worden gewist.';
 
   @override
-  String get appsDisconnected => 'Je apps en integraties worden direct losgekoppeld.';
+  String get appsDisconnected => 'Je apps en integraties worden losgekoppeld.';
 
   @override
   String get exportBeforeDelete =>
@@ -1041,7 +1040,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Weet je zeker dat je de verbinding met $appName wilt verbreken? Je kunt altijd opnieuw verbinden.';
+    return 'Je kunt $appName altijd opnieuw verbinden.';
   }
 
   @override
@@ -1985,14 +1984,14 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteActionItemTitle => 'Taak verwijderen';
 
   @override
-  String get deleteActionItemMessage => 'Weet u zeker dat u deze taak wilt verwijderen?';
+  String get deleteActionItemMessage => 'Deze taak verwijderen?';
 
   @override
   String get deleteSelectedItemsTitle => 'Geselecteerde items verwijderen';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Weet je zeker dat je $count geselecteerde ta(a)k(en)$s wilt verwijderen?';
+    return '$count geselecteerde ta(a)k(en)$s verwijderen?';
   }
 
   @override
@@ -2061,7 +2060,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get undo => 'Ongedaan maken';
 
   @override
-  String get noMemoriesYet => '🧠 Nog geen herinneringen';
+  String get noMemoriesYet => 'Nog geen herinneringen';
 
   @override
   String get noAutoMemories => 'Nog geen automatisch geëxtraheerde herinneringen';
@@ -2073,7 +2072,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noMemoriesInCategories => 'Geen herinneringen in deze categorieën';
 
   @override
-  String get noMemoriesFound => '🔍 Geen herinneringen gevonden';
+  String get noMemoriesFound => 'Geen herinneringen gevonden';
 
   @override
   String get addFirstMemory => 'Voeg je eerste herinnering toe';
@@ -2082,8 +2081,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearMemoryTitle => 'Omi\'s geheugen wissen';
 
   @override
-  String get clearMemoryMessage =>
-      'Weet je zeker dat je Omi\'s geheugen wilt wissen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get clearMemoryMessage => 'Al je herinneringen worden verwijderd. Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get clearMemoryButton => 'Geheugen wissen';
@@ -2229,20 +2227,20 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteActionItemConfirmTitle => 'Taak verwijderen';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Weet je zeker dat je deze taak wilt verwijderen?';
+  String get deleteActionItemConfirmMessage => 'Deze taak verwijderen?';
 
   @override
   String get appLanguage => 'App-taal';
 
   @override
-  String get appInterfaceSectionTitle => 'APP-INTERFACE';
+  String get appInterfaceSectionTitle => 'App-interface';
 
   @override
-  String get speechTranscriptionSectionTitle => 'SPRAAK & TRANSCRIPTIE';
+  String get speechTranscriptionSectionTitle => 'Spraak & transcriptie';
 
   @override
   String get languageSettingsHelperText =>
-      'App-taal verandert menu\'s en knoppen. Spraaktaal beïnvloedt hoe je opnames worden getranscribeerd.';
+      'App-taal verandert menu\'s en knoppen. Primaire taal bepaalt hoe je opnames worden getranscribeerd.';
 
   @override
   String get translationNotice => 'Vertaalbericht';
@@ -2333,7 +2331,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteMemory => 'Geheugen verwijderen';
 
   @override
-  String get thisActionCannotBeUndone => 'Deze actie kan niet ongedaan worden gemaakt.';
+  String get thisActionCannotBeUndone => 'Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String memoriesCount(int count) {
@@ -2767,8 +2765,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteActionItem => 'Taak verwijderen';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Weet je zeker dat je deze taak wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get deleteActionItemConfirmation => 'Deze taak verwijderen? Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get enterActionItemDescription => 'Voer taakbeschrijving in';
@@ -3110,7 +3107,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Bericht succesvol gemeld';
 
   @override
-  String get confirmReportMessage => 'Weet u zeker dat u dit bericht wilt melden?';
+  String get confirmReportMessage => 'Dit bericht melden?';
 
   @override
   String get selectChatAssistant => 'Selecteer chat-assistent';
@@ -3125,7 +3122,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearChatTitle => 'Chat wissen?';
 
   @override
-  String get confirmClearChat => 'Weet u zeker dat u de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get confirmClearChat => 'Deze chat wissen? Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get copy => 'Kopiëren';
@@ -3297,8 +3294,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get createMemory => 'Geheugen maken';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Weet je zeker dat je dit geheugen wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get deleteMemoryConfirmation => 'Deze herinnering verwijderen? Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get makePrivate => 'Privé maken';
@@ -3335,7 +3331,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Weet je zeker dat je Omi\'s geheugen wilt wissen? Deze actie kan niet ongedaan worden gemaakt en zal alle $count herinneringen permanent verwijderen.';
+    return 'Alle $count herinneringen worden verwijderd. Dit kan niet ongedaan worden gemaakt.';
   }
 
   @override
@@ -3629,8 +3625,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Laat Omi automatisch de beste app kiezen';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Weet u zeker dat u dit gesprek wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+  String get deleteConversationConfirmation => 'Dit gesprek verwijderen? Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get conversationDeleted => 'Gesprek verwijderd';
@@ -3957,8 +3952,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get updateAppQuestion => 'App bijwerken?';
 
   @override
-  String get updateAppConfirmation =>
-      'Weet u zeker dat u uw app wilt bijwerken? De wijzigingen worden doorgevoerd na beoordeling door ons team.';
+  String get updateAppConfirmation => 'De wijzigingen worden doorgevoerd na beoordeling door ons team.';
 
   @override
   String get updateApp => 'App bijwerken';
@@ -3980,9 +3974,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Openbare apps ($count)';
   }
-
-  @override
-  String get newVersionAvailable => 'Nieuwe versie beschikbaar';
 
   @override
   String get no => 'Nee';
@@ -4025,8 +4016,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Abonnement annuleren?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Weet u zeker dat u uw abonnement wilt annuleren? U behoudt toegang tot het einde van uw huidige factureringsperiode.';
+  String get cancelSubscriptionConfirmation => 'U behoudt toegang tot het einde van uw huidige factureringsperiode.';
 
   @override
   String get cancelSubscriptionButton => 'Abonnement annuleren';
@@ -4212,7 +4202,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Deze actie kan niet ongedaan worden gemaakt. Applicaties die deze sleutel gebruiken, hebben geen toegang meer tot de API.';
+      'Apps die deze sleutel gebruiken, verliezen toegang tot de API. Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get revoke => 'Intrekken';
@@ -4269,7 +4259,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Weet u zeker dat u deze $item wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+    return '$item wordt verwijderd. Dit kan niet ongedaan worden gemaakt.';
   }
 
   @override
@@ -4277,7 +4267,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Weet u zeker dat u de sleutel \"$keyName\" wilt intrekken? Deze actie kan niet ongedaan worden gemaakt.';
+    return 'Alles wat \"$keyName\" gebruikt, verliest toegang. Dit kan niet ongedaan worden gemaakt.';
   }
 
   @override
@@ -4455,7 +4445,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Uw plan blijft actief tot $date. Daarna verliest u de toegang tot uw onbeperkte functies. Weet u het zeker?';
+    return 'Uw plan blijft actief tot $date. Daarna verliest u de toegang tot uw onbeperkte functies.';
   }
 
   @override
@@ -4547,7 +4537,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get askOmiAnything => 'Vraag Omi alles over uw leven';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Ontgrendel Omi\'s oneindige geheugen';
+  String get unlockOmiInfiniteMemory => 'Onbeperkte herinneringen';
 
   @override
   String get youreOnAnnualPlan => 'U bent op het jaarabonnement';
@@ -4559,7 +4549,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get unableToLoadPlans => 'Kan plannen niet laden';
 
   @override
-  String get checkConnectionTryAgain => 'Controleer je verbinding en probeer opnieuw';
+  String get checkConnectionTryAgain => 'Controleer je verbinding en probeer het opnieuw.';
 
   @override
   String get useFreePlan => 'Gratis abonnement gebruiken';
@@ -4741,7 +4731,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Dit verwijdert permanent alle gesprekken die zijn geïmporteerd uit Limitless. Deze actie kan niet ongedaan worden gemaakt.';
+      'Alle gesprekken die uit Limitless zijn geïmporteerd, worden verwijderd. Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4782,7 +4772,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Weet u zeker dat u het voorbeeld van $name wilt verwijderen?';
+    return 'De stemsample van $name wordt verwijderd. Dit kan niet ongedaan worden gemaakt.';
   }
 
   @override
@@ -4790,7 +4780,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Weet u zeker dat u $name wilt verwijderen? Dit verwijdert ook alle bijbehorende spraaksamples.';
+    return 'Hiermee worden de stemsamples van $name verwijderd. Dit kan niet ongedaan worden gemaakt. De uitspraken in eerdere gesprekken worden naamloze sprekers.';
   }
 
   @override
@@ -5069,8 +5059,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Door verder te gaan worden uw gesprekken, opnames en persoonlijke informatie veilig opgeslagen op onze servers. Uw audio-opnames en transcripties worden verwerkt door AI-diensten van derden (waaronder Deepgram voor transcriptie en OpenAI voor analyse) om u AI-gestuurde inzichten te bieden en alle app-functies mogelijk te maken.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Taken uit je gesprekken verschijnen hier.\nTik op + om er handmatig een te maken.';
+  String get tasksEmptyStateMessage => 'Begin een gesprek om een taak aan te maken.';
 
   @override
   String get clearChatAction => 'Chat wissen';
@@ -5148,8 +5137,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get finishedConversation => 'Gesprek beëindigd?';
 
   @override
-  String get stopRecordingConfirmation =>
-      'Weet je zeker dat je de opname wilt stoppen en het gesprek nu wilt samenvatten?';
+  String get stopRecordingConfirmation => 'Opname stoppen en het gesprek nu samenvatten?';
 
   @override
   String get conversationEndsManually => 'Het gesprek eindigt alleen handmatig.';
@@ -5994,7 +5982,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.';
+      '300 premium minuten per maand. Kies Op apparaat voor onbeperkte gratis transcriptie.';
 
   @override
   String get viewUsage => 'Bekijk gebruik';
@@ -6076,7 +6064,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ';
+      '300 premium minuten per maand. Kies Op apparaat voor onbeperkte gratis transcriptie. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6131,7 +6119,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omis ingebouwde live transcriptie is geoptimaliseerd voor realtime gesprekken met automatische sprekersdetectie en diarisatie.';
+      'De live transcriptie van Omi is gemaakt voor realtime gesprekken en laat zien wie wat zei.';
 
   @override
   String get reset => 'Resetten';
@@ -6665,8 +6653,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get shareRecording => 'Opname delen';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Weet je zeker dat je deze opname permanent wilt verwijderen? Dit kan niet ongedaan worden gemaakt.';
+  String get deleteRecordingConfirmation => 'Dit kan niet ongedaan worden gemaakt.';
 
   @override
   String get recordingIdLabel => 'Opname-ID';
@@ -7037,7 +7024,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Je schakelt je Onbeperkt Plan over naar het $title. Weet je zeker dat je wilt doorgaan?';
+    return 'Je schakelt je Onbeperkt Plan over naar het $title.';
   }
 
   @override
@@ -8503,7 +8490,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get tipAutoSync => 'Opnames worden automatisch gesynchroniseerd';
 
   @override
-  String get storageSection => 'OPSLAG';
+  String get storageSection => 'Opslag';
 
   @override
   String get permissions => 'Machtigingen';
@@ -8930,10 +8917,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Optioneel — jouw inzichten helpen ons een beter product te bouwen.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Dit is definitief';
+  String get deleteFlowConfirmTitle => 'Je account verwijderen?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Zodra je je account verwijdert, is herstel niet meer mogelijk.';
+  String get deleteFlowConfirmSubtitle => 'Dit kan niet ongedaan worden gemaakt, ook niet door support.';
 
   @override
   String get deleteConsequenceSubscription => 'Een actief abonnement wordt geannuleerd.';
@@ -9295,6 +9282,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Downloaden van je apparaat';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current van $total';
   }
@@ -9376,7 +9373,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Neem nu audio op en transcribeer die later wanneer je wilt, in plaats van live. Opnames worden op je telefoon bewaard, daarna upload je ze om gesprekken te maken.';
+      'Neem nu op en transcribeer wanneer je wilt. Tot dan blijft de audio op je telefoon.';
 
   @override
   String get transcribeLaterNote =>
@@ -9658,7 +9655,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteOnDeviceModel => 'Model verwijderen';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Weet je zeker dat je dit model wilt verwijderen?';
+  String get deleteOnDeviceModelConfirm => 'Dit model verwijderen?';
 
   @override
   String get onDeviceModelDownloaded => 'Gedownload';
@@ -9814,7 +9811,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncStatusTooOld => 'Te oud om te synchroniseren — Omi kan deze niet accepteren';
 
   @override
-  String get planSheetChooseYourPlan => 'Kies je abonnement om onbeperkt Omi te ontgrendelen.';
+  String get planSheetChooseYourPlan => 'Kies het abonnement dat bij je past.';
 
   @override
   String get availableOnMacMobileWeb => 'Beschikbaar op Mac, mobiel en web';
@@ -10062,24 +10059,23 @@ class AppLocalizationsNl extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
         'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
         'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
@@ -10092,13 +10088,13 @@ class AppLocalizationsNl extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10128,12 +10124,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Audio niet leesbaar — kan niet worden gesynchroniseerd';
-
-  @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
 
   @override
   String chatStarterPrompt(String kind) {
@@ -10487,8 +10477,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Apparaat vergeten?';
 
   @override
-  String get forgetDeviceConfirmMessage =>
-      'Omi maakt geen verbinding meer met dit apparaat. Om het opnieuw te gebruiken, moet je het opnieuw koppelen.';
+  String get forgetDeviceConfirmMessage => 'Omi maakt geen verbinding meer met dit apparaat.';
 
   @override
   String get deviceForgottenMessage => 'Apparaat vergeten';
@@ -11257,7 +11246,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get openCall => 'Gesprek openen';
 
   @override
-  String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
+  String get captureRecoveryBanner => 'Omi verzendt geen audio — tik om opnieuw verbinding te maken';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11295,6 +11284,9 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi maakt vanzelf opnieuw verbinding';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -11441,4 +11433,1022 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Donker';
+
+  @override
+  String get chatDiscardRecording => 'Verwerpen';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Dat heb ik niet verstaan — probeer het opnieuw';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Feedback geven';
+
+  @override
+  String get feedbackAllGood => 'Alles goed';
+
+  @override
+  String get feedbackChatWithUs => 'Meer te melden? Chat met ons';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Niet nauwkeurig';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Onvolledig';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Niet relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Verkeerde context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Iets anders';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Audio ontbreekt';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Slechte transcriptie';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Verkeerde spreker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Vertraagd of vastgelopen';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Gefragmenteerd of gedupliceerd';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Iets anders';
+
+  @override
+  String get searchPeople => 'Personen zoeken';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" toevoegen als nieuwe persoon';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Alle $count personen weergeven';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hoi $name, vraag maar raak';
+  }
+
+  @override
+  String get activity => 'Activiteit';
+
+  @override
+  String get places => 'Plaatsen';
+
+  @override
+  String get recaps => 'Samenvattingen';
+
+  @override
+  String get recent => 'Recent';
+
+  @override
+  String get searchPartialFailure => 'Sommige resultaten konden niet worden geladen';
+
+  @override
+  String get peopleSearchPlaceholder => 'Zoek mensen';
+
+  @override
+  String get peopleNotHeardYet => 'Nog niet gehoord';
+
+  @override
+  String get peopleRecent => 'Recent';
+
+  @override
+  String get deletePeopleMessage =>
+      'Hiermee worden hun stemsamples verwijderd. Dit kan niet ongedaan worden gemaakt. Hun uitspraken in eerdere gesprekken worden naamloze sprekers.';
+
+  @override
+  String get personTalkTime => 'Spreektijd';
+
+  @override
+  String get personLastHeard => 'Laatst gehoord';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personen verwijderen?',
+      one: '1 persoon verwijderen?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Stem nodig';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personen',
+      one: '1 persoon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Geen Overeenkomende Personen';
+
+  @override
+  String get deselectAll => 'Alles Deselecteren';
+
+  @override
+  String get voiceRecognitionSettings => 'Stemherkenning';
+
+  @override
+  String get greetingMorning => 'Goedemorgen';
+
+  @override
+  String get greetingAfternoon => 'Goedemiddag';
+
+  @override
+  String get greetingEvening => 'Goedenavond';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Wat wil je weten?';
+
+  @override
+  String get askSuggestDecide => 'Wat heb ik vandaag besloten?';
+
+  @override
+  String get askSuggestOwe => 'Wat ben ik mensen nog verschuldigd?';
+
+  @override
+  String get askSuggestNotice => 'Wat viel Omi op?';
+
+  @override
+  String get pastChats => 'Eerdere chats';
+
+  @override
+  String get newChat => 'Nieuwe chat';
+
+  @override
+  String get startFresh => 'Opnieuw beginnen';
+
+  @override
+  String get noPastChats => 'Je chats met Omi verschijnen hier.';
+
+  @override
+  String get deleteChatQuestion => 'Deze chat verwijderen?';
+
+  @override
+  String get deleteChatMessage => 'Hij verdwijnt voorgoed uit eerdere chats.';
+
+  @override
+  String get deleteChat => 'Chat verwijderen';
+
+  @override
+  String get appsAskWith => 'Omi vragen met';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken vandaag.',
+      one: '1 gesprek vandaag.',
+      zero: 'Vandaag geen gesprekken.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Wat er op het scherm stond';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Schermafbeelding van deze vergadering';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Schermafbeelding verwijderen?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Hiermee wordt de schermafbeelding uit de notitie van deze vergadering verwijderd. Dit kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get conversationSummaryFailed => 'Samenvatting mislukt';
+
+  @override
+  String get reconnectionsRecent => 'Herverbindingen (laatste 7 dagen)';
+
+  @override
+  String get failedConnections => 'Mislukte verbindingen';
+
+  @override
+  String get failedConnectionsRecent => 'Mislukte verbindingen (laatste 7 dagen)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count sinds koppeling';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Lage zekerheid';
+
+  @override
+  String get peopleFilterPinned => 'Vastgezet';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vastgezet',
+      one: '1 vastgezet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Bevestigd';
+
+  @override
+  String get confidenceLikely => 'Waarschijnlijk';
+
+  @override
+  String get confidenceUnverified => 'Niet geverifieerd';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Zekerheid: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Je hebt $count keer gelabeld',
+      one: 'Je hebt één keer gelabeld',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gekozen in $count suggesties',
+      one: 'Gekozen in 1 suggestie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Je hebt $count matches bevestigd',
+      one: 'Je hebt 1 match bevestigd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Alleen automatisch gematcht, nooit bevestigd';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Nooit bevestigd';
+
+  @override
+  String get confidenceReasonCorrected => 'Je hebt de match gecorrigeerd';
+
+  @override
+  String get confidenceReasonVoiceReady => 'stem klaar';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'stem nodig';
+
+  @override
+  String get confidenceReasonNotHeard => 'nog niet gehoord';
+
+  @override
+  String get confidenceSheetTitle => 'Zekerheid';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi herkent de stem van $name, en je hebt dat bevestigd.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi herkent de stem van $name meestal, maar je hebt het maar een paar keer bevestigd.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Niets wat je hebt gedaan ondersteunt $name tot nu toe.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Bewijs';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Door jou gelabeld in $count gesprekken',
+      one: 'Door jou gelabeld in 1 gesprek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ja op $count suggesties',
+      one: 'Ja op 1 suggestie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gekozen in $count suggesties',
+      one: 'Gekozen in 1 suggestie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automatische matches bevestigd',
+      one: '1 automatische match bevestigd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count matches naar iemand anders verplaatst',
+      one: '1 match naar iemand anders verplaatst',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automatische matches die niemand heeft bevestigd',
+      one: '1 automatische match die niemand heeft bevestigd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Stemvoorbeeld klaar';
+
+  @override
+  String get evidenceNoVoice => 'Nog geen stemvoorbeeld';
+
+  @override
+  String get evidenceNotHeard => 'Nog niet gehoord in een gesprek';
+
+  @override
+  String get evidenceNothing => 'Je hebt deze persoon nog niet gelabeld of bevestigd';
+
+  @override
+  String get effectCountsALot => 'Helpt veel';
+
+  @override
+  String get effectCounts => 'Helpt';
+
+  @override
+  String get effectCountsALittle => 'Helpt een beetje';
+
+  @override
+  String get effectBarelyCounts => 'Helpt nauwelijks';
+
+  @override
+  String get effectCountsAgainst => 'Schaadt';
+
+  @override
+  String get effectNeeded => 'Nodig voor Bevestigd';
+
+  @override
+  String get confidenceToReachConfirmed => 'Om Bevestigd te bereiken';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi heeft ook een stemvoorbeeld van $name nodig. Label deze persoon met “Stemmen onthouden” aan.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name is bevestigd. Omi blijft leren van elk label.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Alleen je antwoorden veranderen de zekerheid veel. Automatische matches alleen helpen nauwelijks.';
+
+  @override
+  String get personWhyConfidence => 'Waarom?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '$name vastzetten';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Bewaar $name en verwacht deze persoon in je gesprekken';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi vraagt het eerst voordat vergelijkbare stemmen worden gekoppeld.';
+
+  @override
+  String get pinAction => 'Vastzetten';
+
+  @override
+  String get unpinAction => 'Losmaken';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name vastgezet';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name losgemaakt';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Waarom $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return '$name verwijderen?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name is vastgezet. De stemvoorbeelden worden verwijderd, Omi herkent deze persoon niet meer en in eerdere transcripties verschijnt die als een naamloze spreker. Dit kan niet ongedaan worden gemaakt.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '$name verwijderen';
+  }
+
+  @override
+  String get selectPeople => 'Mensen selecteren';
+
+  @override
+  String get cleanUpEllipsis => 'Opruimen…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mensen waarvan Omi het niet zeker weet',
+      one: '1 persoon waarvan Omi het niet zeker weet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Meestal verkeerd verstane namen. Bekijk ze en verwijder de namen die niet echt zijn.';
+
+  @override
+  String get reviewAction => 'Bekijken';
+
+  @override
+  String get cleanUpTitle => 'Opruimen';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi weet het niet zeker bij deze $count mensen. De meeste zijn namen die verkeerd zijn verstaan in transcripties. Vink uit wie je wilt behouden.',
+      one: 'Omi weet het niet zeker bij deze persoon. Vink uit om te behouden.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Vastgezette mensen worden nooit meegenomen bij Opruimen.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mensen verwijderen',
+      one: '1 persoon verwijderen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mensen verwijderd',
+      one: '1 persoon verwijderd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Niets om op te ruimen';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi is op dit moment over niemand onzeker.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Alles selecteren slaat vastgezette mensen over. Verwijder ze één voor één vanaf hun pagina.';
+
+  @override
+  String get pinnedNotSelectable => 'Vastgezet, niet te selecteren';
+
+  @override
+  String get ignoredVoicesTitle => 'Genegeerde stemmen';
+
+  @override
+  String get ignoredVoicesSubtitle => 'Tv, podcasts en andere stemmen die je hebt gemarkeerd als “Geen persoon”';
+
+  @override
+  String get ignoredVoicesEmpty => 'Geen genegeerde stemmen';
+
+  @override
+  String get restoreAction => 'Herstellen';
+
+  @override
+  String get voiceRestoredToast => 'Omi kan opnieuw naar deze stem vragen';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Iemand anders…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Geen persoon';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Weet ik niet';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Dat ben ik';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Dichtstbijzijnde stemmen';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Mensen met wie je recent hebt gepraat';
+
+  @override
+  String get voiceMatchClose => 'Sterke match';
+
+  @override
+  String get voiceMatchPossible => 'Mogelijke match';
+
+  @override
+  String get voiceMatchWeak => 'Zwakke match';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Stemmatch: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'Elk antwoord leert Omi een stem en verhoogt de zekerheid over die persoon.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ja verhoogt de zekerheid over $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Houdt je eigen stemprofiel scherp, zodat Omi je nooit als iemand anders benoemt.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Opgeslagen als $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Opgeslagen als jij';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi vraagt niet meer naar deze stem';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Gelabeld als $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Gelabeld als jij';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Gemarkeerd als geen persoon';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Label verwijderd';
+
+  @override
+  String get whoIsItTitle => 'Wie is het?';
+
+  @override
+  String get newPersonEllipsis => 'Nieuwe persoon…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Voeg “$name” toe';
+  }
+
+  @override
+  String get everyoneHeader => 'Iedereen';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Geldt voor elke regel van deze spreker';
+
+  @override
+  String get collapseAction => 'Samenvouwen';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Niet ik';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Label ze in nog $count gesprekken.',
+      one: 'Label ze in nog 1 gesprek.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Zet Omi aan in Sneltoetsen → Siri. Zeg “$askPhrase” of “$questionPhrase” en stel daarna je vraag.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Je kunt ook “$searchPhrase for what I did today” zeggen.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Update beschikbaar';
+
+  @override
+  String get updateAvailableMessage => 'Er staat een nieuwe versie van Omi klaar, met oplossingen en verbeteringen.';
+
+  @override
+  String get updateRequiredTitle => 'Update vereist';
+
+  @override
+  String get updateRequiredMessage =>
+      'Deze versie van Omi wordt niet meer ondersteund. Update om te blijven opnemen en synchroniseren.';
+
+  @override
+  String get exportingAllData =>
+      'Je gegevens worden geëxporteerd… Houd Omi open; grote accounts kunnen enkele minuten duren.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sprekers',
+      one: '1 spreker',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Gesynchroniseerde kopieën automatisch verwijderen';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Gesynchroniseerde kopieën worden na $days dagen verwijderd';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Verwijdert lokale kopieën $days dagen na synchronisatie. Cloudkopieën blijven bewaard.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokale kopieën';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count regels gelabeld',
+      one: '1 regel gelabeld',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Stem geleerd',
+        'pending': 'Stem leren…',
+        'disabled': 'Stem opslaan staat uit',
+        'other': 'Stem nog niet geleerd',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi herkent $name de volgende keer.',
+        'pending': 'Dit duurt een paar seconden.',
+        'disabled': 'Zet stemmen opslaan aan in Instellingen zodat Omi $name kan herkennen.',
+        'other': 'Omi heeft meer duidelijke spraak van $name nodig en blijft het proberen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gevonden in $count eerdere gesprekken',
+      one: 'Gevonden in 1 eerder gesprek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Waarschijnlijk',
+        'soundsLike': 'Klinkt als $name',
+        'notPerson': 'Niet $name',
+        'carried': 'Nog steeds $name. Overgenomen uit je laatste gesprek.',
+        'change': 'Wijzigen',
+        'alsoTitle': 'Is dit ook $name?',
+        'alsoBody': 'Omi heeft dezelfde stem in eerdere gesprekken gevonden.',
+        'confirmed': 'Je hebt dit label bevestigd',
+        'other': 'Bekijken',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration van deze stem';
+  }
+
+  @override
+  String get findDeviceNoneTitle => 'Geen Omi gevonden';
+
+  @override
+  String get findDeviceNoneMessage => 'Zet hem aan en houd hem bij je telefoon.';
+
+  @override
+  String get startupFailedDetails => 'Details';
+
+  @override
+  String get couldNotLoadApiKeys => 'API-sleutels konden niet worden geladen.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Nee…';
+
+  @override
+  String get diagnosticsRightNow => 'Op dit moment';
+
+  @override
+  String get diagnosticsLast7Days => 'Laatste 7 dagen';
+
+  @override
+  String get diagnosticsConnectedFor => 'Verbonden sinds';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Maakt zelf opnieuw verbinding';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Korte onderbrekingen, elke keer na ongeveer $duration terug';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Geen onderbrekingen deze week';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Problemen met verbinden';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Mislukte verbindingen in de afgelopen 24 uur: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Onderbrekingen';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'ongeveer $count per uur';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Langste onderbreking';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Sinds koppeling: $drops onderbrekingen, $failed mislukte verbindingen.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Laatste $duration';
+  }
+
+  @override
+  String get chatReplyOffline => 'Kan geen verbinding maken. Controleer je verbinding en probeer het opnieuw.';
+
+  @override
+  String get chatReplyServerError => 'Er is iets misgegaan aan onze kant. Probeer het opnieuw.';
+
+  @override
+  String get chatReplyTimeout => 'De reactie duurde te lang. Probeer het opnieuw.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Je bent niet ingelogd. Log in en probeer het opnieuw.';
+
+  @override
+  String get chatAppsLoadFailed => 'Chat-apps konden niet worden geladen. Probeer het opnieuw.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Stem';
+
+  @override
+  String get assistantVoice => 'Stem van assistent';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Je stemkeuze wordt gedeeld tussen mobiel en desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Chatantwoorden hardop voorlezen';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Spreekt alleen als Spraakantwoord dit toestaat.';
+
+  @override
+  String get voicePreviewSample => 'Hoi, ik ben Omi. Dit is mijn stem.';
+
+  @override
+  String get peopleStatsIncomplete => 'De aantallen zijn mogelijk onvolledig.';
+
+  @override
+  String get previousDay => 'Vorige dag';
+
+  @override
+  String get nextDay => 'Volgende dag';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Geen taken op $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Gesprek wordt opnieuw verwerkt…';
+
+  @override
+  String get conversationReprocessed => 'Gesprek bijgewerkt';
+
+  @override
+  String get loadingTranscript => 'Transcript laden…';
+
+  @override
+  String get transcriptLoadFailed => 'Kan het transcript niet laden.';
+
+  @override
+  String get processingConversationProgress => 'Gesprek wordt verwerkt…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Dit gesprek kon niet worden verwerkt.';
+
+  @override
+  String get waitForReprocessing => 'Wacht tot het opnieuw verwerken klaar is.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Spreker';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Sprekers zijn niet gescheiden over opnames heen.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Over sprekerlabels';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi kon de andere stemmen niet uit elkaar houden over opnames heen. Tik op een sprekerlabel om te benoemen wie er spreekt.';
+
+  @override
+  String get nameSpeakerTitle => 'Spreker benoemen';
+
+  @override
+  String get playbackPreparingAudio => 'Audio wordt voorbereid…';
+
+  @override
+  String get playbackBackToCurrent => 'Terug naar huidige';
+
+  @override
+  String get playbackAudioUnavailable => 'Audio niet beschikbaar';
+
+  @override
+  String get playbackAudioLoadFailed => 'Audio kon niet worden geladen';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Controleer verbinding';
+
+  @override
+  String get forYou => 'Voor jou';
+
+  @override
+  String get stopThese => 'Deze stoppen';
+
+  @override
+  String get dismiss => 'Verbergen';
+
+  @override
+  String get showOnLockScreen => 'Toon op vergrendelscherm';
 }

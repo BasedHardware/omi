@@ -42,16 +42,15 @@ import io
 import logging
 import time
 import wave
-from collections import deque
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from fastapi.websockets import WebSocketDisconnect
 
 import routers.listen.receiver as receiver_module
+import utils.stt.replay_delivery as replay_delivery_module
 import utils.stt.vad_gate as vad_gate_module
 from database import conversations as conversations_db
 from routers.listen.contracts import ListenLimits, ListenSessionState
@@ -64,6 +63,7 @@ from utils.product_telemetry import set_product_telemetry_client_for_tests
 from utils.stt.socket import STTSocket
 from utils.stt.streaming import STTService
 from utils.stt.vad_gate import GatedSTTSocket
+from utils.stt.replay_delivery import ReplayTailSocket
 from utils.transcribe_store import get_user_name as transcribe_get_user_name
 from utils.transcribe_store import user_db
 
@@ -89,6 +89,11 @@ STALL_SECONDS = 5.0
 OWNER_FREQUENCY_HZ = 200.0  # fake-embedding bin identifying the owner's voice
 OTHER_FREQUENCY_HZ = 700.0  # a second voice would sit here; far from the owner's bin
 _FAKE_FREQS = (100.0, 200.0, 350.0, 700.0)
+
+
+@pytest.fixture(autouse=True)
+def _recovery_enabled(monkeypatch):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 @pytest.fixture
@@ -166,8 +171,21 @@ def _fake_fresh_state():
 # Doubles for the outermost IO only.
 # ---------------------------------------------------------------------------
 class FakeListenWebSocket:
-    def __init__(self, frames, clock):
-        self.frames = deque(frames)
+    """One long-lived receive stream per session.
+
+    ``receive`` blocks on an empty queue so the real ``receive_data`` loop
+    stays mounted for the session's whole life: a mid-scenario "disconnect"
+    would trip the receiver's monotonic client-leaving latch and no failover
+    could ever run after it. ``run_receive`` appends frames then an ``_ack``
+    sentinel; the fake resolves it only after every prior frame was popped —
+    and because ``receive_data`` processes each frame fully (decode, capture
+    clock, STT-buffer flush) before asking for the next, a resolved ack means
+    the whole batch was delivered through the real path. Disconnect is fed
+    once, at teardown.
+    """
+
+    def __init__(self, clock):
+        self.queue = asyncio.Queue()
         self.clock = clock
         self.sent_json = []
 
@@ -177,16 +195,25 @@ class FakeListenWebSocket:
     async def close(self, code=1000, reason=None):
         return None
 
+    def feed(self, frames):
+        for frame in frames:
+            self.queue.put_nowait(frame)
+
+    def feed_disconnect(self):
+        self.queue.put_nowait({'type': 'websocket.disconnect', 'code': 1000})
+
     async def receive(self):
-        if self.frames:
-            frame = self.frames.popleft()
+        while True:
+            frame = await self.queue.get()
+            ack = frame.pop('_ack', None)
+            if ack is not None:
+                ack.set()
+                continue
             advance = frame.pop('_advance', None)
             if advance is not None:
                 self.clock['wall'] += advance[0]
                 self.clock['mono'] += advance[1]
             return frame
-        await asyncio.sleep(0)
-        raise WebSocketDisconnect(1000)
 
 
 class FakeProviderSocket(STTSocket):
@@ -324,11 +351,15 @@ class FailoverStack:
         self.owner_name = owner_name
 
         async def persistence_call(fn, *args, **kwargs):
+            if fn is speakers_module.named_speaker_prompts_allowed:
+                return True
             if fn is conversations_db.get_conversation:
                 raw = dict(self.store.rows.get(('users', UID, 'conversations', args[1])) or {})
                 # The canonical read decode: the stored row carries zlib-compressed
                 # transcript segments once the first write has landed.
                 return conversations_db.prepare_conversation_for_read(raw, UID)
+            if fn is conversations_db.get_manual_speaker_receipt:
+                return {}
             if fn is conversations_db.update_conversation_finished_at:
                 _uid, conversation_id, finished_at = args
                 self.store.rows[('users', UID, 'conversations', conversation_id)]['finished_at'] = finished_at
@@ -421,19 +452,36 @@ class FailoverStack:
         awaiting = getattr(self.state, 'conversations_awaiting_capture_origin', None)
         if awaiting is not None:
             awaiting.add(CONV)
+        # receive_data's finally block clears the flag; restore it before any
+        # await so the processing loop never observes a false session end.
+        self.websocket = FakeListenWebSocket(self.clock)
+        self.request.websocket = self.websocket
+        self.state.active = True
+        self.receive_task = None
 
     def restore(self):
         receiver_module.time = self._real_time
 
+    async def finish(self):
+        """Teardown: the one real disconnect, then the mounted loop's exit."""
+        if self.receive_task is None:
+            return
+        self.websocket.feed_disconnect()
+        await asyncio.gather(self.receive_task, return_exceptions=True)
+
     async def run_receive(self, frames):
-        self.request.websocket = FakeListenWebSocket(frames, self.clock)
-        websocket = self.request.websocket
-        self.state.active = True
-        await self.receiver.receive_data()
-        # receive_data's finally block clears the flag; restore it before any
-        # await so the processing loop never observes a false session end.
-        self.state.active = True
-        return websocket
+        if self.receive_task is None:
+            self.receive_task = asyncio.create_task(self.receiver.receive_data())
+        ack = asyncio.Event()
+        self.websocket.feed(frames)
+        self.websocket.queue.put_nowait({'_ack': ack})
+        await ack.wait()
+        # Capture acceptance is independent of paced provider delivery after
+        # recovery. Emit fake provider text only after its audio has arrived.
+        tail_task = getattr(self.receiver.stt_socket, '_task', None)
+        if tail_task is not None:
+            await asyncio.wait_for(asyncio.shield(tail_task), timeout=30)
+        return self.websocket
 
     def provider(self, index):
         return self.created_sockets[index]
@@ -515,7 +563,8 @@ async def _run_failover_scenario(monkeypatch, caplog, *, v2: bool):
         assert len(stack.created_sockets) >= 2
         failover_index = len(stack.created_sockets) - 1
         socket2 = stack.receiver.stt_socket
-        assert socket2 is not socket1 and isinstance(socket2, GatedSTTSocket)
+        assert socket2 is not socket1 and isinstance(socket2, ReplayTailSocket)
+        assert isinstance(socket2.connection, GatedSTTSocket)
         assert socket2._send_tracker is not None, 'the rebuild must install send_tracker=epoch'
         assert socket2._send_tracker is not socket1._send_tracker, 'each epoch owns its own translator'
 
@@ -581,6 +630,7 @@ async def _run_failover_scenario(monkeypatch, caplog, *, v2: bool):
     finally:
         stack.state.active = False
         stack.state.shutdown_event.set()
+        await stack.finish()
         await asyncio.wait_for(loop_task, timeout=30)
         for task in stack.tasks:
             task.cancel()
@@ -664,11 +714,13 @@ async def test_initialize_stt_installs_epoch_tracked_gated_socket(monkeypatch, c
         socket._conn.mark_dead()
         assert await stack.receiver._failover_stt_socket()
         rebuilt = stack.receiver.stt_socket
-        assert rebuilt is not socket and isinstance(rebuilt, GatedSTTSocket)
+        assert rebuilt is not socket and isinstance(rebuilt, ReplayTailSocket)
+        assert isinstance(rebuilt.connection, GatedSTTSocket)
         assert rebuilt._send_tracker is not None and rebuilt._send_tracker is not socket._send_tracker
     finally:
         stack.state.active = False
         stack.state.shutdown_event.set()
+        await stack.finish()
         for task in stack.tasks:
             task.cancel()
         await asyncio.gather(*stack.tasks, return_exceptions=True)
@@ -728,6 +780,7 @@ async def test_introduction_recognition_runs_with_capture_windows_present(monkey
     finally:
         stack.state.active = False
         stack.state.shutdown_event.set()
+        await stack.finish()
         await asyncio.wait_for(loop_task, timeout=30)
         for task in stack.tasks:
             task.cancel()
@@ -751,6 +804,7 @@ async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypa
     finally:
         stack.state.active = False
         stack.state.shutdown_event.set()
+        await stack.finish()
         await asyncio.wait_for(loop_task, timeout=30)
         for task in stack.tasks:
             task.cancel()
@@ -761,3 +815,92 @@ async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypa
     assert events, 'Diarization Completed must be emitted from the v2 batch path as from the legacy loop'
     assert events[-1]['properties']['conversation_id'] == CONV
     assert events[-1]['properties']['speaker_count'] >= 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('v2', [False, True])
+async def test_cold_start_contention_corrects_persisted_and_delivered_owner(monkeypatch, telemetry, v2):
+    """Real receive -> match -> transaction -> client correction, one enrolled print."""
+    import routers.listen.speakers as speakers_module
+
+    stack = FailoverStack(monkeypatch, v2=v2)
+
+    def measured_embedding(audio, filename):
+        voice = int(np.argmax(_fake_extract_embedding(audio, filename)))
+        distance, sign = (0.631, 1) if voice == 1 else (0.645, -1)
+        vector = np.zeros_like(np.asarray(_unit_vector(1), dtype=np.float32)).reshape(1, -1)
+        vector[0, 1] = 1 - distance
+        vector[0, 0] = sign * np.sqrt(1 - (1 - distance) ** 2)
+        return vector
+
+    monkeypatch.setattr(speakers_module, 'extract_embedding_from_bytes', measured_embedding)
+    loop_task = asyncio.create_task(stack.processor.process_loop())
+    matcher_task = asyncio.create_task(stack.host.speakers.load_and_run())
+    stack.tasks.extend([loop_task, matcher_task])
+    try:
+        await stack.host.speakers.refresh_for_conversation(CONV)
+        assert set(stack.host.speakers.person_embeddings) == {'user'}
+        assert await stack.receiver.initialize_stt()
+        first_socket = await stack.run_receive(_frames_for(_owner(6.0) + _tone(OTHER_FREQUENCY_HZ, 6.0)))
+        stack.provider(0)['callback']([_provider_segment('first', 0, 6, 'First voice speaking.')])
+        await _wait_for(lambda: any(s['is_user'] for s in stack.decode_segments()), message='initial owner label')
+        assert any(s['is_user'] for s in _delivered_items(first_socket.sent_json, 'First voice'))
+
+        second_socket = first_socket
+        second = _provider_segment('second', 6, 12, 'Second voice speaking.')
+        second.update(speaker='SPEAKER_01', speaker_id=1)
+        stack.provider(0)['callback']([second])
+
+        def corrected():
+            saved = stack.decode_segments()
+            return len(saved) == 2 and all(s.get('speaker_identity_status') == 'ambiguous' for s in saved)
+
+        await _wait_for(corrected, message='persisted ambiguity correction', stack=stack)
+        saved = stack.decode_segments()
+        assert all(not s['is_user'] and not s.get('person_id') for s in saved)
+        await _wait_for(
+            lambda: any(
+                s.get('speaker_identity_status') == 'ambiguous'
+                for s in _delivered_items(second_socket.sent_json, 'First voice')
+            ),
+            message='correction delivered for previously labelled owner',
+        )
+        corrections = _delivered_items(second_socket.sent_json, 'First voice')
+        assert not corrections[-1]['is_user']
+    finally:
+        stack.state.active = False
+        stack.state.shutdown_event.set()
+        await stack.finish()
+        await asyncio.wait_for(loop_task, timeout=30)
+        for task in stack.tasks:
+            task.cancel()
+        await asyncio.gather(*stack.tasks, return_exceptions=True)
+        stack.restore()
+
+
+@pytest.mark.anyio
+async def test_held_live_audio_birth_is_accept_time_not_flush_time(monkeypatch, telemetry):
+    """A sub-flush frame's residence clock starts at capture-accept, not at
+    the later STT-buffer flush into the recovery ring — the flush must never
+    renew the capture-age deadline of audio it merely held."""
+    stack = FailoverStack(monkeypatch, v2=False)
+    monkeypatch.setattr(replay_delivery_module, 'clock', lambda: stack.clock['mono'])
+    try:
+        assert await stack.receiver.initialize_stt()
+        await stack.run_receive(_frames_for(_silence(0.02), seconds_per_frame=0.02))
+        first_birth = stack.receiver._live_birth.lookup(0)
+        assert first_birth == pytest.approx(0.02)
+
+        stack.receiver._window_replay_started = True
+        stack.provider(0)['inner'].mark_dead()
+        await stack.run_receive([_stall_frame(5.0)] + _frames_for(_silence(0.5)))
+        assert stack.receiver._live_birth.lookup(0) == pytest.approx(first_birth)
+        assert stack.receiver._live_birth.lookup(0) < 5.0
+    finally:
+        stack.state.active = False
+        stack.state.shutdown_event.set()
+        await stack.finish()
+        for task in stack.tasks:
+            task.cancel()
+        await asyncio.gather(*stack.tasks, return_exceptions=True)
+        stack.restore()

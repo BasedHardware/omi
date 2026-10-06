@@ -444,6 +444,10 @@ class ServerConversation {
   String? folderId;
   ConversationVisibility visibility;
 
+  /// The app keeps its historical private fallback for unknown wire values;
+  /// Siri excludes that row instead of inferring the owner's visibility.
+  final bool siriVisibilityValid;
+
   /// Search-only transcript evidence for find-and-play.
   final List<TranscriptMatchSnippet> matchSnippets;
 
@@ -453,6 +457,11 @@ class ServerConversation {
 
   /// Whether and which speaker ids are people; null on conversations processed before it existed.
   final ConversationSpeakers? speakerResolution;
+
+  /// Server-authored: summarization failed on a transient error after its retries and a
+  /// reprocess can still succeed. Absent (false) on every other row, including rows where the
+  /// model ran and found nothing to summarize.
+  final bool summaryRetryable;
 
   // local label
   bool isNew = false;
@@ -481,9 +490,11 @@ class ServerConversation {
     this.starred = false,
     this.folderId,
     this.visibility = ConversationVisibility.private_,
+    this.siriVisibilityValid = true,
     this.matchSnippets = const [],
     this.captureGroup,
     this.speakerResolution,
+    this.summaryRetryable = false,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -516,6 +527,8 @@ class ServerConversation {
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
+      siriVisibilityValid: json['siri_visibility_valid'] != false &&
+          (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
     );
   }
@@ -525,6 +538,7 @@ class ServerConversation {
     Structured? structured,
     Geolocation? geolocation,
     bool deleted = false,
+    bool siriVisibilityValid = true,
     List<TranscriptMatchSnippet>? matchSnippets,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
@@ -561,10 +575,12 @@ class ServerConversation {
       starred: generated.starred,
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
+      siriVisibilityValid: siriVisibilityValid,
       matchSnippets: snippets,
       captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
       speakerResolution:
           generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
+      summaryRetryable: generated.summaryRetryable == true,
     );
   }
 
@@ -596,8 +612,10 @@ class ServerConversation {
       'starred': starred,
       'folder_id': folderId,
       'visibility': visibility.value,
+      if (!siriVisibilityValid) 'siri_visibility_valid': false,
       'capture_group': captureGroup?.toJson(),
       'speaker_resolution': speakerResolution?.toJson(),
+      if (summaryRetryable) 'summary_retryable': true,
     };
   }
 
@@ -629,6 +647,7 @@ class ServerConversation {
       visibility: visibility.value,
       captureGroup: captureGroup?.toGenerated(),
       speakerResolution: speakerResolution?.toGenerated(),
+      summaryRetryable: summaryRetryable ? true : null,
     );
   }
 
@@ -679,7 +698,11 @@ class ServerConversation {
   }
 
   String getTranscript({int? maxCount, bool generate = false}) {
-    var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true);
+    var transcript = TranscriptSegment.segmentsAsString(
+      transcriptSegments,
+      includeTimestamps: true,
+      unresolved: speakerResolution?.status == 'unavailable',
+    );
     if (maxCount != null && transcript.isNotEmpty) {
       transcript = transcript.substring(max(transcript.length - maxCount, 0));
     }
@@ -724,22 +747,12 @@ class ServerConversation {
     return duration > 0 ? duration.toInt() : 0;
   }
 
-  /// Matches desktop's recoverable-content heuristic: one transcript segment
-  /// with at least this many words is treated as real speech, not ambient noise.
-  static const int substantialTranscriptMinWords = 5;
-
-  /// True when any transcript segment is long enough to plausibly deserve a title.
-  bool get hasSubstantialTranscriptSegment =>
-      transcriptSegments.any((segment) => segment.wordCount >= substantialTranscriptMinWords);
-
-  /// Completed processing, empty title, and a substantial transcript — a silent
-  /// title-pass failure the user can recover with Reprocess. Discarded, locked,
-  /// in-flight, and ambient/short captures stay quiet.
-  bool get isFailedTitleRecoverable {
+  /// Show "Summary failed · Retry" only when the server says a reprocess can succeed
+  /// ([summaryRetryable]). Discarded, locked and in-flight rows stay quiet.
+  bool get showsSummaryRetry {
     if (discarded || isLocked) return false;
     if (status != ConversationStatus.completed) return false;
-    if (structured.title.trim().isNotEmpty) return false;
-    return hasSubstantialTranscriptSegment;
+    return summaryRetryable;
   }
 
   /// Check if this conversation has audio files available

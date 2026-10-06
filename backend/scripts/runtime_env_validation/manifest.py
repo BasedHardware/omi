@@ -20,6 +20,8 @@ from scripts.runtime_env_capability_contracts import (
     validate_speaker_embedding_hosts,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
+from scripts.runtime_env_jev_contract import validate_jev_uid_allowlist  # noqa: E402
+from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _fetch_live_cloud_run_state,
     _validate_cloud_run,
@@ -49,6 +51,8 @@ from scripts.runtime_env_validation.common import (
     _validate_env_entries,
     _validate_forbidden_env_entries,
     data_plane_project,
+    validate_mentor_pipeline,
+    validate_proactivity_v2_posthog_token,
 )
 
 _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
@@ -171,6 +175,9 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
     errors = validate_retired_memory_manifest(env, env_config)
+    errors.extend(
+        ValidationError('sync_lineage_rollout', message) for message in validate_sync_lineage_rollout(env, env_config)
+    )
     for key in ('region', 'gke', 'cloud_run'):
         if key not in env_config:
             errors.append(ValidationError(env, f'missing {key}'))
@@ -715,6 +722,38 @@ def _validate_desktop_backend_vertex_pt_contract(env: str, env_config: ConfigDic
     return errors
 
 
+def _validate_proactivity_v2_flag_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Every feed/mentor host and gateway admission executor needs the dedicated token."""
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    hosts = [(f'gke/{name}', gke.get(name)) for name in ('backend-listen', 'pusher')]
+    hosts.extend((f'cloud_run/{name}', host) for name, host in services.items())
+    hosts.extend((name, env_config.get(name)) for name in ('llm_gateway', 'desktop_backend'))
+    errors: list[ValidationError] = []
+    for name, host in hosts:
+        env_map = _as_config_dict((_as_config_dict(host) or {}).get('env')) or {}
+        errors.extend(validate_proactivity_v2_posthog_token(scope=f'{env}/{name}', env_entries=env_map, required=True))
+
+    # Gateway has its own manifest section, outside _validate_gke's service loop.
+    gateway = _as_config_dict(env_config.get('llm_gateway')) or {}
+    gateway_env = _as_config_dict(gateway.get('env')) or {}
+    values = _load_yaml(ROOT / f'backend/charts/llm-gateway/{env}_omi_llm_gateway_values.yaml')
+    errors.extend(
+        _validate_env_entries(
+            scope=f'{env}/llm_gateway',
+            expected={
+                name: gateway_env[name]
+                for name in ('PROACTIVITY_V2_POSTHOG_TOKEN', 'PROACTIVITY_V2_POSTHOG_HOST')
+                if name in gateway_env
+            },
+            actual=_env_entries_by_name(values.get('env', [])),
+            strict_provisional=True,
+        )
+    )
+    return errors
+
+
 def validate_runtime_env(
     *,
     env: str,
@@ -728,11 +767,22 @@ def validate_runtime_env(
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
     errors = _validate_manifest_shape(env_config, env)
+    errors.extend(validate_mentor_pipeline(scope=env, config=env_config))
+    errors.extend(validate_jev_uid_allowlist(stage=env, scope=env, config=env_config))
     if errors:
         return errors
 
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
+    errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    for service, service_config in (_as_config_dict(env_config.get('gke')) or {}).items():
+        values_file = (_as_config_dict(service_config) or {}).get('values_file')
+        if values_file:
+            errors.extend(
+                validate_jev_uid_allowlist(
+                    stage=env, scope=f'{env}/gke/{service}', config=_load_yaml(ROOT / values_file)
+                )
+            )
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(validate_speaker_embedding_hosts(env, env_config))
     errors.extend(validate_free_tier_deploy_contract(env, env_config))
@@ -763,6 +813,7 @@ def validate_runtime_env(
         cloud_run_state = _fetch_live_cloud_run_state(env_config)
 
     if cloud_run_state is not None:
+        errors.extend(validate_jev_uid_allowlist(stage=env, scope=f'{env}/cloud_run', config=cloud_run_state))
         errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
         errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
     return errors

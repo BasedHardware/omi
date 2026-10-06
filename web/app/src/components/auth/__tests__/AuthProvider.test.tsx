@@ -87,7 +87,9 @@ async function renderProvider() {
   function Probe() {
     const { user, loading, redirectSignInError } = useAuth();
     const code =
-      typeof redirectSignInError === 'object' && redirectSignInError !== null && 'code' in redirectSignInError
+      typeof redirectSignInError === 'object' &&
+      redirectSignInError !== null &&
+      'code' in redirectSignInError
         ? String((redirectSignInError as { code: unknown }).code)
         : 'none';
     return createElement(

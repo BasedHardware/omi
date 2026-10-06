@@ -188,6 +188,7 @@ getTranscriptWidget(
   bool topMargin = true,
   bool canDisplaySeconds = true,
   bool isConversationDetail = false,
+  bool unresolvedSpeakers = false,
   double bottomMargin = 100.0,
   Function(String, int)? editSegment,
   List<String> taggingSegmentIds = const [],
@@ -206,9 +207,21 @@ getTranscriptWidget(
   List<Widget> leadingItems = const [],
   List<String> leadingItemIds = const [],
   TranscriptSegmentBuilder? segmentBuilder,
+  void Function(TranscriptSegment segment)? onConfirmSpeakerLabel,
+  void Function(TranscriptSegment segment)? onRejectSpeakerLabel,
+  DateTime? startedAt,
+  String? currentSegmentId,
+  String? followTargetSegmentId,
+  bool followCurrentSegment = false,
+  int playbackFollowRequest = 0,
+  VoidCallback? onUserScroll,
+  ValueChanged<TranscriptSegment>? onTopVisibleSegmentChanged,
 }) {
   if (conversationCreating) {
-    return const Padding(padding: EdgeInsets.only(top: 80), child: Center(child: OmiSpinner()));
+    return const Padding(
+      padding: EdgeInsets.only(top: 80),
+      child: Center(child: OmiSpinner()),
+    );
   }
 
   final bool showPhotos = photos.isNotEmpty;
@@ -222,6 +235,7 @@ getTranscriptWidget(
     return TranscriptWidget(
       key: transcriptKey,
       segments: segments,
+      unresolvedSpeakers: unresolvedSpeakers,
       horizontalMargin: horizontalMargin,
       topMargin: topMargin,
       canDisplaySeconds: canDisplaySeconds,
@@ -242,6 +256,15 @@ getTranscriptWidget(
       leadingItems: leadingItems,
       leadingItemIds: leadingItemIds,
       segmentBuilder: segmentBuilder,
+      onConfirmSpeakerLabel: onConfirmSpeakerLabel,
+      onRejectSpeakerLabel: onRejectSpeakerLabel,
+      startedAt: startedAt,
+      currentSegmentId: currentSegmentId,
+      followTargetSegmentId: followTargetSegmentId,
+      followCurrentSegment: followCurrentSegment,
+      playbackFollowRequest: playbackFollowRequest,
+      onUserScroll: onUserScroll,
+      onTopVisibleSegmentChanged: onTopVisibleSegmentChanged,
     );
   }
 

@@ -43,6 +43,8 @@ numpy==1.26.4
 
 # Metrics
 prometheus-client==0.21.1
+# Cohort flag evaluation (utils.proactivity_flags) and integration telemetry
+posthog==3.5.2
 
 # LLM services (for process_conversation)
 anthropic>=0.52.0

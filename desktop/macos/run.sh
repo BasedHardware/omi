@@ -1286,7 +1286,7 @@ fi
 
 if [ "$FAST_BUNDLE" = "1" ]; then
     step "Building Swift app (swift build -c debug)..."
-    xcrun swift build -c debug --package-path Desktop
+    xcrun swift build -c debug --package-path Desktop -Xswiftc -emit-const-values
 
     step "Patching installed app executable..."
     PATCHED_BINARY="$(mktemp "$APP_PATH/Contents/MacOS/.omi-fast-executable.XXXXXX")"
@@ -1295,6 +1295,8 @@ if [ "$FAST_BUNDLE" = "1" ]; then
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$PATCHED_BINARY" 2>/dev/null || true
     rewrite_bundled_dylib_load_path "$PATCHED_BINARY" "libwebp.7.dylib"
     mv -f "$PATCHED_BINARY" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
+    step "Embedding App Intents metadata..."
+    ./scripts/embed-app-intents-metadata.sh Desktop "$APP_PATH" Debug "$(uname -m)"
     if [ "$LOCAL_PROFILE" = true ]; then
         EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
         omi_write_local_profile_env "$APP_PATH/Contents/Resources/.env"
@@ -1341,7 +1343,7 @@ if [ -f scripts/check_schema_docs.sh ]; then
 fi
 
 step "Building Swift app (swift build -c debug)..."
-xcrun swift build -c debug --package-path Desktop
+xcrun swift build -c debug --package-path Desktop -Xswiftc -emit-const-values
 
 step "Creating app bundle..."
 substep "Removing prior bundle (if any)"
@@ -1353,6 +1355,8 @@ mkdir -p "$APP_BUNDLE/Contents/Frameworks"
 
 substep "Copying binary ($(du -h "Desktop/.build/debug/$BINARY_NAME" 2>/dev/null | cut -f1))"
 cp -f "Desktop/.build/debug/$BINARY_NAME" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+substep "Embedding App Intents metadata"
+./scripts/embed-app-intents-metadata.sh Desktop "$APP_BUNDLE" Debug "$(uname -m)"
 
 substep "Adding rpath for Frameworks"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true

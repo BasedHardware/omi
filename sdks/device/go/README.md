@@ -14,6 +14,10 @@ WebSocket connections; it needs no device, API credentials, or network service.
 Parakeet ignores PCM until its server sends `ready`, while Deepgram accepts PCM
 as soon as its connection is established.
 
+`ParakeetWSURL` overrides an existing `sample_rate`, including percent-encoded
+query keys, and emits one rate parameter. Other query parameters retain their
+original encoding and relative order.
+
 Exports UUIDs, `StripPacketHeader`, STT helpers. `Scan` / `Listen` / `ListenPayload` / `ReadCodec` return `ErrBLEDisabled`.
 
 ## BLE build (`-tags ble`)

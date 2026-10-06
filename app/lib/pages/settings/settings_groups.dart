@@ -17,7 +17,6 @@ import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 /// The Settings group pages. The Settings sheet shows Account, the five groups here, Integrations
@@ -39,7 +38,10 @@ class SettingsTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: OmiRadius.smAll),
-      child: Text(label, style: OmiType.caption.copyWith(color: color, fontWeight: FontWeight.w600)),
+      child: Text(
+        label,
+        style: OmiType.caption.copyWith(color: color, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }
@@ -160,28 +162,6 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
     }
   }
 
-  Future<void> _showVoiceResponseModeSheet() async {
-    final current = _prefs.voiceResponseMode;
-    final picked = await showOmiSheet<int>(
-      context: context,
-      title: context.l10n.voiceResponseModeTitle,
-      builder: (sheetContext) => OmiSettingsGroup(
-        children: [
-          for (final mode in const [0, 1, 2])
-            OmiSettingsRow(
-              title: _voiceResponseModeLabel(mode),
-              trailing: mode == current ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
-              showChevron: false,
-              onTap: () => Navigator.of(sheetContext).pop(mode),
-            ),
-        ],
-      ),
-    );
-    if (picked == null || picked == current || !mounted) return;
-    setState(() => _prefs.voiceResponseMode = picked);
-    PlatformManager.instance.analytics.voiceResponseModeChanged(picked);
-  }
-
   Future<void> _setBackgroundMode(bool value) async {
     final accepted = await context.read<CaptureProvider>().setBackgroundModeEnabled(value);
     if (accepted && mounted) setState(() {});
@@ -208,8 +188,12 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
       children: [
         OmiSettingsGroup(
           children: [
-            row(SettingsDestination.transcription,
-                icon: FontAwesomeIcons.microphone, title: l10n.transcription, value: _transcriptionValue()),
+            row(
+              SettingsDestination.transcription,
+              icon: FontAwesomeIcons.microphone,
+              title: l10n.transcription,
+              value: _transcriptionValue(),
+            ),
             row(SettingsDestination.language, icon: FontAwesomeIcons.globe, title: l10n.language),
             row(SettingsDestination.customVocabulary, icon: FontAwesomeIcons.book, title: l10n.customVocabulary),
           ],
@@ -224,17 +208,19 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
               leading: const FaIcon(FontAwesomeIcons.volumeHigh),
               title: l10n.voiceResponseMode,
               value: _voiceResponseModeLabel(_prefs.voiceResponseMode),
-              onTap: _showVoiceResponseModeSheet,
+              onTap: () => open(SettingsDestination.voice),
             ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
         OmiSettingsGroup(
           children: [
-            row(SettingsDestination.conversationTimeout,
-                icon: FontAwesomeIcons.clock,
-                title: l10n.conversationTimeout,
-                subtitle: l10n.setWhenConversationsAutoEnd),
+            row(
+              SettingsDestination.conversationTimeout,
+              icon: FontAwesomeIcons.clock,
+              title: l10n.conversationTimeout,
+              subtitle: l10n.setWhenConversationsAutoEnd,
+            ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
@@ -242,7 +228,6 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
         // Capture modes: two-state settings, so inline switches that apply immediately.
         OmiSectionHeader(l10n.recording, trailing: SettingsTag(l10n.beta, OmiColors.warning)),
         OmiSettingsGroup(
-          footer: l10n.transcribeLaterNote,
           children: [
             OmiSettingsRow.toggle(
               key: const ValueKey('settings_row_transcribeLater'),
@@ -319,7 +304,6 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
         OmiSettingsGroup(
           children: [
             row(SettingsDestination.notifications, icon: FontAwesomeIcons.solidBell, title: l10n.notifications),
-            row(SettingsDestination.homeScreen, icon: FontAwesomeIcons.house, title: l10n.homeScreen),
             row(SettingsDestination.conversationDisplay, icon: FontAwesomeIcons.list, title: l10n.conversationDisplay),
             OmiSettingsRow(
               key: const ValueKey('settings_row_appearance'),
@@ -338,7 +322,7 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
 // -----------------------------------------------------------------------------------------------
 // Privacy & Data
 
-/// Privacy & Data: data protection, memories, and exporting or importing data.
+/// Privacy & Data: data protection, and exporting or importing data.
 class PrivacyDataGroupPage extends StatefulWidget {
   const PrivacyDataGroupPage({super.key});
 
@@ -357,7 +341,6 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
         OmiSettingsGroup(
           children: [
             row(SettingsDestination.dataPrivacy, icon: FontAwesomeIcons.shield, title: l10n.dataProtection),
-            row(SettingsDestination.memories, icon: FontAwesomeIcons.brain, title: l10n.memories),
             ValueListenableBuilder<bool>(
               valueListenable: DataExport.exportInProgress,
               builder: (context, exporting, _) => OmiSettingsRow(
@@ -370,8 +353,12 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
                 onTap: exporting ? null : () => open(SettingsDestination.exportData),
               ),
             ),
-            row(SettingsDestination.importData,
-                icon: FontAwesomeIcons.fileImport, title: l10n.importData, subtitle: l10n.importDataFromOtherSources),
+            row(
+              SettingsDestination.importData,
+              icon: FontAwesomeIcons.fileImport,
+              title: l10n.importData,
+              subtitle: l10n.importDataFromOtherSources,
+            ),
           ],
         ),
       ],

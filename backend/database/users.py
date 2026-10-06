@@ -19,8 +19,15 @@ from database.account_deletion_transitions import (
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.firestore_tier_context import invalidate_subscription, observe_subscription
-from database.person_aliases import rename_person_retaining_aliases
+from database.person_aliases import (
+    dismiss_person_soft,
+    find_person_by_name,
+    list_people,
+    rename_person_retaining_aliases,
+)
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
+from database.speaker_learning_fields import project_person_learning, speech_sample_source, voice_learning_fields
+from database.speaker_profile_authority import person_teaching_authorized
 from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
@@ -232,12 +239,12 @@ def set_user_store_recording_permission(uid: str, value: bool):
     user_ref.update({'store_recording_permission': value})
 
 
-def get_meeting_note_screenshots_enabled(uid: str) -> bool:
+def get_meeting_note_screenshots_enabled(uid: str, *, rpc_timeout: Optional[float] = None) -> bool:
     """Account-level setting gating screen-frame egress admission (contract
     §6). Default true — off means the feature does nothing and existing
-    frames stay hidden (contract §9), it does not delete anything."""
+    frames stay hidden (contract §9); ``rpc_timeout`` bounds it to one attempt."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict() or {}
+    user_data = user_ref.get(**({'timeout': rpc_timeout, 'retry': None} if rpc_timeout else {})).to_dict() or {}
     return user_data.get('meeting_note_screenshots_enabled', True)
 
 
@@ -883,35 +890,46 @@ def create_person(uid: str, data: dict):
     return data
 
 
-def get_person(uid: str, person_id: str):
+def get_person(uid: str, person_id: str, *, include_dismissed: bool = False):
+    """Return one owner-scoped person, hiding soft-dismissed records by default.
+
+    ``include_dismissed`` is reserved for complete-account export paths. Normal
+    product reads must not make dismissed people or their voice data visible.
+    """
+
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_doc = person_ref.get()
     if not person_doc.exists:
         return None
     person_data = person_doc.to_dict()
+    if not include_dismissed and person_data.get('is_dismissed') is True:
+        return None
     person_data.setdefault('id', person_doc.id)
-    return person_data
+    return project_person_learning(uid, person_data, firestore_client=db)
 
 
-def get_people(uid: str):
-    people_ref = db.collection('users').document(uid).collection('people')
-    result = []
-    for person in people_ref.stream():
-        data = person.to_dict()
-        data.setdefault('id', person.id)
-        result.append(data)
-    return result
+def get_people(uid: str, *, include_dismissed: bool = False):
+    cache = {}
+    return [
+        project_person_learning(uid, person, firestore_client=db, projection_cache=cache)
+        for person in list_people(db, uid, include_dismissed=include_dismissed)
+    ]
+
+
+def count_people(uid: str, *, firestore_client: Any = None) -> int:
+    """Server-side count of active people, excluding soft-dismissed profiles like `get_people`."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    people_ref = client.collection('users').document(uid).collection('people')
+    total = int(people_ref.count().get()[0][0].value or 0)
+    dismissed = int(people_ref.where(filter=FieldFilter('is_dismissed', '==', True)).count().get()[0][0].value or 0)
+    return max(total - dismissed, 0)
 
 
 def get_person_by_name(uid: str, name: str):
-    people_ref = db.collection('users').document(uid).collection('people')
-    query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
-    docs = list(query.stream())
-    if docs:
-        data = docs[0].to_dict()
-        data.setdefault('id', docs[0].id)
-        return data
-    return None
+    person = find_person_by_name(db, uid, name)
+    if person is None:
+        return None
+    return project_person_learning(uid, person, firestore_client=db)
 
 
 def get_people_by_ids(uid: str, person_ids: list[str]):
@@ -919,6 +937,8 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
 
     Note: db.get_all() returns results in arbitrary order (Firestore behavior).
     Callers must not assume the result order matches person_ids order.
+    Dismissed people are returned on purpose: callers resolve IDs already stored on past
+    segments, and dismissal hides a profile from lists without rewriting that history.
     """
     if not person_ids:
         return []
@@ -926,13 +946,13 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
     # Use document ID fetches instead of where("id", "in", ...) to handle
     # legacy docs that may not have a stored 'id' field.
     doc_refs = [people_ref.document(pid) for pid in person_ids]
-    all_people = []
+    all_people, cache = [], {}
     for doc in db.get_all(doc_refs):
         if doc.exists:
             data = doc.to_dict()
             data.setdefault('id', doc.id)
             if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
-                all_people.append(data)
+                all_people.append(project_person_learning(uid, data, firestore_client=db, projection_cache=cache))
     return all_people
 
 
@@ -940,6 +960,10 @@ def update_person(uid: str, person_id: str, name: str) -> bool:
     """Rename a stable person and retain old names as owner-scoped aliases."""
 
     return rename_person_retaining_aliases(db, uid, person_id, name)
+
+
+def dismiss_person(uid: str, person_id: str) -> bool:
+    return dismiss_person_soft(db, uid, person_id)
 
 
 def delete_person(uid: str, person_id: str):
@@ -986,23 +1010,7 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
 def add_person_speech_sample(
     uid: str, person_id: str, sample_path: str, transcript: Optional[str] = None, max_samples: int = 5
 ) -> bool:
-    """
-    Append speech sample path to person's speech_samples list.
-    Limits to max_samples to prevent unlimited growth.
-
-    Uses Firestore transaction to ensure atomic read-modify-write,
-    preventing array drift from concurrent updates.
-
-    Args:
-        uid: User ID
-        person_id: Person ID
-        sample_path: GCS path to the speech sample
-        transcript: Optional transcript text for the sample
-        max_samples: Maximum number of samples to keep (default 5)
-
-    Returns:
-        True if sample was added, False if limit reached or person not found
-    """
+    """Atomically append a sample; return False for a missing person or a full sample list."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     transaction = db.transaction()
     return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
@@ -1021,7 +1029,11 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
 
 
 @transactional
-def _replace_speech_profile_transaction(transaction, person_ref, expected_updated_at, profile, user_ref=None):
+def _replace_speech_profile_transaction(
+    transaction, person_ref, expected_updated_at, profile, user_ref=None, source=None
+):
+    if source and not person_teaching_authorized(transaction, user_ref, person_ref.id, *source):
+        return None
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
@@ -1046,25 +1058,28 @@ def replace_person_speech_profile(
     embedding: list,
     conversation_id: str,
     segment_ids: list[str],
+    *,
+    speech_seconds: Optional[float] = None,
+    expected_receipt_generation: Optional[int] = None,
 ) -> Optional[list[str]]:
-    """Publish one verified sample, its embedding and teaching provenance atomically.
-
-    None means the result lost its ownership/version fence; [] is a first enrollment.
-    """
+    """Publish verified teaching atomically; None means its source/version fence failed."""
     user_ref = db.collection('users').document(uid)
     ref = user_ref.collection('people').document(person_id)
+    profile = {
+        'speech_samples': [sample_path],
+        'speech_sample_transcripts': [transcript],
+        'speech_samples_version': 3,
+        'speaker_embedding': embedding,
+        'speech_sample_source': speech_sample_source(conversation_id, segment_ids, expected_receipt_generation),
+        **voice_learning_fields('learned', 'stored', speech_seconds),
+    }
     return _replace_speech_profile_transaction(
         db.transaction(),
         ref,
         expected_updated_at,
-        {
-            'speech_samples': [sample_path],
-            'speech_sample_transcripts': [transcript],
-            'speech_samples_version': 3,
-            'speaker_embedding': embedding,
-            'speech_sample_source': {'conversation_id': conversation_id, 'segment_ids': segment_ids},
-        },
+        profile,
         user_ref=user_ref,
+        source=(uid, conversation_id, segment_ids, expected_receipt_generation),
     )
 
 
@@ -1171,10 +1186,12 @@ def get_user_speaker_embedding(uid: str) -> Optional[list]:
 
 def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, *, expected_updated_at) -> bool:
     """Recover a vector only while the sample snapshot that produced it is current."""
-    ref = db.collection('users').document(uid).collection('people').document(person_id)
+    # user_ref revalidates save_other_voice_profiles; recovery needs no source fence.
+    user_ref = db.collection('users').document(uid)
+    ref = user_ref.collection('people').document(person_id)
     return (
         _replace_speech_profile_transaction(
-            db.transaction(), ref, expected_updated_at, {'speaker_embedding': embedding}
+            db.transaction(), ref, expected_updated_at, {'speaker_embedding': embedding}, user_ref=user_ref
         )
         is not None
     )
@@ -1735,8 +1752,8 @@ def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
     user_ref.set({'onboarding': onboarding_data}, merge=True)
 
 
-def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Subscription:
-    """Gets the user's subscription, creating a default free one if it doesn't exist."""
+def get_user_subscription(uid: str, *, firestore_client: Any | None = None, read_only: bool = False) -> Subscription:
+    """Get a subscription; read_only suppresses default creation and legacy migration."""
     user_ref = (firestore_client or db).collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if user_doc.exists:
@@ -1755,7 +1772,7 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
 
             subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
             # Handle migration for old 'free' plan identifier after validating the normalized payload.
-            if legacy_free_plan:
+            if legacy_free_plan and not read_only:
                 sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
             observe_subscription(uid, subscription)
@@ -1768,6 +1785,8 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
     from utils.subscription import get_default_basic_subscription
 
     default_subscription = get_default_basic_subscription()
+    if read_only:
+        return default_subscription
     # Strip dynamic fields before storing
     sub_to_store = default_subscription.model_dump()
     sub_to_store.pop('features', None)

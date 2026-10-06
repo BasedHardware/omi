@@ -87,10 +87,18 @@ def test_request_keeps_verbatim_text_separate_from_style_and_selects_audio():
 
 
 def test_provider_specific_voice_names_map_and_unknowns_use_safe_default():
-    assert tts.map_gemini_voice('BAMYoBHLZM7lJgJAmFz0', 'mobile') == 'Aoede'
+    assert tts.map_gemini_voice('BAMYoBHLZM7lJgJAmFz0', 'mobile') == 'Charon'
     assert tts.map_gemini_voice('shimmer', 'desktop') == 'Aoede'
     assert tts.map_gemini_voice('cedar', 'desktop') == 'Gacrux'
     assert tts.map_gemini_voice('future-provider-voice', 'desktop') == tts.DEFAULT_GEMINI_VOICE
+
+
+def test_default_voice_and_style_match_the_live_assistant():
+    request = tts.build_gemini_request(text='Hello.', voice=tts.DEFAULT_GEMINI_VOICE)
+    assert tts.DEFAULT_GEMINI_VOICE == 'Charon'
+    assert request['contents'][0]['parts'][0]['speech_metadata']['style'] == (
+        'Clear, friendly, neutral assistant voice at a natural conversational pace; no dramatic emphasis.'
+    )
 
 
 @pytest.mark.asyncio

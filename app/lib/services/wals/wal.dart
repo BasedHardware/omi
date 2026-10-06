@@ -5,7 +5,8 @@ import 'package:omi/backend/schema/geolocation.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
-const sdcardChunkSizeSecs = 180;
+
+const sdcardChunkSizeSecs = 60;
 const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
@@ -183,6 +184,11 @@ class Wal {
   DateTime? syncStartedAt;
   int? syncEtaSeconds;
   double? syncSpeedKBps;
+
+  /// 0..1 fraction of this recording's device transfer. Runtime only.
+  /// Null when this recording is not the active device download.
+  /// Zero means the transfer has started but no countable bytes have arrived.
+  double? deviceDownloadFraction;
   SyncMethod syncMethod = SyncMethod.ble;
 
   int frameSize = 160;
@@ -196,12 +202,26 @@ class Wal {
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
 
+  /// Client recording id (`activeRecordingId` / `external_data.recording_session_id`).
+  /// Stamped when the WAL is created so a safety copy that misses
+  /// ConversationProcessingStarted can still bind to the live conversation.
+  String? recordingSessionId;
+
   /// The account that created this recording, stamped from the signed-in uid
   /// at creation (or back-filled at logout). Loaded records owned by another
   /// account are parked durably instead of being loaded, so a session never
   /// renders or uploads another account's recordings after an account switch.
   /// Null on records written before this field existed (pre-upgrade data).
   String? ownerUid;
+  String? captureRoot;
+  int? sourceFrameStart;
+  int? sourceClockEpoch;
+
+  int? liveRingId;
+  int? liveOrdinalStart;
+  int? liveOrdinalEnd;
+
+  int? liveConnectionEpoch;
 
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? geolocation;
@@ -219,6 +239,15 @@ class Wal {
 
   /// Unix timestamp (seconds) when the audio was uploaded (202 received).
   int uploadedAt;
+
+  /// Unix timestamp (seconds) when the server confirmed this recording synced
+  /// (job resolved to [WalStatus.synced], or the live-stream ack completed it).
+  /// 0 = unknown: records synced before this field existed, and WALs whose
+  /// status was migrated without a timestamp. The synced-copy auto-remove
+  /// policy deliberately skips records with 0 — never delete on unknown age.
+  int syncedAt;
+
+  bool keptForTranscriptRecovery;
 
   String get id => '${device}_$timerStart';
 
@@ -320,12 +349,21 @@ class Wal {
     this.syncedFrameOffset = 0,
     this.originalStorage,
     this.conversationId,
+    this.recordingSessionId,
     this.ownerUid,
+    this.captureRoot,
+    this.sourceFrameStart,
+    this.sourceClockEpoch,
+    this.liveRingId,
+    this.liveOrdinalStart,
+    this.liveOrdinalEnd,
     this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
     this.jobId,
     this.uploadedAt = 0,
+    this.syncedAt = 0,
+    this.keptForTranscriptRecovery = false,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -350,7 +388,14 @@ class Wal {
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
+      recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],
+      captureRoot: json['capture_root'],
+      sourceFrameStart: json['source_frame_start'],
+      sourceClockEpoch: json['source_clock_epoch'],
+      liveRingId: json['live_ring_id'],
+      liveOrdinalStart: json['live_ordinal_start'],
+      liveOrdinalEnd: json['live_ordinal_end'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -358,6 +403,8 @@ class Wal {
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
       uploadedAt: json['uploaded_at'] ?? 0,
+      syncedAt: json['synced_at'] ?? 0,
+      keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
     );
   }
 
@@ -380,12 +427,21 @@ class Wal {
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
+      'recording_session_id': recordingSessionId,
       'owner_uid': ownerUid,
+      if (captureRoot != null) 'capture_root': captureRoot,
+      if (sourceFrameStart != null) 'source_frame_start': sourceFrameStart,
+      if (sourceClockEpoch != null) 'source_clock_epoch': sourceClockEpoch,
+      if (liveRingId != null) 'live_ring_id': liveRingId,
+      if (liveOrdinalStart != null) 'live_ordinal_start': liveOrdinalStart,
+      if (liveOrdinalEnd != null) 'live_ordinal_end': liveOrdinalEnd,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
       'job_id': jobId,
       'uploaded_at': uploadedAt,
+      'synced_at': syncedAt,
+      if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
     };
   }
 

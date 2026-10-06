@@ -8,7 +8,7 @@ import os
 import asyncio
 
 import pytz
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -24,10 +24,12 @@ from database import (
 )
 from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
-from services.users.data_export import iter_user_data_export
+from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
+from services.users.data_export_response import DataExportStreamingResponse
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
+from database.conversation_scan import conversation_scan_budget, people_stats_scan
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -53,6 +55,7 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
+from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
@@ -122,6 +125,7 @@ from utils.cloud_tasks import (
     verify_account_deletion_cloud_tasks_oidc,
 )
 from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -134,14 +138,17 @@ from utils.other.notifications import (
 )
 from models.notification_message import NotificationMessage
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
+from utils.other.list_budget import finish_list_budget
 from utils.other.storage import (
     delete_all_conversation_recordings,
     get_speech_sample_signed_urls,
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
+from utils.people_stats import apply_people_stats, collect_people_stats
 from utils.webhooks import button_event_webhook, webhook_first_time_setup
 from utils.byok import (
     get_byok_key,
@@ -227,6 +234,7 @@ class UserDataExportResponse(BaseModel):
     action_items: List[Dict[str, Any]] = Field(default_factory=list)
     task_data: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
     chat_messages: List[Dict[str, Any]] = Field(default_factory=list)
+    export_complete: Optional[bool] = None
 
 
 class StoreRecordingPermissionResponse(BaseModel):
@@ -431,6 +439,17 @@ def set_user_webhook_endpoint(
     wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     url = data.url
+    # Reject a non-public target at configuration time, so an internal/loopback/metadata address
+    # is a 400 here rather than an SSRF from the backend's network position at delivery time.
+    target = webhook_url_from_setting(wtype, url)
+    if target:
+        try:
+            safe_request_target(target)
+        except (UnsafeWebhookURLError, ValueError):
+            # UnsafeWebhookURLError: non-public/unresolvable target. ValueError: the shared URL
+            # validator raises it for a malformed URL (e.g. an invalid IPv6 literal) — both are a
+            # bad configuration, so answer 400 rather than letting it escape as a 500.
+            raise HTTPException(status_code=400, detail='Webhook URL must be a valid public http(s) address')
     set_user_webhook_db(uid, wtype, url)
     if not webhook_url_from_setting(wtype, url):
         disable_user_webhook_db(uid, wtype)
@@ -622,7 +641,12 @@ def get_single_person(
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
-    person = Person(**person)
+    # A malformed/legacy doc (e.g. missing the required name) must read as not-found, not 500:
+    # the list endpoint already skips these via Person.deserialize_many_safe (#8264).
+    people = Person.deserialize_many_safe([person])
+    if not people:
+        raise HTTPException(status_code=404, detail="Person not found")
+    person = people[0]
     if include_speech_samples:
         # Convert stored GCS paths to signed URLs
         stored_paths = person.speech_samples
@@ -631,9 +655,21 @@ def get_single_person(
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
+def get_all_people(
+    include_speech_samples: bool = True,
+    include_stats: bool = False,
+    uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
+):
     logger.info(f'get_all_people {include_speech_samples}')
+    budget = conversation_scan_budget(request, route='people-stats') if include_stats else None
     people = Person.deserialize_many_safe(get_people(uid))
+    if include_stats and people:
+        stats = collect_people_stats(people_stats_scan(uid, budget=budget), uid=uid, budget=budget)
+        apply_people_stats(people, stats)
+    if budget is not None:
+        finish_list_budget(response, budget)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
@@ -1564,11 +1600,19 @@ def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
 class DailySummarySettingsResponse(BaseModel):
     enabled: bool
     hour: int  # Local hour (0-23) in user's timezone
+    depth: DailySummaryDepth = DEFAULT_DAILY_SUMMARY_DEPTH
 
 
 class DailySummarySettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
     hour: Optional[int] = None  # Local hour (0-23), e.g., 22 for 10 PM, 8 for 8 AM
+    depth: Optional[DailySummaryDepth] = None
+
+
+class DailySummarySettingsUpdateResponse(UserStatusResponse):
+    # An echo lets a new desktop client detect an older backend that silently
+    # ignores the additive PATCH field instead of falsely claiming it was saved.
+    depth: Optional[DailySummaryDepth] = None
 
 
 @router.get('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsResponse)
@@ -1579,6 +1623,7 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     Returns:
         - enabled: Whether daily summary notifications are enabled (default: True)
         - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)
+        - depth: Recap detail level (brief by default)
     """
     enabled = notification_db.get_daily_summary_enabled(uid)
     local_hour = notification_db.get_daily_summary_hour_local(uid)
@@ -1587,10 +1632,12 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     if local_hour is None:
         local_hour = notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
 
-    return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
+    return DailySummarySettingsResponse(
+        enabled=enabled, hour=local_hour, depth=notification_db.get_daily_summary_depth(uid)
+    )
 
 
-@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=UserStatusResponse)
+@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsUpdateResponse)
 def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """
     Update user's daily summary notification settings.
@@ -1599,6 +1646,7 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
         - enabled: Enable/disable daily summary notifications
         - hour: Preferred hour in local timezone (0-23).
                 Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)
+        - depth: brief, normal, or deep for newly generated recaps
 
     Note: Hour is stored as local time. The system determines when to send
     based on the user's timezone and will send the summary at the correct local time
@@ -1616,7 +1664,10 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
             logger.error(f"Failed to set daily summary hour: {sanitize(str(e))}", exc_info=True)
             raise HTTPException(status_code=400, detail="Invalid hour. Must be between 0 and 23.")
 
-    return {'status': 'ok'}
+    if data.depth is not None:
+        notification_db.set_daily_summary_depth(uid, data.depth)
+
+    return {'status': 'ok', 'depth': data.depth}
 
 
 def _memories_learned_payload(uid, conversations, start_date_utc, end_date_utc):
@@ -1941,6 +1992,25 @@ def create_user_daily_summary(
     raise HTTPException(status_code=400, detail=f'Nothing to summarize for {date_str}')
 
 
+# Declared before `/v1/users/daily-summaries/{summary_id}` so `search` is not captured as an id.
+@router.get('/v1/users/daily-summaries/search', tags=['v1'], response_model=DailySummariesResponse)
+def search_daily_summaries(
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Search the user's recent daily summaries, newest first.
+
+    Case-insensitive substring match: every whitespace-separated term must appear
+    in the recap's readable text (headline, overview, highlights, action items,
+    questions, decisions, knowledge nuggets, learned memories, place addresses).
+    Only the latest 365 summaries are scanned.
+    """
+    summaries = daily_summaries_db.get_daily_summaries(uid, limit=DAILY_SUMMARY_SEARCH_WINDOW, offset=0)
+    return {'summaries': filter_daily_summaries(summaries, query, limit)}
+
+
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
 def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
@@ -2221,15 +2291,39 @@ def get_llm_top_features(
 # response_model omitted: this streams a chunked JSON document via StreamingResponse (not a single JSON object);
 # the responses= override documents the streamed shape in OpenAPI without enforcing response_model validation.
 @router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
-def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
-    """Export all user data for GDPR/CCPA compliance from a disk-backed spool."""
+def export_all_user_data(
+    stream: Annotated[
+        bool,
+        Query(
+            description=(
+                'Stream the export lazily instead of spooling it server-side before headers. '
+                'When true, clients MUST verify the body ends with the "export_complete": true '
+                'completion suffix; a truncated body is a failed export even after HTTP 200.'
+            )
+        ),
+    ] = False,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Export all user data for GDPR/CCPA compliance."""
+    headers = {
+        'Content-Disposition': 'attachment; filename="omi-export.json"',
+        'Cache-Control': 'private, no-store',
+    }
+    if stream:
+        headers['X-Accel-Buffering'] = 'no'
+        return DataExportStreamingResponse(
+            uid,
+            iterator_factory=iter_user_data_export_streaming,
+            media_type='application/json',
+            headers=headers,
+        )
     # Iterator construction eagerly validates and spools the complete export,
     # including retained image bytes, before HTTP 200 and headers are committed.
-    export_stream = iter_user_data_export(uid)
-    return StreamingResponse(
-        export_stream,
+    return DataExportStreamingResponse(
+        uid,
+        iterator_factory=iter_user_data_export,
         media_type='application/json',
-        headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
+        headers=headers,
     )
 
 

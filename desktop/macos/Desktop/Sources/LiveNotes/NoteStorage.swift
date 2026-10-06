@@ -5,42 +5,21 @@ import Foundation
 /// Provides crash-safe persistence for notes generated during transcription
 actor NoteStorage {
   static let shared = NoteStorage()
-
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
-  private var isInitialized = false
+  private let repository = RewindRepository(owner: "NoteStorage")
 
   private init() {}
 
   /// Invalidate cached DB queue (called on user switch / sign-out)
-  func invalidateCache() {
-    _dbQueue = nil
-    isInitialized = false
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   /// Ensure database is initialized before use
   private func ensureInitialized() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
-      return db
-    }
-
-    // Initialize RewindDatabase which creates our tables via migrations
-    do {
-      try await RewindDatabase.shared.initialize()
-    } catch {
-      log("NoteStorage: Database initialization failed: \(error.localizedDescription)")
-      throw error
-    }
-
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw LiveNoteError.databaseNotInitialized
     }
-
-    _dbQueue = db
-    _dbGeneration = generation
-    isInitialized = true
-    return db
+    return databasePool
   }
 
   // MARK: - Note Operations

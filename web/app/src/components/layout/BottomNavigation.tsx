@@ -62,11 +62,11 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
       className={cn(
-        'fixed bottom-0 inset-x-0 z-40',
+        'fixed inset-x-0 bottom-0 z-40',
         'lg:hidden', // Only show on mobile
         'bg-bg-secondary/90 backdrop-blur-xl',
         'border-t border-white/[0.06]',
-        'pb-safe' // Safe area inset for devices with home indicators
+        'pb-safe', // Safe area inset for devices with home indicators
       )}
       aria-label="Primary navigation"
     >
@@ -95,9 +95,9 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
                   aria-hidden="true"
                 />
                 {showRecordingBadge && (
-                  <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                  <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
                   </span>
                 )}
               </span>

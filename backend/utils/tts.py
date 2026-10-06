@@ -21,6 +21,7 @@ from typing import Any, cast, Literal
 
 import httpx
 
+from config.assistant_voices import ASSISTANT_VOICE_IDS, DEFAULT_ASSISTANT_VOICE
 from utils.async_tasks import create_named_task
 from utils.http_client import get_tts_client, get_tts_semaphore
 
@@ -35,12 +36,14 @@ GEMINI_TTS_URL = (
 )
 GEMINI_PCM_MIME_PREFIX = 'audio/l16'
 GEMINI_SAMPLE_RATE = 24_000
-DEFAULT_GEMINI_VOICE = 'Aoede'
-DEFAULT_GEMINI_STYLE = 'Warm, natural, conversational, and easy to understand.'
+DEFAULT_GEMINI_VOICE = DEFAULT_ASSISTANT_VOICE
+DEFAULT_GEMINI_STYLE = (
+    'Clear, friendly, neutral assistant voice at a natural conversational pace; no dramatic emphasis.'
+)
 
 _MOBILE_VOICE_MAP = {
     # Sloane, the released mobile client's default ElevenLabs voice.
-    'BAMYoBHLZM7lJgJAmFz0': 'Aoede',
+    'BAMYoBHLZM7lJgJAmFz0': 'Charon',
 }
 _DESKTOP_VOICE_MAP = {
     'alloy': 'Schedar',
@@ -127,6 +130,8 @@ def get_tts_provider() -> TtsProvider:
 def map_gemini_voice(voice_id: str, client: TtsClient) -> str:
     """Map released provider-specific voices, defaulting unknown names safely."""
 
+    if voice_id in ASSISTANT_VOICE_IDS:
+        return voice_id
     if client == 'mobile':
         return _MOBILE_VOICE_MAP.get(voice_id, DEFAULT_GEMINI_VOICE)
     return _DESKTOP_VOICE_MAP.get(voice_id.strip().lower(), DEFAULT_GEMINI_VOICE)

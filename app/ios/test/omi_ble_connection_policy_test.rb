@@ -3,7 +3,6 @@
 require 'minitest/autorun'
 require 'open3'
 require 'tmpdir'
-
 class OmiBleConnectionPolicyTest < Minitest::Test
   IOS_ROOT = File.expand_path('..', __dir__)
   POLICY_SOURCE = File.join(IOS_ROOT, 'Runner', 'Ble', 'OmiBleConnectionPolicy.swift')
@@ -19,6 +18,92 @@ class OmiBleConnectionPolicyTest < Minitest::Test
         @main
         struct OmiBleConnectionPolicyTestHarness {
             static func main() {
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: true,
+                    hasCompleteServices: true,
+                    discoveryInFlight: false
+                ) == .replayReady)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: false,
+                    hasCompleteServices: true,
+                    discoveryInFlight: false
+                ) == .hydrateReady)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: false,
+                    hasCompleteServices: true,
+                    discoveryInFlight: true
+                ) == .hydrateReady)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: true,
+                    hasCompleteServices: false,
+                    discoveryInFlight: false
+                ) == .discoverServices)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: false,
+                    hasCompleteServices: false,
+                    discoveryInFlight: true
+                ) == .awaitDiscovery)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .disconnected,
+                    nativeReady: true,
+                    hasCompleteServices: true,
+                    discoveryInFlight: true
+                ) == .connect)
+                precondition(OmiBleConnectionPolicy.discoveryIsActive(startedAt: 100, now: 114))
+                precondition(!OmiBleConnectionPolicy.discoveryIsActive(startedAt: 100, now: 115))
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
+                    peripheralState: .connected, nativeReady: false, requestPending: true, retries: 0
+                ) == .retry)
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
+                    peripheralState: .connected, nativeReady: false, requestPending: true, retries: 1
+                ) == .fail)
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
+                    peripheralState: .connected, nativeReady: false, requestPending: false, retries: 0
+                ) == .ignore)
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
+                    peripheralState: .disconnected, nativeReady: false, requestPending: true, retries: 0
+                ) == .ignore)
+
+                // A cached live link is never reused during a physical capture reset.
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected, nativeReady: true, hasCompleteServices: true,
+                    discoveryInFlight: false, captureResetInProgress: true
+                ) == .awaitCaptureReset)
+                precondition(!OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: false, alreadyReconnected: false, authorized: true, pairingLost: false
+                ))
+                precondition(OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: true, alreadyReconnected: false, authorized: true, pairingLost: false
+                ))
+                precondition(!OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: true, alreadyReconnected: true, authorized: true, pairingLost: false
+                ))
+                precondition(!OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: true, alreadyReconnected: false, authorized: false, pairingLost: false
+                ))
+                precondition(!OmiBleConnectionPolicy.captureResetCanConnect(
+                    disconnectObserved: true, alreadyReconnected: false, authorized: true, pairingLost: true
+                ))
+                for source in ["restore", "replay", "hydrate"] {
+                    precondition(!OmiBleConnectionPolicy.captureResetReady(
+                        disconnectObserved: true, freshConnection: true, source: source
+                    ))
+                }
+                precondition(!OmiBleConnectionPolicy.captureResetReady(
+                    disconnectObserved: false, freshConnection: true, source: "discovery"
+                ))
+                precondition(!OmiBleConnectionPolicy.captureResetReady(
+                    disconnectObserved: true, freshConnection: false, source: "discovery"
+                ))
+                precondition(OmiBleConnectionPolicy.captureResetReady(
+                    disconnectObserved: true, freshConnection: true, source: "discovery"
+                ))
+
                 let recoveryCodes = [
                     CBATTError.insufficientAuthentication.rawValue,
                     CBATTError.insufficientAuthorization.rawValue,

@@ -140,6 +140,9 @@ def test_support_scanner_derives_every_paid_plan_and_retained_price():
         # B6: actively sold production IDs are retained without a "legacy" assumption.
         ('price_1RtJPm1F8wnoWYvwhVJ38kLb', PlanType.unlimited),
         ('price_1RtJQ71F8wnoWYvwKMPaGlGY', PlanType.unlimited),
+        # Older Unlimited $19/$199 extras still billed on prod_SmpevIU38nIEUO.
+        ('price_1RrFym1F8wnoWYvwQgIFhRWD', PlanType.unlimited),
+        ('price_1RrG6k1F8wnoWYvwORsU26Mr', PlanType.unlimited),
         ('price_1TAfBB1F8wnoWYvw8XBFM1dX', PlanType.architect),
         ('price_1TLFac1F8wnoWYvwtPxZhtzE', PlanType.architect),
         # Current production consumer-plan prices.
@@ -259,3 +262,18 @@ def test_compatibility_guard_requires_revision_bump():
     assert 'compatibility: catalog_revision must increase when the catalog changes' in validate_compatibility(
         previous, current
     )
+
+
+@pytest.mark.parametrize(
+    'patch',
+    [
+        {'fraction_basis_points': 999},
+        {'days_per_month': 31},
+        {'monthly_reference_cents': {'basic': 0, 'plus': -1}},
+        {'monthly_reference_cents': {'basic': 0, 'plus': True}},
+    ],
+)
+def test_proactivity_budget_rejects_unsafe_policy(patch):
+    catalog = deepcopy(load_catalog())
+    catalog['proactivity_v2_budget'].update(patch)
+    assert any('proactivity_v2_budget' in error for error in validate_catalog(catalog))

@@ -16,6 +16,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, Iterator, List, Tuple
 
+import pytest
+
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 # Imported for its side effect on import cost, not for its API: the job imports
@@ -124,7 +126,11 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
             'models.notification_message',
             NotificationMessage=notification_message,
         ),
-        'utils.conversations.factory': _module('utils.conversations.factory', deserialize_conversation=lambda v: v),
+        'utils.conversations.factory': _module(
+            'utils.conversations.factory',
+            deserialize_conversation=lambda v: v,
+            deserialize_conversations=lambda items: list(items),
+        ),
         'utils.llm.external_integrations': _module(
             'utils.llm.external_integrations',
             generate_comprehensive_daily_summary=lambda *_a, **_k: {},
@@ -132,7 +138,7 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
         'utils.notifications': _module(
             'utils.notifications',
             send_bulk_notification=no_async_work,
-            send_notification=lambda *_a, **_k: None,
+            send_notification_result=lambda *_a, **_k: 1,
         ),
         'utils.observability.fallback': _module('utils.observability.fallback', record_fallback=fallbacks),
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
@@ -140,6 +146,7 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
             create_daily_summary=lambda *_args: 'summary-id',
+            mark_daily_summary_delivery_completed=lambda *_args: None,
         ),
     }
 
@@ -207,7 +214,7 @@ def test_per_user_budget_exceeded_is_recorded_and_skipped() -> None:
 
 def test_failing_hour_group_does_not_abort_the_remaining_groups() -> None:
     with _loaded_job() as (notifications, notification_db, _redis, _fallbacks):
-        notifications._get_timezones_grouped_by_hour = lambda: {21: ['UTC'], 22: ['Etc/GMT+1']}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {21: ['UTC'], 22: ['Etc/GMT+1']}
         served: List[str] = []
 
         def read_users(timezones: List[str], target_hour: int) -> List[Any]:
@@ -261,7 +268,7 @@ def test_job_budget_checkpoints_the_unfinished_tail() -> None:
 
 def test_next_execution_resumes_at_the_checkpointed_tail() -> None:
     with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
-        notifications._get_timezones_grouped_by_hour = lambda: {22: ['UTC']}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {22: ['UTC']}
         notification_db.get_users_for_daily_summary_indexed = lambda _tz, _hour: _users(9)
         notifications.summary_budget.write_job_cursor(
             notifications.summary_budget.job_cursor_key(),
@@ -281,7 +288,7 @@ def test_a_partially_read_hour_group_does_not_clear_the_checkpoint() -> None:
     """A dropped timezone chunk is a partial enumeration. Finishing the run as if
     it were complete retires users the job never even listed."""
     with _loaded_job() as (notifications, notification_db, redis, fallbacks):
-        notifications._get_timezones_grouped_by_hour = lambda: {22: [f'tz-{i:02d}' for i in range(40)]}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {22: [f'tz-{i:02d}' for i in range(40)]}
         served: List[str] = []
 
         def read_users(timezones: List[str], _target_hour: int) -> List[Any]:
@@ -449,7 +456,7 @@ def test_cursor_helpers_are_fail_soft_when_redis_is_down() -> None:
 def test_job_survives_a_redis_outage_end_to_end() -> None:
     with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
         redis.fail = True
-        notifications._get_timezones_grouped_by_hour = lambda: {22: ['UTC']}
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {22: ['UTC']}
         notification_db.get_users_for_daily_summary_indexed = lambda _tz, _hour: _users(3)
         served: List[str] = []
         notifications._send_summary_notification = lambda user: served.append(user[0])
@@ -529,7 +536,9 @@ def _loaded_send_path(
             r=FakeRedis(),
         ),
         'utils.conversations.factory': _module(
-            'utils.conversations.factory', deserialize_conversation=lambda _v: _FakeConversation()
+            'utils.conversations.factory',
+            deserialize_conversation=lambda _v: _FakeConversation(),
+            deserialize_conversations=lambda items: [_FakeConversation() for _ in items],
         ),
         'utils.conversations.render': _module('utils.conversations.render', conversations_to_string=lambda _c: 'text'),
         'utils.llm.external_integrations': _module(
@@ -539,7 +548,7 @@ def _loaded_send_path(
         'utils.notifications': _module(
             'utils.notifications',
             send_bulk_notification=no_async_work,
-            send_notification=lambda *args, **kwargs: sends.append((args, kwargs)),
+            send_notification_result=lambda *args, **kwargs: sends.append((args, kwargs)) or 1,
         ),
         'utils.observability.fallback': _module('utils.observability.fallback', record_fallback=RecordedFallbacks()),
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=no_async_work),
@@ -547,6 +556,7 @@ def _loaded_send_path(
             'database.daily_summaries',
             get_daily_summary_by_date=lambda *_args: None,
             create_daily_summary=lambda *_args: 'summary-id',
+            mark_daily_summary_delivery_completed=lambda *_args: None,
         ),
     }
     with stub_modules(stubs):
@@ -610,3 +620,175 @@ def test_an_oversized_card_costs_the_card_not_the_notification() -> None:
         payload = sends[0][0][3]
         assert 'content_blocks' not in payload
         assert payload['text'] == 'You shipped the thing.'
+
+
+def test_checkpoint_resumes_original_recipients_after_hour_and_noon_rollover() -> None:
+    with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
+        now = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+        original = now - timedelta(hours=1)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        notifications.summary_budget.write_job_cursor(
+            notifications.summary_budget.job_cursor_key(),
+            notifications.summary_budget.make_cursor(11, 'tail', original),
+        )
+        reads = []
+
+        def selector(zones, hour):
+            reads.append((zones, hour))
+            return [('tail', [], 'UTC')] if zones == ['UTC'] and hour == 11 else []
+
+        # Exercise real timezone grouping with the saved instant. Narrowing
+        # tzdata avoids unrelated empty groups without stubbing the builder.
+        notifications.pytz = SimpleNamespace(
+            utc=timezone.utc, all_timezones=['UTC'], timezone=lambda name: timezone.utc
+        )
+        notification_db.get_users_for_daily_summary_indexed = selector
+        served = []
+        notifications._send_summary_notification = lambda user: served.append(
+            (user[0], notifications._display_date_for_now(user[2], user[3]))
+        )
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+
+        assert outcome.ok and outcome.complete
+        assert reads == [(['UTC'], 11), (['UTC'], 12)]
+        assert served == [('tail', original.date() - timedelta(days=1))]
+        assert redis.store == {}
+
+
+def test_incomplete_saved_cohort_is_retained_instead_of_replaced_by_current_hour() -> None:
+    with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
+        now = datetime(2026, 10, 3, 23, 0, tzinfo=timezone.utc)
+        original = now - timedelta(hours=1)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        notifications._get_timezones_grouped_by_hour = lambda at: {at.hour: ['UTC']}
+        notifications.summary_budget.write_job_cursor(
+            notifications.summary_budget.job_cursor_key(),
+            notifications.summary_budget.make_cursor(22, 'tail', original),
+        )
+        reads = []
+
+        def unavailable(zones, hour):
+            reads.append(hour)
+            raise RuntimeError('query unavailable')
+
+        notification_db.get_users_for_daily_summary_indexed = unavailable
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert not outcome.ok and not outcome.complete
+        assert reads == [22]
+        saved = notifications.summary_budget.read_job_cursor(notifications.summary_budget.job_cursor_key())
+        assert notifications.summary_budget.cursor_cohort_utc(saved) == original
+
+
+def test_due_local_hours_include_half_and_quarter_hour_zones() -> None:
+    with _loaded_job() as (notifications, _db, _redis, _fallbacks):
+        now = datetime(2026, 10, 3, 16, 15, tzinfo=timezone.utc)
+        grouped = notifications._get_timezones_grouped_by_hour(now)
+        assert 'Asia/Kathmandu' in grouped[22]
+        assert 'Asia/Kolkata' in grouped[21]
+        assert notifications._display_date_for_now('Asia/Kathmandu', now) == now.date()
+
+
+def test_saved_half_hour_zone_cohort_survives_rollover_inside_the_same_utc_hour() -> None:
+    with _loaded_job() as (notifications, notification_db, _redis, _fallbacks):
+        now = datetime(2026, 10, 3, 16, 30, tzinfo=timezone.utc)
+        original = now - timedelta(minutes=15)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        real_pytz = notifications.pytz
+        notifications.pytz = SimpleNamespace(
+            utc=timezone.utc, all_timezones=['Asia/Kolkata'], timezone=real_pytz.timezone
+        )
+        notifications.summary_budget.write_job_cursor(
+            notifications.summary_budget.job_cursor_key(),
+            notifications.summary_budget.make_cursor(21, 'tail', original),
+        )
+        reads = []
+
+        def selector(zones, hour):
+            reads.append((zones, hour))
+            return [('tail', [], 'Asia/Kolkata')] if hour == 21 else []
+
+        notification_db.get_users_for_daily_summary_indexed = selector
+        served = []
+        notifications._send_summary_notification = lambda user: served.append((user[0], user[3]))
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok and outcome.complete
+        assert reads == [(['Asia/Kolkata'], 21), (['Asia/Kolkata'], 22)]
+        assert served == [('tail', original)]
+
+
+@pytest.mark.parametrize('failure_kind', ['generation', 'delivery', 'timeout'])
+def test_final_tick_failure_is_retained_across_noon_until_retry_succeeds(failure_kind) -> None:
+    with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
+        original = datetime(2026, 10, 3, 11, 45, tzinfo=timezone.utc)
+        now = original
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        notifications.pytz = SimpleNamespace(
+            utc=timezone.utc, all_timezones=['UTC'], timezone=lambda name: timezone.utc
+        )
+        users = [(f'uid-{i:02}', [], 'UTC') for i in range(12)]
+        reads = []
+
+        def selector(zones, hour):
+            reads.append(hour)
+            return users if hour == 11 else []
+
+        notification_db.get_users_for_daily_summary_indexed = selector
+        attempts = []
+        failure = {
+            'generation': RuntimeError('generation failed'),
+            'delivery': notifications.DailySummaryDeliveryError('delivery failed'),
+            'timeout': TimeoutError('worker timed out'),
+        }[failure_kind]
+        failures_remaining = 2
+
+        def worker(user):
+            nonlocal failures_remaining
+            attempts.append((user[0], notifications._display_date_for_now(user[2], user[3]), user[4], user[5]))
+            if user[0] == 'uid-00' and failures_remaining:
+                failures_remaining -= 1
+                raise failure
+
+        notifications._send_summary_notification = worker
+        for tick in range(2):
+            now = original + timedelta(minutes=15 * tick)
+            outcome = asyncio.run(notifications.send_daily_summary_notification())
+            assert not outcome.ok and not outcome.complete
+            saved = notifications.summary_budget.read_job_cursor(notifications.summary_budget.job_cursor_key())
+            assert saved['uid'] == 'uid-00', 'later batch progress must not overwrite the failed recipient'
+            assert saved['retry_recipients'] == {'uid-00': failure_kind in ('delivery', 'timeout')}
+            assert notifications.summary_budget.cursor_cohort_utc(saved) == original
+
+        now = original + timedelta(minutes=30)
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert outcome.ok and outcome.complete
+        assert reads == [11, 11, 11, 12]
+        assert redis.store == {}
+        retries = [attempt for attempt in attempts if attempt[0] == 'uid-00']
+        assert len(retries) == 3
+        assert {attempt[1] for attempt in retries} == {original.date() - timedelta(days=1)}
+        assert retries[1][2:] == (failure_kind in ('delivery', 'timeout'), True)
+        assert {'uid-08', 'uid-11'} <= {attempt[0] for attempt in attempts}, 'healthy later batches still run'

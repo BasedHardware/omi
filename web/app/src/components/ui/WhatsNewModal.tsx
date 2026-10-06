@@ -14,17 +14,17 @@ interface Feature {
 // Update this list when you want to announce new features
 const CURRENT_FEATURES: Feature[] = [
   {
-    icon: <Mic className="w-4 h-4 text-text-primary" />,
+    icon: <Mic className="h-4 w-4 text-text-primary" />,
     title: 'Microphone Recording',
     description: 'Record conversations directly from your browser',
   },
   {
-    icon: <Zap className="w-4 h-4 text-text-primary" />,
+    icon: <Zap className="h-4 w-4 text-text-primary" />,
     title: 'Performance Improvements',
     description: 'Faster loading times and smoother experience',
   },
   {
-    icon: <Sparkles className="w-4 h-4 text-text-primary" />,
+    icon: <Sparkles className="h-4 w-4 text-text-primary" />,
     title: 'Enhanced UI',
     description: 'Refined interface with better responsiveness',
   },
@@ -80,8 +80,8 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
         transition={{ duration: reduceMotion ? 0.16 : 0.22, ease: [0.23, 1, 0.32, 1] }}
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          'relative w-full max-w-md bg-bg-secondary rounded-2xl',
-          'shadow-xl border border-bg-tertiary',
+          'relative w-full max-w-md rounded-2xl bg-bg-secondary',
+          'border border-bg-tertiary shadow-xl',
           'max-h-[calc(100dvh-2rem)] overflow-y-auto',
         )}
       >
@@ -89,19 +89,19 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
         <button
           onClick={handleClose}
           aria-label="Close"
-          className="absolute top-3 right-3 z-10 rounded-lg p-2 text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+          className="absolute right-3 top-3 z-10 rounded-lg p-2 text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
         >
-          <X className="w-5 h-5" />
+          <X className="h-5 w-5" />
         </button>
 
         {/* Header with gradient */}
-        <div className="relative px-6 pt-8 pb-6 text-center">
+        <div className="relative px-6 pb-6 pt-8 text-center">
           <div className="absolute inset-0 bg-gradient-to-b from-white/[0.06] to-transparent" />
           <div className="relative">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/[0.14] mb-4">
-              <Rocket className="w-8 h-8 text-text-primary" />
+            <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white/[0.14]">
+              <Rocket className="h-8 w-8 text-text-primary" />
             </div>
-            <h2 className="text-2xl font-semibold text-text-primary mb-2">
+            <h2 className="mb-2 text-2xl font-semibold text-text-primary">
               What&apos;s New
             </h2>
             <p className="text-text-tertiary">Check out the latest updates</p>
@@ -109,7 +109,7 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
         </div>
 
         {/* Content */}
-        <div className="px-6 pb-6 space-y-4">
+        <div className="space-y-4 px-6 pb-6">
           {/* Feature list */}
           <div className="space-y-3">
             {CURRENT_FEATURES.map((feature, index) => (
@@ -125,9 +125,9 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
                   delay: reduceMotion ? 0 : 0.06 + index * 0.05,
                   ease: [0.23, 1, 0.32, 1],
                 }}
-                className="flex items-start gap-3 p-3 rounded-xl bg-bg-tertiary/50"
+                className="flex items-start gap-3 rounded-xl bg-bg-tertiary/50 p-3"
               >
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/[0.08] flex items-center justify-center">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/[0.08]">
                   {feature.icon}
                 </div>
                 <div>
@@ -142,7 +142,7 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
           <div className="pt-4">
             <button
               onClick={handleClose}
-              className="block w-full py-3 px-4 rounded-xl bg-text-primary text-bg-primary text-center font-medium hover:bg-text-primary/90 transition-colors"
+              className="block w-full rounded-xl bg-text-primary px-4 py-3 text-center font-medium text-bg-primary transition-colors hover:bg-text-primary/90"
             >
               Got it!
             </button>

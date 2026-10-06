@@ -16,6 +16,7 @@ from google.cloud import firestore
 from google.api_core.exceptions import NotFound
 
 from database._client import get_firestore_client
+from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,21 @@ WAIT_ALERT_SECONDS = 12 * 60 * 60  # Well before Redis job / staged blob expiry.
 
 def enabled() -> bool:
     """An absent setting and phase-one dev/prod manifests keep direct dispatch."""
-    return os.getenv('SYNC_BACKFILL_UID_SEQUENCER', 'off').strip().lower() == 'on'
+    return production_stage() and os.getenv('SYNC_BACKFILL_UID_SEQUENCER', 'off').strip().lower() == 'on'
+
+
+def production_stage() -> bool:
+    """The legacy registry belongs exclusively to the production runtime.
+
+    The customer Firestore project is also mounted in dev, so the Firestore
+    project ID cannot identify the sequencer owner.
+    """
+    return sync_stage.production_stage()
+
+
+def _require_production() -> None:
+    if not production_stage():
+        raise RuntimeError('sync backfill UID sequencer registry is production-only')
 
 
 def _now() -> datetime:
@@ -54,6 +69,7 @@ def _data(snapshot: Any) -> dict[str, Any]:
 
 def is_registered(uid: str, job_id: str, *, firestore_client: Any = None) -> bool:
     """Resolve an uncertain admission acknowledgement without dropping durable work."""
+    _require_production()
     client = firestore_client or get_firestore_client()
     if _data(_pending_ref(client, uid, job_id).get()):
         return True
@@ -70,6 +86,7 @@ def register_job(
     now: Optional[datetime] = None,
 ) -> bool:
     """Persist an accepted job before 202; safe to repeat after an uncertain write."""
+    _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     pending = _pending_ref(client, uid, job_id)
@@ -112,11 +129,13 @@ def _first_pending(client: Any, uid: str, *, transaction: Any = None) -> Optiona
 
 
 def has_pending(uid: str, *, firestore_client: Any = None) -> bool:
+    _require_production()
     client = firestore_client or get_firestore_client()
     return _first_pending(client, uid) is not None
 
 
 def waiting_sample(uid: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> dict[str, Any]:
+    _require_production()
     client = firestore_client or get_firestore_client()
     docs = list(_pending_for_uid(client, uid).order_by('accepted_at').limit(100).stream())
     if not docs:
@@ -129,6 +148,7 @@ def waiting_sample(uid: str, *, firestore_client: Any = None, now: Optional[date
 def due_pending(
     *, limit: int = 100, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> list[dict[str, Any]]:
+    _require_production()
     client = firestore_client or get_firestore_client()
     docs = (
         client.collection(PENDING_COLLECTION)
@@ -140,6 +160,7 @@ def due_pending(
 
 
 def defer_pending(job_id: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> None:
+    _require_production()
     client = firestore_client or get_firestore_client()
     try:
         client.collection(PENDING_COLLECTION).document(job_id).update(
@@ -151,6 +172,7 @@ def defer_pending(job_id: str, *, firestore_client: Any = None, now: Optional[da
 
 def claim_next(uid: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> Optional[dict[str, Any]]:
     """Promote the oldest waiting capture into a fenced dispatch reservation."""
+    _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     current = now or _now()
@@ -200,6 +222,7 @@ def begin_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> bool:
     """A stale Cloud Task epoch can never enter the transcription pipeline."""
+    _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     current = now or _now()
@@ -226,6 +249,7 @@ def begin_job(
 def renew_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> bool:
+    _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     current = now or _now()
@@ -252,6 +276,7 @@ def finish_job(
     uid: str, job_id: str, epoch: int, outcome: str, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> bool:
     """Only the current epoch releases the UID; duplicate completion is inert."""
+    _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
 
@@ -270,6 +295,7 @@ def finish_job(
 
 
 def get_owner(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
+    _require_production()
     client = firestore_client or get_firestore_client()
     return _data(_root(client, uid).get())
 
@@ -277,6 +303,7 @@ def get_owner(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
 def due_owners(
     *, limit: int = 100, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> list[dict[str, Any]]:
+    _require_production()
     client = firestore_client or get_firestore_client()
     docs = (
         client.collection(COLLECTION).where('reconcile_at', '<=', now or _now()).limit(max(1, min(limit, 500))).stream()
@@ -285,6 +312,7 @@ def due_owners(
 
 
 def defer_owner(uid: str, seconds: int, *, firestore_client: Any = None, now: Optional[datetime] = None) -> None:
+    _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     current = now or _now()
@@ -295,6 +323,7 @@ def redrive_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> Optional[dict[str, Any]]:
     """Replace a lost dispatch epoch, preserving the one active job and payload."""
+    _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     current = now or _now()

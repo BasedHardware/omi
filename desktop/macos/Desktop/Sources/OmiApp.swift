@@ -159,9 +159,6 @@ struct OMIApp: App {
         .environmentObject(appState)
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
-        .onAppear {
-          log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
-        }
     }
     .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the top bar occupies the title-bar band.
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
@@ -328,10 +325,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // screenshots in the temp directory, and its close handler never ran. This is the first moment
     // anything of ours can take them off disk.
     ScreenFrameQuickLook.purgeStaleScratch()
-
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
     let pendingUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    CaptureLaunchContext.setPendingRelaunch(pendingUpdateRelaunch)
     let restoreMainWindowAfterUpdateRelaunch = pendingUpdateRelaunch?.restoreMainWindow
     if let restoreMainWindowAfterUpdateRelaunch {
       log(
@@ -534,11 +531,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Route completed background-agent results into live voice sessions.
     AgentCompletionVoiceDelivery.shared.start()
 
-    // Drain explicit JIT feedback queued during an offline session as soon as
-    // the app launches; the client also retries on owner restoration, app
-    // activation, and periodic network recovery.
-    Task { await JITTriggerFeedbackClient.shared.installLifecycleRetry() }
-
     scheduleAppLifecycleMaintenance()
 
     // Offer an integration when the user opens an app Omi can connect to.
@@ -663,6 +655,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
         restoreMainWindowAfterUpdateRelaunch: restoreMainWindowAfterUpdateRelaunch)
     }
 
+    SiriIndexLifecycle.shared.start(launchMode: OMIApp.launchMode.rawValue)
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 

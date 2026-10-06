@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from .firestore_query_types import (
+    FieldIndexRequirement,
     FirestoreIndexField,
     FirestoreIndexRequirement,
     FirestoreQueryFilter,
@@ -33,6 +34,98 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    FirestoreIndexRequirement(
+        'proactivity_followup_source_outcomes',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('source_id'), _asc('producer'), _asc('state'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_mentor_delivered_history',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('producer'), _asc('state'), _asc('delivered'), _desc('delivered_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_mentor_recent_outcomes',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('producer'), _asc('state'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_feed_state_created',
+        'proactivity_items',
+        'COLLECTION',
+        (_asc('state'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'proactivity_producer_cohort',
+        'proactivity_items',
+        'COLLECTION_GROUP',
+        (
+            _asc('producer'),
+            _asc('created_at'),
+            _asc('acted_count'),
+            _asc('charged_micro_usd'),
+            _asc('delivered_count'),
+            _asc('negative_count'),
+            _asc('unknown_count'),
+            _asc('__name__'),
+        ),
+    ),
+    # I024: database.conversations.get_conversations_count; macOS
+    # LiveConversationRemoteDataSource.count builds folder + starred + day bounds
+    # on GET /v1/conversations/count. Reachability report 871737adf7e87104.
+    FirestoreIndexRequirement(
+        'conversations_discarded_folder_starred_status_created_count',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('folder_id'), _asc('starred'), _asc('status'), _asc('created_at'), _asc('__name__')),
+    ),
+    # ADMIN-MESSAGES: web/admin/app/api/omi/stats/notifications/route.ts collectionGroup(messages)
+    # query for app_id + created_at bounds; GET /api/omi/stats/notifications.
+    # Reachability report 871737adf7e87104 (694 prod errors in September).
+    FirestoreIndexRequirement(
+        'admin_messages_app_created_at',
+        'messages',
+        'COLLECTION_GROUP',
+        (_asc('app_id'), _asc('created_at'), _asc('__name__')),
+    ),
+    # database.advice.get_advice via GET /v1/advice, category + dismissed=true.
+    # Reachability report 871737adf7e87104, suggestion I001.
+    FirestoreIndexRequirement(
+        'advice_category_created_at',
+        'advice',
+        'COLLECTION',
+        (_asc('category'), _desc('created_at'), _desc('__name__')),
+    ),
+    # database.advice.get_advice via GET /v1/advice, category + dismissed=false.
+    # Reachability report 871737adf7e87104, suggestion I002.
+    FirestoreIndexRequirement(
+        'advice_category_dismissed_created_at',
+        'advice',
+        'COLLECTION',
+        (_asc('category'), _asc('is_dismissed'), _desc('created_at'), _desc('__name__')),
+    ),
+    # database.advice.get_advice via GET /v1/advice, no category + dismissed=false.
+    # Reachability report 871737adf7e87104, suggestion I003.
+    FirestoreIndexRequirement(
+        'advice_dismissed_created_at',
+        'advice',
+        'COLLECTION',
+        (_asc('is_dismissed'), _desc('created_at'), _desc('__name__')),
+    ),
+    # I070 is declared by PR H as conversations (folder_id ASC, created_at DESC, __name__ DESC).
+    # database.folders.get_conversations_in_folder uses the identical COLLECTION index.
+    # Reachability report 871737adf7e87104, suggestion I070.
+    # database.frame_requests.enqueue_frame_request first transactional query via
+    # POST /v1/frame-requests. Reachability report 871737adf7e87104, suggestion I141.
+    FirestoreIndexRequirement(
+        'frame_requests_enqueue_dedupe_attempt',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('account_generation'), _asc('dedupe_key'), _asc('device_id'), _desc('attempt_number'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'sync_backfill_pending_uid_sort',
         'sync_backfill_pending',
@@ -112,6 +205,24 @@ INDEX_ONLY_REQUIREMENTS = (
         'conversations',
         'COLLECTION',
         (_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_source_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('source'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_starred_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('starred'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_folder_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('folder_id'), _desc('created_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
         'conversations_status_finished',
@@ -294,6 +405,400 @@ INDEX_ONLY_REQUIREMENTS = (
         'frame_requests',
         'COLLECTION',
         (_asc('state'), _asc('cleanup_state'), _asc('cleanup_next_attempt_at'), _asc('__name__')),
+    ),
+    # Adopted from the live prod inventory on 2026-09-30. These exist in prod (hand-created) but were never declared, so fresh databases (self-host, jit-qa) fail. Serving callers are mapped in a later wave.
+    # caller: database/action_items.py due-date reads
+    FirestoreIndexRequirement(
+        'action_items_completed_asc_due_at_desc_name_desc',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _desc('due_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'action_items_conversation_id_asc_created_at_desc_name_desc',
+        'action_items',
+        'COLLECTION',
+        (_asc('conversation_id'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/action_items.py due-date reads
+    FirestoreIndexRequirement(
+        'action_items_due_at_asc_created_at_desc_name_desc',
+        'action_items',
+        'COLLECTION',
+        (_asc('due_at'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'action_items_export_platform_asc_exported_asc_updated_at_desc_name_desc',
+        'action_items',
+        'COLLECTION',
+        (_asc('export_platform'), _asc('exported'), _desc('updated_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'announcements_active_asc_type_asc_app_version_numeric_asc_name_asc',
+        'announcements',
+        'COLLECTION',
+        (_asc('active'), _asc('type'), _asc('app_version_numeric'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'announcements_type_asc_firmware_version_numeric_desc_active_asc_name_asc',
+        'announcements',
+        'COLLECTION',
+        (_asc('type'), _desc('firmware_version_numeric'), _asc('active'), _asc('__name__')),
+    ),
+    # caller: database/chat.py plugin-session reads
+    FirestoreIndexRequirement(
+        'chat_sessions_plugin_id_asc_starred_asc_updated_at_desc_name_desc',
+        'chat_sessions',
+        'COLLECTION',
+        (_asc('plugin_id'), _asc('starred'), _desc('updated_at'), _desc('__name__')),
+    ),
+    # caller: database/chat.py plugin-session reads
+    FirestoreIndexRequirement(
+        'chat_sessions_plugin_id_asc_updated_at_desc_name_desc',
+        'chat_sessions',
+        'COLLECTION',
+        (_asc('plugin_id'), _desc('updated_at'), _desc('__name__')),
+    ),
+    # caller: database/conversations.py status-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_apps_results_contains_discarded_asc_status_asc_created_at_desc_name_desc',
+        'conversations',
+        'COLLECTION',
+        (_contains('apps_results'), _asc('discarded'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/conversations.py date-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_created_at_desc_finished_at_desc_started_at_desc_name_desc',
+        'conversations',
+        'COLLECTION',
+        (_desc('created_at'), _desc('finished_at'), _desc('started_at'), _desc('__name__')),
+    ),
+    # caller: database/conversations.py folder-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_discarded_asc_folder_id_asc_starred_asc_status_asc_created_at_desc_name_desc',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('folder_id'), _asc('starred'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/conversations.py folder-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_discarded_asc_folder_id_asc_status_asc_created_at_asc_name_asc',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('folder_id'), _asc('status'), _asc('created_at'), _asc('__name__')),
+    ),
+    # caller: database/conversations.py folder-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_discarded_asc_folder_id_asc_status_asc_created_at_desc_name_desc',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('folder_id'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/conversations.py starred-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_discarded_asc_starred_asc_status_asc_created_at_desc_name_desc',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('starred'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/conversations.py date-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_discarded_asc_started_at_asc_name_asc',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('started_at'), _asc('__name__')),
+    ),
+    # caller: database/conversations.py date-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_discarded_asc_started_at_desc_name_desc',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _desc('started_at'), _desc('__name__')),
+    ),
+    # caller: database/conversations.py folder-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_folder_id_asc_starred_asc_status_asc_created_at_desc_name_desc',
+        'conversations',
+        'COLLECTION',
+        (_asc('folder_id'), _asc('starred'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/conversations.py folder-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_folder_id_asc_status_asc_created_at_desc_name_desc',
+        'conversations',
+        'COLLECTION',
+        (_asc('folder_id'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/conversations.py starred-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_starred_asc_status_asc_created_at_desc_name_desc',
+        'conversations',
+        'COLLECTION',
+        (_asc('starred'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'conversations_created_at_asc_id_asc_name_asc_collection_group',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('created_at'), _asc('id'), _asc('__name__')),
+    ),
+    # caller: database/conversations.py status-filtered reads
+    FirestoreIndexRequirement(
+        'conversations_discarded_asc_status_asc_name_asc_collection_group',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('discarded'), _asc('status'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'daily_usage_year_desc_month_desc_day_desc_name_desc',
+        'daily_usage',
+        'COLLECTION',
+        (_desc('year'), _desc('month'), _desc('day'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'dev_api_keys_user_id_asc_created_at_desc_name_desc',
+        'dev_api_keys',
+        'COLLECTION',
+        (_asc('user_id'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'fair_use_state_stage_asc_updated_at_desc_name_desc_collection_group',
+        'fair_use_state',
+        'COLLECTION_GROUP',
+        (_asc('stage'), _desc('updated_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'files_id_asc_created_at_desc_name_desc',
+        'files',
+        'COLLECTION',
+        (_asc('id'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'flash_sessions_status_asc_created_at_asc_name_asc',
+        'flash_sessions',
+        'COLLECTION',
+        (_asc('status'), _asc('created_at'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'goals_is_active_asc_created_at_desc_name_desc',
+        'goals',
+        'COLLECTION',
+        (_asc('is_active'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'hourly_usage_month_asc_year_asc_id_asc_name_asc',
+        'hourly_usage',
+        'COLLECTION',
+        (_asc('month'), _asc('year'), _asc('id'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'hourly_usage_month_asc_year_asc_name_asc_collection_group',
+        'hourly_usage',
+        'COLLECTION_GROUP',
+        (_asc('month'), _asc('year'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'import_jobs_uid_asc_created_at_desc_name_desc',
+        'import_jobs',
+        'COLLECTION',
+        (_asc('uid'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'mcp_api_keys_user_id_asc_created_at_desc_name_desc',
+        'mcp_api_keys',
+        'COLLECTION',
+        (_asc('user_id'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'meetings_start_time_asc_end_time_asc_name_asc',
+        'meetings',
+        'COLLECTION',
+        (_asc('start_time'), _asc('end_time'), _asc('__name__')),
+    ),
+    # caller: database/memories.py list and filter reads
+    FirestoreIndexRequirement(
+        'memories_category_asc_scoring_desc_created_at_desc_name_desc',
+        'memories',
+        'COLLECTION',
+        (_asc('category'), _desc('scoring'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/memories.py list and filter reads
+    FirestoreIndexRequirement(
+        'memories_is_dismissed_asc_scoring_desc_created_at_desc_name_desc',
+        'memories',
+        'COLLECTION',
+        (_asc('is_dismissed'), _desc('scoring'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/memories.py list and filter reads
+    FirestoreIndexRequirement(
+        'memories_tags_contains_scoring_desc_created_at_desc_name_desc',
+        'memories',
+        'COLLECTION',
+        (_contains('tags'), _desc('scoring'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: database/memories.py list and filter reads
+    FirestoreIndexRequirement(
+        'memories_visibility_asc_created_at_desc_name_desc',
+        'memories',
+        'COLLECTION',
+        (_asc('visibility'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'memory_items_account_generation_asc_tier_asc_status_asc_processing_state_asc_graph_ready_asc_updated_at_desc_name_desc_collection_group',
+        'memory_items',
+        'COLLECTION_GROUP',
+        (
+            _asc('account_generation'),
+            _asc('tier'),
+            _asc('status'),
+            _asc('processing_state'),
+            _asc('graph_ready'),
+            _desc('updated_at'),
+            _desc('__name__'),
+        ),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'messages_botname_asc_timestamp_asc_name_asc',
+        'messages',
+        'COLLECTION',
+        (_asc('botName'), _asc('timestamp'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'messages_chat_session_id_asc_plugin_id_asc_created_at_desc_name_desc',
+        'messages',
+        'COLLECTION',
+        (_asc('chat_session_id'), _asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'messages_pluginid_asc_timestamp_asc_name_asc',
+        'messages',
+        'COLLECTION',
+        (_asc('pluginId'), _asc('timestamp'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'messages_chat_session_id_asc_created_at_asc_name_asc_collection_group',
+        'messages',
+        'COLLECTION_GROUP',
+        (_asc('chat_session_id'), _asc('created_at'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'messages_rating_asc_created_at_asc_name_asc_collection_group',
+        'messages',
+        'COLLECTION_GROUP',
+        (_asc('rating'), _asc('created_at'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'messages_session_id_asc_created_at_asc_name_asc_collection_group',
+        'messages',
+        'COLLECTION_GROUP',
+        (_asc('session_id'), _asc('created_at'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'offline_sync_jobs_status_asc_uid_asc_created_at_desc_name_desc',
+        'offline_sync_jobs',
+        'COLLECTION',
+        (_asc('status'), _asc('uid'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'plugins_visible_in_store_asc_category_asc_name_asc',
+        'plugins',
+        'COLLECTION',
+        (_asc('visible_in_store'), _asc('category'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'plugins_data_category_asc_sub_count_desc_name_desc',
+        'plugins_data',
+        'COLLECTION',
+        (_asc('category'), _desc('sub_count'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'plugins_data_category_asc_username_asc_name_asc',
+        'plugins_data',
+        'COLLECTION',
+        (_asc('category'), _asc('username'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'plugins_data_private_asc_deleted_asc_name_asc',
+        'plugins_data',
+        'COLLECTION',
+        (_asc('private'), _asc('deleted'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'staged_tasks_completed_asc_relevance_score_asc_name_asc',
+        'staged_tasks',
+        'COLLECTION',
+        (_asc('completed'), _asc('relevance_score'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'staged_tasks_completed_asc_relevance_score_asc_created_at_desc_name_desc',
+        'staged_tasks',
+        'COLLECTION',
+        (_asc('completed'), _asc('relevance_score'), _desc('created_at'), _desc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'usage_history_type_asc_timestamp_asc_name_asc',
+        'usage_history',
+        'COLLECTION',
+        (_asc('type'), _asc('timestamp'), _asc('__name__')),
+    ),
+    # caller: unmapped
+    FirestoreIndexRequirement(
+        'users_signup_platform_asc_signup_platform_at_asc_name_asc',
+        'users',
+        'COLLECTION',
+        (_asc('signup_platform'), _asc('signup_platform_at'), _asc('__name__')),
+    ),
+    # Prod FailedPrecondition 2026-09-09 (15 errors): get_conversations_count with starred, statuses, and a date range.
+    FirestoreIndexRequirement(
+        'conversations_discarded_starred_status_created_count',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('starred'), _asc('status'), _asc('created_at'), _asc('__name__')),
+    ),
+    # Prod FailedPrecondition 2026-09-23 (6 errors): get_conversations_in_folder in database/folders.py.
+    FirestoreIndexRequirement(
+        'conversations_discarded_folder_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('folder_id'), _desc('created_at'), _desc('__name__')),
+    ),
+    # Prod FailedPrecondition 2026-09-26 (3 errors): get_conversations_count with sources, statuses, and a date range.
+    FirestoreIndexRequirement(
+        'conversations_source_status_created_count',
+        'conversations',
+        'COLLECTION',
+        (_asc('source'), _asc('status'), _asc('created_at'), _asc('__name__')),
     ),
 )
 
@@ -844,6 +1349,26 @@ CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
 )
 
 
+# `GET /v1/conversations/count?include_discarded=false&start_date=...&end_date=...`
+# (`get_conversations_count`, added to the mobile app shell in #19730) filters
+# `discarded == False` plus a `created_at` range and runs a `count()` aggregation
+# with no ordering. Firestore serves an aggregation over a range from an index
+# whose range field is ASCENDING, so the list-side `(discarded ASC, created_at
+# DESC)` composite above does not cover it: prod returned FailedPrecondition
+# ("The query requires an index") and the route 500ed. A start-only or end-only
+# range needs the same composite (equality prefix, then the one range field).
+CONVERSATIONS_COUNT_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_count_discarded_created_range',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('created_at', '>=', 'start_date'),
+        FirestoreQueryFilter('created_at', '<=', 'end_date'),
+    ),
+    index_fields=(_asc('discarded'), _asc('created_at'), _asc('__name__')),
+)
+
 MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
 for _has_categories in (False, True):
     for _has_start_date in (False, True):
@@ -872,6 +1397,25 @@ for _has_categories in (False, True):
                 filters=tuple(_filters),
                 index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
             )
+
+# Sync safety-WAL binding: the newest rollover generations of one recording that
+# started before the upload's audio ends (utils/sync/recording_lineage.py).
+SYNC_RECORDING_LINEAGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_recording_lineage',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('external_data.recording_origin_id', '==', 'recording_origin_id'),
+        FirestoreQueryFilter('started_at', '<=', 'started_before'),
+        FirestoreQueryFilter('finished_at', '>=', 'finished_after'),
+    ),
+    index_fields=(
+        _asc('external_data.recording_origin_id'),
+        _desc('started_at'),
+        _desc('finished_at'),
+        _desc('__name__'),
+    ),
+)
 
 ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_entity_timeline_completed',
@@ -1311,6 +1855,23 @@ DAILY_SUMMARY_RECIPIENTS_QUERY = FirestoreQuerySpec(
 )
 
 
+# Smart merge (utils/conversations/smart_merge.py): the newest visible rows of one
+# source before a just-finished conversation. Same signature as the existing
+# `conversations_discarded_source_status_created` index, so nothing new is provisioned.
+CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY = FirestoreQuerySpec(
+    identifier='conversations_smart_merge_preceding',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('source', '==', 'source'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+        FirestoreQueryFilter('created_at', '<', 'created_before'),
+    ),
+    index_fields=(_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+)
+
+
 CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     identifier='conversation_photos_name_range_export',
     collection_group='photos',
@@ -1384,7 +1945,9 @@ QUERY_SPECS = (
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
+    CONVERSATIONS_COUNT_CREATED_RANGE_QUERY,
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
+    SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
@@ -1394,6 +1957,7 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
     DAILY_SUMMARY_RECIPIENTS_QUERY,
+    CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
@@ -1502,7 +2066,57 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('sync_backfill_sequencer', 'active_payload'),
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
+    ('conversations', 'live_transcript_replay_receipt'),
 )
+
+FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
+    FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
+    FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
+    FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'fair_use_events_case_ref_group_both', 'fair_use_events', 'case_ref', ('ASCENDING', 'DESCENDING')
+    ),
+    FieldIndexRequirement(
+        'fcm_tokens_app_version_group_both', 'fcm_tokens', 'app_version', ('ASCENDING', 'DESCENDING')
+    ),
+    FieldIndexRequirement('fcm_tokens_token_group_ascending', 'fcm_tokens', 'token', ('ASCENDING',)),
+    FieldIndexRequirement('llm_usage_date_group_ascending', 'llm_usage', 'date', ('ASCENDING',)),
+    FieldIndexRequirement('memories_tags_group_contains', 'memories', 'tags', ('CONTAINS',)),
+    FieldIndexRequirement(
+        'processing_memories_created_at_group_ascending', 'processing_memories', 'created_at', ('ASCENDING',)
+    ),
+    FieldIndexRequirement(
+        'candidate_integration_outbox_status_group_ascending',
+        'candidate_integration_outbox',
+        'status',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_dead_letters_created_at_group_ascending',
+        'chat_first_dead_letters',
+        'created_at',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_proactive_intents_created_at_group_ascending',
+        'chat_first_proactive_intents',
+        'created_at',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_proactive_intents_delivery_state_group_ascending',
+        'chat_first_proactive_intents',
+        'delivery_state',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement('memory_outbox_status_group_ascending', 'memory_outbox', 'status', ('ASCENDING',)),
+    FieldIndexRequirement('projection_repairs_status_group_ascending', 'projection_repairs', 'status', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
+    ),
+)
+
+_FIELD_MODES = {'ASCENDING', 'DESCENDING', 'CONTAINS'}
 
 
 def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
@@ -1515,13 +2129,32 @@ def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
             raise ValueError(f'duplicate Firestore index requirement: {requirement.identifier}')
         signatures.add(requirement.signature)
         indexes.append(requirement.to_manifest())
-    field_overrides = [
-        {
-            'collectionGroup': collection_group,
-            'fieldPath': field_path,
-            'ttl': False,
-            'indexes': [],
-        }
-        for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS
-    ]
+    additive_fields: set[tuple[str, str]] = set()
+    field_overrides: list[dict[str, Any]] = []
+    for requirement in FIELD_INDEX_REQUIREMENTS:
+        key = (requirement.collection_group, requirement.field_path)
+        if key in additive_fields:
+            raise ValueError(f'duplicate Firestore field index requirement: {requirement.identifier}')
+        additive_fields.add(key)
+        if not requirement.collection_group or '/' in requirement.collection_group:
+            raise ValueError(f'invalid collection group in Firestore field requirement: {requirement.identifier}')
+        if not requirement.field_path or '/' in requirement.field_path:
+            raise ValueError(f'invalid field path in Firestore field requirement: {requirement.identifier}')
+        modes = requirement.collection_group_modes
+        if not modes or any(mode not in _FIELD_MODES for mode in modes) or len(set(modes)) != len(modes):
+            raise ValueError(f'invalid modes in Firestore field requirement: {requirement.identifier}')
+        field_overrides.append(requirement.to_manifest())
+    for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS:
+        if (collection_group, field_path) in additive_fields:
+            raise ValueError(
+                f'Firestore field {collection_group}.{field_path} is both an additive requirement and an exemption'
+            )
+        field_overrides.append(
+            {
+                'collectionGroup': collection_group,
+                'fieldPath': field_path,
+                'ttl': False,
+                'indexes': [],
+            }
+        )
     return {'indexes': indexes, 'fieldOverrides': field_overrides}

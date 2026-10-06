@@ -9,6 +9,7 @@ from google.api_core.exceptions import Aborted
 
 from database import conversation_finalization_jobs as jobs
 from database import firestore_transaction_retry
+from models.conversation import Conversation
 from utils.listen_pusher_session import FINALIZATION_IN_FLIGHT_ERROR
 
 
@@ -412,15 +413,18 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     ref = _Ref('job-1', {'status': 'queued', 'dispatch_generation': 2, 'attempt_count': 0})
     first = _Transaction()
 
-    claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now)
+    claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now, count_worker_claim=True)
     assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 0, 'created_at': None}
     claim_update = first.updates[0][1]
     assert claim_update['status'] == 'leased'
     assert 'attempt_count' not in claim_update
+    assert claim_update['worker_claim_count'] == 1
 
     ref.data = ref.data | claim_update
     duplicate = _Transaction()
-    assert jobs._claim_finalization_job_txn(duplicate, ref, 2, False, 1500, now + timedelta(seconds=1)) == {
+    assert jobs._claim_finalization_job_txn(
+        duplicate, ref, 2, False, 1500, now + timedelta(seconds=1), count_worker_claim=True
+    ) == {
         'status': 'leased',
         'lease_epoch': None,
         'attempt_count': 0,
@@ -465,7 +469,7 @@ def test_expired_worker_lease_can_be_safely_reclaimed():
     )
     transaction = _Transaction()
 
-    claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
+    claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now, count_worker_claim=True)
     assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1, 'created_at': None}
     assert 'attempt_count' not in transaction.updates[0][1]
     assert transaction.updates[0][1]['lease_epoch'] == 1
@@ -491,6 +495,7 @@ def test_session_handoff_reclaim_does_not_burn_the_processing_attempt_budget():
         assert claim['status'] == 'claimed'
         assert claim['attempt_count'] == 0
         assert 'attempt_count' not in transaction.updates[0][1]
+        assert 'worker_claim_count' not in transaction.updates[0][1]
         ref.data = ref.data | transaction.updates[0][1]
         ref.data['lease_expires_at'] = now - timedelta(seconds=1)
 
@@ -839,7 +844,28 @@ def test_reconciler_replaces_stale_generation_after_worker_crash():
 
     assert intent['status'] == 'queued'
     assert intent['dispatch_generation'] == 5
+    assert intent['created'] is True
     assert transaction.updates[0][1]['dispatch_generation'] == 5
+
+
+def test_reconciler_does_not_dispatch_an_already_fresh_generation():
+    now = _now()
+    transaction = _Transaction()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 5,
+            'requires_byok': False,
+            'dispatch_requested_at': now,
+        },
+    )
+
+    intent = jobs._claim_finalization_replay_txn(transaction, ref, timedelta(minutes=5), now)
+
+    assert intent['status'] == 'queued'
+    assert intent['created'] is False
+    assert transaction.updates == []
 
 
 def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
@@ -856,7 +882,7 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
     )
 
     reclaim = _Transaction()
-    new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now)
+    new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now, count_worker_claim=True)
     assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 0, 'created_at': None}
     ref.data = ref.data | reclaim.updates[0][1]
 
@@ -868,7 +894,7 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
     assert jobs._mark_finalization_completed_txn(current_completion, ref, 3, 5, now) is True
 
 
-def test_final_attempt_sets_visible_dead_letter_instead_of_completed():
+def test_final_attempt_sets_job_dead_letter_instead_of_completed():
     transaction = _Transaction()
     ref = _Ref('job-1', {'status': 'leased', 'dispatch_generation': 3, 'lease_epoch': 1})
 
@@ -877,6 +903,7 @@ def test_final_attempt_sets_visible_dead_letter_instead_of_completed():
     assert update['status'] == 'dead_letter'
     assert update['terminal_outcome'] == 'failure'
     assert update['task_retry_count'] == 5
+    assert update['attempt_count'] == 5
     assert 'completed_at' not in update
 
 
@@ -899,6 +926,7 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
             'discarded': False,
             'finalization_job_id': 'job-1',
             'finalization_revision': 3,
+            'structured': {'title': 'Existing summary'},
         }
     )
 
@@ -926,18 +954,223 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
                 'lease_expires_at': _now(),
                 'reconcile_after_at': jobs.firestore.DELETE_FIELD,
                 'task_retry_count': 5,
+                'attempt_count': 5,
                 'last_failure_code': 'final_attempt_failed',
             },
         ),
         (
             conversation_ref,
             {
-                'status': 'failed',
-                'discarded': True,
+                'status': 'completed',
+                'discarded': False,
                 'finalization_status': 'dead_letter',
             },
         ),
     ]
+
+
+def test_worker_budget_survives_failed_write_and_crashed_lease_replay():
+    """Accepted claims consume slots across generations; duplicate delivery does not."""
+    now = _now()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 1,
+            'lease_epoch': 0,
+            'attempt_count': 0,
+            'requires_byok': False,
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+        },
+    )
+    conversation_ref = _conversation(
+        {
+            'status': 'processing',
+            'discarded': False,
+            'finalization_job_id': 'job-1',
+            'finalization_revision': 3,
+        }
+    )
+
+    def apply(transaction):
+        for ref, patch in transaction.updates:
+            ref.data = ref.data | patch
+
+    first = _Transaction()
+    first_claim = jobs._claim_finalization_job_txn(first, job_ref, 1, False, 1500, now, count_worker_claim=True)
+    assert first_claim['attempt_count'] == 0
+    apply(first)
+    duplicate = _Transaction()
+    assert (
+        jobs._claim_finalization_job_txn(duplicate, job_ref, 1, False, 1500, now, count_worker_claim=True)['status']
+        == 'leased'
+    )
+    assert duplicate.updates == []
+    assert job_ref.data['worker_claim_count'] == 1
+
+    failure = _Transaction()
+    assert jobs._mark_finalization_retryable_txn(
+        failure, job_ref, 1, first_claim['lease_epoch'], 'processing_failed', now
+    )
+    apply(failure)
+    assert job_ref.data['attempt_count'] == 1
+
+    replay = _Transaction()
+    assert (
+        jobs._claim_finalization_replay_txn(replay, job_ref, timedelta(minutes=5), now + timedelta(minutes=6))[
+            'dispatch_generation'
+        ]
+        == 2
+    )
+    apply(replay)
+    second = _Transaction()
+    second_claim = jobs._claim_finalization_job_txn(
+        second, job_ref, 2, False, 1500, now + timedelta(minutes=6), count_worker_claim=True
+    )
+    assert second_claim['attempt_count'] == 1
+    apply(second)
+
+    # The second worker dies before writing a failure; the expired lease is
+    # replayed into a third generation with no Cloud Tasks retry header.
+    crash_replay = _Transaction()
+    assert (
+        jobs._claim_finalization_replay_txn(crash_replay, job_ref, timedelta(minutes=5), now + timedelta(minutes=32))[
+            'dispatch_generation'
+        ]
+        == 3
+    )
+    apply(crash_replay)
+    third = _Transaction()
+    third_claim = jobs._claim_finalization_job_txn(
+        third, job_ref, 3, False, 1500, now + timedelta(minutes=32), count_worker_claim=True
+    )
+    assert third_claim['attempt_count'] == 2
+    apply(third)
+    assert job_ref.data['attempt_count'] == 1
+    assert job_ref.data['worker_claim_count'] == 3
+    assert not jobs._mark_finalization_retryable_txn(
+        _Transaction(), job_ref, 2, second_claim['lease_epoch'], 'stale_worker', now
+    )
+
+    # Repeated killed workers reach the durable budget despite each new task
+    # arriving with retry_count=0. Terminalization leaves transcript visible.
+    for generation, minute in ((4, 58), (5, 84), (6, 110)):
+        replay = _Transaction()
+        assert (
+            jobs._claim_finalization_replay_txn(replay, job_ref, timedelta(minutes=5), now + timedelta(minutes=minute))[
+                'dispatch_generation'
+            ]
+            == generation
+        )
+        apply(replay)
+        claim_txn = _Transaction()
+        claim = jobs._claim_finalization_job_txn(
+            claim_txn, job_ref, generation, False, 1500, now + timedelta(minutes=minute), count_worker_claim=True
+        )
+        apply(claim_txn)
+    assert claim['attempt_count'] == 5
+    terminal = _Transaction()
+    assert jobs._mark_finalization_dead_letter_txn(
+        terminal,
+        job_ref,
+        6,
+        claim['lease_epoch'],
+        claim['attempt_count'],
+        now,
+        lambda uid, conversation_id: conversation_ref,
+    )
+    apply(terminal)
+    assert job_ref.data['status'] == 'dead_letter'
+    assert job_ref.data['attempt_count'] == 5
+    assert conversation_ref.data['status'] == 'completed'
+    assert conversation_ref.data['discarded'] is False
+    assert conversation_ref.data['transcript_segments'] == [{'text': 'persisted'}]
+    assert conversation_ref.data['finalization_status'] == 'dead_letter'
+    # A kept row never lands untitled: the deterministic first-sentence title.
+    assert conversation_ref.data['structured'] == {'title': 'persisted', 'overview': ''}
+    assert conversation_ref.data['summary_retryable'] is True
+    api_row = Conversation.model_validate(
+        {
+            'id': 'conversation-1',
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+            **conversation_ref.data,
+            'transcript_segments': [{'text': 'persisted', 'is_user': False, 'start': 0, 'end': 1}],
+        }
+    )
+    assert api_row.structured.title == 'persisted'
+    assert api_row.summary_retryable is True
+    assert api_row.discarded is False
+
+
+def test_committed_fanout_completes_after_crashed_claims_exhaust_budget():
+    now = _now()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 1,
+            'lease_epoch': 0,
+            'attempt_count': 0,
+            'worker_claim_count': 0,
+            'fanout_status': 'pending',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+        },
+    )
+    conversation_ref = _completed_finalization_conversation(revision=3)
+
+    def apply(transaction):
+        for ref, patch in transaction.updates:
+            ref.data = ref.data | patch
+
+    first = _Transaction()
+    first_claim = jobs._claim_finalization_job_txn(first, job_ref, 1, False, 1500, now, count_worker_claim=True)
+    apply(first)
+    fanout = _Transaction()
+    assert (
+        jobs._claim_finalization_fanout_txn(
+            fanout, job_ref, 1, first_claim['lease_epoch'], now, lambda uid, conversation_id: conversation_ref
+        )['status']
+        == 'claimed'
+    )
+    apply(fanout)
+    fanout_done = _Transaction()
+    assert jobs._mark_finalization_fanout_completed_txn(fanout_done, job_ref, 1, first_claim['lease_epoch'], now)
+    apply(fanout_done)
+
+    # Each worker dies after claiming; the reconciler mints new tasks whose
+    # Cloud Tasks retry header starts at zero, but the claim count persists.
+    for generation in range(2, 7):
+        replay_at = now + timedelta(minutes=26 * (generation - 1))
+        replay = _Transaction()
+        assert (
+            jobs._claim_finalization_replay_txn(replay, job_ref, timedelta(minutes=5), replay_at)['dispatch_generation']
+            == generation
+        )
+        apply(replay)
+        claim_txn = _Transaction()
+        claim = jobs._claim_finalization_job_txn(
+            claim_txn, job_ref, generation, False, 1500, replay_at, count_worker_claim=True
+        )
+        apply(claim_txn)
+
+    assert claim['attempt_count'] == 5
+    assert job_ref.data['worker_claim_count'] == 6
+    refused_terminal = _Transaction()
+    assert not jobs._mark_finalization_dead_letter_txn(refused_terminal, job_ref, 6, claim['lease_epoch'], 5, now)
+    assert refused_terminal.updates == []
+    completion = _Transaction()
+    assert jobs._mark_finalization_completed_txn(completion, job_ref, 6, claim['lease_epoch'], now)
+    apply(completion)
+    assert job_ref.data['status'] == 'completed'
+    assert job_ref.data['terminal_outcome'] == 'success'
+    assert job_ref.data['fanout_status'] == 'completed'
+    assert conversation_ref.data['status'] == 'completed'
 
 
 def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregations():
@@ -1464,6 +1697,32 @@ def test_complete_orphan_completes_only_an_unchanged_orphan_generation():
 
     assert completed is True
     assert transaction.updates == [(orphan, {'status': 'completed'})]
+
+
+def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
+    transaction = _Transaction()
+    now = _now()
+    admitted = now - timedelta(seconds=1000)
+    orphan = _Ref(
+        'orphan',
+        {
+            'status': 'processing',
+            'processing_admitted_at': admitted,
+            'structured': {'title': '', 'overview': '', 'category': 'other'},
+            'transcript_segments': [{'text': 'Call the plumber tomorrow. Also groceries.'}],
+        },
+    )
+
+    assert jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, now, 'uid-1') is True
+    assert transaction.updates == [
+        (
+            orphan,
+            {
+                'status': 'completed',
+                'structured': {'title': 'Call the plumber tomorrow.', 'overview': '', 'category': 'other'},
+            },
+        )
+    ]
 
 
 def test_complete_orphan_fences_a_row_a_finalizer_claimed_after_discovery():

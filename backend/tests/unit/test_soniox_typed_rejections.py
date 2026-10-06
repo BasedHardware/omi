@@ -48,6 +48,8 @@ from utils.stt.live_failure import (
     terminate_live_stt_session,
 )
 from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome, bounded_provider
+from utils.stt.recovery_state import LiveRecoveryController
+from utils.stt.replay_delivery import ReplayTailSocket
 from utils.stt.soniox import (
     SONIOX_DEATH_IDLE_TIMEOUT,
     SONIOX_DEATH_ROTATION,
@@ -55,8 +57,14 @@ from utils.stt.soniox import (
     soniox_death_reason,
 )
 from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
+from utils.stt.stream_close import PROVIDER_RATE_LIMITED
 from utils.stt.streaming import STTService, _fallback_failure_reason
 from utils.stt.vad_gate import GatedSTTSocket
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 class FakeWebSocket:
@@ -65,12 +73,13 @@ class FakeWebSocket:
     def __init__(self, inbound):
         self._inbound = list(inbound)
         self.sent = []
+        self.closed = False
 
     async def send(self, data):
         self.sent.append(data)
 
     async def close(self):
-        pass
+        self.closed = True
 
     def __aiter__(self):
         async def gen():
@@ -118,6 +127,14 @@ def test_a_413_max_duration_frame_classifies_as_documented_rotation():
     assert soniox_death_reason(413, 'max_duration_reached') == SONIOX_DEATH_ROTATION
 
 
+def test_a_429_frame_classifies_as_transient_provider_rate_limit():
+    assert soniox_death_reason(429, 'limit_exceeded') == PROVIDER_RATE_LIMITED
+    assert soniox_death_reason(None, 'limit_exceeded') == PROVIDER_RATE_LIMITED
+    socket = _drive_socket([_frame(429, 'limit_exceeded', 'Requests per minute exceeded')])
+    assert socket.is_connection_dead
+    assert socket.typed_death_reason == PROVIDER_RATE_LIMITED
+
+
 def test_unknown_shapes_degrade_to_connection_lost():
     """A new provider error shape must not grow metric cardinality per message."""
     assert soniox_death_reason(500, 'internal_server_error') == 'connection_lost'
@@ -127,6 +144,102 @@ def test_unknown_shapes_degrade_to_connection_lost():
 
 def test_the_error_type_match_tolerates_provider_casing():
     assert soniox_death_reason(402, 'Organization_Balance_Exhausted') == PROVIDER_BUDGET_EXHAUSTED
+
+
+def test_an_active_no_audio_rejection_remains_an_idle_death():
+    sock = _drive_socket([_frame(400, 'invalid_request', 'No audio received')])
+    assert sock.is_connection_dead
+    assert sock.typed_death_reason == SONIOX_DEATH_IDLE_TIMEOUT
+
+
+def test_zero_audio_finish_closes_without_end_frame_or_socket_death():
+    class DelayedWebSocket(FakeWebSocket):
+        def __init__(self):
+            super().__init__([])
+            self.release = asyncio.Event()
+
+        def __aiter__(self):
+            async def gen():
+                await self.release.wait()
+                yield json.dumps(_frame(400, 'invalid_request', 'No audio received'))
+
+            return gen()
+
+    async def run():
+        ws = DelayedWebSocket()
+        sock = SafeSonioxSocket(ws, lambda _segments: None, asyncio.get_running_loop())
+        with patch('utils.stt.soniox.record_stt_stream_close') as record_close:
+            sock.finish()
+            await asyncio.sleep(0.01)
+            assert ws.sent == []
+            ws.release.set()
+            await asyncio.sleep(0.01)
+            assert not sock.is_connection_dead
+            assert sock.typed_death_reason is None
+            record_close.assert_called_once_with(provider='soniox', reason='soniox_no_audio_teardown')
+
+            host = SimpleNamespace(
+                state=SimpleNamespace(active=True, stt_terminal_failure=False),
+                wait=AsyncMock(return_value=True),
+            )
+            receiver = object.__new__(ListenReceiver)
+            receiver.host = host
+            receiver.recovery = LiveRecoveryController(host)
+            receiver._candidate_token = None
+            receiver.stt_socket = sock
+            receiver._failover_stt_socket = AsyncMock()
+            with patch.object(receiver_mod, 'terminate_live_stt_session', new=AsyncMock()) as terminate:
+                await receiver._monitor_stt_death()
+            assert host.state.stt_terminal_failure is False
+            receiver._failover_stt_socket.assert_not_awaited()
+            terminate.assert_not_awaited()
+            await sock.drain_and_close()
+        assert ws.sent == []
+        assert ws.closed
+
+    asyncio.run(run())
+
+
+def test_audio_finish_still_sends_end_frame_and_drains_finished():
+    class FinishedWebSocket(FakeWebSocket):
+        def __init__(self):
+            super().__init__([])
+            self.release = asyncio.Event()
+
+        def __aiter__(self):
+            async def gen():
+                await self.release.wait()
+                yield json.dumps({'finished': True})
+
+            return gen()
+
+        async def send(self, data):
+            await super().send(data)
+            if data == '':
+                self.release.set()
+
+    async def run():
+        ws = FinishedWebSocket()
+        sock = SafeSonioxSocket(ws, lambda _segments: None, asyncio.get_running_loop())
+        assert sock.send(b'\x01\x02')
+        sock.finish()
+        await sock.drain_and_close()
+        assert ws.sent == [b'\x01\x02', '']
+        assert not sock.is_connection_dead
+
+    asyncio.run(run())
+
+
+def test_finalize_control_without_audio_does_not_send_end_frame_or_wait_for_finished():
+    async def run():
+        ws = FakeWebSocket([])
+        sock = SafeSonioxSocket(ws, lambda _segments: None, asyncio.get_running_loop())
+        sock.finalize()
+        await sock.drain_and_close()
+        assert ws.sent == [json.dumps({'type': 'finalize'})]
+        assert ws.closed
+
+    asyncio.run(run())
 
 
 # ---------------------------------------------------------------------------
@@ -379,7 +492,10 @@ async def test_failover_on_a_typed_402_death_opens_the_selection_circuit():
     ), patch('utils.stt.streaming.open_provider_selection_circuit', side_effect=opener):
         assert await receiver._failover_stt_socket() is True
 
-    assert receiver.stt_socket is healthy
+    # Replacement legs always adopt the bounded paced tail now (empty prefix
+    # included) so receive/disconnect observation never stalls behind it.
+    assert isinstance(receiver.stt_socket, ReplayTailSocket)
+    assert receiver.stt_socket.connection is healthy
     assert calls == [('soniox', 'provider_budget_exhausted')]
 
 
@@ -487,6 +603,7 @@ def test_stream_close_reasons_are_bounded_not_raw_vendor_text():
 
     assert bounded_stream_close_reason('organization_monthly_budget_exhausted') == 'connection_lost'
     assert bounded_stream_close_reason(PROVIDER_BUDGET_EXHAUSTED) == PROVIDER_BUDGET_EXHAUSTED
+    assert bounded_stream_close_reason('soniox_no_audio_teardown') == 'soniox_no_audio_teardown'
     from utils.metrics import OMI_STT_STREAM_CLOSE_TOTAL
 
     before = OMI_STT_STREAM_CLOSE_TOTAL.labels(provider='unknown', reason='connection_lost')._value.get()

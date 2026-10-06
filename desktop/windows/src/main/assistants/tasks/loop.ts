@@ -20,7 +20,7 @@
 // with scripted tool-call sequences; production omits `deps` and gets the real
 // implementations.
 import { getAbortSignal, type BackendSession } from '../core/session'
-import type { GeminiTool, ToolCall } from '../insight/models'
+import type { GeminiTool, ToolCall } from '../core/geminiTypes'
 import { sendInitialTurn, sendToolResponseTurn } from './geminiWire'
 import { TASK_TOOLS } from './tools'
 import { parseExtractTask, validateTaskTitle, wordCount, type ExtractedTask } from './models'

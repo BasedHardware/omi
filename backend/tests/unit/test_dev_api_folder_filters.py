@@ -9,7 +9,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -651,7 +651,9 @@ class TestDevApiMemoriesHttpLayer:
         assert locked_legacy['content'] == ''
         assert locked_legacy['category'] == 'interesting'
         assert locked_legacy['scoring'] == '123'
-        memory_service.read.assert_called_once_with('uid1', limit=3, offset=7, include_pending_processing=True)
+        memory_service.read.assert_called_once_with(
+            'uid1', limit=3, offset=7, include_pending_processing=True, budget=ANY
+        )
 
     def test_cleaner_memory_coerces_edge_values(self):
         """CleanerMemory validators should be resilient outside the endpoint pre-filter too."""

@@ -327,6 +327,28 @@ esac
 if [ -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap" ]; then
   fail "temporary automation-owner transition overlapped another suite"
 fi
+cat >"$TMPDIR/tests/OwnerAuthorityAdopterTests.swift" <<'SWIFT'
+import XCTest
+final class OwnerAuthorityAdopterTests: XCTestCase {
+    func testOne() {
+        UserDefaults.standard.set("fixture-owner", forKey: .authUserId)
+    }
+}
+SWIFT
+: >"$FAKE_XCRUN_SCRATCH_LOG"
+rm -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap"
+if "$RUNNER" >"$TMPDIR/auth-defaults-runner.out" 2>"$TMPDIR/auth-defaults-runner.err"; then
+  fail "direct auth UserDefaults fixture run unexpectedly succeeded despite AlphaTests failure"
+fi
+auth_defaults_scratch="$(awk -F '\t' '$1 == "OwnerAuthorityAdopterTests" {print $2}' \
+  "$FAKE_XCRUN_SCRATCH_LOG")"
+case "$auth_defaults_scratch" in
+  */serial-*.build) ;;
+  *) fail "runner did not derive sequential execution from a direct auth UserDefaults mutation" ;;
+esac
+if [ -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap" ]; then
+  fail "direct auth UserDefaults mutation overlapped another suite"
+fi
 if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest" "$FAKE_XCRUN_LOG"; then
   fail "runner did not pass ratcheted skips to SwiftPM"
 fi

@@ -9,9 +9,12 @@ import 'package:version/version.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class OmiDeviceConnection extends DeviceConnection {
@@ -22,13 +25,287 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
-  OmiDeviceConnection(super.device, super.transport);
+  final PendantRingCustody _custody;
+
+  RingInfo? _lastRingInfo;
+  bool _livePersistEnabled = false;
+  int _ringEffectiveCaps = 0;
+  Object? _custodyToken;
+  int _custodyEpoch = 0;
+  static int _custodyEpochAlloc = 0;
+  Future<void>? _probeFuture;
+  bool _custodyProbeResolved = false;
+  bool _optInAttempted = false;
+
+  Future<void> _storageCmdQueue = Future.value();
+
+  StreamSubscription? _custodyNotifySub;
+
+  @override
+  RingInfo? get lastRingInfo => _lastRingInfo;
+
+  @override
+  int get ringEffectiveCaps => _ringEffectiveCaps;
+
+  @override
+  int get ringCustodyEpoch => _custodyEpoch;
+
+  @override
+  Future<void> get ringCustodyReady => _probeFuture ?? Future.value();
+
+  @override
+  bool get ringLivePersistEnabled => _livePersistEnabled;
+
+  Future<T> _enqueueStorageCommand<T>(Future<T> Function() op) {
+    final prev = _storageCmdQueue;
+    final completer = Completer<T>();
+    _storageCmdQueue = prev.then((_) async {
+      try {
+        completer.complete(await op());
+      } catch (e, st) {
+        completer.completeError(e, st);
+      }
+    });
+    return completer.future;
+  }
+
+  OmiDeviceConnection(super.device, super.transport, {PendantRingCustody? custody})
+      : _custody = custody ?? PendantRingCustody.shared {
+    final t = transport;
+    if (t is NativeBleTransport) {
+      t.beforeAudioResubscribe = (_) => _audioResubscribeGate();
+    }
+  }
+
+  int _audioSubscribers = 0;
+  Completer<void>? _physicalReady = Completer<void>();
+  Future<void>? _enableFuture;
+
+  Future<void> _audioResubscribeGate() async {
+    await _physicalReady?.future;
+    await _enableAfterProbe();
+  }
 
   get deviceId => device.id;
 
   @override
+  void onPhysicalConnectionEstablished() {
+    _lastRingInfo = null;
+    _livePersistEnabled = false;
+    _ringEffectiveCaps = 0;
+    _custodyToken = Object();
+    _custodyEpoch = ++_custodyEpochAlloc;
+    _custodyProbeResolved = false;
+    _optInAttempted = false;
+    _probeFuture = null;
+    _enableFuture = null;
+    final ready = _physicalReady;
+    final epoch = _custodyEpoch;
+    final token = _custodyToken;
+    unawaited(() async {
+      try {
+        await _probeRingCustody();
+        if (_audioSubscribers > 0 && epoch == _custodyEpoch && identical(token, _custodyToken)) {
+          await _enableAfterProbe();
+        }
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: custody readiness failed: $e');
+      } finally {
+        if (ready != null && !ready.isCompleted) ready.complete();
+      }
+    }());
+  }
+
+  @override
+  void onPhysicalConnectionLost() {
+    _endCustodySession();
+    _physicalReady = Completer<void>();
+  }
+
+  void _endCustodySession() {
+    final token = _custodyToken;
+    _livePersistEnabled = false;
+    _ringEffectiveCaps = 0;
+    _lastRingInfo = null;
+    _custodyToken = null;
+    unawaited(_custodyNotifySub?.cancel());
+    _custodyNotifySub = null;
+    _custody.endConnection(device.id, _custodyEpoch, sessionToken: token);
+  }
+
+  Future<void> _probeRingCustody() {
+    final existing = _probeFuture;
+    if (existing != null) return existing;
+    final future = _runRingCustodyProbe();
+    _probeFuture = future;
+    future.whenComplete(() {
+      if (identical(_probeFuture, future)) _probeFuture = null;
+    });
+    return future;
+  }
+
+  Future<void> _runRingCustodyProbe() async {
+    await _runRingCustodyProbeInner();
+  }
+
+  Future<void> _runRingCustodyProbeInner() async {
+    final epoch = _custodyEpoch;
+    final token = _custodyToken;
+    if (token == null || _custodyProbeResolved) return;
+    if (!RingProtocol.isRingBufferFirmware(device.firmwareRevision)) return;
+
+    try {
+      _custodyNotifySub = await getBleStorageBytesListener(
+        onStorageBytesReceived: (value) {
+          if (epoch != _custodyEpoch || token != _custodyToken || value.isEmpty) return;
+          if (value[0] == RingProtocol.notifyLiveMark) {
+            final mark = RingProtocol.parseLiveMarkNotification(value);
+            if (mark != null) {
+              _custody.observeLiveMark(device.id, epoch, mark);
+            }
+          } else if (value[0] == RingProtocol.notifyInfo) {
+            final info = RingProtocol.parseInfoNotification(value);
+            if (info != null) {
+              _lastRingInfo = info;
+              _noteInfoDropped(info);
+              _custody.noteInfo(device.id, epoch, info);
+            }
+          }
+        },
+      );
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: custody notify subscribe failed: $e');
+    }
+
+    final info = await getRingInfo();
+    if (epoch != _custodyEpoch || token != _custodyToken || info == null) return;
+    _lastRingInfo = info;
+    _noteInfoDropped(info);
+
+    final effective = info.effectiveCaps;
+    _ringEffectiveCaps = effective;
+    _custodyProbeResolved = true;
+
+    final scopedRingId = (effective & RingProtocol.capRingId) != 0 ? info.ringId : null;
+
+    await _custody.beginConnection(
+      device.id,
+      epoch,
+      info,
+      sessionToken: token,
+      effectiveCaps: effective,
+      replayAdvance: (seq) async {
+        if (scopedRingId == null) return null;
+        final ack = await advanceRingCustody(seq, expectedEpoch: epoch, expectedRingId: scopedRingId);
+        return ack?.status;
+      },
+      onAdvanceReady: (seq) async {
+        final ack = await advanceRingCustody(seq, expectedEpoch: epoch, expectedRingId: scopedRingId);
+        return ack?.status;
+      },
+    );
+  }
+
+  Future<void> _enableLiveCustody() async {
+    await _probeRingCustody();
+    await _enableAfterProbe();
+  }
+
+  Future<void> _enableAfterProbe() {
+    final existing = _enableFuture;
+    if (existing != null) return existing;
+    final epoch = _custodyEpoch;
+    final token = _custodyToken;
+    if (token == null || _optInAttempted) return Future.value();
+    final future = _runEnableAfterProbe(epoch, token);
+    _enableFuture = future;
+    unawaited(() async {
+      try {
+        await future;
+      } catch (_) {
+      } finally {
+        if (identical(_enableFuture, future)) _enableFuture = null;
+      }
+    }());
+    return future;
+  }
+
+  Future<void> _runEnableAfterProbe(int epoch, Object token) async {
+    if (epoch != _custodyEpoch || token != _custodyToken || _optInAttempted) return;
+    final info = _lastRingInfo;
+    if (info == null || !info.capLivePersist) return;
+    _optInAttempted = true;
+
+    final ack = await enableRingCustody(info.effectiveCaps);
+    if (epoch != _custodyEpoch || token != _custodyToken) return;
+    if (ack == null || !ack.isOk) {
+      final legacy = ack != null && ack.status == RingProtocol.ackInvalidCommand;
+      Logger.debug(
+        'OmiDeviceConnection: custody opt-in ${ack == null ? "unacknowledged" : "rejected (status=${ack.status})"} — ${legacy ? "staying legacy" : "live custody off, ring-id custody retained"}',
+      );
+      _ringEffectiveCaps = legacy ? 0 : (info.effectiveCaps & ~RingProtocol.capLivePersist);
+      _livePersistEnabled = false;
+      _custody.setLivePersistEnabled(device.id, epoch, false);
+      _emitCustodyTelemetry('custody_enable_rejected', info);
+      return;
+    }
+    var granted = ack.grantedCaps;
+    if (granted == null) {
+      final confirm = await getRingInfo();
+      if (epoch != _custodyEpoch || token != _custodyToken) return;
+      if (confirm != null) {
+        _lastRingInfo = confirm;
+        _noteInfoDropped(confirm);
+        _custody.noteInfo(device.id, epoch, confirm);
+      }
+      granted = confirm?.effectiveCaps ?? 0;
+    }
+    _ringEffectiveCaps = granted;
+    _livePersistEnabled = granted & RingProtocol.capLivePersist != 0;
+    _custody.setLivePersistEnabled(device.id, epoch, _livePersistEnabled);
+    _emitCustodyTelemetry('custody_enable', info);
+  }
+
+  Future<void> retryRingCustodyProbe() async {
+    if (_custodyToken == null || _custodyProbeResolved) return;
+    await _probeRingCustody();
+  }
+
+  final Map<String, int> _droppedSeen = {};
+
+  void _noteInfoDropped(RingInfo info) {
+    final key = '${device.id}:${info.ringId}';
+    final last = _droppedSeen[key];
+    _droppedSeen[key] = info.droppedPackets;
+    if (last == null) return;
+    final delta = info.droppedPackets - last;
+    if (delta <= 0) return;
+    DebugLogManager.logEvent('pendant_custody', {
+      'action': 'dropped_delta',
+      'device': device.id,
+      'ring_id': info.ringId,
+      'dropped_delta': delta,
+      'used': info.unreadPackets,
+      'capacity': info.capacityPackets,
+    });
+  }
+
+  void _emitCustodyTelemetry(String action, RingInfo info) {
+    DebugLogManager.logEvent('pendant_custody', {
+      'action': action,
+      'caps': _ringEffectiveCaps,
+      'advertised_caps': info.advertisedCaps,
+      'contract_version': info.contractVersion,
+      'ring_id': info.ringId,
+      'enabled': _livePersistEnabled,
+      'residual_legacy_risk': _ringEffectiveCaps == 0,
+    });
+  }
+
+  @override
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+    await retryRingCustodyProbe();
 
     await performSyncTime();
   }
@@ -118,14 +395,17 @@ class OmiDeviceConnection extends DeviceConnection {
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
     try {
+      await _enableLiveCustody();
       final stream = transport.getCharacteristicStream(omiServiceUuid, audioDataStreamCharacteristicUuid);
 
       Logger.debug('Subscribed to audioBytes stream from Omi Device');
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) onAudioBytesReceived(value);
       });
-
-      return subscription;
+      _audioSubscribers++;
+      return _CountedSubscription<List<int>>(subscription, () {
+        if (_audioSubscribers > 0) _audioSubscribers--;
+      });
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error setting up audio listener: $e');
       return null;
@@ -225,12 +505,7 @@ class OmiDeviceConnection extends DeviceConnection {
         return null;
       }
 
-      final status = StorageStatus(
-        totalUsedBytes: totalBytes,
-        fileCount: fileCount,
-        freeBytes: 0,
-        statusFlags: 0,
-      );
+      final status = StorageStatus(totalUsedBytes: totalBytes, fileCount: fileCount, freeBytes: 0, statusFlags: 0);
       Logger.debug('OmiDeviceConnection: $status');
       return status;
     } catch (e) {
@@ -386,6 +661,12 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<RingInfo?> performGetRingInfo() async {
+    final info = await _enqueueStorageCommand(() => _getRingInfoLocked());
+    if (info != null) _lastRingInfo = info;
+    return info;
+  }
+
+  Future<RingInfo?> _getRingInfoLocked() async {
     StreamSubscription? sub;
     try {
       final completer = Completer<RingInfo?>();
@@ -402,16 +683,17 @@ class OmiDeviceConnection extends DeviceConnection {
         completer.complete(info);
       });
 
-      await transport.writeCharacteristic(
-        storageDataStreamServiceUuid,
-        storageDataStreamCharacteristicUuid,
-        [RingProtocol.cmdInfo],
-      );
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+        RingProtocol.cmdInfo,
+      ]);
 
-      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-        Logger.debug('OmiDeviceConnection: getRingInfo timeout');
-        return null;
-      });
+      return await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: getRingInfo timeout');
+          return null;
+        },
+      );
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting ring info: $e');
       return null;
@@ -438,43 +720,125 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<bool> performAdvanceRing(int newReadSeq) async {
-    StreamSubscription? sub;
-    try {
-      final completer = Completer<bool>();
-      final stream = transport.getCharacteristicStream(
-        storageDataStreamServiceUuid,
-        storageDataStreamCharacteristicUuid,
-      );
-
-      sub = stream.listen((value) {
-        if (completer.isCompleted) return;
-        if (value.length < 2 || value[0] != RingProtocol.notifyAck) return;
-        final status = value[1];
-        Logger.debug('OmiDeviceConnection: ADVANCE ack status=$status');
-        completer.complete(status == 0);
-      });
-
-      await transport.writeCharacteristic(
-        storageDataStreamServiceUuid,
-        storageDataStreamCharacteristicUuid,
-        RingProtocol.encodeAdvanceCommand(newReadSeq),
-      );
-      Logger.debug('OmiDeviceConnection: CMD_RING_ADVANCE seq=$newReadSeq');
-
-      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-        Logger.debug('OmiDeviceConnection: advanceRing timeout');
-        return false;
-      });
-    } catch (e) {
-      Logger.debug('OmiDeviceConnection: Error advancing ring: $e');
-      return false;
-    } finally {
-      await sub?.cancel();
-    }
+    final ack = await performAdvanceRingCustody(newReadSeq, expectedEpoch: _custodyEpoch, expectedRingId: null);
+    return ack?.isOk ?? false;
   }
 
   @override
-  Future<bool> performClearRing() async {
+  Future<RingCommandAck?> performAdvanceRingCustody(
+    int newReadSeq, {
+    required int expectedEpoch,
+    required int? expectedRingId,
+  }) async {
+    return _enqueueStorageCommand(() async {
+      int? currentRingId() => (_ringEffectiveCaps & RingProtocol.capRingId) != 0 ? _lastRingInfo?.ringId : null;
+      if (expectedEpoch != _custodyEpoch || expectedRingId != currentRingId()) {
+        Logger.debug(
+          'OmiDeviceConnection: stale advance fenced seq=$newReadSeq epoch=$expectedEpoch/$_custodyEpoch ring=$expectedRingId/${currentRingId()}',
+        );
+        return const RingCommandAck(status: RingProtocol.ackRingIdMismatch);
+      }
+      StreamSubscription? sub;
+      try {
+        final completer = Completer<RingCommandAck?>();
+        final stream = transport.getCharacteristicStream(
+          storageDataStreamServiceUuid,
+          storageDataStreamCharacteristicUuid,
+        );
+
+        sub = stream.listen((value) {
+          if (completer.isCompleted) return;
+          if (value.length < 2 || value[0] != RingProtocol.notifyAck) return;
+          final ack = RingCommandAck(status: value[1], grantedCaps: value.length >= 3 ? value[2] : null);
+          Logger.debug('OmiDeviceConnection: ADVANCE ack status=${ack.status}');
+          completer.complete(ack);
+        });
+
+        final ringId = expectedRingId;
+        final payload = ringId != null
+            ? RingProtocol.encodeAdvanceIdCommand(ringId, newReadSeq)
+            : RingProtocol.encodeAdvanceCommand(newReadSeq);
+        await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, payload);
+        Logger.debug(
+          'OmiDeviceConnection: ${ringId != null ? "CMD_RING_ADVANCE_ID" : "CMD_RING_ADVANCE"} seq=$newReadSeq ring=${ringId ?? "none"}',
+        );
+
+        final result = await completer.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            Logger.debug('OmiDeviceConnection: advanceRing timeout');
+            return null;
+          },
+        );
+        if (expectedEpoch != _custodyEpoch || expectedRingId != currentRingId()) {
+          return const RingCommandAck(status: RingProtocol.ackRingIdMismatch);
+        }
+        var ack = result;
+        if (ack != null && ack.status == RingProtocol.ackSeqOutOfRange) {
+          final fresh = await _getRingInfoLocked();
+          if (expectedEpoch != _custodyEpoch || expectedRingId != currentRingId()) {
+            return const RingCommandAck(status: RingProtocol.ackRingIdMismatch);
+          }
+          if (fresh != null &&
+              (expectedRingId == null || fresh.ringId == expectedRingId) &&
+              newReadSeq <= fresh.readSeq) {
+            return const RingCommandAck(status: RingProtocol.ackOk);
+          }
+        }
+        return ack;
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Error advancing ring: $e');
+        return null;
+      } finally {
+        await sub?.cancel();
+      }
+    });
+  }
+
+  @override
+  Future<RingCommandAck?> performEnableRingCustody(int requestedCaps) async {
+    return _enqueueStorageCommand(() async {
+      StreamSubscription? sub;
+      try {
+        final completer = Completer<RingCommandAck?>();
+        final stream = transport.getCharacteristicStream(
+          storageDataStreamServiceUuid,
+          storageDataStreamCharacteristicUuid,
+        );
+
+        sub = stream.listen((value) {
+          if (completer.isCompleted) return;
+          if (value.length < 2 || value[0] != RingProtocol.notifyAck) return;
+          completer.complete(RingCommandAck(status: value[1], grantedCaps: value.length >= 3 ? value[2] : null));
+        });
+
+        await transport.writeCharacteristic(
+          storageDataStreamServiceUuid,
+          storageDataStreamCharacteristicUuid,
+          RingProtocol.encodeCustodyEnableCommand(requestedCaps),
+        );
+        Logger.debug('OmiDeviceConnection: CMD_CUSTODY_ENABLE caps=0x${requestedCaps.toRadixString(16)}');
+
+        return await completer.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            Logger.debug('OmiDeviceConnection: custody enable timeout');
+            return null;
+          },
+        );
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Error enabling ring custody: $e');
+        return null;
+      } finally {
+        await sub?.cancel();
+      }
+    });
+  }
+
+  @override
+  Future<bool> performClearRing() => _enqueueStorageCommand(_clearRingLocked);
+
+  Future<bool> _clearRingLocked() async {
     StreamSubscription? sub;
     try {
       final completer = Completer<bool>();
@@ -491,17 +855,18 @@ class OmiDeviceConnection extends DeviceConnection {
         completer.complete(status == 0);
       });
 
-      await transport.writeCharacteristic(
-        storageDataStreamServiceUuid,
-        storageDataStreamCharacteristicUuid,
-        [RingProtocol.cmdClear],
-      );
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+        RingProtocol.cmdClear,
+      ]);
       Logger.debug('OmiDeviceConnection: CMD_RING_CLEAR');
 
-      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-        Logger.debug('OmiDeviceConnection: clearRing timeout');
-        return false;
-      });
+      return await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: clearRing timeout');
+          return false;
+        },
+      );
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error clearing ring: $e');
       return false;
@@ -880,10 +1245,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
   Future<bool> readChargingStatus() async {
     try {
-      final value = await transport.readCharacteristic(
-        settingsServiceUuid,
-        settingsChargingStatusCharacteristicUuid,
-      );
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsChargingStatusCharacteristicUuid);
       return value.isNotEmpty && value[0] == 1;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error reading charging status: $e');
@@ -895,10 +1257,7 @@ class OmiDeviceConnection extends DeviceConnection {
     required void Function(bool isCharging) onChargingStatusChange,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(
-        settingsServiceUuid,
-        settingsChargingStatusCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(settingsServiceUuid, settingsChargingStatusCharacteristicUuid);
       return stream.listen((value) {
         if (value.isNotEmpty) {
           onChargingStatusChange(value[0] == 1);
@@ -908,6 +1267,27 @@ class OmiDeviceConnection extends DeviceConnection {
       Logger.debug('OmiDeviceConnection: Error setting up charging status listener: $e');
       return null;
     }
+  }
+
+  /// CV1 publishes its nRF FICR device ID as exactly 16 hex characters.
+  /// Only that shape is accepted: this connection also serves other
+  /// Omi-protocol devices, and any constant or fallback serial they report
+  /// (e.g. the firmware's "unknown") would merge every unit into one
+  /// analytics hardware_id.
+  static final RegExp _unitIdPattern = RegExp(r'^[0-9A-F]{16}$');
+
+  /// Bounds the serial read so a missing native callback cannot stall setup.
+  static const Duration _serialReadTimeout = Duration(seconds: 3);
+
+  /// Parses a DIS Serial Number String read into a CV1 unit ID, or null when
+  /// it is not a 16-hex-character ID or is a single repeated digit (unset FICR).
+  @visibleForTesting
+  static String? parseSerialNumber(List<int> value) {
+    if (value.isEmpty) return null;
+    final serial = String.fromCharCodes(value).replaceAll('\u0000', '').trim().toUpperCase();
+    if (!_unitIdPattern.hasMatch(serial)) return null;
+    if (serial.split('').toSet().length == 1) return null;
+    return serial;
   }
 
   /// Get device information from Omi device
@@ -967,6 +1347,21 @@ class OmiDeviceConnection extends DeviceConnection {
         Logger.debug('OmiDeviceConnection: Error reading manufacturer name: $e');
       }
 
+      // Read serial number (0x2A25). CV1 firmware that exposes the per-unit
+      // hardware ID serves it here; older firmware has no such characteristic
+      // and the transport returns an empty read, leaving serialNumber unset.
+      try {
+        final serialValue = await transport
+            .readCharacteristic(deviceInformationServiceUuid, serialNumberCharacteristicUuid)
+            .timeout(_serialReadTimeout);
+        final serial = parseSerialNumber(serialValue);
+        if (serial != null) {
+          deviceInfo['serialNumber'] = serial;
+        }
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Error reading serial number: $e');
+      }
+
       // Check if device has image streaming capability (for OpenGlass/OmiGlass detection)
       try {
         final chars = await transport.readCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
@@ -994,4 +1389,48 @@ class OmiDeviceConnection extends DeviceConnection {
 
     return deviceInfo;
   }
+}
+
+class _CountedSubscription<T> implements StreamSubscription<T> {
+  _CountedSubscription(this._inner, this._onRelease);
+
+  final StreamSubscription<T> _inner;
+  final void Function() _onRelease;
+  bool _released = false;
+
+  void _release() {
+    if (_released) return;
+    _released = true;
+    _onRelease();
+  }
+
+  @override
+  Future<void> cancel() {
+    _release();
+    return _inner.cancel();
+  }
+
+  @override
+  void onData(void Function(T)? handleData) => _inner.onData(handleData);
+
+  @override
+  void onDone(void Function()? handleDone) => _inner.onDone(() {
+        _release();
+        handleDone?.call();
+      });
+
+  @override
+  void onError(Function? handleError) => _inner.onError(handleError);
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture(futureValue);
+
+  @override
+  bool get isPaused => _inner.isPaused;
+
+  @override
+  void pause([Future<void>? resumeSignal]) => _inner.pause(resumeSignal);
+
+  @override
+  void resume() => _inner.resume();
 }

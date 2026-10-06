@@ -13,12 +13,12 @@ import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
-import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
@@ -234,6 +234,8 @@ class AIMessage extends StatefulWidget {
   /// The reply failed; a localized error with [onRetry] replaces the raw server text.
   final bool replyFailed;
 
+  final ChatStreamFailureClass? replyFailure;
+
   /// Sends the user's message again. Null when the failed reply cannot be retried (voice).
   final VoidCallback? onRetry;
 
@@ -250,6 +252,7 @@ class AIMessage extends StatefulWidget {
     this.showThinkingAfterText = false,
     this.fetchConversation,
     this.replyFailed = false,
+    this.replyFailure,
     this.onRetry,
   });
 
@@ -268,7 +271,7 @@ class _AIMessageState extends State<AIMessage> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.replyFailed) return ChatReplyError(onRetry: widget.onRetry);
+    if (widget.replyFailed) return ChatReplyError(failure: widget.replyFailure, onRetry: widget.onRetry);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -286,6 +289,20 @@ class _AIMessageState extends State<AIMessage> {
           showThinkingAfterText: widget.showThinkingAfterText,
           fetchConversation: widget.fetchConversation,
         ),
+        if (!widget.showTypingIndicator && widget.message.memoryAction != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.psychology_outlined, size: 14, color: OmiColors.textTertiary),
+              const SizedBox(width: 4),
+              Text(
+                widget.message.memoryAction == 'updated' ? context.l10n.memoryReviewUpdated : context.l10n.saved,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -371,8 +388,8 @@ Widget buildMessageWidget(
   // Native content blocks. Both are additive chrome: an absent or malformed
   // block leaves the answer exactly as it renders today.
   final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
-  final followUp = showTypingIndicator ? null : message.followUpQuestion;
-  if (evidence == null && !appendBlocks && reviewCard == null && followUp == null) return messageWidget;
+  // Follow-ups are transient composer suggestions, not part of each historical answer's chrome.
+  if (evidence == null && !appendBlocks && reviewCard == null) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
@@ -397,7 +414,6 @@ Widget buildMessageWidget(
         // can never become an external action.
         ChatEvidenceReferenceList(envelope: evidence),
       ],
-      if (followUp != null) ...[const SizedBox(height: 8), ChatFollowUpChip(question: followUp, onSend: sendMessage)],
     ],
   );
 }
@@ -585,33 +601,24 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
         thinkingText != null || (!_showDots && widget.showTypingIndicator && widget.messageText.isEmpty);
     String displayThinkingText = thinkingText ?? context.l10n.thinking;
 
+    final working = widget.showTypingIndicator && widget.messageText.isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         FilesHandlerWidget(message: widget.message),
-        widget.showTypingIndicator && widget.messageText.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    shouldShowThinking
-                        ? Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                _ThinkingLine(text: displayThinkingText, appId: currentAppId),
-                              ],
-                            ),
-                          )
-                        : const TypingIndicator(),
-                  ],
-                ),
-              )
-            : const SizedBox.shrink(),
+        // Tool steps: one line each while the reply works, folded into one line above the answer.
+        if (widget.message.thinkings.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: ChatActivitySteps(thinkings: widget.message.thinkings, working: working),
+          )
+        else if (working)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: shouldShowThinking ? _ThinkingLine(text: displayThinkingText) : const TypingIndicator(),
+          ),
         // !(showTypingIndicator && messageText.isEmpty)
         //     ? Container(
         //         margin: const EdgeInsets.only(bottom: 4.0),
@@ -732,8 +739,6 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   Widget build(BuildContext context) {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
 
-    // Parse app_id and display text from thinking messages
-    String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;
     var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
@@ -754,26 +759,21 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
         //     ),
         //   ),
         // ),
+        if (widget.message.thinkings.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: ChatActivitySteps(
+              thinkings: widget.message.thinkings,
+              working: widget.showTypingIndicator && widget.messageText == '…',
+            ),
+          ),
         widget.showTypingIndicator && widget.messageText == '…'
-            ? Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    shouldShowThinking
-                        ? Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                _ThinkingLine(text: displayThinkingText, appId: currentAppId),
-                              ],
-                            ),
-                          )
-                        : const TypingIndicator(),
-                  ],
-                ),
-              )
+            ? (widget.message.thinkings.isNotEmpty
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: shouldShowThinking ? _ThinkingLine(text: displayThinkingText) : const TypingIndicator(),
+                  ))
             : widget.showTypingIndicator
                 ? const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -943,6 +943,181 @@ class _ThinkingLine extends StatelessWidget {
   }
 }
 
+/// What Omi did for a reply, the way Granola shows it: while the reply works, one quiet line per
+/// tool step with the current step shimmering; once the answer starts, the steps fold into one
+/// line naming the last step. Any line opens the Activity sheet with the whole timeline.
+class ChatActivitySteps extends StatelessWidget {
+  const ChatActivitySteps({super.key, required this.thinkings, required this.working});
+
+  /// The reply's steps as streamed (`think:` chunks), oldest first; may carry an `|app_id:` suffix.
+  final List<String> thinkings;
+
+  /// The reply is still streaming and has no answer text yet.
+  final bool working;
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = thinkings.map((t) => t.decodeString).where((t) => t.trim().isNotEmpty).toList();
+    if (steps.isEmpty) return const SizedBox.shrink();
+    void open() => showChatActivitySheet(context, steps: steps, working: working);
+    if (!working) {
+      return _ChatStepLine(key: const ValueKey('chat_activity_summary'), raw: steps.last, onTap: open);
+    }
+    return Column(
+      key: const ValueKey('chat_activity_steps'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < steps.length; i++)
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: _ChatStepLine(
+              key: ValueKey('chat_step_${i}_${i == steps.length - 1}'),
+              raw: steps[i],
+              current: i == steps.length - 1,
+              onTap: open,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One step: its app or integration glyph, its words, and a chevron to the Activity sheet.
+class _ChatStepLine extends StatelessWidget {
+  const _ChatStepLine({super.key, required this.raw, required this.onTap, this.current = false});
+
+  final String raw;
+  final VoidCallback onTap;
+
+  /// The step in progress; its words shimmer.
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) {
+    final appId = parseAppIdFromThinking(raw);
+    final text = getThinkingDisplayText(raw);
+    final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
+    return Semantics(
+      button: true,
+      label: text,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 30),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 16,
+                child: Center(
+                  child: appId != null
+                      ? _buildAppIcon(context, appId, size: 13)
+                      : _buildThinkingIconWidget(text, size: 12, color: OmiColors.textTertiary),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: current
+                    ? ShimmerWithTimeout(
+                        baseColor: OmiColors.textSecondary,
+                        highlightColor: OmiColors.textTertiary.withValues(alpha: 0.4),
+                        child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+                      )
+                    : Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+              ),
+              const SizedBox(width: 2),
+              Icon(Icons.chevron_right_rounded, size: 16, color: OmiColors.textTertiary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The Activity sheet: every step of a reply as a timeline, ending in Done (or a shimmering
+/// Thinking while the reply still works).
+Future<void> showChatActivitySheet(BuildContext context, {required List<String> steps, required bool working}) {
+  return showOmiSheet<void>(
+    context: context,
+    title: context.l10n.activity,
+    builder: (sheetContext) => ChatActivityTimeline(steps: steps, working: working),
+  );
+}
+
+/// The body of the Activity sheet, public for the visual audit.
+class ChatActivityTimeline extends StatelessWidget {
+  const ChatActivityTimeline({super.key, required this.steps, required this.working});
+
+  final List<String> steps;
+  final bool working;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[
+      for (final raw in steps)
+        _TimelineRow(
+          glyph: parseAppIdFromThinking(raw) != null
+              ? _buildAppIcon(context, parseAppIdFromThinking(raw)!, size: 14)
+              : _buildThinkingIconWidget(getThinkingDisplayText(raw), size: 13, color: OmiColors.textSecondary),
+          child: Text(getThinkingDisplayText(raw), style: OmiType.subhead),
+        ),
+      _TimelineRow(
+        last: true,
+        glyph: working
+            ? const OmiSpinner(size: OmiSpinnerSize.small)
+            : Icon(Icons.check_circle_outline_rounded, size: 16, color: OmiColors.textSecondary),
+        child: Text(
+          working ? context.l10n.thinking : context.l10n.done,
+          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+        ),
+      ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.lg),
+      child: Column(mainAxisSize: MainAxisSize.min, children: rows),
+    );
+  }
+}
+
+class _TimelineRow extends StatelessWidget {
+  const _TimelineRow({required this.glyph, required this.child, this.last = false});
+
+  final Widget glyph;
+  final Widget child;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 20,
+            child: Column(
+              children: [
+                SizedBox(height: 22, child: Center(child: glyph)),
+                if (!last) Expanded(child: Center(child: Container(width: 1, color: OmiColors.border))),
+              ],
+            ),
+          ),
+          const SizedBox(width: OmiSpacing.sm),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(top: 2, bottom: last ? 0 : OmiSpacing.md),
+              child: child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Placeholder where a chart will appear while the reply that draws it is still streaming.
 class _ChartShimmer extends StatelessWidget {
   const _ChartShimmer();
@@ -996,7 +1171,9 @@ class InitialOptionWidget extends StatelessWidget {
 
 /// A reply that failed: a localized reason and Try Again, which sends the user's message again.
 class ChatReplyError extends StatelessWidget {
-  const ChatReplyError({super.key, this.onRetry});
+  const ChatReplyError({super.key, this.failure, this.onRetry});
+
+  final ChatStreamFailureClass? failure;
 
   /// Null when the message cannot be sent again from here (a voice message).
   final VoidCallback? onRetry;
@@ -1004,6 +1181,14 @@ class ChatReplyError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final reason = switch (failure) {
+      ChatStreamFailureClass.offline => l10n.chatReplyOffline,
+      ChatStreamFailureClass.server => l10n.chatReplyServerError,
+      ChatStreamFailureClass.timeout => l10n.chatReplyTimeout,
+      ChatStreamFailureClass.notSignedIn => l10n.chatReplyNotSignedIn,
+      ChatStreamFailureClass.quota => l10n.chatQuotaExceededReply,
+      _ => l10n.chatReplyFailed,
+    };
     return Semantics(
       liveRegion: true,
       child: Container(
@@ -1014,7 +1199,7 @@ class ChatReplyError extends StatelessWidget {
             ExcludeSemantics(child: Icon(Icons.error_outline_rounded, size: 20, color: OmiColors.danger)),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
-              child: Text(l10n.chatReplyFailed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+              child: Text(reason, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
             ),
             if (onRetry != null)
               Padding(

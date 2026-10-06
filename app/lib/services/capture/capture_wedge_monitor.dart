@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/capture/capture_composition.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -63,6 +64,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   static const String triggerBytesSentNoTranscript = 'bytes_sent_no_transcript';
   static const String triggerUploadSilence = 'upload_silence';
   static const String triggerStorageAtRisk = 'storage_at_risk';
+  static const String triggerIngressRecoveryFailed = 'ingress_recovery_failed';
   static const String localWalDeviceId = 'local-wal';
   static const String localWalSource = 'local_wal';
 
@@ -75,6 +77,64 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   final String Function() _platform;
 
   final Map<String, _DeviceWedgeState> _devices = {};
+  final Map<String, String> _ingressEvents = {};
+  final Set<String> _nativeIngressDevices = {};
+  final Set<String> _cccdRecoveryDevices = {};
+
+  void setNativeIngressOwner(String deviceId, bool active) {
+    if (active) {
+      _nativeIngressDevices.add(deviceId);
+    } else {
+      _nativeIngressDevices.remove(deviceId);
+      _ingressEvents.remove(deviceId);
+      observeIngressHealth(deviceId, null);
+    }
+  }
+
+  /// Native owns this recovery. Never start a second BLE retry from the banner
+  /// projection, or let a transcript resolve an ingress failure.
+  void observeIngressHealth(String deviceId, CaptureIngressHealth? health) {
+    final state = _stateFor(deviceId);
+    if (health?.reason == CaptureIngressHealth.cccdRecoveryReason) {
+      _cccdRecoveryDevices.add(deviceId);
+      _nativeIngressDevices.add(deviceId);
+      if (state.episode?.trigger != triggerIngressRecoveryFailed) state.episode = null;
+    } else if (_cccdRecoveryDevices.remove(deviceId)) {
+      _nativeIngressDevices.remove(deviceId);
+    }
+    if (health != null) {
+      final event = '${health.generation}:${health.phase}:${health.reason}:'
+          '${health.subscriptionConfirmed}:${health.recoveryOutcome}:${health.recoverySpent}:${health.reconnectSpent}';
+      if (_ingressEvents[deviceId] != event) {
+        _ingressEvents[deviceId] = event;
+        _safeTrack('Capture Ingress Health', {
+          'phase': health.phase,
+          'reason': health.reason,
+          'connection_generation': health.generation,
+          'subscription_confirmed': health.subscriptionConfirmed,
+          'unverified_since_ms': health.unverifiedSinceMs,
+          'recovery_outcome': health.recoveryOutcome,
+          'recovery_spent': health.recoverySpent,
+          'reconnect_spent': health.reconnectSpent,
+        });
+      }
+    }
+    if (health?.actionable == true) {
+      if (state.episode?.trigger != triggerIngressRecoveryFailed) {
+        state.episode = CaptureWedgeEpisode(
+          deviceId: deviceId,
+          source: 'omi',
+          trigger: triggerIngressRecoveryFailed,
+          declaredAt: _now(),
+        )..retryAttempted = true;
+      }
+      state.episode!.promptVisible = true;
+    } else if (state.episode?.trigger == triggerIngressRecoveryFailed) {
+      state.episode = null;
+    }
+    notifyListeners();
+  }
+
   final Map<int, _OpenCaptureSession> _openSessions = {};
   final Set<String> _retryInFlightDevices = {};
   DateTime? _lastUploadAt;
@@ -195,9 +255,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     );
   }
 
-  /// Surfaces a bounded-retention eviction once per cap-engagement event.
-  void observeStorageAtRisk({required DateTime engagedAt, required int evictedCount, required int retainedCount}) {
-    final fingerprint = '${engagedAt.microsecondsSinceEpoch}:$evictedCount:$retainedCount';
+  void observeStorageAtRisk({
+    required DateTime engagedAt,
+    required int blockedCount,
+    required int retainedCount,
+    required String reason,
+  }) {
+    final fingerprint = '${engagedAt.microsecondsSinceEpoch}:$blockedCount:$retainedCount:$reason';
     if (_lastRetentionRiskFingerprint == fingerprint) return;
     _lastRetentionRiskFingerprint = fingerprint;
     final state = _stateFor(localWalDeviceId);
@@ -209,9 +273,10 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         trigger: triggerStorageAtRisk,
         requireFeatureGate: false,
         extraProperties: {
-          'evicted_wal_count': evictedCount,
+          'blocked_wal_count': blockedCount,
           'retained_wal_count': retainedCount,
-          'retention_policy': 'oldest_first_count_cap',
+          'retention_policy': 'admission_count_cap',
+          'block_reason': reason,
         },
       ),
     );
@@ -261,8 +326,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final state = _stateFor(deviceId);
     if (intentional) {
       state.rapidDropEnds.clear();
-      if (state.episode != null) {
+      if (state.episode != null || state.telemetryEpisode != null) {
         state.episode = null;
+        state.telemetryEpisode = null;
         notifyListeners();
       }
       return;
@@ -300,7 +366,11 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   void retryVisibleEpisode() {
     final episode = visiblePrompt;
-    if (episode == null || _retryInFlightDevices.contains(episode.deviceId)) return;
+    if (episode == null ||
+        episode.trigger == triggerIngressRecoveryFailed ||
+        _retryInFlightDevices.contains(episode.deviceId)) {
+      return;
+    }
     episode.promptVisible = false;
     notifyListeners();
     unawaited(_attemptRecovery(episode));
@@ -310,13 +380,16 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final state = _devices[deviceId];
     if (state == null) return;
     state.rapidDropEnds.clear();
-    if (state.episode == null) return;
+    if (state.episode == null && state.telemetryEpisode == null) return;
     state.episode = null;
+    state.telemetryEpisode = null;
     notifyListeners();
   }
 
   void reset() {
     _devices.clear();
+    _ingressEvents.clear();
+    _nativeIngressDevices.clear();
     _openSessions.clear();
     _retryInFlightDevices.clear();
     _lastUploadAt = null;
@@ -329,6 +402,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   @override
   void dispose() {
     _devices.clear();
+    _ingressEvents.clear();
+    _nativeIngressDevices.clear();
     _openSessions.clear();
     _retryInFlightDevices.clear();
     _connectedWatchdog?.cancel();
@@ -343,7 +418,11 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     bool requireFeatureGate = true,
     Map<String, Object> extraProperties = const {},
   }) async {
-    if (state.episode != null) return;
+    if (_nativeIngressDevices.contains(deviceId) &&
+        (trigger == triggerZeroByteStreak || trigger == triggerRapidReconnects)) {
+      return;
+    }
+    if (!_canDeclare(state, trigger)) return;
     var allowed = true;
     if (requireFeatureGate) {
       try {
@@ -352,9 +431,21 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         allowed = false;
       }
     }
-    if (!allowed || state.episode != null) return;
+    // Ownership can arrive while the gate was pending (TOCTOU): recheck after
+    // the await, or a legacy episode lands invisibly, blocks later declarations
+    // via _canDeclare, and its recovery exits at the owner guard.
+    if (!allowed ||
+        !_canDeclare(state, trigger) ||
+        (_nativeIngressDevices.contains(deviceId) &&
+            (trigger == triggerZeroByteStreak || trigger == triggerRapidReconnects))) {
+      return;
+    }
     final episode = CaptureWedgeEpisode(deviceId: deviceId, source: source, trigger: trigger, declaredAt: _now());
-    state.episode = episode;
+    if (_isTelemetryOnlyTrigger(trigger)) {
+      state.telemetryEpisode = episode;
+    } else {
+      state.episode = episode;
+    }
     _safeTrack('Capture Wedge Detected', {
       'source': source,
       'consecutive_zero_byte_sessions': state.zeroByteSessionEnds.length,
@@ -367,9 +458,23 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     unawaited(_attemptRecovery(episode));
   }
 
+  bool _isTelemetryOnlyTrigger(String trigger) =>
+      trigger == triggerBytesSentNoTranscript || trigger == triggerUploadSilence;
+
+  bool _canDeclare(_DeviceWedgeState state, String trigger) {
+    return _isTelemetryOnlyTrigger(trigger) ? state.telemetryEpisode == null : state.episode == null;
+  }
+
   Future<void> _attemptRecovery(CaptureWedgeEpisode episode) async {
+    if (_nativeIngressDevices.contains(episode.deviceId) &&
+        episode.trigger != triggerUploadSilence &&
+        episode.trigger != triggerStorageAtRisk &&
+        episode.trigger != triggerBytesSentNoTranscript) {
+      return;
+    }
     episode.retryAttempted = true;
-    _retryInFlightDevices.add(episode.deviceId);
+    final telemetryOnly = _isTelemetryOnlyTrigger(episode.trigger);
+    if (!telemetryOnly) _retryInFlightDevices.add(episode.deviceId);
     try {
       final transferRetry = _transferRetry;
       if ((episode.trigger == triggerUploadSilence ||
@@ -383,24 +488,40 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     } catch (e) {
       Logger.debug('CaptureWedgeMonitor: recovery retry for ${episode.deviceId} failed: $e');
     } finally {
-      _retryInFlightDevices.remove(episode.deviceId);
+      if (!telemetryOnly) _retryInFlightDevices.remove(episode.deviceId);
     }
-    if (_episodeFor(episode.deviceId) != episode) return;
+    if (_episodeFor(episode.deviceId, telemetryOnly: telemetryOnly) != episode || telemetryOnly) return;
     episode.promptVisible = true;
     notifyListeners();
   }
 
+  /// Gates the BLE retry's reconnect, so only actionable episodes count;
+  /// telemetry-only episodes never own a BLE retry.
   bool hasActiveEpisode(String deviceId) => _devices[deviceId]?.episode != null;
 
-  CaptureWedgeEpisode? _episodeFor(String deviceId) => _devices[deviceId]?.episode;
+  CaptureWedgeEpisode? _episodeFor(String deviceId, {required bool telemetryOnly}) {
+    final state = _devices[deviceId];
+    return telemetryOnly ? state?.telemetryEpisode : state?.episode;
+  }
 
   void _resolveIfActive(String deviceId, _DeviceWedgeState state) {
-    final episode = state.episode;
-    if (episode == null) return;
-    if (_now().difference(episode.declaredAt) <= resolveWindow) {
-      _safeTrack('Capture Recovery Resolved', {'source': episode.source, 'trigger': episode.trigger});
+    if (state.episode?.trigger == triggerIngressRecoveryFailed) {
+      // The ingress failure stays (native owns it), but a transcript during
+      // the alert must still release the telemetry slot: native-owned devices
+      // can hold bytes_sent_no_transcript episodes, and an occupied slot
+      // blocks later declarations and transfer retries.
+      state.telemetryEpisode = null;
+      notifyListeners();
+      return;
+    }
+    if (state.episode == null && state.telemetryEpisode == null) return;
+    for (final episode in [state.episode, state.telemetryEpisode]) {
+      if (episode != null && _now().difference(episode.declaredAt) <= resolveWindow) {
+        _safeTrack('Capture Recovery Resolved', {'source': episode.source, 'trigger': episode.trigger});
+      }
     }
     state.episode = null;
+    state.telemetryEpisode = null;
     notifyListeners();
   }
 
@@ -418,6 +539,7 @@ class _DeviceWedgeState {
   final List<DateTime> noTranscriptSessionEnds = [];
   final List<DateTime> rapidDropEnds = [];
   CaptureWedgeEpisode? episode;
+  CaptureWedgeEpisode? telemetryEpisode;
 }
 
 class _OpenCaptureSession {

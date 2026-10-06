@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 
 from database import redis_db
 from database._client import get_firestore_client
+from database.voice_preferences import get_assistant_voice
+from database.serving_query_reads import list_desktop_release_snapshots
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
@@ -41,7 +43,7 @@ _RELEASES_COLLECTION = "desktop_releases"
 
 class TtsSynthesizeRequest(BaseModel):
     text: str
-    voice_id: str
+    voice_id: str | None = None
     instructions: str | None = None
 
 
@@ -132,14 +134,8 @@ def _appcast_xml(releases: list[ReleaseInfo], platform: str) -> str:
 
 
 def _release_models() -> list[tuple[str, ReleaseInfo]]:
-    snapshots = (
-        get_firestore_client()
-        .collection(_RELEASES_COLLECTION)
-        .order_by("build_number", direction="DESCENDING")
-        .stream()
-    )
     releases: list[tuple[str, ReleaseInfo]] = []
-    for snapshot in snapshots:
+    for snapshot in list_desktop_release_snapshots():
         try:
             releases.append((snapshot.id, ReleaseInfo.model_validate(snapshot.to_dict())))
         except Exception:
@@ -187,21 +183,34 @@ async def _openai_tts(payload: dict[str, str], api_key: str) -> httpx.Response:
         raise HTTPException(status_code=502, detail="OpenAI TTS request failed")
 
 
-@router.post("/v1/tts/synthesize", responses={200: {"content": {"audio/mpeg": {}}}})
+@router.post(
+    "/v1/tts/synthesize",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "MP3 audio stream.",
+            "content": {"audio/mpeg": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
 async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_current_user_uid)):
     text = request.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
     if len(text) > _MAX_TTS_CHARS:
         raise HTTPException(status_code=400, detail="text is too long")
-    voice_id = request.voice_id.strip()
+    voice_id = (request.voice_id or '').strip()
     try:
         provider = get_tts_provider()
     except TtsConfigurationError as exc:
         raise HTTPException(status_code=503, detail="TTS service is not configured") from exc
+    if not voice_id:
+        voice_id = await run_blocking(db_executor, get_assistant_voice, uid)
     if provider == 'legacy':
         if not _is_allowed_openai_voice(voice_id):
-            raise HTTPException(status_code=400, detail="voice_id is not supported")
+            if not _is_valid_voice_name(voice_id):
+                raise HTTPException(status_code=400, detail="voice_id is not supported")
+            voice_id = "cedar"
     elif not _is_valid_voice_name(voice_id):
         raise HTTPException(status_code=400, detail="voice_id is not supported")
     legacy_openai = provider == 'legacy'
@@ -218,7 +227,7 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
     if not (legacy_openai and openai_byok_key):
         status, _ = await run_blocking(
             critical_executor,
-            redis_db.check_tts_rate_limit,
+            redis_db.check_tts_rate_limit_for_user,
             uid,
             char_count=len(text),
             burst_limit=_TTS_BURST_PER_MINUTE,

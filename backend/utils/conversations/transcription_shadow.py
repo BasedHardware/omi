@@ -34,9 +34,9 @@ from utils.conversations.segment_remap import (
     remap_source_ids,
     remap_translations,
 )
-from utils.conversations.speaker_resolution import apply_speaker_resolution, load_voiceprints_for_resolution
+from utils.conversations.speaker_resolution import apply_speaker_resolution
 from utils.executors import start_background_task
-from utils.other.storage import iter_audio_chunk_pcm
+from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
 from utils.stt.conversation_speakers import resolve_conversation_speakers
 from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes, postprocess_words
@@ -320,10 +320,15 @@ def _make_pass(
     conversation.transcript_segments = segments
     if vectors:
         resolution = resolve_conversation_speakers(
-            segments, vectors, manual_speakers={}, voiceprints=load_voiceprints_for_resolution(uid)
+            segments,
+            vectors,
+            manual_speakers={},
+            voiceprints={identity: entry['embedding'].reshape(-1) for identity, entry in cache.items()},
         )
         if resolution is not None:
-            apply_speaker_resolution(conversation, resolution.speaker_ids, resolution.voice_identities)
+            apply_speaker_resolution(
+                conversation, resolution.speaker_ids, resolution.voice_identities, resolution.voice_identity_statuses
+            )
             conversation.speaker_resolution = ConversationSpeakers(
                 status='resolved' if resolution.coverage >= 0.9 else 'unavailable',
                 participant_speaker_ids=resolution.significant_speaker_ids if resolution.coverage >= 0.9 else [],

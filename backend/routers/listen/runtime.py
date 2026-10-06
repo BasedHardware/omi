@@ -14,12 +14,12 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from database.firestore_read_metrics import FirestoreReadSite
+from database.live_language_profile import get_live_language_sessions
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
     MessageEvent,
     MessageServiceStatusEvent,
-    SpeakerLabelSuggestionEvent,
 )
 from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
@@ -44,6 +44,7 @@ from utils.fair_use import (
 )
 from utils.listen_pusher_session import ListenPusherSession, ListenPusherSessionConfig, ListenPusherSessionDeps
 from utils.listen_session_bootstrap import finalize_listen_connect_context, load_listen_connect_base
+from utils.listen_reconnect_budget import listen_reconnect_budget
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
@@ -55,9 +56,19 @@ from utils.observability.transcription import (
     record_live_stt_audio_seconds,
 )
 from utils.pusher import PusherCircuitBreakerOpen
-from utils.product_telemetry import emit_product_event
+from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_speaker_suggestion
 from utils.stt.streaming import get_stt_service_for_language
-from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+import utils.stt.replay_delivery as replay_delivery
+from utils.stt.live_failure import terminate_live_stt_backoff
+from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
+from utils.stt.live_metrics import (
+    COST_CANARY_OUTCOME,
+    LIVE_SESSION_TERMINAL_AFTER_TEXT,
+    WINDOW_CANARY_OUTCOME,
+    provider_family,
+)
+from config.live_stt_registry import routing_on
+from config.live_stt_recovery import current_recovery_enabled, recovery_enabled, session_recovery_enabled
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -75,12 +86,12 @@ from database.account_deletion_policy import account_deletion_blocks_access
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.audio import AudioRingBuffer
 from utils.other.storage import get_user_has_speech_profile
-from utils.transcribe_decisions import USER_SELF_PERSON_ID, person_id_for_client
 
 from .contracts import ListenLimits, ListenRequest, ListenSessionState
 from .conversations import LiveConversationController
 from .persistence import ListenPersistence
 from .parity_capture import ListenParityCapture
+from . import receiver as receiver_module
 from .receiver import ListenReceiver
 from .registry import register as register_listen_session
 from .registry import unregister as unregister_listen_session
@@ -122,7 +133,9 @@ class ListenSessionRuntime:
     """Stateful session coordinator; subcomponents only communicate through this surface."""
 
     def __init__(self, request: ListenRequest):
+        self.recovery_enabled = recovery_enabled()
         self.request = request
+        self.declared_codec = request.codec
         self.limits = ListenLimits()
         self.persistence = ListenPersistence()
         self.state = ListenSessionState()
@@ -134,7 +147,6 @@ class ListenSessionRuntime:
             request.websocket.headers
         )
         self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
-        record_listen_session_accepted(source=request.source, platform=self.client_device_context.platform)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
@@ -211,30 +223,18 @@ class ListenSessionRuntime:
         if self.state.active:
             self.spawn(self.asend_event(event), name='message_event')
 
-    def emit_speaker_suggestion(self, speaker_id: int, person_id: str, person_name: str, segment_id: str) -> None:
-        emit_product_event(
-            uid=self.request.uid,
-            event='Speaker Identity Proposed',
-            properties={
-                'recording_id': self.recording_session_id,
-                'conversation_id': self.state.current_conversation_id,
-                'speaker_id': speaker_id,
-                'matched_existing_person': bool(person_id),
-                'auto_assign_enabled': self.request.speaker_auto_assign_enabled,
-                'proposal_source': 'live_speaker_identification',
-            },
-        )
-        self.send_event(
-            SpeakerLabelSuggestionEvent(
-                speaker_id=speaker_id,
-                person_id=(
-                    'user'
-                    if person_id == USER_SELF_PERSON_ID
-                    else person_id_for_client(person_id, self.request.speaker_auto_assign_enabled)
-                ),
-                person_name=person_name,
-                segment_id=segment_id,
-            )
+    def emit_speaker_suggestion(
+        self,
+        speaker_id: int,
+        person_id: str,
+        person_name: str,
+        segment_id: str,
+        suggested_person_id: Optional[str] = None,
+        *,
+        retracted: bool = False,
+    ) -> None:
+        emit_live_speaker_suggestion(
+            self, speaker_id, person_id, person_name, segment_id, suggested_person_id, retracted=retracted
         )
 
     def start_live_transcription(self) -> None:
@@ -361,6 +361,16 @@ class ListenSessionRuntime:
             return 'too_short'
         return 'no_transcript'
 
+    def _capture_cost_routing_arm(self) -> None:
+        self._cost_routing_arm: str | None = None
+        if managed_chain_enabled(self):
+            try:
+                self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
+            except (ValueError, TypeError):
+                # Selection owns invalid-config diagnostics and static fallback.
+                # A cohort metric must never prevent that serving path running.
+                self._cost_routing_arm = 'control'
+
     def _record_session_transcript_outcome(self) -> None:
         """Emit omi_live_session_transcript_outcome_total exactly once per session.
 
@@ -384,19 +394,48 @@ class ListenSessionRuntime:
         if getattr(self, 'use_custom_stt', False):
             return
         try:
+            outcome = self._session_transcript_outcome()
             record_live_session_transcript_outcome(
-                outcome=self._session_transcript_outcome(),
+                outcome=outcome,
                 uid=self.request.uid,
                 source=self.request.source,
                 platform=self.client_device_context.platform,
                 recording_id=self.request.client_conversation_id,
             )
+            WINDOW_CANARY_OUTCOME.labels(
+                arm='window' if window_allocation(self.request.uid) else 'control', outcome=outcome
+            ).inc()
+            arm = getattr(self, '_cost_routing_arm', None)
+            if arm is not None:
+                COST_CANARY_OUTCOME.labels(arm=arm, outcome=outcome).inc()
+            if (
+                session_recovery_enabled(self)
+                and self.state.live_transcript_delivered
+                and self.state.stt_terminal_failure
+            ):
+                provider = (
+                    getattr(getattr(self, 'stt_service', None), 'value', None)
+                    or getattr(self.state, 'stt_provider', None)
+                    or getattr(self.state, 'requested_provider', None)
+                    or 'unknown'
+                )
+                LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=provider_family(provider)).inc()
         except Exception as error:
             logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
     async def _admit(self) -> bool:
         if not self.request.uid:
             await self.request.websocket.close(code=1008, reason='Bad uid')
+            return False
+        device_id = getattr(getattr(self, 'client_device_context', None), 'client_device_id', None)
+        allowed, retry_after = listen_reconnect_budget.admit(self.request.uid, device_id)
+        if not allowed:
+            await terminate_live_stt_backoff(
+                self.request.websocket,
+                self.state,
+                reason='reconnect_budget',
+                retry_after=retry_after,
+            )
             return False
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
@@ -470,11 +509,25 @@ class ListenSessionRuntime:
         )
         # Retained so a mid-session failover reselects under the same language policy.
         self.multi_lang_enabled = not single_language_mode
+        language_profile_in_scope = not (self.is_multi_channel or self.use_custom_stt or get_byok_keys())
+        learned_sessions = None
+        if (
+            language_profile_in_scope
+            and self.multi_lang_enabled
+            and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true'
+        ):
+            try:
+                learned_sessions = await asyncio.wait_for(
+                    run_blocking(db_executor, get_live_language_sessions, request.uid), timeout=2.0
+                )
+            except Exception:
+                logger.warning('Live STT language profile read failed')
         self.language_profile = LiveLanguageProfile.create(
             self.language,
             multi=self.multi_lang_enabled,
             uid=request.uid,
-            in_scope=not (self.is_multi_channel or self.use_custom_stt or get_byok_keys()),
+            in_scope=language_profile_in_scope,
+            learned_sessions=learned_sessions,
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
@@ -807,6 +860,7 @@ class ListenSessionRuntime:
                 # STT — always on internally) AND the AUDIO_TIMELINE_V2
                 # persistence admission AND a pusher capability acknowledgment.
                 audio_timeline_v2=bool(getattr(self.state, 'capture_timeline_v2', False)),
+                audio_timeline_spans=bool(getattr(self.state, 'capture_timeline_spans', False)),
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: self.state.current_conversation_id,
@@ -867,6 +921,15 @@ class ListenSessionRuntime:
         )
 
     async def run(self) -> None:
+        if not isinstance(getattr(self, 'recovery_enabled', None), bool):
+            self.recovery_enabled = session_recovery_enabled(self)
+        token = current_recovery_enabled.set(self.recovery_enabled)
+        try:
+            await self._run()
+        finally:
+            current_recovery_enabled.reset(token)
+
+    async def _run(self) -> None:
         if not await self._admit() or not await self._bootstrap():
             return
         register_listen_session(self)
@@ -893,8 +956,12 @@ class ListenSessionRuntime:
             await self.asend_event(
                 MessageServiceStatusEvent(status='stt_initiating', status_text='STT Service Starting')
             )
+            # Intent-to-treat cohort: snapshot before selection, including
+            # initialization failures and fail-open sessions in the on arm.
+            self._capture_cost_routing_arm()
             if not await self.receiver.initialize_stt():
                 return
+            record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
             await self._start_pusher()
             receive_task = self.task_supervisor.create_task(self.receiver.receive_data(), name='receive')
             background.extend(
@@ -924,26 +991,87 @@ class ListenSessionRuntime:
             self.send_event(self._ready_event())
             result = await self.task_supervisor.supervise(receive_task=receive_task)
             logger.info('Listen supervisor exited reason=%s', result.reason)
-            if result.reason in {'crash', 'lifetime_done'}:
+            ordinary_close = self._ordinary_client_close(result)
+            if self._supervisor_failed_transcription(result, ordinary_close=ordinary_close):
                 self.state.live_transcription_failed = True
             if receive_task.done() and not receive_task.cancelled():
                 receive_error = receive_task.exception()
                 if receive_error is not None:
                     raise receive_error
+            close_bound: Optional[float] = None
+            if self.recovery_enabled:
+                if self.receiver.shutdown_deadline is None:
+                    self.receiver.shutdown_deadline = (
+                        replay_delivery.clock() + receiver_module.SHUTDOWN_DELIVERY_SECONDS
+                    )
+                close_bound = self.receiver.shutdown_deadline + receiver_module.SHUTDOWN_CLEANUP_SECONDS
             if not receive_task.done():
                 self.state.active = False
-                receive_task.cancel()
-                try:
-                    await receive_task
-                except asyncio.CancelledError:
-                    pass
+                if ordinary_close:
+                    await self._complete_receive(receive_task, deadline=cast(float, close_bound))
+                elif self.recovery_enabled:
+                    receive_task.cancel()
+                    await self._complete_receive(receive_task, deadline=cast(float, close_bound))
+                else:
+                    receive_task.cancel()
+                    try:
+                        await receive_task
+                    except asyncio.CancelledError:
+                        pass
             self.state.shutdown_event.set()
-            await self.task_supervisor.drain_monitored(timeout=self.limits.bg_drain_timeout, cancel=False)
+            if self.recovery_enabled:
+                await self.task_supervisor.drain_monitored(
+                    timeout=self.limits.bg_drain_timeout, cancel=False, deadline=cast(float, close_bound)
+                )
+            else:
+                await self.task_supervisor.drain_monitored(timeout=self.limits.bg_drain_timeout, cancel=False)
         except Exception as error:
             logger.error('Listen WebSocket operation failed type=%s', type(error).__name__)
             self.state.live_transcription_failed = True
         finally:
             await self._teardown()
+
+    def _supervisor_failed_transcription(self, result: Any, *, ordinary_close: bool) -> bool:
+        # ASGI 1006 is a departed client, not evidence of a provider failure.
+        # A heartbeat may finish first after that same departure. Keep drain
+        # policy separate from outcome classification: abnormal peers cannot
+        # receive the graceful tail, but their attempts still match control.
+        if (
+            self.recovery_enabled
+            and result.reason in {'disconnect', 'lifetime_done'}
+            and self.receiver.client_closing
+            and not self.state.stt_terminal_failure
+            and self.state.close_code != 1011
+            and not self.request.owner_persistence_blocked.is_set()
+        ):
+            return False
+        return not ordinary_close and (
+            result.reason in {'crash', 'lifetime_done'}
+            or (result.reason == 'disconnect' and self.recovery_enabled and self.state.close_code == 1011)
+        )
+
+    def _ordinary_client_close(self, result: Any) -> bool:
+        if not self.recovery_enabled or result.reason != 'lifetime_done':
+            return False
+        if self.state.stt_terminal_failure or self.request.owner_persistence_blocked.is_set():
+            return False
+        if self.state.close_code not in (1000, 1001):
+            return False
+        return (
+            getattr(self.receiver, 'client_closing', False)
+            or self.request.websocket.client_state != WebSocketState.CONNECTED
+        )
+
+    async def _complete_receive(self, receive_task: asyncio.Task[Any], *, deadline: float) -> None:
+        remaining = lambda: max(0.0, deadline - replay_delivery.clock())
+        _, pending = await asyncio.wait({receive_task}, timeout=remaining())
+        if pending:
+            receive_task.cancel()
+            _, _ = await asyncio.wait({receive_task}, timeout=remaining())
+        if receive_task.done() and not receive_task.cancelled():
+            error = receive_task.exception()
+            if error is not None:
+                raise error
 
     async def _teardown(self) -> None:
         try:
@@ -1044,7 +1172,7 @@ class ListenSessionRuntime:
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
         if self.language_observations is not None:
-            await self.language_observations.summarize()
+            await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
         if not owner_persistence_blocked:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         self.receiver.clear()
