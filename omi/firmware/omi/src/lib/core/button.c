@@ -225,7 +225,7 @@ void check_button_level(struct k_work *work_item)
             }
             btn_tap_count = 0;
             btn_last_tap_time = 0;
-        } else if ((current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
+        } else if (btn_tap_count == 0 && (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
             event = BUTTON_EVENT_RELEASE;
         }
     }

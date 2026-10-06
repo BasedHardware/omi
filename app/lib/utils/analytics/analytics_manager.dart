@@ -2437,19 +2437,16 @@ class AnalyticsManager {
     properties['duration_seconds'] = conversation.getDurationInSeconds();
 
     // Get the summarized app id if available
-    if (conversation.appResults.isNotEmpty) {
-      var summarizedApp = conversation.appResults.firstOrNull;
-      if (summarizedApp != null && summarizedApp.appId != null) {
-        properties['summary_app_id'] = summarizedApp.appId!;
-      }
-    }
+    final appId = conversation.appResults.firstOrNull?.appId;
+    if (appId != null) properties['summary_app_id'] = appId;
 
     track('Conversation Star Toggled', properties: properties);
   }
 
-  void omiDoubleTap({required String feature}) {
-    track('Omi Double Tap', properties: {'feature': feature});
-  }
+  void omiDoubleTap({required String feature}) => track('Omi Double Tap', properties: {'feature': feature});
+
+  void omiButtonGesture({required String gesture, required String feature}) =>
+      track('Omi Button Gesture', properties: {'gesture': gesture, 'feature': feature});
 
   // ============================================================================
   // WRAPPED 2025 TRACKING

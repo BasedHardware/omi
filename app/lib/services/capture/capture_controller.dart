@@ -1718,9 +1718,9 @@ class CaptureController extends ChangeNotifier
     // Intercept for interactive device onboarding
     if (deviceOnboardingProvider?.isOnboardingActive == true) {
       deviceOnboardingProvider!.onButtonEvent(buttonState);
-      // For step 1 (ask question), let single-tap fall through to normal voice command handling
+      // For step 1 (ask question), let single-tap fall through to voice question handling
       if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
-        // Fall through to normal single-tap handling below
+        // Fall through to voice question handling below
       } else {
         return;
       }
@@ -1738,30 +1738,33 @@ class CaptureController extends ChangeNotifier
         Logger.debug("$gestureName: already processing, ignoring");
         return;
       }
+      void emitAnalytics(String feature) {
+        PlatformManager.instance.analytics.omiButtonGesture(gesture: gestureName, feature: feature);
+        if (gestureName == "Double tap") {
+          PlatformManager.instance.analytics.omiDoubleTap(feature: feature);
+        }
+      }
+
       switch (action) {
         case 1:
           Logger.debug("$gestureName: toggling pause/mute");
           _isProcessingButtonEvent = true;
           final future = isPaused ? resumeDeviceRecording() : pauseDeviceRecording();
-          PlatformManager.instance.analytics.omiDoubleTap(feature: isPaused ? 'unmute' : 'mute');
+          emitAnalytics(isPaused ? 'unmute' : 'mute');
           future.whenComplete(() => _isProcessingButtonEvent = false);
           break;
         case 2:
           // Star ongoing conversation (doesn't end it)
           Logger.debug("$gestureName: marking conversation for starring");
-          if (!_starOngoingConversation) {
-            markConversationForStarring();
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-            HapticFeedback.mediumImpact();
-          } else {
-            unmarkConversationForStarring();
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-            HapticFeedback.lightImpact();
-          }
+          final star = !_starOngoingConversation;
+          star ? markConversationForStarring() : unmarkConversationForStarring();
+          emitAnalytics(star ? 'star_conversation' : 'unstar_conversation');
+          star ? HapticFeedback.mediumImpact() : HapticFeedback.lightImpact();
           break;
         case 3:
           // Toggle voice question mode
           Logger.debug("$gestureName: voice question toggle");
+          emitAnalytics('voice_question');
           if (_voiceCommandSession == null) {
             final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
             if (autoSubmittedAt != null && _now().difference(autoSubmittedAt) <= _voiceCommandAutoSubmitGrace) {
@@ -1786,7 +1789,7 @@ class CaptureController extends ChangeNotifier
         default:
           // End conversation and process (0)
           Logger.debug("$gestureName: processing conversation");
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+          emitAnalytics('process_conversation');
           forceProcessingCurrentConversation();
           break;
       }
@@ -1802,7 +1805,9 @@ class CaptureController extends ChangeNotifier
     // Single tap (buttonState == 1)
     if (buttonState == 1) {
       debugPrint("Single tap detected");
-      executeAction(SharedPreferencesUtil().singleTapAction, "Single tap");
+      final action =
+          deviceOnboardingProvider?.isOnboardingActive == true ? 3 : SharedPreferencesUtil().singleTapAction;
+      executeAction(action, "Single tap");
       return;
     }
 

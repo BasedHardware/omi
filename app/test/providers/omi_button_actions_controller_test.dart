@@ -381,4 +381,24 @@ void main() {
     provider.dispose();
     onboarding.dispose();
   });
+
+  test('single tap forces voice question action during tutorial even if customized', () {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+    SharedPreferencesUtil().singleTapAction = 1;
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(onboarding.voiceSessionActive, isTrue);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(onboarding.questionSent, isTrue);
+    expect(onboarding.voiceSessionActive, isFalse);
+
+    provider.dispose();
+    onboarding.dispose();
+  });
 }

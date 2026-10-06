@@ -469,10 +469,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             longPressRow,
           ],
         ] else ...[
-          singleTapRow,
           doubleTapRow,
-          tripleTapRow,
-          longPressRow,
         ],
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
