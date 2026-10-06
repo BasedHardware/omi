@@ -531,7 +531,7 @@ def test_malformed_rule_reason_never_raises_or_hides(reason):
     assert not conversations.is_visible_conversation(_incident())
 
 
-def test_detail_http_omitted_param_preserves_show_discarded(monkeypatch):
+def test_detail_http_omitted_param_hides_a_rule_discard_and_keeps_a_stored_discard(monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from database import conversations as conversations_db
@@ -539,18 +539,31 @@ def test_detail_http_omitted_param_preserves_show_discarded(monkeypatch):
     from utils.other import endpoints as auth
 
     stored = _incident()
-    monkeypatch.setattr(
-        conversations_db,
-        'get_conversation',
-        lambda *a, **k: conversations_db.prepare_conversation_for_read(deepcopy(stored), 'u'),
-    )
+    archived = {
+        'id': 'archived',
+        'created_at': datetime(2026, 9, 22, 10, 0, tzinfo=timezone.utc),
+        'started_at': datetime(2026, 9, 22, 10, 0, tzinfo=timezone.utc),
+        'finished_at': datetime(2026, 9, 22, 10, 2, tzinfo=timezone.utc),
+        'status': 'completed',
+        'discarded': True,
+        'deleted': False,
+        'source': 'omi',
+        'structured': {'title': 'Kept discard'},
+    }
+    rows = {'incident': stored, 'archived': archived}
+
+    def _get(uid, conversation_id, **_kwargs):
+        row = rows.get(conversation_id)
+        return conversations_db.prepare_conversation_for_read(deepcopy(row), uid) if row else None
+
+    monkeypatch.setattr(conversations_db, 'get_conversation', _get)
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'
     client = TestClient(app)
 
     default = client.get('/v1/conversations/incident')
-    assert default.status_code == 200 and default.json()['discarded'] is True
+    assert default.status_code == 404
 
     hidden = client.get('/v1/conversations/incident', params={'include_discarded': 'false'})
     assert hidden.status_code == 404
@@ -558,4 +571,6 @@ def test_detail_http_omitted_param_preserves_show_discarded(monkeypatch):
     shown = client.get('/v1/conversations/incident', params={'include_discarded': 'true'})
     assert shown.status_code == 200 and shown.json()['discarded'] is True
 
+    kept = client.get('/v1/conversations/archived')
+    assert kept.status_code == 200 and kept.json()['id'] == 'archived'
     assert stored['discarded'] is False

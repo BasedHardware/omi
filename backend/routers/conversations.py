@@ -40,6 +40,7 @@ from models.conversation import (
     UpdateSummaryRequest,
     project_shared_conversation,
 )
+from utils.conversations.fragment_visibility import is_completed_rule_discard
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
@@ -980,7 +981,7 @@ def get_conversations_count(
 def get_conversation_by_id(
     conversation_id: str,
     source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
-    include_discarded: bool = Query(True),
+    include_discarded: Optional[bool] = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
     include_translations: bool = Query(False),
     translation_cursor: Optional[str] = Query(None),
@@ -995,7 +996,13 @@ def get_conversation_by_id(
             )
         if conversation.get('source') != 'omi':
             raise HTTPException(status_code=404, detail="Conversation not found")
-    if not conversations_db.is_visible_conversation(conversation, include_discarded=include_discarded):
+    # Omitted keeps the historical detail default (show a stored discard).
+    # A completed rule-discard is noise, not an archive row: the web permalink
+    # omits this flag, so it stays hidden unless the caller explicitly asks.
+    show_discarded = True if include_discarded is None else include_discarded
+    if is_completed_rule_discard(conversation) and include_discarded is not True:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
         raise HTTPException(status_code=404, detail="Conversation not found")
     # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
