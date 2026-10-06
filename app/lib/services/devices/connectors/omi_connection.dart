@@ -414,29 +414,31 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<BleAudioCodec> performGetAudioCodec() async {
-    try {
-      final codecValue = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
-
-      var codecId = 1;
-      if (codecValue.isNotEmpty) {
-        codecId = codecValue[0];
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final codecValue = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
+        if (codecValue.isNotEmpty) {
+          final codecId = codecValue[0];
+          switch (codecId) {
+            case 1:
+              return BleAudioCodec.pcm8;
+            case 20:
+              return BleAudioCodec.opus;
+            case 21:
+              return BleAudioCodec.opusFS320;
+            default:
+              Logger.debug('OmiDeviceConnection: Unknown codec id: $codecId');
+              return BleAudioCodec.unknown;
+          }
+        }
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Error reading audio codec (attempt $attempt): $e');
       }
-
-      switch (codecId) {
-        case 1:
-          return BleAudioCodec.pcm8;
-        case 20:
-          return BleAudioCodec.opus;
-        case 21:
-          return BleAudioCodec.opusFS320;
-        default:
-          Logger.debug('OmiDeviceConnection: Unknown codec id: $codecId');
-          return BleAudioCodec.pcm8;
+      if (attempt < 2) {
+        await Future.delayed(const Duration(milliseconds: 60));
       }
-    } catch (e) {
-      Logger.debug('OmiDeviceConnection: Error reading audio codec: $e');
-      return BleAudioCodec.pcm8;
     }
+    return cachedAudioCodec ?? BleAudioCodec.unknown;
   }
 
   @override
