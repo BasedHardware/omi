@@ -122,6 +122,11 @@ overlay:
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
           category: rollout
+        # 2026-10-06: prod listen only, after a 3h51m 5-pod canary (0 restarts,
+        # 0 reopen failures, reopen p95 0.24s). Unset or zero elsewhere means off.
+        SONIOX_IDLE_CLOSE_SECONDS:
+          value: '45'
+          category: rollout
         STT_ROUTING_MODE:
           value: shadow
         SONIOX_MONTHLY_CEILING_USD:
