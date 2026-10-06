@@ -171,3 +171,38 @@ def test_delete_agent_vm_for_account_success(agent_vm_account_cleanup):
         )
 
         mock_cleanup_migration.assert_called_once_with(uid, mock_plans, 'test-project', mock_client, headers)
+
+
+def test_reconcile_lease_oversized_expiry_is_ambiguous_not_overflow(agent_vm_account_cleanup):
+    # Positive oversized int (400-digit)
+    vm = {'reconcile': {'lease': {'expiresAt': int('9' * 400)}}}
+    with pytest.raises(RuntimeError, match='Agent VM migration reconcile lease is ambiguous'):
+        agent_vm_account_cleanup._migration_reconcile_lease_active(vm, [{}], now=1000.0)
+
+    # Negative oversized int (400-digit)
+    vm = {'reconcile': {'lease': {'expiresAt': -int('9' * 400)}}}
+    with pytest.raises(RuntimeError, match='Agent VM migration reconcile lease is ambiguous'):
+        agent_vm_account_cleanup._migration_reconcile_lease_active(vm, [{}], now=1000.0)
+
+    # Oversized decimal string
+    vm = {'reconcile': {'lease': {'expiresAt': '1e500'}}}
+    with pytest.raises(RuntimeError, match='Agent VM migration reconcile lease is ambiguous'):
+        agent_vm_account_cleanup._migration_reconcile_lease_active(vm, [{}], now=1000.0)
+
+
+def test_reconcile_lease_normal_expiry_still_evaluates(agent_vm_account_cleanup):
+    # Valid integer
+    vm = {'reconcile': {'lease': {'expiresAt': 2000}}}
+    assert agent_vm_account_cleanup._migration_reconcile_lease_active(vm, [{}], now=1000.0) is True
+
+    # Valid float
+    vm = {'reconcile': {'lease': {'expiresAt': 2000.0}}}
+    assert agent_vm_account_cleanup._migration_reconcile_lease_active(vm, [{}], now=1000.0) is True
+
+    # Valid string
+    vm = {'reconcile': {'lease': {'expiresAt': '2000.0'}}}
+    assert agent_vm_account_cleanup._migration_reconcile_lease_active(vm, [{}], now=1000.0) is True
+
+    # Expired lease
+    vm = {'reconcile': {'lease': {'expiresAt': 500}}}
+    assert agent_vm_account_cleanup._migration_reconcile_lease_active(vm, [{}], now=1000.0) is False
