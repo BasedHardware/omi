@@ -11396,5 +11396,6 @@
     "dismiss": "Схаваць",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Паказваць на экране блакіроўкі"
+    "showOnLockScreen": "Паказваць на экране блакіроўкі",
+    "accountDeletionInProgressSignInAgain": "Гэты ўліковы запіс выдаляецца. Увайдзіце з іншым уліковым запісам або пачакайце некалькі хвілін і паспрабуйце зноў."
 }

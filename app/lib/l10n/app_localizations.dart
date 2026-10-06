@@ -22226,6 +22226,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show on Lock Screen'**
   String get showOnLockScreen;
+
+  /// Shown on the sign-in screen after the backend refused every request because the account's deletion is still in progress
+  ///
+  /// In en, this message translates to:
+  /// **'This account is being deleted. Sign in with another account, or wait a few minutes and try again.'**
+  String get accountDeletionInProgressSignInAgain;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

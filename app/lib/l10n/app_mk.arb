@@ -11396,5 +11396,6 @@
     "dismiss": "Сокриј",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Прикажи на заклучениот екран"
+    "showOnLockScreen": "Прикажи на заклучениот екран",
+    "accountDeletionInProgressSignInAgain": "Оваа сметка се брише. Најавете се со друга сметка или почекајте неколку минути и обидете се повторно."
 }

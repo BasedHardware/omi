@@ -12475,4 +12475,8 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Прикажи на заклучениот екран';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Оваа сметка се брише. Најавете се со друга сметка или почекајте неколку минути и обидете се повторно.';
 }

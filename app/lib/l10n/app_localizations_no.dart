@@ -12415,4 +12415,8 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Vis på låseskjermen';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Denne kontoen slettes. Logg inn med en annen konto, eller vent noen minutter og prøv igjen.';
 }
