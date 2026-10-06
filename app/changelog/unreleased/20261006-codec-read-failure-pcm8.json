@@ -1,0 +1,1 @@
+{"change":"Fixed an issue where a transient Bluetooth read error during connection setup could cause Opus devices to incorrectly fall back to PCM8 audio."}

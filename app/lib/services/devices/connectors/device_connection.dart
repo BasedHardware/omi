@@ -377,29 +377,45 @@ abstract class DeviceConnection {
     return stream.listen(onButtonReceived);
   }
 
+  BleAudioCodec? cachedAudioCodec;
+
   Future<BleAudioCodec> getAudioCodec() async {
     if (await isConnected()) {
-      return await performGetAudioCodec();
+      final codec = await performGetAudioCodec();
+      if (codec != BleAudioCodec.unknown) {
+        cachedAudioCodec = codec;
+      }
+      return codec;
     }
-    return BleAudioCodec.pcm8;
+    return cachedAudioCodec ?? BleAudioCodec.unknown;
   }
 
   Future<BleAudioCodec> performGetAudioCodec() async {
-    final data = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
-    if (data.isNotEmpty) {
-      final codecId = data[0];
-      switch (codecId) {
-        case 1:
-          return BleAudioCodec.pcm8;
-        case 20:
-          return BleAudioCodec.opus;
-        case 21:
-          return BleAudioCodec.opusFS320;
-        default:
-          return BleAudioCodec.pcm8;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final data = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
+        if (data.isNotEmpty) {
+          final codecId = data[0];
+          switch (codecId) {
+            case 1:
+              return BleAudioCodec.pcm8;
+            case 20:
+              return BleAudioCodec.opus;
+            case 21:
+              return BleAudioCodec.opusFS320;
+            default:
+              Logger.debug('DeviceConnection: Unknown codec id: $codecId');
+              return BleAudioCodec.unknown;
+          }
+        }
+      } catch (e) {
+        Logger.debug('DeviceConnection: Error reading audio codec (attempt $attempt): $e');
+      }
+      if (attempt < 2) {
+        await Future.delayed(const Duration(milliseconds: 60));
       }
     }
-    return BleAudioCodec.pcm8;
+    return cachedAudioCodec ?? BleAudioCodec.unknown;
   }
 
   /// Plays a distinctive three-pulse pattern so a nearby Omi can be located.

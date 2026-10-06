@@ -1588,6 +1588,7 @@ class CaptureController extends ChangeNotifier
     late final BleAudioCodec codec;
     try {
       codec = await _getAudioCodec(_recordingDevice!.id);
+      if (codec == BleAudioCodec.unknown) throw StateError('unknown codec');
     } catch (_) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.codecLookupFailed);
       return;
@@ -1969,42 +1970,30 @@ class CaptureController extends ChangeNotifier
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
     if (_audioCodecLoader != null) return _audioCodecLoader!(deviceId);
-    var connection = await _ensureDeviceConnection(deviceId);
-    if (connection == null) {
-      return BleAudioCodec.pcm8;
-    }
-    return connection.getAudioCodec();
+    final connection = await _ensureDeviceConnection(deviceId);
+    return connection == null ? BleAudioCodec.unknown : connection.getAudioCodec();
   }
 
   Future<bool> _playSpeakerHaptic(String deviceId, int level) async {
     if (_speakerHaptic != null) return _speakerHaptic!(deviceId, level);
-    var connection = await _ensureDeviceConnection(deviceId);
-    if (connection == null) {
-      return false;
-    }
-    return connection.performPlayToSpeakerHaptic(level);
+    final connection = await _ensureDeviceConnection(deviceId);
+    return connection?.performPlayToSpeakerHaptic(level) ?? false;
   }
 
   Future<StreamSubscription?> _getBleAudioBytesListener(
     String deviceId, {
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
-    var connection = await _ensureDeviceConnection(deviceId);
-    if (connection == null) {
-      return Future.value(null);
-    }
-    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+    final connection = await _ensureDeviceConnection(deviceId);
+    return connection?.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
 
   Future<StreamSubscription?> _getBleButtonListener(
     String deviceId, {
     required void Function(List<int>) onButtonReceived,
   }) async {
-    var connection = await _ensureDeviceConnection(deviceId);
-    if (connection == null) {
-      return Future.value(null);
-    }
-    return connection.getBleButtonListener(onButtonReceived: onButtonReceived);
+    final connection = await _ensureDeviceConnection(deviceId);
+    return connection?.getBleButtonListener(onButtonReceived: onButtonReceived);
   }
 
   Future<void> _ensureDeviceSocketConnection() async {
@@ -2017,7 +2006,8 @@ class CaptureController extends ChangeNotifier
     final deviceRevision = _deviceIdentityRevision;
     BleAudioCodec codec = await _getAudioCodec(device.id);
     final postAwaitPhase = _capture.stagedReadModel.phase;
-    if (_recordingDevice?.id != device.id ||
+    if (codec == BleAudioCodec.unknown ||
+        _recordingDevice?.id != device.id ||
         _deviceIdentityStale(deviceRevision) ||
         _pendantSuspension != null ||
         (postAwaitPhase != CapturePhase.pendantLive && postAwaitPhase != CapturePhase.pendantPaused) ||
@@ -2069,7 +2059,8 @@ class CaptureController extends ChangeNotifier
     final connection = await _ensureDeviceConnection(deviceId);
     if (connection == null || _deviceIdentityStale(deviceRevision)) return;
     final codec = await _getAudioCodec(deviceId);
-    if (_recordingDevice?.id != deviceId ||
+    if (codec == BleAudioCodec.unknown ||
+        _recordingDevice?.id != deviceId ||
         _deviceIdentityStale(deviceRevision) ||
         _pendantSuspension != null ||
         !_capture.stagedReadModel.pendantOwns ||
@@ -3048,9 +3039,14 @@ class CaptureController extends ChangeNotifier
     if (stagedPhase != CapturePhase.pendantLive && !attestedIdle) return;
     final deviceRevision = _deviceIdentityRevision;
     final codec = await _getAudioCodec(device.id);
-    if (!_captureSessionIsCurrent(token) || _deviceIdentityStale(deviceRevision)) return;
-    if (_capture.stagedReadModel.phase != stagedPhase || _recordingDevice?.id != device.id) return;
-    if (!_shouldReconnectTranscriptionSocket) return;
+    if (codec == BleAudioCodec.unknown ||
+        !_captureSessionIsCurrent(token) ||
+        _deviceIdentityStale(deviceRevision) ||
+        _capture.stagedReadModel.phase != stagedPhase ||
+        _recordingDevice?.id != device.id ||
+        !_shouldReconnectTranscriptionSocket) {
+      return;
+    }
     await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
   }
 
