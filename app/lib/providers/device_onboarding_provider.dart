@@ -42,6 +42,10 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   int doublePressCount = 0;
   bool showSingleTapHint = false;
 
+  /// A step reopened from the All Set summary; finishing it goes back to the summary instead of
+  /// walking through every later step again (#20787).
+  bool reviewingFromSummary = false;
+
   Timer? _hintTimer;
   bool _disposed = false;
 
@@ -64,6 +68,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     selectedDoubleTapAction = -1;
     doublePressCount = 0;
     showSingleTapHint = false;
+    reviewingFromSummary = false;
     _hintTimer?.cancel();
     _hintTimer = null;
   }
@@ -77,7 +82,14 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void goToStep(int step) {
     if (step < transcriptionStep || step >= totalSteps || step == currentStep) return;
+    reviewingFromSummary = currentStep == allSetStep;
     currentStep = step;
+    notifyListeners();
+  }
+
+  void returnToSummary() {
+    reviewingFromSummary = false;
+    currentStep = allSetStep;
     notifyListeners();
   }
 

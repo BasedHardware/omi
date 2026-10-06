@@ -79,7 +79,9 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   void _onStepComplete(String stepName) {
     AnalyticsManager().deviceOnboardingStepCompleted(stepName);
 
-    if (_onboardingProvider.currentStep < DeviceOnboardingProvider.totalSteps - 1) {
+    if (_onboardingProvider.reviewingFromSummary) {
+      _onboardingProvider.returnToSummary();
+    } else if (_onboardingProvider.currentStep < DeviceOnboardingProvider.totalSteps - 1) {
       // advanceStep() notifies; the Consumer below rebuilds and the AnimatedSwitcher
       // swaps to the next step (keyed by currentStep) with a fade + small slide.
       _onboardingProvider.advanceStep();
