@@ -3150,8 +3150,8 @@ class TasksStore: ObservableObject {
             priority: priority,
             category: tags?.first,
             metadata: metadata,
-            completed: completed,
             recurrenceRule: recurrenceRule,
+            completed: completed,
             expectedOwnerId: lease.ownerID,
             authorizationSnapshot: lease.authorizationSnapshot
           )
