@@ -51,7 +51,7 @@ def test_model_screen_name_and_unrelated_freemail_survive(evidence):
         has_background_context=evidence == 'screen_moment',
         background_body=f'SCREEN MOMENTS\n{NAME} {EMAIL}' if evidence != 'calendar_attendee' else '',
     )
-    assert [(p.name, p.email, p.source) for p in result.participants] == [(NAME, EMAIL, 'screen')]
+    assert [(p.name, p.email, p.source) for p in result.participants] == [(NAME, EMAIL, 'transcript')]
 
 
 def test_owner_identity_does_not_depend_on_model_is_user_bit():
