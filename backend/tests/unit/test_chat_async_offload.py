@@ -427,6 +427,7 @@ async def test_agentic_setup_reads_run_off_loop():
         full_response,
         safety_guard,
         configurable,
+        **_kwargs,
     ):
         # End the stream immediately so the generator's queue loop breaks.
         await callback.queue.put(None)
@@ -475,6 +476,7 @@ async def test_agentic_chat_uses_server_rollout_for_jit_gate_and_config():
         _full_response,
         _safety_guard,
         configurable,
+        **_kwargs,
     ):
         seen['system_prompt'] = system_prompt
         seen['configurable'] = configurable
