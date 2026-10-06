@@ -404,6 +404,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _onReceiveTaskData(dynamic data) async {
     if (data is! Map<String, dynamic>) return;
+    if (data['recordingSyncWake'] == true) {
+      await RecordingTransferCoordinator.instance.wake(WakeTrigger.periodic);
+      return;
+    }
     if (!(data.containsKey('latitude') && data.containsKey('longitude'))) return;
     await updateUserGeolocation(
       geolocation: Geolocation(

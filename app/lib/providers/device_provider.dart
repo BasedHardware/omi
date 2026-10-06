@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/services/devices/charge_start_tracker.dart';
+import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -527,7 +528,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     final currentStatus = await connection.readChargingStatus();
     if (!_isCurrent(generation)) return;
-    if (_chargeStarts.observe(connectedDevice!.id, currentStatus)) captureProvider?.onChargingStarted();
+    final chargeStarted = _chargeStarts.observe(connectedDevice!.id, currentStatus);
+    // An initial read made by a sync wake is observation, not a charge-start event.
+    if (chargeStarted && !SyncWakeScope.syncOnly) captureProvider?.onChargingStarted();
     if (isCharging != currentStatus) {
       isCharging = currentStatus;
 
@@ -845,6 +848,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _onDeviceConnected(BtDevice device, int generation) async {
+    final syncOnly = SyncWakeScope.syncOnly;
     Logger.debug('_onConnected inside: $connectedDevice');
     if (!_isCurrent(generation)) return;
     final deviceSetup = setConnectedDevice(device);
@@ -887,7 +891,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(device: normalizedDevice);
+    if (!syncOnly) await captureProvider?.streamDeviceRecording(device: normalizedDevice);
     if (!_isCurrent(generation)) return;
 
     await getDeviceInfo();

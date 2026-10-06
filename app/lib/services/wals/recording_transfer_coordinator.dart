@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/utils/logger.dart';
+import 'package:omi/services/wals/sync_wake_scope.dart';
 
 /// The event that made another recording-transfer pass worthwhile.
 ///
@@ -8,6 +9,7 @@ import 'package:omi/utils/logger.dart';
 /// without introducing a second recovery owner.
 enum WakeTrigger {
   startup,
+  periodic,
   foregrounded,
   connectivityRestored,
   deviceConnected,
@@ -135,6 +137,13 @@ class RecordingTransferCoordinator {
   bool _wasConnected = true;
   int _failureStreak = 0;
   int _cooldownGeneration = 0;
+  int _periodicGeneration = 0;
+
+  /// Retire an expired OS window before any further discovery/upload stage.
+  void cancelPeriodicWake() {
+    _periodicGeneration++;
+    if (_pendingWake == WakeTrigger.periodic) _pendingWake = null;
+  }
 
   /// Visible to tests and diagnostics; this is not persisted because timers are
   /// foreground-only and startup is always another wake.
@@ -272,6 +281,8 @@ class RecordingTransferCoordinator {
   }
 
   bool _isBackgroundEligible(WakeTrigger trigger) =>
+      trigger == WakeTrigger.periodic ||
+      trigger == WakeTrigger.deviceConnected ||
       trigger == WakeTrigger.connectivityRestored ||
       trigger == WakeTrigger.socketReconnected ||
       trigger == WakeTrigger.dataStalled;
@@ -283,7 +294,7 @@ class RecordingTransferCoordinator {
 
   int _wakePriority(WakeTrigger trigger) => switch (trigger) {
         WakeTrigger.userRetry => 3,
-        WakeTrigger.connectivityRestored => 2,
+        WakeTrigger.periodic || WakeTrigger.deviceConnected || WakeTrigger.connectivityRestored => 2,
         WakeTrigger.socketReconnected || WakeTrigger.dataStalled => 1,
         _ => 0,
       };
@@ -314,6 +325,17 @@ class RecordingTransferCoordinator {
   }
 
   Future<void> _runPass(WakeTrigger trigger) async {
+    if (trigger == WakeTrigger.periodic) {
+      await SyncWakeScope.run(() => _runPassBody(trigger));
+    } else {
+      await _runPassBody(trigger);
+    }
+  }
+
+  Future<void> _runPassBody(WakeTrigger trigger) async {
+    final periodicGeneration = _periodicGeneration;
+    bool expired() => trigger == WakeTrigger.periodic && periodicGeneration != _periodicGeneration;
+    final backlogWake = trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected;
     try {
       if (trigger == WakeTrigger.connectivityRestored) {
         await _onConnectivityRestored?.call();
@@ -323,10 +345,13 @@ class RecordingTransferCoordinator {
       // Reconciling only resolves work already on the server, so a failure here
       // must not stop new recordings from uploading — it is retried instead.
       var reconcileFailed = !await _tryReconcile();
-      if (_foreground) {
+      if (expired()) return;
+      if (_foreground || backlogWake) {
         await _discover();
       }
+      if (expired()) return;
       await _refreshPending();
+      if (expired()) return;
 
       final mayUpload = trigger == WakeTrigger.userRetry || _autoUploadEnabled();
       if (!mayUpload) {
@@ -334,9 +359,10 @@ class RecordingTransferCoordinator {
         return;
       }
 
-      final drain = _foreground ? _drain : _drainLiveCapture;
+      final drain = (_foreground || backlogWake) ? _drain : _drainLiveCapture;
       if (drain == null) return;
       final result = await drain();
+      if (expired()) return;
       await _refreshPending();
 
       // Partial upload success still leaves `uploaded` WALs that need the

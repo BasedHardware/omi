@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/services/capture/uplink_silence_timer.dart';
+import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -162,13 +163,15 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> resumeAfterSilence() async {
+    if (SyncWakeScope.syncOnly) await SyncWakeScope.whenIdle;
+    if (_captureControllerDisposed) return;
     final outcome = await _capture.dispatch(const ResumeSilencePaused());
     outcome.throwIfFailed();
   }
 
   /// Charging wakes capture only when the timer paused it; manual mute wins.
   void onChargingStarted() {
-    unawaited(_dispatchLogged(const ResumeSilencePaused()));
+    unawaited(resumeAfterSilence());
   }
 
   Timer? _keepAliveTimer;
@@ -477,7 +480,7 @@ class CaptureController extends ChangeNotifier
   /// the stall clock so suspended timers don't false-trigger stop→start (which
   /// would race native recovery and restart a healthy session).
   void onAppResumed() {
-    unawaited(_dispatchLogged(const ResumeSilencePaused()));
+    unawaited(resumeAfterSilence());
     unawaited(_dispatchLogged(const AppForegrounded()));
   }
 
@@ -1236,6 +1239,7 @@ class CaptureController extends ChangeNotifier
     bool force = false,
     String? source,
   }) async {
+    if (SyncWakeScope.syncOnly) return;
     // Resolve the defaults here so two callers that spell the same
     // configuration differently (null vs the value it defaults to) share a key.
     final effectiveSampleRate = sampleRate ?? mapCodecToSampleRate(audioCodec);
@@ -2088,6 +2092,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _initiateDeviceAudioStreaming() async {
+    if (SyncWakeScope.syncOnly) return;
     final device = _recordingDevice;
     final staged = _capture.stagedReadModel;
     if (device == null || _pendantSuspension != null || !staged.pendantOwns || staged.callActive) {
@@ -2872,6 +2877,10 @@ class CaptureController extends ChangeNotifier
 
   Future streamDeviceRecording({BtDevice? device}) async {
     Logger.debug("streamDeviceRecording $device");
+    if (SyncWakeScope.syncOnly) {
+      if (device != null) updateRecordingDevice(device);
+      return;
+    }
     final outcome = await _capture.dispatch(DeviceStartRequested(device: device));
     outcome.throwIfFailed();
   }
