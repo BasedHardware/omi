@@ -106,7 +106,7 @@ preserve pause. Foreground or a charge-start edge resumes a fresh recording;
 manual mute still wins. Repeated charging reads across reconnect are not edges.
 Phone microphone pause continues to preserve its conversation and socket.
 
-TODO(astra): connected-but-unsubscribed Omi firmware currently discards its TX
+TODO(astra) (#5491): connected-but-unsubscribed Omi firmware currently discards its TX
 queue instead of writing offline storage (`omi/firmware/omi/src/lib/core/transport.c`,
 `pusher`: storage writes require `!conn`). Therefore speech after timeout can be
 missed until resume; a live-mode ring-buffer guarantee needs firmware work outside

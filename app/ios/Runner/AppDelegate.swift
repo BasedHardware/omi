@@ -141,7 +141,7 @@ final class QuickActionsIconPatcher: NSObject {
   private func runPeriodicSync(_ task: BGTask) {
     schedulePeriodicSync()
     guard periodicSyncReady, let channel = periodicSyncChannel else {
-      // TODO(astra): WAL recovery is configured by the UI-isolate SyncProvider.
+      // TODO(astra): WAL recovery is configured by the UI-isolate SyncProvider. (#5491)
       // There is no isolated headless WAL/account bootstrap. Do not boot the
       // ordinary app entrypoint here: it can start capture. Suspended-engine
       // refresh is supported; a cold-process grant safely waits for foreground.

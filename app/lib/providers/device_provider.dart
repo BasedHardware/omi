@@ -524,7 +524,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
     if (!_isCurrent(generation)) return;
     if (connection == null) return;
-    // TODO(astra): non-Omi connections, including Friend Pendant, expose no charging-status API.
+    // TODO(astra): non-Omi connections, including Friend Pendant, expose no charging-status API. (#5491)
     if (connection is! OmiDeviceConnection) return;
 
     final currentStatus = await connection.readChargingStatus();
