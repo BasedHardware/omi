@@ -2,6 +2,7 @@
 
 import asyncio
 import copy
+from contextlib import asynccontextmanager
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -317,6 +318,12 @@ def test_notes_on_uses_one_schema_turn(monkeypatch):
             )
 
     monkeypatch.setattr(notes, 'get_llm', lambda *a, **k: Model())
+
+    @asynccontextmanager
+    async def isolated_fake(model):
+        yield model
+
+    monkeypatch.setattr(notes, 'isolated_notes_model', isolated_fake)
     monkeypatch.setattr(notes, 'shared_conversation_cache_supported', lambda: True)
     monkeypatch.setattr(notes, '_get_conversation_notes_legacy', lambda *a, **k: pytest.fail('old writer called'))
     prefix = ConversationPromptPrefix('c', 'FULL TRANSCRIPT\nThis is unique evidence.')
@@ -532,3 +539,45 @@ def test_flag_off_chat_provider_bytes_match_legacy(monkeypatch):
     served = asyncio.run(run(agentic._run_routed_chat_stream))
     assert old == served == b'Same streamed bytes\n'
     assert requests[0] == requests[1]
+
+
+def test_notes_transport_is_owned_per_worker_loop(monkeypatch):
+    import httpx
+    from langchain_openai import ChatOpenAI
+    from utils.llm import shaped_notes_transport
+
+    transports, loops = [], []
+    real_client = httpx.AsyncClient
+
+    async def respond(request):
+        loops.append(asyncio.get_running_loop())
+        return httpx.Response(
+            200,
+            json={
+                'id': 'completion',
+                'object': 'chat.completion',
+                'created': 0,
+                'model': 'test',
+                'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': 'ok'}, 'finish_reason': 'stop'}],
+                'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2},
+            },
+        )
+
+    def transport_factory():
+        transport = real_client(transport=httpx.MockTransport(respond))
+        transports.append(transport)
+        return transport
+
+    cached = ChatOpenAI(model='test', api_key='fake', max_retries=0)
+    original_client = cached.root_async_client
+    monkeypatch.setattr(shaped_notes_transport, 'httpx', SimpleNamespace(AsyncClient=transport_factory))
+
+    async def call():
+        async with shaped_notes_transport.isolated_notes_model(cached) as model:
+            assert model is not cached
+            return (await model.ainvoke('hello')).content
+
+    assert asyncio.run(call()) == asyncio.run(call()) == 'ok'
+    assert loops[0] is not loops[1]
+    assert len(transports) == 2 and all(transport.is_closed for transport in transports)
+    assert cached.root_async_client is original_client and not original_client.is_closed()

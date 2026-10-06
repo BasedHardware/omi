@@ -46,6 +46,7 @@ from utils.llm.meeting_notes_validation import (
     validate_structured_source_segment_ids,
 )
 from utils.llm.shaped_agent import Budget, Mount, Turn, run_loop, serve_notes
+from utils.llm.shaped_notes_transport import isolated_notes_model
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
@@ -1321,14 +1322,21 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
         evidence.append(screen_frames_message(frames))
     cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
     model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
-    model = model.with_structured_output(mount.schema, method='json_schema')
-    if cache_enabled:
-        model = model.bind(extra_body={'prompt_cache_options': GPT56_EXPLICIT_CACHE_OPTIONS})
 
-    async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
-        return Turn(value=await model.ainvoke(messages))
+    async def invoke():
+        async with isolated_notes_model(model) as isolated_model:
+            structured_model = isolated_model.with_structured_output(mount.schema, method='json_schema')
+            if cache_enabled:
+                structured_model = structured_model.bind(
+                    extra_body={'prompt_cache_options': GPT56_EXPLICIT_CACHE_OPTIONS}
+                )
 
-    result = asyncio.run(run_loop(mount, evidence, model_turn, explicit_cache=cache_enabled))
+            async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
+                return Turn(value=await structured_model.ainvoke(messages))
+
+            return await run_loop(mount, evidence, model_turn, explicit_cache=cache_enabled)
+
+    result = asyncio.run(invoke())
     structured = StructuredExtraction.model_validate(result.value).to_structured()
     # A one-turn mount cannot buy the legacy presentation revision call.
     enforce_structured_presentation_contract(structured, prefix.transcript_segment_ids, safe_fallback=True)
