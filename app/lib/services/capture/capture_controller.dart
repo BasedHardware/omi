@@ -1850,10 +1850,11 @@ class CaptureController extends ChangeNotifier
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
-    _startMetricsTracking();
-    final subscription = await _getBleAudioBytesListener(
-      deviceId,
-      onAudioBytesReceived: (List<int> value) {
+    StreamSubscription? subscription;
+    try {
+      subscription = await _getBleAudioBytesListener(
+        deviceId,
+        onAudioBytesReceived: (List<int> value) {
         if (_captureControllerDisposed || !_admitsCapture(revision) || _recordingDevice?.id != deviceId) return;
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
@@ -1920,6 +1921,11 @@ class CaptureController extends ChangeNotifier
         }
       },
     );
+    _startMetricsTracking();
+  } catch (e) {
+    Logger.debug('Failed to get BLE audio bytes listener for device $deviceId: $e');
+    return false;
+  }
     if (!_admitsCapture(revision) || _deviceIdentityStale(deviceRevision)) {
       await subscription?.cancel();
       return false;
@@ -2113,6 +2119,9 @@ class CaptureController extends ChangeNotifier
     }
     if (foregroundAudioReady) {
       await _preferences.saveBool('nativeBleForegroundReady', true);
+    } else {
+      Logger.debug('[_initiateDeviceAudioStreaming] streamAudioToWs returned false for device $deviceId');
+      return;
     }
 
     // Update state (limitless is excluded: the pendant records on-device, so the
@@ -3937,7 +3946,7 @@ class CaptureController extends ChangeNotifier
     await BatteryWidgetService().updateMuteState(false);
     if (!_admitsCapture(revision)) return;
     await _initiateDeviceAudioStreaming();
-    if (!_admitsCapture(revision)) return;
+    if (!_admitsCapture(revision) || _bleBytesStream == null) return;
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
   }
