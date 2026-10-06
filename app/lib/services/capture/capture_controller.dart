@@ -159,9 +159,8 @@ class CaptureController extends ChangeNotifier
   );
 
   Future<void> resumeAfterSilence() async {
-    if (SyncWakeScope.syncOnly) await SyncWakeScope.whenIdle;
     if (_captureControllerDisposed) return;
-    final outcome = await _capture.dispatch(const ResumeSilencePaused());
+    final outcome = await _dispatchWithResumeFence(const ResumeSilencePaused());
     outcome.throwIfFailed();
   }
 
@@ -577,7 +576,7 @@ class CaptureController extends ChangeNotifier
       default:
         throw ArgumentError.value(action, 'action');
     }
-    final outcome = await _capture.dispatch(event);
+    final outcome = await _dispatchWithResumeFence(event);
     outcome.throwIfFailed();
     // Refused because capture shut down, or applied after the card's recording changed.
     if (!outcome.admitted || outcome.result is StaleSystemSurfaceTarget) throw StateError('Recording changed');
@@ -3914,7 +3913,7 @@ class CaptureController extends ChangeNotifier
 
   /// Resume the source [pauseCapture] paused.
   Future<void> resumeCapture() async {
-    final outcome = await _capture.dispatch(const ResumeCaptureRequested());
+    final outcome = await _dispatchWithResumeFence(const ResumeCaptureRequested());
     outcome.throwIfFailed();
   }
 
@@ -3940,7 +3939,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> resumeDeviceRecording() async {
-    final outcome = await _capture.dispatch(const DeviceResumeRequested());
+    final outcome = await _dispatchWithResumeFence(const DeviceResumeRequested());
     outcome.throwIfFailed();
   }
 
@@ -3948,7 +3947,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _dispatchLogged(CaptureEvent event) async {
     if (_captureControllerDisposed) return;
-    final outcome = await _capture.dispatch(event);
+    final outcome = await _dispatchWithResumeFence(event);
     if (outcome.failed) {
       Logger.error('[CaptureProvider] ${event.runtimeType} failed: ${outcome.error}\n${outcome.stackTrace}');
     }

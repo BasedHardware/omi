@@ -3,8 +3,30 @@ part of 'capture_controller.dart';
 /// Pendant uplink effects share the existing admission and session owners.
 extension _CaptureUplinkPolicy on CaptureController {
   Future<void> _resumeSilenceLogged() async {
-    if (SyncWakeScope.syncOnly) await SyncWakeScope.whenIdle;
     await _dispatchLogged(const ResumeSilencePaused());
+  }
+
+  /// Resume must not clear paused intent until both live transports can start.
+  /// Keep genuine sync passes fenced; resume through the normal startup path
+  /// after the drain, which also re-arms the socket keepalive.
+  Future<CaptureDispatchOutcome> _dispatchWithResumeFence(CaptureEvent event) async {
+    final resume = event is ResumeCaptureRequested || event is DeviceResumeRequested || event is ResumeSilencePaused;
+    if (resume) {
+      while (SyncWakeScope.syncOnly) {
+        await SyncWakeScope.whenIdle;
+      }
+    }
+    final outcome = await _capture.dispatch(event);
+    if (resume &&
+        outcome.admitted &&
+        !outcome.failed &&
+        !_captureControllerDisposed &&
+        _capture.readModel.pendantOwns &&
+        !isPaused &&
+        _socket?.state == SocketServiceState.connected) {
+      _startKeepAliveServices();
+    }
+    return outcome;
   }
 
   void _armUplinkSilence() {
