@@ -154,3 +154,25 @@ def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock,
     result = cli_runner.invoke(app, ["--no-color", *command])
     assert result.exit_code == 0, result.output
     assert "[draft] literal [/bold] :warning:" in result.stdout
+
+
+def test_memory_export_csv(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[
+            {
+                "id": "m1",
+                "content": "hello world",
+                "category": "core",
+                "visibility": "private",
+                "tags": ["tag1", "tag2"],
+                "created_at": "2026-04-01T00:00:00Z",
+            }
+        ]
+    )
+    out_file = tmp_path / "memories.csv"
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file)])
+    assert result.exit_code == 0
+    assert out_file.exists()
+    content = out_file.read_text(encoding="utf-8")
+    assert "id,category,visibility,content,tags,created_at" in content
+    assert "m1,core,private,hello world,tag1;tag2,2026-04-01T00:00:00Z" in content

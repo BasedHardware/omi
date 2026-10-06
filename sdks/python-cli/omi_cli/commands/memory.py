@@ -154,3 +154,38 @@ def delete_memory(
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted memory [bold]{escape(memory_id)}[/bold].")
+
+
+@app.command("export", help="Export memories to CSV format.")
+def export_memories(
+    typer_ctx: typer.Context,
+    limit: int = typer.Option(200, "--limit", min=1, max=1000, help="Max items to export."),
+    categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
+    output_file: Optional[str] = typer.Option(None, "--output", "-o", help="File path to save CSV output."),
+) -> None:
+    """Export memories to CSV format."""
+    import csv
+    import io
+
+    ctx = _ctx(typer_ctx)
+    with ctx.make_client() as client:
+        items = client.get(
+            "/v1/dev/user/memories",
+            params={"limit": limit, "offset": 0, "categories": categories},
+        )
+    fieldnames = ["id", "category", "visibility", "content", "tags", "created_at"]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for m in items or []:
+        row = dict(m)
+        if isinstance(row.get("tags"), list):
+            row["tags"] = ";".join(str(t) for t in row["tags"])
+        writer.writerow(row)
+    csv_str = output.getvalue()
+    if output_file:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(csv_str)
+        ctx.renderer.success(f"Exported {len(items or [])} memories to [bold]{escape(output_file)}[/bold].")
+    else:
+        typer.echo(csv_str, nl=False)
