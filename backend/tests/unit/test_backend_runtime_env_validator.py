@@ -3248,7 +3248,7 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
     ):
         entries = parse_env_entries(chart_path.read_text(encoding='utf-8'))
         assert entries[CONVERSATION_RELEVANCE_JEV_ENABLED_ENV].value == 'true', chart_path.name
-        assert entries['CONVERSATION_RELEVANCE_JEV_PERCENT'].value == '10', chart_path.name
+        assert entries['CONVERSATION_RELEVANCE_JEV_PERCENT'].value == '50', chart_path.name
         assert MEMORY_OWNER_JEV_FLIP_ENABLED_ENV not in entries, chart_path.name
 
     dev_config = validator._get_env_config(manifest, 'dev')
