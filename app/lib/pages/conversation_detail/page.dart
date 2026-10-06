@@ -47,6 +47,7 @@ import 'capture_group_separation.dart';
 import 'widgets/calendar_event_sheets.dart';
 import 'widgets/capture_recordings.dart';
 import 'widgets/conversation_activity_strip.dart';
+import 'widgets/conversation_action_items_section.dart' show conversationActionItemSearchMatchCount;
 import 'widgets/conversation_detail_header.dart';
 import 'widgets/conversation_detail_tabs.dart';
 import 'widgets/detail_search_bar.dart';
@@ -153,12 +154,18 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   final FocusNode _searchFocusNode = FocusNode();
   int _currentSearchIndex = 0;
   int _totalSearchResults = 0;
+
+  /// The Summary tab's matches that belong to the note itself; the tab's
+  /// action-item section's matches follow them, so this is the section's
+  /// offset into the tab's results.
+  int _summaryContentSearchResults = 0;
   final List<(Timer, Completer<void>)> _ownedDelays = [];
   final _separation = CaptureGroupSeparationController();
 
   void _updateSearchResults() {
     if (_searchQuery.isEmpty) {
       _totalSearchResults = 0;
+      _summaryContentSearchResults = 0;
       _currentSearchIndex = 0;
       return;
     }
@@ -176,6 +183,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     }
 
     int count = 0;
+    _summaryContentSearchResults = 0;
     if (selectedTab == ConversationTab.transcript) {
       for (var segment in provider.conversation.transcriptSegments) {
         count += countIn(segment.text.toLowerCase());
@@ -183,8 +191,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     } else if (selectedTab == ConversationTab.summary) {
       final summarySelection = provider.getSummarySelection();
       if (summarySelection.content.isNotEmpty) {
-        count += countIn(summarySelection.content.decodeString.toLowerCase());
+        _summaryContentSearchResults = countIn(summarySelection.content.decodeString.toLowerCase());
       }
+      // The tab renders its action items after the note; their matches count
+      // toward the tab's total and are navigated inside the section.
+      count = _summaryContentSearchResults +
+          conversationActionItemSearchMatchCount(provider.conversation.structured.actionItems, _searchQuery);
     }
 
     _totalSearchResults = count;
@@ -1164,6 +1176,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                                 !_reviewInterrupted,
                             searchQuery: _searchQuery,
                             currentResultIndex: getCurrentResultIndexForHighlighting(),
+                            summarySearchResultOffset: _summaryContentSearchResults,
                             onTapWhenSearchEmpty: _closeSearchIfEmpty,
                             onShowActionItemInTranscript: _showActionItemInTranscript,
                           ),

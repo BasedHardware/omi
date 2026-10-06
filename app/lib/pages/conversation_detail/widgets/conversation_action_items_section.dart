@@ -54,6 +54,37 @@ class ActionItemMeta {
       context: context.isEmpty ? null : context,
     );
   }
+
+  /// The row's text a Summary-tab search can match, in display order: the
+  /// description, the owner's displayed name (never the localized "You" and
+  /// never an email shape) and the context. Due labels are formatted per
+  /// locale and stay out of both the count and the highlighting.
+  static List<String> searchableTexts(ActionItem item) {
+    final name = item.ownerName?.trim() ?? '';
+    final ownerShown = item.captureOwner == 'user' || name.isEmpty || _emailShaped.hasMatch(name) ? null : name;
+    final context = item.context?.trim() ?? '';
+    return [
+      item.description,
+      if (ownerShown != null) ownerShown,
+      if (context.isNotEmpty) context,
+    ];
+  }
+}
+
+/// The Summary tab's search result count includes the section's rows: the
+/// page adds this to the note's own matches so `n/m` covers the action items
+/// the tab renders. Deleted rows are not rendered and do not count.
+int conversationActionItemSearchMatchCount(List<ActionItem> items, String query) {
+  if (query.isEmpty) return 0;
+  final pattern = RegExp(RegExp.escape(query), caseSensitive: false);
+  var count = 0;
+  for (final item in items) {
+    if (item.deleted) continue;
+    for (final text in ActionItemMeta.searchableTexts(item)) {
+      count += pattern.allMatches(text).length;
+    }
+  }
+  return count;
 }
 
 typedef ConversationTaskCreator = Future<String?> Function(
@@ -271,11 +302,26 @@ class ConversationActionItemsSection extends StatefulWidget {
     required this.items,
     required this.conversationId,
     required this.onShowInTranscript,
+    this.searchQuery = '',
+    this.currentResultIndex = -1,
+    this.searchResultOffset = 0,
   });
 
   final List<ActionItem> items;
   final String conversationId;
   final ValueChanged<List<String>> onShowInTranscript;
+
+  /// The Summary tab's active search, when one is running. Rows highlight
+  /// their matches and scroll to the tab's current result.
+  final String searchQuery;
+
+  /// The tab's current search result (0-based) among ALL Summary-tab matches,
+  /// or -1 when the section owns none of them.
+  final int currentResultIndex;
+
+  /// How many of the tab's Summary matches precede this section's first row;
+  /// the page computes it alongside the total.
+  final int searchResultOffset;
 
   @override
   State<ConversationActionItemsSection> createState() => _ConversationActionItemsSectionState();
@@ -284,6 +330,20 @@ class ConversationActionItemsSection extends StatefulWidget {
 class _ConversationActionItemsSectionState extends State<ConversationActionItemsSection> {
   final Set<String> _adding = {};
   final Set<String> _failed = {};
+
+  /// One scroll anchor per rendered row while a search runs, so the tab's
+  /// current result can be scrolled to like the note's own paragraphs.
+  final Map<String, GlobalKey> _rowKeys = {};
+  String? _owningRowIdentity;
+
+  void _scrollToCurrentSearchResult() {
+    final identity = _owningRowIdentity;
+    if (identity == null) return;
+    final context = _rowKeys[identity]?.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(context, duration: const Duration(milliseconds: 250), alignment: 0.4);
+    }
+  }
 
   late final ConversationActionItemTaskSession _taskSession = ConversationActionItemTaskSession(
     conversationId: widget.conversationId,
@@ -360,6 +420,35 @@ class _ConversationActionItemsSectionState extends State<ConversationActionItems
     if (active.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
     final l10n = context.l10n;
     final dates = OmiDateFormat.of(context);
+    // Resolve which row (if any) owns the tab's current search result, and
+    // which of that row's own matches is the current one. Rows are visited in
+    // display order, so the arithmetic mirrors the page's count.
+    String? owningRow;
+    int owningRowLocalMatch = -1;
+    if (widget.searchQuery.isNotEmpty && widget.currentResultIndex >= widget.searchResultOffset) {
+      final pattern = RegExp(RegExp.escape(widget.searchQuery), caseSensitive: false);
+      var consumed = widget.searchResultOffset;
+      for (var i = 0; i < active.length; i++) {
+        var rowMatches = 0;
+        for (final text in ActionItemMeta.searchableTexts(active[i])) {
+          rowMatches += pattern.allMatches(text).length;
+        }
+        if (widget.currentResultIndex < consumed + rowMatches) {
+          owningRow = _identity(active[i], indexed[i].$1);
+          owningRowLocalMatch = widget.currentResultIndex - consumed;
+          break;
+        }
+        consumed += rowMatches;
+      }
+    }
+    if (owningRow != _owningRowIdentity) {
+      // The current result moved to another row: remember it before the frame
+      // paints, then scroll it into view once its anchor exists.
+      _owningRowIdentity = owningRow;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToCurrentSearchResult();
+      });
+    }
     return SliverToBoxAdapter(
       child: Padding(
         key: const ValueKey('conversation_action_items_section'),
@@ -394,21 +483,30 @@ class _ConversationActionItemsSectionState extends State<ConversationActionItems
                 children: [
                   for (var i = 0; i < active.length; i++) ...[
                     if (i > 0) Divider(height: 1, thickness: 1, color: OmiColors.border),
-                    _ActionItemRow(
-                      key: Key('conversation-action-item-row-${_identity(active[i], indexed[i].$1)}'),
-                      item: active[i],
-                      meta: ActionItemMeta.of(active[i], l10n: l10n, dates: dates),
-                      adding: _adding.contains(_identity(active[i], indexed[i].$1)) ||
-                          _taskSession.isPending(active[i], row: indexed[i].$1),
-                      failed: _failed.contains(_identity(active[i], indexed[i].$1)),
-                      linked: active[i].targetTaskId != null,
-                      added: _taskSession.taskIdFor(active[i], row: indexed[i].$1) != null &&
-                          active[i].targetTaskId == null,
-                      onToggle: (value) => _setCompleted(active[i], indexed[i].$1, value),
-                      onAddToTasks: () => _addToTasks(active[i], indexed[i].$1),
-                      onOpenTask: () => _openTask(active[i], indexed[i].$1),
-                      onShowInTranscript: () => widget.onShowInTranscript(active[i].sourceSegmentIds),
-                    ),
+                    Builder(builder: (context) {
+                      final identity = _identity(active[i], indexed[i].$1);
+                      // Only the row owning the current result needs a scroll
+                      // anchor; the key is created in this build and read in
+                      // the post-frame scroll callback.
+                      final anchor = owningRow == identity ? _rowKeys.putIfAbsent(identity, () => GlobalKey()) : null;
+                      return _ActionItemRow(
+                        key: Key('conversation-action-item-row-$identity'),
+                        rowAnchorKey: anchor,
+                        item: active[i],
+                        meta: ActionItemMeta.of(active[i], l10n: l10n, dates: dates),
+                        adding: _adding.contains(identity) || _taskSession.isPending(active[i], row: indexed[i].$1),
+                        failed: _failed.contains(identity),
+                        linked: active[i].targetTaskId != null,
+                        added: _taskSession.taskIdFor(active[i], row: indexed[i].$1) != null &&
+                            active[i].targetTaskId == null,
+                        highlightQuery: widget.searchQuery,
+                        currentMatchInRow: owningRow == identity ? owningRowLocalMatch : -1,
+                        onToggle: (value) => _setCompleted(active[i], indexed[i].$1, value),
+                        onAddToTasks: () => _addToTasks(active[i], indexed[i].$1),
+                        onOpenTask: () => _openTask(active[i], indexed[i].$1),
+                        onShowInTranscript: () => widget.onShowInTranscript(active[i].sourceSegmentIds),
+                      );
+                    }),
                   ],
                 ],
               ),
@@ -433,6 +531,9 @@ class _ActionItemRow extends StatelessWidget {
     required this.onAddToTasks,
     required this.onOpenTask,
     required this.onShowInTranscript,
+    this.rowAnchorKey,
+    this.highlightQuery = '',
+    this.currentMatchInRow = -1,
   });
 
   final ActionItem item;
@@ -445,6 +546,56 @@ class _ActionItemRow extends StatelessWidget {
   final VoidCallback onAddToTasks;
   final VoidCallback onOpenTask;
   final VoidCallback onShowInTranscript;
+
+  /// Scroll anchor for the Summary tab's search navigation; null unless a
+  /// search is running or this row owns the current result.
+  final Key? rowAnchorKey;
+
+  /// Active Summary-tab search; non-empty rows highlight their matches.
+  final String highlightQuery;
+
+  /// Which of this row's own matches is the tab's current one, or -1.
+  final int currentMatchInRow;
+
+  /// Splits [text] into spans around case-insensitive query matches,
+  /// highlighting them like the note's own search results. [searchIndex] is
+  /// this text's position among the row's searchable texts (description,
+  /// owner, context — in display order); -1 renders plain because the text is
+  /// a localized label the tab's count does not include (e.g. "You").
+  List<InlineSpan> _highlightedSpans(String text, TextStyle style, {required int searchIndex}) {
+    if (highlightQuery.isEmpty || searchIndex < 0) return [TextSpan(text: text, style: style)];
+    final pattern = RegExp(RegExp.escape(highlightQuery), caseSensitive: false);
+    final searchable = ActionItemMeta.searchableTexts(item);
+    var matchBase = 0;
+    for (var i = 0; i < searchIndex && i < searchable.length; i++) {
+      matchBase += pattern.allMatches(searchable[i]).length;
+    }
+    final matches = pattern.allMatches(text).toList();
+    if (matches.isEmpty) return [TextSpan(text: text, style: style)];
+    final spans = <InlineSpan>[];
+    var previous = 0;
+    for (var i = 0; i < matches.length; i++) {
+      final match = matches[i];
+      if (match.start > previous) spans.add(TextSpan(text: text.substring(previous, match.start), style: style));
+      spans.add(TextSpan(
+        text: text.substring(match.start, match.end),
+        style: style.copyWith(
+          backgroundColor: matchBase + i == currentMatchInRow ? OmiColors.warning : OmiColors.textTertiary,
+          color: OmiColors.textPrimary,
+        ),
+      ));
+      previous = match.end;
+    }
+    if (previous < text.length) spans.add(TextSpan(text: text.substring(previous), style: style));
+    return spans;
+  }
+
+  /// The owner's search position: 1 when the row shows the extraction's own
+  /// verbatim name, -1 for the reader's localized "You" label (not counted).
+  int get _ownerSearchIndex => item.captureOwner == 'user' || meta.owner == null ? -1 : 1;
+
+  /// The context's search position: after the owner when the name is counted.
+  int get _contextSearchIndex => meta.context == null ? -1 : (_ownerSearchIndex < 0 ? 1 : 2);
 
   @override
   Widget build(BuildContext context) {
@@ -462,6 +613,7 @@ class _ActionItemRow extends StatelessWidget {
         onLongPress: () => _showMenu(context),
         child: MergeSemantics(
           child: Padding(
+            key: rowAnchorKey,
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -480,11 +632,15 @@ class _ActionItemRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item.description,
-                        style: OmiType.callout.copyWith(
-                          color: item.completed ? OmiColors.textSecondary : OmiColors.textPrimary,
-                          decoration: item.completed ? TextDecoration.lineThrough : null,
+                      Text.rich(
+                        TextSpan(
+                          children: _highlightedSpans(
+                              item.description,
+                              OmiType.callout.copyWith(
+                                color: item.completed ? OmiColors.textSecondary : OmiColors.textPrimary,
+                                decoration: item.completed ? TextDecoration.lineThrough : null,
+                              ),
+                              searchIndex: 0),
                         ),
                       ),
                       if (meta.hasOwnerOrDue) ...[
@@ -500,7 +656,13 @@ class _ActionItemRow extends StatelessWidget {
                                 children: [
                                   _OwnerInitials(name: owner),
                                   const SizedBox(width: OmiSpacing.xxs + 2),
-                                  Flexible(child: Text(owner, style: secondary)),
+                                  Flexible(
+                                    child: Text.rich(
+                                      TextSpan(
+                                        children: _highlightedSpans(owner, secondary, searchIndex: _ownerSearchIndex),
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             if (owner != null && due != null)
@@ -518,7 +680,11 @@ class _ActionItemRow extends StatelessWidget {
                       ],
                       if (meta.context != null) ...[
                         const SizedBox(height: OmiSpacing.xxs),
-                        Text(meta.context!, style: secondary),
+                        Text.rich(
+                          TextSpan(
+                            children: _highlightedSpans(meta.context!, secondary, searchIndex: _contextSearchIndex),
+                          ),
+                        ),
                       ],
                       if (adding || failed || linked || added) ...[
                         const SizedBox(height: OmiSpacing.xxs),

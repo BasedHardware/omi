@@ -27,6 +27,10 @@ class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
   final String searchQuery;
   final int currentResultIndex;
+
+  /// How many of the Summary tab's search matches precede the action-item
+  /// section; the page computes it alongside the tab's total.
+  final int summarySearchResultOffset;
   final VoidCallback? onTapWhenSearchEmpty;
   final ValueChanged<List<String>>? onShowActionItemInTranscript;
 
@@ -35,6 +39,7 @@ class SummaryTab extends StatefulWidget {
       this.reviewEnabled = false,
       this.searchQuery = '',
       this.currentResultIndex = -1,
+      this.summarySearchResultOffset = 0,
       this.onTapWhenSearchEmpty,
       this.onShowActionItemInTranscript});
 
@@ -141,6 +146,9 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             items: conversation.structured.actionItems,
                             conversationId: conversation.id,
                             onShowInTranscript: widget.onShowActionItemInTranscript ?? (_) {},
+                            searchQuery: widget.searchQuery,
+                            currentResultIndex: widget.currentResultIndex,
+                            searchResultOffset: widget.summarySearchResultOffset,
                           ),
                       ]),
                     ),

@@ -133,6 +133,84 @@ void main() {
     });
   });
 
+  group('action-item search', () {
+    test('the count covers description, owner and context once each', () {
+      final items = [
+        ActionItem('Send the proposal to Eddie', ownerName: 'Eddie Thai', context: 'Mentioned by Eddie'),
+        ActionItem('Call the clinic', captureOwner: 'user', ownerName: 'David'),
+        ActionItem('deleted row', deleted: true),
+      ];
+      // "eddie" appears in the description, the owner name and the context.
+      expect(conversationActionItemSearchMatchCount(items, 'eddie'), 3);
+      // The localized "You" owner label is not searchable text.
+      expect(conversationActionItemSearchMatchCount(items, 'you'), 0);
+      // Deleted rows are not rendered and do not count.
+      expect(conversationActionItemSearchMatchCount(items, 'deleted'), 0);
+      expect(conversationActionItemSearchMatchCount(items, 'PROPOSAL'), 1);
+      expect(conversationActionItemSearchMatchCount(items, ''), 0);
+    });
+
+    testWidgets('rows highlight their matches and the current result is marked', (tester) async {
+      Future<void> pumpSearching(
+          WidgetTester tester, List<ActionItem> items, String query, int current, int offset) async {
+        await tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(
+            body: CustomScrollView(
+              slivers: [
+                ConversationActionItemsSection(
+                  items: items,
+                  conversationId: 'conversation-1',
+                  onShowInTranscript: (_) {},
+                  searchQuery: query,
+                  currentResultIndex: current,
+                  searchResultOffset: offset,
+                ),
+              ],
+            ),
+          ),
+        ));
+        await tester.pumpAndSettle();
+      }
+
+      bool hasHighlightSpan(RichText widget, Color? withBackground) {
+        bool visit(InlineSpan span) {
+          if (span is! TextSpan) return false;
+          final bg = span.style?.backgroundColor;
+          if (span.children == null || span.children!.isEmpty) {
+            return withBackground == null ? bg != null : bg == withBackground;
+          }
+          return span.children!.any(visit);
+        }
+
+        return visit(widget.text);
+      }
+
+      final items = [
+        ActionItem('Send the proposal', ownerName: 'Eddie Thai', context: 'Eddie will send the deck'),
+      ];
+      // Three "eddie" matches live in this section: owner one, context two (the
+      // description has none). The tab's current result #1 (0-based) is the
+      // first of the context's two matches.
+      await pumpSearching(tester, items, 'eddie', 1, 0);
+
+      // One RichText per searchable text with matches: owner + context.
+      final highlighted = find.byWidgetPredicate((w) => w is RichText && hasHighlightSpan(w, null));
+      expect(highlighted, findsNWidgets(2));
+      // The current result carries the warning background that marks it active.
+      final currentSpans = find.byWidgetPredicate((w) => w is RichText && hasHighlightSpan(w, OmiColors.warning));
+      expect(currentSpans, findsOneWidget);
+
+      // The section ignores results that belong to the note above it: when the
+      // current result precedes this section's matches, rows still highlight
+      // their own matches but none is marked as the tab's current result.
+      await pumpSearching(tester, items, 'eddie', 0, 99);
+      expect(find.byWidgetPredicate((w) => w is RichText && hasHighlightSpan(w, null)), findsNWidgets(2));
+      expect(find.byWidgetPredicate((w) => w is RichText && hasHighlightSpan(w, OmiColors.warning)), findsNothing);
+    });
+  });
+
   group('ConversationActionItemTaskSession', () {
     ConversationActionItemTaskSession sessionWith({
       required Future<String?> Function(ActionItem item, bool completed, String idempotencyKey) onCreate,
