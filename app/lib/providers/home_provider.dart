@@ -256,23 +256,27 @@ class HomeProvider extends ChangeNotifier {
     await setupUserPrimaryLanguage();
   }
 
-  Future<void> setupUserPrimaryLanguage() async {
+  Future<void> setupUserPrimaryLanguage({Future<String?> Function()? fetchPrimaryLanguage}) async {
     if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
       return;
     }
 
     final generation = _sessionGeneration;
     try {
-      final language = await getUserPrimaryLanguage();
+      final language = await (fetchPrimaryLanguage ?? getUserPrimaryLanguage)();
       if (generation != _sessionGeneration) return;
       if (language == null) {
         // User hasn't set a primary language yet
         userPrimaryLanguage = '';
         hasSetPrimaryLanguage = false;
 
-        // Show language dialog after a short delay to ensure UI is ready
+        // Show language dialog after a short delay to ensure UI is ready. Not during onboarding:
+        // it has its own language step, and the required sheet would cover whichever step a
+        // relaunch resumed on, consent included (#20788).
         Future.delayed(const Duration(milliseconds: 500), () {
-          if (generation == _sessionGeneration && globalNavigatorKey.currentContext != null) {
+          if (generation == _sessionGeneration &&
+              SharedPreferencesUtil().onboardingCompleted &&
+              globalNavigatorKey.currentContext != null) {
             showLanguageDialogIfNeeded(globalNavigatorKey.currentContext!);
           }
         });
