@@ -611,7 +611,7 @@ def test_reconcile_query_and_claim_recover_only_already_gone_billing_failures():
         'No such subscription: sub_123',
         'resource_missing',
         'A canceled subscription can only update its cancellation_details and metadata.',
-        'subscription is already canceled',
+        'already canceled',
         'subscription is incomplete_expired',
         'Stripe timeout',
         'Stripe rate limit 429',

@@ -25,9 +25,9 @@ def deletion_billing_error_is_already_gone(error: object) -> bool:
             'resource_missing',
             'no such subscription',
             'a canceled subscription can only update its cancellation_details and metadata',
-            'subscription is already canceled',
-            'subscription is already cancelled',
-            'subscription is incomplete_expired',
+            'already canceled',
+            'already cancelled',
+            'incomplete_expired',
         )
     )
 
