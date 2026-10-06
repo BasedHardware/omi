@@ -7,6 +7,8 @@ from ._client import db, run_transactional
 
 # ImportJobStatus.cancelled; the database layer does not import the API models.
 _CANCELLED = 'cancelled'
+# The counters a worker reports: all that a progress-only write may change.
+IMPORT_JOB_PROGRESS_FIELDS = frozenset({'processed_files', 'conversations_created', 'conversations_skipped'})
 
 
 def create_import_job(job_data: Dict[str, Any]) -> str:
@@ -38,6 +40,28 @@ def update_import_job_unless_cancelled(job_id: str, updates: Dict[str, Any]) -> 
         if not isinstance(current, dict) or current.get('status') == _CANCELLED:
             return False
         transaction.update(job_ref, updates)
+        return True
+
+    return bool(run_transactional(db, apply))
+
+
+def update_import_job_progress(job_id: str, progress: Dict[str, Any]) -> bool:
+    """Write progress counters to a job that still exists, whatever its status; whether they were written.
+
+    For a worker that stops on a cancel: it records the counts it reached, while
+    ``status`` and every other field stay as the cancel left them. Only
+    ``IMPORT_JOB_PROGRESS_FIELDS`` may be written, and a deleted job is not recreated.
+    """
+    unexpected = set(progress) - IMPORT_JOB_PROGRESS_FIELDS
+    if unexpected:
+        raise ValueError(f'not import job progress fields: {sorted(unexpected)}')
+    job_ref = db.collection('import_jobs').document(job_id)
+
+    @firestore.transactional
+    def apply(transaction: Any) -> bool:
+        if not getattr(job_ref.get(transaction=transaction), 'exists', False):
+            return False
+        transaction.update(job_ref, progress)
         return True
 
     return bool(run_transactional(db, apply))

@@ -975,6 +975,24 @@ def _job_cancelled(job_id: str) -> bool:
     return current is None or current.get('status') == ImportJobStatus.cancelled.value
 
 
+def _record_cancelled_counts(job_id: str, processed: int, created: int, skipped: int) -> None:
+    """The counts a cancelled import reached, so its history matches the conversations it left.
+
+    Progress is otherwise written only every 10 files. This writes the counters alone
+    (``update_import_job_progress``), never ``status``, so the cancel stands; a deleted
+    job is not recreated. Best effort: the import has already stopped.
+    """
+    if not processed:
+        return
+    progress = {'processed_files': processed, 'conversations_created': created, 'conversations_skipped': skipped}
+    try:
+        import_jobs_db.update_import_job_progress(job_id, progress)
+    except Exception as exc:
+        logger.warning(
+            'transcript import cancel counts not recorded job_id=%s error_class=%s', job_id, type(exc).__name__
+        )
+
+
 def _notify(uid: str, job_id: str, title: str, body: str, data: Dict[str, str]) -> None:
     """Push is best effort; delivery cannot change a committed import status."""
     try:
@@ -1097,6 +1115,7 @@ async def process_transcript_import(
             return
         for entry in upload.entries:
             if await run_blocking(db_executor, _job_cancelled, job_id):
+                await run_blocking(db_executor, _record_cancelled_counts, job_id, processed, created, skipped)
                 logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
                 return
             try:
@@ -1130,6 +1149,7 @@ async def process_transcript_import(
                 if not await run_blocking(
                     db_executor, import_jobs_db.update_import_job_unless_cancelled, job_id, progress
                 ):
+                    await run_blocking(db_executor, _record_cancelled_counts, job_id, processed, created, skipped)
                     logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
                     return
         if errors and created == 0 and skipped == 0:

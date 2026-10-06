@@ -919,9 +919,20 @@ def job(monkeypatch):
         tf.import_jobs_db.update_import_job(job_id, fields)
         return True
 
+    def update_progress(job_id, fields):
+        """Counters only, whatever the status, as the real write; a deleted job stays deleted."""
+        assert set(fields) <= tf.import_jobs_db.IMPORT_JOB_PROGRESS_FIELDS
+        reads.append(dict(state))
+        if deleted:
+            return False
+        updates.append(fields)
+        state.update(fields)
+        return True
+
     monkeypatch.setattr(tf.lifecycle_service, 'persist_imported_conversation', store.persist)
     monkeypatch.setattr(tf.import_jobs_db, 'update_import_job', update)
     monkeypatch.setattr(tf.import_jobs_db, 'update_import_job_unless_cancelled', update_unless_cancelled)
+    monkeypatch.setattr(tf.import_jobs_db, 'update_import_job_progress', update_progress)
     monkeypatch.setattr(tf.import_jobs_db, 'get_import_job', get)
     # The owner is resolved by the real identity lookup, from a Firebase display name.
     monkeypatch.setattr(auth_db, '_firebase_get_user', lambda uid: _firebase_user('Jane Doe'))
@@ -1176,6 +1187,47 @@ def test_cancelled_job_stops_creating_conversations(tmp_path, job, monkeypatch):
     assert job.final_status_writes() == []
     assert job.state['status'] == ImportJobStatus.cancelled.value
     assert job.notifications == []
+
+
+@pytest.mark.parametrize('cancel_after', [1, 3, 9, 10], ids=lambda n: f'after-{n}')
+def test_a_cancelled_import_records_the_counts_it_reached(tmp_path, job, monkeypatch, cancel_after):
+    """Progress is written every 10 files; a cancel in between must not leave import history under-counted."""
+    persist = job.store.persist
+
+    def persist_then_cancel_at(uid, data):
+        saved = persist(uid, data)
+        if len(job.store.docs) == cancel_after:
+            job.cancel()
+        return saved
+
+    monkeypatch.setattr(tf.lifecycle_service, 'persist_imported_conversation', persist_then_cancel_at)
+
+    _run(tmp_path, 'export.zip', _zip(_numbered_srts(25)))
+
+    assert len(job.store.docs) == cancel_after
+    assert job.state['status'] == ImportJobStatus.cancelled.value
+    counts = [job.state.get(key) for key in ('processed_files', 'conversations_created', 'conversations_skipped')]
+    assert counts == [cancel_after, cancel_after, 0]
+    assert job.final_status_writes() == []
+    assert job.notifications == []
+
+
+def test_a_job_deleted_mid_import_gets_no_final_counts(tmp_path, job, monkeypatch):
+    persist = job.store.persist
+
+    def persist_then_delete(uid, data):
+        saved = persist(uid, data)
+        if len(job.store.docs) == 3:
+            job.cancel()
+            job.delete()
+        return saved
+
+    monkeypatch.setattr(tf.lifecycle_service, 'persist_imported_conversation', persist_then_delete)
+
+    _run(tmp_path, 'export.zip', _zip(_numbered_srts(25)))
+
+    assert len(job.store.docs) == 3
+    assert [u for u in job.updates if 'processed_files' in u] == []
 
 
 def test_every_status_write_is_conditional_on_the_job_not_being_cancelled(tmp_path, job, monkeypatch):
@@ -1450,6 +1502,41 @@ def test_the_conditional_job_update_reads_and_writes_in_one_transaction(monkeypa
     assert result is applied
     assert ref.read_in == [transaction], 'the status is read inside the transaction'
     assert transaction.updates == ([(ref, {'status': 'completed'})] if applied else [])
+
+
+@pytest.mark.parametrize(
+    ('doc', 'applied'),
+    [
+        pytest.param({'status': 'cancelled'}, True, id='cancelled'),
+        pytest.param({'status': 'processing'}, True, id='running'),
+        pytest.param(None, False, id='deleted'),
+    ],
+)
+def test_a_progress_write_touches_only_the_counters_of_a_job_that_exists(monkeypatch, doc, applied):
+    """A cancelled job still gets the counts its worker reached; its status is never written."""
+    import database.import_jobs as import_jobs
+
+    ref, transaction = _FakeJobRef(doc), _FakeTransaction()
+    client = SimpleNamespace(
+        collection=lambda name: SimpleNamespace(document=lambda job_id: ref), transaction=lambda: transaction
+    )
+    monkeypatch.setattr(import_jobs, 'db', client)
+    monkeypatch.setattr(import_jobs.firestore, 'transactional', lambda fn: fn)
+    progress = {'processed_files': 3, 'conversations_created': 2, 'conversations_skipped': 1}
+
+    assert import_jobs.update_import_job_progress('job-1', progress) is applied
+    assert ref.read_in == [transaction]
+    assert transaction.updates == ([(ref, progress)] if applied else [])
+
+
+@pytest.mark.parametrize('fields', [{'status': 'completed'}, {'processed_files': 1, 'error': None}])
+def test_a_progress_write_refuses_anything_but_the_counters(monkeypatch, fields):
+    import database.import_jobs as import_jobs
+
+    monkeypatch.setattr(import_jobs, 'db', None)
+
+    with pytest.raises(ValueError):
+        import_jobs.update_import_job_progress('job-1', fields)
 
 
 def test_job_uses_its_own_source_type(monkeypatch):
