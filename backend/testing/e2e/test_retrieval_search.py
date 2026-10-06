@@ -247,3 +247,73 @@ def test_conversation_and_transcript_chunk_search_return_persisted_conversation_
     assert no_chunk_search.status_code == 200, no_chunk_search.text
     assert "No transcript excerpts found" in no_chunk_search.json()["result_text"]
     assert fake_index.count(namespace=vector_db.TRANSCRIPT_CHUNKS_NAMESPACE) == 0
+
+
+def test_transcript_chunk_backfill_makes_unindexed_history_searchable(
+    client, auth_headers, sample_conversation_data, monkeypatch
+):
+    """#20629: history stored while chunk indexing was off becomes findable after the backfill."""
+    vector_db, fake_index, _ = _install_fakes(monkeypatch)
+    from database import conversations as conversations_db
+    from scripts.backfill_transcript_chunk_vectors import backfill_user
+
+    conversation = dict(
+        sample_conversation_data,
+        id="conv-backfill-001",
+        structured={**sample_conversation_data["structured"], "title": "Weekly sync", "overview": "Team catch-up."},
+        transcript_segments=[
+            {
+                "id": "seg-backfill-1",
+                "text": "The Halvorsen invoice came to four hundred twelve dollars.",
+                "speaker": "SPEAKER_00",
+                "is_user": True,
+                "start": 0.0,
+                "end": 3.0,
+            }
+        ],
+    )
+    for field in ("created_at", "started_at", "finished_at"):
+        conversation[field] = datetime.fromisoformat(conversation[field].replace("Z", "+00:00"))
+    seed_conversation("123", conversation)
+
+    def chunk_search():
+        response = client.post(
+            "/v1/tools/conversations/search-chunks",
+            json={"query": "Halvorsen invoice dollars", "limit": 5},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["result_text"]
+
+    assert "No transcript excerpts found" in chunk_search()
+
+    dry = backfill_user(
+        "123", conversations_db.iter_all_conversations("123", include_discarded=False), apply=False, upsert=None
+    )
+    assert (dry.eligible, dry.chunks, dry.upserted) == (1, 1, 0)
+    assert fake_index.count(namespace=vector_db.TRANSCRIPT_CHUNKS_NAMESPACE) == 0
+
+    applied = backfill_user(
+        "123",
+        conversations_db.iter_all_conversations("123", include_discarded=False),
+        apply=True,
+        upsert=vector_db.upsert_transcript_chunk_vectors,
+    )
+    assert (applied.upserted, applied.failed) == (1, 0)
+    assert "four hundred twelve dollars" in chunk_search()
+    chat_search = client.post(
+        "/v1/tools/conversations/search",
+        json={"query": "Halvorsen invoice amount", "limit": 5},
+        headers=auth_headers,
+    )
+    assert chat_search.status_code == 200, chat_search.text
+    assert "four hundred twelve dollars" in chat_search.json()["result_text"]
+
+    # A rerun overwrites by deterministic vector ID instead of duplicating.
+    backfill_user(
+        "123",
+        conversations_db.iter_all_conversations("123", include_discarded=False),
+        apply=True,
+        upsert=vector_db.upsert_transcript_chunk_vectors,
+    )
+    assert fake_index.count(namespace=vector_db.TRANSCRIPT_CHUNKS_NAMESPACE) == 1
