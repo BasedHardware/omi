@@ -152,4 +152,17 @@ final class MeetingMemoryBriefComposerTests: XCTestCase {
         from: conversation(
           identity: matchingIdentity, actions: source.structured.actionItems, locked: true)))
   }
+
+  func testFollowUpDraftDoesNotSilentlyDropLaterCommitments() {
+    let actions = (1...7).map { number in
+      ActionItem(
+        description: "Commitment \(number)", completed: false, deleted: false,
+        captureOwner: "user", sourceSegmentIDs: ["s\(number)"])
+    }
+    let source = conversation(identity: matchingIdentity, actions: actions)
+
+    let draft = MeetingFollowUpDraftComposer.compose(from: source)
+    XCTAssertTrue(draft?.contains("Commitment 1") == true)
+    XCTAssertTrue(draft?.contains("Commitment 7") == true)
+  }
 }

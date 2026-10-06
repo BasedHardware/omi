@@ -193,6 +193,10 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.meetingNoteScreenshotsEnabled.rawValue)
   var meetingNoteScreenshotsEnabled: Bool = true
 
+  @AppStorage(DefaultsKey.meetingMemoryBriefsEnabled.rawValue)
+  var meetingMemoryBriefsEnabled: Bool = false
+  @State var meetingBriefAccessRequestGeneration = 0
+
   // Guards against the read-on-appear (`loadMeetingNoteScreenshotsSetting`) reconciling
   // `meetingNoteScreenshotsEnabled` with the server's value from also being mistaken for a user
   // edit and PATCHed straight back — see the toggle's `onChange` in SettingsContentView+Rewind.swift.

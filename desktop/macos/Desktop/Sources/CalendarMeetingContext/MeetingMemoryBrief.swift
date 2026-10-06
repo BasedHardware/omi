@@ -200,7 +200,7 @@ enum MeetingFollowUpDraftComposer {
       }
     guard !actions.isEmpty else { return nil }
 
-    let bulletList = actions.prefix(5).map { "- \($0)" }.joined(separator: "\n")
+    let bulletList = actions.map { "- \($0)" }.joined(separator: "\n")
     return
       "Thanks for the conversation. Here are the follow-ups I noted:\n\n\(bulletList)\n\nPlease let me know if I missed anything."
   }
