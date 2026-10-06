@@ -1286,8 +1286,9 @@ def test_all_callsites_use_get_llm():
     """Verify ALL callsites across conversation_processing, knowledge_graph, and memories use get_llm()."""
     backend_dir = Path(__file__).resolve().parent.parent.parent
 
-    # conversation_processing.py: 9 callsites
+    # Processor and its episode model factory: 14 calls, including repair, selection, and the shaped mount
     conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text(encoding="utf-8")
+    conv_proc_source += (backend_dir / "utils" / "llm" / "episode_writer.py").read_text(encoding="utf-8")
     conv_proc_calls = re.findall(r"get_llm\(\s*'(\w+)'", conv_proc_source)
     assert 'conv_action_items' in conv_proc_calls, "Missing get_llm('conv_action_items') in conversation_processing.py"
     assert 'conv_app_result' in conv_proc_calls, "Missing get_llm('conv_app_result') in conversation_processing.py"
@@ -1316,9 +1317,9 @@ def test_all_callsites_use_get_llm():
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
 
-    # Total: notes mount adds one conv_structure callsite on top of the prior 20.
+    # Episode retry factory plus the shaped notes mount.
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 21, f"Expected 21 total get_llm() callsites, got {total}"
+    assert total == 23, f"Expected 23 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():
@@ -2059,11 +2060,8 @@ def test_custom_stt_exhausted_processing_budget_skips_llm_work(monkeypatch):
 
 
 def test_dedup_candidates_exclude_own_and_merge_source_items():
-    """Regression: on reprocess/merge, the conversation's own previous action
-    items (and the merge sources') came back as dedup candidates — the LLM
-    suppressed re-extracting them and the save step then deleted them, so
-    tasks silently vanished. Items from the conversation being processed or
-    its merge sources must never be dedup candidates."""
+    """Own and merge-source tasks must not be dedup candidates: suppression on
+    reprocess/merge would prevent re-extraction and silently delete those tasks."""
     import sys
     from datetime import datetime, timezone
     from types import SimpleNamespace
@@ -2083,16 +2081,17 @@ def test_dedup_candidates_exclude_own_and_merge_source_items():
         external_data={'merge_metadata': {'source_conversation_ids': ['src-conv']}},
     )
     structured = SimpleNamespace(overview='discussed follow-ups')
-
-    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
+    with patch.object(
+        sys.modules["utils.conversations.notes_task_context"],
+        "find_similar_action_items",
+        MagicMock(return_value=similar),
+    ):
         eligible = process_conversation._fetch_dedup_candidates('user-1', structured, conversation)
-
     assert [item['id'] for item in eligible] == ['unrelated']
 
 
 def test_dedup_candidates_unchanged_without_conversation_context():
-    """Without a conversation (new-conversation path has a fresh id), all open
-    recent items remain candidates."""
+    """Without conversation context, all open recent items remain candidates."""
     import sys
     from datetime import datetime, timezone
     from types import SimpleNamespace
@@ -2104,10 +2103,12 @@ def test_dedup_candidates_unchanged_without_conversation_context():
 
     similar = [{'action_item_id': 'open-item', 'score': 0.9}]
     structured = SimpleNamespace(overview='discussed follow-ups')
-
-    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
+    with patch.object(
+        sys.modules["utils.conversations.notes_task_context"],
+        "find_similar_action_items",
+        MagicMock(return_value=similar),
+    ):
         eligible = process_conversation._fetch_dedup_candidates('user-1', structured)
-
     assert [item['id'] for item in eligible] == ['open-item']
 
 

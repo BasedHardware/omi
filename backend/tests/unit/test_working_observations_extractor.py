@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage
 from models.memory_contracts import L1MemoryArchiveClass, L1MemoryArchiveItem
 from models.transcript_segment import TranscriptSegment
 from utils.llm import working_observations
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 from utils.llm.memories import extract_canonical_l1_memory_candidates
 from utils.llm.working_observations import (
     MAX_WORKING_OBSERVATION_ITEMS,

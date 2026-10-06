@@ -24,7 +24,7 @@ from utils.llm import conversation_processing as notes
 from utils.llm import shaped_agent as shaped
 from utils.llm import shaped_notes_transport
 from utils.llm.conversation_processing import notes_mount
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, build_conversation_prompt_prefix
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.retrieval import agentic, graph
 from utils.retrieval.agentic import chat_mount
 

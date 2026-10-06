@@ -9,6 +9,7 @@ from utils.llm.memories import CanonicalL1MemoryCandidate
 
 
 def _patch_process_conversation_boundaries(monkeypatch):
+    import utils.conversations.notes_task_context as notes_task_context_module
     import utils.conversations.process_conversation as process_module
 
     # Universal canonical intake is deployment-fenced; this hermetic lifecycle
@@ -36,7 +37,9 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "record_usage", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "track_usage", lambda *args, **kwargs: _NoopContext())
     monkeypatch.setattr(process_module, "should_discard_conversation", lambda *args, **kwargs: False)
-    monkeypatch.setattr(process_module, "find_similar_action_items", lambda *args, **kwargs: [])
+    # Dedup similarity lookup moved to utils.conversations.notes_task_context;
+    # stub it where the production call now resolves.
+    monkeypatch.setattr(notes_task_context_module, "find_similar_action_items", lambda *args, **kwargs: [])
     monkeypatch.setattr(process_module, "upsert_vector2", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_vector_metadata", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "upsert_transcript_chunk_vectors", lambda *args, **kwargs: None)

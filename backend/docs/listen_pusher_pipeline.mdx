@@ -1493,6 +1493,24 @@ best-effort and appended only to the notes volatile suffix as BACKGROUND
 CONTEXT; it never enters the shared prefix, the memory extractor, or app
 prompts, and no single source failure can block the note.
 
+The default-off `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` switch also requires
+sticky percentage admission (default0). Kept captures gather the existing rich
+inputs only after relevance; discard behavior and consent gates stay unchanged.
+Typed speech, screen/OCR, messages and background evidence share source IDs,
+times and actors. Connected non-speech evidence can explain the episode but
+must never be presented as speech; unrelated screen content stays excluded.
+Claims are optional and default off; sharing is the owner's whole-note decision.
+David locked deterministic selection with C7/no effort override and C6/xhigh at
+1500 speech words and two admitted source kinds. One bounded repair addresses
+vacuity/provenance/presentation; residual violations retain the best usable note.
+Detail reads filter stale claim spans; list/search omit the metadata. Memory and
+app prompts retain their existing gates. See `utils/conversations/EPISODE_EVIDENCE.md`
+and `utils/conversations/EPISODE_ROLLOUT.md` for mapping, acceptance and ramp.
+Extended writer budgets apply only in existing leased finalizers; synchronous
+requests keep their prior bound. C6 is clamped115s by the shared gateway, with
+one C7 fallback. No outer lifecycle, lease or request deadline changes; see
+[`EPISODE_DEADLINES.md`](../utils/conversations/EPISODE_DEADLINES.md).
+
 Meeting-context merges retain `participant_sources` alongside the legacy combined
 participant list. Shaped notes consume its separate `expected_calendar` and
 `observed_screen_listing` sets, including after context serialization. A name may

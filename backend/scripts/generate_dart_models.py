@@ -66,6 +66,8 @@ SCHEMA_GROUPS = {
             'Section',
             'Participant',
             'Insight',
+            'NoteEvidenceRef',
+            'NoteClaim',
             'Structured',
             'Geolocation',
             'ConversationPhoto',

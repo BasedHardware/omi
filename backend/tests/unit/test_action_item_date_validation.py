@@ -118,6 +118,7 @@ _SYS_MODULE_NAMES = [
     "utils.llm.clients",
     "utils.llm.conversation_folder",
     "utils.llm.conversation_prompt_prefix",
+    "utils.llm.conversation_prompt_context",
     "utils.llm.conversation_processing",
     "utils.llm.model_config",
     "utils.retrieval",
@@ -132,6 +133,12 @@ _SYS_MODULE_NAMES = [
     "utils.conversations.meeting_participants",
     "utils.llm.meeting_notes_rich_prompts",
     "utils.llm.meeting_notes_validation",
+    "utils.llm.meeting_notes_presentation",
+    "utils.llm.action_item_normalization",
+    "utils.llm.conversation_notes_prompts",
+    "utils.observability",
+    "utils.observability.fallback",
+    "models.structured_extraction",
     "models.structured",
     "models.calendar_context",
     "models.conversation_enums",
@@ -366,9 +373,9 @@ model_config_stub = _stub_module("utils.llm.model_config")
 model_config_stub.FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
 
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
-prompt_prefix_stub.ConversationPromptPrefix = MagicMock
+prompt_context_stub = _stub_module("utils.llm.conversation_prompt_context")
+prompt_context_stub.ConversationPromptPrefix = MagicMock
 prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
-prompt_prefix_stub.SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the account owner.'
 
 # wake_word is stdlib-only; load the real trust-boundary helper before the
 # isolated conversation-processing module imports it.
@@ -412,10 +419,28 @@ _load_module_from_file(
     BACKEND_DIR / "utils" / "llm" / "action_item_normalization.py",
 )
 
+# Content-free receipts are stdlib-only and wrap the notes entry point.
+_load_module_from_file(
+    "utils.llm.notes_observability",
+    BACKEND_DIR / "utils" / "llm" / "notes_observability.py",
+)
+
+# Episode helpers are lazy and unused by these flag-off action-item tests.
+# Keep the isolated graph limited to the production imports exercised here.
+_stub_package("utils.observability")
+fallback_stub = _stub_module("utils.observability.fallback")
+fallback_stub.record_fallback = MagicMock()
+_load_module_from_file("utils.llm.conversation_notes_prompts", BACKEND_DIR / "utils/llm/conversation_notes_prompts.py")
+
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
 )
+
+# Retain the same extraction model graph as the isolated production module.
+# Importing it again after restoration creates incompatible Pydantic class identities.
+ActionItemsExtraction = sys.modules["models.structured_extraction"].ActionItemsExtraction
+ExtractedActionItem = sys.modules["models.structured_extraction"].ExtractedActionItem
 
 # Restore sys.modules now that the modules under test are imported and bound to
 # their stubbed dependencies. Tests below patch those module objects directly.
@@ -630,8 +655,6 @@ class TestExtractActionItemsPostValidation:
 
     def test_clears_past_due_dates_from_extraction(self):
         """Due dates more than 1 day in the past should be cleared after extraction."""
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
         past_due = datetime(2025, 9, 15, 10, 0, tzinfo=timezone.utc)
         future_due = datetime.now(timezone.utc) + timedelta(days=3)
 
@@ -675,8 +698,6 @@ class TestExtractActionItemsPostValidation:
 
     def test_passes_current_time_to_invoke(self):
         """extract_action_items should pass current_time in the invoke payload."""
-        from models.structured_extraction import ActionItemsExtraction
-
         mock_response = ActionItemsExtraction(action_items=[])
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
@@ -711,8 +732,6 @@ class TestExtractActionItemsPostValidation:
 
     def test_preserves_none_due_dates(self):
         """Action items with no due date should remain unchanged."""
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
         mock_response = ActionItemsExtraction(
             action_items=[ExtractedActionItem(description="No due date task", due_at=None)]
         )
@@ -748,8 +767,6 @@ class TestExtractActionItemsPostValidation:
 
     def test_preserves_due_date_within_grace_boundary(self):
         """Due date 23h ago should be preserved (within 1-day grace window)."""
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
         boundary_due = datetime.now(timezone.utc) - timedelta(hours=23)
         mock_response = ActionItemsExtraction(
             action_items=[ExtractedActionItem(description="Boundary task", due_at=boundary_due)]
@@ -795,8 +812,6 @@ class TestActionItemTimezoneConversion:
         return ZoneInfo(key)
 
     def _run(self, due_at, tz):
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
         mock_response = ActionItemsExtraction(action_items=[ExtractedActionItem(description="Task", due_at=due_at)])
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
