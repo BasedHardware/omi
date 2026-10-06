@@ -19,4 +19,3 @@ Addresses [BasedHardware/omi #20213](https://github.com/BasedHardware/omi/issues
 - **Idempotent Storage**: Prevents duplicate uploads on network retry.
 - **Hermetic Test Suite**: 100% mocked unit tests with zero external
   network dependencies.
-
