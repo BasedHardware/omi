@@ -1131,6 +1131,10 @@ overlay:
             value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
           REDIS_DB_PORT:
             value: '13151'
+          # The canonical intake fence reads MEMORY_ENABLED; without it the job's
+          # memory writes 503 with 'globally paused'.
+          MEMORY_ENABLED:
+            value: 'on'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           PINECONE_INDEX_NAME:
