@@ -1322,17 +1322,25 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
         evidence.append(screen_frames_message(frames))
     cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
     model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+    extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
+    cache_lane = shared_conversation_cache_supported()
+    mount = Mount(
+        instructions=mount.instructions + '\n\n' + extraction_parser.get_format_instructions(),
+        budget=mount.budget,
+        cache_breakpoint=cache_lane,
+    )
 
     async def invoke():
         async with isolated_notes_model(model) as isolated_model:
-            structured_model = isolated_model.with_structured_output(mount.schema, method='json_schema')
-            if cache_enabled:
-                structured_model = structured_model.bind(
-                    extra_body={'prompt_cache_options': GPT56_EXPLICIT_CACHE_OPTIONS}
-                )
+            if cache_enabled and shared_conversation_cache_supported():
+                isolated_model = isolated_model.bind(extra_body={'prompt_cache_options': GPT56_EXPLICIT_CACHE_OPTIONS})
 
             async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
-                return Turn(value=await structured_model.ainvoke(messages))
+                response = await isolated_model.ainvoke(messages)
+                content = getattr(response, 'content', response)
+                if isinstance(content, list):
+                    content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
+                return Turn(value=extraction_parser.parse(str(content)))
 
             return await run_loop(mount, evidence, model_turn, explicit_cache=cache_enabled)
 
