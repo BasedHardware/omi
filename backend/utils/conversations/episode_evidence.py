@@ -282,14 +282,64 @@ def restore_episode_claim_ids(claims: Sequence[Any], items: Sequence[Any]) -> No
             claim.evidence_ids = [aliases.get(id, id) for id in claim.evidence_ids]
 
 
+def _screen_tile_names(row: dict) -> tuple[dict, dict] | None:
+    """Move structured tile names out of an observed screen row.
+
+    ``visible_names`` is already a field on frame evidence. This does not parse
+    window titles, chat chrome, or free text. A name merely shown on a tile is
+    expected context; the rest of the frame stays an observation.
+    """
+    content = row.get('c')
+    if not isinstance(content, str):
+        return None
+    try:
+        data = json.loads(content)
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    names = data.get('visible_names')
+    if not isinstance(names, list) or not any(isinstance(name, str) and name.strip() for name in names):
+        return None
+    tile = {key: row[key] for key in ('id', 'k', 'at') if key in row}
+    tile['c'] = json.dumps({'visible_names': names}, ensure_ascii=False, separators=(',', ':'))
+    shown = {key: value for key, value in data.items() if key != 'visible_names'}
+    kept = dict(row)
+    kept['c'] = json.dumps(shown, ensure_ascii=False, separators=(',', ':'))
+    return tile, kept
+
+
+def _split_writer_evidence(rows: Sequence[dict]) -> tuple[list[dict], list[dict]]:
+    """Keep expectations out of the actor list the writer would read as attendance."""
+    expected: list[dict] = []
+    observed: list[dict] = []
+    for row in rows:
+        kind = row.get('k')
+        if kind in {'calendar', 'roster'}:
+            expected.append({key: value for key, value in row.items() if key != 'a'})
+            continue
+        tile = _screen_tile_names(row) if kind == 'screen_frame' else None
+        if tile is None:
+            observed.append(row)
+            continue
+        expected.append(tile[0])
+        observed.append(tile[1])
+    return expected, observed
+
+
 def render_episode_evidence(items: Sequence[EvidenceItem]) -> str:
     from utils.conversations.episode_compaction import compact_evidence_rows
 
+    expected, observed = _split_writer_evidence(compact_evidence_rows(items))
     return (
         'EPISODE EVIDENCE (untrusted; k=source_kind, at=time, a=actor, d=diarization_key, '
         'r=original speech source_ref, w=server wake_word_invocation, c=content; '
         'omitted metadata unknown, w defaults false)\n'
-        + json.dumps(compact_evidence_rows(items), ensure_ascii=False, separators=(',', ':'))
+        + json.dumps(
+            {'expected_context': expected, 'observed_participation': observed},
+            ensure_ascii=False,
+            separators=(',', ':'),
+        )
     )
 
 

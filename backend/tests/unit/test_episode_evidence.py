@@ -635,6 +635,108 @@ def test_short_unique_anchor_covers_its_unit_and_headings_need_no_claim():
     assert 'ambiguous_claim_span' in claim_violations(note, [item], drop_invalid=True)
 
 
+def test_expected_counterpart_without_observed_participation_is_not_attendance(processing, monkeypatch):
+    """An expected counterpart with no observed participation is not an attendee.
+
+    The fixture is generic: no real conversation, app, or person. The note is
+    written from the packet and instructions the writer actually receives.
+    """
+    from langchain_core.output_parsers import PydanticOutputParser
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+    from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+    from models.structured_extraction import RichStructuredExtraction
+    from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
+
+    expected_name = 'Synthetic Counterpart'
+    speech = 'I am still sitting here and have not started anything.'
+    segment = SimpleNamespace(id='s1', start=1.0, end=4.0, is_user=True, speaker_id=0, text=speech)
+    conversation = SimpleNamespace(
+        transcript_segments=[segment], source='desktop', started_at=START, finished_at=START, photos=[]
+    )
+    roster = MeetingRoster(
+        entries=(RosterEntry(expected_name, None, None, 'human', 'screen_activity'),),
+        display_title=None,
+        title_is_window_title=False,
+    )
+    calendar = CalendarMeetingContext(
+        calendar_event_id='synthetic-event',
+        title='Scheduled time',
+        participants=[MeetingParticipant(name=expected_name)],
+        start_time=START,
+        duration_minutes=30,
+    )
+    frame = SimpleNamespace(
+        frame_id='f1',
+        summary='A tile is visible and silent.',
+        names=(expected_name,),
+        role='view',
+        captured_at=START,
+    )
+    evidence = [
+        *capture_evidence(conversation, roster=roster, desktop_capture=True),
+        *meeting_evidence(roster, calendar, [frame]),
+    ]
+    rendered = render_episode_evidence(evidence)
+    packet = json.loads(rendered.split('\n', 1)[1])
+    observed = packet['observed_participation']
+    expected = packet['expected_context']
+    observed_text = json.dumps(observed, ensure_ascii=False)
+    assert expected_name in json.dumps(expected, ensure_ascii=False)
+    assert expected_name not in observed_text
+    assert [row.get('c') for row in observed if row.get('k') == 'speech'] == [speech]
+    assert all(row.get('a') != expected_name for row in observed)
+    assert 'visible_names' not in observed_text
+
+    instructions = episode_static_instructions(
+        PydanticOutputParser(pydantic_object=RichStructuredExtraction).get_format_instructions(),
+        _conversation_notes_static_instructions,
+        include_claims=False,
+    )
+    assert 'Fill participants from the roster and transcript evidence' not in instructions
+    assert 'whose participation was observed' in instructions
+    assert 'not participation' in instructions
+    assert 'Do not describe a meeting, attendance' in instructions
+    assert 'People and AI agents evidenced by the meeting roster or the transcript' not in instructions
+
+    calls = []
+    grounded = valid_note(title='Still sitting here', overview=speech)
+    for entry in grounded.note_claims:
+        entry.evidence_ids = ['evidence:0']
+        entry.provenance = 'said'
+
+    def invoke(messages):
+        calls.append(messages)
+        return SimpleNamespace(content=json.dumps(grounded.model_dump(mode='json')))
+
+    monkeypatch.setattr(processing, 'get_llm', lambda *a, **k: SimpleNamespace(invoke=invoke))
+    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: False)
+    result = processing.get_conversation_notes(
+        ConversationPromptPrefix('synthetic', 'FULL TRANSCRIPT\n', has_usable_content=False),
+        started_at=START,
+        language_code='en',
+        output_language_code=None,
+        tz='UTC',
+        task_intelligence_capture=False,
+        episode_evidence=evidence,
+    )
+    system = calls[0][0].content
+    system_text = system[0]['text'] if isinstance(system, list) else system
+    user_text = calls[0][1].content
+    writer_packet = json.loads(user_text.split('EPISODE EVIDENCE', 1)[1].split('\n', 1)[1].split('\n', 1)[0])
+    writer_observed = json.dumps(writer_packet['observed_participation'], ensure_ascii=False)
+    assert expected_name in json.dumps(writer_packet['expected_context'], ensure_ascii=False)
+    assert expected_name not in writer_observed
+    assert speech in writer_observed
+    assert 'FULL TRANSCRIPT' not in user_text
+    assert 'PARTICIPANTS' not in user_text
+    assert 'Do not describe a meeting, attendance' in system_text
+    assert 'Fill participants from the roster and transcript evidence' not in system_text
+    assert not result.participants
+    assert not result.events
+    assert expected_name not in f'{result.title}\n{result.overview}'
+    assert 'agreed' not in result.overview.casefold() and 'decided' not in result.overview.casefold()
+
+
 def test_compact_evidence_preserves_provenance_and_trusted_metadata():
     items = [
         EvidenceItem(
@@ -651,7 +753,7 @@ def test_compact_evidence_preserves_provenance_and_trusted_metadata():
     ]
     rendered = render_episode_evidence(items)
     encoded = json.loads(rendered.split('\n', 1)[1])
-    assert encoded[0] == {
+    assert encoded['observed_participation'][0] == {
         'id': 'evidence:0',
         'k': 'speech',
         'at': items[0].time,
@@ -661,7 +763,8 @@ def test_compact_evidence_preserves_provenance_and_trusted_metadata():
         'w': True,
         'd': 'cluster:0',
     }
-    assert 'a' not in encoded[1] and 'sensitivity' not in encoded[1]
+    assert encoded['expected_context'] == []
+    assert 'a' not in encoded['observed_participation'][1] and 'sensitivity' not in encoded['observed_participation'][1]
     assert len(rendered) < len(json.dumps([item.model_dump() for item in items], indent=2))
 
 
@@ -672,7 +775,14 @@ def test_episode_person_provenance_and_relevance_rules_are_shared():
 
     for rule in [EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE]:
         assert all(rule in prompt for prompt in [EPISODE_CONTRACT, REFERENCE_PROMPT, JUDGE_PROMPT])
-    assert RICH_PERSON_RULES in EPISODE_CONTRACT
+    for line in RICH_PERSON_RULES.splitlines():
+        if 'Fill participants from the roster and transcript evidence' in line:
+            assert line not in EPISODE_CONTRACT
+        else:
+            assert line in EPISODE_CONTRACT
+    assert 'Fill participants from the roster and transcript evidence' not in EPISODE_CONTRACT
+    assert 'List a person in participants only when observed participation shows they took part' in EPISODE_CONTRACT
+    assert 'expected_context' in EPISODE_CONTRACT and 'observed_participation' in EPISODE_CONTRACT
     assert "Never infer anyone's gender" in EPISODE_CONTRACT
     assert 'Treat an AI agent as a separate speaker' in EPISODE_CONTRACT
     assert 'Set meeting_type only' not in EPISODE_CONTRACT

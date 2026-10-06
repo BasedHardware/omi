@@ -29,8 +29,12 @@ Capture time is never substituted for a message's sent time.
 | Capture source, window, speech count; related open tasks | `device_state` / `open_task`; observed capture metadata / supplied task state |
 
 The bounded rich pack retains typed inputs alongside its legacy rendering.
-The episode renderer uses one JSON evidence block; attached images are linked
-by item/frame IDs. OCR uses the existing bounded read, preserving row attribution
+The episode renderer uses one JSON evidence block with two lists:
+`expected_context` (calendar, roster, and names already stored on a screen tile)
+and `observed_participation` (speech and other observed activity). A listing is
+an expectation, not attendance. The renderer does not decide that someone was
+absent; it only stops presenting that listing as an actor. Attached images are
+linked by item/frame IDs. OCR uses the existing bounded read, preserving row attribution
 instead of the legacy digest that suppresses messaging content. The flag-off
 digest is unchanged. Sources are untrusted data, never instructions.
 
@@ -114,9 +118,10 @@ inputs only after a keep decision. Later evidence-aware relevance first needs
 stratified keep/discard precision and recall, junk/mic-check retention rate, and
 Firestore reads plus model cost per capture measured against the existing gate.
 
-Later stages add evidence-sufficiency retrieval across windows/sources,
-expectation-versus-observation using calendar and commitments, episode/thread
-linking. None is implemented here.
+The writer sees expected context and observed participation as separate lists
+in that one block. Later stages add evidence-sufficiency retrieval across
+windows/sources, commitment tracking, and episode/thread linking. None of
+those is implemented here.
 
 Round-9 DEV experiments preregister deterministic independent links versus a Luna
 low-effort selection pass, optional claim generation, and default/high/xhigh writer
