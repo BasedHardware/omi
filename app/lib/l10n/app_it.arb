@@ -3839,6 +3839,8 @@
     "dismiss": "Ignora",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Mostra sulla schermata di blocco",
+    "accountDeletionInProgressSignInAgain": "Questo account è in fase di eliminazione. Accedi con un altro account oppure attendi qualche minuto e riprova.",
     "thisWeek": "Questa settimana",
     "busiestDay": "Giorno più intenso",
     "timeRecorded": "Tempo registrato",

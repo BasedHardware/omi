@@ -12323,6 +12323,13 @@ class AppLocalizationsHe extends AppLocalizations {
   String get dismiss => 'סגירה';
 
   @override
+  String get showOnLockScreen => 'הצגה במסך הנעילה';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'החשבון הזה נמחק כעת. היכנסו עם חשבון אחר, או המתינו כמה דקות ונסו שוב.';
+
+  @override
   String get thisWeek => 'השבוע';
 
   @override

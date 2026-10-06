@@ -12409,6 +12409,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get dismiss => 'Ẩn';
 
   @override
+  String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Tài khoản này đang được xóa. Hãy đăng nhập bằng tài khoản khác, hoặc chờ vài phút rồi thử lại.';
+
+  @override
   String get thisWeek => 'Tuần này';
 
   @override

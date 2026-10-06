@@ -22,6 +22,7 @@ from typing import Any, Callable
 from starlette.websockets import WebSocketState
 
 from utils.stt.live_metrics import RECOVERY_ATTEMPTS, provider_family
+from config.live_stt_registry import MAX_REGISTRY_TARGETS
 
 # One recovery episode per provider death.
 RECOVERY_EPISODE_SECONDS = 60.0
@@ -31,7 +32,7 @@ RECOVERY_DIAL_SECONDS = 5.0
 # even when the provider stays silent and emits no transcript.
 RECOVERY_HEALTHY_CONNECTED_SECONDS = 5.0
 # max 16 registry targets plus the possible four legacy protocol identities.
-MAX_RECOVERY_TARGETS = 20
+MAX_RECOVERY_TARGETS = MAX_REGISTRY_TARGETS + 4
 # Bounded recovery work per session: each fresh episode deadline counts once.
 MAX_RECOVERY_EPISODES = 20
 clock = time.monotonic
@@ -70,6 +71,8 @@ class LiveRecoveryController:
         self.dial_attempts = 0
         self._reentry_grants: set[str] = set()
         self._reentry_used: set[str] = set()
+        self._cheap_reentry_granted = False
+        self._cheap_reentry_used = False
         # The dial that killed the leg, normalized for bounded metric labels.
         self.source_family: str | None = None
         # Proof binding: text and adoption count only for the current
@@ -250,6 +253,16 @@ class LiveRecoveryController:
         self._reentry_grants.add(identity)
         return True
 
+    def grant_cheap_reentry(self, identity: str) -> bool:
+        """One lease-expiry failback, independent of transient Soniox rescue."""
+        if self._cheap_reentry_granted or identity != 'parakeet-window':
+            return False
+        self._cheap_reentry_granted = True
+        return True
+
+    def _cheap_reentry_available(self, identity: str) -> bool:
+        return identity == 'parakeet-window' and self._cheap_reentry_granted and not self._cheap_reentry_used
+
     def mark_attempted(self, identity: str) -> None:
         """Record a real dial whose reservation happened outside the seam
         (e.g. a test harness socket factory that bypasses the chain)."""
@@ -267,29 +280,39 @@ class LiveRecoveryController:
             return False
         if len(self.attempted_targets) < MAX_RECOVERY_TARGETS:
             return True
-        return bool(self._reentry_grants - self._reentry_used)
+        return bool(self._reentry_grants - self._reentry_used) or self._cheap_reentry_available('parakeet-window')
 
     def can_attempt(self, identity: str) -> bool:
         if self._blocked():
             return False
         if identity in self.attempted_targets:
-            return identity in self._reentry_grants and identity not in self._reentry_used
+            return (
+                identity in self._reentry_grants and identity not in self._reentry_used
+            ) or self._cheap_reentry_available(identity)
         return len(self.attempted_targets) < MAX_RECOVERY_TARGETS
 
     def reserve(self, identity: str, successor: str | None = None) -> bool:
         """Count a real connection once, just before it is dialed. A target's
-        second dial is refused except one granted transient re-entry, shared
-        by every transient reconnect/rescue scope."""
+        second dial is refused except one granted transient re-entry or the
+        single bounded no-text lease failback to Parakeet."""
         if self._blocked():
             return False
         if identity in self.attempted_targets:
-            if not (identity in self._reentry_grants and identity not in self._reentry_used):
+            if self._cheap_reentry_available(identity):
+                self._cheap_reentry_used = True
+            elif identity in self._reentry_grants and identity not in self._reentry_used:
+                self._reentry_used.add(identity)
+            else:
                 return False
-            self._reentry_used.add(identity)
         else:
             if len(self.attempted_targets) >= MAX_RECOVERY_TARGETS:
                 return False
             self.attempted_targets.add(identity)
+            # The no-text lease failback authorizes exactly one Parakeet dial,
+            # whatever endpoint identity the connected socket reports; consume
+            # the grant here so a mismatch retry cannot dial Parakeet twice.
+            if self._cheap_reentry_granted and not self._cheap_reentry_used and provider_family(identity) == 'parakeet':
+                self._cheap_reentry_used = True
         self.dial_attempts += 1
         if self._deadline is not None and self.state is RecoveryState.provider_died:
             self.state = RecoveryState.recovering

@@ -12516,6 +12516,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get dismiss => 'Masquer';
 
   @override
+  String get showOnLockScreen => 'Afficher sur l’écran verrouillé';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Ce compte est en cours de suppression. Connectez-vous avec un autre compte, ou patientez quelques minutes et réessayez.';
+
+  @override
   String get thisWeek => 'Cette semaine';
 
   @override

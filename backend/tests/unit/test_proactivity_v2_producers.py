@@ -16,6 +16,32 @@ from utils import commitment_followup_tasks as scheduler
 from tests.unit.test_proactivity_v2_budget import store
 
 
+def test_mentor_context_preserves_past_conversation_items_and_excludes_locked(monkeypatch):
+    newest = {'id': 'newest', 'text': 'Newer context'}
+    older = {'id': 'older', 'text': 'Older context'}
+    monkeypatch.setattr(integration, 'get_prompt_memories', lambda uid: ('User', '- Known fact'))
+    monkeypatch.setattr(integration, 'get_user_goals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(integration, 'get_app_messages', lambda *args, **kwargs: [])
+    monkeypatch.setattr(integration, 'current_date_for_uid', lambda uid: '2026-10-05')
+    monkeypatch.setattr(integration, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(
+        integration.conversations_db,
+        'get_conversations',
+        lambda *args, **kwargs: [newest, {'id': 'locked', 'is_locked': True}, older],
+    )
+    monkeypatch.setattr(integration, 'deserialize_conversations', lambda rows: rows)
+    calls = []
+
+    def render(rows):
+        calls.append(rows)
+        return 'Conversation #1\n' + rows[0]['text']
+
+    monkeypatch.setattr(integration, 'conversations_to_string', render)
+    context = producers.mentor_context('u', 3, 0.78)
+    assert calls == [[newest], [older]]
+    assert context['past_conversations'] == ['Conversation #1\nNewer context', 'Conversation #2\nOlder context']
+
+
 @pytest.fixture
 def lane(monkeypatch):
     item = {

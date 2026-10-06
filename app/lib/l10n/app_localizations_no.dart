@@ -12414,6 +12414,13 @@ class AppLocalizationsNo extends AppLocalizations {
   String get dismiss => 'Avvis';
 
   @override
+  String get showOnLockScreen => 'Vis på låseskjermen';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Denne kontoen slettes. Logg inn med en annen konto, eller vent noen minutter og prøv igjen.';
+
+  @override
   String get thisWeek => 'Denne uken';
 
   @override

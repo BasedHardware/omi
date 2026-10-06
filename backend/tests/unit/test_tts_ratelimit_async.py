@@ -2,14 +2,16 @@
 
 ``tts_synthesize`` (``POST /v2/tts/synthesize`` in ``routers/tts.py``) is an ``async`` handler
 that streams the upstream TTS response via an httpx async client, but it first runs the
-synchronous Redis rate-limit check ``redis_db.check_tts_rate_limit`` directly on the event
-loop. The sync Redis call blocks the loop (``database.*`` is exactly the class the
-async-blocker lint does not catch).
+synchronous Redis rate-limit check directly on the event loop. The sync Redis call blocks the
+loop (``database.*`` is exactly the class the async-blocker lint does not catch).
 
-It must be offloaded with ``await run_blocking(critical_executor, redis_db.check_tts_rate_limit,
-...)`` (the auth/rate-limit pool per ``AGENTS.md``). These AST checks assert the offload stays
-in place, including that the ``run_blocking`` call is awaited (a bare call would be a dangling
-coroutine that never runs).
+The handler enters through ``redis_db.check_tts_rate_limit_for_user``, which resolves the
+user's time zone and then calls ``redis_db.check_tts_rate_limit``; both are synchronous, so
+neither may run on the loop. The entry point must be offloaded with
+``await run_blocking(critical_executor, redis_db.check_tts_rate_limit_for_user, ...)`` (the
+auth/rate-limit pool per ``AGENTS.md``). These AST checks assert the offload stays in place,
+including that the ``run_blocking`` call is awaited (a bare call would be a dangling coroutine
+that never runs).
 """
 
 import ast
@@ -19,7 +21,8 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 TTS_ROUTER = BACKEND_DIR / "routers" / "tts.py"
 
 _HANDLER = "tts_synthesize"
-_BLOCKING = "redis_db.check_tts_rate_limit"
+_BLOCKING = "redis_db.check_tts_rate_limit_for_user"
+_NEVER_ON_THE_LOOP = ("redis_db.check_tts_rate_limit", _BLOCKING)
 
 
 def _dotted(func):
@@ -65,10 +68,12 @@ def _offloaded_via_awaited_run_blocking(node):
 
 class TestTtsRateLimitOffload:
     def test_rate_limit_check_is_not_called_directly_in_the_async_handler(self):
-        assert _BLOCKING not in _direct_calls(_handler_node()), (
-            f"{_HANDLER} runs {_BLOCKING} directly on the event loop. "
-            f"Offload it with await run_blocking(critical_executor, ...)."
-        )
+        called = _direct_calls(_handler_node())
+        for name in _NEVER_ON_THE_LOOP:
+            assert name not in called, (
+                f"{_HANDLER} runs {name} directly on the event loop. "
+                f"Offload it with await run_blocking(critical_executor, ...)."
+            )
 
     def test_rate_limit_check_is_offloaded_via_awaited_run_blocking(self):
         offloaded = _offloaded_via_awaited_run_blocking(_handler_node())

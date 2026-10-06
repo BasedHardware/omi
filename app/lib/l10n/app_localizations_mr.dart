@@ -12421,6 +12421,13 @@ class AppLocalizationsMr extends AppLocalizations {
   String get dismiss => 'लपवा';
 
   @override
+  String get showOnLockScreen => 'लॉक स्क्रीनवर दाखवा';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'हे खाते हटवले जात आहे. दुसऱ्या खात्याने साइन इन करा, किंवा काही मिनिटे थांबून पुन्हा प्रयत्न करा.';
+
+  @override
   String get thisWeek => 'हा आठवडा';
 
   @override

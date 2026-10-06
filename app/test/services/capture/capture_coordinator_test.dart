@@ -20,6 +20,8 @@ CaptureEnvironment environment(
   bool batch = false,
   bool batchSuspended = false,
   bool call = false,
+  String? cardRecordingId,
+  int cardRevision = 0,
 }) =>
     CaptureEnvironment(
       policyMuted: muted,
@@ -36,6 +38,8 @@ CaptureEnvironment environment(
       callActive: call,
       deviceRecording: state.phase == CapturePhase.pendantLive,
       micCapturing: state.phase == CapturePhase.phoneLive || state.phase == CapturePhase.audioInterrupted,
+      systemSurfaceRecordingId: cardRecordingId,
+      systemSurfaceConversationRevision: cardRevision,
     );
 
 class HarnessPorts {
@@ -1136,6 +1140,35 @@ void main() {
     model.step(const ScriptStep(14));
     expect(model.state.phase, CapturePhase.phonePaused);
     expect(model.state.active?.sessionKey, id);
+  });
+
+  test('a Live Activity tap applies only while its recording and conversation are current', () {
+    final model = SequenceModel();
+    model.step(const ScriptStep(2));
+    final live = model.state;
+    final env = environment(live, cardRecordingId: 'recording-2', cardRevision: 4);
+    for (final stale in const [
+      SystemSurfaceTarget(recordingId: 'recording-1', conversationRevision: 4),
+      SystemSurfaceTarget(recordingId: 'recording-2', conversationRevision: 3),
+    ]) {
+      for (final event in [
+        PauseCaptureRequested(target: stale),
+        ResumeCaptureRequested(target: stale),
+        FinishRequested(target: stale),
+      ]) {
+        final rejected = transitionCapture(live, event, env);
+        expect(rejected.state, same(live));
+        expect(rejected.effects, isEmpty);
+        expect(rejected.result, isA<StaleSystemSurfaceTarget>());
+      }
+    }
+    final paused = transitionCapture(
+      live,
+      const PauseCaptureRequested(target: SystemSurfaceTarget(recordingId: 'recording-2', conversationRevision: 4)),
+      env,
+    );
+    expect(paused.state.phase, CapturePhase.phonePaused);
+    expect(paused.effects.whereType<PolicyWrite>().single.muted, isTrue);
   });
 
   test('permission denial leaves the live pendant and its recording unprocessed', () async {

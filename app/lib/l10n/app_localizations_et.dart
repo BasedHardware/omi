@@ -12408,6 +12408,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dismiss => 'Peida';
 
   @override
+  String get showOnLockScreen => 'Kuva lukustuskuval';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Seda kontot kustutatakse. Logi sisse teise kontoga või oota paar minutit ja proovi uuesti.';
+
+  @override
   String get thisWeek => 'See nädal';
 
   @override

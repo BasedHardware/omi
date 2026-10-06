@@ -3839,6 +3839,8 @@
     "dismiss": "Paslēpt",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Rādīt bloķēšanas ekrānā",
+    "accountDeletionInProgressSignInAgain": "Šis konts tiek dzēsts. Pierakstieties ar citu kontu vai uzgaidiet dažas minūtes un mēģiniet vēlreiz.",
     "thisWeek": "Šī nedēļa",
     "busiestDay": "Aizņemtākā diena",
     "timeRecorded": "Ierakstītais laiks",

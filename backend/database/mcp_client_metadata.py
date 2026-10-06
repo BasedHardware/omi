@@ -44,7 +44,7 @@ from urllib.parse import urlsplit
 
 import database.mcp_cache_integrity as mcp_cache_integrity
 import database.redis_db as redis_db
-from config.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from config.mcp_scopes import MCP_SUPPORTED_SCOPES
 
 logger = logging.getLogger(__name__)
 
@@ -592,7 +592,7 @@ def get_url_client(client_id: str) -> Optional[Dict[str, Any]]:
         "allowed_redirect_uris": metadata["redirect_uris"],
         "allowed_redirect_uri_prefixes": [],
         "allowed_resources": None,  # filled by caller with the MCP audience
-        "allowed_scopes": list(MCP_FULL_ACCESS_SCOPES),
+        "allowed_scopes": list(MCP_SUPPORTED_SCOPES),
         "token_endpoint_auth_method": "none",
         "client_secret_hash": "",
         "disabled_at": None,

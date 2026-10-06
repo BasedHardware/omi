@@ -38,13 +38,19 @@ class _RecordingActions extends NoopCaptureExternalActions {
 }
 
 class _GatedPhoneSync {
-  _GatedPhoneSync(this.finalizeGate, {this.stampError});
+  _GatedPhoneSync(Completer<void> finalizeGate, {this.stampError, List<Completer<void>> laterFinalizeGates = const []})
+      : finalizeGates = [finalizeGate, ...laterFinalizeGates];
 
-  final Completer<void> finalizeGate;
+  /// One gate per drain, in call order; later drains reuse the last gate.
+  final List<Completer<void>> finalizeGates;
   final Object? stampError;
+  var _finalizeCalls = 0;
   var stampCalls = 0;
 
-  Future<void> finalizeCurrentSession() => finalizeGate.future;
+  Future<void> finalizeCurrentSession() {
+    final call = _finalizeCalls++;
+    return finalizeGates[call < finalizeGates.length ? call : finalizeGates.length - 1].future;
+  }
 
   Future<void> stampConversationId(int start, String id, {String? recordingSessionId}) async {
     stampCalls++;
@@ -116,9 +122,10 @@ CaptureProvider _provider({
   required _RecordingActions actions,
   required Completer<void> finalizeGate,
   required Future<CreateConversationResponse?> Function() process,
+  List<Completer<void>> laterFinalizeGates = const [],
   _GatedPhoneSync? phone,
 }) {
-  final resolvedPhone = phone ?? _GatedPhoneSync(finalizeGate);
+  final resolvedPhone = phone ?? _GatedPhoneSync(finalizeGate, laterFinalizeGates: laterFinalizeGates);
   return CaptureProvider(
     externalActions: actions,
     walService: _GatedWal(resolvedPhone),
@@ -198,11 +205,7 @@ void main() {
   test('removes the id 0 placeholder when processing returns null', () async {
     final finalize = Completer<void>();
     final actions = _RecordingActions();
-    final provider = _provider(
-      actions: actions,
-      finalizeGate: finalize,
-      process: () async => null,
-    );
+    final provider = _provider(actions: actions, finalizeGate: finalize, process: () async => null);
     addTearDown(provider.dispose);
 
     final pending = provider.forceProcessingCurrentConversation();
@@ -214,6 +217,64 @@ void main() {
 
     expect(actions.processing, isEmpty);
     expect(actions.upserted, isEmpty);
+  });
+
+  test('a conversation that changes during the drain removes the skeleton without processing', () async {
+    final finalize = Completer<void>();
+    final actions = _RecordingActions();
+    var processed = false;
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: finalize,
+      process: () async {
+        processed = true;
+        return null;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    final pending = provider.forceProcessingCurrentConversation();
+    expect(actions.processing.map((conversation) => conversation.id), ['0']);
+    // Another path (a server-finished conversation or a batch cut) moves on.
+    provider.startNewOfflineRecording();
+    finalize.complete();
+    await expectLater(pending, completes);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(actions.processing, isEmpty);
+    expect(processed, isFalse);
+    expect(actions.upserted, isEmpty);
+  });
+
+  test('a stale drain keeps the skeleton a newer request is still showing', () async {
+    final firstDrain = Completer<void>();
+    final secondDrain = Completer<void>();
+    final actions = _RecordingActions();
+    var processCalls = 0;
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: firstDrain,
+      laterFinalizeGates: [secondDrain],
+      process: () {
+        processCalls++;
+        return Completer<CreateConversationResponse?>().future;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    final first = provider.forceProcessingCurrentConversation();
+    // The conversation moves on during the first drain and the next one is processed.
+    provider.startNewOfflineRecording();
+    final second = provider.forceProcessingCurrentConversation();
+
+    firstDrain.complete();
+    await first;
+    expect(actions.processing.map((conversation) => conversation.id), ['0']);
+
+    secondDrain.complete();
+    await second;
+    expect(processCalls, 1);
+    expect(actions.processing.map((conversation) => conversation.id), ['0']);
   });
 
   test('keeps a processing skeleton instead of a contentless completed row', () async {
@@ -261,11 +322,7 @@ void main() {
     final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
     final finalize = Completer<void>();
     late Completer<CreateConversationResponse?> processGate;
-    final provider = _provider(
-      actions: _RecordingActions(),
-      finalizeGate: finalize,
-      process: () => processGate.future,
-    );
+    final provider = _provider(actions: _RecordingActions(), finalizeGate: finalize, process: () => processGate.future);
 
     final outcome = await _runInGuardedZone(() async {
       processGate = Completer<CreateConversationResponse?>();
@@ -338,11 +395,7 @@ void main() {
     crashlytics.recordErrorFailure = PlatformException(code: 'unavailable', message: 'transport down');
     final finalize = Completer<void>();
     late Completer<CreateConversationResponse?> processGate;
-    final provider = _provider(
-      actions: _RecordingActions(),
-      finalizeGate: finalize,
-      process: () => processGate.future,
-    );
+    final provider = _provider(actions: _RecordingActions(), finalizeGate: finalize, process: () => processGate.future);
 
     final outcome = await _runInGuardedZone(() async {
       processGate = Completer<CreateConversationResponse?>();

@@ -12419,6 +12419,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get dismiss => 'Avvisa';
 
   @override
+  String get showOnLockScreen => 'Visa på låsskärmen';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Det här kontot håller på att raderas. Logga in med ett annat konto, eller vänta några minuter och försök igen.';
+
+  @override
   String get thisWeek => 'Den här veckan';
 
   @override

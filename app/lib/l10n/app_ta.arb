@@ -11396,6 +11396,8 @@
     "dismiss": "மறை",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "பூட்டுத் திரையில் காட்டு",
+    "accountDeletionInProgressSignInAgain": "இந்தக் கணக்கு நீக்கப்பட்டு வருகிறது. வேறு கணக்கில் உள்நுழையவும், அல்லது சில நிமிடங்கள் காத்திருந்து மீண்டும் முயற்சிக்கவும்.",
     "thisWeek": "இந்த வாரம்",
     "busiestDay": "மிகவும் பரபரப்பான நாள்",
     "timeRecorded": "பதிவு செய்த நேரம்",

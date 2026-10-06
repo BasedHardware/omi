@@ -3839,6 +3839,8 @@
     "dismiss": "Avvis",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Vis på låseskjermen",
+    "accountDeletionInProgressSignInAgain": "Denne kontoen slettes. Logg inn med en annen konto, eller vent noen minutter og prøv igjen.",
     "thisWeek": "Denne uken",
     "busiestDay": "Travleste dag",
     "timeRecorded": "Tid tatt opp",

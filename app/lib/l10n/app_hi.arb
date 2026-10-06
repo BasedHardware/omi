@@ -3839,6 +3839,8 @@
     "dismiss": "हटाएँ",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ",
+    "accountDeletionInProgressSignInAgain": "यह खाता हटाया जा रहा है। किसी दूसरे खाते से साइन इन करें, या कुछ मिनट रुककर फिर से कोशिश करें।",
     "thisWeek": "इस सप्ताह",
     "busiestDay": "सबसे व्यस्त दिन",
     "timeRecorded": "रिकॉर्ड किया गया समय",

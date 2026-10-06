@@ -3839,6 +3839,8 @@
     "dismiss": "Tutup",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Tunjukkan pada skrin kunci",
+    "accountDeletionInProgressSignInAgain": "Akaun ini sedang dipadamkan. Log masuk dengan akaun lain, atau tunggu beberapa minit dan cuba lagi.",
     "thisWeek": "Minggu ini",
     "busiestDay": "Hari paling sibuk",
     "timeRecorded": "Masa dirakam",

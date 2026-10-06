@@ -3874,6 +3874,8 @@
     "dismiss": "Скрыть",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Показывать на экране блокировки",
+    "accountDeletionInProgressSignInAgain": "Этот аккаунт удаляется. Войдите с другим аккаунтом или подождите несколько минут и попробуйте снова.",
     "thisWeek": "Эта неделя",
     "busiestDay": "Самый насыщенный день",
     "timeRecorded": "Записанное время",

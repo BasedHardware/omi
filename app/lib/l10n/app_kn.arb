@@ -11396,6 +11396,8 @@
     "dismiss": "ಮರೆಮಾಡಿ",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ",
+    "accountDeletionInProgressSignInAgain": "ಈ ಖಾತೆಯನ್ನು ಅಳಿಸಲಾಗುತ್ತಿದೆ. ಬೇರೆ ಖಾತೆಯಿಂದ ಸೈನ್ ಇನ್ ಮಾಡಿ, ಅಥವಾ ಕೆಲವು ನಿಮಿಷ ಕಾದು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "thisWeek": "ಈ ವಾರ",
     "busiestDay": "ಅತ್ಯಂತ ಬಿಡುವಿಲ್ಲದ ದಿನ",
     "timeRecorded": "ದಾಖಲಾದ ಸಮಯ",

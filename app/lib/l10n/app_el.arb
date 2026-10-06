@@ -3839,6 +3839,8 @@
     "dismiss": "Απόρριψη",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Εμφάνιση στην οθόνη κλειδώματος",
+    "accountDeletionInProgressSignInAgain": "Αυτός ο λογαριασμός διαγράφεται. Συνδεθείτε με άλλον λογαριασμό ή περιμένετε λίγα λεπτά και δοκιμάστε ξανά.",
     "thisWeek": "Αυτή την εβδομάδα",
     "busiestDay": "Η πιο πολυάσχολη μέρα",
     "timeRecorded": "Χρόνος ηχογράφησης",

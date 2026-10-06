@@ -3839,6 +3839,8 @@
     "dismiss": "Avvisa",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Visa på låsskärmen",
+    "accountDeletionInProgressSignInAgain": "Det här kontot håller på att raderas. Logga in med ett annat konto, eller vänta några minuter och försök igen.",
     "thisWeek": "Den här veckan",
     "busiestDay": "Den mest aktiva dagen",
     "timeRecorded": "Inspelad tid",

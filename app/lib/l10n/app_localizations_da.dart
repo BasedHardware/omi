@@ -12402,6 +12402,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get dismiss => 'Afvis';
 
   @override
+  String get showOnLockScreen => 'Vis på låseskærmen';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Denne konto er ved at blive slettet. Log ind med en anden konto, eller vent et par minutter og prøv igen.';
+
+  @override
   String get thisWeek => 'Denne uge';
 
   @override

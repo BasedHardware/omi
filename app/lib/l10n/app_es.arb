@@ -3839,6 +3839,8 @@
     "dismiss": "Descartar",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Mostrar en la pantalla de bloqueo",
+    "accountDeletionInProgressSignInAgain": "Esta cuenta se está eliminando. Inicia sesión con otra cuenta o espera unos minutos e inténtalo de nuevo.",
     "thisWeek": "Esta semana",
     "busiestDay": "Día más ocupado",
     "timeRecorded": "Tiempo grabado",

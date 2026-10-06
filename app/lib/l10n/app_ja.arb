@@ -3839,6 +3839,8 @@
     "dismiss": "非表示",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "ロック画面に表示",
+    "accountDeletionInProgressSignInAgain": "このアカウントは削除処理中です。別のアカウントでサインインするか、数分待ってからもう一度お試しください。",
     "thisWeek": "今週",
     "busiestDay": "最も忙しかった日",
     "timeRecorded": "録音時間",

@@ -12451,6 +12451,13 @@ class AppLocalizationsKn extends AppLocalizations {
   String get dismiss => 'ಮರೆಮಾಡಿ';
 
   @override
+  String get showOnLockScreen => 'ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'ಈ ಖಾತೆಯನ್ನು ಅಳಿಸಲಾಗುತ್ತಿದೆ. ಬೇರೆ ಖಾತೆಯಿಂದ ಸೈನ್ ಇನ್ ಮಾಡಿ, ಅಥವಾ ಕೆಲವು ನಿಮಿಷ ಕಾದು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
   String get thisWeek => 'ಈ ವಾರ';
 
   @override

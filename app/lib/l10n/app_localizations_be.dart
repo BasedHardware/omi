@@ -12446,6 +12446,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get dismiss => 'Схаваць';
 
   @override
+  String get showOnLockScreen => 'Паказваць на экране блакіроўкі';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Гэты ўліковы запіс выдаляецца. Увайдзіце з іншым уліковым запісам або пачакайце некалькі хвілін і паспрабуйце зноў.';
+
+  @override
   String get thisWeek => 'Гэты тыдзень';
 
   @override

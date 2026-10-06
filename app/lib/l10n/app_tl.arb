@@ -11396,6 +11396,8 @@
     "dismiss": "Isara",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Ipakita sa lock screen",
+    "accountDeletionInProgressSignInAgain": "Binubura ang account na ito. Mag-sign in gamit ang ibang account, o maghintay ng ilang minuto at subukang muli.",
     "thisWeek": "Ngayong linggo",
     "busiestDay": "Pinakaabalang araw",
     "timeRecorded": "Oras na na-record",
