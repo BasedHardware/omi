@@ -32,7 +32,7 @@ import database.users as users_db
 from database.auth import get_user_full_name
 from database.document_ids import document_id_from_seed
 from models.conversation import Conversation
-from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
+from models.conversation_enums import ConversationSource, ConversationStatus
 from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from models.transcript_segment import TranscriptSegment
@@ -717,7 +717,6 @@ def build_imported_conversation(
             title=parsed.title,
             overview=_overview(segments),
             emoji='💬',
-            category=CategoryEnum.other,
             action_items=[],
             events=[],
         ),
