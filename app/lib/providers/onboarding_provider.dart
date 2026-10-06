@@ -331,13 +331,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       }
     } catch (e) {
       Logger.debug('Error connecting to device: $e');
-      if (!isSavedDevice(device)) {
-        foundDevicesMap.remove(device.id);
-        deviceList.removeWhere((element) => element.id == device.id);
-      }
       isClicked = false; // Allow clicks again after finishing the operation
       connectingToDeviceId = null; // Reset the connecting device
-      deviceProvider!.setIsConnected(false);
+      deviceProvider?.setIsConnected(false);
+      notifyError('DEVICE_CONNECT_FAILED');
       notifyListeners();
     }
 
