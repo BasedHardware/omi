@@ -121,8 +121,7 @@ class HomeForYouState extends State<HomeForYou> with WidgetsBindingObserver {
     final current = ModalRoute.of(context)?.isCurrent ?? true;
     final ownerEpoch = _ownerEpoch;
     return Padding(
-      // Home's 16 pt gutter, in line with Daily Recaps and the conversation rows.
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
