@@ -129,7 +129,11 @@ overlay:
           value: '45'
           category: rollout
         STT_ROUTING_MODE:
-          value: shadow
+          value: 'on'
+        # 2026-10-06: sticky-UID ON ramp step 1 (5%); gate each step on the
+        # omi_stt_routing_cohort_* counters (GATES.md) before 25/50/100.
+        STT_ROUTING_ON_PERCENT:
+          value: '5'
         SONIOX_MONTHLY_CEILING_USD:
           value: '10000'
         # 2026-09-28: learn each user's expected languages from observed output. About 75% of
