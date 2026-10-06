@@ -2879,6 +2879,9 @@ environments:
           PARAKEET_WINDOW_MAX_EMPTY_STREAK:
             value: '4'
             category: reliability
+          SONIOX_IDLE_CLOSE_SECONDS:
+            value: '45'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BUCKET_SCREEN_FRAMES:

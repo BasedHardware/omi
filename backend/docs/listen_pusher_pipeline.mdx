@@ -3236,11 +3236,12 @@ provider outages. The existing `omi-journey-capture-fail` alert
 uses the durable terminal projection; inspect the current alert manifest for
 its 30-minute denominator and dwell rather than adding a raw-count page.
 
-### Soniox idle transport canary
+### Soniox idle transport
 
 `SONIOX_IDLE_CLOSE_SECONDS` is default-off (unset, zero, invalid or negative
-values preserve the existing adapter and keepalive wire behavior). Suggested
-first canary value: `45`. Positive values below `20` seconds clamp to `20`, with
+values preserve the existing adapter and keepalive wire behavior). Prod listen
+sets `45` after a 3h51m canary; every other service leaves it unset. Positive
+values below `20` seconds clamp to `20`, with
 one warning per process. `SONIOX_IDLE_REARM_SECONDS` defaults to `60` seconds
 and cannot be set below `60`: after a successful reopen, the socket stays
 connected for at least that interval even if VAD flaps. Non-finite or invalid
