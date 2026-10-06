@@ -3839,5 +3839,6 @@
     "dismiss": "ปิด",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "แสดงบนหน้าจอล็อก"
+    "showOnLockScreen": "แสดงบนหน้าจอล็อก",
+    "accountDeletionInProgressSignInAgain": "บัญชีนี้กำลังถูกลบ ลงชื่อเข้าใช้ด้วยบัญชีอื่น หรือรอสักครู่แล้วลองอีกครั้ง"
 }

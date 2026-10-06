@@ -3874,5 +3874,6 @@
     "dismiss": "Dispensar",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Mostrar na tela de bloqueio"
+    "showOnLockScreen": "Mostrar na tela de bloqueio",
+    "accountDeletionInProgressSignInAgain": "Esta conta está sendo excluída. Entre com outra conta ou aguarde alguns minutos e tente novamente."
 }

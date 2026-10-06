@@ -3935,5 +3935,6 @@
     "dismiss": "Elrejtés",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Megjelenítés a zárolási képernyőn"
+    "showOnLockScreen": "Megjelenítés a zárolási képernyőn",
+    "accountDeletionInProgressSignInAgain": "Ez a fiók törlés alatt áll. Jelentkezz be egy másik fiókkal, vagy várj néhány percet, és próbáld újra."
 }

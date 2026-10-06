@@ -12484,4 +12484,8 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Mostra sulla schermata di blocco';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Questo account è in fase di eliminazione. Accedi con un altro account oppure attendi qualche minuto e riprova.';
 }

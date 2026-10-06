@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -666,6 +667,57 @@ void main() {
       publish('current');
       await p.pendingLiveSegmentWrite;
       expect(store.calls, ['issued', 'current']);
+      p.dispose();
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('websocket close 4005 (account deletion in progress) ends the session instead of reconnecting', () async {
+    final dir = await Directory.systemTemp.createTemp('c1-auth-deleted-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    try {
+      world.disposeController();
+      var refreshes = 0;
+      var expirations = 0;
+      var opens = 0;
+      final deps = _deps(
+        world: world,
+        auth: CaptureAuthBoundary(
+          isSignedIn: () => true,
+          refreshIdToken: () async {
+            refreshes++;
+            return null;
+          },
+          expireDeletedAccountSession: () async => expirations++,
+        ),
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          opens++;
+          return null;
+        },
+      );
+      final p = composeCaptureProvider(deps);
+      p.updateRecordingState(RecordingState.systemAudioRecord);
+      p.onClosed(accountDeletionWebSocketCloseCode);
+      await pumpEventQueue();
+      expect(expirations, 1);
+      expect(refreshes, 0, reason: 'a deleted account is not a stale token');
+      // The same close twice (primary and secondary sockets) still asks the
+      // idempotent AuthService.expireSession; nothing else fires.
+      p.onClosed(accountDeletionWebSocketCloseCode);
+      await pumpEventQueue();
+      expect(expirations, 2);
+      expect(opens, 0);
       p.dispose();
     } finally {
       await world.dispose();

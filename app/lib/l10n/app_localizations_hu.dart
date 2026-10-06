@@ -12463,4 +12463,8 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Megjelenítés a zárolási képernyőn';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Ez a fiók törlés alatt áll. Jelentkezz be egy másik fiókkal, vagy várj néhány percet, és próbáld újra.';
 }

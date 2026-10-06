@@ -3839,5 +3839,6 @@
     "dismiss": "Peida",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Kuva lukustuskuval"
+    "showOnLockScreen": "Kuva lukustuskuval",
+    "accountDeletionInProgressSignInAgain": "Seda kontot kustutatakse. Logi sisse teise kontoga või oota paar minutit ja proovi uuesti."
 }

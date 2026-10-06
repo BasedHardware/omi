@@ -3839,5 +3839,6 @@
     "dismiss": "Ẩn",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Hiển thị trên màn hình khóa"
+    "showOnLockScreen": "Hiển thị trên màn hình khóa",
+    "accountDeletionInProgressSignInAgain": "Tài khoản này đang được xóa. Hãy đăng nhập bằng tài khoản khác, hoặc chờ vài phút rồi thử lại."
 }

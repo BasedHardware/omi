@@ -55,6 +55,42 @@ def test_unreadable_subscription_is_not_terminal(monkeypatch):
     assert stripe_utils.is_subscription_terminal('sub_123') is False
 
 
+def test_missing_subscription_is_terminal(monkeypatch):
+    """A stored subscription id that Stripe does not know cannot bill: the goal state holds.
+
+    Regression for the account-deletion deadlock of 2026-10-06: a user doc pointed at a
+    synthetic ``sub_agent_test_model_attr`` id, cancel returned None, this returned False, and
+    the wipe failed 15 times while the auth fence kept the user out of the app.
+    """
+    monkeypatch.setattr(
+        stripe_utils.stripe.Subscription,
+        'retrieve',
+        MagicMock(
+            side_effect=stripe.InvalidRequestError(
+                "No such subscription: 'sub_agent_test_model_attr'",
+                'id',
+                code='resource_missing',
+                http_status=404,
+            )
+        ),
+    )
+
+    assert stripe_utils.is_subscription_terminal('sub_agent_test_model_attr') is True
+
+
+def test_other_invalid_requests_are_not_terminal(monkeypatch):
+    """Only a missing resource is terminal; a malformed request still fails closed."""
+    monkeypatch.setattr(
+        stripe_utils.stripe.Subscription,
+        'retrieve',
+        MagicMock(
+            side_effect=stripe.InvalidRequestError('bad id', 'id', code='parameter_invalid_empty', http_status=400)
+        ),
+    )
+
+    assert stripe_utils.is_subscription_terminal('') is False
+
+
 def _uid_subscriptions(*subscriptions: tuple[str, str, dict[str, str]]) -> stripe.SearchResultObject:
     return stripe.SearchResultObject.construct_from(
         {
@@ -106,3 +142,69 @@ def test_a_deployment_without_stripe_has_no_app_subscriptions_to_find(monkeypatc
 
     assert stripe_utils.find_billable_app_subscription_ids('uid1') == []
     search.assert_not_called()
+
+
+@pytest.mark.parametrize('status', ['canceled', 'incomplete_expired'])
+def test_erasure_skips_cancel_for_terminal_subscription(monkeypatch, status):
+    monkeypatch.setattr(stripe.Subscription, 'retrieve', MagicMock(return_value=_subscription(status)))
+    delete = MagicMock()
+    monkeypatch.setattr(stripe.Subscription, 'delete', delete)
+    stripe_utils.cancel_subscription_for_account_deletion('sub_123')
+    delete.assert_not_called()
+
+
+@pytest.mark.parametrize('at_delete', [False, True])
+def test_erasure_accepts_missing_subscription_even_during_cancel_race(monkeypatch, at_delete):
+    missing = stripe.InvalidRequestError('No such subscription', 'id', code='resource_missing')
+    monkeypatch.setattr(
+        stripe.Subscription,
+        'retrieve',
+        MagicMock(return_value=_subscription('active')) if at_delete else MagicMock(side_effect=missing),
+    )
+    monkeypatch.setattr(stripe.Subscription, 'delete', MagicMock(side_effect=missing))
+    stripe_utils.cancel_subscription_for_account_deletion('sub_123')
+
+
+def test_erasure_accepts_concurrent_terminal_transition(monkeypatch):
+    monkeypatch.setattr(
+        stripe.Subscription, 'retrieve', MagicMock(side_effect=[_subscription('active'), _subscription('canceled')])
+    )
+    monkeypatch.setattr(
+        stripe.Subscription,
+        'delete',
+        MagicMock(
+            side_effect=stripe.InvalidRequestError(
+                'A canceled subscription can only update its cancellation_details and metadata.', 'id'
+            )
+        ),
+    )
+    stripe_utils.cancel_subscription_for_account_deletion('sub_123')
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        stripe.APIConnectionError('Stripe timeout'),
+        stripe.RateLimitError('Too many requests', http_status=429),
+        stripe.APIError('Stripe server unavailable', http_status=503),
+    ],
+)
+@pytest.mark.parametrize('at_delete', [False, True])
+def test_erasure_propagates_transient_errors(monkeypatch, error, at_delete):
+    monkeypatch.setattr(
+        stripe.Subscription,
+        'retrieve',
+        MagicMock(return_value=_subscription('active')) if at_delete else MagicMock(side_effect=error),
+    )
+    monkeypatch.setattr(stripe.Subscription, 'delete', MagicMock(side_effect=error))
+    with pytest.raises(type(error)):
+        stripe_utils.cancel_subscription_for_account_deletion('sub_123')
+
+
+def test_erasure_does_not_accept_arbitrary_invalid_request(monkeypatch):
+    monkeypatch.setattr(stripe.Subscription, 'retrieve', MagicMock(return_value=_subscription('active')))
+    monkeypatch.setattr(
+        stripe.Subscription, 'delete', MagicMock(side_effect=stripe.InvalidRequestError('invalid credentials', 'id'))
+    )
+    with pytest.raises(stripe.InvalidRequestError):
+        stripe_utils.cancel_subscription_for_account_deletion('sub_123')

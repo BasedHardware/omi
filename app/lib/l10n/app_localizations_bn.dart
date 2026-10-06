@@ -12415,4 +12415,8 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'লক স্ক্রিনে দেখান';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'এই অ্যাকাউন্টটি মুছে ফেলা হচ্ছে। অন্য অ্যাকাউন্ট দিয়ে সাইন ইন করুন, অথবা কয়েক মিনিট অপেক্ষা করে আবার চেষ্টা করুন।';
 }

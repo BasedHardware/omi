@@ -12428,4 +12428,8 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'لاک اسکرین پر دکھائیں';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'یہ اکاؤنٹ حذف کیا جا رہا ہے۔ کسی دوسرے اکاؤنٹ سے سائن ان کریں، یا چند منٹ انتظار کر کے دوبارہ کوشش کریں۔';
 }

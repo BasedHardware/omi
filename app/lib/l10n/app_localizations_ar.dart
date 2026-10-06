@@ -12344,4 +12344,8 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'إظهار على شاشة القفل';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'يجري حذف هذا الحساب. سجّل الدخول بحساب آخر، أو انتظر بضع دقائق ثم حاول مرة أخرى.';
 }
