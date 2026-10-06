@@ -207,4 +207,4 @@ class TestCallSitesUseHybridSearch:
     def test_call_site_merges_keyword_and_vector(self, rel_path):
         source = (BACKEND_DIR / rel_path).read_text(encoding='utf-8')
         assert 'keyword_search_conversation_ids(' in source, f'{rel_path} lost the keyword search half of #5072'
-        assert 'merge_conversation_search_ids(' in source, f'{rel_path} lost the hybrid merge of #5072'
+        assert 'merge_chat_conversation_ids(' in source, f'{rel_path} lost the ranked chat merge of #5072'

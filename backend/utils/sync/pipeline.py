@@ -2135,22 +2135,20 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             except asyncio.CancelledError:
                 preserve_retry_material = True
                 raise
-            if (
-                use_lineage
-                and sync_recording_lineage.sync_lineage_s1_required()
-                and len(source_frame_maps) != len(wav_paths)
-            ):
-                use_lineage = False
-                target_conversation_id = await _resolve_safety_wal_target(
-                    uid,
-                    target_conversation_id,
-                    recording_session_id,
-                    source,
-                    client_device_id,
-                    should_lock,
-                    audio_start_seconds,
-                    audio_end_seconds,
-                )
+            if use_lineage and sync_recording_lineage.sync_lineage_s1_required():
+                if len(source_frame_maps) != len(wav_paths):
+                    sync_recording_lineage.emit_s1_refusal('count_mismatch')
+                    use_lineage = False
+                    target_conversation_id = await _resolve_safety_wal_target(
+                        uid,
+                        target_conversation_id,
+                        recording_session_id,
+                        source,
+                        client_device_id,
+                        should_lock,
+                        audio_start_seconds,
+                        audio_end_seconds,
+                    )
             # --- Phase 2: VAD ---
             job_phase = 'vad'
             await run_blocking(
@@ -2502,6 +2500,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         is_locked,
                         job_id,
                         segment_binding_reasons,
+                        **({'segment_source_maps': segment_source_maps} if segment_source_maps else {}),
                     )
                 except Exception:
                     # Span construction and the executor call are also part of

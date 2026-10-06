@@ -56,6 +56,8 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | speechProfileUploadSucceeded | Speech Profile Upload Succeeded | none | active | mobile-instrumentation-presence |
 | speechProfileEmbeddingStored | Speech Profile Embedding Stored | none | active | mobile-instrumentation-presence |
 | speechProfileContinued | Onboarding Step Speech Profile Continued | none | active | mobile-instrumentation-presence |
+| onboardingSetupRatingPromptShown | Onboarding Setup Rating Prompt Shown | none | active | mobile-instrumentation-presence |
+| onboardingSetupRatingPromptAnswered | Onboarding Setup Rating Prompt Answered | answer | active | mobile-instrumentation-presence |
 | useWithoutDeviceOnboardingWelcome | Use Without Device Onboarding Welcome | none | active | mobile-instrumentation-presence |
 | useWithoutDeviceOnboardingFindDevices | Use Without Device Onboarding Find Devices | none | active | mobile-instrumentation-presence |
 | memoriesPageEditedMemory | Fact Page Edited Fact | none | active | mobile-instrumentation-presence |

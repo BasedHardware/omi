@@ -15,6 +15,7 @@ from models.candidate import (
     CandidateResolutionReceipt,
     CandidateStatus,
     CandidateSubjectKind,
+    SummaryTaskReference,
 )
 from utils.executors import postprocess_executor, submit_with_context
 from utils.notifications import sync_action_item_reminder
@@ -182,11 +183,19 @@ def _sync_task_reminder(uid: str, task_id: str) -> None:
     )
 
 
-def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) -> CandidateResolutionReceipt:
+def accept_candidate(
+    uid: str,
+    candidate_id: str,
+    *,
+    account_generation: int,
+    summary_item: Optional[SummaryTaskReference] = None,
+) -> CandidateResolutionReceipt:
     candidate = candidates_db.get_candidate(uid, candidate_id)
     if candidate is None:
         raise candidates_db.CandidateNotFoundError(candidate_id)
     if candidate.subject_kind == CandidateSubjectKind.workstream:
+        if summary_item is not None:
+            raise candidates_db.CandidateConflictError('Summary promotion requires a task-create Candidate')
         if _workstream_resolver is None:
             raise candidates_db.WorkstreamCandidateResolverUnavailableError(
                 'Ticket 04 workstream resolver is not registered'
@@ -227,12 +236,21 @@ def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) ->
         if final_workstream_id is None:
             final_workstream_id = expected_task_links[1]
     task_links.validate_task_links(uid, goal_id=final_goal_id, workstream_id=final_workstream_id)
-    receipt = candidates_db.resolve_task_candidate(
-        uid,
-        candidate_id,
-        account_generation=account_generation,
-        expected_task_links=expected_task_links,
-    )
+    if summary_item is None:
+        receipt = candidates_db.resolve_task_candidate(
+            uid,
+            candidate_id,
+            account_generation=account_generation,
+            expected_task_links=expected_task_links,
+        )
+    else:
+        receipt = candidates_db.resolve_task_candidate(
+            uid,
+            candidate_id,
+            account_generation=account_generation,
+            expected_task_links=expected_task_links,
+            summary_item=summary_item,
+        )
     if candidate.proposed_action == CandidateAction.create and receipt.task_id:
         _dispatch_task_integration(
             uid,

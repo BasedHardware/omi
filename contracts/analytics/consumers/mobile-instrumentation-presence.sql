@@ -55,6 +55,8 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Speech Profile Upload Succeeded',
     'Speech Profile Embedding Stored',
     'Onboarding Step Speech Profile Continued',
+    'Onboarding Setup Rating Prompt Shown',
+    'Onboarding Setup Rating Prompt Answered',
     'Use Without Device Onboarding Welcome',
     'Use Without Device Onboarding Find Devices',
     'Fact Page Edited Fact',

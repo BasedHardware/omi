@@ -84,14 +84,16 @@ class _LiveActivitySettingsState extends State<LiveActivitySettings> with Widget
     if (!_supported) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.all(OmiSpacing.md),
-      child: OmiSettingsGroup(children: [
-        OmiSettingsRow.toggle(
-          key: const ValueKey('capture_live_activity_toggle'),
-          title: context.l10n.showOnLockScreen,
-          value: _enabled,
-          onChanged: _saving ? null : _setEnabled,
-        ),
-      ]),
+      child: OmiSettingsGroup(
+        children: [
+          OmiSettingsRow.toggle(
+            key: const ValueKey('capture_live_activity_toggle'),
+            title: context.l10n.showOnLockScreen,
+            value: _enabled,
+            onChanged: _saving ? null : _setEnabled,
+          ),
+        ],
+      ),
     );
   }
 }
