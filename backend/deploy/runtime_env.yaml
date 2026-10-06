@@ -42,6 +42,12 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
             value: 'false'
             category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+            value: 'false'
+            category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -51,6 +57,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -520,6 +529,12 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
             value: 'false'
             category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+            value: 'false'
+            category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -529,6 +544,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -951,6 +969,12 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -960,6 +984,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1291,6 +1318,12 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1300,6 +1333,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1599,6 +1635,12 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1608,6 +1650,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1860,6 +1905,12 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1869,6 +1920,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -2406,6 +2460,12 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
             value: 'true'
             category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+            value: 'true'
+            category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'true'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -2415,6 +2475,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -2539,7 +2602,7 @@ environments:
             value: 'false'
             category: rollout
           STT_FAILOVER_RECOVERY_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           STT_ROUTING_MODE:
             value: shadow
@@ -2780,6 +2843,9 @@ environments:
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -2917,6 +2983,12 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
             value: 'true'
             category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+            value: 'true'
+            category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'true'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -2926,6 +2998,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -3002,6 +3077,9 @@ environments:
             category: telemetry
           MENTOR_PIPELINE:
             value: cohort
+            category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
             category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -3262,6 +3340,12 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3271,6 +3355,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -3465,6 +3552,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -3622,6 +3712,12 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3631,6 +3727,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -3789,6 +3888,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
               value: 'true'
               category: rollout
@@ -3923,6 +4025,12 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3932,6 +4040,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -4069,6 +4180,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -4198,6 +4312,12 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
               value: 'false'
               category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -4207,6 +4327,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -4308,6 +4431,9 @@ environments:
               category: rollout
             MENTOR_PIPELINE:
               value: cohort
+              category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware

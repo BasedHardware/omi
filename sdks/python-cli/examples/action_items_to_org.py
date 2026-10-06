@@ -19,6 +19,16 @@ DONE_WORDS = {"true", "yes", "1", "done", "completed"}
 ZWSP = "​"  # zero-width space, Org's documented escape character
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    encoding the rendered file raises UnicodeEncodeError on them. Dropping them keeps
+    the remaining text and lets the export write.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
 def one_line(value):
     """Render one exported field as single-line text.
 
@@ -29,7 +39,11 @@ def one_line(value):
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    return " ".join(value.split())
+    # Strip unencodable code points before callers inspect the text for syntax:
+    # a leading surrogate would hide a real completion mark, priority cookie or
+    # agenda timestamp from their guards, and removing it later would expose that
+    # marker unescaped.
+    return " ".join(strip_surrogates(value).split())
 
 
 def heading_text(value):
@@ -131,7 +145,7 @@ def convert(source, destination, zone):
         lines.append(":END:")
     # Build the whole file before touching the filesystem, so a conversion
     # failure cannot leave a truncated .org file behind.
-    payload = ("\n".join(lines) + "\n").encode("utf-8")
+    payload = strip_surrogates("\n".join(lines) + "\n").encode("utf-8")
     output_path = Path(destination)
     # Exclusive creation protects an existing file; a failed write leaves no partial file.
     try:

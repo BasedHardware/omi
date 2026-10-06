@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import math
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
@@ -44,9 +45,11 @@ from config.conversation_smart_merge import (
     QUESTION_VERSION,
     REFRESH_LEASE_SECONDS,
     SmartMergeMode,
+    SmartMergeWallclockGapMode,
     smart_merge_flatten_enabled,
     smart_merge_mode,
     smart_merge_uid_allowed,
+    smart_merge_wallclock_gap_mode,
 )
 from config.jev_decisions import JEV_MODEL
 from database import conversations as conversations_db
@@ -72,7 +75,9 @@ from utils.conversations.smart_merge_policy import (
     fragment_segments,
     is_donor,
     ledger_fragments,
+    live_recording_origin,
     new_conversation_skip,
+    newest_wallclock_fragment,
     partition,
     predecessor_status_skip,
     refresh_owed,
@@ -80,6 +85,7 @@ from utils.conversations.smart_merge_policy import (
     smart_merge_state,
     stretch_before,
     user_managed,
+    valid_fragment_id,
 )
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
 from utils.executors import postprocess_executor, run_blocking
@@ -88,6 +94,7 @@ from utils.metrics import (
     record_conversation_smart_merge,
     record_conversation_smart_merge_audit,
     record_conversation_smart_merge_refresh,
+    record_conversation_smart_merge_wallclock_shadow,
     record_smart_merge_flatten,
 )
 from utils.observability.fallback import record_fallback
@@ -166,6 +173,10 @@ class _MergePlan:
         gap: Optional[float],
         expected_survivor_sync_revision: Any = None,
         expected_donor_sync_revision: Any = None,
+        same_recording: bool = False,
+        last_fragment_id: Optional[str] = None,
+        wallclock_gap: bool = False,
+        admission_path: Optional[str] = None,
     ):
         self.survivor_id = survivor_id
         self.expected_revision = expected_revision
@@ -173,6 +184,10 @@ class _MergePlan:
         self.gap = gap
         self.expected_survivor_sync_revision = expected_survivor_sync_revision
         self.expected_donor_sync_revision = expected_donor_sync_revision
+        self.same_recording = same_recording
+        self.last_fragment_id = last_fragment_id
+        self.wallclock_gap = wallclock_gap
+        self.admission_path = admission_path
 
 
 def _segments(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -231,6 +246,159 @@ def _ask(state: str) -> Optional[float]:
     return None if answers is None else answers.noul(QUESTION_NAME)
 
 
+def _pair_state(
+    uid: str,
+    new_row: Mapping[str, Any],
+    new_segments: Sequence[Mapping[str, Any]],
+    survivor: Mapping[str, Any],
+    survivor_segments: Sequence[Mapping[str, Any]],
+    rows: Sequence[Mapping[str, Any]],
+    survivor_id: str,
+    *,
+    same_recording: bool,
+    last_fragment_row: Optional[Mapping[str, Any]],
+) -> Optional[tuple[str, int]]:
+    """The Jev question text and stretch count for this pair, or None when it
+    cannot be phrased.
+
+    With ``same_recording`` the two endpoints' drifted speech ``started_at`` is
+    replaced by their server ``created_at`` so the stated gap is the real
+    wall-clock gap; A's transcript is the newest fragment's own decoded row.
+    Every other field — question, stretch, ledger payload — stays unchanged.
+    """
+    fragments = ledger_fragments(survivor)
+    b = fragment_of(new_row)
+    if b is None or not fragments:
+        return None
+    if same_recording:
+        last = newest_wallclock_fragment(survivor)
+        if last is None:
+            return None
+        last_row = last_fragment_row if isinstance(last_fragment_row, Mapping) else survivor
+        a = replace(last, started_at=last_row['created_at'], finished_at=last_row['finished_at'])
+        b = replace(b, started_at=new_row['created_at'])
+        candidates = [fragment for fragment in fragments if fragment.id != last.id]
+        a_segments = (
+            fragment_segments(survivor, survivor_segments, last)
+            if last.id == str(survivor.get('id'))
+            else _segments(last_row)
+        )
+    else:
+        a = fragments[-1]
+        candidates = list(fragments[:-1])
+        a_segments = fragment_segments(survivor, survivor_segments, a)
+    for row in rows:
+        if str(row.get('id')) != survivor_id:
+            candidates.extend(ledger_fragments(row))
+    stretch = stretch_before(a, candidates)
+    state = build_state(
+        source=str(new_row['source']),
+        a=a,
+        a_segments=a_segments,
+        b=b,
+        b_segments=new_segments,
+        stretch=stretch,
+        tz=_user_tz(uid),
+    )
+    return state, len(stretch)
+
+
+def _normalize_p_same(p_same: Any) -> Optional[float]:
+    if (
+        isinstance(p_same, bool)
+        or not isinstance(p_same, (int, float))
+        or not math.isfinite(p_same)
+        or not 0.0 <= p_same <= 1.0
+    ):
+        return None
+    return p_same
+
+
+def _wallclock_shadow_emit(
+    would: str,
+    reason: str,
+    p_same: Optional[float],
+    gap_wall: Optional[float],
+    gap_legacy: Optional[float],
+    uid: str,
+    conversation_id: str,
+    survivor_id: str,
+) -> None:
+    record_conversation_smart_merge_wallclock_shadow(would, reason)
+    logger.info(
+        'event=smart_merge_wallclock_shadow would=%s reason=%s p_same=%s gap_wall_s=%s gap_legacy_s=%s uid=%s conversation=%s candidate=%s',
+        would,
+        reason,
+        p_same,
+        gap_wall,
+        gap_legacy,
+        uid,
+        conversation_id,
+        survivor_id,
+    )
+
+
+def _wallclock_shadow(
+    uid: str,
+    conversation_id: str,
+    survivor: Mapping[str, Any],
+    survivor_segments: Sequence[Mapping[str, Any]],
+    new_row: Mapping[str, Any],
+    new_segments: Sequence[Mapping[str, Any]],
+    rows: Sequence[Mapping[str, Any]],
+    survivor_id: str,
+    legacy_gap: Optional[float],
+    load_last_fragment_row: Any,
+) -> None:
+    """What the corrected wall-clock policy would do for a pair the legacy gate
+    skipped. Legacy stays authoritative: this only observes — one extra Jev
+    question at most, one bounded log line and counter, never a write."""
+    corrected: Optional[PairCheck] = None
+    last_fragment_row: Optional[Mapping[str, Any]] = None
+    try:
+        last_fragment_row = load_last_fragment_row()
+        corrected = check_pair(
+            survivor,
+            survivor_segments,
+            new_row,
+            new_segments,
+            wallclock_gap=True,
+            last_fragment_row=last_fragment_row,
+        )
+        if not corrected.same_recording:
+            return
+        if corrected.reason is not None:
+            _wallclock_shadow_emit(
+                'skip', corrected.reason, None, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id
+            )
+            return
+        built = _pair_state(
+            uid,
+            new_row,
+            new_segments,
+            survivor,
+            survivor_segments,
+            rows,
+            survivor_id,
+            same_recording=True,
+            last_fragment_row=last_fragment_row,
+        )
+        p_same = _normalize_p_same(_ask(built[0])) if built is not None else None
+    except Exception:
+        if corrected is not None and corrected.same_recording and corrected.reason is None:
+            _wallclock_shadow_emit(
+                'skip', 'jev_unavailable', None, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id
+            )
+        return
+    if p_same is None:
+        would, reason = 'skip', 'jev_unavailable'
+    elif p_same >= MERGE_THRESHOLD:
+        would, reason = 'merge', 'jev_same'
+    else:
+        would, reason = 'kept', 'jev_different'
+    _wallclock_shadow_emit(would, reason, p_same, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id)
+
+
 def _decide(
     uid: str, conversation_id: str, *, mode: SmartMergeMode, trigger: ProcessingTrigger, owner: str
 ) -> Optional[_MergePlan]:
@@ -280,7 +448,44 @@ def _decide(
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
+    wall_mode = smart_merge_wallclock_gap_mode()
+    newest = newest_wallclock_fragment(survivor) if wall_mode is not SmartMergeWallclockGapMode.OFF else None
+    last_fragment_id = (
+        newest.id if newest is not None and newest.id != survivor_id and valid_fragment_id(newest.id) else None
+    )
+
+    def _last_fragment_row() -> Optional[Mapping[str, Any]]:
+        if last_fragment_id is None or live_recording_origin(new_row) is None:
+            return None
+        row = conversations_db.get_conversation(uid, last_fragment_id, read_site=FirestoreReadSite.SMART_MERGE)
+        return dict(row, id=last_fragment_id) if row else None
+
+    last_fragment_row: Optional[Mapping[str, Any]] = None
     check = check_pair(survivor, survivor_segments, new_row, new_segments)
+    if check.reason is not None:
+        if wall_mode is SmartMergeWallclockGapMode.ON:
+            last_fragment_row = _last_fragment_row()
+            check = check_pair(
+                survivor,
+                survivor_segments,
+                new_row,
+                new_segments,
+                wallclock_gap=True,
+                last_fragment_row=last_fragment_row,
+            )
+        elif wall_mode is SmartMergeWallclockGapMode.SHADOW:
+            _wallclock_shadow(
+                uid,
+                conversation_id,
+                survivor,
+                survivor_segments,
+                new_row,
+                new_segments,
+                rows,
+                survivor_id,
+                check.gap_seconds,
+                _last_fragment_row,
+            )
     if check.reason is not None:
         _skip(mode, check.reason, uid, conversation_id, check.gap_seconds)
         return None
@@ -288,41 +493,39 @@ def _decide(
     stored = new_row.get(DECISION_FIELD)
     prior: Mapping[str, Any] = stored if isinstance(stored, Mapping) else {}
     reuse = prior.get('candidate_id') == survivor_id and prior.get('question_version') == QUESTION_VERSION
+    if reuse and check.same_recording:
+        prior_gap = prior.get('gap_seconds')
+        reuse = (
+            prior.get('speech_gap_seconds') is None
+            and isinstance(prior_gap, (int, float))
+            and not isinstance(prior_gap, bool)
+            and check.gap_seconds is not None
+            and float(prior_gap) == round(check.gap_seconds, 1)
+        )
     if reuse:
         # Sticky: a replay never re-asks, so a run-to-run flip cannot change a retried job.
         p_same = prior.get('p_same')
         stretch_count, state_hash = int(prior.get('stretch_count') or 0), prior.get('state_sha256')
     else:
-        fragments = ledger_fragments(survivor)
-        b = fragment_of(new_row)
-        if b is None or not fragments:
+        built = _pair_state(
+            uid,
+            new_row,
+            new_segments,
+            survivor,
+            survivor_segments,
+            rows,
+            survivor_id,
+            same_recording=check.same_recording,
+            last_fragment_row=last_fragment_row,
+        )
+        if built is None:
             _skip(mode, SkipReason.CONVERSATION_NOT_ELIGIBLE, uid, conversation_id)
             return None
-        a = fragments[-1]
-        candidates = list(fragments[:-1])
-        for row in rows:
-            if str(row.get('id')) != survivor_id:
-                candidates.extend(ledger_fragments(row))
-        stretch = stretch_before(a, candidates)
-        state = build_state(
-            source=str(new_row['source']),
-            a=a,
-            a_segments=fragment_segments(survivor, survivor_segments, a),
-            b=b,
-            b_segments=new_segments,
-            stretch=stretch,
-            tz=_user_tz(uid),
-        )
+        state, stretch_count = built
         p_same = _ask(state)
-        stretch_count, state_hash = len(stretch), state_sha256(state)
+        state_hash = state_sha256(state)
 
-    if (
-        isinstance(p_same, bool)
-        or not isinstance(p_same, (int, float))
-        or not math.isfinite(p_same)
-        or not 0.0 <= p_same <= 1.0
-    ):
-        p_same = None
+    p_same = _normalize_p_same(p_same)
     same = p_same is not None and p_same >= MERGE_THRESHOLD
     reason = 'jev_unavailable' if p_same is None else ('jev_same' if same else 'jev_different')
 
@@ -349,8 +552,13 @@ def _decide(
             gap_seconds=check.gap_seconds,
             p_same=None if reuse else p_same,
         )
+        gap_path = (
+            f" gap_path={'wallclock' if check.same_recording else 'legacy'}"
+            if wall_mode is SmartMergeWallclockGapMode.ON
+            else ''
+        )
         logger.info(
-            'event=smart_merge mode=%s decision=%s reason=%s p_same=%s gap_s=%s uid=%s conversation=%s candidate=%s',
+            'event=smart_merge mode=%s decision=%s reason=%s p_same=%s gap_s=%s uid=%s conversation=%s candidate=%s%s',
             mode.value,
             decision,
             reason,
@@ -359,6 +567,7 @@ def _decide(
             uid,
             conversation_id,
             survivor_id,
+            gap_path,
         )
         return None
     merge_record = record(MERGED, reason)
@@ -371,6 +580,12 @@ def _decide(
         check.gap_seconds,
         expected_survivor_sync_revision=survivor.get('sync_content_revision'),
         expected_donor_sync_revision=new_row.get('sync_content_revision'),
+        same_recording=check.same_recording,
+        last_fragment_id=last_fragment_id if wall_mode is SmartMergeWallclockGapMode.ON else None,
+        wallclock_gap=wall_mode is SmartMergeWallclockGapMode.ON,
+        admission_path=(
+            ('wallclock' if check.same_recording else 'legacy') if wall_mode is SmartMergeWallclockGapMode.ON else None
+        ),
     )
 
 
@@ -380,6 +595,7 @@ def _decide(
 def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMergeMode, owner: str) -> bool:
     merged_at = datetime.now(timezone.utc)
     flattened_count = 0
+    admission_path = plan.admission_path
 
     def payloads(
         survivor: Mapping[str, Any],
@@ -387,10 +603,22 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         donor: Mapping[str, Any],
         donor_segments: Sequence[Mapping[str, Any]],
         ancestor_rows: Mapping[str, Optional[Mapping[str, Any]]],
+        last_fragment_row: Optional[Mapping[str, Any]],
     ) -> tuple[Optional[str], Optional[dict], Optional[dict], Mapping[str, dict]]:
+        nonlocal admission_path
         reason = new_conversation_skip(donor, donor_segments, capture_end=True)
         if reason is None:
-            reason = check_pair(survivor, survivor_segments, donor, donor_segments).reason
+            check = check_pair(
+                survivor,
+                survivor_segments,
+                donor,
+                donor_segments,
+                wallclock_gap=plan.wallclock_gap,
+                last_fragment_row=last_fragment_row,
+            )
+            reason = check.reason
+            if reason is None and plan.wallclock_gap:
+                admission_path = 'wallclock' if check.same_recording else 'legacy'
         if reason is not None:
             return reason, None, None, {}
         survivor_update, donor_update = absorb_payloads(
@@ -415,6 +643,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             plan=payloads,
             expected_survivor_sync_revision=plan.expected_survivor_sync_revision,
             expected_donor_sync_revision=plan.expected_donor_sync_revision,
+            last_fragment_id=plan.last_fragment_id,
         )
         outcome, reason, audit = result.outcome, result.reason, result.audit
         flattened_count = result.flattened_ancestor_count
@@ -444,13 +673,14 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             logger.warning('event=smart_merge outcome=record_failed uid=%s conversation=%s', uid, conversation_id)
         record_conversation_smart_merge(mode=mode.value, decision='keep', reason=reason, gap_seconds=plan.gap)
         logger.info(
-            'event=smart_merge mode=%s decision=kept reason=%s uid=%s conversation=%s candidate=%s flattened_ancestor_count=%s',
+            'event=smart_merge mode=%s decision=kept reason=%s uid=%s conversation=%s candidate=%s flattened_ancestor_count=%s%s',
             mode.value,
             reason,
             uid,
             conversation_id,
             plan.survivor_id,
             flattened_count,
+            f' gap_path={admission_path}' if admission_path else '',
         )
         return False
 
@@ -469,13 +699,14 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
                 outcome='degraded',
             )
     logger.info(
-        'event=smart_merge mode=%s decision=merged p_same=%s uid=%s conversation=%s survivor=%s flattened_ancestor_count=%s',
+        'event=smart_merge mode=%s decision=merged p_same=%s uid=%s conversation=%s survivor=%s flattened_ancestor_count=%s%s',
         mode.value,
         plan.record.get('p_same'),
         uid,
         conversation_id,
         plan.survivor_id,
         flattened_count,
+        f' gap_path={admission_path}' if admission_path else '',
     )
     finish_absorb(uid, conversation_id, owner=owner)
     return True

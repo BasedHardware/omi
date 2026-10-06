@@ -214,6 +214,62 @@ def test_search_conversations_tool_refilters_hydrated_hits_to_timeframe():
     render.assert_not_called()
 
 
+def test_search_conversations_tool_finds_transcript_only_fact_with_verbatim_evidence():
+    """A summary-only miss must not become an unsupported answer after user pushback (#20629)."""
+    cfg = {"configurable": {"user_id": "u1", "conversations_collected": []}}
+    conv = {
+        'id': 'spoken-only',
+        'started_at': datetime(2026, 8, 18, tzinfo=timezone.utc),
+        'created_at': datetime(2026, 8, 18, tzinfo=timezone.utc),
+        'transcript_segments': [{'text': 'The invoice total was 47 dollars.'}],
+        'is_locked': False,
+        'discarded': False,
+    }
+    parsed = MagicMock(id='spoken-only', transcript_segments=[])
+    embeddings = MagicMock()
+    embeddings.embed_query.return_value = [0.5]
+    with (
+        patch.object(tools, 'parse_exact_conversation_reference', return_value=None),
+        patch.object(tools, 'keyword_search_conversation_ids', return_value=[]),
+        patch.object(tools.vector_db, 'index', object()),
+        patch.object(tools.vector_db, 'embeddings', embeddings),
+        patch.object(tools.vector_db, 'query_vectors', return_value=[]) as summaries,
+        patch.object(
+            tools.vector_db,
+            'search_transcript_chunks',
+            return_value=[{'conversation_id': 'spoken-only', 'chunk_index': 0}],
+        ) as chunks,
+        patch.object(tools.conversations_db, 'get_conversations_by_id', return_value=[conv]) as fetch,
+        patch.object(tools, 'deserialize_conversation', return_value=parsed),
+        patch.object(tools, 'conversation_to_citation_card', return_value={'id': 'spoken-only'}),
+        patch.object(tools, 'conversations_to_string', return_value='Summary: Billing discussion'),
+        patch.object(tools.notification_db, 'get_user_time_zone', return_value='UTC'),
+    ):
+        out = tools.search_conversations_tool.invoke({'query': 'invoice amount'}, config=cfg)
+    assert embeddings.embed_query.call_count == 1
+    assert summaries.call_args.kwargs['query_vector'] == [0.5]
+    assert chunks.call_args.kwargs['query_vector'] == [0.5]
+    fetch.assert_called_once_with('u1', ['spoken-only'])
+    assert '47 dollars' in out
+    assert 'spoken-only' in out
+    assert cfg['configurable']['conversations_collected'] == [{'id': 'spoken-only'}]
+
+
+def test_search_conversations_tool_does_not_claim_no_transcript_match_when_index_unavailable():
+    cfg = {"configurable": {"user_id": "u1", "conversations_collected": []}}
+    with (
+        patch.object(tools, 'parse_exact_conversation_reference', return_value=None),
+        patch.object(tools, 'keyword_search_conversation_ids', return_value=[]),
+        patch.object(tools.vector_db, 'index', None),
+        patch.object(tools.vector_db, 'query_vectors', return_value=[]),
+        patch.object(tools.vector_db, 'search_transcript_chunks') as chunks,
+    ):
+        out = tools.search_conversations_tool.invoke({'query': 'invoice amount'}, config=cfg)
+    chunks.assert_not_called()
+    assert 'Transcript text was not searched' in out
+    assert 'cannot establish' in out
+
+
 def test_get_action_items_tool_forces_conversation_scope():
     import utils.retrieval.tools.action_item_tools as action_tools
 
