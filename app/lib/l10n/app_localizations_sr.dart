@@ -12431,4 +12431,37 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Овај налог се брише. Пријавите се другим налогом или сачекајте неколико минута и покушајте поново.';
+
+  @override
+  String get onboardingSetupTitle => 'Подешавамо ваш Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Дајте Omi-ју тренутак да се прилагоди';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Припремамо ваш радни простор';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Прилагођавамо транскрипцију вашем језику';
+
+  @override
+  String get onboardingSetupStepMemory => 'Подешавамо вашу меморију';
+
+  @override
+  String get onboardingSetupStepDevices => 'Повезујемо ваше уређаје';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Персонализујемо ваше искуство';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Док чекате, да ли вам је пријатно да користите Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Оцена са 5 звездица нам заиста много помаже ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Да, желим да вас подржим!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Не баш';
 }

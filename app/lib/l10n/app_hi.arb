@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ",
-    "accountDeletionInProgressSignInAgain": "यह खाता हटाया जा रहा है। किसी दूसरे खाते से साइन इन करें, या कुछ मिनट रुककर फिर से कोशिश करें।"
+    "accountDeletionInProgressSignInAgain": "यह खाता हटाया जा रहा है। किसी दूसरे खाते से साइन इन करें, या कुछ मिनट रुककर फिर से कोशिश करें।",
+    "onboardingSetupTitle": "आपका Omi सेट हो रहा है",
+    "onboardingSetupSubtitle": "Omi को पर्सनलाइज़ होने के लिए थोड़ा समय दें",
+    "onboardingSetupStepWorkspace": "आपका वर्कस्पेस तैयार हो रहा है",
+    "onboardingSetupStepLanguage": "आपकी भाषा के लिए ट्रांसक्रिप्शन ट्यून हो रहा है",
+    "onboardingSetupStepMemory": "आपकी मेमोरी सेट हो रही है",
+    "onboardingSetupStepDevices": "आपके डिवाइस कनेक्ट हो रहे हैं",
+    "onboardingSetupStepPersonalize": "आपका अनुभव पर्सनलाइज़ हो रहा है",
+    "onboardingRatingPromptTitle": "इंतज़ार के दौरान बताइए, क्या Omi इस्तेमाल करना अच्छा लगा?",
+    "onboardingRatingPromptBody": "5 स्टार रेटिंग देने से हमें सच में बहुत मदद मिलती है ❤️",
+    "onboardingRatingPromptYes": "हाँ, मुझे आपको सपोर्ट करना है!",
+    "onboardingRatingPromptNo": "ज़्यादा नहीं"
 }

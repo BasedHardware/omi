@@ -11397,5 +11397,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "הצגה במסך הנעילה",
-    "accountDeletionInProgressSignInAgain": "החשבון הזה נמחק כעת. היכנסו עם חשבון אחר, או המתינו כמה דקות ונסו שוב."
+    "accountDeletionInProgressSignInAgain": "החשבון הזה נמחק כעת. היכנסו עם חשבון אחר, או המתינו כמה דקות ונסו שוב.",
+    "onboardingSetupTitle": "מגדירים את ה-Omi שלך",
+    "onboardingSetupSubtitle": "תנו ל-Omi רגע להתאים את עצמו אליכם",
+    "onboardingSetupStepWorkspace": "מכינים את סביבת העבודה שלך",
+    "onboardingSetupStepLanguage": "מכוונים את התמלול לשפה שלך",
+    "onboardingSetupStepMemory": "מגדירים את הזיכרון שלך",
+    "onboardingSetupStepDevices": "מחברים את המכשירים שלך",
+    "onboardingSetupStepPersonalize": "מתאימים אישית את החוויה שלך",
+    "onboardingRatingPromptTitle": "בזמן שמחכים, נעים לכם להשתמש ב-Omi?",
+    "onboardingRatingPromptBody": "דירוג של 5 כוכבים עוזר לנו מאוד ❤️",
+    "onboardingRatingPromptYes": "כן, אני רוצה לתמוך בכם!",
+    "onboardingRatingPromptNo": "לא ממש"
 }

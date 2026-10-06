@@ -3936,5 +3936,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Megjelenítés a zárolási képernyőn",
-    "accountDeletionInProgressSignInAgain": "Ez a fiók törlés alatt áll. Jelentkezz be egy másik fiókkal, vagy várj néhány percet, és próbáld újra."
+    "accountDeletionInProgressSignInAgain": "Ez a fiók törlés alatt áll. Jelentkezz be egy másik fiókkal, vagy várj néhány percet, és próbáld újra.",
+    "onboardingSetupTitle": "Az Omi beállítása",
+    "onboardingSetupSubtitle": "Adj egy pillanatot az Ominak a testreszabásra",
+    "onboardingSetupStepWorkspace": "A munkaterületed előkészítése",
+    "onboardingSetupStepLanguage": "Az átírás hangolása a nyelvedhez",
+    "onboardingSetupStepMemory": "A memóriád beállítása",
+    "onboardingSetupStepDevices": "Az eszközeid csatlakoztatása",
+    "onboardingSetupStepPersonalize": "Az élményed személyre szabása",
+    "onboardingRatingPromptTitle": "Amíg vársz, jó élmény volt az Omi használata?",
+    "onboardingRatingPromptBody": "Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️",
+    "onboardingRatingPromptYes": "Igen, szeretnék támogatni titeket!",
+    "onboardingRatingPromptNo": "Nem igazán"
 }

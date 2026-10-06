@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Toon op vergrendelscherm",
-    "accountDeletionInProgressSignInAgain": "Dit account wordt verwijderd. Log in met een ander account, of wacht een paar minuten en probeer het opnieuw."
+    "accountDeletionInProgressSignInAgain": "Dit account wordt verwijderd. Log in met een ander account, of wacht een paar minuten en probeer het opnieuw.",
+    "onboardingSetupTitle": "Je Omi wordt ingesteld",
+    "onboardingSetupSubtitle": "Geef Omi even de tijd om te personaliseren",
+    "onboardingSetupStepWorkspace": "Je werkruimte wordt voorbereid",
+    "onboardingSetupStepLanguage": "Transcriptie wordt afgestemd op jouw taal",
+    "onboardingSetupStepMemory": "Je geheugen wordt ingesteld",
+    "onboardingSetupStepDevices": "Je apparaten worden verbonden",
+    "onboardingSetupStepPersonalize": "Je ervaring wordt gepersonaliseerd",
+    "onboardingRatingPromptTitle": "Terwijl je wacht: vind je Omi fijn om te gebruiken?",
+    "onboardingRatingPromptBody": "5 sterren helpen ons echt enorm ❤️",
+    "onboardingRatingPromptYes": "Ja, ik wil jullie steunen!",
+    "onboardingRatingPromptNo": "Niet echt"
 }

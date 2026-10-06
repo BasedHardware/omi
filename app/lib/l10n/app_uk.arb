@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Показувати на екрані блокування",
-    "accountDeletionInProgressSignInAgain": "Цей обліковий запис видаляється. Увійдіть з іншим обліковим записом або зачекайте кілька хвилин і спробуйте знову."
+    "accountDeletionInProgressSignInAgain": "Цей обліковий запис видаляється. Увійдіть з іншим обліковим записом або зачекайте кілька хвилин і спробуйте знову.",
+    "onboardingSetupTitle": "Налаштовуємо ваш Omi",
+    "onboardingSetupSubtitle": "Дайте Omi хвилинку, щоб підлаштуватися під вас",
+    "onboardingSetupStepWorkspace": "Готуємо ваш робочий простір",
+    "onboardingSetupStepLanguage": "Налаштовуємо транскрипцію під вашу мову",
+    "onboardingSetupStepMemory": "Налаштовуємо вашу пам'ять",
+    "onboardingSetupStepDevices": "Підключаємо ваші пристрої",
+    "onboardingSetupStepPersonalize": "Персоналізуємо ваш досвід",
+    "onboardingRatingPromptTitle": "Поки чекаєте, вам приємно користуватися Omi?",
+    "onboardingRatingPromptBody": "Оцінка в 5 зірок дуже нам допоможе ❤️",
+    "onboardingRatingPromptYes": "Так, хочу вас підтримати!",
+    "onboardingRatingPromptNo": "Не дуже"
 }

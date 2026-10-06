@@ -12470,4 +12470,37 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'ఈ ఖాతా తొలగించబడుతోంది. మరో ఖాతాతో సైన్ ఇన్ చేయండి, లేదా కొన్ని నిమిషాలు వేచి ఉండి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get onboardingSetupTitle => 'మీ Omi సెటప్ అవుతోంది';
+
+  @override
+  String get onboardingSetupSubtitle => 'వ్యక్తిగతీకరించడానికి Omi కి కొంచెం సమయం ఇవ్వండి';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'మీ వర్క్‌స్పేస్ సిద్ధమవుతోంది';
+
+  @override
+  String get onboardingSetupStepLanguage => 'మీ భాషకు అనుగుణంగా ట్రాన్స్‌క్రిప్షన్ ట్యూన్ అవుతోంది';
+
+  @override
+  String get onboardingSetupStepMemory => 'మీ మెమరీ సెటప్ అవుతోంది';
+
+  @override
+  String get onboardingSetupStepDevices => 'మీ పరికరాలు కనెక్ట్ అవుతున్నాయి';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'మీ అనుభవం వ్యక్తిగతీకరించబడుతోంది';
+
+  @override
+  String get onboardingRatingPromptTitle => 'వేచి ఉన్నప్పుడు, Omi వాడటం బాగుందా?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 స్టార్ రేటింగ్ ఇస్తే మాకు నిజంగా చాలా సహాయం ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'అవును, నేను మీకు మద్దతు ఇవ్వాలనుకుంటున్నాను!';
+
+  @override
+  String get onboardingRatingPromptNo => 'అంతగా లేదు';
 }

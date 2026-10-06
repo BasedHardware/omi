@@ -3875,5 +3875,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Pokaż na ekranie blokady",
-    "accountDeletionInProgressSignInAgain": "To konto jest usuwane. Zaloguj się na inne konto albo poczekaj kilka minut i spróbuj ponownie."
+    "accountDeletionInProgressSignInAgain": "To konto jest usuwane. Zaloguj się na inne konto albo poczekaj kilka minut i spróbuj ponownie.",
+    "onboardingSetupTitle": "Konfigurujemy Twoje Omi",
+    "onboardingSetupSubtitle": "Daj Omi chwilę na personalizację",
+    "onboardingSetupStepWorkspace": "Przygotowujemy Twoją przestrzeń roboczą",
+    "onboardingSetupStepLanguage": "Dostrajamy transkrypcję do Twojego języka",
+    "onboardingSetupStepMemory": "Konfigurujemy Twoją pamięć",
+    "onboardingSetupStepDevices": "Łączymy Twoje urządzenia",
+    "onboardingSetupStepPersonalize": "Personalizujemy Twoje doświadczenie",
+    "onboardingRatingPromptTitle": "Skoro czekasz, czy Omi dobrze Ci się sprawdza?",
+    "onboardingRatingPromptBody": "Ocena 5 gwiazdek naprawdę nam pomaga ❤️",
+    "onboardingRatingPromptYes": "Tak, chcę Was wesprzeć!",
+    "onboardingRatingPromptNo": "Niezbyt"
 }

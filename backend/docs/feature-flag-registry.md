@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-02 -->
+<!-- feature-flag-registry as-of: 2026-10-06 -->
 
 # Feature-flag authority registry
 
@@ -104,7 +104,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-02.
+None as of 2026-10-06.
 
 ## Flags
 
@@ -246,6 +246,7 @@ and an explicit empty literal renders as `''`.
 | `negative_feedback_remediation_kill` | Beta negative-feedback remediation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `on_device_meeting_identity` | Enable on-device meeting identity on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
 | `on_device_meeting_identity_kill` | Beta on-device meeting identity stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
+| `onboarding-setup-rating-prompt` | Mobile onboarding Setting up your Omi page with the store-rating pre-prompt before the completion screen; client-evaluated, default off so the flow is unchanged and store review never sees it | mobile | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-05 | nik |
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-03 | dazheng |
 | `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |

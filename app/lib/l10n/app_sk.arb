@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Zobraziť na zamknutej obrazovke",
-    "accountDeletionInProgressSignInAgain": "Tento účet sa odstraňuje. Prihláste sa iným účtom alebo počkajte niekoľko minút a skúste to znova."
+    "accountDeletionInProgressSignInAgain": "Tento účet sa odstraňuje. Prihláste sa iným účtom alebo počkajte niekoľko minút a skúste to znova.",
+    "onboardingSetupTitle": "Nastavujeme váš Omi",
+    "onboardingSetupSubtitle": "Dajte Omi chvíľu na prispôsobenie",
+    "onboardingSetupStepWorkspace": "Pripravujeme váš pracovný priestor",
+    "onboardingSetupStepLanguage": "Ladíme prepis na váš jazyk",
+    "onboardingSetupStepMemory": "Nastavujeme vašu pamäť",
+    "onboardingSetupStepDevices": "Pripájame vaše zariadenia",
+    "onboardingSetupStepPersonalize": "Prispôsobujeme váš zážitok",
+    "onboardingRatingPromptTitle": "Kým čakáte, páči sa vám používanie Omi?",
+    "onboardingRatingPromptBody": "Hodnotenie 5 hviezdičiek nám naozaj veľmi pomáha ❤️",
+    "onboardingRatingPromptYes": "Áno, chcem vás podporiť!",
+    "onboardingRatingPromptNo": "Nie celkom"
 }

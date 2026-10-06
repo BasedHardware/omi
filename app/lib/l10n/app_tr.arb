@@ -3875,5 +3875,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Kilit ekranında göster",
-    "accountDeletionInProgressSignInAgain": "Bu hesap siliniyor. Başka bir hesapla giriş yapın ya da birkaç dakika bekleyip tekrar deneyin."
+    "accountDeletionInProgressSignInAgain": "Bu hesap siliniyor. Başka bir hesapla giriş yapın ya da birkaç dakika bekleyip tekrar deneyin.",
+    "onboardingSetupTitle": "Omi'niz ayarlanıyor",
+    "onboardingSetupSubtitle": "Omi'ye kişiselleştirmek için biraz zaman tanıyın",
+    "onboardingSetupStepWorkspace": "Çalışma alanınız hazırlanıyor",
+    "onboardingSetupStepLanguage": "Transkripsiyon diliniz için ayarlanıyor",
+    "onboardingSetupStepMemory": "Belleğiniz ayarlanıyor",
+    "onboardingSetupStepDevices": "Cihazlarınız bağlanıyor",
+    "onboardingSetupStepPersonalize": "Deneyiminiz kişiselleştiriliyor",
+    "onboardingRatingPromptTitle": "Beklerken, Omi'yi kullanmak hoşunuza gitti mi?",
+    "onboardingRatingPromptBody": "5 yıldız vermeniz bize gerçekten çok yardımcı olur ❤️",
+    "onboardingRatingPromptYes": "Evet, size destek olmak istiyorum!",
+    "onboardingRatingPromptNo": "Pek değil"
 }
