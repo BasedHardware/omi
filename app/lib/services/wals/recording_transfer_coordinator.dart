@@ -59,10 +59,11 @@ typedef RecordingTransferKeepAlive = Future<void> Function();
 
 /// The single owner for recording recovery.
 ///
-/// New discovery/drain passes stay foreground-only. An already-running pass
-/// keeps its Android transfer keep-alive (FGS + partial wake lock) until that
-/// pass completes or the user cancels, so screen-off cannot kill BLE/cloud
-/// file sync (#5221). It deliberately knows no provider or transport details.
+/// Foreground, device reconnect, and periodic wakes discover and drain backlog.
+/// Background wakes run at most two serial passes, without retry timers, and
+/// backlog wakes fence live capture. A running pass keeps its Android transfer
+/// keep-alive until completion or cancellation so screen-off cannot kill
+/// BLE/cloud file sync (#5221). It knows no provider or transport details.
 class RecordingTransferCoordinator {
   RecordingTransferCoordinator({
     required RecordingTransferPass reconcile,
@@ -242,8 +243,9 @@ class RecordingTransferCoordinator {
   /// during one pass therefore run at most two passes and never parallel drains,
   /// including while backgrounded.
   Future<void> wake(WakeTrigger trigger) {
-    // Background recovery is limited to recent conversation-bound phone WALs.
-    // It never enumerates device storage or starts a whole-history drain.
+    // Reconnect and periodic background wakes discover device storage and drain
+    // backlog inside a sync-only scope. Other eligible background recovery is
+    // limited to recent conversation-bound phone WALs. All are bounded in _run.
     if (!_foreground && !_isBackgroundEligible(trigger)) {
       final active = _inFlight;
       if (active != null) return active;
@@ -325,7 +327,7 @@ class RecordingTransferCoordinator {
   }
 
   Future<void> _runPass(WakeTrigger trigger) async {
-    if (trigger == WakeTrigger.periodic) {
+    if (trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected) {
       await SyncWakeScope.run(() => _runPassBody(trigger));
     } else {
       await _runPassBody(trigger);

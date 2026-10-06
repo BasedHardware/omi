@@ -14,32 +14,83 @@ import '../../support/capture/scripted_device_connection.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('background periodic wake discovers and drains backlog without opening live capture', () async {
-    final directory = await Directory.systemTemp.createTemp('periodic_sync_');
-    final world = await CaptureReplayWorld.boot(tempDir: directory);
-    final pendant = BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40);
-    world.deviceConnection = ScriptedDeviceConnection();
+  for (final trigger in [WakeTrigger.periodic, WakeTrigger.deviceConnected]) {
+    test('background $trigger wake discovers and drains backlog without opening live capture', () async {
+      final directory = await Directory.systemTemp.createTemp('periodic_sync_');
+      final world = await CaptureReplayWorld.boot(tempDir: directory);
+      final pendant = BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40);
+      world.deviceConnection = ScriptedDeviceConnection();
+      var discoveries = 0;
+      var drains = 0;
+      var holds = 0;
+      var releases = 0;
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () async {},
+        refreshPending: () async {},
+        discover: () async {
+          discoveries++;
+          expect(SyncWakeScope.syncOnly, true);
+          // A BLE connect observer and Home both attempt their normal starts.
+          await world.controller.streamDeviceRecording(device: pendant);
+          await world.controller.streamDeviceRecording();
+        },
+        drain: () async {
+          drains++;
+          expect(SyncWakeScope.syncOnly, true);
+          return const RecordingTransferDrainResult(attempted: true, failed: false, needsReconciliation: false);
+        },
+        drainLiveCapture: () async => throw StateError('must drain the backlog'),
+        autoUploadEnabled: () => true,
+        onTransferStarted: () async {
+          holds++;
+        },
+        onTransferFinished: () async {
+          releases++;
+        },
+      )..setForeground(false);
+      await coordinator.wake(trigger);
+      await coordinator.waitUntilIdle();
+      await world.controller.pendingSourceSwitch;
+      expect(discoveries, 1);
+      expect(drains, 1);
+      expect(holds, 1);
+      expect(releases, 1);
+      expect(world.sockets, isEmpty);
+      expect(world.deviceConnection!.openAudioSubscriptions, 0);
+      expect(coordinator.nextCooldownAt, isNull);
+      expect(SyncWakeScope.syncOnly, false);
+      coordinator.dispose();
+      await world.dispose();
+      directory.deleteSync(recursive: true);
+    });
+  }
+
+  test('background reconnect storms stop after two fenced passes, including failures', () async {
     var discoveries = 0;
     var drains = 0;
     var holds = 0;
     var releases = 0;
-    final coordinator = RecordingTransferCoordinator(
+    var cooldowns = 0;
+    late RecordingTransferCoordinator coordinator;
+    coordinator = RecordingTransferCoordinator(
       reconcile: () async {},
       refreshPending: () async {},
       discover: () async {
         discoveries++;
         expect(SyncWakeScope.syncOnly, true);
-        // A BLE connect observer and Home both attempt their normal starts.
-        await world.controller.streamDeviceRecording(device: pendant);
-        await world.controller.streamDeviceRecording();
+        // Coalesce a burst, even during the final allowed pass.
+        for (var i = 0; i < 5; i++) {
+          unawaited(coordinator.wake(WakeTrigger.deviceConnected));
+        }
       },
       drain: () async {
         drains++;
         expect(SyncWakeScope.syncOnly, true);
-        return const RecordingTransferDrainResult(attempted: true, failed: false, needsReconciliation: false);
+        throw StateError('retryable upload failure');
       },
       drainLiveCapture: () async => throw StateError('must drain the backlog'),
       autoUploadEnabled: () => true,
+      scheduleCooldown: (_, __) => cooldowns++,
       onTransferStarted: () async {
         holds++;
       },
@@ -47,20 +98,16 @@ void main() {
         releases++;
       },
     )..setForeground(false);
-    await coordinator.wake(WakeTrigger.periodic);
+    addTearDown(coordinator.dispose);
+    await coordinator.wake(WakeTrigger.deviceConnected);
     await coordinator.waitUntilIdle();
-    await world.controller.pendingSourceSwitch;
-    expect(discoveries, 1);
-    expect(drains, 1);
+    expect(discoveries, 2);
+    expect(drains, 2);
     expect(holds, 1);
     expect(releases, 1);
-    expect(world.sockets, isEmpty);
-    expect(world.deviceConnection!.openAudioSubscriptions, 0);
+    expect(cooldowns, 0);
     expect(coordinator.nextCooldownAt, isNull);
     expect(SyncWakeScope.syncOnly, false);
-    coordinator.dispose();
-    await world.dispose();
-    directory.deleteSync(recursive: true);
   });
 
   test('expiration fences discovery before upload and releases the sync-only scope', () async {
