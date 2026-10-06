@@ -200,6 +200,8 @@ env:
     value: "true"
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
+  - name: OMI_SHAPED_AGENT_MODE
+    value: "cohort"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
@@ -227,11 +229,15 @@ env:
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
     value: "100"
   - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
-    value: "2"
+    value: "20"
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
-    value: "10"
+    value: "100"
+  - name: MEETING_NOTES_EPISODE_EVIDENCE_ENABLED
+    value: 'true'
+  - name: MEETING_NOTES_EPISODE_EVIDENCE_PERCENT
+    value: '1'
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
@@ -439,6 +445,8 @@ env:
     value: "false"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
+  - name: SONIOX_IDLE_CLOSE_SECONDS
+    value: "45"
   - name: STT_ROUTING_MODE
     value: "shadow"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
@@ -583,6 +591,8 @@ env:
     value: "true"
   - name: SONIOX_WIRE_LEDGER
     value: "true"
+  - name: SONIOX_ORDERED_FINALIZE
+    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from

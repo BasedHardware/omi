@@ -34,6 +34,7 @@ import 'package:omi/services/capture/native_ble_stream_config.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
+import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -2916,6 +2917,12 @@ class CaptureController extends ChangeNotifier
 
     if (closeCode == 4001) {
       unawaited(_refreshRejectedAuthToken());
+    }
+
+    if (closeCode == accountDeletionWebSocketCloseCode) {
+      // Same fence as the HTTP 403 `account_deletion_in_progress`: no
+      // reconnect can succeed, the session is over.
+      unawaited(_auth.expireDeletedAccountSession());
     }
 
     // Reflect the transcription pipeline break in recordingState. Before this

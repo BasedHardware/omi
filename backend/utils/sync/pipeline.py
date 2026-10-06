@@ -84,10 +84,13 @@ from models.geolocation import Geolocation
 from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
+from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations.relevance import sync_intake_decision
 from utils.executors import (
     db_executor,
     postprocess_executor,
@@ -184,7 +187,7 @@ from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
 from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
 from utils.sync.merge_audio import store_partial_merge_survivor_audio
-from utils.sync.assignment import fragment_rule, needs_fragment_review
+from utils.sync.assignment import fragment_rule
 from utils.sync.speaker_identity import PersonEmbeddingsCache, SpeakerIdentityDependencies, USER_SELF_PERSON_ID
 from utils.sync.speaker_identity import build_person_embeddings_cache as _build_person_embeddings_cache
 from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
@@ -1040,11 +1043,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
-    if (
-        (sync_lineage_resolve_active_for(uid) or language == _LINEAGE_RETRY_LANGUAGE)
-        and conversation_data.get('sync_live_target')
-        and conversation_data.get('status') == 'in_progress'
-    ):
+    if conversation_data.get('sync_live_target') and conversation_data.get('status') == 'in_progress':
         # Live finalization owns the open row. SYNC_UPDATE would mark it
         # completed while the socket is still adding speech, after which the
         # finalizer skips processing that later content.
@@ -1054,11 +1053,23 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # spend. Everything else goes through the relevance step (SYNC_UPDATE),
     # which reassesses the whole merged transcript, so later speech promotes it.
     segments = conversation_data.get('transcript_segments', [])
-    if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(segments):
-        record_conversation_relevance(
-            trigger='sync_intake', verdict='discard', decided_by='rule', reason=fragment_rule(segments)[1]
-        )
-        return
+    status = getattr(conversation_data.get('status'), 'value', conversation_data.get('status'))
+    if (
+        status == 'completed'
+        and conversation_data.get('sync_relevance') == 'review'
+        and not is_user_curated(conversation_data)
+    ):
+        verdict, rule = fragment_rule(segments)
+        if verdict == 'discard':
+            persisted = lifecycle_service.discard_by_relevance(
+                uid,
+                conversation_id,
+                sync_intake_decision(rule),
+                expected_sync_content_revision=conversation_data.get('sync_content_revision'),
+            )
+            if persisted:
+                record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
+            return
 
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
@@ -1071,7 +1082,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         language_code=language or 'en',
         conversation=conversation,
         trigger=ProcessingTrigger.SYNC_UPDATE,
-        user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
+        user_kept=is_user_curated(conversation_data),
         persistence_observer=_require_current_conversation_persistence,
     )
 
@@ -2500,6 +2511,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         is_locked,
                         job_id,
                         segment_binding_reasons,
+                        **({'segment_source_maps': segment_source_maps} if segment_source_maps else {}),
                     )
                 except Exception:
                     # Span construction and the executor call are also part of

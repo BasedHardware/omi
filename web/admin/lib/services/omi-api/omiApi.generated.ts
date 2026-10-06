@@ -824,6 +824,20 @@ export interface CalendarMeetingContext {
   duration_minutes: number;
   meeting_link?: string | null;
   notes?: string | null;
+  participant_sources?: MeetingParticipantSources | null;
+  participants?: Array<MeetingParticipant>;
+  platform?: string | null;
+  start_time: string;
+  title: string;
+}
+
+export interface CalendarMeetingContext_Output {
+  calendar_event_id: string;
+  calendar_source?: string | null;
+  duration_minutes: number;
+  meeting_link?: string | null;
+  notes?: string | null;
+  participant_sources?: MeetingParticipantSources | null;
   participants?: Array<MeetingParticipant>;
   platform?: string | null;
   start_time: string;
@@ -2982,6 +2996,11 @@ export interface MeetingParticipant {
   name?: string | null;
 }
 
+export interface MeetingParticipantSources {
+  expected_calendar?: Array<MeetingParticipant> | null;
+  observed_screen_listing?: Array<MeetingParticipant> | null;
+}
+
 export interface Memory {
   arguments?: Record<string, unknown>;
   belief_class?: string | null;
@@ -3312,6 +3331,23 @@ export interface NormalizedRect {
   width: number;
   x: number;
   y: number;
+}
+
+export interface NoteClaim {
+  evidence_ids: Array<string>;
+  evidence_sources?: Array<NoteEvidenceRef> | null;
+  provenance: "said" | "shown" | "written" | "inferred";
+  target: string;
+  text: string;
+}
+
+export interface NoteEvidenceRef {
+  actor?: string | null;
+  diarization_key?: string | null;
+  id: string;
+  source_kind: string;
+  source_ref?: string | null;
+  time?: string | null;
 }
 
 export interface NotificationSettingsResponse {
@@ -4495,6 +4531,7 @@ export interface Structured {
   events?: Array<Event>;
   insights?: Array<Insight>;
   meeting_type?: "interview" | "intro" | "sales" | "customer" | "one_on_one" | "team_sync" | "planning" | "demo" | "social" | "other" | null;
+  note_claims?: Array<NoteClaim> | null;
   overview?: string;
   participants?: Array<Participant>;
   sections?: Array<Section>;
@@ -5523,6 +5560,7 @@ export interface OmiApiSchemas {
   "CalendarCaptureGap": CalendarCaptureGap;
   "CalendarEventLink": CalendarEventLink;
   "CalendarMeetingContext": CalendarMeetingContext;
+  "CalendarMeetingContext-Output": CalendarMeetingContext_Output;
   "CalendarOnboardingResetResponse": CalendarOnboardingResetResponse;
   "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
@@ -5805,6 +5843,7 @@ export interface OmiApiSchemas {
   "McpStatusResponse": McpStatusResponse;
   "McpUpdateActionItem": McpUpdateActionItem;
   "MeetingParticipant": MeetingParticipant;
+  "MeetingParticipantSources": MeetingParticipantSources;
   "Memory": Memory;
   "MemoryAssistantSettings": MemoryAssistantSettings;
   "MemoryCaptureContext": MemoryCaptureContext;
@@ -5849,6 +5888,8 @@ export interface OmiApiSchemas {
   "NormalizedContextMatch": NormalizedContextMatch;
   "NormalizedContextSnapshot": NormalizedContextSnapshot;
   "NormalizedRect": NormalizedRect;
+  "NoteClaim": NoteClaim;
+  "NoteEvidenceRef": NoteEvidenceRef;
   "NotificationSettingsResponse": NotificationSettingsResponse;
   "OAuthUrlResponse": OAuthUrlResponse;
   "OfflineQueueInstruction": OfflineQueueInstruction;
@@ -6903,7 +6944,7 @@ export interface OmiApiPaths {
     get: {
       operationId: "list_calendar_meetings_v1_calendar_meetings_get";
       responses: {
-        "200": Array<CalendarMeetingContext>;
+        "200": Array<CalendarMeetingContext_Output>;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -6921,7 +6962,7 @@ export interface OmiApiPaths {
     get: {
       operationId: "get_calendar_meeting_v1_calendar_meetings__meeting_id__get";
       responses: {
-        "200": CalendarMeetingContext;
+        "200": CalendarMeetingContext_Output;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -12522,7 +12563,7 @@ export async function list_google_calendar_events_v1_calendar_google_events_get(
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function list_calendar_meetings_v1_calendar_meetings_get(query: { start_date?: string | null, end_date?: string | null, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<CalendarMeetingContext>> {
+export async function list_calendar_meetings_v1_calendar_meetings_get(query: { start_date?: string | null, end_date?: string | null, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<CalendarMeetingContext_Output>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/calendar/meetings`;
   const _params = query ? Object.entries(query)
@@ -12565,7 +12606,7 @@ export async function store_calendar_meeting_v1_calendar_meetings_post(header: {
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_calendar_meeting_v1_calendar_meetings__meeting_id__get(path: { meeting_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CalendarMeetingContext> {
+export async function get_calendar_meeting_v1_calendar_meetings__meeting_id__get(path: { meeting_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CalendarMeetingContext_Output> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/calendar/meetings/${path.meeting_id}`;
   const _search = "";
@@ -13069,7 +13110,7 @@ export async function generate_conversation_topic_endpoint_v1_conversations_topi
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, query: { source?: string | null, include_discarded?: boolean, include_translations?: boolean, translation_cursor?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
+export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, query: { source?: string | null, include_discarded?: boolean | null, include_translations?: boolean, translation_cursor?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}`;
   const _params = query ? Object.entries(query)

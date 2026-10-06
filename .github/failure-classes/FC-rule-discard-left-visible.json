@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-rule-discard-left-visible",
+  "violated_contract": "A completed conversation discarded by deterministic content rules is hidden from default client lists and detail reads unless explicitly kept by the user, and remains recoverable through Show discarded. Live ownership and shared visibility are not permanent keep decisions.",
+  "canonical_prevention": "Separate explicit user curation from live capture and publication metadata. Persist completed rule discards atomically with their decision at sync intake and the reprocess shortcut, and apply the same metadata-only effective-discard predicate at client-facing reads for previously inconsistent rows. Protect open sessions, explicit keeps, and concurrent content revisions without relaxing merge eligibility.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_rule_discard_visibility.py",
+    "backend/tests/unit/test_sync_fragment_visibility.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/fragment_visibility.py",
+    "backend/utils/sync/assignment.py",
+    "backend/utils/sync/pipeline.py",
+    "backend/database/conversations.py",
+    "backend/routers/conversations.py"
+  ],
+  "status": "open"
+}
