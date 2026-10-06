@@ -770,35 +770,82 @@ def _collect_visible_conversation_page(
     include_discarded: bool,
     budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
-    """Page visible rows. Offset counts visible rows, not stored slots.
+    """Page visible rows.
 
-    A Firestore ``limit``/``offset`` on ``discarded == False`` then a Python
-    drop lets one completed rule-discard empty the page and makes the next
-    offset repeat or skip. Fill ``limit`` visible rows after skipping
-    ``offset`` visible rows instead. ``include_discarded=False`` still cannot
-    express the decision check in the indexed query, so those skips are capped.
-    The list-read budget stops the scan when it is present.
+    ``include_discarded=True`` scans and fills, because donor tombstones are not
+    excluded by an indexed flag. ``include_discarded=False`` keeps the indexed
+    ``discarded == False`` query's server ``limit``/``offset`` (desktop parity).
+    If that window is full but some rows are completed rule-discards, keep
+    reading after the last snapshot until the page is full or the skip cap hits.
     """
-    skipped_visible = 0
-    skipped_hidden = 0
-    conversations: List[Dict[str, Any]] = []
+    if include_discarded:
+        skipped_visible = 0
+        conversations: List[Dict[str, Any]] = []
+        try:
+            for doc in budgeted_stream_iter(conversations_ref, budget):
+                conversation = document_data_with_revision(doc)
+                if conversation is None or not is_visible_conversation(
+                    conversation, include_discarded=include_discarded
+                ):
+                    continue
+                if skipped_visible < offset:
+                    skipped_visible += 1
+                    continue
+                conversations.append(conversation)
+                if len(conversations) >= limit:
+                    break
+        except ListReadBudgetExhausted:
+            pass
+        return conversations
+
+    if budget is not None and offset > 0:
+        try:
+            budget.charge(offset)
+        except ListReadBudgetExhausted:
+            return []
+    page_query = conversations_ref.offset(offset).limit(limit)
+    conversations = []
+    last_doc = None
+    fetched = 0
     try:
-        for doc in budgeted_stream_iter(conversations_ref, budget):
+        for doc in budgeted_stream_iter(page_query, budget):
+            fetched += 1
+            last_doc = doc
             conversation = document_data_with_revision(doc)
-            if conversation is None or not is_visible_conversation(conversation, include_discarded=include_discarded):
-                if not include_discarded:
-                    skipped_hidden += 1
-                    if skipped_hidden > _RULE_DISCARD_PAGE_SKIP_CAP:
-                        break
-                continue
-            if skipped_visible < offset:
-                skipped_visible += 1
+            if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
                 continue
             conversations.append(conversation)
-            if len(conversations) >= limit:
-                break
     except ListReadBudgetExhausted:
-        pass
+        return conversations
+
+    skipped = fetched - len(conversations)
+    while (
+        len(conversations) < limit
+        and fetched == limit
+        and last_doc is not None
+        and skipped <= _RULE_DISCARD_PAGE_SKIP_CAP
+        and hasattr(conversations_ref, 'start_after')
+    ):
+        need = limit - len(conversations)
+        follow = conversations_ref.start_after(last_doc).limit(need)
+        fetched = 0
+        try:
+            for doc in budgeted_stream_iter(follow, budget):
+                fetched += 1
+                last_doc = doc
+                conversation = document_data_with_revision(doc)
+                if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
+                    skipped += 1
+                    if skipped > _RULE_DISCARD_PAGE_SKIP_CAP:
+                        return conversations
+                    continue
+                conversations.append(conversation)
+                if len(conversations) >= limit:
+                    return conversations
+        except ListReadBudgetExhausted:
+            return conversations
+        if fetched < need:
+            break
     return conversations
 
 

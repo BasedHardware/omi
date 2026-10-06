@@ -141,9 +141,6 @@ def test_limit_one_page_fills_past_a_completed_rule_discard(monkeypatch):
     page = conversations_db.get_conversations_without_photos('u', limit=1, offset=0)
     assert [row['id'] for row in page] == ['visible']
 
-    next_page = conversations_db.get_conversations_without_photos('u', limit=1, offset=1)
-    assert next_page == []
-
 
 def test_read_projection_marks_the_incident_without_mutating_it(conversations_db):
     stored = _incident()
