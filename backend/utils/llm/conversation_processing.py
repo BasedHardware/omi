@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import logging
@@ -38,11 +39,13 @@ from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_in
 from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
 from utils.llm.meeting_notes_presentation import enforce_conversation_note_presentation
 from utils.llm.meeting_notes_validation import (
+    enforce_structured_presentation_contract,
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
     validate_rich_meeting_notes,
     validate_structured_source_segment_ids,
 )
+from utils.llm.shaped_agent import Budget, Mount, Turn, run_loop, serve_notes
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
@@ -1263,7 +1266,89 @@ DATE CONTEXT
     return text
 
 
+def notes_mount() -> Mount:
+    return Mount(
+        instructions=_conversation_notes_static_instructions('') + """
+Calendar invitees are expected participants only. Screen-shown names are observed
+listing data only. Neither establishes attendance or binds an audio cluster to a
+person. Attribute speech only from the original speaker map or direct evidence.
+Do not infer attendance, absence, or a no-show from either listing.
+""",
+        schema=StructuredExtraction,
+        budget=Budget(turns=1, tool_calls=0, deadline_seconds=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS),
+    )
+
+
 def get_conversation_notes(
+    prefix: ConversationPromptPrefix,
+    *,
+    uid: Optional[str] = None,
+    legacy_writer: Optional[Callable[[], Structured]] = None,
+    **kwargs: Any,
+) -> Structured:
+    return serve_notes(
+        uid,
+        legacy_writer or (lambda: _get_conversation_notes_legacy(prefix, **kwargs)),
+        lambda: _get_shaped_conversation_notes(prefix, **kwargs),
+    )
+
+
+def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: Any) -> Structured:
+    frames = kwargs.get('screen_frames', ())
+    if not prefix.has_usable_content and not frames:
+        return Structured()
+    mount = notes_mount()
+    # Never reuse the old prefix metadata: it may already have bound a roster.
+    context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
+    evidence = [
+        {
+            'role': 'user',
+            'content': json.dumps(
+                {
+                    'response_language': kwargs.get('output_language_code') or kwargs['language_code'],
+                    'timezone': kwargs['tz'],
+                    'started_at': kwargs['started_at'].isoformat(),
+                    'task_intelligence_capture': kwargs['task_intelligence_capture'],
+                    'open_tasks': kwargs.get('existing_action_items') or [],
+                    'capture_evidence': context,
+                },
+                ensure_ascii=False,
+                default=str,
+            ),
+        }
+    ]
+    if frames:
+        evidence.append(screen_frames_message(frames))
+    cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
+    model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+    model = model.with_structured_output(mount.schema, method='json_schema')
+    if cache_enabled:
+        model = model.bind(extra_body={'prompt_cache_options': GPT56_EXPLICIT_CACHE_OPTIONS})
+
+    async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
+        return Turn(value=await model.ainvoke(messages))
+
+    result = asyncio.run(run_loop(mount, evidence, model_turn, explicit_cache=cache_enabled))
+    structured = StructuredExtraction.model_validate(result.value).to_structured()
+    # A one-turn mount cannot buy the legacy presentation revision call.
+    enforce_structured_presentation_contract(structured, prefix.transcript_segment_ids, safe_fallback=True)
+    now = datetime.now(timezone.utc)
+    try:
+        user_tz = ZoneInfo(kwargs['tz']) if kwargs['tz'] else timezone.utc
+    except Exception:
+        user_tz = timezone.utc
+    for item in structured.action_items:
+        if item.created_at is None:
+            item.created_at = now
+    _normalize_action_item_due_dates(structured.action_items, user_tz=user_tz, now=now, log_past_due_clears=True)
+    for event in structured.events:
+        event.duration = min(event.duration, 180)
+        event.created = False
+    structured.overview = render_sections_markdown(structured.sections) or structured.overview
+    return structured
+
+
+def _get_conversation_notes_legacy(
     prefix: ConversationPromptPrefix,
     *,
     started_at: datetime,
