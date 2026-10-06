@@ -4032,39 +4032,47 @@ public enum OmiAPI {
 
 
   public struct Participant: Codable {
+    public let alias: String?
     public let email: String?
     public let isAiAgent: Bool?
     public let name: String?
     public let organization: String?
     public let role: String?
     public let source: String
+    public let speakerBindings: [Int]?
 
     private enum CodingKeys: String, CodingKey {
+      case alias
       case email
       case isAiAgent = "is_ai_agent"
       case name
       case organization
       case role
       case source
+      case speakerBindings = "speaker_bindings"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      alias = try c.decodeIfPresent(String.self, forKey: .alias)
       email = try c.decodeIfPresent(String.self, forKey: .email)
       isAiAgent = try c.decodeIfPresent(Bool.self, forKey: .isAiAgent)
       name = try c.decodeIfPresent(String.self, forKey: .name)
       organization = try c.decodeIfPresent(String.self, forKey: .organization)
       role = try c.decodeIfPresent(String.self, forKey: .role)
       source = try c.decode(String.self, forKey: .source)
+      speakerBindings = try c.decodeIfPresent([Int].self, forKey: .speakerBindings)
     }
 
-    public init(email: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String) {
+    public init(alias: String? = nil, email: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String, speakerBindings: [Int]? = nil) {
+      self.alias = alias
       self.email = email
       self.isAiAgent = isAiAgent
       self.name = name
       self.organization = organization
       self.role = role
       self.source = source
+      self.speakerBindings = speakerBindings
     }
   }
 

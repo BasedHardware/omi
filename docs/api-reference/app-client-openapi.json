@@ -21340,7 +21340,11 @@
             "title": "Role"
           },
           "source": {
-            "description": "Identity evidence source: roster, transcript, screen, or background",
+            "description": "Whether meeting metadata ('roster') or only the conversation evidences this participant",
+            "enum": [
+              "roster",
+              "transcript"
+            ],
             "title": "Source",
             "type": "string"
           },

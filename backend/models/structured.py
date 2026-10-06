@@ -130,7 +130,16 @@ except ModuleNotFoundError:
             default_factory=list,
             description='Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain',
         )
-        source: str = Field(description="Identity evidence source: roster, transcript, screen, or background")
+        source: Literal['roster', 'transcript'] = Field(
+            description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
+        )
+
+        @field_validator('source', mode='before')
+        @classmethod
+        def fold_unreleased_sources(cls, value):
+            if value in ('screen', 'background'):
+                return 'transcript'
+            return value
 
         @field_validator('speaker_bindings', mode='before')
         @classmethod

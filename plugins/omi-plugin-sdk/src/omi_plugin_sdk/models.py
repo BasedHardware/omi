@@ -170,7 +170,18 @@ class Participant(BaseModel):
         default_factory=list,
         description='Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain',
     )
-    source: str = Field(description="Identity evidence source: roster, transcript, screen, or background")
+    source: Literal['roster', 'transcript'] = Field(
+        description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
+    )
+
+    @field_validator('source', mode='before')
+    @classmethod
+    def fold_unreleased_sources(cls, value):
+        # Released app clients only decode roster|transcript. Screen and background
+        # evidence still creates the person; the wire value stays transcript.
+        if value in ('screen', 'background'):
+            return 'transcript'
+        return value
 
     @field_validator('speaker_bindings', mode='before')
     @classmethod
