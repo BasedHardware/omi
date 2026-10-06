@@ -1,4 +1,3 @@
-import pytest
 from utils.api_key_families import (
     api_key_family,
     wrong_key_family_detail,
