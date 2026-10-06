@@ -1393,6 +1393,7 @@ def _get_conversation_notes_legacy(
     if episode_mode and import_module('utils.llm.episode_writer').episode_budget_exceeded(
         messages, episode_settings, run
     ):
+        # The public notes function is the shaped dispatcher and is not wrapped.
         return import_module('utils.llm.episode_writer').baseline_budget_fallback(
             getattr(_get_conversation_notes_legacy, '__wrapped__'), run, prefix, locals()
         )
