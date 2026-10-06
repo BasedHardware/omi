@@ -26,6 +26,8 @@ def _incident(**overrides):
     row = {
         'id': 'incident',
         'created_at': datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc),
+        'started_at': datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc),
+        'finished_at': datetime(2026, 9, 22, 12, 2, tzinfo=timezone.utc),
         'status': 'completed',
         'discarded': False,
         'deleted': False,
@@ -456,3 +458,46 @@ def test_kept_empty_capture_gets_the_deterministic_title(monkeypatch):
     assert result.discarded is False
     assert result.structured.title == deterministic_minimum_title(conversation, tz_name_provider=lambda: 'UTC')
     assert result.structured.title.strip()
+
+
+@pytest.mark.parametrize('reason', [['no_content_words'], {'r': 'no_content_words'}, None, 7])
+def test_malformed_rule_reason_never_raises_or_hides(reason):
+    from database import conversations
+
+    row = _incident(relevance_decision={'verdict': 'discard', 'decided_by': 'rule', 'reason': reason})
+    projected = conversations.prepare_conversation_for_read(deepcopy(row), 'u')
+    assert projected['discarded'] is False
+    assert conversations.is_visible_conversation(row) is True
+    assert conversations.is_visible_conversation(row, include_discarded=True) is True
+    assert row['discarded'] is False
+    assert not conversations.is_visible_conversation(_incident())
+
+
+def test_detail_http_omitted_param_preserves_show_discarded(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database import conversations as conversations_db
+    from routers import conversations as routes
+    from utils.other import endpoints as auth
+
+    stored = _incident()
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        lambda *a, **k: conversations_db.prepare_conversation_for_read(deepcopy(stored), 'u'),
+    )
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'
+    client = TestClient(app)
+
+    default = client.get('/v1/conversations/incident')
+    assert default.status_code == 200 and default.json()['discarded'] is True
+
+    hidden = client.get('/v1/conversations/incident', params={'include_discarded': 'false'})
+    assert hidden.status_code == 404
+
+    shown = client.get('/v1/conversations/incident', params={'include_discarded': 'true'})
+    assert shown.status_code == 200 and shown.json()['discarded'] is True
+
+    assert stored['discarded'] is False

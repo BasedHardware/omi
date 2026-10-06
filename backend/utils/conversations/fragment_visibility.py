@@ -47,6 +47,7 @@ def is_rule_discard_decision(decision: Any) -> bool:
         isinstance(decision, Mapping)
         and decision.get('verdict') == 'discard'
         and decision.get('decided_by') == 'rule'
+        and isinstance(decision.get('reason'), str)
         and decision.get('reason') in _RULE_DISCARD_REASONS
     )
 
