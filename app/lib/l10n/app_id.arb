@@ -3874,5 +3874,6 @@
     "dismiss": "Tutup",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Tampilkan di layar kunci"
+    "showOnLockScreen": "Tampilkan di layar kunci",
+    "accountDeletionInProgressSignInAgain": "Akun ini sedang dihapus. Masuk dengan akun lain, atau tunggu beberapa menit lalu coba lagi."
 }

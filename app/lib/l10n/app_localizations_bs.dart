@@ -12444,4 +12444,8 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Prikaži na zaključanom ekranu';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Ovaj račun se briše. Prijavite se drugim računom ili sačekajte nekoliko minuta i pokušajte ponovo.';
 }

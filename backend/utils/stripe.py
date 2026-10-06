@@ -114,6 +114,34 @@ def cancel_subscription(subscription_id: str):
 TERMINAL_SUBSCRIPTION_STATUSES = frozenset({'canceled', 'incomplete_expired'})
 
 
+def cancel_subscription_for_account_deletion(subscription_id: str) -> None:
+    """Cancel now for erasure; absent/terminal subscriptions already satisfy it.
+
+    Unlike period-end cancellation, transport/rate-limit/server errors propagate
+    so the deletion task can retry without mistaking an outage for success.
+    """
+    try:
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        if subscription.get('status') in TERMINAL_SUBSCRIPTION_STATUSES:
+            return
+        canceled = subscription.delete()
+        if canceled.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES:
+            raise RuntimeError('Stripe immediate cancellation did not reach a terminal status')
+    except stripe.InvalidRequestError as error:
+        if error.code == 'resource_missing' or 'no such subscription' in str(error).lower():
+            return
+        # A concurrent cancellation can win between retrieve and delete. Verify
+        # the goal state rather than accepting an arbitrary Stripe 400.
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+        except stripe.InvalidRequestError as read_error:
+            if read_error.code == 'resource_missing' or 'no such subscription' in str(read_error).lower():
+                return
+            raise
+        if subscription.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES:
+            raise error
+
+
 def is_subscription_terminal(subscription_id: str) -> bool:
     """Whether Stripe currently reports the subscription in a terminal, non-billing state.
 

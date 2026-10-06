@@ -11396,5 +11396,6 @@
     "dismiss": "దాచు",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు"
+    "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు",
+    "accountDeletionInProgressSignInAgain": "ఈ ఖాతా తొలగించబడుతోంది. మరో ఖాతాతో సైన్ ఇన్ చేయండి, లేదా కొన్ని నిమిషాలు వేచి ఉండి మళ్లీ ప్రయత్నించండి."
 }

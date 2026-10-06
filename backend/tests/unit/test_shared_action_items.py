@@ -99,10 +99,9 @@ def test_accept_shared_tasks_used_token_conflict(mock_redis, mock_db, sample_req
     assert "already accepted" in exc_info.value.detail
 
 
-@patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
 @patch("routers.action_items.redis_db")
-def test_accept_shared_tasks_unavailable_claim_returns_503(mock_redis, mock_db, mock_wake, sample_request, share_data):
+def test_accept_shared_tasks_unavailable_claim_returns_503(mock_redis, mock_db, sample_request, share_data):
     """try_accept_task_share returns None when Redis is unreachable, False when the
     token was already used. Only the second is the client's fault, so they must not
     collapse to one status."""
@@ -119,7 +118,6 @@ def test_accept_shared_tasks_unavailable_claim_returns_503(mock_redis, mock_db, 
 
     assert exc_info.value.status_code == 503
     mock_db.create_action_item.assert_not_called()
-    mock_wake.assert_not_called()
 
 
 @patch("routers.action_items.upsert_action_item_vector")

@@ -12458,4 +12458,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Показывать на экране блокировки';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Этот аккаунт удаляется. Войдите с другим аккаунтом или подождите несколько минут и попробуйте снова.';
 }

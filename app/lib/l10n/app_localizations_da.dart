@@ -12403,4 +12403,8 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Vis på låseskærmen';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Denne konto er ved at blive slettet. Log ind med en anden konto, eller vent et par minutter og prøv igen.';
 }

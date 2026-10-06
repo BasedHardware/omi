@@ -700,6 +700,7 @@ def send_message(
                 client_kind=mobile_journey_attempt.client_kind,
                 client_tz=chat_tz,
                 device_tool_names=set(data.device_tools or ()),
+                shaped_invocation=True,
             ):
                 if chunk:
                     if chunk.startswith('error: '):

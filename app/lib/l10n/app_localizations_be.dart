@@ -12447,4 +12447,8 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Паказваць на экране блакіроўкі';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Гэты ўліковы запіс выдаляецца. Увайдзіце з іншым уліковым запісам або пачакайце некалькі хвілін і паспрабуйце зноў.';
 }

@@ -12443,4 +12443,8 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Rādīt bloķēšanas ekrānā';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Šis konts tiek dzēsts. Pierakstieties ar citu kontu vai uzgaidiet dažas minūtes un mēģiniet vēlreiz.';
 }

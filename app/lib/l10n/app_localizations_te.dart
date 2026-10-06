@@ -12466,4 +12466,8 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'లాక్ స్క్రీన్‌పై చూపించు';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'ఈ ఖాతా తొలగించబడుతోంది. మరో ఖాతాతో సైన్ ఇన్ చేయండి, లేదా కొన్ని నిమిషాలు వేచి ఉండి మళ్లీ ప్రయత్నించండి.';
 }

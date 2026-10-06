@@ -1,0 +1,49 @@
+name: Mobile daily train
+
+# Codemagic schedules live only in its UI, so the daily store train is dispatched from here:
+# one Codemagic `mobile-daily-train` run per day on main. The train queues the newest internal
+# build for a human release (iOS review with MANUAL release, Play production draft); it never
+# releases anything itself. See .github/agent-docs/mobile-release-process.md.
+
+on:
+  schedule:
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read store state and print the plan without submitting or drafting
+        type: boolean
+        default: false
+
+concurrency:
+  group: mobile-daily-train
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Start the Codemagic train
+        env:
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
+          TRAIN_DRY_RUN: ${{ inputs.dry_run == true && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/dispatch_mobile_daily_train.py \
+            --app-id "$CODEMAGIC_APP_ID" \
+            --dry-run "$TRAIN_DRY_RUN" | tee "$RUNNER_TEMP/dispatch.txt"
+          {
+            echo "### Mobile daily train"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/dispatch.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

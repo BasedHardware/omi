@@ -12433,4 +12433,8 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Mostrar na tela de bloqueio';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Esta conta está sendo excluída. Entre com outra conta ou aguarde alguns minutos e tente novamente.';
 }
