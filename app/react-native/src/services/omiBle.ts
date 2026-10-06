@@ -101,6 +101,36 @@ const CODEC_BY_ID: Record<number, OmiCodec> = {
 /** Every codec the firmware reports maps to 16 kHz, as in bt_device.dart. */
 export const SAMPLE_RATE = 16000;
 
+/**
+ * Wire names for the STT websocket, from mapCodecToName() in bt_device.dart.
+ *
+ * Not the Dart enum names: the backend is sent 'opus_fs320', not
+ * 'BleAudioCodec.opusFS320'. OmiCodec is kept camelCase to match the enum; this
+ * is the only place the two vocabularies meet.
+ */
+const WIRE_CODEC: Record<OmiCodec, string | null> = {
+  pcm8: 'pcm8',
+  pcm16: 'pcm16',
+  opus: 'opus',
+  opusFS320: 'opus_fs320',
+  unknown: null,
+};
+
+/** The codec name the backend expects, or null for one it cannot decode. */
+export function sttCodecName(codec: OmiCodec): string | null {
+  return WIRE_CODEC[codec] ?? null;
+}
+
+/**
+ * Channel count the backend expects. Flutter sends 2 for opus and 1 for pcm
+ * (capture_controller.dart), which is a quirk rather than a derivation -- there
+ * is nothing wrong with single-channel opus -- but the backend is written against
+ * it, so matching it is what works.
+ */
+export function sttChannels(codec: OmiCodec): 1 | 2 {
+  return codec === 'opus' || codec === 'opusFS320' ? 2 : 1;
+}
+
 export interface OmiScanResult {
   id: string;
   name: string | null;
@@ -405,3 +435,21 @@ async function manager_disconnect(d: Device): Promise<void> {
 }
 
 export const omiBle = new OmiBle();
+
+/**
+ * The query parameters for a device capture, derived from what the firmware
+ * reported. Lives here rather than in captureStore so it can be asserted without
+ * importing that store, which pulls in the native microphone module. Getting
+ * these wrong fails silently: the socket still opens and then returns no
+ * transcripts, which looks like a network fault rather than a formatting one.
+ */
+export function omiStreamParams(codec: OmiCodec): Record<string, string> | null {
+  const wire = sttCodecName(codec);
+  if (!wire) return null;
+  return {
+    codec: wire,
+    sample_rate: String(SAMPLE_RATE),
+    channels: String(sttChannels(codec)),
+    language: 'multi',
+  };
+}

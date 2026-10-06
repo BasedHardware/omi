@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/constants/theme';
 import { DEV_LOCAL_BRAIN } from '@/devFlags';
+import { useCaptureStore } from '@/state/captureStore';
 import {
   omiBle,
   OMI,
@@ -44,6 +45,7 @@ export default function DevOmiDeviceScreen() {
   const [audioChunks, setAudioChunks] = useState(0);
   const [audioBytes, setAudioBytes] = useState(0);
   const [listening, setListening] = useState(false);
+  const capture = useCaptureStore();
 
   const say = useCallback((line: string) => {
     setLog((p) => [line, ...p].slice(0, 14));
@@ -200,6 +202,48 @@ export default function DevOmiDeviceScreen() {
             <Btn label="Stop" onPress={stopAudio} bg="#444" />
           </View>
 
+          <Text style={[styles.label, { color: theme.textSecondary }]}>TRANSCRIBE</Text>
+          <Text style={[styles.line, { color: theme.text }]}>
+            {capture.recording
+              ? `streaming to STT · ${capture.segments.length} segments`
+              : capture.connecting
+                ? 'connecting…'
+                : 'idle'}
+          </Text>
+          {capture.error ? (
+            <Text style={[styles.err, { color: '#fca5a5' }]}>{capture.error}</Text>
+          ) : null}
+          <View style={styles.row}>
+            <Btn
+              label="Device -> STT"
+              bg="#2563eb"
+              disabled={capture.recording || capture.connecting || !identity}
+              onPress={() => {
+                if (!identity) return;
+                capture.startFromOmi(identity.codec);
+                say(`startFromOmi(${identity.codec})`);
+              }}
+            />
+            <Btn
+              label="Stop STT"
+              bg="#444"
+              disabled={!capture.recording}
+              onPress={() => {
+                capture.stop();
+                say('capture.stop()');
+              }}
+            />
+          </View>
+          {capture.segments.length > 0 && (
+            <>
+              {capture.segments.slice(-6).map((sg, i) => (
+                <Text key={i} style={[styles.line, { color: theme.text }]}>
+                  {sg.speaker}: {sg.text}
+                </Text>
+              ))}
+            </>
+          )}
+
           <Text style={[styles.label, { color: theme.textSecondary }]}>LOG</Text>
           {log.length === 0 ? (
             <Text style={[styles.dim, { color: theme.textSecondary }]}>Scan first.</Text>
@@ -242,5 +286,6 @@ const styles = StyleSheet.create({
   line: { fontSize: 13 },
   dim: { fontSize: 12 },
   mono: { fontSize: 11, fontFamily: 'monospace' },
+  err: { fontSize: 12 },
   row: { flexDirection: 'row', gap: Spacing.two },
 });
