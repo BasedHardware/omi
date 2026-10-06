@@ -63,6 +63,7 @@ _PRECEDING_FIELDS = (
     'uses_custom_stt',
     'external_data.duplicate_capture_of',
     'relevance_decision.trigger',
+    'sync_merged_into',
     SMART_MERGE_FIELD,
 )
 
@@ -99,20 +100,24 @@ def find_preceding_conversations(
     *,
     source: str,
     created_before: datetime,
-    limit: int,
+    limit: Optional[int] = None,
+    discarded: bool = False,
+    transaction: Any = None,
     firestore_client: Any = None,
 ) -> list[dict[str, Any]]:
-    """Newest-first visible rows of one source created before ``created_before``.
+    """Newest-first rows of one source and discard flag created before ``created_before``.
 
     Every status is requested so a busy immediate predecessor is seen (and
     blocks the pair) instead of being skipped for an older row. Served by the
-    existing ``conversations_discarded_source_status_created`` index.
+    existing ``conversations_discarded_source_status_created`` index. ``None``
+    for ``limit`` runs the scan unbounded; ``transaction`` binds the stream to
+    that transaction's snapshot.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     query = CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY.build(
         _collection(client, uid),
         {
-            'discarded': False,
+            'discarded': discarded,
             'source': source,
             'statuses': list(_ALL_STATUSES),
             'created_before': created_before,
@@ -120,12 +125,96 @@ def find_preceding_conversations(
         field_filter_factory=FieldFilter,
     )
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(list(_PRECEDING_FIELDS))
+    if limit is not None:
+        query = query.limit(limit)
+    stream = query.stream(transaction=transaction) if transaction is not None else query.stream()
     rows = []
-    for snapshot in query.limit(limit).stream():
+    for snapshot in stream:
         data = snapshot.to_dict() or {}
         data['id'] = snapshot.id
         rows.append(data)
     return rows
+
+
+def _epoch(value: Any) -> Optional[float]:
+    return value.timestamp() if isinstance(value, datetime) else None
+
+
+def _is_own_tombstone(row: Mapping[str, Any], survivor: Mapping[str, Any]) -> bool:
+    """A deleted donor already absorbed into this survivor, proven by lineage.
+
+    Requires the redirect marker, the donor ledger entry and membership in the
+    survivor's own fragment ledger or ``sync_merged_from`` set; a bare
+    ``smart_merge.survivor_id`` claim without lineage proof does not exempt.
+    """
+    survivor_id = survivor.get('id')
+    if row.get('deleted') is not True or row.get('sync_merged_into') != survivor_id:
+        return False
+    donor_state = row.get(SMART_MERGE_FIELD)
+    if not isinstance(donor_state, Mapping):
+        return False
+    if donor_state.get('role') != 'donor' or donor_state.get('survivor_id') != survivor_id:
+        return False
+    if str(row.get('id')) in {str(entry) for entry in survivor.get('sync_merged_from') or ()}:
+        return True
+    survivor_state = survivor.get(SMART_MERGE_FIELD) or {}
+    fragments = survivor_state.get('fragments') or ()
+    return any(isinstance(entry, Mapping) and entry.get('id') == row.get('id') for entry in fragments)
+
+
+def has_intervening_discarded(
+    uid: str,
+    survivor: Mapping[str, Any],
+    donor: Mapping[str, Any],
+    *,
+    transaction: Any = None,
+    firestore_client: Any = None,
+) -> bool:
+    """True when a discarded row of the donor's device partition spans the gap.
+
+    The gap is the open interval between the survivor's ``finished_at`` and
+    ``max(donor.started_at, donor.created_at)``: the recorded gap plus the
+    wall-clock rescue gap a backward-drifting ``started_at`` would hide. A
+    discarded row blocks when its ``started_at``/``finished_at`` interval
+    intersects it; endpoint touches and rows wholly outside do not. The scan
+    runs unbounded on the registered preceding query with ``discarded=True``
+    and ``created_before=datetime.max``: speech times and ingestion times do
+    not align, so no creation-time bound may hide a delayed-ingest barrier. A
+    genuine own tombstone — deleted, redirecting into this survivor, ledgered
+    as its donor and listed in the survivor's own lineage — is a constituent
+    of the predecessor, not an independent discarded capture; every other
+    discarded row, deleted or not, counts. Rows whose interval bounds are not
+    datetimes are skipped — an unreadable tombstone cannot prove it crosses
+    the gap, and malformed endpoints make the pair itself fail the existing
+    gates first.
+    """
+    lower = _epoch(survivor.get('finished_at'))
+    started = _epoch(donor.get('started_at'))
+    created = _epoch(donor.get('created_at'))
+    if lower is None or started is None or created is None:
+        return False
+    upper = max(started, created)
+    if upper <= lower:
+        return False
+    for row in find_preceding_conversations(
+        uid,
+        source=donor['source'],
+        created_before=datetime.max.replace(tzinfo=timezone.utc),
+        limit=None,
+        discarded=True,
+        transaction=transaction,
+        firestore_client=firestore_client,
+    ):
+        if row.get('client_device_id') != donor.get('client_device_id'):
+            continue
+        if _is_own_tombstone(row, survivor):
+            continue
+        row_started, row_finished = _epoch(row.get('started_at')), _epoch(row.get('finished_at'))
+        if row_started is None or row_finished is None:
+            continue
+        if row_started < upper and row_finished > lower:
+            return True
+    return False
 
 
 def _decode_row(uid: str, raw: Mapping[str, Any]) -> tuple[dict[str, Any], list[Any]]:
@@ -240,6 +329,8 @@ def absorb_conversation(
                 if fragment_raw is not None:
                     fragment_row, fragment_segments = _decode_row(uid, dict(fragment_raw, id=last_fragment_id))
                     last_fragment_row = dict(fragment_row, transcript_segments=fragment_segments)
+        if has_intervening_discarded(uid, survivor, donor, transaction=transaction, firestore_client=client):
+            return AbsorbResult('rejected', 'intervening_discarded')
         reason, survivor_update, donor_update, ancestor_updates = plan(
             survivor, survivor_segments, donor, donor_segments, ancestor_rows, last_fragment_row
         )

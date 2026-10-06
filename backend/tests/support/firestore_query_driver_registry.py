@@ -136,6 +136,7 @@ BODY_DIGEST = {
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
+    'database.smart_merge.absorb_conversation': '56123c7f51757edce7c7f0ed8b61fc718e080b542ce5a153bb5b83e6a1a84ca5',
 }
 
 DRIVERS: dict[str, DriverEntry] = {}
@@ -1906,7 +1907,39 @@ _add(
     DriverEntry(
         'database.smart_merge.find_preceding_conversations',
         base={'uid': UID, 'source': 'omi', 'created_before': T0},
-        neutrals={'limit': _LIMIT},
+        domains={'discarded': [False, True], 'transaction': [None, ref_transaction()]},
+        neutrals={'limit': _LIMIT_OPT},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.smart_merge.absorb_conversation',
+        covered_by=(
+            'database.smart_merge.find_preceding_conversations',
+            'database.smart_merge.has_intervening_discarded',
+        ),
+        reason='the discarded-barrier scan runs inside absorb_attempt through '
+        'has_intervening_discarded/find_preceding_conversations, so the terminal '
+        'stream records under those callees, never under absorb_conversation',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.smart_merge.absorb_conversation'],
+    )
+)
+_add(
+    DriverEntry(
+        'database.smart_merge.has_intervening_discarded',
+        base={
+            'uid': UID,
+            'survivor': {'id': 'conv-p', 'finished_at': T0},
+            'donor': {
+                'id': 'conv-n',
+                'source': 'omi',
+                'client_device_id': 'pendant-1',
+                'started_at': T0 + timedelta(minutes=5),
+                'created_at': T0 + timedelta(minutes=5),
+            },
+        },
+        domains={'transaction': [None, ref_transaction()]},
     )
 )
 _add(

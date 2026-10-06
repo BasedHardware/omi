@@ -82,6 +82,7 @@ class SkipReason:
     FLATTEN_CONTENT_CHANGED = 'flatten_content_changed'
     WALLCLOCK_GAP_NEGATIVE = 'wallclock_gap_negative'
     WALLCLOCK_TIME_INVALID = 'wallclock_time_invalid'
+    INTERVENING_DISCARDED = 'intervening_discarded'
 
 
 def smart_merge_state(row: Mapping[str, Any]) -> Mapping[str, Any]:
