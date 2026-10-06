@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: firmware-connected-aad-tests
+    command: ["bash", "omi/firmware/omi/tests/aad/run.sh"]
+    triggers: ["omi/firmware/omi/src/mic.c", "omi/firmware/omi/src/aad_policy.h", "omi/firmware/omi/src/software_vad.c", "omi/firmware/omi/src/software_vad.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/transport.h", "omi/firmware/omi/src/lib/core/mic.h", "omi/firmware/omi/src/main.c", "omi/firmware/omi/Kconfig", "omi/firmware/omi/CMakeLists.txt", "omi/firmware/omi/tests/aad/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PR #14156 identifies lost conversation openings at hardware AAD wake; execute the production T5838 audio policy and mic transitions plus its reused pre-roll tests to guard late-speech STOP, connected batch ownership and immediate wake forwarding; this seam is specific to mic/CLK ownership, not a shared scheduling primitive"
   - id: firestore-index-guard
     command: ["python3", "backend/scripts/run_firestore_index_guard.py"]
     triggers: ["@firestore-index-guard", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/actions/release-eligibility/action.yml"]
