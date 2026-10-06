@@ -59,13 +59,11 @@ omi --json goal list --limit 100 | python sdks/python-cli/examples/goals_to_xlsx
 | `id` | String (`s`) | Retains leading zeros; never coerced to numeric. |
 | `title` | String (`s`) | Formula injection protected; values like `=SUM(...)` remain literal text. |
 | `goal_type` | String (`s`) | Goal classification (`boolean`, `scale`, `numeric`). |
-| `target_value` | Number | Numeric target threshold. |
 | `current_value` | Number | Numeric current progress value. |
-| `min_value` | Number | Numeric lower bound for scale goals. |
-| `max_value` | Number | Numeric upper bound for scale goals. |
+| `target_value` | Number | Numeric target threshold. |
 | `unit` | String (`s`) | Measurement unit (e.g. `hours`, `pages`, or empty). |
-| `is_active` | Boolean | Native Excel boolean (`TRUE` / `FALSE`). |
-| `progress_pct` | Number | Calculated completion percentage (0.0% to 100.0%, formatted as `0.0%`). |
+| `progress_pct` | Number | Calculated completion percentage bounded to `0.0` to `100.0` (numeric value, e.g. `75.0` for 75%). |
+| `is_active` | String (`s`) | Normalized goal status string (`active` or `inactive`). |
 | `created_at (UTC)` | Datetime | Native Excel datetime (`yyyy-mm-dd hh:mm:ss`) converted to UTC. |
 | `updated_at (UTC)` | Datetime | Native Excel datetime (`yyyy-mm-dd hh:mm:ss`) converted to UTC. |
 

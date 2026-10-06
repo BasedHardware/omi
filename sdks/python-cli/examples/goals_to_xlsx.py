@@ -39,7 +39,6 @@ FIELDS = (
 )
 
 DATETIME_FORMAT = "yyyy-mm-dd hh:mm:ss"
-PERCENT_FORMAT = "0.0%"
 
 
 def cell_text(value: Any) -> Optional[str]:
@@ -127,11 +126,12 @@ def calculate_progress_pct(item: Dict[str, Any]) -> Optional[float]:
                 if min_v is not None and goal_type == "scale":
                     min_f = float(min_v)
                     span = target_f - min_f
-                    if span != 0:
+                    if span > 0:
                         pct = ((curr_f - min_f) / span) * 100.0
-                        return round(pct, 1)
+                        return max(0.0, min(100.0, round(pct, 1)))
+                    return 0.0
                 pct = (curr_f / target_f) * 100.0
-                return round(pct, 1)
+                return max(0.0, min(100.0, round(pct, 1)))
         except (ValueError, TypeError):
             pass
     return None
@@ -207,10 +207,7 @@ def convert_goals_to_xlsx(
     # Auto-adjust column widths
     for index, name in enumerate(headers, start=1):
         col_letter = get_column_letter(index)
-        longest = max(
-            len(str(c.value)) if c.value is not None else 0
-            for c in sheet[col_letter]
-        )
+        longest = max(len(str(c.value)) if c.value is not None else 0 for c in sheet[col_letter])
         sheet.column_dimensions[col_letter].width = min(max(len(name), longest) + 3, 60)
 
     # Atomic write via temporary partial file with safe no-clobber protection

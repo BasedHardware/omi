@@ -87,6 +87,31 @@ class TestGoalsToXlsx(unittest.TestCase):
         bool_done = {"goal_type": "boolean", "current_value": 1}
         self.assertEqual(goals_xlsx.calculate_progress_pct(bool_done), 100.0)
 
+        # Clamping behavior (exceeding target / below min / invalid scale span)
+        scale_over = {
+            "goal_type": "scale",
+            "current_value": 150,
+            "min_value": 0,
+            "target_value": 100,
+        }
+        self.assertEqual(goals_xlsx.calculate_progress_pct(scale_over), 100.0)
+
+        scale_under = {
+            "goal_type": "scale",
+            "current_value": -10,
+            "min_value": 0,
+            "target_value": 100,
+        }
+        self.assertEqual(goals_xlsx.calculate_progress_pct(scale_under), 0.0)
+
+        scale_zero_span = {
+            "goal_type": "scale",
+            "current_value": 50,
+            "min_value": 100,
+            "target_value": 100,
+        }
+        self.assertEqual(goals_xlsx.calculate_progress_pct(scale_zero_span), 0.0)
+
     def test_validate_path(self) -> None:
         safe_path = goals_xlsx.validate_path("output.xlsx")
         self.assertEqual(str(safe_path), "output.xlsx")
