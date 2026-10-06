@@ -12226,4 +12226,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dismiss => '닫기';
+
+  @override
+  String get showOnLockScreen => '잠금 화면에 표시';
 }

@@ -103,6 +103,25 @@ _conv_search_mod.keyword_search_conversation_ids = MagicMock(return_value=[])
 _conv_search_mod.merge_conversation_search_ids = MagicMock(return_value=[])
 _conv_search_mod.parse_exact_conversation_reference = MagicMock(return_value=None)
 
+_transcript_search_mod = _mod("utils.conversations.mcp_transcript_search")
+
+
+class _ChatTranscriptSearch:
+    def __init__(self, rows, searched):
+        self.rows = rows
+        self.searched = searched
+
+    @property
+    def conversation_ids(self):
+        return list(dict.fromkeys(row['conversation_id'] for row in self.rows))
+
+
+_transcript_search_mod.ChatTranscriptSearch = _ChatTranscriptSearch
+_transcript_search_mod.chat_transcript_coverage_note = MagicMock(return_value="Transcript coverage is partial.")
+_transcript_search_mod.chat_transcript_excerpts = MagicMock(return_value={})
+_transcript_search_mod.merge_chat_conversation_ids = MagicMock(return_value=[])
+_transcript_search_mod.search_chat_transcript_chunks = MagicMock(return_value=_ChatTranscriptSearch([], False))
+
 # Stub utils.retrieval.chat_scope
 _chat_scope_mod = _mod("utils.retrieval.chat_scope")
 _chat_scope_mod.apply_chat_scope_dates = lambda scope, s, e: (s, e, None)

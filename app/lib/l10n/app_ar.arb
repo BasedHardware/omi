@@ -3838,5 +3838,6 @@
     "stopThese": "إيقاف هذه",
     "dismiss": "تجاهل",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "إظهار على شاشة القفل"
 }

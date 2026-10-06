@@ -11395,5 +11395,6 @@
     "stopThese": "இவற்றை நிறுத்து",
     "dismiss": "மறை",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "பூட்டுத் திரையில் காட்டு"
 }

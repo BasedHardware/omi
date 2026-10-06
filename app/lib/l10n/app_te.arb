@@ -11395,5 +11395,6 @@
     "stopThese": "వీటిని ఆపండి",
     "dismiss": "దాచు",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "లాక్ స్క్రీన్‌పై చూపించు"
 }

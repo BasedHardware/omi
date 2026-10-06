@@ -14,11 +14,13 @@ device partition and a user-managed row are.
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
+import config.speaker_match_scores as match_scores
 from config.conversation_smart_merge import (
     ELIGIBLE_SOURCES,
     LEDGER_OVERVIEW_CHARS,
@@ -78,6 +80,8 @@ class SkipReason:
     FLATTEN_ANCESTOR_USER_MANAGED = 'flatten_ancestor_user_managed'
     FLATTEN_ANCESTOR_CAP = 'flatten_ancestor_cap'
     FLATTEN_CONTENT_CHANGED = 'flatten_content_changed'
+    WALLCLOCK_GAP_NEGATIVE = 'wallclock_gap_negative'
+    WALLCLOCK_TIME_INVALID = 'wallclock_time_invalid'
 
 
 def smart_merge_state(row: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -169,6 +173,58 @@ def ledger_fragments(row: Mapping[str, Any]) -> list[Fragment]:
     return [own] if own is not None else []
 
 
+def newest_wallclock_fragment(row: Mapping[str, Any]) -> Optional[Fragment]:
+    """The ledger fragment that finished last, by server wall time.
+
+    ``started_at`` drifts on rollover generations, so the ledger's sort order
+    cannot be trusted to name the newest fragment; ``finished_at`` is a server
+    wall clock and does not drift. Ties resolve to the later ledger position.
+    An over-budget or malformed ledger proves nothing (``None``), leaving the
+    caller on the exact legacy policy — the fragment cap is never hidden by
+    truncation.
+    """
+    entries = smart_merge_state(row).get('fragments')
+    if not isinstance(entries, list) or not entries:
+        return fragment_of(row)
+    if len(entries) > MAX_FRAGMENTS:
+        return None
+    fragments = []
+    for entry in entries:
+        fragment = Fragment.from_ledger_entry(entry) if isinstance(entry, Mapping) else None
+        if fragment is None:
+            return None
+        fragments.append(fragment)
+    best = max(range(len(fragments)), key=lambda index: (fragments[index].finished_at, index))
+    return fragments[best]
+
+
+_FRAGMENT_ID = re.compile(r'[A-Za-z0-9_.:\-]{1,128}')
+
+
+def valid_fragment_id(value: Any) -> bool:
+    return isinstance(value, str) and bool(_FRAGMENT_ID.fullmatch(value)) and value not in ('.', '..')
+
+
+def live_recording_origin(row: Mapping[str, Any]) -> Optional[str]:
+    """The client recording id proving a row is a live rollover generation.
+
+    Live captures stamp ``external_data.recording_session_id`` per server
+    generation and ``recording_origin_id`` for the client's whole recording
+    (routers/listen/conversations.py). Both must be nonempty strings for the
+    origin to mean anything; sync rows carry neither.
+    """
+    external = row.get('external_data')
+    if not isinstance(external, Mapping):
+        return None
+    session = external.get('recording_session_id')
+    origin = external.get('recording_origin_id')
+    if not isinstance(session, str) or not session.strip():
+        return None
+    if not isinstance(origin, str) or not origin.strip():
+        return None
+    return origin
+
+
 def fragment_segments(
     row: Mapping[str, Any], segments: Sequence[Mapping[str, Any]], fragment: Fragment
 ) -> list[Mapping[str, Any]]:
@@ -244,6 +300,7 @@ class PairCheck:
     reason: Optional[str]  # None when Jev may be asked
     gap_seconds: Optional[float] = None
     speech_gap_seconds: Optional[float] = None
+    same_recording: bool = False
 
 
 def check_pair(
@@ -251,8 +308,20 @@ def check_pair(
     survivor_segments: Sequence[Mapping[str, Any]],
     new: Mapping[str, Any],
     new_segments: Sequence[Mapping[str, Any]],
+    *,
+    wallclock_gap: bool = False,
+    last_fragment_row: Optional[Mapping[str, Any]] = None,
 ) -> PairCheck:
-    """Full deterministic gate for (survivor, new), both decoded and current."""
+    """Full deterministic gate for (survivor, new), both decoded and current.
+
+    With ``wallclock_gap`` the recorded/speech-gap window is replaced by the
+    server wall clock, but only for a pair proven to be generations of one
+    client recording: the newest-``finished_at`` ledger fragment's own row must
+    carry ``external_data`` live stamps whose ``recording_origin_id`` equals
+    the new row's. Any absent or mismatched proof falls back to the exact
+    legacy policy; ``last_fragment_row`` supplies the fragment's decoded row
+    when the newest fragment is a donor tombstone rather than the survivor.
+    """
     reason = predecessor_status_skip(survivor)
     if reason is not None:
         return PairCheck(reason)
@@ -262,6 +331,21 @@ def check_pair(
         return PairCheck(SkipReason.PREDECESSOR_REFRESH_PENDING)
     if has_wake_word(survivor_segments):
         return PairCheck(SkipReason.WAKE_WORD)
+    legacy = _check_pair_legacy(survivor, survivor_segments, new, new_segments)
+    if legacy.reason is None or not wallclock_gap:
+        return legacy
+    check = _check_pair_wallclock(survivor, survivor_segments, new, new_segments, last_fragment_row)
+    if check is not None:
+        return check
+    return legacy
+
+
+def _check_pair_legacy(
+    survivor: Mapping[str, Any],
+    survivor_segments: Sequence[Mapping[str, Any]],
+    new: Mapping[str, Any],
+    new_segments: Sequence[Mapping[str, Any]],
+) -> PairCheck:
     survivor_speech = speech_bounds(survivor, survivor_segments)
     new_speech = speech_bounds(new, new_segments)
     survivor_end, new_start = survivor.get('finished_at'), new.get('started_at')
@@ -286,6 +370,84 @@ def check_pair(
     if len(fragments) + 1 > MAX_FRAGMENTS:
         return PairCheck(SkipReason.FRAGMENT_CAP, gap, speech_gap)
     return check
+
+
+def _wall_times(row: Mapping[str, Any]) -> Optional[tuple[datetime, datetime]]:
+    created, finished = row.get('created_at'), row.get('finished_at')
+    if not isinstance(created, datetime) or not isinstance(finished, datetime) or finished < created:
+        return None
+    return created, finished
+
+
+def _last_fragment_row_eligible(row: Mapping[str, Any], survivor_id: str) -> bool:
+    """A retained donor row proves lineage only as a completed row or as the
+    genuine smart-merge tombstone this survivor already absorbed."""
+    if not row.get('deleted') and not row.get('discarded'):
+        return row.get('status') == 'completed'
+    state = smart_merge_state(row)
+    return (
+        row.get('deleted') is True
+        and row.get('discarded') is True
+        and row.get('sync_merged_into') == survivor_id
+        and state.get('role') == ROLE_DONOR
+        and state.get('survivor_id') == survivor_id
+    )
+
+
+def _check_pair_wallclock(
+    survivor: Mapping[str, Any],
+    survivor_segments: Sequence[Mapping[str, Any]],
+    new: Mapping[str, Any],
+    new_segments: Sequence[Mapping[str, Any]],
+    last_fragment_row: Optional[Mapping[str, Any]],
+) -> Optional[PairCheck]:
+    """Same-recording wall-clock gate; ``None`` means no proof, run legacy."""
+    origin = live_recording_origin(new)
+    if origin is None:
+        return None
+    last = newest_wallclock_fragment(survivor)
+    if last is None:
+        return None
+    if last.id == str(survivor.get('id')):
+        last_row = survivor
+        last_segments = fragment_segments(survivor, survivor_segments, last)
+    else:
+        last_row = last_fragment_row
+        if not isinstance(last_row, Mapping):
+            return None
+        if str(last_row.get('id')) != last.id or not valid_fragment_id(last.id):
+            return None
+        if partition(last_row) != partition(survivor):
+            return None
+        if not _last_fragment_row_eligible(last_row, str(survivor.get('id'))):
+            return None
+        segments = last_row.get('transcript_segments')
+        last_segments = [s for s in segments if isinstance(s, Mapping)] if isinstance(segments, list) else []
+    if live_recording_origin(last_row) != origin:
+        return None
+    survivor_times = _wall_times(survivor)
+    new_times = _wall_times(new)
+    last_times = _wall_times(last_row)
+    if survivor_times is None or new_times is None or last_times is None:
+        return PairCheck(SkipReason.WALLCLOCK_TIME_INVALID, same_recording=True)
+    survivor_created, survivor_finished = survivor_times
+    new_created, new_finished = new_times
+    _, last_finished = last_times
+    gap = (new_created - last_finished).total_seconds()
+    if gap < 0:
+        return PairCheck(SkipReason.WALLCLOCK_GAP_NEGATIVE, gap, same_recording=True)
+    if gap > MAX_GAP_SECONDS:
+        return PairCheck(SkipReason.GAP_OUT_OF_WINDOW, gap, same_recording=True)
+    if word_count(last_segments) < MIN_WORDS or word_count(new_segments) < MIN_WORDS:
+        return PairCheck(SkipReason.TOO_FEW_WORDS, gap, same_recording=True)
+    span = (max(survivor_finished, new_finished) - survivor_created).total_seconds()
+    if span > MAX_MERGED_SPAN_SECONDS or span < 0:
+        return PairCheck(SkipReason.SPAN_CAP, gap, same_recording=True)
+    if len(survivor_segments) + len(new_segments) > MAX_MERGED_SEGMENTS:
+        return PairCheck(SkipReason.SEGMENT_CAP, gap, same_recording=True)
+    if len(ledger_fragments(survivor)) + 1 > MAX_FRAGMENTS:
+        return PairCheck(SkipReason.FRAGMENT_CAP, gap, same_recording=True)
+    return PairCheck(None, gap, None, same_recording=True)
 
 
 def _stronger_protection(*levels: Optional[str]) -> str:
@@ -360,6 +522,9 @@ def absorb_payloads(
         'sync_merged_from': sorted({*(survivor.get('sync_merged_from') or []), str(donor['id'])}),
         SMART_MERGE_FIELD: state,
     }
+    score_union = match_scores.aggregate([survivor, donor])
+    if score_union is not None:
+        survivor_update[match_scores.FIELD] = score_union
     # The processor's existing transcript fence is sync_content_revision. Stamp
     # live survivors too: a processor started before this absorb must not write
     # its old transcript or summary over the newly joined occasion.

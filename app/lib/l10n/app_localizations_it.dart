@@ -12481,4 +12481,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get dismiss => 'Ignora';
+
+  @override
+  String get showOnLockScreen => 'Mostra sulla schermata di blocco';
 }

@@ -12410,4 +12410,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get dismiss => 'رد کردن';
+
+  @override
+  String get showOnLockScreen => 'نمایش در صفحهٔ قفل';
 }

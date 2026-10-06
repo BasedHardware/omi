@@ -12395,4 +12395,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get dismiss => 'हटाएँ';
+
+  @override
+  String get showOnLockScreen => 'लॉक स्क्रीन पर दिखाएँ';
 }

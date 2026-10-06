@@ -12460,4 +12460,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get dismiss => 'Elrejtés';
+
+  @override
+  String get showOnLockScreen => 'Megjelenítés a zárolási képernyőn';
 }

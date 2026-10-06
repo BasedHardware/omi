@@ -12472,4 +12472,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get dismiss => 'Сокриј';
+
+  @override
+  String get showOnLockScreen => 'Прикажи на заклучениот екран';
 }

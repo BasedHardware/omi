@@ -387,16 +387,19 @@ class GeneratedUserWebhookUrlResponse {
 }
 
 class GeneratedDailySummarySettingsResponse {
+  final String depth;
   final bool enabled;
   final int hour;
 
   const GeneratedDailySummarySettingsResponse({
+    this.depth = "brief",
     required this.enabled,
     required this.hour,
   });
 
   factory GeneratedDailySummarySettingsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummarySettingsResponse(
+      depth: _required(_readFieldValue<String>(_readField(json, const ["depth"]), "depth", _readString, requiredField: false, nullable: false, defaultValue: "brief"), "depth"),
       enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
       hour: _required(_readFieldValue<int>(_readField(json, const ["hour"]), "hour", _readInt, requiredField: true, nullable: false), "hour"),
     );
@@ -404,6 +407,7 @@ class GeneratedDailySummarySettingsResponse {
 
   Map<String, dynamic> toJson() {
     return {
+      'depth': depth,
       'enabled': enabled,
       'hour': hour,
     };

@@ -3838,5 +3838,6 @@
     "stopThese": "이 유형 중지",
     "dismiss": "닫기",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "잠금 화면에 표시"
 }

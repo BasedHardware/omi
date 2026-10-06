@@ -12424,4 +12424,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get dismiss => 'Сакриј';
+
+  @override
+  String get showOnLockScreen => 'Прикажи на закључаном екрану';
 }

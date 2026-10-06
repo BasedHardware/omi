@@ -12400,4 +12400,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get dismiss => 'Afvis';
+
+  @override
+  String get showOnLockScreen => 'Vis på låseskærmen';
 }
