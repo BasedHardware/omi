@@ -38,6 +38,7 @@
   exportación de conversaciones a CSV en español.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
   exports into a digest: per-day totals, categories and longest sessions.
+* [`goals_digest.md`](goals_digest.md) — summarise goal-list exports into an executive digest with KPIs and progress bars.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
