@@ -1458,6 +1458,12 @@ best-effort and appended only to the notes volatile suffix as BACKGROUND
 CONTEXT; it never enters the shared prefix, the memory extractor, or app
 prompts, and no single source failure can block the note.
 
+Meeting-context merges retain `participant_sources` alongside the legacy combined
+participant list. Shaped notes consume its separate `expected_calendar` and
+`observed_screen_listing` sets, including after context serialization. A name may
+appear in both sets; a screen-only name is never promoted to an expected invitee.
+Neither set establishes attendance. Legacy roster rendering remains unchanged.
+
 Approved meeting screenshots feed the same pass. The Mac adjudicates frames
 before it finalizes (admission accepts an in_progress/processing conversation
 once its transcript fixes a trusted content window), and the judge stores

@@ -86,6 +86,10 @@ langchain_messages.SystemMessage = MagicMock()
 langchain_messages.HumanMessage = MagicMock()
 langchain_prompts = _stub_module("langchain_core.prompts")
 langchain_prompts.ChatPromptTemplate = MagicMock()
+langchain_openai = _stub_package("langchain_openai")
+langchain_openai.ChatOpenAI = MagicMock()
+language_models = _stub_module("langchain_core.language_models")
+language_models.BaseChatModel = object
 
 # Stub utils packages and the LLM client module.
 _stub_package("utils")
@@ -143,6 +147,11 @@ _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm"
 # prompt_cache only needs tiktoken, so load the real module rather than stub the
 # cache floor the preflight assertions below depend on.
 _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
+
+# conversation_processing imports the shaped loop at module scope. The stubbed
+# utils.llm package cannot resolve it, so load the real stdlib module first.
+_load_module_from_file("utils.llm.shaped_agent", BACKEND_DIR / "utils" / "llm" / "shaped_agent.py")
+_load_module_from_file("utils.llm.shaped_notes_transport", BACKEND_DIR / "utils" / "llm" / "shaped_notes_transport.py")
 
 # model_config pulls in gateway_client; stub the one constant conversation_processing
 # imports so the isolated load does not need the real module tree.
