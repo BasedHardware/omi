@@ -1009,7 +1009,15 @@ overlay:
         flags:
           --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
           --remove-env-vars: HOSTED_PUSHER_API_URL
+        secrets:
+          REDIS_DB_PASSWORD:
+            secret: REDIS_DB_PASSWORD
+            version: latest
         env:
+          REDIS_DB_HOST:
+            value: redis-10797.c62.us-east-1-4.ec2.redns.redis-cloud.com
+          REDIS_DB_PORT:
+            value: '10797'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:

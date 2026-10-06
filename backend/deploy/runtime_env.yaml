@@ -2154,6 +2154,9 @@ environments:
             RAPID_API_KEY:
               secret: RAPID_API_KEY
               version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -2177,6 +2180,10 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            REDIS_DB_HOST:
+              value: redis-10797.c62.us-east-1-4.ec2.redns.redis-cloud.com
+            REDIS_DB_PORT:
+              value: '10797'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -4672,6 +4679,9 @@ environments:
             RAPID_API_KEY:
               secret: RAPID_API_KEY
               version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -4695,6 +4705,10 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            REDIS_DB_HOST:
+              value: redis-10797.c62.us-east-1-4.ec2.redns.redis-cloud.com
+            REDIS_DB_PORT:
+              value: '10797'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
         memory-maintenance-job:
