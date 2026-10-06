@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "ロック画面に表示",
-    "accountDeletionInProgressSignInAgain": "このアカウントは削除処理中です。別のアカウントでサインインするか、数分待ってからもう一度お試しください。"
+    "accountDeletionInProgressSignInAgain": "このアカウントは削除処理中です。別のアカウントでサインインするか、数分待ってからもう一度お試しください。",
+    "onboardingSetupTitle": "Omiをセットアップ中",
+    "onboardingSetupSubtitle": "Omiがあなた向けに調整するまで少々お待ちください",
+    "onboardingSetupStepWorkspace": "ワークスペースを準備中",
+    "onboardingSetupStepLanguage": "文字起こしをあなたの言語に最適化中",
+    "onboardingSetupStepMemory": "メモリーをセットアップ中",
+    "onboardingSetupStepDevices": "デバイスを接続中",
+    "onboardingSetupStepPersonalize": "あなた向けにカスタマイズ中",
+    "onboardingRatingPromptTitle": "お待ちの間に、Omiは使いやすいですか？",
+    "onboardingRatingPromptBody": "星5つの評価は私たちの大きな励みになります ❤️",
+    "onboardingRatingPromptYes": "はい、応援します！",
+    "onboardingRatingPromptNo": "あまり"
 }

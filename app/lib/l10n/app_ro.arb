@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Afișează pe ecranul de blocare",
-    "accountDeletionInProgressSignInAgain": "Acest cont este în curs de ștergere. Conectează-te cu alt cont sau așteaptă câteva minute și încearcă din nou."
+    "accountDeletionInProgressSignInAgain": "Acest cont este în curs de ștergere. Conectează-te cu alt cont sau așteaptă câteva minute și încearcă din nou.",
+    "onboardingSetupTitle": "Se configurează Omi",
+    "onboardingSetupSubtitle": "Dă-i lui Omi un moment să se personalizeze",
+    "onboardingSetupStepWorkspace": "Se pregătește spațiul tău de lucru",
+    "onboardingSetupStepLanguage": "Se ajustează transcrierea pentru limba ta",
+    "onboardingSetupStepMemory": "Se configurează memoria ta",
+    "onboardingSetupStepDevices": "Se conectează dispozitivele tale",
+    "onboardingSetupStepPersonalize": "Se personalizează experiența ta",
+    "onboardingRatingPromptTitle": "Cât aștepți, ți-a plăcut să folosești Omi?",
+    "onboardingRatingPromptBody": "O evaluare de 5 stele ne ajută cu adevărat ❤️",
+    "onboardingRatingPromptYes": "Da, vreau să vă susțin!",
+    "onboardingRatingPromptNo": "Nu prea"
 }

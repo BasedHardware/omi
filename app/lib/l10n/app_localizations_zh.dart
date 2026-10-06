@@ -12207,4 +12207,37 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountDeletionInProgressSignInAgain => '此账号正在删除中。请使用其他账号登录，或等待几分钟后重试。';
+
+  @override
+  String get onboardingSetupTitle => '正在设置你的 Omi';
+
+  @override
+  String get onboardingSetupSubtitle => '请稍等片刻，Omi 正在为你个性化设置';
+
+  @override
+  String get onboardingSetupStepWorkspace => '正在准备你的工作区';
+
+  @override
+  String get onboardingSetupStepLanguage => '正在根据你的语言优化转写';
+
+  @override
+  String get onboardingSetupStepMemory => '正在设置你的记忆';
+
+  @override
+  String get onboardingSetupStepDevices => '正在连接你的设备';
+
+  @override
+  String get onboardingSetupStepPersonalize => '正在个性化你的体验';
+
+  @override
+  String get onboardingRatingPromptTitle => '等待的时候，Omi 用起来还顺手吗？';
+
+  @override
+  String get onboardingRatingPromptBody => '给我们 5 星好评对我们真的很有帮助 ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => '好的，我想支持你们！';
+
+  @override
+  String get onboardingRatingPromptNo => '不太满意';
 }

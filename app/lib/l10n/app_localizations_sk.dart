@@ -12415,4 +12415,37 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Tento účet sa odstraňuje. Prihláste sa iným účtom alebo počkajte niekoľko minút a skúste to znova.';
+
+  @override
+  String get onboardingSetupTitle => 'Nastavujeme váš Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Dajte Omi chvíľu na prispôsobenie';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Pripravujeme váš pracovný priestor';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Ladíme prepis na váš jazyk';
+
+  @override
+  String get onboardingSetupStepMemory => 'Nastavujeme vašu pamäť';
+
+  @override
+  String get onboardingSetupStepDevices => 'Pripájame vaše zariadenia';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Prispôsobujeme váš zážitok';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Kým čakáte, páči sa vám používanie Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Hodnotenie 5 hviezdičiek nám naozaj veľmi pomáha ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Áno, chcem vás podporiť!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Nie celkom';
 }

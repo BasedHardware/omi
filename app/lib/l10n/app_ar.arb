@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "إظهار على شاشة القفل",
-    "accountDeletionInProgressSignInAgain": "يجري حذف هذا الحساب. سجّل الدخول بحساب آخر، أو انتظر بضع دقائق ثم حاول مرة أخرى."
+    "accountDeletionInProgressSignInAgain": "يجري حذف هذا الحساب. سجّل الدخول بحساب آخر، أو انتظر بضع دقائق ثم حاول مرة أخرى.",
+    "onboardingSetupTitle": "إعداد Omi الخاص بك",
+    "onboardingSetupSubtitle": "امنح Omi لحظة للتخصيص",
+    "onboardingSetupStepWorkspace": "تجهيز مساحة عملك",
+    "onboardingSetupStepLanguage": "ضبط النسخ النصي على لغتك",
+    "onboardingSetupStepMemory": "إعداد ذاكرتك",
+    "onboardingSetupStepDevices": "توصيل أجهزتك",
+    "onboardingSetupStepPersonalize": "تخصيص تجربتك",
+    "onboardingRatingPromptTitle": "بينما تنتظر، هل كان استخدام Omi ممتعًا؟",
+    "onboardingRatingPromptBody": "تقييمك لنا بخمس نجوم يساعدنا كثيرًا ❤️",
+    "onboardingRatingPromptYes": "نعم، أريد أن أدعمكم!",
+    "onboardingRatingPromptNo": "ليس تمامًا"
 }

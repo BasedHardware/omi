@@ -11397,5 +11397,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "பூட்டுத் திரையில் காட்டு",
-    "accountDeletionInProgressSignInAgain": "இந்தக் கணக்கு நீக்கப்பட்டு வருகிறது. வேறு கணக்கில் உள்நுழையவும், அல்லது சில நிமிடங்கள் காத்திருந்து மீண்டும் முயற்சிக்கவும்."
+    "accountDeletionInProgressSignInAgain": "இந்தக் கணக்கு நீக்கப்பட்டு வருகிறது. வேறு கணக்கில் உள்நுழையவும், அல்லது சில நிமிடங்கள் காத்திருந்து மீண்டும் முயற்சிக்கவும்.",
+    "onboardingSetupTitle": "உங்கள் Omi அமைக்கப்படுகிறது",
+    "onboardingSetupSubtitle": "தனிப்பயனாக்க Omi-க்கு சிறிது நேரம் கொடுங்கள்",
+    "onboardingSetupStepWorkspace": "உங்கள் பணியிடம் தயாராகிறது",
+    "onboardingSetupStepLanguage": "உங்கள் மொழிக்கு ஏற்ப டிரான்ஸ்கிரிப்ஷன் சரிசெய்யப்படுகிறது",
+    "onboardingSetupStepMemory": "உங்கள் நினைவகம் அமைக்கப்படுகிறது",
+    "onboardingSetupStepDevices": "உங்கள் சாதனங்கள் இணைக்கப்படுகின்றன",
+    "onboardingSetupStepPersonalize": "உங்கள் அனுபவம் தனிப்பயனாக்கப்படுகிறது",
+    "onboardingRatingPromptTitle": "காத்திருக்கும் நேரத்தில், Omi பயன்படுத்த இனிமையாக இருக்கிறதா?",
+    "onboardingRatingPromptBody": "5 நட்சத்திர மதிப்பீடு எங்களுக்கு மிகவும் உதவும் ❤️",
+    "onboardingRatingPromptYes": "ஆம், உங்களுக்கு ஆதரவளிக்க விரும்புகிறேன்!",
+    "onboardingRatingPromptNo": "அவ்வளவாக இல்லை"
 }

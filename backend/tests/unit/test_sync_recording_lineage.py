@@ -950,6 +950,7 @@ class _FakeQuery:
 
     def select(self, field_paths):
         self.ops.append(('select', tuple(field_paths)))
+        self.field_paths = tuple(field_paths)
         return self
 
     def limit(self, count):
@@ -957,7 +958,33 @@ class _FakeQuery:
         return self
 
     def stream(self):
-        return iter(self.docs)
+        return iter(self.projected_docs())
+
+    def projected_docs(self):
+        """Each doc's dict narrowed to the selected field paths, as the real
+        backend serves a ``select`` projection (dotted paths nest)."""
+        if getattr(self, 'field_paths', None) is None:
+            return self.docs
+        projected = []
+        for doc in self.docs:
+            data = doc.to_dict()
+            out = {}
+            for path in self.field_paths:
+                parts = path.split('.')
+                value = data
+                for part in parts:
+                    if not isinstance(value, dict) or part not in value:
+                        value = None
+                        break
+                    value = value[part]
+                if value is None:
+                    continue
+                target = out
+                for part in parts[:-1]:
+                    target = target.setdefault(part, {})
+                target[parts[-1]] = deepcopy(value)
+            projected.append(SimpleNamespace(id=doc.id, to_dict=lambda out=out: deepcopy(out)))
+        return projected
 
 
 def test_lineage_reads_are_bounded_indexed_and_transcript_free(monkeypatch):
@@ -990,6 +1017,97 @@ def test_lineage_reads_are_bounded_indexed_and_transcript_free(monkeypatch):
         ('sync_recording_lineage', 'bounded', 1),
         ('sync_recording_lineage', 'bounded', 0),
     ]
+
+
+def test_lineage_projection_always_carries_deleted_and_discarded(monkeypatch):
+    from database import sync_recording_lineage as lineage_db
+
+    monkeypatch.setattr(lineage_db, 'record_firestore_read', lambda *args: None)
+    full = {
+        'created_at': at(T0),
+        'started_at': at(T0),
+        'finished_at': at(T0 + 60),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'is_locked': False,
+        'deleted': False,
+        'discarded': True,
+        'sync_merged_into': 'GEN-MERGED',
+        'smart_merge': {'role': 'donor', 'survivor_id': 'GEN-MERGED'},
+        'external_data': {'recording_session_id': 'SESSION-X', 'recording_origin_id': ORIGIN},
+        'capture_evidence': {'version': 1, 'origin': 'live'},
+        'transcript_segments': [{'text': 'hidden'}],
+        'structured': {'title': 'hidden'},
+    }
+    doc = SimpleNamespace(id='GEN-DONOR', to_dict=lambda: deepcopy(full))
+    for include in (False, True):
+        query = _FakeQuery([doc])
+        rows = lineage_db.get_recording_generations(
+            'u',
+            ORIGIN,
+            started_before=at(T0 + 600),
+            finished_after=at(T0),
+            limit=8,
+            include_capture_evidence=include,
+            firestore_client=query,
+        )
+        selected = next(op[1] for op in query.ops if op[0] == 'select')
+        assert 'deleted' in selected and 'discarded' in selected
+        assert ('capture_evidence' in selected) is include
+        assert rows[0]['discarded'] is True and rows[0]['deleted'] is False
+        assert 'transcript_segments' not in rows[0] and 'structured' not in rows[0]
+        assert ('capture_evidence' in rows[0]) is include
+        origin = _FakeQuery([doc])
+        rows = lineage_db.get_origin_generation(
+            'u', ORIGIN, limit=5, include_capture_evidence=include, firestore_client=origin
+        )
+        selected = next(op[1] for op in origin.ops if op[0] == 'select')
+        assert 'deleted' in selected and 'discarded' in selected
+        assert ('capture_evidence' in selected) is include
+        assert rows[0]['discarded'] is True and ('capture_evidence' in rows[0]) is include
+
+
+def test_projected_discard_flag_reaches_the_planner(monkeypatch):
+    """Real query + projection: a discarded covering row cannot compete with a
+    visible one, so the single visible canonical wins instead of pending."""
+    from database import sync_recording_lineage as lineage_db
+
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
+    monkeypatch.setattr(lineage_db, 'record_firestore_read', lambda *args: None)
+    base = {
+        'created_at': at(gen_start(1)),
+        'started_at': at(gen_start(1)),
+        'finished_at': at(gen_start(1) + DURATION),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'is_locked': False,
+        'deleted': False,
+        'external_data': {'recording_session_id': ORIGIN, 'recording_origin_id': ORIGIN},
+        'transcript_segments': [{'text': 'hidden'}],
+    }
+    visible = dict(base, discarded=False)
+    hidden = dict(base, discarded=True)
+    query = _FakeQuery(
+        [
+            SimpleNamespace(id='LIVE-V', to_dict=lambda: deepcopy(visible)),
+            SimpleNamespace(id='LIVE-D', to_dict=lambda: deepcopy(hidden)),
+        ]
+    )
+    start = gen_start(1) + 30.0
+    reasons = {}
+    targets = resolve_segment_targets(
+        'u',
+        ORIGIN,
+        {'seg.wav': (start, start + 10.0)},
+        stamped_target=None,
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+        firestore_client=query,
+        binding_reasons=reasons,
+    )
+    assert targets == {'seg.wav': 'LIVE-V'}
+    assert reasons == {'seg.wav': 'bound'}
 
 
 # --- Kill switch --------------------------------------------------------------

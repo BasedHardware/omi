@@ -12520,4 +12520,37 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Binubura ang account na ito. Mag-sign in gamit ang ibang account, o maghintay ng ilang minuto at subukang muli.';
+
+  @override
+  String get onboardingSetupTitle => 'Sine-set up ang iyong Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Bigyan ng sandali ang Omi para i-personalize';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Inihahanda ang iyong workspace';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Inaayos ang transcription para sa iyong wika';
+
+  @override
+  String get onboardingSetupStepMemory => 'Sine-set up ang iyong memory';
+
+  @override
+  String get onboardingSetupStepDevices => 'Kinokonekta ang iyong mga device';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Pini-personalize ang iyong karanasan';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Habang naghihintay, masarap bang gamitin ang Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Malaking tulong sa amin ang 5 stars ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Oo, gusto ko kayong suportahan!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Hindi masyado';
 }

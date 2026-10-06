@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Auf dem Sperrbildschirm anzeigen",
-    "accountDeletionInProgressSignInAgain": "Dieses Konto wird gerade gelöscht. Melde dich mit einem anderen Konto an oder warte ein paar Minuten und versuche es erneut."
+    "accountDeletionInProgressSignInAgain": "Dieses Konto wird gerade gelöscht. Melde dich mit einem anderen Konto an oder warte ein paar Minuten und versuche es erneut.",
+    "onboardingSetupTitle": "Dein Omi wird eingerichtet",
+    "onboardingSetupSubtitle": "Gib Omi einen Moment zum Personalisieren",
+    "onboardingSetupStepWorkspace": "Dein Arbeitsbereich wird vorbereitet",
+    "onboardingSetupStepLanguage": "Transkription wird auf deine Sprache abgestimmt",
+    "onboardingSetupStepMemory": "Dein Gedächtnis wird eingerichtet",
+    "onboardingSetupStepDevices": "Deine Geräte werden verbunden",
+    "onboardingSetupStepPersonalize": "Dein Erlebnis wird personalisiert",
+    "onboardingRatingPromptTitle": "Während du wartest: Gefällt dir Omi bisher?",
+    "onboardingRatingPromptBody": "5 Sterne helfen uns wirklich sehr ❤️",
+    "onboardingRatingPromptYes": "Ja, ich möchte euch unterstützen!",
+    "onboardingRatingPromptNo": "Eher nicht"
 }

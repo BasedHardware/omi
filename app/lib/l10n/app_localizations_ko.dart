@@ -12232,4 +12232,37 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get accountDeletionInProgressSignInAgain => '이 계정은 삭제 중입니다. 다른 계정으로 로그인하거나 몇 분 후 다시 시도해 주세요.';
+
+  @override
+  String get onboardingSetupTitle => 'Omi 설정 중';
+
+  @override
+  String get onboardingSetupSubtitle => 'Omi가 맞춤 설정을 하는 동안 잠시만 기다려 주세요';
+
+  @override
+  String get onboardingSetupStepWorkspace => '작업 공간 준비 중';
+
+  @override
+  String get onboardingSetupStepLanguage => '사용하는 언어에 맞게 음성 인식 조정 중';
+
+  @override
+  String get onboardingSetupStepMemory => '메모리 설정 중';
+
+  @override
+  String get onboardingSetupStepDevices => '기기 연결 중';
+
+  @override
+  String get onboardingSetupStepPersonalize => '맞춤 환경 설정 중';
+
+  @override
+  String get onboardingRatingPromptTitle => '기다리는 동안 Omi가 마음에 드셨나요?';
+
+  @override
+  String get onboardingRatingPromptBody => '별 5개를 주시면 큰 힘이 됩니다 ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => '네, 응원할게요!';
+
+  @override
+  String get onboardingRatingPromptNo => '별로예요';
 }

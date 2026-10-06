@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-02 -->
+<!-- feature-flag-registry as-of: 2026-10-06 -->
 
 # Feature-flag authority registry
 
@@ -104,7 +104,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-02.
+None as of 2026-10-06.
 
 ## Flags
 
@@ -203,7 +203,7 @@ and an explicit empty literal renders as `''`.
 | `SONIOX_CAPTURE_AXIS_DIAGNOSTICS` | Measure raw Soniox token clocks against wire PCM and the managed send ledger; default off, no placement changes | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-04 | dazheng |
 | `SONIOX_CONTEXT_TERMS` | Send session vocabulary (Omi first) as Soniox context terms after dev config-frame validation | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
 | `SONIOX_ELAPSED_AXIS` | Measure Soniox elapsed timestamps before enabling speaker windows | backend | env | closed | — | — | — | — | pending | 2026-10-27 | dazheng |
-| `SONIOX_IDLE_CLOSE_SECONDS` | Close paid Soniox transports after continuous active-VAD silence; unset or zero off; suggested canary 45 seconds | backend | env | closed | — | — | — | — | pending | 2026-11-04 | backend |
+| `SONIOX_IDLE_CLOSE_SECONDS` | Close paid Soniox transports after continuous active-VAD silence; unset or zero off; prod listen 45 | backend | env | closed | — | — | 45 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-11-04 | backend |
 | `SONIOX_MONTHLY_CEILING_USD` | Enable Soniox monthly spend runway against a configured USD ceiling | backend | env | closed | 0 | 0 (backend-listen (chart), gke/backend-listen) | 10000 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | dazheng |
 | `SONIOX_WIRE_LEDGER` | Account every emitted managed Soniox sample on the compact axis; unknown capture origins reserve unplaceable intervals; reserve reported finalize padding as provider-only holes and refuse raced intervals; preserve every control frame; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-04 | dazheng |
 | `SPEAKER_MATCH_SCORES_ENABLED` | Persist bounded internal voice-match evidence on existing conversation writes; dev/local/offline default on; production hosts explicitly on | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-04 | dazheng |
@@ -246,6 +246,7 @@ and an explicit empty literal renders as `''`.
 | `negative_feedback_remediation_kill` | Beta negative-feedback remediation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `on_device_meeting_identity` | Enable on-device meeting identity on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
 | `on_device_meeting_identity_kill` | Beta on-device meeting identity stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
+| `onboarding-setup-rating-prompt` | Mobile onboarding Setting up your Omi page with the store-rating pre-prompt before the completion screen; client-evaluated, default off so the flow is unchanged and store review never sees it | mobile | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-05 | nik |
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-03 | dazheng |
 | `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
@@ -388,7 +389,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SCREEN_TASK_STOP` — Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease (fail: inverted)
 - `SELFHEAL_MODE` — Conversation self-heal sweeper mode: off/detect-only/nudge/heal (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
-- `SONIOX_IDLE_CLOSE_SECONDS` — Close paid Soniox transports after continuous active-VAD silence; unset or zero off; suggested canary 45 seconds (fail: closed)
 - `STT_NO_TEXT_RESCUE_ENABLED` — Default-off bounded paid rescue and cheap failback for silent window episodes; requires recovery enabled (fail: closed)
 - `STT_NO_TEXT_RESCUE_SECONDS` — Maximum paid wall and admitted audio seconds per no-text rescue; default 60 bounded 5-120 (fail: closed)
 - `STT_PAID_SPILLOVER_BUDGET_ENABLED` — Default-off fleet budget for paid router promotions after Parakeet capacity refusal; denial restores static order (fail: closed)

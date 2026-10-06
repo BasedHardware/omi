@@ -14848,5 +14848,49 @@
     "accountDeletionInProgressSignInAgain": "This account is being deleted. Sign in with another account, or wait a few minutes and try again.",
     "@accountDeletionInProgressSignInAgain": {
         "description": "Shown on the sign-in screen after the backend refused every request because the account's deletion is still in progress"
+    },
+    "onboardingSetupTitle": "Setting up your Omi",
+    "@onboardingSetupTitle": {
+        "description": "Onboarding setup page title"
+    },
+    "onboardingSetupSubtitle": "Give Omi a moment to personalize",
+    "@onboardingSetupSubtitle": {
+        "description": "Onboarding setup page subtitle"
+    },
+    "onboardingSetupStepWorkspace": "Preparing your workspace",
+    "@onboardingSetupStepWorkspace": {
+        "description": "Onboarding setup checklist step"
+    },
+    "onboardingSetupStepLanguage": "Tuning transcription to your language",
+    "@onboardingSetupStepLanguage": {
+        "description": "Onboarding setup checklist step"
+    },
+    "onboardingSetupStepMemory": "Setting up your memory",
+    "@onboardingSetupStepMemory": {
+        "description": "Onboarding setup checklist step"
+    },
+    "onboardingSetupStepDevices": "Connecting your devices",
+    "@onboardingSetupStepDevices": {
+        "description": "Onboarding setup checklist step"
+    },
+    "onboardingSetupStepPersonalize": "Personalizing your experience",
+    "@onboardingSetupStepPersonalize": {
+        "description": "Onboarding setup checklist step"
+    },
+    "onboardingRatingPromptTitle": "While you wait, has Omi been nice to use?",
+    "@onboardingRatingPromptTitle": {
+        "description": "Store rating pre-prompt title shown on the onboarding setup page"
+    },
+    "onboardingRatingPromptBody": "Rating us 5 stars really helps us out ❤️",
+    "@onboardingRatingPromptBody": {
+        "description": "Store rating pre-prompt body"
+    },
+    "onboardingRatingPromptYes": "Yes, I want to support you!",
+    "@onboardingRatingPromptYes": {
+        "description": "Store rating pre-prompt: open the store review sheet"
+    },
+    "onboardingRatingPromptNo": "Not really",
+    "@onboardingRatingPromptNo": {
+        "description": "Store rating pre-prompt: decline"
     }
 }

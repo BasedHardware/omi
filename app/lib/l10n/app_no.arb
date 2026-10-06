@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Vis på låseskjermen",
-    "accountDeletionInProgressSignInAgain": "Denne kontoen slettes. Logg inn med en annen konto, eller vent noen minutter og prøv igjen."
+    "accountDeletionInProgressSignInAgain": "Denne kontoen slettes. Logg inn med en annen konto, eller vent noen minutter og prøv igjen.",
+    "onboardingSetupTitle": "Setter opp Omi",
+    "onboardingSetupSubtitle": "Gi Omi et øyeblikk til å tilpasse seg",
+    "onboardingSetupStepWorkspace": "Forbereder arbeidsområdet ditt",
+    "onboardingSetupStepLanguage": "Tilpasser transkripsjonen til språket ditt",
+    "onboardingSetupStepMemory": "Setter opp minnet ditt",
+    "onboardingSetupStepDevices": "Kobler til enhetene dine",
+    "onboardingSetupStepPersonalize": "Tilpasser opplevelsen din",
+    "onboardingRatingPromptTitle": "Mens du venter, har Omi vært fin å bruke?",
+    "onboardingRatingPromptBody": "5 stjerner hjelper oss virkelig mye ❤️",
+    "onboardingRatingPromptYes": "Ja, jeg vil støtte dere!",
+    "onboardingRatingPromptNo": "Ikke egentlig"
 }

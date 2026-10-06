@@ -12458,4 +12458,37 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'To konto jest usuwane. Zaloguj się na inne konto albo poczekaj kilka minut i spróbuj ponownie.';
+
+  @override
+  String get onboardingSetupTitle => 'Konfigurujemy Twoje Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Daj Omi chwilę na personalizację';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Przygotowujemy Twoją przestrzeń roboczą';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Dostrajamy transkrypcję do Twojego języka';
+
+  @override
+  String get onboardingSetupStepMemory => 'Konfigurujemy Twoją pamięć';
+
+  @override
+  String get onboardingSetupStepDevices => 'Łączymy Twoje urządzenia';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Personalizujemy Twoje doświadczenie';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Skoro czekasz, czy Omi dobrze Ci się sprawdza?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Ocena 5 gwiazdek naprawdę nam pomaga ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Tak, chcę Was wesprzeć!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Niezbyt';
 }

@@ -12353,4 +12353,37 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'บัญชีนี้กำลังถูกลบ ลงชื่อเข้าใช้ด้วยบัญชีอื่น หรือรอสักครู่แล้วลองอีกครั้ง';
+
+  @override
+  String get onboardingSetupTitle => 'กำลังตั้งค่า Omi ของคุณ';
+
+  @override
+  String get onboardingSetupSubtitle => 'ขอเวลา Omi สักครู่เพื่อปรับให้เหมาะกับคุณ';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'กำลังเตรียมพื้นที่ทำงานของคุณ';
+
+  @override
+  String get onboardingSetupStepLanguage => 'กำลังปรับการถอดเสียงให้เข้ากับภาษาของคุณ';
+
+  @override
+  String get onboardingSetupStepMemory => 'กำลังตั้งค่าความจำของคุณ';
+
+  @override
+  String get onboardingSetupStepDevices => 'กำลังเชื่อมต่ออุปกรณ์ของคุณ';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'กำลังปรับแต่งประสบการณ์ของคุณ';
+
+  @override
+  String get onboardingRatingPromptTitle => 'ระหว่างรอ Omi ใช้งานแล้วถูกใจไหม';
+
+  @override
+  String get onboardingRatingPromptBody => 'การให้ 5 ดาวช่วยเราได้มากจริงๆ ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'ใช่ ฉันอยากสนับสนุนคุณ!';
+
+  @override
+  String get onboardingRatingPromptNo => 'ไม่ค่อย';
 }

@@ -63,6 +63,7 @@ CONVERSATION_SMART_MERGE_REASONS = frozenset(
         'flatten_content_changed',
         'wallclock_gap_negative',
         'wallclock_time_invalid',
+        'intervening_discarded',
     }
 )
 CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES = frozenset({'refreshed', 'fenced', 'lease_busy', 'failed'})
