@@ -803,7 +803,7 @@ def _collect_visible_conversation_page(
             budget.charge(offset)
         except ListReadBudgetExhausted:
             return []
-    page_query = conversations_ref.offset(offset).limit(limit)
+    page_query = conversations_ref.limit(limit).offset(offset)
     conversations = []
     last_doc = None
     fetched = 0
