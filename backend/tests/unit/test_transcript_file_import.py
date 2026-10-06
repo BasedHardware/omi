@@ -131,6 +131,46 @@ def test_srt_formatting_tags_are_removed_before_speaker_labels_are_read(srt, ext
     ]
 
 
+@pytest.mark.parametrize('extension', ['.srt', '.txt'])
+def test_srt_angle_brackets_and_ampersands_that_are_not_markup_stay_words(extension):
+    """Only SRT's own tags (<i>, <b>, <u>, <s>, <font>) are markup; "x < 10" and "<-" are words."""
+    srt = (
+        '1\n00:00:01,000 --> 00:00:02,000\nAlice: if x < 10 and y > 5 we ship\n\n'
+        '2\n00:00:02,000 --> 00:00:03,000\nBob: the arrow <- goes\nback -> here\n\n'
+        '3\n00:00:03,000 --> 00:00:04,000\nAlice: meeting&notes, R&amp;D and &amp;lt;b&amp;gt;\n'
+    )
+
+    parsed = tf.parse_transcript_file(f'call{extension}', srt.encode('utf-8'))
+
+    assert parsed is not None
+    assert [(cue.speaker, cue.text) for cue in parsed.cues] == [
+        ('Alice', 'if x < 10 and y > 5 we ship'),
+        ('Bob', 'the arrow <- goes back -> here'),
+        # An entity needs its ';' ("&not" is not one here), and text is unescaped exactly once.
+        ('Alice', 'meeting&notes, R&D and &lt;b&gt;'),
+    ]
+
+
+def test_a_vtt_voice_name_is_unescaped_so_it_can_bind():
+    vtt = 'WEBVTT\n\n00:01.000 --> 00:02.000\n<v Tom &amp; Jerry>hello</v>\n'
+
+    cues = tf.parse_vtt(vtt)
+    segments = tf.segments_from_cues(cues, owner_name=None, people={'tom & jerry': 'person-tj'})
+
+    assert [cue.speaker for cue in cues] == ['Tom & Jerry']
+    assert [(s.text, s.person_id) for s in segments] == [('hello', 'person-tj')]
+
+
+@pytest.mark.parametrize('body', ['Alice: hello', 'alice: hello'])
+def test_a_name_the_text_already_opens_with_is_not_repeated(body):
+    """A voice-tagged cue may also write its speaker's label; the unbound name is kept once."""
+    vtt = f'WEBVTT\n\n00:01.000 --> 00:02.000\n<v Alice>{body}</v>\n'
+
+    segments = tf.segments_from_cues(tf.parse_vtt(vtt), owner_name='Jane Doe', people={})
+
+    assert [s.text for s in segments] == [body]
+
+
 def test_one_off_label_in_unlabeled_file_is_text_but_speaker_n_is_a_speaker():
     srt = (
         '1\n00:00:00,000 --> 00:00:01,000\nLet us go over the plan.\n\n'

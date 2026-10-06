@@ -140,7 +140,13 @@ _GENERIC_SPEAKER_RE = re.compile(
 # must stay linear: no two adjacent unbounded runs that can trade characters
 # (a tag or voice ends at the next '<', and a header name is capped).
 _VOICE_RE = re.compile(r'<v(?:\.[\w.-]+)?\s+([^<>\s][^<>]*)>')
+# WebVTT escapes every literal '<', so any '<...>' in a cue is markup.
 _TAG_RE = re.compile(r'<[^<>]*>')
+# SRT does not escape: only its own formatting tags (<i>, <b>, <u>, <s>, <font ...>) are
+# markup, and other angle brackets are words ("if x < 10 and y > 5", "<-").
+_SRT_TAG_RE = re.compile(r'</?(?:[ibus]|font)\b[^<>]*>', re.IGNORECASE)
+# A character reference ends with ';': "meeting&notes" is text, not "&not" + "es".
+_ENTITY_RE = re.compile(r'&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});')
 _HEADER_NAME_FIRST_RE = re.compile(rf'^(?P<name>\S(?:[^\n]{{0,58}}\S)?)\s{{2,}}\(?(?P<ts>{_TIMESTAMP})\)?$')
 _HEADER_TIME_FIRST_RE = re.compile(rf"^\[?(?P<ts>{_TIMESTAMP})\]?\s+(?P<name>[^\W\d_][\w .'-]{{0,39}})$")
 # An optional "--> end" (one-line cues, whisper.cpp's "[start --> end]") is consumed whole,
@@ -177,9 +183,14 @@ def _normalize(text: str) -> str:
     return text.lstrip('﻿').replace('\r\n', '\n').replace('\r', '\n')
 
 
-def _plain_cue_text(raw: str) -> str:
-    """A cue's text without SRT and WebVTT markup: tags (``<i>``, ``<font ...>``, ``<v Name>``) and entities."""
-    return re.sub(r'\s+', ' ', html.unescape(_TAG_RE.sub('', raw))).strip()
+def _unescape(text: str) -> str:
+    """Decode each ``;``-terminated character reference once; a bare "&" stays text."""
+    return _ENTITY_RE.sub(lambda entity: html.unescape(entity.group(0)), text)
+
+
+def _plain_cue_text(raw: str, tags: re.Pattern[str]) -> str:
+    """A cue's text without its markup: the ``tags`` its format uses, then character references."""
+    return re.sub(r'\s+', ' ', _unescape(tags.sub('', raw))).strip()
 
 
 def _blocks(text: str) -> List[List[str]]:
@@ -234,8 +245,9 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
     one-line cues, one per timing line; other lines continue the cue above them.
     The line before a timing is the cue number; with ``keep_label`` (a .txt) a line
     there that is not a number (a title, "Clip", "Quote:") is kept as its own cue.
-    Formatting tags (``<i>``, ``<b>``, ``<font color=...>``) are removed from cue text
-    before any "Name: " label is looked for.
+    SRT's formatting tags (``<i>``, ``<b>``, ``<u>``, ``<s>``, ``<font ...>``) are
+    removed from cue text before any "Name: " label is looked for; other angle
+    brackets are kept as words.
     """
     timing_index = next((index for index, line in enumerate(lines[:2]) if _CUE_TIMING_RE.match(line)), None)
     if timing_index is None:
@@ -245,7 +257,7 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
     label = lines[0] if keep_label and timing_index == 1 and not lines[0].isdigit() else ''
     labels = [TranscriptCue(text=label)] if label else []
     if _CUE_SETTINGS_RE.fullmatch(lines[timing_index], timing.end()):
-        body = _plain_cue_text(' '.join(lines[timing_index + 1 :]))
+        body = _plain_cue_text(' '.join(lines[timing_index + 1 :]), _SRT_TAG_RE)
         start, end = _seconds(timing.group(1)), _seconds(timing.group(2))
         return labels + ([TranscriptCue(text=body, start=start, end=end)] if body else [])
     runs: List[tuple[re.Match[str], List[str]]] = []
@@ -257,7 +269,7 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
             runs[-1][1].append(line)
     cues: List[TranscriptCue] = labels
     for line_timing, parts in runs:
-        body = _plain_cue_text(' '.join(parts))
+        body = _plain_cue_text(' '.join(parts), _SRT_TAG_RE)
         if body:
             cues.append(
                 TranscriptCue(text=body, start=_seconds(line_timing.group(1)), end=_seconds(line_timing.group(2)))
@@ -302,13 +314,13 @@ def parse_vtt(text: str) -> List[TranscriptCue]:
         timing = _CUE_TIMING_RE.match(lines[timing_index])
         raw = ' '.join(lines[timing_index + 1 :])
         voice = _VOICE_RE.search(raw)
-        body = _plain_cue_text(raw)
+        body = _plain_cue_text(raw, _TAG_RE)
         if not timing or not body:
             continue
         cues.append(
             TranscriptCue(
                 text=body,
-                speaker=voice.group(1).strip() if voice else None,
+                speaker=_unescape(voice.group(1)).strip() if voice else None,
                 start=_seconds(timing.group(1)),
                 end=_seconds(timing.group(2)),
             )
@@ -583,8 +595,11 @@ def _segment_text(cue: TranscriptCue, *, bound: bool) -> str:
     "TODO" or an agenda heading) stays in the text rather than vanish. A generic
     placeholder ("Speaker 2") names no one: the segment's ``SPEAKER_NN`` already
     records the turn, and repeating it would only duplicate the app's own label.
+    Nor is a name added to text that already opens with it (``<v Alice>Alice: hi``).
     """
     if bound or not cue.speaker or _GENERIC_SPEAKER_RE.match(cue.speaker):
+        return cue.text
+    if cue.text.casefold().startswith(f'{cue.speaker}:'.casefold()):
         return cue.text
     return f'{cue.speaker}: {cue.text}'
 
