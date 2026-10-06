@@ -146,10 +146,21 @@ def is_subscription_terminal(subscription_id: str) -> bool:
     """Whether Stripe currently reports the subscription in a terminal, non-billing state.
 
     Fails closed: an unreadable subscription or any non-terminal status returns False, so a
-    caller never mistakes a transport error for a subscription that is already canceled.
+    caller never mistakes a transport error for a subscription that is already canceled. A
+    subscription that does not exist at all (Stripe ``resource_missing``) is terminal: nothing
+    can bill through an id Stripe does not know.
     """
     try:
         subscription = stripe.Subscription.retrieve(subscription_id)
+    except stripe.InvalidRequestError as e:
+        if getattr(e, 'code', None) == 'resource_missing' or getattr(e, 'http_status', None) == 404:
+            # A subscription id Stripe has never heard of (a stale or synthetic id stored on the
+            # user) cannot bill anyone, so the billing goal state is already met. Treating it as a
+            # failure left account-deletion wipes retrying forever behind the auth fence.
+            logger.warning(f"Subscription {subscription_id} does not exist in Stripe; treating as terminal")
+            return True
+        logger.error(f"Error retrieving subscription: {e}")
+        return False
     except Exception as e:
         logger.error(f"Error retrieving subscription: {e}")
         return False

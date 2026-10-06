@@ -24,6 +24,7 @@ EXEMPT_APP_PATHS = {
     "app/scripts/mobile_store_promote_test.py",
     "app/scripts/mobile_store_version.py",
     "app/scripts/mobile_store_version_test.py",
+    "app/scripts/store_promotion_request.json",
 }
 
 
