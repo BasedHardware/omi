@@ -235,6 +235,8 @@ env:
   # environment — pusher hosts the same finalizer after 2026-08-30.
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
+  - name: OMI_SHAPED_AGENT_MODE
+    value: "cohort"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
@@ -273,7 +275,7 @@ env:
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
-    value: "50"
+    value: "100"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP

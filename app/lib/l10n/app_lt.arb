@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Rodyti užrakinimo ekrane",
-    "accountDeletionInProgressSignInAgain": "Ši paskyra šalinama. Prisijunkite kita paskyra arba palaukite kelias minutes ir bandykite dar kartą."
+    "accountDeletionInProgressSignInAgain": "Ši paskyra šalinama. Prisijunkite kita paskyra arba palaukite kelias minutes ir bandykite dar kartą.",
+    "onboardingSetupTitle": "Ruošiamas jūsų Omi",
+    "onboardingSetupSubtitle": "Duokite Omi akimirką prisitaikyti",
+    "onboardingSetupStepWorkspace": "Ruošiama jūsų darbo erdvė",
+    "onboardingSetupStepLanguage": "Derinama transkripcija jūsų kalbai",
+    "onboardingSetupStepMemory": "Nustatoma jūsų atmintis",
+    "onboardingSetupStepDevices": "Jungiami jūsų įrenginiai",
+    "onboardingSetupStepPersonalize": "Personalizuojama jūsų patirtis",
+    "onboardingRatingPromptTitle": "Kol laukiate, ar Omi buvo malonu naudoti?",
+    "onboardingRatingPromptBody": "5 žvaigždučių įvertinimas mums labai padeda ❤️",
+    "onboardingRatingPromptYes": "Taip, noriu jus palaikyti!",
+    "onboardingRatingPromptNo": "Ne visai"
 }

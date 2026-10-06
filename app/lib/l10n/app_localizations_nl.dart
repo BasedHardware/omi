@@ -12455,4 +12455,37 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Dit account wordt verwijderd. Log in met een ander account, of wacht een paar minuten en probeer het opnieuw.';
+
+  @override
+  String get onboardingSetupTitle => 'Je Omi wordt ingesteld';
+
+  @override
+  String get onboardingSetupSubtitle => 'Geef Omi even de tijd om te personaliseren';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Je werkruimte wordt voorbereid';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Transcriptie wordt afgestemd op jouw taal';
+
+  @override
+  String get onboardingSetupStepMemory => 'Je geheugen wordt ingesteld';
+
+  @override
+  String get onboardingSetupStepDevices => 'Je apparaten worden verbonden';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Je ervaring wordt gepersonaliseerd';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Terwijl je wacht: vind je Omi fijn om te gebruiken?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 sterren helpen ons echt enorm ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Ja, ik wil jullie steunen!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Niet echt';
 }

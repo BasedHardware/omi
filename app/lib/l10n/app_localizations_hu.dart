@@ -12467,4 +12467,37 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Ez a fiók törlés alatt áll. Jelentkezz be egy másik fiókkal, vagy várj néhány percet, és próbáld újra.';
+
+  @override
+  String get onboardingSetupTitle => 'Az Omi beállítása';
+
+  @override
+  String get onboardingSetupSubtitle => 'Adj egy pillanatot az Ominak a testreszabásra';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'A munkaterületed előkészítése';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Az átírás hangolása a nyelvedhez';
+
+  @override
+  String get onboardingSetupStepMemory => 'A memóriád beállítása';
+
+  @override
+  String get onboardingSetupStepDevices => 'Az eszközeid csatlakoztatása';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Az élményed személyre szabása';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Amíg vársz, jó élmény volt az Omi használata?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Igen, szeretnék támogatni titeket!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Nem igazán';
 }

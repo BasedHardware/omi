@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Visa på låsskärmen",
-    "accountDeletionInProgressSignInAgain": "Det här kontot håller på att raderas. Logga in med ett annat konto, eller vänta några minuter och försök igen."
+    "accountDeletionInProgressSignInAgain": "Det här kontot håller på att raderas. Logga in med ett annat konto, eller vänta några minuter och försök igen.",
+    "onboardingSetupTitle": "Din Omi ställs in",
+    "onboardingSetupSubtitle": "Ge Omi en stund att anpassa sig",
+    "onboardingSetupStepWorkspace": "Din arbetsyta förbereds",
+    "onboardingSetupStepLanguage": "Transkriberingen anpassas till ditt språk",
+    "onboardingSetupStepMemory": "Ditt minne ställs in",
+    "onboardingSetupStepDevices": "Dina enheter ansluts",
+    "onboardingSetupStepPersonalize": "Din upplevelse anpassas",
+    "onboardingRatingPromptTitle": "Medan du väntar, har Omi varit trevlig att använda?",
+    "onboardingRatingPromptBody": "5 stjärnor hjälper oss verkligen mycket ❤️",
+    "onboardingRatingPromptYes": "Ja, jag vill stötta er!",
+    "onboardingRatingPromptNo": "Inte direkt"
 }

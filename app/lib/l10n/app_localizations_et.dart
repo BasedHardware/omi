@@ -12413,4 +12413,37 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Seda kontot kustutatakse. Logi sisse teise kontoga või oota paar minutit ja proovi uuesti.';
+
+  @override
+  String get onboardingSetupTitle => 'Sinu Omi seadistamine';
+
+  @override
+  String get onboardingSetupSubtitle => 'Anna Omile hetk kohandamiseks';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Sinu tööruumi ettevalmistamine';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Transkriptsiooni häälestamine sinu keelele';
+
+  @override
+  String get onboardingSetupStepMemory => 'Sinu mälu seadistamine';
+
+  @override
+  String get onboardingSetupStepDevices => 'Sinu seadmete ühendamine';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Sinu kogemuse isikupärastamine';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Kuni ootad, kas Omi kasutamine on meeldiv olnud?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 tärni aitavad meid tõesti palju ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Jah, tahan teid toetada!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Pigem mitte';
 }

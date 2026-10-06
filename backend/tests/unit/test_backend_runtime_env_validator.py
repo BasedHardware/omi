@@ -3271,7 +3271,7 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
                 percent = env_block.get('CONVERSATION_RELEVANCE_JEV_PERCENT')
                 if scope in _JEV_LIVE_RELEVANCE_HOSTS:
                     assert enabled == {'value': 'true', 'category': 'rollout'}, scope
-                    assert percent == {'value': '50', 'category': 'rollout'}, scope
+                    assert percent == {'value': '100', 'category': 'rollout'}, scope
                 else:
                     assert enabled is None and percent is None, scope
                 assert env_block.get(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV) is None, scope
@@ -3295,7 +3295,7 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
     ):
         entries = parse_env_entries(chart_path.read_text(encoding='utf-8'))
         assert entries[CONVERSATION_RELEVANCE_JEV_ENABLED_ENV].value == 'true', chart_path.name
-        assert entries['CONVERSATION_RELEVANCE_JEV_PERCENT'].value == '50', chart_path.name
+        assert entries['CONVERSATION_RELEVANCE_JEV_PERCENT'].value == '100', chart_path.name
         assert MEMORY_OWNER_JEV_FLIP_ENABLED_ENV not in entries, chart_path.name
 
     dev_config = validator._get_env_config(manifest, 'dev')

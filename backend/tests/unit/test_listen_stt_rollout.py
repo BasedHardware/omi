@@ -16,6 +16,7 @@ import yaml
 from websockets.legacy.server import serve
 
 from config.live_stt_recovery import current_recovery_enabled, recovery_enabled
+from config.soniox_idle import idle_close_seconds
 from deploy.compose_runtime_env import compose_manifest
 from testing.live_stt_soak.manifest import render as soak_manifest
 from testing.live_stt_soak.run import metric_samples, session, summarize, validate_pod, public_pcm, pod_generation
@@ -82,6 +83,52 @@ def test_stable_recovery_code_default_remains_off(monkeypatch, value):
         assert recovery_enabled() is False
     finally:
         current_recovery_enabled.reset(token)
+
+
+@pytest.mark.parametrize('runtime_source', ['committed', 'composed'])
+def test_stable_idle_close_is_scoped_to_prod_listen(runtime_source):
+    flag = 'SONIOX_IDLE_CLOSE_SECONDS'
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    manifest = (
+        yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
+        if runtime_source == 'committed'
+        else compose_manifest()
+    )
+
+    def declarations(node, path=()):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == flag:
+                    yield path, value
+                else:
+                    yield from declarations(value, (*path, key))
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                yield from declarations(value, (*path, index))
+
+    assert dict(declarations(manifest)) == {
+        ('environments', 'prod', 'gke', 'backend-listen', 'env'): {'value': '45', 'category': 'rollout'},
+    }
+    prod_values = yaml.load(
+        (ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text(),
+        Loader=loader,
+    )
+    dev_values = yaml.load(
+        (ROOT / 'backend/charts/backend-listen/dev_omi_backend_listen_values.yaml').read_text(),
+        Loader=loader,
+    )
+    assert [entry for entry in prod_values['env'] if entry['name'] == flag] == [{'name': flag, 'value': '45'}]
+    assert [entry for entry in dev_values['env'] if entry['name'] == flag] == []
+
+
+@pytest.mark.parametrize('value', [None, '0', '-1', 'nope'], ids=['unset', 'zero', 'negative', 'invalid'])
+def test_stable_idle_close_code_default_remains_off(monkeypatch, value):
+    flag = 'SONIOX_IDLE_CLOSE_SECONDS'
+    if value is None:
+        monkeypatch.delenv(flag, raising=False)
+    else:
+        monkeypatch.setenv(flag, value)
+    assert idle_close_seconds() == 0.0
 
 
 @pytest.mark.parametrize('environment', ['prod', 'dev'])

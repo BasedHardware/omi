@@ -12489,4 +12489,37 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Aquest compte s\'està suprimint. Inicia la sessió amb un altre compte o espera uns minuts i torna-ho a provar.';
+
+  @override
+  String get onboardingSetupTitle => 'Configurant el teu Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Dona un moment a Omi per personalitzar-se';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Preparant el teu espai de treball';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Ajustant la transcripció al teu idioma';
+
+  @override
+  String get onboardingSetupStepMemory => 'Configurant la teva memòria';
+
+  @override
+  String get onboardingSetupStepDevices => 'Connectant els teus dispositius';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Personalitzant la teva experiència';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Mentre esperes, t\'agrada utilitzar Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Valorar-nos amb 5 estrelles ens ajuda molt ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Sí, vull donar-vos suport!';
+
+  @override
+  String get onboardingRatingPromptNo => 'No gaire';
 }

@@ -12503,4 +12503,37 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'இந்தக் கணக்கு நீக்கப்பட்டு வருகிறது. வேறு கணக்கில் உள்நுழையவும், அல்லது சில நிமிடங்கள் காத்திருந்து மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get onboardingSetupTitle => 'உங்கள் Omi அமைக்கப்படுகிறது';
+
+  @override
+  String get onboardingSetupSubtitle => 'தனிப்பயனாக்க Omi-க்கு சிறிது நேரம் கொடுங்கள்';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'உங்கள் பணியிடம் தயாராகிறது';
+
+  @override
+  String get onboardingSetupStepLanguage => 'உங்கள் மொழிக்கு ஏற்ப டிரான்ஸ்கிரிப்ஷன் சரிசெய்யப்படுகிறது';
+
+  @override
+  String get onboardingSetupStepMemory => 'உங்கள் நினைவகம் அமைக்கப்படுகிறது';
+
+  @override
+  String get onboardingSetupStepDevices => 'உங்கள் சாதனங்கள் இணைக்கப்படுகின்றன';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'உங்கள் அனுபவம் தனிப்பயனாக்கப்படுகிறது';
+
+  @override
+  String get onboardingRatingPromptTitle => 'காத்திருக்கும் நேரத்தில், Omi பயன்படுத்த இனிமையாக இருக்கிறதா?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 நட்சத்திர மதிப்பீடு எங்களுக்கு மிகவும் உதவும் ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'ஆம், உங்களுக்கு ஆதரவளிக்க விரும்புகிறேன்!';
+
+  @override
+  String get onboardingRatingPromptNo => 'அவ்வளவாக இல்லை';
 }

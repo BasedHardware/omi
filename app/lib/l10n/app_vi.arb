@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Hiển thị trên màn hình khóa",
-    "accountDeletionInProgressSignInAgain": "Tài khoản này đang được xóa. Hãy đăng nhập bằng tài khoản khác, hoặc chờ vài phút rồi thử lại."
+    "accountDeletionInProgressSignInAgain": "Tài khoản này đang được xóa. Hãy đăng nhập bằng tài khoản khác, hoặc chờ vài phút rồi thử lại.",
+    "onboardingSetupTitle": "Đang thiết lập Omi của bạn",
+    "onboardingSetupSubtitle": "Hãy cho Omi một chút thời gian để cá nhân hóa",
+    "onboardingSetupStepWorkspace": "Đang chuẩn bị không gian làm việc của bạn",
+    "onboardingSetupStepLanguage": "Đang tinh chỉnh phiên âm theo ngôn ngữ của bạn",
+    "onboardingSetupStepMemory": "Đang thiết lập bộ nhớ của bạn",
+    "onboardingSetupStepDevices": "Đang kết nối các thiết bị của bạn",
+    "onboardingSetupStepPersonalize": "Đang cá nhân hóa trải nghiệm của bạn",
+    "onboardingRatingPromptTitle": "Trong lúc chờ, bạn thấy dùng Omi có thích không?",
+    "onboardingRatingPromptBody": "Đánh giá 5 sao thực sự giúp ích cho chúng tôi rất nhiều ❤️",
+    "onboardingRatingPromptYes": "Có, tôi muốn ủng hộ các bạn!",
+    "onboardingRatingPromptNo": "Không hẳn"
 }

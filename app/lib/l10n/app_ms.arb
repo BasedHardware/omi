@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Tunjukkan pada skrin kunci",
-    "accountDeletionInProgressSignInAgain": "Akaun ini sedang dipadamkan. Log masuk dengan akaun lain, atau tunggu beberapa minit dan cuba lagi."
+    "accountDeletionInProgressSignInAgain": "Akaun ini sedang dipadamkan. Log masuk dengan akaun lain, atau tunggu beberapa minit dan cuba lagi.",
+    "onboardingSetupTitle": "Menyediakan Omi anda",
+    "onboardingSetupSubtitle": "Beri Omi sedikit masa untuk memperibadikan",
+    "onboardingSetupStepWorkspace": "Menyediakan ruang kerja anda",
+    "onboardingSetupStepLanguage": "Menala transkripsi mengikut bahasa anda",
+    "onboardingSetupStepMemory": "Menyediakan memori anda",
+    "onboardingSetupStepDevices": "Menyambungkan peranti anda",
+    "onboardingSetupStepPersonalize": "Memperibadikan pengalaman anda",
+    "onboardingRatingPromptTitle": "Sementara menunggu, adakah Omi menyenangkan untuk digunakan?",
+    "onboardingRatingPromptBody": "Memberi kami 5 bintang sangat membantu kami ❤️",
+    "onboardingRatingPromptYes": "Ya, saya mahu menyokong anda!",
+    "onboardingRatingPromptNo": "Tidak begitu"
 }

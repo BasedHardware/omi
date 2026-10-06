@@ -12462,4 +12462,37 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Этот аккаунт удаляется. Войдите с другим аккаунтом или подождите несколько минут и попробуйте снова.';
+
+  @override
+  String get onboardingSetupTitle => 'Настраиваем ваш Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Дайте Omi минутку, чтобы подстроиться под вас';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Подготовка вашего рабочего пространства';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Настройка транскрипции под ваш язык';
+
+  @override
+  String get onboardingSetupStepMemory => 'Настройка вашей памяти';
+
+  @override
+  String get onboardingSetupStepDevices => 'Подключение ваших устройств';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Персонализация вашего опыта';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Пока вы ждёте, приятно ли вам пользоваться Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Оценка в 5 звёзд очень нам поможет ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Да, хочу вас поддержать!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Не совсем';
 }

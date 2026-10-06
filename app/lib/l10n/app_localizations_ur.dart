@@ -12432,4 +12432,37 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'یہ اکاؤنٹ حذف کیا جا رہا ہے۔ کسی دوسرے اکاؤنٹ سے سائن ان کریں، یا چند منٹ انتظار کر کے دوبارہ کوشش کریں۔';
+
+  @override
+  String get onboardingSetupTitle => 'آپ کا Omi سیٹ اپ ہو رہا ہے';
+
+  @override
+  String get onboardingSetupSubtitle => 'Omi کو ذاتی بنانے کے لیے ذرا سا وقت دیں';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'آپ کا ورک اسپیس تیار کیا جا رہا ہے';
+
+  @override
+  String get onboardingSetupStepLanguage => 'ٹرانسکرپشن کو آپ کی زبان کے مطابق بنایا جا رہا ہے';
+
+  @override
+  String get onboardingSetupStepMemory => 'آپ کی میموری سیٹ اپ ہو رہی ہے';
+
+  @override
+  String get onboardingSetupStepDevices => 'آپ کے آلات کنیکٹ کیے جا رہے ہیں';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'آپ کے تجربے کو ذاتی بنایا جا رہا ہے';
+
+  @override
+  String get onboardingRatingPromptTitle => 'انتظار کے دوران بتائیں، کیا Omi استعمال کرنا اچھا لگا؟';
+
+  @override
+  String get onboardingRatingPromptBody => '5 اسٹار ریٹنگ ہماری واقعی بہت مدد کرتی ہے ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'ہاں، مجھے آپ کو سپورٹ کرنا ہے!';
+
+  @override
+  String get onboardingRatingPromptNo => 'زیادہ نہیں';
 }

@@ -12328,4 +12328,37 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'החשבון הזה נמחק כעת. היכנסו עם חשבון אחר, או המתינו כמה דקות ונסו שוב.';
+
+  @override
+  String get onboardingSetupTitle => 'מגדירים את ה-Omi שלך';
+
+  @override
+  String get onboardingSetupSubtitle => 'תנו ל-Omi רגע להתאים את עצמו אליכם';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'מכינים את סביבת העבודה שלך';
+
+  @override
+  String get onboardingSetupStepLanguage => 'מכוונים את התמלול לשפה שלך';
+
+  @override
+  String get onboardingSetupStepMemory => 'מגדירים את הזיכרון שלך';
+
+  @override
+  String get onboardingSetupStepDevices => 'מחברים את המכשירים שלך';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'מתאימים אישית את החוויה שלך';
+
+  @override
+  String get onboardingRatingPromptTitle => 'בזמן שמחכים, נעים לכם להשתמש ב-Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'דירוג של 5 כוכבים עוזר לנו מאוד ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'כן, אני רוצה לתמוך בכם!';
+
+  @override
+  String get onboardingRatingPromptNo => 'לא ממש';
 }

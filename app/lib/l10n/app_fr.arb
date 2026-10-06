@@ -3875,5 +3875,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Afficher sur l’écran verrouillé",
-    "accountDeletionInProgressSignInAgain": "Ce compte est en cours de suppression. Connectez-vous avec un autre compte, ou patientez quelques minutes et réessayez."
+    "accountDeletionInProgressSignInAgain": "Ce compte est en cours de suppression. Connectez-vous avec un autre compte, ou patientez quelques minutes et réessayez.",
+    "onboardingSetupTitle": "Configuration de votre Omi",
+    "onboardingSetupSubtitle": "Laissez un instant à Omi pour se personnaliser",
+    "onboardingSetupStepWorkspace": "Préparation de votre espace de travail",
+    "onboardingSetupStepLanguage": "Réglage de la transcription pour votre langue",
+    "onboardingSetupStepMemory": "Configuration de votre mémoire",
+    "onboardingSetupStepDevices": "Connexion de vos appareils",
+    "onboardingSetupStepPersonalize": "Personnalisation de votre expérience",
+    "onboardingRatingPromptTitle": "Pendant que vous patientez, Omi vous plaît-il ?",
+    "onboardingRatingPromptBody": "Une note de 5 étoiles nous aide vraiment beaucoup ❤️",
+    "onboardingRatingPromptYes": "Oui, je veux vous soutenir !",
+    "onboardingRatingPromptNo": "Pas vraiment"
 }

@@ -12423,4 +12423,37 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Tätä tiliä poistetaan. Kirjaudu sisään toisella tilillä tai odota muutama minuutti ja yritä uudelleen.';
+
+  @override
+  String get onboardingSetupTitle => 'Omia otetaan käyttöön';
+
+  @override
+  String get onboardingSetupSubtitle => 'Anna Omille hetki mukautua';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Työtilaasi valmistellaan';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Tekstitystä mukautetaan kielellesi';
+
+  @override
+  String get onboardingSetupStepMemory => 'Muistiasi otetaan käyttöön';
+
+  @override
+  String get onboardingSetupStepDevices => 'Laitteitasi yhdistetään';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Kokemustasi personoidaan';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Odotellessasi: onko Omin käyttö ollut mukavaa?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 tähteä auttaa meitä todella paljon ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Kyllä, haluan tukea teitä!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Ei oikeastaan';
 }

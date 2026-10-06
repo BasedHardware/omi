@@ -2156,14 +2156,14 @@
     "mobile_daily_train.yml/dispatch": {
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
-      "expected_runs_class": "non-pr",
+      "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "One ubuntu job per daily 14:00 UTC schedule or manual dispatch; it only calls the Codemagic API to start the mobile release train, so no build runs on GitHub runners and it never runs for pull requests",
+      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4783,7 +4783,7 @@
     "mobile_daily_train.yml": {
       "name": "Mobile daily train",
       "owner": "CI maintainers",
-      "rationale": "Daily 14:00 UTC schedule plus workflow_dispatch with a dry_run input; added by #20797 and not triggered by pull_request or push",
+      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row.",
       "triggers": {
         "schedule": [
           {

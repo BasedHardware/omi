@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "Показване на заключения екран",
-    "accountDeletionInProgressSignInAgain": "Този акаунт се изтрива. Влезте с друг акаунт или изчакайте няколко минути и опитайте отново."
+    "accountDeletionInProgressSignInAgain": "Този акаунт се изтрива. Влезте с друг акаунт или изчакайте няколко минути и опитайте отново.",
+    "onboardingSetupTitle": "Настройване на вашия Omi",
+    "onboardingSetupSubtitle": "Дайте на Omi малко време да се персонализира",
+    "onboardingSetupStepWorkspace": "Подготвяне на работното ви пространство",
+    "onboardingSetupStepLanguage": "Настройване на транскрипцията за вашия език",
+    "onboardingSetupStepMemory": "Настройване на паметта ви",
+    "onboardingSetupStepDevices": "Свързване на устройствата ви",
+    "onboardingSetupStepPersonalize": "Персонализиране на вашето изживяване",
+    "onboardingRatingPromptTitle": "Докато чакате, приятно ли ви е да използвате Omi?",
+    "onboardingRatingPromptBody": "Оценка от 5 звезди наистина ни помага ❤️",
+    "onboardingRatingPromptYes": "Да, искам да ви подкрепя!",
+    "onboardingRatingPromptNo": "Не особено"
 }

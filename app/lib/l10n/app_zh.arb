@@ -3840,5 +3840,16 @@
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
     "showOnLockScreen": "在锁定屏幕上显示",
-    "accountDeletionInProgressSignInAgain": "此账号正在删除中。请使用其他账号登录，或等待几分钟后重试。"
+    "accountDeletionInProgressSignInAgain": "此账号正在删除中。请使用其他账号登录，或等待几分钟后重试。",
+    "onboardingSetupTitle": "正在设置你的 Omi",
+    "onboardingSetupSubtitle": "请稍等片刻，Omi 正在为你个性化设置",
+    "onboardingSetupStepWorkspace": "正在准备你的工作区",
+    "onboardingSetupStepLanguage": "正在根据你的语言优化转写",
+    "onboardingSetupStepMemory": "正在设置你的记忆",
+    "onboardingSetupStepDevices": "正在连接你的设备",
+    "onboardingSetupStepPersonalize": "正在个性化你的体验",
+    "onboardingRatingPromptTitle": "等待的时候，Omi 用起来还顺手吗？",
+    "onboardingRatingPromptBody": "给我们 5 星好评对我们真的很有帮助 ❤️",
+    "onboardingRatingPromptYes": "好的，我想支持你们！",
+    "onboardingRatingPromptNo": "不太满意"
 }
