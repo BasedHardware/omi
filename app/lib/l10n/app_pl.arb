@@ -3874,5 +3874,6 @@
     "dismiss": "Ukryj",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Pokaż na ekranie blokady"
+    "showOnLockScreen": "Pokaż na ekranie blokady",
+    "accountDeletionInProgressSignInAgain": "To konto jest usuwane. Zaloguj się na inne konto albo poczekaj kilka minut i spróbuj ponownie."
 }

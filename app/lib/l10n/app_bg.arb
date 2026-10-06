@@ -3839,5 +3839,6 @@
     "dismiss": "Скрий",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Показване на заключения екран"
+    "showOnLockScreen": "Показване на заключения екран",
+    "accountDeletionInProgressSignInAgain": "Този акаунт се изтрива. Влезте с друг акаунт или изчакайте няколко минути и опитайте отново."
 }

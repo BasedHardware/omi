@@ -12410,4 +12410,8 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Tài khoản này đang được xóa. Hãy đăng nhập bằng tài khoản khác, hoặc chờ vài phút rồi thử lại.';
 }

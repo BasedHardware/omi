@@ -12427,4 +12427,8 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Kilit ekranında göster';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Bu hesap siliniyor. Başka bir hesapla giriş yapın ya da birkaç dakika bekleyip tekrar deneyin.';
 }
