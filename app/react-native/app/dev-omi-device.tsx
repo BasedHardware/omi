@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Pressable,
   View,
   Text,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/constants/theme';
@@ -156,7 +158,18 @@ export default function DevOmiDeviceScreen() {
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + Spacing.three, paddingBottom: 40 }}>
-        <Text style={[styles.h1, { color: theme.text }]}>omi device</Text>
+        <View style={styles.backRow}>
+          <Pressable
+            style={styles.back}
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            testID="dev-back"
+          >
+            <Text style={[styles.backText, { color: theme.text }]}>‹ Back</Text>
+          </Pressable>
+          <Text style={[styles.h1, { color: theme.text }]}>omi device</Text>
+        </View>
         <Text style={[styles.note, { color: theme.textSecondary }]}>
           adapter: {bleState} · service {OMI.service.slice(0, 8)}…
         </Text>
@@ -201,6 +214,24 @@ export default function DevOmiDeviceScreen() {
             <Btn label="Start audio" onPress={startAudio} bg="#16a34a" />
             <Btn label="Stop" onPress={stopAudio} bg="#444" />
           </View>
+          <Btn
+            label={omiBle.connectedDeviceId ? 'Disconnect device' : 'Not connected'}
+            bg="#b91c1c"
+            disabled={!omiBle.connectedDeviceId}
+            onPress={async () => {
+              // Tear the capture down first: leaving the notification enabled
+              // after a disconnect means the device pushes audio into a stream
+              // that no longer has a socket.
+              if (capture.recording) capture.stop();
+              omiBle.stopAudio();
+              await omiBle.disconnect();
+              setIdentity(null);
+              setAudioChunks(0);
+              setAudioBytes(0);
+              setListening(false);
+              say('disconnected');
+            }}
+          />
 
           <Text style={[styles.label, { color: theme.textSecondary }]}>TRANSCRIBE</Text>
           <Text style={[styles.line, { color: theme.text }]}>
@@ -274,6 +305,9 @@ function Btn({ label, onPress, bg, disabled }: { label: string; onPress: () => v
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  backRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.three, gap: Spacing.two },
+  back: { paddingVertical: 6 },
+  backText: { fontSize: 16, fontWeight: '600' },
   h1: { fontSize: 24, fontWeight: '700', paddingHorizontal: Spacing.three },
   note: { fontSize: 12, paddingHorizontal: Spacing.three, marginBottom: Spacing.two },
   pad: { paddingHorizontal: Spacing.three, gap: Spacing.two },

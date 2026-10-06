@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { Pressable, View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 
 import { LocalBrainBar, type RouteTrace } from '@/components/LocalBrainBar';
 import { useTheme } from '@/hooks/use-theme';
@@ -40,7 +41,9 @@ export default function DevLocalBrainScreen() {
   const [busy, setBusy] = useState(false);
   const [loadMs, setLoadMs] = useState<number | null>(null);
 
-  const router = React.useMemo(
+  // Named brainRouter, not router: `router` is the expo-router navigation
+  // object imported above, and shadowing it broke the Back button.
+  const brainRouter = React.useMemo(
     () =>
       isLocalBrainAvailable
         ? createNativeRouter(ROUTE_PROTOTYPES, OUT_OF_DOMAIN_PROTOTYPES)
@@ -53,13 +56,13 @@ export default function DevLocalBrainScreen() {
   }, []);
 
   const run = useCallback(async () => {
-    if (!router) {
+    if (!brainRouter) {
       append('no native router; the bar should say so');
       return;
     }
     setBusy(true);
     const t0 = Date.now();
-    const outcome = await routeWithProvider(text, router);
+    const outcome = await routeWithProvider(text, brainRouter);
     const ms = Date.now() - t0;
     setTrace({
       source: outcome.source,
@@ -69,7 +72,7 @@ export default function DevLocalBrainScreen() {
     });
     append(`${ms}ms  ${JSON.stringify(outcome)}`);
     setBusy(false);
-  }, [router, text, append]);
+  }, [brainRouter, text, append]);
 
   const warm = useCallback(async () => {
     setBusy(true);
@@ -94,7 +97,18 @@ export default function DevLocalBrainScreen() {
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + Spacing.three }}>
-        <Text style={[styles.h1, { color: theme.text }]}>Local brain</Text>
+        <View style={styles.backRow}>
+          <Pressable
+            style={styles.back}
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            testID="dev-back"
+          >
+            <Text style={[styles.backText, { color: theme.text }]}>‹ Back</Text>
+          </Pressable>
+          <Text style={[styles.h1, { color: theme.text }]}>Local brain</Text>
+        </View>
         <Text style={[styles.note, { color: theme.textSecondary }]}>
           native module: {String(isLocalBrainAvailable)} · warm-up:{' '}
           {loadMs == null ? 'not run' : `${loadMs}ms`}
@@ -165,6 +179,9 @@ export default function DevLocalBrainScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  backRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.three, gap: Spacing.two },
+  back: { paddingVertical: 6 },
+  backText: { fontSize: 16, fontWeight: '600' },
   pad: { paddingHorizontal: Spacing.three, gap: Spacing.two },
   h1: { fontSize: 24, fontWeight: '700', paddingHorizontal: Spacing.three },
   note: { fontSize: 12, paddingHorizontal: Spacing.three, marginBottom: Spacing.two },
