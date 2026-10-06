@@ -7,6 +7,11 @@ import 'package:omi/services/capture/capture_seams.dart';
 class UplinkSilenceTimer {
   UplinkSilenceTimer({required this.scheduling, required this.now, required this.timeout, required this.onTimeout});
 
+  /// Match the listen server's existing settings contract: -1 is four hours,
+  /// and malformed/sub-minimum values retain the two-minute floor.
+  static Duration fromPreference(int seconds) =>
+      Duration(seconds: seconds == -1 ? 4 * 60 * 60 : (seconds < 120 ? 120 : seconds));
+
   final CaptureScheduling scheduling;
   final DateTime Function() now;
   final Duration Function() timeout;

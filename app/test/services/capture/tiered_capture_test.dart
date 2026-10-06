@@ -18,6 +18,12 @@ void main() {
     await world.settle();
   }
 
+  Future<void> elapse(Duration duration) async {
+    await world.elapse(duration);
+    await world.controller.pendingSourceSwitch;
+    await world.settle();
+  }
+
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('tiered_capture_');
     world = await CaptureReplayWorld.boot(tempDir: directory);
@@ -31,9 +37,9 @@ void main() {
 
   test('default 120 second deadline pauses BLE and socket, finalizes once, and stays paused on reconnect', () async {
     final socket = world.socket!;
-    await world.elapse(const Duration(seconds: 119));
+    await elapse(const Duration(seconds: 119));
     expect(world.controller.isPaused, false);
-    await world.elapse(const Duration(seconds: 1));
+    await elapse(const Duration(seconds: 1));
     expect(world.controller.silencePaused, true);
     expect(world.controller.isPaused, true);
     expect(socket.closeCalls, 1);
@@ -44,16 +50,16 @@ void main() {
     await world.settle();
     await connect();
     await world.controller.streamDeviceRecording(); // Home's check-only start
-    await world.elapse(const Duration(seconds: 150));
+    await elapse(const Duration(seconds: 150));
     expect(world.controller.isPaused, true);
     expect(world.sockets.length, sockets);
     expect(world.deviceConnection!.openAudioSubscriptions, 0);
   });
 
   test('speech resets the configured deadline, audio packets do not', () async {
-    SharedPreferencesUtil().conversationSilenceDuration = 30;
+    SharedPreferencesUtil().conversationSilenceDuration = 300;
     await connect();
-    await world.elapse(const Duration(seconds: 20));
+    await elapse(const Duration(seconds: 200));
     world.controller.onSegmentReceived([
       TranscriptSegment(
           id: 'speech',
@@ -66,17 +72,17 @@ void main() {
           translations: []),
     ]);
     await world.settle();
-    await world.elapse(const Duration(seconds: 20));
+    await elapse(const Duration(seconds: 200));
     expect(world.controller.isPaused, false);
     world.deviceConnection!.emitAudio();
-    await world.elapse(const Duration(seconds: 10));
+    await elapse(const Duration(seconds: 100));
     expect(world.controller.silencePaused, true);
   });
 
   for (final charging in [false, true]) {
     test('${charging ? 'charging' : 'foreground'} resumes silence as a fresh session but respects manual mute',
         () async {
-      await world.elapse(const Duration(seconds: 120));
+      await elapse(const Duration(seconds: 120));
       final recording = world.controller.activeRecordingId;
       final sockets = world.sockets.length;
       if (charging) {
@@ -101,7 +107,7 @@ void main() {
   }
 
   test('manual pause takes over silence reason and prevents auto resume', () async {
-    await world.elapse(const Duration(seconds: 120));
+    await elapse(const Duration(seconds: 120));
     await world.controller.pauseCapture();
     expect(world.controller.silencePaused, false);
     await world.controller.resumeAfterSilence();
@@ -109,7 +115,7 @@ void main() {
   });
 
   test('late transcript delivery cannot reopen an expired capture', () async {
-    await world.elapse(const Duration(seconds: 120));
+    await elapse(const Duration(seconds: 120));
     await world.controller.pendingSourceSwitch;
     world.controller.onSegmentReceived([
       TranscriptSegment(

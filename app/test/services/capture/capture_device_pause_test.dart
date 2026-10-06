@@ -37,6 +37,7 @@ void main() {
       expect(world.controller.keepAliveScheduledForTesting, false);
       final count = world.sockets.length;
       await world.controller.onTranscriptionSettingsChanged();
+      await world.controller.changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16);
       await world.controller.streamDeviceRecording(device: pendant);
       await world.elapse(const Duration(seconds: 30));
       expect(world.sockets.length, count);

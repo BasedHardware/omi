@@ -5,6 +5,8 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/enums.dart';
 
+part 'capture_silence_policy.dart';
+
 /// Capture ownership coordinator: the single admission and ordering authority
 /// for "one live source at a time" (CAPTURE_POLICY.md). Every
 /// ownership-relevant entry becomes a [CaptureEvent] through [dispatch]; the
@@ -678,22 +680,6 @@ class DevicePauseRequested extends CaptureEvent {
 
 class DeviceResumeRequested extends CaptureEvent {
   const DeviceResumeRequested();
-}
-
-/// Timer events are fenced to the recording that armed them, then checked
-/// against the current deadline when the serialized reducer runs.
-class UplinkSilenceElapsed extends CaptureEvent {
-  const UplinkSilenceElapsed(this.recordingId);
-  final String? recordingId;
-}
-
-class ResumeSilencePaused extends CaptureEvent {
-  const ResumeSilencePaused();
-}
-
-class SilencePauseMarkerStage extends CaptureStage {
-  const SilencePauseMarkerStage(this.paused);
-  final bool paused;
 }
 
 /// `_onOmiCallStateChanged` — the reducer re-reads the call state from the
@@ -2182,56 +2168,6 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
   );
 }
 
-CaptureTransition _reduceUplinkSilence(
-  CaptureCoordinatorState state,
-  UplinkSilenceElapsed event,
-  CaptureEnvironment env,
-) {
-  if (state.phase != CapturePhase.pendantLive ||
-      env.policyMuted ||
-      !env.uplinkSilenceExpired ||
-      state.active?.recordingId != event.recordingId) {
-    return CaptureTransition(state, const []);
-  }
-  return CaptureTransition(state.copyWith(phase: CapturePhase.pendantPaused), const [
-    PolicyWrite(true),
-    RunStage(SilencePauseMarkerStage(true)),
-    RunStage(PauseDeviceTailStage()),
-    WalFinalize(),
-    RunStage(ProcessConversationStage()),
-  ]);
-}
-
-CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
-  if (!env.silencePaused || state.phoneOwns || state.callActive) {
-    return CaptureTransition(state, const []);
-  }
-  final device = state.connectedDevice;
-  if (device == null) {
-    // Link reconnect remains immediate and will start capture under this intent.
-    return CaptureTransition(state, const [PolicyWrite(false)]);
-  }
-  final seq = state.sessionSeq + 1;
-  final key = 'pendant-$seq';
-  return CaptureTransition(
-    state.copyWith(
-      phase: CapturePhase.pendantLive,
-      sessionSeq: seq,
-      active: () => ActiveCaptureSession(
-          source: CaptureSource.pendant,
-          mode: CaptureTransport.live,
-          sessionKey: key,
-          deviceId: device.id,
-          deviceType: device.type),
-    ),
-    [
-      const PolicyWrite(false),
-      MintRecording(sessionKey: key, telemetrySource: 'pendant_live'),
-      const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)),
-    ],
-  );
-}
-
 CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment env) {
   if (env.silencePaused) {
     return CaptureTransition(state, const [RunStage(SilencePauseMarkerStage(false))]);
@@ -2549,36 +2485,6 @@ CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpda
     ),
     effects,
   );
-}
-
-CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvironment env) {
-  if (env.silencePaused) {
-    return CaptureTransition(state, const [RunStage(SilencePauseMarkerStage(false))]);
-  }
-  if (state.phase == CapturePhase.phoneLive || state.phase == CapturePhase.phoneBatchLive) {
-    return _reducePause(state, env);
-  }
-  if (state.phoneOwns) return CaptureTransition(state, const []);
-  final nextPhase = switch (state.phase) {
-    CapturePhase.pendantLive => CapturePhase.pendantPaused,
-    CapturePhase.pendantBatchLive => CapturePhase.pendantBatchPaused,
-    _ => state.phase,
-  };
-  if (nextPhase != state.phase) {
-    return CaptureTransition(state.copyWith(phase: nextPhase), const [
-      PolicyWrite(true),
-      RunStage(PauseDeviceTailStage()),
-    ]);
-  }
-  // An unowned pendant control only records suspended intent; the legacy
-  // idle mute persists admission without opening any capture source.
-  if (state.pendantSuspension != null) {
-    return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, true)), const []);
-  }
-  if (state.phase == CapturePhase.idle && !state.callActive) {
-    return CaptureTransition(state, const [PolicyWrite(true), RunStage(PauseDeviceTailStage())]);
-  }
-  return CaptureTransition(state, const []);
 }
 
 CaptureTransition _reduceDeviceResume(CaptureCoordinatorState state, CaptureEnvironment env) {

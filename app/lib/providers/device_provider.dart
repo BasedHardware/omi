@@ -516,7 +516,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
-  Future<void> initiateChargingStatusListener() async {
+  Future<void> initiateChargingStatusListener({bool allowCaptureResume = true}) async {
     final generation = _sessionGeneration;
     if (!_isCurrent(generation) || connectedDevice == null) return;
     _bleChargingStatusListener?.cancel();
@@ -524,13 +524,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
     if (!_isCurrent(generation)) return;
     if (connection == null) return;
+    // TODO(astra): non-Omi connections, including Friend Pendant, expose no charging-status API.
     if (connection is! OmiDeviceConnection) return;
 
     final currentStatus = await connection.readChargingStatus();
     if (!_isCurrent(generation)) return;
     final chargeStarted = _chargeStarts.observe(connectedDevice!.id, currentStatus);
     // An initial read made by a sync wake is observation, not a charge-start event.
-    if (chargeStarted && !SyncWakeScope.syncOnly) captureProvider?.onChargingStarted();
+    if (chargeStarted && allowCaptureResume && !SyncWakeScope.syncOnly) captureProvider?.onChargingStarted();
     if (isCharging != currentStatus) {
       isCharging = currentStatus;
 
@@ -885,7 +886,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Then set up listeners for battery changes and charging status
     await initiateBleBatteryListener();
     if (!_isCurrent(generation)) return;
-    await initiateChargingStatusListener();
+    await initiateChargingStatusListener(allowCaptureResume: !syncOnly);
     if (!_isCurrent(generation)) return;
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;
