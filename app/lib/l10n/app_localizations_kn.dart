@@ -12452,4 +12452,37 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ';
+
+  @override
+  String get onboardingSetupTitle => 'ನಿಮ್ಮ Omi ಅನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get onboardingSetupSubtitle => 'ವೈಯಕ್ತೀಕರಿಸಲು Omi ಗೆ ಒಂದು ಕ್ಷಣ ನೀಡಿ';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'ನಿಮ್ಮ ವರ್ಕ್‌ಸ್ಪೇಸ್ ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get onboardingSetupStepLanguage => 'ನಿಮ್ಮ ಭಾಷೆಗೆ ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಶನ್ ಹೊಂದಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get onboardingSetupStepMemory => 'ನಿಮ್ಮ ಮೆಮೊರಿ ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get onboardingSetupStepDevices => 'ನಿಮ್ಮ ಸಾಧನಗಳನ್ನು ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'ನಿಮ್ಮ ಅನುಭವವನ್ನು ವೈಯಕ್ತೀಕರಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get onboardingRatingPromptTitle => 'ಕಾಯುತ್ತಿರುವಾಗ, Omi ಬಳಸುವುದು ಚೆನ್ನಾಗಿದೆಯೇ?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 ಸ್ಟಾರ್ ರೇಟಿಂಗ್ ನೀಡಿದರೆ ನಮಗೆ ತುಂಬಾ ಸಹಾಯವಾಗುತ್ತದೆ 🤍';
+
+  @override
+  String get onboardingRatingPromptYes => 'ಹೌದು, ನಾನು ನಿಮ್ಮನ್ನು ಬೆಂಬಲಿಸಲು ಬಯಸುತ್ತೇನೆ!';
+
+  @override
+  String get onboardingRatingPromptNo => 'ಅಷ್ಟಾಗಿ ಇಲ್ಲ';
 }

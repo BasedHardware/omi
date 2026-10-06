@@ -3839,5 +3839,16 @@
     "dismiss": "Skrýt",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Zobrazit na zamčené obrazovce"
+    "showOnLockScreen": "Zobrazit na zamčené obrazovce",
+    "onboardingSetupTitle": "Nastavujeme váš Omi",
+    "onboardingSetupSubtitle": "Dejte Omi chvilku na přizpůsobení",
+    "onboardingSetupStepWorkspace": "Připravujeme váš pracovní prostor",
+    "onboardingSetupStepLanguage": "Ladíme přepis na váš jazyk",
+    "onboardingSetupStepMemory": "Nastavujeme vaši paměť",
+    "onboardingSetupStepDevices": "Připojujeme vaše zařízení",
+    "onboardingSetupStepPersonalize": "Přizpůsobujeme váš zážitek",
+    "onboardingRatingPromptTitle": "Než to doběhne, líbí se vám Omi?",
+    "onboardingRatingPromptBody": "Hodnocení 5 hvězdiček nám opravdu hodně pomůže 🤍",
+    "onboardingRatingPromptYes": "Ano, chci vás podpořit!",
+    "onboardingRatingPromptNo": "Moc ne"
 }

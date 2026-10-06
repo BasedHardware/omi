@@ -11396,5 +11396,16 @@
     "dismiss": "چھپائیں",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "لاک اسکرین پر دکھائیں"
+    "showOnLockScreen": "لاک اسکرین پر دکھائیں",
+    "onboardingSetupTitle": "آپ کا Omi سیٹ اپ ہو رہا ہے",
+    "onboardingSetupSubtitle": "Omi کو ذاتی بنانے کے لیے ذرا سا وقت دیں",
+    "onboardingSetupStepWorkspace": "آپ کا ورک اسپیس تیار کیا جا رہا ہے",
+    "onboardingSetupStepLanguage": "ٹرانسکرپشن کو آپ کی زبان کے مطابق بنایا جا رہا ہے",
+    "onboardingSetupStepMemory": "آپ کی میموری سیٹ اپ ہو رہی ہے",
+    "onboardingSetupStepDevices": "آپ کے آلات کنیکٹ کیے جا رہے ہیں",
+    "onboardingSetupStepPersonalize": "آپ کے تجربے کو ذاتی بنایا جا رہا ہے",
+    "onboardingRatingPromptTitle": "انتظار کے دوران بتائیں، کیا Omi استعمال کرنا اچھا لگا؟",
+    "onboardingRatingPromptBody": "5 اسٹار ریٹنگ ہماری واقعی بہت مدد کرتی ہے 🤍",
+    "onboardingRatingPromptYes": "ہاں، مجھے آپ کو سپورٹ کرنا ہے!",
+    "onboardingRatingPromptNo": "زیادہ نہیں"
 }

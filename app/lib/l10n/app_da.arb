@@ -3881,5 +3881,16 @@
     "dismiss": "Afvis",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Vis på låseskærmen"
+    "showOnLockScreen": "Vis på låseskærmen",
+    "onboardingSetupTitle": "Gør din Omi klar",
+    "onboardingSetupSubtitle": "Giv Omi et øjeblik til at tilpasse sig",
+    "onboardingSetupStepWorkspace": "Forbereder dit arbejdsområde",
+    "onboardingSetupStepLanguage": "Tilpasser transskription til dit sprog",
+    "onboardingSetupStepMemory": "Sætter din hukommelse op",
+    "onboardingSetupStepDevices": "Forbinder dine enheder",
+    "onboardingSetupStepPersonalize": "Tilpasser din oplevelse",
+    "onboardingRatingPromptTitle": "Mens du venter, har Omi været rar at bruge?",
+    "onboardingRatingPromptBody": "5 stjerner hjælper os virkelig meget 🤍",
+    "onboardingRatingPromptYes": "Ja, jeg vil gerne støtte jer!",
+    "onboardingRatingPromptNo": "Ikke rigtig"
 }

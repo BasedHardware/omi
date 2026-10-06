@@ -12415,4 +12415,37 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Vis på låseskjermen';
+
+  @override
+  String get onboardingSetupTitle => 'Setter opp Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Gi Omi et øyeblikk til å tilpasse seg';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Forbereder arbeidsområdet ditt';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Tilpasser transkripsjonen til språket ditt';
+
+  @override
+  String get onboardingSetupStepMemory => 'Setter opp minnet ditt';
+
+  @override
+  String get onboardingSetupStepDevices => 'Kobler til enhetene dine';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Tilpasser opplevelsen din';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Mens du venter, har Omi vært fin å bruke?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 stjerner hjelper oss virkelig mye 🤍';
+
+  @override
+  String get onboardingRatingPromptYes => 'Ja, jeg vil støtte dere!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Ikke egentlig';
 }

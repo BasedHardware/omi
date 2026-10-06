@@ -11396,5 +11396,16 @@
     "dismiss": "Схаваць",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Паказваць на экране блакіроўкі"
+    "showOnLockScreen": "Паказваць на экране блакіроўкі",
+    "onboardingSetupTitle": "Налада вашага Omi",
+    "onboardingSetupSubtitle": "Дайце Omi хвілінку, каб наладзіцца пад вас",
+    "onboardingSetupStepWorkspace": "Падрыхтоўка вашай працоўнай прасторы",
+    "onboardingSetupStepLanguage": "Налада транскрыпцыі пад вашу мову",
+    "onboardingSetupStepMemory": "Налада вашай памяці",
+    "onboardingSetupStepDevices": "Падключэнне вашых прылад",
+    "onboardingSetupStepPersonalize": "Персаналізацыя вашага вопыту",
+    "onboardingRatingPromptTitle": "Пакуль вы чакаеце, ці прыемна вам карыстацца Omi?",
+    "onboardingRatingPromptBody": "Ацэнка ў 5 зорак вельмі нам дапаможа 🤍",
+    "onboardingRatingPromptYes": "Так, хачу вас падтрымаць!",
+    "onboardingRatingPromptNo": "Не асабліва"
 }
