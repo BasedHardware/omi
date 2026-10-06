@@ -42589,9 +42589,15 @@
             "name": "include_discarded",
             "required": false,
             "schema": {
-              "default": true,
-              "title": "Include Discarded",
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Include Discarded"
             }
           },
           {
