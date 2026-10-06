@@ -10,6 +10,9 @@ import wave
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+import config.speaker_match_scores as match_scores
+import utils.stt.speaker_match as match_policy
+
 import numpy as np
 
 from config.speaker_prior import pinned_speaker_prior_enabled
@@ -240,6 +243,24 @@ def identify_speakers_for_segments(
                 if decision.owner_contended
                 else 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
             )
+            try:
+                if match_scores.enabled():
+                    row = match_scores.summarize(
+                        speaker_id,
+                        voice_distances[speaker_id],
+                        decision,
+                        evidence_seconds,
+                        'sync',
+                        threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
+                        margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
+                        scope=best_seg.speaker_id_scope or '',
+                        outcome=outcome,
+                        accepted=accepted,
+                    )
+                    for segment in segments:
+                        segment.speaker_match_scores = row
+            except Exception:
+                match_scores.record_failure(logger)
             for segment in segments:
                 if segment.speaker_match_source == 'sync_embedding':
                     # Reprocessing may revisit our own earlier automatic accept.

@@ -2861,6 +2861,9 @@ environments:
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
             category: rollout
@@ -3095,6 +3098,9 @@ environments:
             category: telemetry
           MENTOR_PIPELINE:
             value: cohort
+            category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
             category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
@@ -3570,6 +3576,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             SONIOX_ORDERED_FINALIZE:
               value: 'false'
               category: rollout
@@ -3906,6 +3915,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             SONIOX_ORDERED_FINALIZE:
               value: 'false'
               category: rollout
@@ -4198,6 +4210,9 @@ environments:
             MENTOR_PIPELINE:
               value: cohort
               category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
             SONIOX_ORDERED_FINALIZE:
               value: 'false'
               category: rollout
@@ -4449,6 +4464,9 @@ environments:
               category: rollout
             MENTOR_PIPELINE:
               value: cohort
+              category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
               category: rollout
             SONIOX_ORDERED_FINALIZE:
               value: 'false'
