@@ -195,8 +195,8 @@ autoscaling:
       policies:
       - type: Pods
         value: 1
-        # Add capacity sooner while admission stays conservative; model/node
-        # cold starts still require the three-pod warm floor and provider fallback.
+        # Request the next replica sooner. A new GPU pod is not serving until
+        # startup succeeds. Cold starts still need the three-pod floor and fallback.
         periodSeconds: 60
     scaleDown:
       stabilizationWindowSeconds: 600
