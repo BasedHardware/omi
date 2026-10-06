@@ -2854,22 +2854,16 @@ def test_x_connector_sync_job_workflow_is_listed_and_targets_job():
         notifications = manifest['environments'][env_name]['cloud_run']['jobs']['notifications-job']
         x_sync = manifest['environments'][env_name]['cloud_run']['jobs']['x-connector-sync-job']
         assert 'X_OAUTH_CLIENT_SECRET' not in notifications.get('secrets', {})
-        assert 'X_OAUTH_CLIENT_ID' not in notifications.get('secrets', {})
-        assert 'X_OAUTH_REDIRECT_URI' not in notifications.get('secrets', {})
         assert 'RAPID_API_KEY' not in notifications.get('secrets', {})
-        assert 'RAPID_API_HOST' not in notifications.get('secrets', {})
         assert 'X_OAUTH_CLIENT_ID' not in notifications.get('env', {})
         assert 'X_OAUTH_REDIRECT_URI' not in notifications.get('env', {})
         assert 'RAPID_API_HOST' not in notifications.get('env', {})
         assert 'X_OAUTH_CLIENT_SECRET' in x_sync.get('secrets', {})
-        assert 'X_OAUTH_CLIENT_ID' in x_sync.get('secrets', {})
-        assert 'X_OAUTH_REDIRECT_URI' in x_sync.get('secrets', {})
         assert 'RAPID_API_KEY' in x_sync.get('secrets', {})
-        assert 'RAPID_API_HOST' in x_sync.get('secrets', {})
         assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in x_sync.get('secrets', {})
-        assert 'X_OAUTH_CLIENT_ID' not in x_sync.get('env', {})
-        assert 'X_OAUTH_REDIRECT_URI' not in x_sync.get('env', {})
-        assert 'RAPID_API_HOST' not in x_sync.get('env', {})
+        assert 'X_OAUTH_CLIENT_ID' in x_sync.get('env', {})
+        assert 'X_OAUTH_REDIRECT_URI' in x_sync.get('env', {})
+        assert 'RAPID_API_HOST' in x_sync.get('env', {})
         assert (
             x_sync.get('flags', {}).get('--service-account')
             == {

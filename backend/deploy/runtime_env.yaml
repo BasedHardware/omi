@@ -2079,17 +2079,8 @@ environments:
             X_OAUTH_CLIENT_SECRET:
               secret: X_OAUTH_CLIENT_SECRET
               version: latest
-            X_OAUTH_CLIENT_ID:
-              secret: X_OAUTH_CLIENT_ID
-              version: latest
-            X_OAUTH_REDIRECT_URI:
-              secret: X_OAUTH_REDIRECT_URI
-              version: latest
             RAPID_API_KEY:
               secret: RAPID_API_KEY
-              version: latest
-            RAPID_API_HOST:
-              secret: RAPID_API_HOST
               version: latest
           env:
             OMI_LLM_GATEWAY_URL:
@@ -2102,6 +2093,15 @@ environments:
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend-dev
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -4465,17 +4465,8 @@ environments:
             X_OAUTH_CLIENT_SECRET:
               secret: X_OAUTH_CLIENT_SECRET
               version: latest
-            X_OAUTH_CLIENT_ID:
-              secret: X_OAUTH_CLIENT_ID
-              version: latest
-            X_OAUTH_REDIRECT_URI:
-              secret: X_OAUTH_REDIRECT_URI
-              version: latest
             RAPID_API_KEY:
               secret: RAPID_API_KEY
-              version: latest
-            RAPID_API_HOST:
-              secret: RAPID_API_HOST
               version: latest
           env:
             OMI_LLM_GATEWAY_URL:
@@ -4488,6 +4479,15 @@ environments:
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
