@@ -35,8 +35,8 @@ class DeviceTile extends StatelessWidget {
 
   static const double size = 40;
 
-  /// Air above and below a row that starts with a tile, so the list breathes.
-  static const double rowPadding = 14;
+  /// Air above and below a row that starts with a tile.
+  static const double rowPadding = 10;
 
   @override
   Widget build(BuildContext context) {
