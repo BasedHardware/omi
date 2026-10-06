@@ -12,8 +12,8 @@
   "evidence_prs": [],
   "scope_hints": [
     ".github/scripts/mobile-changelog.py",
-    "app/changelog/releases",
-    "app/changelog/unreleased",
+    "app/changelog/releases/*.json",
+    "app/changelog/unreleased/*.json",
     "app/scripts/mobile_store_promote.py"
   ],
   "status": "open"
