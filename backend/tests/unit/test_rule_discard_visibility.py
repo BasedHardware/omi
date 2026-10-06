@@ -25,10 +25,6 @@ from tests.unit.test_sync_donor_tombstone_visibility import (
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
 
 
-def _at(hour: int) -> datetime:
-    return datetime(2026, 9, 22, hour, 0, tzinfo=timezone.utc)
-
-
 def _visible_row(when: datetime, row_id: str = 'visible') -> dict:
     return {
         'id': row_id,
@@ -203,6 +199,7 @@ def test_default_list_sends_limit_then_offset_and_refill_stays_capped(monkeypatc
     """Desktop parity: the first query must carry server limit+offset, and the
     refill must give up after the 64-skip cap instead of walking the collection."""
     from database import conversations as conversations_db
+    from datetime import timedelta
 
     calls = []
     real_limit = _ListingSpy.limit
@@ -225,13 +222,14 @@ def test_default_list_sends_limit_then_offset_and_refill_stays_capped(monkeypatc
     monkeypatch.setattr(_ListingSpy, 'offset', offset)
     monkeypatch.setattr(_ListingSpy, 'stream', stream)
 
-    # First page: one visible row then 70 consecutive stale rule-discards.
-    # The visible row is newest so the first window is full; the refill must
-    # stop at the cap instead of scanning all 70.
-    rows = {'visible': _visible_row(_at(20))}
-    for hour in range(19, 0, -1):
-        rows[f'stale-{hour}'] = _incident(id=f'stale-{hour}', created_at=_at(hour))
-    rows['deep-visible'] = _visible_row(_at(0))
+    # First page: one visible row, then 70 consecutive stale rule-discards
+    # (above the 64-skip cap), then a deep visible row. The refill must stop
+    # at the cap; reaching the deep row means the cap is gone.
+    base = datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc)
+    rows = {'visible': _visible_row(base + timedelta(minutes=100))}
+    for n in range(1, 71):
+        rows[f'stale-{n}'] = _incident(id=f'stale-{n}', created_at=base + timedelta(minutes=100 - n))
+    rows['deep-visible'] = _visible_row(base, row_id='deep-visible')
     _install_listing(monkeypatch, rows)
 
     page = conversations_db.get_conversations_without_photos('u', limit=2, offset=0)
@@ -241,13 +239,13 @@ def test_default_list_sends_limit_then_offset_and_refill_stays_capped(monkeypatc
     first_limit = next(i for i, c in enumerate(calls) if c[0] == 'limit')
     assert calls[first_limit] == ('limit', 2)
     assert calls[first_limit + 1] == ('offset', 0)
-    # the refill read is bounded: it never streams past the cap window
-    # (70 skips at a window of 2 = 35 batches; the cap stops it near 32)
+    # the refill read is bounded: 70 skips at window 2 = 35 batches, capped
     refill_streams = [c for c in calls if c[0] == 'stream' and c[3] is not None]
     assert len(refill_streams) <= 36
-    # the deep visible row stays unreached; the page is short, not wrong
-    assert 'visible' in ids
-    assert 'deep-visible' not in ids
+    # the cap stopped the scan: the page is short, never wrong
+    assert ids == ['visible']
+    # sanity: without the cap the deep row would exist in this listing
+    assert any(doc_id == 'deep-visible' for doc_id in rows)
 
 
 def test_read_projection_marks_the_incident_without_mutating_it(conversations_db):
