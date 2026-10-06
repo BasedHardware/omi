@@ -1140,6 +1140,9 @@ void transport_bulk_tx_release(void)
 // Thread
 K_THREAD_STACK_DEFINE(pusher_stack, 4096);
 static struct k_thread pusher_thread;
+/* Packet sequence belongs to the pusher, not mic/AAD. A silent interval emits
+ * no packets and consumes no IDs; wake and reconnect never reset this counter
+ * (normal uint16 wrap is unchanged). Codec/TX rings drain normally across STOP. */
 static uint16_t packet_next_index = 0;
 
 // Define buffer sizes based on configuration and potential MTU
@@ -1216,6 +1219,9 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
 static uint32_t offset = 0;
+/* Preserve partial SD packet assembly across AAD. SD's own write_seq/read_seq
+ * and WAL advance only on real writes. Its packet timestamps use get_utc_time()
+ * at write time, so a sleep creates a wall-clock gap, never synthesized audio. */
 static uint16_t buffer_offset = 0;
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE

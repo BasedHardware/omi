@@ -30,7 +30,8 @@ void t5838_aad_power(bool on);
 /*
  * Program the T5838 into AAD mode A and clock it into low-power sleep.
  * Precondition: PDM peripheral stopped, mic powered. Bit-bangs THSEL+PDMCLK.
- * Leaves PDMCLK idle low afterwards so the peripheral can reclaim it on resume.
+ * Leaves PDMCLK and THSEL high (matching the shifter pull-ups) during sleep.
+ * Call t5838_aad_release_clk() before the peripheral reclaims CLK on resume.
  */
 int t5838_aad_enter(void);
 
