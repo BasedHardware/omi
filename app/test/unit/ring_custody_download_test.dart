@@ -65,11 +65,15 @@ class _FakeRingDevice implements DeviceConnection {
   void Function(List<int>)? onBytes;
   final controller = StreamController<List<int>>.broadcast();
   final advances = <_Advance>[];
+  final _firstAdvance = Completer<void>();
   int ackStatus = RingProtocol.ackOk;
   RingInfo? postAckInfo;
   int custodyEpochValue = 7;
 
   void emit(List<int> bytes) => onBytes?.call(bytes);
+
+  /// Completes when the first advance reaches the card.
+  Future<void> get firstAdvance => _firstAdvance.future;
 
   @override
   Future<RingInfo?> getRingInfo() async {
@@ -96,6 +100,7 @@ class _FakeRingDevice implements DeviceConnection {
     required int? expectedRingId,
   }) async {
     advances.add(_Advance(newReadSeq, expectedEpoch, expectedRingId));
+    if (!_firstAdvance.isCompleted) _firstAdvance.complete();
     return RingCommandAck(status: ackStatus);
   }
 
@@ -264,7 +269,10 @@ void main() {
       for (var i = 0; i < 61; i++) {
         card.emit(_record(frameSizes: List.filled(100, 1)));
       }
-      await Future.delayed(const Duration(milliseconds: 300));
+      // The first 60 records fill a chunk. Wait for its advance instead of a fixed sleep: under CI
+      // load the advance had not fired yet when a 300 ms sleep ended (#20500). The bound only keeps
+      // a missing incremental advance from hanging; the expectation below still fails the test.
+      await card.firstAdvance.timeout(const Duration(seconds: 10), onTimeout: () {});
       final incrementalCount = card.advances.length;
       for (var i = 0; i < 2; i++) {
         card.emit(_record(frameSizes: List.filled(100, 1)));
