@@ -3,7 +3,8 @@
 class ChargeStartTracker {
   final Map<String, bool> _charging = {};
 
-  bool observe(String deviceId, bool charging) {
+  bool observe(String deviceId, bool? charging) {
+    if (charging == null) return false;
     final wasCharging = _charging[deviceId] ?? false;
     _charging[deviceId] = charging;
     return charging && !wasCharging;

@@ -78,6 +78,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   DateTime? _deviceSessionStartedAt;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
   final FindDeviceRunner _findDeviceRunner;
+  final Future<DeviceConnection?> Function(String) _chargingConnectionLoader;
   final CaptureWedgeMonitor _wedgeMonitor;
   final Set<String> _intentionalDisconnectDevices = {};
 
@@ -147,8 +148,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     BleDiagnosticsLoader? bleDiagnosticsLoader,
     FindDeviceRunner? findDeviceRunner,
     CaptureWedgeMonitor? captureWedgeMonitor,
+    Future<DeviceConnection?> Function(String)? chargingConnectionLoader,
   })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
+        _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
         _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _handlePairingLost;
@@ -521,7 +524,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_isCurrent(generation) || connectedDevice == null) return;
     _bleChargingStatusListener?.cancel();
 
-    var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+    var connection = await _chargingConnectionLoader(connectedDevice!.id);
     if (!_isCurrent(generation)) return;
     if (connection == null) return;
     // TODO(astra): non-Omi connections, including Friend Pendant, expose no charging-status API. (#5491)
@@ -529,15 +532,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     final currentStatus = await connection.readChargingStatus();
     if (!_isCurrent(generation)) return;
-    final chargeStarted = _chargeStarts.observe(connectedDevice!.id, currentStatus);
-    // An initial read made by a sync wake is observation, not a charge-start event.
-    if (chargeStarted && allowCaptureResume && !SyncWakeScope.syncOnly) captureProvider?.onChargingStarted();
-    if (isCharging != currentStatus) {
-      isCharging = currentStatus;
-
-      notifyListeners();
+    // Failed reads are unknown: retain the last successful observation and UI state.
+    if (currentStatus != null) {
+      final chargeStarted = _chargeStarts.observe(connectedDevice!.id, currentStatus);
+      // An initial read made by a sync wake is observation, not a charge-start event.
+      if (chargeStarted && allowCaptureResume && !SyncWakeScope.syncOnly) captureProvider?.onChargingStarted();
+      if (isCharging != currentStatus) {
+        isCharging = currentStatus;
+        notifyListeners();
+      }
+      BatteryWidgetService().updateChargingState(currentStatus);
     }
-    BatteryWidgetService().updateChargingState(currentStatus);
 
     _bleChargingStatusListener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
