@@ -572,6 +572,8 @@ class _FakeActionItem:
         self.completed = False
         self.created_at = None
         self.completed_at = None
+        # Unlinked row: the mirror keeps the legacy description-wide path.
+        self.target_task_id = None
 
     def model_dump(self):
         return {"description": self.description, "completed": self.completed}
