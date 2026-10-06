@@ -296,6 +296,7 @@ abstract class IMicRecorderService {
 
 class MicRecorderBackgroundService implements IMicRecorderService {
   late BackgroundService _runner;
+  int _startGeneration = 0;
 
   MicRecorderBackgroundService({required BackgroundService runner}) {
     _runner = runner;
@@ -310,7 +311,10 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     Function()? onStalled,
     Function(bool began)? onInterruption,
   }) async {
+    final generation = ++_startGeneration;
     await _runner.ensureRunning();
+    // A stop() while the background service was coming up cancels this start (#20775).
+    if (generation != _startGeneration) return;
 
     _runner.startRecorder(
       onByteReceived: onByteReceived,
@@ -335,6 +339,7 @@ class MicRecorderBackgroundService implements IMicRecorderService {
 
   @override
   void stop() {
+    _startGeneration++;
     _runner.stopRecorder();
   }
 
