@@ -220,6 +220,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": "false",
         "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": "false",
         "SONIOX_WIRE_LEDGER": "false",
+        "SONIOX_ORDERED_FINALIZE": "false",
         "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
         "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
