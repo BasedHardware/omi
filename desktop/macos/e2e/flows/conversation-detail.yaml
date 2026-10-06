@@ -21,6 +21,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/ConversationDetailAutomationState.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/MeetingMemoryBrief.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/MeetingMemoryBriefCard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/MeetingFollowUpDraftSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/LiveTranscriptView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TranscriptDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/CitationCardView.swift
