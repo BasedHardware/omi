@@ -494,7 +494,10 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     await gate.waitUntilStarted()
     illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
     await gate.release()
-    await operation.value
+    // toggleTask now reports whether the mutation took effect; a revoked lease
+    // must surface as false rather than an unused result.
+    let toggled = await operation.value
+    XCTAssertFalse(toggled)
 
     XCTAssertEqual(store.incompleteTasks.map(\.id), [task.id])
     XCTAssertTrue(store.completedTasks.isEmpty)
@@ -579,7 +582,10 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     await transitionEffectiveOwner(to: nil)
     await transitionEffectiveOwner(to: "owner-a")
     await gate.release()
-    await operation.value
+    // toggleTask now reports whether the mutation took effect; the lease must
+    // not survive the generation change, so the toggle reports false.
+    let revokedByGeneration = await operation.value
+    XCTAssertFalse(revokedByGeneration)
 
     XCTAssertEqual(probe.localWrites, 0)
     XCTAssertEqual(probe.dashboardRefreshes, 0)
@@ -639,7 +645,10 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     store.overdueTasks = [ownerBDashboard]
     store.error = nil
     await gate.release()
-    await operation.value
+    // The toggle completed under the captured lease even though the visible
+    // arrays were swapped mid-flight; it must report that it took effect.
+    let tookEffect = await operation.value
+    XCTAssertTrue(tookEffect)
 
     XCTAssertEqual(probe.localWrites, 1)
     XCTAssertEqual(probe.remoteRequests, 1)
