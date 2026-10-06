@@ -768,6 +768,7 @@ def test_finalize_conversation_passes_calendar_context_into_atomic_durable_admis
                 'duration_minutes': 30,
                 'notes': None,
                 'calendar_source': 'system_calendar',
+                'participant_sources': None,
             }
         }
     }

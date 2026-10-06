@@ -9,7 +9,7 @@ from typing import Any, Callable, Iterable, Optional
 
 import database.calendar_meetings as calendar_db
 import database.redis_db as redis_db
-from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant, MeetingParticipantSources
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from models.conversation import CalendarEventLink, Conversation, CreateConversation
 
@@ -675,6 +675,24 @@ def merge_meeting_contexts(
         return fallback
     if fallback is None:
         return primary
+    # Preserve each source before the legacy union loses its provenance. Keep
+    # independent deduplication: a name may legitimately occur in both sets.
+    primary_sources = primary.participants_by_source()
+    fallback_sources = fallback.participants_by_source()
+    source_sets: dict[str, Optional[list[MeetingParticipant]]] = {}
+    for source, left, right in (
+        ('expected_calendar', primary_sources.expected_calendar, fallback_sources.expected_calendar),
+        ('observed_screen_listing', primary_sources.observed_screen_listing, fallback_sources.observed_screen_listing),
+    ):
+        if left is None and right is None:
+            source_sets[source] = None
+            continue
+        source_participants: dict[tuple[str, str], MeetingParticipant] = {}
+        for participant in [*(left or []), *(right or [])]:
+            key = ((participant.name or '').casefold(), (participant.email or '').casefold())
+            source_participants.setdefault(key, participant)
+        source_sets[source] = list(source_participants.values())
+
     participants = list(primary.participants)
     seen = {
         (participant.name or '').casefold() + '|' + (participant.email or '').casefold() for participant in participants
@@ -687,6 +705,7 @@ def merge_meeting_contexts(
     return primary.model_copy(
         update={
             'participants': participants,
+            'participant_sources': MeetingParticipantSources(**source_sets),
             'platform': primary.platform or fallback.platform,
             'notes': primary.notes or fallback.notes,
         }

@@ -5229,6 +5229,119 @@
             "description": "Meeting notes/description from calendar",
             "title": "Notes"
           },
+          "participant_sources": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingParticipantSources"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Participant provenance retained before calendar/screen context merging"
+          },
+          "participants": {
+            "description": "List of meeting participants",
+            "items": {
+              "$ref": "#/components/schemas/MeetingParticipant"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Meeting platform (Zoom, Teams, Google Meet, etc.)",
+            "title": "Platform"
+          },
+          "start_time": {
+            "description": "Meeting start time",
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "title": {
+            "description": "Meeting title from calendar",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "calendar_event_id",
+          "title",
+          "start_time",
+          "duration_minutes"
+        ],
+        "title": "CalendarMeetingContext",
+        "type": "object"
+      },
+      "CalendarMeetingContext-Output": {
+        "description": "Calendar meeting metadata to provide context for conversation processing",
+        "properties": {
+          "calendar_event_id": {
+            "description": "System calendar event ID",
+            "title": "Calendar Event Id",
+            "type": "string"
+          },
+          "calendar_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "system_calendar",
+            "description": "Calendar source (system_calendar, google, outlook, etc.)",
+            "title": "Calendar Source"
+          },
+          "duration_minutes": {
+            "description": "Meeting duration in minutes",
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "meeting_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "URL to join the meeting",
+            "title": "Meeting Link"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Meeting notes/description from calendar",
+            "title": "Notes"
+          },
+          "participant_sources": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingParticipantSources"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Participant provenance retained before calendar/screen context merging"
+          },
           "participants": {
             "description": "List of meeting participants",
             "items": {
@@ -18570,6 +18683,41 @@
           }
         },
         "title": "MeetingParticipant",
+        "type": "object"
+      },
+      "MeetingParticipantSources": {
+        "description": "Source sets, not attendance: None means that source was not supplied.",
+        "properties": {
+          "expected_calendar": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MeetingParticipant"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Calendar"
+          },
+          "observed_screen_listing": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MeetingParticipant"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Screen Listing"
+          }
+        },
+        "title": "MeetingParticipantSources",
         "type": "object"
       },
       "Memory": {
@@ -39846,7 +39994,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/CalendarMeetingContext"
+                    "$ref": "#/components/schemas/CalendarMeetingContext-Output"
                   },
                   "title": "Response List Calendar Meetings V1 Calendar Meetings Get",
                   "type": "array"
@@ -40022,7 +40170,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CalendarMeetingContext"
+                  "$ref": "#/components/schemas/CalendarMeetingContext-Output"
                 }
               }
             },

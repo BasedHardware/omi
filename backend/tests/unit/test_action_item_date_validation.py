@@ -255,6 +255,10 @@ langchain_output_parsers = _stub_module("langchain_core.output_parsers")
 langchain_output_parsers.PydanticOutputParser = MagicMock()
 langchain_prompts = _stub_module("langchain_core.prompts")
 langchain_prompts.ChatPromptTemplate = MagicMock()
+langchain_openai = _stub_package("langchain_openai")
+langchain_openai.ChatOpenAI = MagicMock()
+language_models = _stub_module("langchain_core.language_models")
+language_models.BaseChatModel = object
 langchain_messages = _stub_module("langchain_core.messages")
 langchain_messages.SystemMessage = MagicMock()
 langchain_messages.HumanMessage = MagicMock()
@@ -357,6 +361,11 @@ _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm"
 # empty __path__ above, which leaves conversation_processing's absolute import of it
 # unresolvable.
 _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
+
+# conversation_processing imports the shaped loop at module scope. The stubbed
+# utils.llm package cannot resolve it, so load the real stdlib module first.
+_load_module_from_file("utils.llm.shaped_agent", BACKEND_DIR / "utils" / "llm" / "shaped_agent.py")
+_load_module_from_file("utils.llm.shaped_notes_transport", BACKEND_DIR / "utils" / "llm" / "shaped_notes_transport.py")
 
 # model_config pulls in gateway_client; stub the one constant conversation_processing
 # imports so the isolated load does not need the real module tree.

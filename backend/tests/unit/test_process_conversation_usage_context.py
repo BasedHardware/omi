@@ -1286,7 +1286,7 @@ def test_all_callsites_use_get_llm():
     """Verify ALL callsites across conversation_processing, knowledge_graph, and memories use get_llm()."""
     backend_dir = Path(__file__).resolve().parent.parent.parent
 
-    # Processor and its episode model factory: 13 calls, including repair and selection
+    # Processor and its episode model factory: 14 calls, including repair, selection, and the shaped mount
     conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text(encoding="utf-8")
     conv_proc_source += (backend_dir / "utils" / "llm" / "episode_writer.py").read_text(encoding="utf-8")
     conv_proc_calls = re.findall(r"get_llm\(\s*'(\w+)'", conv_proc_source)
@@ -1317,9 +1317,9 @@ def test_all_callsites_use_get_llm():
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
 
-    # Include wrapped calls and the moved episode retry factory; keep all getter routes covered.
+    # Episode retry factory plus the shaped notes mount.
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 22, f"Expected 22 total get_llm() callsites, got {total}"
+    assert total == 23, f"Expected 23 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():

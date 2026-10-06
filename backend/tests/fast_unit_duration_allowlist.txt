@@ -385,3 +385,7 @@ tests/unit/test_conversation_scan.py::test_people_route_returns_stats
 # Admits MAX_JOBS + 8 legacy receipt-named people through the real ledger transaction and byte
 # budget to prove the admission bound; ~1.1s CPU on CI runners, measured 2026-10-03.
 tests/unit/test_speaker_learning_round2.py::test_legacy_admission_bounds_candidates
+# Constructs ChatOpenAI and runs two hermetic ainvoke calls through a mocked httpx transport.
+# The SDK client graph is the cost, not a sleep or a network call. Measured 0.35-0.45s CPU
+# in the isolated-file runner (2026-10-06).
+tests/unit/test_shaped_agent.py::test_notes_transport_is_owned_per_worker_loop
