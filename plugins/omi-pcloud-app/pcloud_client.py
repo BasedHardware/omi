@@ -64,8 +64,9 @@ class PCloudClient(CloudBackupProvider):
             return None, f"Network exception: {str(ex)}"
 
     def ensure_folder(self, folder_path: str) -> Tuple[Optional[int], Optional[str]]:
-        """Ensures a folder hierarchy exists via /createfolderifnotexists.
+        """Ensures a folder hierarchy exists via sequential parent creation in /createfolderifnotexists.
 
+        Creates missing parent folders in order to prevent pCloud API error 2002 (parent missing).
         Sanitizes each path component and rejects relative traversal ('.'/'..').
         Returns (folder_id, error_message).
         """
@@ -74,7 +75,7 @@ class PCloudClient(CloudBackupProvider):
         for comp in raw_components:
             trimmed = comp.strip()
             if trimmed in (".", ".."):
-                return None, f"Invalid folder path component '{trimmed}'"
+                return None, f"Invalid folder path component '{trimmed}': relative traversal is not permitted"
             sanitized = self.sanitize_path(trimmed)
             if sanitized and sanitized not in (".", ".."):
                 clean_components.append(sanitized)
@@ -82,24 +83,29 @@ class PCloudClient(CloudBackupProvider):
         if not clean_components:
             return None, "Folder path contains no valid directory components"
 
-        clean_path = "/" + "/".join(clean_components)
-        try:
-            resp = requests.post(
-                f"{self.base_url}/createfolderifnotexists",
-                headers=self._headers(),
-                params={"path": clean_path},
-                timeout=20,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("result") == 0:
-                    meta = data.get("metadata", {})
-                    folder_id = meta.get("folderid")
-                    return folder_id, None
-                return None, f"pCloud createfolder error: {data.get('error')}"
-            return None, f"HTTP error {resp.status_code}: {resp.text}"
-        except Exception as ex:
-            return None, f"Network exception creating folder: {str(ex)}"
+        current_folder_id = None
+        for i in range(len(clean_components)):
+            subpath = "/" + "/".join(clean_components[: i + 1])
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/createfolderifnotexists",
+                    headers=self._headers(),
+                    params={"path": subpath},
+                    timeout=20,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("result") == 0:
+                        meta = data.get("metadata", {})
+                        current_folder_id = meta.get("folderid")
+                    else:
+                        return None, f"pCloud createfolder error for '{subpath}': {data.get('error')}"
+                else:
+                    return None, f"HTTP error {resp.status_code} for '{subpath}': {resp.text}"
+            except Exception as ex:
+                return None, f"Network exception creating folder '{subpath}': {str(ex)}"
+
+        return current_folder_id, None
 
     def upload_file(
         self,
@@ -111,8 +117,12 @@ class PCloudClient(CloudBackupProvider):
         """Uploads file content to the specified folder with idempotent retries.
 
         Defaults to overwrite=True (renameifexists=0) so backup retries do
-        not accumulate duplicate renamed files.
+        not accumulate duplicate renamed files. Rejects relative traversal ('.'/'..').
         """
+        # Validate filename
+        if any(part in (".", "..") for part in str(filename).replace("\\", "/").split("/")):
+            return None, f"Invalid filename '{filename}': relative traversal is not permitted"
+
         clean_filename = self.sanitize_path(filename)
         params: dict[str, str | int] = {
             "nopartial": 1,
@@ -123,7 +133,10 @@ class PCloudClient(CloudBackupProvider):
             folder_prefix = f"folderid:{folder_ref}"
         else:
             raw_parts = [p for p in str(folder_ref).strip("/").split("/") if p]
-            sanitized_parts = [self.sanitize_path(p) for p in raw_parts if p not in (".", "..")]
+            for p in raw_parts:
+                if p.strip() in (".", ".."):
+                    return None, f"Invalid folder path component '{p}': relative traversal is not permitted"
+            sanitized_parts = [self.sanitize_path(p) for p in raw_parts]
             clean_folder = "/" + "/".join(p for p in sanitized_parts if p)
             if clean_folder == "/":
                 clean_folder = "/Untitled"

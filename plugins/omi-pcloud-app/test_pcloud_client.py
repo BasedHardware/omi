@@ -108,25 +108,53 @@ class TestPCloudClientAndProvider(unittest.TestCase):
 
     @patch("requests.post")
     def test_ensure_folder_success_and_sanitization(self, mock_post):
-        """Ensure folder sanitizes components and returns folderid."""
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
+        """Ensure folder sanitizes components and creates sequential paths."""
+        mock_resp1 = MagicMock()
+        mock_resp1.status_code = 200
+        mock_resp1.json.return_value = {
             "result": 0,
-            "metadata": {"folderid": 482019, "name": "Omi Conversations"},
+            "metadata": {"folderid": 482010, "name": "Omi Conversations"},
         }
-        mock_post.return_value = mock_resp
+        mock_resp2 = MagicMock()
+        mock_resp2.status_code = 200
+        mock_resp2.json.return_value = {
+            "result": 0,
+            "metadata": {"folderid": 482019, "name": "2026"},
+        }
+        mock_post.side_effect = [mock_resp1, mock_resp2]
 
         client = PCloudClient("tok123", location_id=2)
         folder_id, err = client.ensure_folder("/Omi: Conversations / 2026? /")
         self.assertIsNone(err)
         self.assertEqual(folder_id, 482019)
-        mock_post.assert_called_once_with(
-            "https://eapi.pcloud.com/createfolderifnotexists",
-            headers={"Authorization": "Bearer tok123"},
-            params={"path": "/Omi Conversations/2026"},
-            timeout=20,
-        )
+        self.assertEqual(mock_post.call_count, 2)
+        called_paths = [call[1]["params"]["path"] for call in mock_post.call_args_list]
+        self.assertEqual(called_paths, ["/Omi Conversations", "/Omi Conversations/2026"])
+
+    @patch("requests.post")
+    def test_ensure_folder_nested_creates_parents_in_order(self, mock_post):
+        """ensure_folder sequentially creates intermediate parents to prevent pCloud error 2002."""
+        mock_resp1 = MagicMock()
+        mock_resp1.status_code = 200
+        mock_resp1.json.return_value = {"result": 0, "metadata": {"folderid": 101}}
+
+        mock_resp2 = MagicMock()
+        mock_resp2.status_code = 200
+        mock_resp2.json.return_value = {"result": 0, "metadata": {"folderid": 102}}
+
+        mock_resp3 = MagicMock()
+        mock_resp3.status_code = 200
+        mock_resp3.json.return_value = {"result": 0, "metadata": {"folderid": 103}}
+
+        mock_post.side_effect = [mock_resp1, mock_resp2, mock_resp3]
+
+        client = PCloudClient("tok123")
+        folder_id, err = client.ensure_folder("/omi/backups/transcripts")
+        self.assertIsNone(err)
+        self.assertEqual(folder_id, 103)
+        self.assertEqual(mock_post.call_count, 3)
+        called_paths = [call[1]["params"]["path"] for call in mock_post.call_args_list]
+        self.assertEqual(called_paths, ["/omi", "/omi/backups", "/omi/backups/transcripts"])
 
     def test_ensure_folder_rejects_relative_components(self):
         """Relative path traversal components ('.' and '..') are rejected."""
@@ -138,6 +166,28 @@ class TestPCloudClientAndProvider(unittest.TestCase):
         folder_id2, err2 = client.ensure_folder("/./")
         self.assertIsNone(folder_id2)
         self.assertIn("Invalid folder path component '.'", err2)
+
+    @patch("requests.post")
+    def test_upload_file_path_traversal_rejected(self, mock_post):
+        """upload_file rejects . and .. traversal components and performs no upload."""
+        client = PCloudClient("tok123")
+        res, err = client.upload_file(
+            folder_ref="/omi/../secret",
+            filename="audio.wav",
+            content=b"test",
+        )
+        self.assertIsNone(res)
+        self.assertIn("relative traversal is not permitted", err)
+        mock_post.assert_not_called()
+
+        res2, err2 = client.upload_file(
+            folder_ref="/omi/backups",
+            filename="../secret.wav",
+            content=b"test",
+        )
+        self.assertIsNone(res2)
+        self.assertIn("relative traversal is not permitted", err2)
+        mock_post.assert_not_called()
 
     @patch("requests.post")
     def test_upload_file_default_overwrite_idempotency(self, mock_post):
