@@ -134,6 +134,32 @@ void main() {
     onboarding.dispose();
   });
 
+  test('a tutorial question sent by the 15 s timeout moves the tutorial on (#20786)', () async {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    // One press and some speech, then no second press: the timeout ends the session.
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(onboarding.voiceSessionActive, isTrue);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.endVoiceCommandSessionForTesting('test-id', autoSubmitted: true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(actions.sendCount, 1);
+    expect(onboarding.voiceSessionActive, isFalse);
+    expect(onboarding.questionSent, isTrue);
+    provider.dispose();
+    onboarding.dispose();
+  });
+
   test('disabled Omi actions still deliver tutorial double-press events', () {
     final onboarding = DeviceOnboardingProvider()..startOnboarding();
     onboarding.goToStep(DeviceOnboardingProvider.doublePressStep);
