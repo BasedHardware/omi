@@ -130,8 +130,9 @@ overlay:
           category: rollout
         STT_ROUTING_MODE:
           value: 'on'
-        # 2026-10-06: sticky-UID ON ramp step 1 (5%); gate each step on the
-        # omi_stt_routing_cohort_* counters (GATES.md) before 25/50/100.
+        # 2026-10-06: sticky-UID ON ramp, gated per step on the
+        # omi_stt_routing_cohort_* counters (GATES.md): 5% held 76 min clean,
+        # this commit advances to 25%.
         STT_ROUTING_ON_PERCENT:
           value: '25'
         SONIOX_MONTHLY_CEILING_USD:
