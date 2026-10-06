@@ -124,7 +124,7 @@ def cancel_subscription_for_account_deletion(subscription_id: str) -> None:
         subscription = stripe.Subscription.retrieve(subscription_id)
         if subscription.get('status') in TERMINAL_SUBSCRIPTION_STATUSES:
             return
-        canceled = stripe.Subscription.delete(subscription_id)
+        canceled = subscription.delete()
         if canceled.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES:
             raise RuntimeError('Stripe immediate cancellation did not reach a terminal status')
     except stripe.InvalidRequestError as error:
