@@ -3224,7 +3224,7 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
                 percent = env_block.get('CONVERSATION_RELEVANCE_JEV_PERCENT')
                 if scope in _JEV_LIVE_RELEVANCE_HOSTS:
                     assert enabled == {'value': 'true', 'category': 'rollout'}, scope
-                    assert percent == {'value': '10', 'category': 'rollout'}, scope
+                    assert percent == {'value': '50', 'category': 'rollout'}, scope
                 else:
                     assert enabled is None and percent is None, scope
                 assert env_block.get(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV) is None, scope
