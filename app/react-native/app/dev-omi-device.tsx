@@ -132,7 +132,7 @@ export default function DevOmiDeviceScreen() {
     } catch (e) {
       say(`startAudio failed: ${String(e)}`);
     }
-  }, [say, identity?.codec]);
+  }, [say, identity]);
 
   const stopAudio = useCallback(() => {
     omiBle.stopAudio();
