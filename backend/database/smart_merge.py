@@ -177,8 +177,9 @@ def has_intervening_discarded(
     wall-clock rescue gap a backward-drifting ``started_at`` would hide. A
     discarded row blocks when its ``started_at``/``finished_at`` interval
     intersects it; endpoint touches and rows wholly outside do not. The scan
-    runs unbounded on the registered preceding query with ``discarded=True``,
-    so barriers past the predecessor page size still refuse the fold. A
+    runs unbounded on the registered preceding query with ``discarded=True``
+    and ``created_before=datetime.max``: speech times and ingestion times do
+    not align, so no creation-time bound may hide a delayed-ingest barrier. A
     genuine own tombstone — deleted, redirecting into this survivor, ledgered
     as its donor and listed in the survivor's own lineage — is a constituent
     of the predecessor, not an independent discarded capture; every other
@@ -198,7 +199,7 @@ def has_intervening_discarded(
     for row in find_preceding_conversations(
         uid,
         source=donor['source'],
-        created_before=donor['created_at'],
+        created_before=datetime.max.replace(tzinfo=timezone.utc),
         limit=None,
         discarded=True,
         transaction=transaction,

@@ -756,8 +756,11 @@ set is a constituent of the predecessor — its absorbed content is not an
 independent discarded capture, and a drifted finish on it cannot fence the
 survivor off forever. Every other discarded row, deleted or not, counts. The
 scan reuses the same registered preceding query (and its
-`conversations_discarded_source_status_created` index) with `discarded=True`
-and no page limit, so barriers older than the predecessor page still count.
+`conversations_discarded_source_status_created` index) with `discarded=True`,
+no page limit, and a `created_at` upper bound of `datetime.max`, so barriers
+older than the predecessor page still count and a capture whose ingestion
+landed after the donor's `created_at` cannot hide — the gate never assumes
+`created_at` ordering matches speech times.
 The absorb transaction re-runs the identical interval check on its freshly
 read rows before planning or any write, so a discard committed between the
 decision and the absorb still rejects with the same reason. No flags or

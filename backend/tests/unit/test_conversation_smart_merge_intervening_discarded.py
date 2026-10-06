@@ -170,6 +170,29 @@ def test_barriers_beyond_the_preceding_limit_still_block(world):
     assert not world.raw('n').get('deleted')
 
 
+@pytest.mark.parametrize('delay_minutes', [0, 5, 20], ids=['equal', 'plus-five', 'much-later'])
+def test_delayed_creation_discard_still_blocks(world, caplog, delay_minutes):
+    """Ingestion delay is not a hiding place: a discarded capture whose
+    ``created_at`` landed at or after the donor's ``created_at`` still occupies
+    the gap — the barrier scan must not cut at the donor's creation time."""
+    world.add('p', 0, 10)
+    donor_created = T0 + timedelta(minutes=15)
+    world.add('d', 11, 2, discarded=True, created_at=donor_created + timedelta(minutes=delay_minutes))
+    world.add('n', 15, 10)
+    world.jev_answers = [0.9]
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
+    assert world.finish('n') is False
+    assert _skip_lines(caplog) == [SKIP_LINE]
+    assert world.jev_calls == []
+    assert not world.raw('n').get('deleted')
+    assert world.preceding_calls[-1] == {
+        'source': 'omi',
+        'discarded': True,
+        'limit': None,
+        'transaction': False,
+    }
+
+
 @pytest.mark.parametrize(
     'tomb_extra, lineage',
     [
@@ -457,6 +480,31 @@ def test_discarded_scan_request_uses_the_registered_shape(sdk_world):
     assert index_fields[:4] == ['discarded', 'source', 'status', 'created_at']
 
 
+def test_barrier_scan_uses_the_max_created_bound(sdk_world):
+    """The helper's own call sends ``created_at < datetime.max``: every
+    representable creation time is in scope, so no created_at alignment with
+    speech times can hide a barrier."""
+    test = sdk_world
+    survivor = {'id': 'p', 'finished_at': T0 + timedelta(minutes=10)}
+    donor = {
+        'id': 'n',
+        'source': 'omi',
+        'client_device_id': 'pendant-1',
+        'started_at': T0 + timedelta(minutes=15),
+        'created_at': T0 + timedelta(minutes=15),
+    }
+    smart_merge_db.has_intervening_discarded(UID, survivor, donor, firestore_client=test.client)
+    request = test.queries[-1]
+    fields = _field_filters(request, test.client)
+    assert ('discarded', 'EQUAL', True) in fields
+    assert ('source', 'EQUAL', 'omi') in fields
+    assert ('status', 'IN', list(smart_merge_db._ALL_STATUSES)) in fields
+    assert ('created_at', 'LESS_THAN', datetime.max.replace(tzinfo=timezone.utc)) in fields
+    orders = [entry.field.field_path for entry in request['structured_query'].order_by]
+    assert orders == ['created_at']
+    assert 'limit' not in request['structured_query']
+
+
 def test_bounded_scan_applies_the_request_limit(sdk_world):
     test = sdk_world
     world = test.world
@@ -515,7 +563,7 @@ def test_barrier_seen_only_on_retry_rejects_inside_the_absorb_transaction(sdk_wo
     world.monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
 
     def write_barrier():
-        world.add('d', 11, 2, discarded=True)
+        world.add('d', 11, 2, discarded=True, created_at=world.raw('n')['created_at'] + timedelta(minutes=5))
 
     test.state.compete = write_barrier
 
