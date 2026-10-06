@@ -13,7 +13,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.meeting_notes_wiring import (
     meeting_notes_rich_context_enabled,
 )
-from utils.conversations.process_conversation import _get_structured
+from utils.conversations.process_conversation import get_structured
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.screen_content_window import selection_fingerprint, trusted_content_window
 from utils.executors import db_executor, llm_executor, run_blocking
@@ -35,7 +35,9 @@ async def refresh_notes_after_evidence(uid: str, conversation_id: str) -> None:
         return
     try:
         raw = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
-        window = trusted_content_window(raw) if raw else None
+        if raw is None:
+            return
+        window = trusted_content_window(raw)
         bucket = configured_screen_frames_bucket()
         if not window or not bucket:
             return
@@ -48,7 +50,7 @@ async def refresh_notes_after_evidence(uid: str, conversation_id: str) -> None:
             return
         conversation = deserialize_conversation(raw)
         structured, discarded = await run_blocking(
-            llm_executor, _get_structured, uid, 'en', conversation, trigger=ProcessingTrigger.SCREEN_EVIDENCE
+            llm_executor, get_structured, uid, 'en', conversation, trigger=ProcessingTrigger.SCREEN_EVIDENCE
         )
         context = getattr(structured, '_notes_identity', None)
         if discarded or context is None:

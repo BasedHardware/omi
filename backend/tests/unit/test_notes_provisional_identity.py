@@ -17,7 +17,7 @@ from utils.conversations.meeting_context_pack import (
     render_meeting_context_pack,
 )
 from utils.conversations.meeting_participants import normalize_meeting_participants
-from utils.llm.meeting_notes_validation import validate_rich_meeting_notes
+from utils.llm.meeting_notes_validation import attach_notes_identity_context, validate_rich_meeting_notes
 from utils.speaker_learning_policy import authorized_teaching_segments
 
 UID = 'synthetic-notes-owner'
@@ -43,14 +43,13 @@ def roster(attendees=()):
 
 @pytest.mark.parametrize('evidence', ['frame', 'screen_moment', 'calendar_attendee'])
 def test_model_screen_name_and_unrelated_freemail_survive(evidence):
-    context = roster([MeetingParticipant(email=EMAIL)] if evidence == 'calendar_attendee' else [])
+    context = roster([MeetingParticipant(name=NAME, email=EMAIL)] if evidence == 'calendar_attendee' else [])
     result = validate_rich_meeting_notes(
         Structured(participants=[Participant(name=NAME, email=EMAIL, source='screen')]),
         transcript_body='Hello. Let us discuss the project.',
         roster=context,
         has_background_context=evidence == 'screen_moment',
-        background_body='SCREEN MOMENTS\nCalendar card' if evidence == 'screen_moment' else '',
-        has_identity_evidence=True,
+        background_body=f'SCREEN MOMENTS\n{NAME} {EMAIL}' if evidence != 'calendar_attendee' else '',
     )
     assert [(p.name, p.email, p.source) for p in result.participants] == [(NAME, EMAIL, 'screen')]
 
@@ -72,14 +71,14 @@ def test_owner_identity_does_not_depend_on_model_is_user_bit():
         }
     ).to_structured()
     validate_rich_meeting_notes(
-        output, transcript_body='hello', roster=roster(), has_background_context=False, has_identity_evidence=True
+        output, transcript_body='hello', roster=roster(), has_background_context=True, background_body=f'{NAME} {EMAIL}'
     )
     assert [p.name for p in output.participants] == [NAME]
     assert output.participants[0].alias == 'Mo'
     assert output.participants[0].speaker_bindings == [2]
 
 
-def fixture(existing_people=None, participant=None, receipt=None):
+def fixture(existing_people=None, participant=None, receipt=None, segments=None, corroborated=True, structured=None):
     people = existing_people or {}
     rows = {('users', UID): {'name': 'Casey Owner', 'email': 'owner@example.invalid'}}
     rows.update({('users', UID, 'people', pid): p for pid, p in people.items()})
@@ -104,12 +103,31 @@ def fixture(existing_people=None, participant=None, receipt=None):
             }
         ],
         '_notes_identity': {
+            'corroborated_names': [(participant or {}).get('name', NAME)] if corroborated else [],
             'catalog_ids': list(people),
             'owner_names': ['Casey Owner'],
             'owner_emails': ['owner@example.invalid'],
             'frame_count': 1,
         },
     }
+    if structured is not None:
+        data['structured'] = structured.model_dump()
+        data['_notes_identity'] = getattr(structured, '_notes_identity')
+    data['transcript_segments'] = (
+        segments
+        if segments is not None
+        else [
+            *data['transcript_segments'],
+            {
+                'id': 'synthetic-owner-segment',
+                'text': 'Hello.',
+                'speaker_id': 0,
+                'start': 15,
+                'end': 16,
+                'is_user': True,
+            },
+        ]
+    )
     transaction = db.transaction()
     result = stage_notes_identity(
         transaction,
@@ -185,13 +203,16 @@ def test_notes_roster_does_not_first_name_merge():
     ],
 )
 def test_reprocess_never_overwrites_rejection_unassignment_or_manual_label(decision):
-    _, transaction, _, segments = fixture(receipt={'speakers': {'2': decision}})
+    _, transaction, note, segments = fixture(receipt={'speakers': {'2': decision}})
+    if decision.get('rejection'):
+        assert note['structured']['participants'] == []
     assert segments[0].get('person_id') == decision['person_id']
     assert segments[0].get('speaker_match_source') is None
     assert not transaction.creates
 
 
-def test_rejection_removes_only_identifiers_this_note_added():
+@pytest.mark.parametrize('corroborated', [False, True])
+def test_rejection_removes_only_identifiers_this_note_added(corroborated):
     person = {
         'name': 'Existing Person',
         'email': EMAIL,
@@ -204,7 +225,8 @@ def test_rejection_removes_only_identifiers_this_note_added():
     assert updates['emails'] == ['existing@example.invalid'] and updates['aliases'] == ['Existing']
     assert CID in updates['notes_identity_rejected_conversations']
     rejected_person = {**person, **updates, 'id': 'synthetic-person', 'name': NAME}
-    _, transaction, _, segments = fixture({'synthetic-person': rejected_person})
+    _, transaction, note, segments = fixture({'synthetic-person': rejected_person}, corroborated=corroborated)
+    assert note['structured']['participants'] == []
     assert not transaction.creates and not transaction.updates
     assert segments[0].get('person_id') is None
 
@@ -288,7 +310,8 @@ def notes_module():
 
 
 @pytest.mark.parametrize('evidence', ['frame', 'screen_moment', 'calendar_attendee'])
-def test_actual_notes_call_admits_model_screen_identity(monkeypatch, notes_module, evidence):
+@pytest.mark.parametrize('corroborated', [False, True])
+def test_actual_notes_call_requires_corroborated_identity(monkeypatch, notes_module, evidence, corroborated):
     import json
     from types import SimpleNamespace
     from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
@@ -311,6 +334,11 @@ def test_actual_notes_call_admits_model_screen_identity(monkeypatch, notes_modul
         if evidence == 'frame'
         else ()
     )
+    background = (
+        f'SCREEN MOMENTS\n{NAME} {EMAIL}'
+        if corroborated
+        else ('SCREEN MOMENTS\nUnrelated card' if evidence == 'screen_moment' else None)
+    )
     result = notes_module.get_conversation_notes(
         ConversationPromptPrefix(
             conversation_id=CID,
@@ -321,13 +349,25 @@ def test_actual_notes_call_admits_model_screen_identity(monkeypatch, notes_modul
         output_language_code='en',
         task_intelligence_capture=False,
         tz='UTC',
-        roster=roster([MeetingParticipant(email=EMAIL)] if evidence == 'calendar_attendee' else []),
+        roster=roster(
+            [
+                MeetingParticipant(
+                    name=NAME if corroborated else 'Unrelated Person',
+                    email=EMAIL if corroborated else 'other@example.invalid',
+                )
+            ]
+            if evidence == 'calendar_attendee'
+            else []
+        ),
         rich_context_enabled=True,
-        meeting_context='BACKGROUND CONTEXT\nSCREEN MOMENTS\n- Calendar card' if evidence == 'screen_moment' else None,
+        meeting_context=background if evidence != 'calendar_attendee' else None,
         screen_frames=frames,
     )
-    assert [(p.name, p.email) for p in result.participants] == [(NAME, EMAIL)]
-    assert result.participants[0].speaker_bindings == [2]
+    assert [(p.name, p.email) for p in result.participants] == ([(NAME, EMAIL)] if corroborated else [])
+    if corroborated:
+        assert result.participants[0].speaker_bindings == [2]
+    _, transaction, _, _ = fixture(structured=result)
+    assert len(transaction.creates) == int(corroborated)
     assert getattr(result, '_notes_identity')['frame_count'] == len(frames)
     if frames:
         assert captured[-1]['content'][-1]['image_url']['url'] == frames[0].data_url
@@ -415,7 +455,7 @@ async def test_late_pass_refreshes_notes_once_including_all_rejected_pass(monkey
         )
         return structured, False
 
-    monkeypatch.setattr(late_module, '_get_structured', generate)
+    monkeypatch.setattr(late_module, 'get_structured', generate)
     saved = []
     monkeypatch.setattr(
         late_module.lifecycle, 'persist_processed_conversation', lambda uid, payload: saved.append(payload) or True
@@ -473,6 +513,7 @@ def test_real_completed_write_commits_people_and_inference_with_current_receipt(
             'owner_names': ['Casey Owner'],
             'owner_emails': ['owner@example.invalid'],
             'frame_count': 1,
+            'corroborated_names': [NAME],
         },
     )
     monkeypatch.setattr(conversations_db, 'db', db)
@@ -491,6 +532,7 @@ def test_real_completed_write_commits_people_and_inference_with_current_receipt(
         UID, stored['transcript_segments'], stored['transcript_segments_compressed']
     )
     if manual_rejection:
+        assert stored['structured']['participants'] == []
         assert segments[0]['person_id'] is None
         assert ('users', UID, 'people', pid) not in db.rows
     else:
@@ -587,6 +629,7 @@ def test_initial_note_and_people_create_in_one_idempotent_transaction(monkeypatc
             'owner_names': ['Casey Owner'],
             'owner_emails': ['owner@example.invalid'],
             'frame_count': 1,
+            'corroborated_names': [NAME],
         },
     )
     monkeypatch.setattr(conversations_db, 'db', db)
@@ -646,5 +689,115 @@ def test_rejected_alias_is_not_recreated_without_a_model_binding():
             }
         }
     }
-    _, transaction, _, _ = fixture({pid: person}, {'name': 'Mo', 'source': 'screen', 'speaker_bindings': []}, receipt)
+    _, transaction, note, _ = fixture(
+        {pid: person}, {'name': 'Mo', 'source': 'screen', 'speaker_bindings': []}, receipt
+    )
+    assert note['structured']['participants'] == []
     assert not transaction.creates and not transaction.updates
+
+
+@pytest.mark.parametrize('background', ['', 'SCREEN MOMENTS\nAn unrelated card'])
+def test_unrelated_evidence_drops_hallucinated_name_and_email(background):
+    result = validate_rich_meeting_notes(
+        Structured(participants=[Participant(name=NAME, email=EMAIL, source='screen')]),
+        transcript_body='Hello.',
+        roster=roster(),
+        has_background_context=bool(background),
+        background_body=background,
+    )
+    attach_notes_identity_context(result, roster(), 1, background)
+    assert result.participants == []
+    _, transaction, note, _ = fixture(structured=result)
+    assert note['structured']['participants'] == []
+    assert not transaction.creates and not transaction.updates
+
+
+def test_transcript_only_name_remains_note_without_person_document():
+    result = validate_rich_meeting_notes(
+        Structured(participants=[Participant(name=NAME, source='transcript')]),
+        transcript_body=f'Hello, {NAME}.',
+        roster=roster(),
+        has_background_context=False,
+    )
+    attach_notes_identity_context(result, roster(), 1, '')
+    assert [p.name for p in result.participants] == [NAME]
+    assert getattr(result, '_notes_identity')['corroborated_names'] == []
+    _, transaction, note, _ = fixture(structured=result)
+    assert note['structured']['participants'][0]['name'] == NAME
+    assert not transaction.creates and not transaction.updates
+
+
+@pytest.mark.parametrize('evidence', ['screen_moment', 'calendar_attendee'])
+def test_corroborated_name_is_kept_and_upserted(evidence):
+    attendees = [MeetingParticipant(name=NAME, email=EMAIL)] if evidence == 'calendar_attendee' else []
+    context = roster(attendees)
+    background = f'SCREEN MOMENTS\n{NAME} {EMAIL}' if evidence == 'screen_moment' else ''
+    result = validate_rich_meeting_notes(
+        Structured(participants=[Participant(name=NAME, email=EMAIL, source='screen')]),
+        transcript_body='Hello.',
+        roster=context,
+        has_background_context=bool(background),
+        background_body=background,
+    )
+    attach_notes_identity_context(result, context, 0, background)
+    assert getattr(result, '_notes_identity')['corroborated_names'] == [NAME]
+    db, transaction, _, _ = fixture(structured=result)
+    assert len(transaction.creates) == 1
+    assert db.rows[('users', UID, 'people', person_id_for(NAME, EMAIL))]['email'] == EMAIL
+
+
+def test_any_owner_segment_fences_entire_speaker_id():
+    segments = [
+        {'id': 'synthetic-owner', 'speaker_id': 2, 'is_user': True},
+        {'id': 'synthetic-other', 'speaker_id': 2, 'is_user': False},
+    ]
+    _, _, _, stored = fixture(segments=segments)
+    assert all(s.get('person_id') is None and s.get('speaker_identity_status') != 'not_user' for s in stored)
+
+
+def test_no_owner_segment_creates_people_without_speaker_bindings():
+    db, transaction, _, stored = fixture(segments=[{'id': 'synthetic-other', 'speaker_id': 2, 'is_user': False}])
+    assert len(transaction.creates) == 1
+    assert db.rows[('users', UID, 'people', person_id_for(NAME, EMAIL))]['confidence'] == 'unverified'
+    assert all(s.get('person_id') is None and s.get('speaker_identity_status') != 'not_user' for s in stored)
+
+
+@pytest.mark.parametrize(
+    'existing_label',
+    [
+        {'person_id': 'synthetic-existing'},
+        {'person_id': 'synthetic-existing', 'speaker_match_source': 'voiceprint'},
+        {'speaker_match_source': 'embedding'},
+    ],
+)
+def test_existing_non_notes_match_is_preserved(existing_label):
+    segments = [
+        {'id': 'synthetic-other', 'speaker_id': 2, 'is_user': False, **existing_label},
+        {'id': 'synthetic-owner', 'speaker_id': 0, 'is_user': True},
+    ]
+    _, _, _, stored = fixture(segments=segments)
+    assert stored[0] == segments[0]
+
+
+@pytest.mark.parametrize('background', [NAME, f'{NAME} cloudberry42@gmail.com.invalid'])
+def test_corroborated_name_does_not_admit_uncorroborated_email(background):
+    result = validate_rich_meeting_notes(
+        Structured(participants=[Participant(name=NAME, email=EMAIL, source='screen')]),
+        transcript_body='Hello.',
+        roster=roster(),
+        has_background_context=True,
+        background_body=background,
+    )
+    assert [p.name for p in result.participants] == [NAME]
+    assert result.participants[0].email is None
+
+
+def test_manual_owner_receipt_fences_entire_speaker_id():
+    segments = [
+        {'id': 'synthetic-owner', 'speaker_id': 0, 'is_user': True},
+        {'id': 'synthetic-new-owner', 'speaker_id': 2, 'is_user': False},
+        {'id': 'synthetic-other', 'speaker_id': 2, 'is_user': False},
+    ]
+    receipt = {'segments': {'synthetic-new-owner': {'is_user': True, 'person_id': None, 'generation': 1}}}
+    _, _, _, stored = fixture(segments=segments, receipt=receipt)
+    assert all(s.get('person_id') is None and s.get('speaker_identity_status') != 'not_user' for s in stored)

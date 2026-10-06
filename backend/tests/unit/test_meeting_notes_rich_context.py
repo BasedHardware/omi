@@ -558,6 +558,24 @@ class TestRichConversationNotes:
             return ''.join(part.get('text', '') for part in content if isinstance(part, dict))
         return str(content)
 
+    def test_flag_off_does_not_attach_notes_identity(self, monkeypatch):
+        structured, _, _ = self._call(
+            monkeypatch,
+            payload={'participants': [{'name': 'Ash Kalb', 'source': 'transcript'}]},
+            meeting_context='SCREEN MOMENTS\nAsh Kalb',
+            roster=_roster([_entry('Ash Kalb')]),
+            rich_enabled=False,
+        )
+        assert not hasattr(structured, '_notes_identity')
+
+    def test_transcript_only_call_does_not_attach_notes_identity(self, monkeypatch):
+        structured, _, _ = self._call(
+            monkeypatch,
+            payload={'participants': [{'name': 'Ash Kalb', 'source': 'transcript'}]},
+        )
+        assert [p.name for p in structured.participants] == ['Ash Kalb']
+        assert not hasattr(structured, '_notes_identity')
+
     def test_rich_fields_parse_and_validate(self, monkeypatch):
         roster = _roster(
             [
@@ -592,10 +610,9 @@ class TestRichConversationNotes:
             roster=roster,
         )
         assert structured.meeting_type == 'one_on_one'
-        # Owner dropped; model identities survive when attendees were supplied.
+        # Owner and uncorroborated model identities are dropped.
         names = [p.name for p in structured.participants]
-        assert names == ['Ash Kalb', 'Morgan Reed', 'Priya Rao']
-        assert structured.participants[1].email == 'cloudberry42@gmail.com'
+        assert names == ['Ash Kalb', 'Priya Rao']
         assert structured.insights[0].kind == 'prior_meeting'
         assert structured.sections[-1].kind == 'side_notes'
         assert structured.sections[-1].heading == 'Side notes'

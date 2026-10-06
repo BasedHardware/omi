@@ -96,7 +96,7 @@ def persist_assignment_effects(
             if s.get('speaker_match_source') == 'notes_inferred' and s.get('person_id')
         }
         for pid in inferred_people:
-            if docs.get(pid):
+            if isinstance(pid, str) and docs.get(pid):
                 updates.setdefault(pid, {}).update(identifier_retraction(docs[pid], conversation_id))
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
     if bookkeeping.enabled:

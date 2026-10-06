@@ -771,6 +771,9 @@ def _get_structured(
         raise conversation_processing_http_exception(e) from e
 
 
+get_structured = _get_structured
+
+
 def _get_conversation_obj(
     uid: str,
     structured: Structured,

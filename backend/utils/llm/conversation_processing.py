@@ -1381,7 +1381,6 @@ def get_conversation_notes(
             roster=roster,
             has_background_context=bool(meeting_context and meeting_context.strip()),
             background_body=meeting_context or '',
-            has_identity_evidence=has_identity_evidence,
         )
 
     structured = enforce_conversation_note_presentation(
@@ -1399,7 +1398,6 @@ def get_conversation_notes(
                     roster=roster,
                     has_background_context=bool(meeting_context and meeting_context.strip()),
                     background_body=meeting_context or '',
-                    has_identity_evidence=has_identity_evidence,
                 )
                 if rich_mode
                 else None
@@ -1422,8 +1420,8 @@ def get_conversation_notes(
     projected_overview = render_sections_markdown(structured.sections)
     if projected_overview:
         structured.overview = projected_overview
-    if rich_mode:
-        attach_notes_identity_context(structured, roster, len(screen_frames))
+    if rich_mode and has_identity_evidence:
+        attach_notes_identity_context(structured, roster, len(screen_frames), meeting_context or '')
     return structured
 
 

@@ -5,15 +5,25 @@ artifacts or teaching obligations. The current manual receipt remains authority.
 """
 
 import hashlib
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 from database.person_aliases import normalized_person_alias
-from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 
 
 def key(value: Any) -> str:
     return ' '.join(value.casefold().split()) if isinstance(value, str) else ''
+
+
+def identifier_in_text(identifier: str, text: str) -> bool:
+    """Require the complete asserted identifier, without extracting identities."""
+    boundary = r'[\w.+@%-]' if '@' in identifier else r'\w'
+    return bool(
+        identifier.strip()
+        and re.search(r'(?<!' + boundary + ')' + re.escape(identifier.strip()) + r'(?!' + boundary + ')', text, re.I)
+    )
 
 
 def person_id_for(name: str, email: str) -> str:
@@ -80,6 +90,7 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
     ]
     write_data['structured']['participants'] = participants
     participants = [p for p in participants if not p.get('is_ai_agent') and key(p.get('name'))]
+    corroborated_names = {key(n) for n in context.get('corroborated_names', [])}
     receipt_people = {
         decision.get('person_id') or (decision.get('rejection') or {}).get('person_id')
         for section in ('speakers', 'segments')
@@ -104,6 +115,16 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
         or s.get('is_user')
         or s.get('speaker_match_source') != 'notes_inferred'
     }
+    protected.update(
+        s.get('id')
+        for s in segments
+        if (s.get('person_id') or s.get('speaker_match_source')) and s.get('speaker_match_source') != 'notes_inferred'
+    )
+    owner_speakers = {
+        s.get('speaker_id') for s in [*segments, *apply_manual_assignments(segments, receipt)] if s.get('is_user')
+    }
+    rejected_speakers = manual_rejected_speakers(receipt)
+    rejected_participants = []
     pending = {}
     bindings = {}
     now = datetime.now(timezone.utc)
@@ -113,7 +134,12 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
             continue
         asserted_bindings = participant.get('speaker_bindings') or []
         bound_segments = [s for s in segments if s.get('speaker_id') in asserted_bindings]
-        if bound_segments and all(s.get('id') in protected or s.get('is_user') for s in bound_segments):
+        if any(
+            s.get('speaker_id') in rejected_speakers
+            and rejected_speakers[s.get('speaker_id')].get('speaker_id_scope') in (None, s.get('speaker_id_scope'))
+            for s in bound_segments
+        ):
+            rejected_participants.append(participant)
             continue
         email = key(participant.get('email'))
         rejected_identifiers = [
@@ -124,6 +150,7 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
             or (email and email in {key(e) for e in r.get('emails') or []})
             for r in rejected_identifiers
         ):
+            rejected_participants.append(participant)
             continue
         matching = [pid for pid, person in people.items() if person and email and email in emails_for(person)]
         if not matching:
@@ -135,10 +162,15 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
         if len(matching) > 1:
             continue  # an ambiguous exact identifier must not join two people
         pid = matching[0] if matching else person_id_for(name, email)
-        person = people.get(pid)
+        person: dict[str, Any] | None = people.get(pid)
         if person and (
             person.get('is_dismissed') or conversation_id in (person.get('notes_identity_rejected_conversations') or [])
         ):
+            rejected_participants.append(participant)
+            continue
+        if key(name) not in corroborated_names:
+            continue
+        if bound_segments and all(s.get('id') in protected or s.get('is_user') for s in bound_segments):
             continue
         created = person is None
         if person is None:
@@ -152,8 +184,10 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
                 confidence='unverified',
             )
         person = dict(person)
-        contributions = dict(person.get('notes_identity_identifiers') or {})
-        contribution = dict(contributions.get(conversation_id) or {'aliases': [], 'emails': [], 'created': created})
+        contributions: dict[str, Any] = dict(person.get('notes_identity_identifiers') or {})
+        contribution: dict[str, Any] = dict(
+            contributions.get(conversation_id) or {'aliases': [], 'emails': [], 'created': created}
+        )
         aliases = list(person.get('aliases') or [])
         alias = normalized_person_alias(participant.get('alias'))
         if alias and key(alias) not in {key(a) for a in [person['name'], *aliases]}:
@@ -172,6 +206,9 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
         for speaker_id in participant.get('speaker_bindings') or []:
             if isinstance(speaker_id, int) and not isinstance(speaker_id, bool) and speaker_id >= 0:
                 bindings.setdefault(speaker_id, set()).add(pid)
+    write_data['structured']['participants'] = [
+        p for p in write_data['structured']['participants'] if p not in rejected_participants
+    ]
     # A number reused across merged scopes does not identify one speaker.
     for segment in segments:
         if segment.get('speaker_match_source') == 'notes_inferred' and segment.get('id') not in protected:
@@ -180,7 +217,13 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
             )
         choices = bindings.get(segment.get('speaker_id'), set())
         scopes = {s.get('speaker_id_scope') for s in segments if s.get('speaker_id') == segment.get('speaker_id')}
-        if len(choices) != 1 or len(scopes) > 1 or segment.get('is_user') or segment.get('id') in protected:
+        if (
+            not owner_speakers
+            or segment.get('speaker_id') in owner_speakers
+            or len(choices) != 1
+            or len(scopes) > 1
+            or segment.get('id') in protected
+        ):
             continue
         segment.update(
             person_id=next(iter(choices)),
