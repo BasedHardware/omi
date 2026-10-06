@@ -121,6 +121,7 @@ def test_request_schema_requires_all_three_contract_fields():
         ('owner-1', {'visibility': 'private', 'is_locked': False}),
         ('owner-1', {'visibility': 'shared', 'is_locked': True}),
         ('owner-1', {'visibility': [], 'is_locked': False}),
+        ('owner-1', {'visibility': 'shared', 'is_locked': False, 'deleted': True}),
     ],
 )
 def test_shared_resolver_makes_missing_private_revoked_and_locked_indistinguishable(uid, conversation):
@@ -359,6 +360,7 @@ def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_saf
     assert firestore.field_paths == [
         'visibility',
         'is_locked',
+        'deleted',
         'transcript_segments_compressed',
         'transcript_segments',
     ]
@@ -373,6 +375,37 @@ def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_saf
             }
         ],
     }
+
+
+def test_public_conversation_read_rejects_soft_deleted_tombstone():
+    raw_segments = zlib.compress(
+        json.dumps(
+            [
+                {
+                    'text': 'The launch is Friday.',
+                    'is_user': True,
+                    'speaker_id': 9,
+                }
+            ]
+        ).encode('utf-8')
+    )
+    firestore = _PublicConversationFirestore(
+        {
+            'visibility': 'shared',
+            'is_locked': False,
+            'deleted': True,
+            'transcript_segments_compressed': True,
+            'transcript_segments': raw_segments,
+        }
+    )
+
+    conversation = conversations_db.get_public_shared_conversation_bounded(
+        'owner-1',
+        'conversation-1',
+        firestore_client=firestore,
+    )
+
+    assert conversation is None
 
 
 def test_transcript_prompt_is_deterministic_bounded_and_keeps_segment_boundaries():
