@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name">Omi Device &amp; Battery</string>
+    <string name="widget_description">Shows your Omi device battery level and mic state.</string>
+    <string name="widget_connect_device">Connect device</string>
+</resources>

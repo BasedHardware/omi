@@ -17,6 +17,7 @@ import androidx.annotation.NonNull
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
+import com.friend.ios.widget.OmiBatteryWidgetProvider
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -30,6 +31,41 @@ class MainActivity: FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Battery Widget Channel — writes Omi device battery and mute state to widget
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi.battery_widget").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "updateBatteryInfo" -> {
+                    val deviceName = call.argument<String>("deviceName") ?: "Omi"
+                    val batteryLevel = when (val raw = call.argument<Any>("batteryLevel")) {
+                        is Int -> raw
+                        is Number -> raw.toInt()
+                        else -> -1
+                    }
+                    val deviceType = call.argument<String>("deviceType") ?: "omi"
+                    val isConnected = call.argument<Boolean>("isConnected") ?: false
+                    OmiBatteryWidgetProvider.updateBatteryInfo(
+                        context = applicationContext,
+                        deviceName = deviceName,
+                        batteryLevel = batteryLevel,
+                        deviceType = deviceType,
+                        isConnected = isConnected
+                    )
+                    result.success(null)
+                }
+                "updateMuteState" -> {
+                    val isMuted = call.argument<Boolean>("isMuted") ?: false
+                    OmiBatteryWidgetProvider.updateMuteState(
+                        context = applicationContext,
+                        isMuted = isMuted
+                    )
+                    result.success(null)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
 
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)
