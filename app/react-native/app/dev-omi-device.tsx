@@ -121,7 +121,7 @@ export default function DevOmiDeviceScreen() {
         say(`CCCD write FAILED: ${omiBle.startAudioError() ?? 'unknown'}`);
         return;
       }
-      say('CCCD written (notify)');
+      say('subscribed via monitorCharacteristic (library writes the CCCD)');
       omiBle.onAudio(
         (bytes) => {
           setAudioChunks((c) => c + 1);

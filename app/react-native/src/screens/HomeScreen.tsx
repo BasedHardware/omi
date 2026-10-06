@@ -7,7 +7,6 @@ import { useMemoriesStore } from '@/state/memoriesStore';
 import { useConversationsStore } from '@/state/conversationsStore';
 import { useAuthStore } from '@/state/authStore';
 import { createActionItem } from '@/api/omiApi';
-import { runAgent } from '@/services/localAgent';
 import {
   routeWithProvider,
   ROUTE_PROTOTYPES,
@@ -16,6 +15,7 @@ import {
 } from '@/services/localBrainRouter';
 import { createNativeRouter, isLocalBrainAvailable } from '../../modules/local-brain';
 import { LocalBrainBar, type RouteTrace } from '@/components/LocalBrainBar';
+import { DEV_LOCAL_BRAIN } from '@/devFlags';
 import type { Conversation, Memory } from '@/api/omiApi';
 
 function dayLabel(iso?: string): string {
@@ -183,6 +183,23 @@ export default function HomeScreen() {
       {/* Routing transparency: which layer decided, and how confident it was. */}
       <LocalBrainBar trace={trace} />
 
+      {DEV_LOCAL_BRAIN && (
+        <View style={styles.devRow}>
+          <TouchableOpacity
+            style={styles.devBtn}
+            onPress={() => router.push('/dev-local-brain')}
+          >
+            <Text style={styles.devBtnText}>Local brain</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.devBtn}
+            onPress={() => router.push('/dev-omi-device')}
+          >
+            <Text style={styles.devBtnText}>omi device</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.inputBar}>
         <View style={styles.inputBox}>
           <TextInput
@@ -244,6 +261,20 @@ const styles = StyleSheet.create({
   },
   mindTag: { color: '#FFF', fontSize: 13, fontWeight: '600' },
   mindCount: { color: '#8E8E93', fontSize: 11 },
+  devRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  devBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#1f2937',
+    alignItems: 'center',
+  },
+  devBtnText: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
   inputBar: {
     paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#0B0B0F',
     borderTopWidth: 1, borderTopColor: '#1C1C1E',

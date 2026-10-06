@@ -85,9 +85,6 @@ export const OMI = {
   serialNumber: '00002a25-0000-1000-8000-00805f9b34fb',
 } as const;
 
-/** Client Characteristic Configuration descriptor -- the write that turns on notifications. */
-const CCCD_UUID = '00002902-0000-1000-8000-00805f9b34fb';
-
 /** Codec ids as written by the firmware. Mirrors the Flutter switch. */
 export type OmiCodec = 'pcm8' | 'pcm16' | 'opus' | 'opusFS320' | 'unknown';
 
@@ -370,33 +367,28 @@ export class OmiBle {
   }
 
   /**
-   * Enables audio notifications by writing the Client Characteristic
-   * Configuration descriptor.
+   * Confirms the device is connected and ready to stream.
    *
-   * This write is required, and the library does not make it for us: on Android
-   * monitorCharacteristicForService calls
-   * BluetoothGatt.setCharacteristicNotification(true) -- which only flips the
-   * *local* flag -- and never writes 0x2902. Verified in logcat against a real Omi
-   * CV 1: the setCharacteristicNotification line appears and no descriptor write
-   * follows, so the device stays silent.
+   * There is deliberately NO descriptor write here, and I had this wrong twice.
+   * react-native-ble-plx exposes writeDescriptorForService, but it throws:
+   * "Cannot write to descriptor 00002902-... It's not allowed by iOS and
+   * therefore forbidden on Android as well." That block is correct behaviour --
+   * writing the CCCD by hand is the wrong route, because the library already does
+   * it. In BleModule.safeMonitorCharacteristicForDevice it calls
+   * connection.setupNotification(gattCharacteristic, QUICK_SETUP) when the CCCD
+   * exists, and setupNotification writes the descriptor.
    *
-   * The value is base64 because that is what this API takes. My first attempt
-   * passed the literal string '0100', which is the ASCII characters '0','1','0',
-   * '0' -- four bytes of 0x30 0x31 0x30 0x30 rather than the two bytes
-   * 0x01 0x00 the firmware expects. toBase64 avoids hand-writing that.
+   * The logcat evidence that misled me was real but misleading:
+   * setCharacteristicNotification() appears with no descriptor write after it,
+   * but the CCCD write goes through a different code path that does not log that
+   * line. Audio was in fact arriving while I believed it was not.
    *
-   *   0x0100 = notifications only
-   *   0x0200 = indications only
+   * So subscribing via onAudio() is the whole mechanism. This only guards the
+   * precondition.
    */
   async startAudio(): Promise<boolean> {
-    const d = this.requireDevice();
     try {
-      await d.writeDescriptorForService(
-        OMI.service,
-        OMI.audioDataStream,
-        CCCD_UUID,
-        toBase64(new Uint8Array([0x01, 0x00]))
-      );
+      this.requireDevice();
       this.lastAudioError = null;
       return true;
     } catch (e) {
