@@ -90,3 +90,48 @@ Future OS-level stop acknowledgements should extend this policy boundary and
 report requested versus applied revision. Preference persistence must never be
 relabeled as proof that an OS microphone has stopped. Full recovery ownership
 convergence remains described in `OWNERSHIP.md`.
+
+## Tiered pendant uplink
+
+Live pendant capture uses `conversationSilenceDuration` for its uplink silence
+window (default 120 seconds; the existing `-1` option means four hours). Capture
+start and speech transcript callbacks arm the timer. BLE packets alone never
+extend it. Expiry uses the existing durable admission gate, cancels the BLE audio
+subscription, closes the listen socket, finalizes the WAL tail and requests
+conversation processing. Live Activity publishes the existing Paused state.
+
+`uplinkSilencePaused` distinguishes this automatic pause from manual mute without
+changing shared capture emissions. Link reconnection and Home check-only starts
+preserve pause. Foreground or a charge-start edge resumes a fresh recording;
+manual mute still wins. Repeated charging reads across reconnect are not edges.
+Phone microphone pause continues to preserve its conversation and socket.
+
+A committed, unmuted live pendant session must have connected transports or
+active transport reconciliation whenever no sync scope is active. Resume
+controls defer dispatch during a scope to avoid unnecessary work, but that gap
+is not an admission guarantee: coalesced passes can raise another scope before
+startup finishes. Every fenced socket/audio attempt records one coalesced
+reconciliation demand. After scope drop and capture commit, it rechecks current
+ownership and pause state, ensures the missing transports, and re-arms the
+existing keepalive. A new scope re-fences the attempt and records demand again.
+Reconciliation never writes policy, mints a session, or adds a retry timer.
+Disposal or a newer paused/non-pendant state cancels admission.
+
+The first successful charging observation inherits its connection's initial
+resume gate. A connection admitted only for sync observes without resuming;
+an authorized connection retains its charge edge even if another scope has
+since started, and capture defers/reconciles the transport work above.
+
+TODO(astra) (#5491): connected-but-unsubscribed Omi firmware currently discards its TX
+queue instead of writing offline storage (`omi/firmware/omi/src/lib/core/transport.c`,
+`pusher`: storage writes require `!conn`). Therefore speech after timeout can be
+missed until resume; a live-mode ring-buffer guarantee needs firmware work outside
+this change. Existing backlog still syncs. No firmware is changed here.
+
+Periodic sync is a bounded backlog pass through RecordingTransferCoordinator.
+It permits device discovery but fences live socket/audio starts, and expiration
+cancels transfer work. iOS BGAppRefresh eligibility is opportunistic, with no hourly
+promise. The current iOS bridge supports a suspended existing engine; cold-process
+grants cannot safely bootstrap the UI-owned WAL/account graph and exit without
+starting capture. Android reuses the existing foreground-task repeat callback and
+main isolate. Neither platform starts a second capture engine for sync.

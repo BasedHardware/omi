@@ -175,6 +175,16 @@ void main() {
     expect(presentation.snapshot['source'], 'pendant');
   }
 
+  test('silence timeout publishes Paused to the Live Activity', () async {
+    await recordWithPendant();
+    await world.elapse(const Duration(seconds: 120));
+    await world.controller.pendingSourceSwitch;
+    await world.settle();
+    expect(presentation.snapshot['paused'], true);
+    expect(presentation.snapshot['status'], 'paused');
+    expect(presentation.snapshot['canPause'], true);
+  });
+
   test('an Omi call holding the pendant reads as an interruption, without Stop or Start', () async {
     await recordWithPendant();
     world.omiCall.value = PhoneCallState.active;

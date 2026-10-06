@@ -5,6 +5,8 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/enums.dart';
 
+part 'capture_silence_policy.dart';
+
 /// Capture ownership coordinator: the single admission and ordering authority
 /// for "one live source at a time" (CAPTURE_POLICY.md). Every
 /// ownership-relevant entry becomes a [CaptureEvent] through [dispatch]; the
@@ -526,6 +528,8 @@ class CaptureEnvironment {
     required this.callActive,
     required this.deviceRecording,
     required this.micCapturing,
+    this.silencePaused = false,
+    this.uplinkSilenceExpired = false,
     this.systemAudioRecording = false,
     this.systemSurfaceRecordingId,
     this.systemSurfaceConversationRevision = 0,
@@ -533,6 +537,8 @@ class CaptureEnvironment {
 
   /// `_preferences.capturePolicy.muted`.
   final bool policyMuted;
+  final bool silencePaused;
+  final bool uplinkSilenceExpired;
 
   /// `_preferences.deviceMuted` — the user pause flag.
   final bool paused;
@@ -1673,6 +1679,8 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       DeviceStopRequested() => _reduceDeviceStop(state, event),
       DeviceUpdated() => _reduceDeviceUpdated(state, event),
       PhoneBatchStartRequested() => _reducePhoneBatchStart(state, event),
+      UplinkSilenceElapsed() => _reduceUplinkSilence(state, event, env),
+      ResumeSilencePaused() => _reduceSilenceResume(state, env),
       DevicePauseRequested() => _reduceDevicePause(state, env),
       DeviceResumeRequested() => _reduceDeviceResume(state, env),
       CallStateChanged() => _reduceCall(state, env),
@@ -2161,6 +2169,9 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
 }
 
 CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (env.silencePaused) {
+    return CaptureTransition(state, const [RunStage(SilencePauseMarkerStage(false))]);
+  }
   return switch (state.phase) {
     CapturePhase.phoneLive => CaptureTransition(state.copyWith(phase: CapturePhase.phonePaused), const [
         PolicyWrite(true),
@@ -2202,6 +2213,7 @@ CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment
 }
 
 CaptureTransition _reduceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (env.silencePaused) return _reduceSilenceResume(state, env);
   return switch (state.phase) {
     CapturePhase.phonePaused => CaptureTransition(state.copyWith(phase: CapturePhase.phoneLive), const [
         PolicyWrite(false),
@@ -2226,7 +2238,8 @@ CaptureTransition _reduceResume(CaptureCoordinatorState state, CaptureEnvironmen
         state.copyWith(suspended: _withPendantWasPaused(state.suspended, false)),
         const [],
       ),
-    _ when state.connectedDevice != null && !state.phoneOwns && !state.callActive => CaptureTransition(state, const [
+    _ when env.policyMuted && state.connectedDevice != null && !state.phoneOwns && !state.callActive =>
+      CaptureTransition(state, const [
         PolicyWrite(false),
       ]),
     _ => CaptureTransition(state, const []),
@@ -2475,34 +2488,8 @@ CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpda
   );
 }
 
-CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvironment env) {
-  if (state.phase == CapturePhase.phoneLive || state.phase == CapturePhase.phoneBatchLive) {
-    return _reducePause(state, env);
-  }
-  if (state.phoneOwns) return CaptureTransition(state, const []);
-  final nextPhase = switch (state.phase) {
-    CapturePhase.pendantLive => CapturePhase.pendantPaused,
-    CapturePhase.pendantBatchLive => CapturePhase.pendantBatchPaused,
-    _ => state.phase,
-  };
-  if (nextPhase != state.phase) {
-    return CaptureTransition(state.copyWith(phase: nextPhase), const [
-      PolicyWrite(true),
-      RunStage(PauseDeviceTailStage()),
-    ]);
-  }
-  // An unowned pendant control only records suspended intent; the legacy
-  // idle mute persists admission without opening any capture source.
-  if (state.pendantSuspension != null) {
-    return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, true)), const []);
-  }
-  if (state.phase == CapturePhase.idle && !state.callActive) {
-    return CaptureTransition(state, const [PolicyWrite(true), RunStage(PauseDeviceTailStage())]);
-  }
-  return CaptureTransition(state, const []);
-}
-
 CaptureTransition _reduceDeviceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (env.silencePaused) return _reduceSilenceResume(state, env);
   if (state.phase == CapturePhase.phonePaused || state.phase == CapturePhase.phoneBatchPaused) {
     return _reduceResume(state, env);
   }
