@@ -357,13 +357,14 @@ before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
 utterances before longer ones.
 
-Realtime mentor dispatch validates `MENTOR_PIPELINE=legacy|v2|cohort` locally
-before running `process_mentor_notification`, the shared paid/opt-in,
-buffering and debounce admission. Only when admission returns conversation
-messages does `cohort` resolve the PostHog flag; explicit `legacy` and `v2`
-dispatch make no flag lookup, and an invalid value invokes neither lane.
-Both lanes receive the same admitted messages. The shared bounded flag cache,
-failure diagnostics and rollback latency are defined in the
+Realtime mentor dispatch validates `MENTOR_PIPELINE=cohort` locally before
+running `process_mentor_notification`, the shared paid/opt-in, buffering and
+debounce admission. Only when admission returns conversation messages does the
+cohort resolve the PostHog flag: `proactivity_v2` true dispatches the v2 mentor;
+false, unknown or a flag error dispatches nothing (fail closed) — the legacy
+mentor lane was deleted after v2 reached 100%. Any other env value invokes
+neither path. The shared bounded flag cache, failure diagnostics and rollback
+latency are defined in the
 [proactivity v2 contract](proactivity_v2/CONTRACT.md#enablement-prerequisites).
 
 Provider speaker labels are connection-local. Before a live segment enters a
