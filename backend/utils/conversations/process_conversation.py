@@ -771,6 +771,9 @@ def _get_structured(
         raise conversation_processing_http_exception(e) from e
 
 
+get_structured = _get_structured
+
+
 def _get_conversation_obj(
     uid: str,
     structured: Structured,
@@ -3141,6 +3144,9 @@ def process_conversation(
     # calendar links, usage, or webhooks from a stale in-memory snapshot.
     conversation.status = ConversationStatus.completed
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    notes_identity = getattr(structured, '_notes_identity', None)
+    if notes_identity is not None and not conversation.discarded:
+        payload['_notes_identity'] = notes_identity
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()

@@ -15,6 +15,22 @@ from utils.conversations.meeting_participants import MeetingRoster
 PRESENTATION_CONTRACT_VERSION = 'v1'
 
 
+def identifier_in_text(identifier: str, text: str) -> bool:
+    """Require the complete asserted identifier, without extracting identities.
+
+    Kept local (duplicated from ``database.notes_identity``) on purpose: this
+    validation module is imported by isolated-environment tests that stub the
+    ``database`` package, and the notes-identity module legitimately pulls in
+    Firestore-bound ``person_aliases``. The corroboration check here only needs
+    the pure regex, not the persistence graph.
+    """
+    boundary = r'[\w.+@%-]' if '@' in identifier else r'\w'
+    return bool(
+        identifier.strip()
+        and re.search(r'(?<!' + boundary + ')' + re.escape(identifier.strip()) + r'(?!' + boundary + ')', text, re.I)
+    )
+
+
 @dataclass
 class PresentationContractReport:
     """Bounded, content-free evidence about generated-note conformance."""
@@ -238,12 +254,28 @@ def sanitize_structured_speaker_placeholders(structured: Structured) -> Structur
     return structured
 
 
-def _name_in_transcript(name: str, transcript_body: str) -> bool:
-    """Case-insensitive whole-name (word-boundary) match against the transcript body."""
-    name = name.strip()
-    if not name or not transcript_body:
-        return False
-    return re.search(r'(?<!\w)' + re.escape(name) + r'(?!\w)', transcript_body, re.IGNORECASE) is not None
+def attach_notes_identity_context(
+    structured: Structured, roster: Optional[MeetingRoster], frame_count: int, background_body: str
+) -> None:
+    """Carry server context to the note-save seam, outside the client/model schema."""
+    entries = roster.entries if roster else []
+    owners = [e for e in entries if e.kind == 'owner']
+    attendee_names = {e.display_name.casefold() for e in entries if e.kind != 'owner' and e.display_name}
+    setattr(
+        structured,
+        '_notes_identity',
+        {
+            'catalog_ids': list(roster.catalog_person_ids) if roster else [],
+            'owner_names': [e.display_name for e in owners if e.display_name],
+            'owner_emails': [e.email for e in owners if e.email],
+            'frame_count': frame_count,
+            'corroborated_names': [
+                p.name
+                for p in structured.participants
+                if p.name and (p.name.casefold() in attendee_names or identifier_in_text(p.name, background_body))
+            ],
+        },
+    )
 
 
 def validate_rich_meeting_notes(
@@ -256,9 +288,9 @@ def validate_rich_meeting_notes(
 ) -> Structured:
     """Server-side guardrails for rich-only fields; the flag-off path never runs this.
 
-    Participants must be corroborated (roster name/email or a whole-name transcript
-    match), the account owner is never a participant, and nameless participants
-    survive only on a roster email. Insights exist only with background context,
+    Names and emails require exact textual or attendee corroboration even when
+    frames are supplied to the model.
+    The account owner is never a participant. Insights exist only with background context,
     capped at 4 entries of <=30 words. At most one side_notes section survives,
     forced last with heading "Side notes" and 1-4 bullets.
     """
@@ -286,26 +318,22 @@ def validate_rich_meeting_notes(
             # call) is a legitimate identity source alongside the transcript.
             if (
                 matched_entry is None
-                and not _name_in_transcript(name, transcript_body)
-                and not (background_body and _name_in_transcript(name, background_body))
+                and not identifier_in_text(name, transcript_body)
+                and not (background_body and identifier_in_text(name, background_body))
             ):
                 continue
         elif email:
             matched_entry = roster_by_email.get(email.casefold())
-            if matched_entry is None:
+            if matched_entry is None and not identifier_in_text(email, transcript_body + '\n' + background_body):
                 continue
         else:
             continue
-        # Keep an email only when it belongs to the same roster entry that
-        # corroborated the participant — a name match must not inherit someone
-        # else's roster email, and untrusted emails are dropped.
-        if (
-            email
-            and matched_entry is not None
-            and matched_entry.email
-            and matched_entry.email.casefold() == email.casefold()
+        if email and (
+            email.casefold() in roster_by_email or identifier_in_text(email, transcript_body + '\n' + background_body)
         ):
             participant.email = email
+        elif not email and matched_entry is not None and matched_entry.email:
+            participant.email = matched_entry.email
         else:
             participant.email = None
         if name:

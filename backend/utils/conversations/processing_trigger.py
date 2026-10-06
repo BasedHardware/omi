@@ -27,6 +27,7 @@ class ProcessingTrigger(str, Enum):
     USER_REPROCESS = 'user_reprocess'  # the user asked to reprocess it
     MERGE = 'merge'  # the user merged conversations into it
     SMART_MERGE = 'smart_merge'  # a finished conversation was folded into this survivor
+    SCREEN_EVIDENCE = 'screen_evidence'  # late evidence refreshes notes on an already-kept row
     SERVER_RECOVERY = 'server_recovery'
 
 
@@ -66,6 +67,7 @@ PROCESSING_MODES: Mapping[ProcessingTrigger, ProcessingMode] = MappingProxyType(
         # Regenerates an existing, already-kept survivor over its longer transcript:
         # no created-side effects, and relevance must not hide the whole occasion.
         ProcessingTrigger.SMART_MERGE: ProcessingMode(True, True, True, _KEEP),
+        ProcessingTrigger.SCREEN_EVIDENCE: ProcessingMode(True, True, True, _KEEP),
         ProcessingTrigger.SERVER_RECOVERY: ProcessingMode(True, True, True, _KEEP),
     }
 )

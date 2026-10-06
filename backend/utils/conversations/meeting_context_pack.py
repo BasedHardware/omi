@@ -66,6 +66,7 @@ class PersonFact:
     relationship: Optional[str] = None
     notes: Optional[str] = None
     aliases: tuple[str, ...] = ()
+    emails: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -139,6 +140,8 @@ def render_meeting_context_pack(pack: Optional[MeetingContextPack]) -> str:
             detail = f'{detail}; aka {", ".join(fact.aliases)}' if detail else f'aka {", ".join(fact.aliases)}'
         if detail:
             line += f' ({detail})'
+        if fact.emails:
+            line += f' <{", ".join(fact.emails)}>'
         if fact.notes:
             line += f' — {fact.notes}'
         people_lines.append(line)
@@ -242,6 +245,7 @@ def load_people_documents(uid: str) -> list[dict[str, Any]]:
             .collection('users')
             .document(uid)
             .collection('people')
+            .order_by('created_at', direction='DESCENDING')
             .limit(MAX_PEOPLE_DOCS)
             .stream()
         )
@@ -252,7 +256,7 @@ def load_people_documents(uid: str) -> list[dict[str, Any]]:
                 continue
             data.setdefault('id', doc.id)
             documents.append(data)
-        return documents
+        return sorted(documents, key=lambda p: str(p.get('updated_at') or p.get('created_at') or ''), reverse=True)
     except Exception as exc:  # noqa: BLE001 - people context is best effort
         _log_source_failure('people', uid, exc)
         return []
@@ -469,7 +473,6 @@ def _person_email_values(person: Mapping[str, Any]) -> set[str]:
 
 
 def _gather_people_facts(roster: MeetingRoster, people: Sequence[Mapping[str, Any]]) -> tuple[PersonFact, ...]:
-    names, emails, person_ids = _roster_identity(roster)
     facts: list[PersonFact] = []
     seen: set[str] = set()
     for person in people:
@@ -477,12 +480,7 @@ def _gather_people_facts(roster: MeetingRoster, people: Sequence[Mapping[str, An
         raw_name = person.get('name')
         name = raw_name if isinstance(raw_name, str) else ''
         person_emails = _person_email_values(person)
-        matched = (
-            (person_id and person_id in person_ids)
-            or (name and name.strip().casefold() in names)
-            or bool(person_emails & emails)
-        )
-        if not matched or not name.strip() or person_id in seen:
+        if person.get('is_dismissed') is True or not name.strip() or (person_id or name.strip().casefold()) in seen:
             continue
         seen.add(person_id or name.strip().casefold())
         relationship = person.get('relationship') or person.get('role')
@@ -503,6 +501,7 @@ def _gather_people_facts(roster: MeetingRoster, people: Sequence[Mapping[str, An
                     else None
                 ),
                 aliases=aliases[:6],
+                emails=tuple(sorted(person_emails)),
             )
         )
         if len(facts) >= 8:

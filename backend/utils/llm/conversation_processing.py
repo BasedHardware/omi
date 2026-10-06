@@ -41,6 +41,7 @@ from utils.llm.meeting_notes_validation import (
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
     validate_rich_meeting_notes,
+    attach_notes_identity_context,
     validate_structured_source_segment_ids,
 )
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
@@ -1368,6 +1369,11 @@ def get_conversation_notes(
     raw_response = _content_str(model.invoke(messages))
     response = extraction_parser.parse(raw_response)
     structured = response.to_structured()
+    has_identity_evidence = bool(
+        screen_frames
+        or 'SCREEN MOMENTS' in (meeting_context or '')
+        or (roster and any(e.kind != 'owner' for e in roster.entries))
+    )
     if rich_mode:
         validate_rich_meeting_notes(
             structured,
@@ -1414,6 +1420,8 @@ def get_conversation_notes(
     projected_overview = render_sections_markdown(structured.sections)
     if projected_overview:
         structured.overview = projected_overview
+    if rich_mode and has_identity_evidence:
+        attach_notes_identity_context(structured, roster, len(screen_frames), meeting_context or '')
     return structured
 
 

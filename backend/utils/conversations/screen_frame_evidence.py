@@ -5,8 +5,6 @@ it also records the participant names shown on call tiles and a short factual
 summary of what was on screen. This module turns those stored fields (and, when
 enabled, the frame pixels themselves) into notes inputs:
 
-- roster names: tile names join the meeting context as ``screen_activity``
-  participants when no better source already named them;
 - SCREEN MOMENTS: time-offset summaries for the background context pack;
 - images: up to four downscaled approved frames attached to the notes call.
 
@@ -30,7 +28,6 @@ from PIL import Image
 
 from database.screen_frames import get_conversation_screen_frames, own_frames
 from database.users import get_meeting_note_screenshots_enabled
-from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from utils.conversations.meeting_context import is_ai_agent_tile_name
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -44,7 +41,6 @@ NOTES_FRAME_JPEG_QUALITY = 80
 FRAME_READ_TIMEOUT_SECONDS = 3.0
 FRAME_READ_BUDGET_SECONDS = 6.0
 MAX_SCREEN_MOMENTS = 7
-MAX_SCREEN_FRAME_NAMES = 8
 
 _NAME_DECORATION = re.compile(r'\s*(?:\(.*?\)|\d{1,2}:\d{2}\s*(?:AM|PM)?|·.*)\s*$', re.IGNORECASE)
 _NOT_A_NAME = {'you', 'me', 'guest', 'host', 'presenting', 'participants', 'everyone'}
@@ -116,109 +112,6 @@ def _clean_name(raw: str, *, agents: bool = False) -> Optional[str]:
     if agents:
         return name if looks_like_ai_agent_name(name) else None
     return name if len(tokens) <= 4 and any(token[:1].isupper() for token in tokens) else None
-
-
-def screen_frame_agent_names(evidence: Sequence[ScreenFrameEvidence]) -> list[str]:
-    """AI-agent tiles on approved frames. They join the roster as agents (never
-    people) so the speaker-binding guard still sees them."""
-    return _frame_names(evidence, agents=True)
-
-
-def screen_frame_names(evidence: Sequence[ScreenFrameEvidence]) -> list[str]:
-    """Human tile names the judge read off approved frames, most frequent first."""
-    return _frame_names(evidence, agents=False)
-
-
-def _frame_names(evidence: Sequence[ScreenFrameEvidence], *, agents: bool) -> list[str]:
-    counts: dict[str, int] = {}
-    spelling: dict[str, str] = {}
-    for item in evidence:
-        for raw in item.names:
-            name = _clean_name(raw, agents=agents)
-            if name is None:
-                continue
-            key = name.casefold()
-            counts[key] = counts.get(key, 0) + 1
-            spelling.setdefault(key, name)
-    ordered = sorted(counts, key=lambda key: -counts[key])
-    return [spelling[key] for key in ordered[:MAX_SCREEN_FRAME_NAMES]]
-
-
-def _email_spells_name(email: str, name_tokens: Sequence[str]) -> bool:
-    """Both the first and the last name token appear in the local part ("jordan.rivera").
-
-    A shared first name alone ("john.smith" vs a "John Doe" tile) is a different person.
-    """
-    if len(name_tokens) < 2:
-        return False
-    local = _tokens(email.split('@', 1)[0])
-    return name_tokens[0] in local and name_tokens[-1] in local
-
-
-def _tokens(value: str) -> set[str]:
-    return {token for token in re.split(r"[\s._\-+'’]+", value.casefold()) if token}
-
-
-def with_screen_frame_participants(
-    context: Optional[CalendarMeetingContext],
-    names: Sequence[str],
-    *,
-    started_at: Optional[datetime],
-    duration_minutes: int,
-) -> Optional[CalendarMeetingContext]:
-    """Add frame-derived names that no better source already supplied.
-
-    A name already on the roster (same name, or same first and last token) is
-    skipped. A nameless email participant whose local part matches the name is
-    given that name instead of gaining a duplicate. Otherwise the name joins as
-    a new participant; with no context at all, a ``screen_activity`` context is
-    created for it.
-    """
-    if not names:
-        return context
-    participants = list(context.participants) if context is not None else []
-    added = False
-    for name in names:
-        name_tokens = name.casefold().split()
-        duplicate = any(
-            participant.name
-            and (
-                participant.name.casefold() == name.casefold()
-                or (
-                    len(name_tokens) >= 2
-                    and participant.name.casefold().split()[:1] == name_tokens[:1]
-                    and participant.name.casefold().split()[-1:] == name_tokens[-1:]
-                )
-            )
-            for participant in participants
-        )
-        if duplicate:
-            continue
-        email_only = [
-            index
-            for index, participant in enumerate(participants)
-            if not participant.name and participant.email and _email_spells_name(participant.email, name_tokens)
-        ]
-        if len(email_only) == 1:
-            index = email_only[0]
-            participants[index] = participants[index].model_copy(update={'name': name})
-        else:
-            participants.append(MeetingParticipant(name=name))
-        added = True
-    if not added:
-        return context
-    if context is not None:
-        return context.model_copy(update={'participants': participants})
-    if started_at is None:
-        return None
-    return CalendarMeetingContext(
-        calendar_event_id='screen-frames',
-        title='Video meeting',
-        participants=participants,
-        start_time=started_at,
-        duration_minutes=max(1, duration_minutes),
-        calendar_source='screen_activity',
-    )
 
 
 def _offset_label(captured_at: datetime, started_at: Optional[datetime]) -> str:
@@ -311,11 +204,3 @@ def load_notes_frame_images(
 
 def frame_evidence_started_at(conversation: Any) -> Optional[datetime]:
     return _as_utc(getattr(conversation, 'started_at', None))
-
-
-def frame_evidence_duration_minutes(conversation: Any) -> int:
-    started = _as_utc(getattr(conversation, 'started_at', None))
-    finished = _as_utc(getattr(conversation, 'finished_at', None))
-    if started is None or finished is None:
-        return 1
-    return max(1, int((finished - started).total_seconds() / 60))

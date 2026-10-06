@@ -558,6 +558,24 @@ class TestRichConversationNotes:
             return ''.join(part.get('text', '') for part in content if isinstance(part, dict))
         return str(content)
 
+    def test_flag_off_does_not_attach_notes_identity(self, monkeypatch):
+        structured, _, _ = self._call(
+            monkeypatch,
+            payload={'participants': [{'name': 'Ash Kalb', 'source': 'transcript'}]},
+            meeting_context='SCREEN MOMENTS\nAsh Kalb',
+            roster=_roster([_entry('Ash Kalb')]),
+            rich_enabled=False,
+        )
+        assert not hasattr(structured, '_notes_identity')
+
+    def test_transcript_only_call_does_not_attach_notes_identity(self, monkeypatch):
+        structured, _, _ = self._call(
+            monkeypatch,
+            payload={'participants': [{'name': 'Ash Kalb', 'source': 'transcript'}]},
+        )
+        assert [p.name for p in structured.participants] == ['Ash Kalb']
+        assert not hasattr(structured, '_notes_identity')
+
     def test_rich_fields_parse_and_validate(self, monkeypatch):
         roster = _roster(
             [
@@ -580,7 +598,7 @@ class TestRichConversationNotes:
             'participants': [
                 {'name': 'David', 'email': 'david@acme.com', 'source': 'roster'},
                 {'name': 'Ash Kalb', 'email': 'ash@fulcra.com', 'source': 'roster'},
-                {'name': 'Nobody Invented', 'source': 'transcript'},
+                {'name': 'Morgan Reed', 'email': 'cloudberry42@gmail.com', 'source': 'screen'},
                 {'name': 'Priya Rao', 'source': 'transcript'},
             ],
             'insights': [{'text': 'Short insight', 'kind': 'prior_meeting'}],
@@ -592,7 +610,7 @@ class TestRichConversationNotes:
             roster=roster,
         )
         assert structured.meeting_type == 'one_on_one'
-        # Owner dropped; uncorroborated name dropped; roster and transcript names kept.
+        # Owner and uncorroborated model identities are dropped.
         names = [p.name for p in structured.participants]
         assert names == ['Ash Kalb', 'Priya Rao']
         assert structured.insights[0].kind == 'prior_meeting'

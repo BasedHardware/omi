@@ -256,9 +256,21 @@ class ExtractedParticipant(BaseModel):
     organization: Optional[str] = Field(default=None, description="Participant's organization when known")
     role: Optional[str] = Field(default=None, description="Participant's role or relationship when known")
     is_ai_agent: bool = Field(default=False, description='True for AI notetakers and assistants, never people')
-    source: Literal['roster', 'transcript'] = Field(
-        description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
+    alias: Optional[str] = Field(
+        default=None, description='Short alias explicitly asserted for this person; never derive it'
     )
+    speaker_bindings: List[int] = Field(
+        default_factory=list,
+        description='Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain',
+    )
+    source: str = Field(description="Identity evidence source: roster, transcript, screen, or background")
+
+    @field_validator('speaker_bindings', mode='before')
+    @classmethod
+    def keep_numeric_bindings(cls, value):
+        if not isinstance(value, list):
+            return []
+        return list(dict.fromkeys(v for v in value if type(v) is int and v >= 0))[:8]
 
     def to_participant(self) -> Participant:
         return Participant(
@@ -268,6 +280,8 @@ class ExtractedParticipant(BaseModel):
             role=self.role,
             is_ai_agent=self.is_ai_agent,
             source=self.source,
+            alias=self.alias,
+            speaker_bindings=self.speaker_bindings,
         )
 
 
@@ -348,7 +362,7 @@ class RichStructuredExtraction(StructuredExtraction):
     )
     participants: List[ExtractedParticipant] = Field(
         default_factory=list,
-        description='People and AI agents evidenced by the meeting roster or the transcript; never the account owner',
+        description='People and AI agents evidenced by the supplied notes context, including screen evidence; never the account owner',
     )
     insights: List[ExtractedInsight] = Field(
         default_factory=list,

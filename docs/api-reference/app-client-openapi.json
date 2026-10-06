@@ -21273,6 +21273,18 @@
       },
       "Participant": {
         "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short alias explicitly asserted for this person; never derive it",
+            "title": "Alias"
+          },
           "email": {
             "anyOf": [
               {
@@ -21335,6 +21347,14 @@
             ],
             "title": "Source",
             "type": "string"
+          },
+          "speaker_bindings": {
+            "description": "Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Speaker Bindings",
+            "type": "array"
           }
         },
         "required": [
@@ -27362,7 +27382,7 @@
             "type": "string"
           },
           "participants": {
-            "description": "People and AI agents evidenced by the meeting roster or the transcript; never the account owner",
+            "description": "People and AI agents evidenced by the supplied notes context, including screen evidence; never the account owner",
             "items": {
               "$ref": "#/components/schemas/Participant"
             },

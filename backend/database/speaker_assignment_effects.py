@@ -14,6 +14,7 @@ from google.api_core.exceptions import Aborted
 from google.cloud import firestore
 
 from database import speaker_learning_jobs as learning_jobs
+from database.notes_identity import identifier_retraction
 from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
 from utils.person_evidence import person_updates_for_assignment
@@ -88,6 +89,15 @@ def persist_assignment_effects(
     updates, removed = person_updates_for_assignment(
         *evidence, receipt, segments, rejected_person_id=rejected_person_id, save_other_voice_profiles=save_other
     )
+    if rejection:
+        inferred_people = {
+            s.get('person_id')
+            for s in relabeled
+            if s.get('speaker_match_source') == 'notes_inferred' and s.get('person_id')
+        }
+        for pid in inferred_people:
+            if isinstance(pid, str) and docs.get(pid):
+                updates.setdefault(pid, {}).update(identifier_retraction(docs[pid], conversation_id))
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
     if bookkeeping.enabled:
         bookkeeping.involved = True

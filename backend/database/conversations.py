@@ -37,6 +37,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .notes_identity import stage_notes_identity
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
@@ -651,6 +652,18 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     write_data['data_protection_level'] = level
 
 
+def _stage_notes_identity(transaction, user_ref, write_data, existing):
+    return stage_notes_identity(
+        transaction,
+        user_ref,
+        write_data,
+        existing,
+        decode_segments=_decode_transcript_segments_strict,
+        decode_receipt=decode_manual_speaker_assignments,
+        encode=_prepare_conversation_for_write,
+    )
+
+
 def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
     """Whether a conversation is a soft-deleted tombstone.
 
@@ -857,11 +870,13 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                 structured['title'] = user_title
 
             _reapply_current_manual_assignments(uid, write_data, existing)
+            _stage_notes_identity(transaction, user_ref, write_data, existing)
             _guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
         write_data.setdefault('has_photos', False)
+        _stage_notes_identity(transaction, user_ref, write_data, {})
         transaction.set(conversation_ref, write_data)
 
     _write_processing_result(transaction)
@@ -914,6 +929,7 @@ def persist_processing_result_with_lifecycle(
         stale_sync_revision = False
         first_completed = False
         write_data = copy.deepcopy(conversation_data)
+        evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         existing_snapshot = conversation_ref.get(transaction=transaction)
@@ -925,7 +941,7 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
-        if existing.get('deleted'):
+        if existing.get('deleted') or (evidence_refresh and effective_user_title(existing.get('user_title'))):
             return False
         if smart_merge_refresh is not None:
             expected_revision, expected_owner = smart_merge_refresh
@@ -1017,6 +1033,7 @@ def persist_processing_result_with_lifecycle(
             structured['title'] = user_title
 
         _reapply_current_manual_assignments(uid, write_data, existing)
+        _stage_notes_identity(transaction, user_ref, write_data, existing)
         _guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
@@ -1062,7 +1079,21 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     try:
-        conversation_ref.create(conversation_data)
+        if '_notes_identity' in conversation_data:
+
+            @firestore.transactional
+            def create_with_people(transaction):
+                if conversation_ref.get(transaction=transaction).exists:
+                    return False
+                write_data = copy.deepcopy(conversation_data)
+                _stage_notes_identity(transaction, user_ref, write_data, {})
+                transaction.create(conversation_ref, write_data)
+                return True
+
+            if not create_with_people(db.transaction()):
+                return False
+        else:
+            conversation_ref.create(conversation_data)
     except (AlreadyExists, Conflict):
         # The conversation exists but may be new to the search index (writer
         # lag, backfill gap); the read-back sync converges it either way.
