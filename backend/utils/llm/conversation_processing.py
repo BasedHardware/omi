@@ -1199,20 +1199,19 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
     ]
     if frames:
         evidence.append(screen_frames_message(frames))
-    cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
+    # The notes lane can be Anthropic (main default); it rejects both
+    # response_format and prompt_cache_breakpoint. The shaped notes mount never
+    # carries a cache breakpoint; parser-based extraction needs no provider
+    # cache hint to work on any lane.
     model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
     extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
-    cache_lane = shared_conversation_cache_supported()
     mount = Mount(
         instructions=mount.instructions + '\n\n' + extraction_parser.get_format_instructions(),
         budget=mount.budget,
-        cache_breakpoint=cache_lane,
     )
 
     async def invoke():
         async with isolated_notes_model(model) as isolated_model:
-            if cache_enabled and shared_conversation_cache_supported():
-                isolated_model = isolated_model.bind(extra_body={'prompt_cache_options': GPT56_EXPLICIT_CACHE_OPTIONS})
 
             async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
                 response = await isolated_model.ainvoke(messages)
@@ -1221,7 +1220,7 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
                 return Turn(value=extraction_parser.parse(str(content)))
 
-            return await run_loop(mount, evidence, model_turn, explicit_cache=cache_enabled)
+            return await run_loop(mount, evidence, model_turn)
 
     result = asyncio.run(invoke())
     structured = StructuredExtraction.model_validate(result.value).to_structured()
