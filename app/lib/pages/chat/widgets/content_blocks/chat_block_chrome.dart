@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/pages/chat/widgets/chat_bubbles.dart';
 import 'package:omi/ui/ui.dart';
 
 /// Shared visual chrome for chat content-block components.
@@ -18,7 +19,7 @@ class ChatBlockCard extends StatelessWidget {
   final VoidCallback? onTap;
   final String? semanticsLabel;
 
-  static const BorderRadius radius = OmiRadius.mdAll;
+  static const BorderRadius radius = OmiRadius.lgAll;
 
   @override
   Widget build(BuildContext context) {
@@ -26,9 +27,8 @@ class ChatBlockCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 10),
       decoration: BoxDecoration(
-        color: OmiColors.surface1,
+        color: ChatInk.fill,
         borderRadius: radius,
-        border: Border.all(color: OmiColors.border),
       ),
       child: child,
     );
