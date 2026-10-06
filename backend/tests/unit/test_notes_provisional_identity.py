@@ -801,3 +801,35 @@ def test_manual_owner_receipt_fences_entire_speaker_id():
     receipt = {'segments': {'synthetic-new-owner': {'is_user': True, 'person_id': None, 'generation': 1}}}
     _, _, _, stored = fixture(segments=segments, receipt=receipt)
     assert all(s.get('person_id') is None and s.get('speaker_identity_status') != 'not_user' for s in stored)
+
+
+def test_note_without_identity_context_still_admits_one_late_evidence_pass():
+    db = StrictFirestore({('users', UID): {'name': 'Casey Owner'}})
+    user_ref = db.collection('users').document(UID)
+    data = {'id': CID, 'status': 'completed', 'structured': {'participants': []}, 'transcript_segments': []}
+    transaction = db.transaction()
+
+    def no_identity_work(*args):
+        pytest.fail('A note without identity context must not decode or assign identities')
+
+    assert (
+        stage_notes_identity(
+            transaction,
+            user_ref,
+            data,
+            {},
+            decode_segments=no_identity_work,
+            decode_receipt=no_identity_work,
+            encode=no_identity_work,
+        )
+        is None
+    )
+    assert '_notes_identity' not in data
+    assert data['notes_screen_frame_count'] == 0
+    assert not transaction.creates and not transaction.updates
+    ref = user_ref.collection('conversations').document(CID)
+    transaction.set(ref, data)
+    marker_at = data['notes_written_at'] + timedelta(seconds=30)
+    assert claim_late_evidence(db.transaction(), ref, marker_at=marker_at, fingerprint='synthetic-window')
+    assert not claim_late_evidence(db.transaction(), ref, marker_at=marker_at, fingerprint='synthetic-window')
+    assert not any(path[-2] == 'people' for path in db.rows)

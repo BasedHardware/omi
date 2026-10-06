@@ -71,6 +71,8 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
     """
     context = write_data.pop('_notes_identity', None)
     if context is None:
+        if write_data.get('status') == 'completed' and 'structured' in write_data:
+            write_data.update(notes_screen_frame_count=0, notes_written_at=datetime.now(timezone.utc))
         return None
     level = existing.get('data_protection_level') or write_data.get('data_protection_level') or 'standard'
     uid = user_ref.id
