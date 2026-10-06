@@ -168,3 +168,32 @@ def test_callback_from_dict_non_dict_data_resilience():
     m4 = HumeJobCallbackModel.from_dict("prosody", {"job_id": "j3", "predictions": [None]})
     assert m4.job_id == "j3"
     assert m4.predictions == []
+
+
+def test_emotion_from_dict_non_dict_data_resilience():
+    m1 = HumePredictionEmotionResponseModel.from_dict(None)
+    assert m1.name == ""
+    assert m1.score == 0.0
+
+    m2 = HumePredictionEmotionResponseModel.from_dict("not-a-dict")
+    assert m2.name == ""
+    assert m2.score == 0.0
+
+
+def test_prediction_from_dict_non_dict_emotion_elements_resilience():
+    payload = {
+        "time": {"begin": 0.5, "end": 1.5},
+        "emotions": [
+            "not-a-dict",
+            None,
+            {"name": "joy", "score": 0.95},
+            123,
+            {"name": "calm", "score": 0.8},
+        ],
+    }
+    m = HumeJobModelPredictionResponseModel.from_dict(payload)
+    assert m.time == (0.5, 1.5)
+    assert len(m.emotions) == 2
+    assert [e.name for e in m.emotions] == ["joy", "calm"]
+    assert [e.score for e in m.emotions] == [0.95, 0.8]
+

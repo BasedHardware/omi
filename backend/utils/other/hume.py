@@ -17,7 +17,9 @@ class HumePredictionEmotionResponseModel:
         self.score = score
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "HumePredictionEmotionResponseModel":
+    def from_dict(cls, data: Any) -> "HumePredictionEmotionResponseModel":
+        if not isinstance(data, dict):
+            return cls("", 0.0)
         # Default to safe values for a malformed entry: a missing/invalid score must stay numeric so
         # downstream math in get_top_emotion_names (sum and threshold comparison) does not hit None.
         score = data.get("score")
@@ -91,6 +93,8 @@ class HumeJobModelPredictionResponseModel:
             cast(List[Dict[str, Any]], raw_emotions) if isinstance(raw_emotions, list) else []
         )
         for emotion in emotions_list:
+            if not isinstance(emotion, dict):
+                continue
             emo = HumePredictionEmotionResponseModel.from_dict(emotion)
             model.emotions.append(emo)
 
