@@ -237,7 +237,8 @@ actor SystemCalendarMeetingContextService {
     self.uploader = uploader
   }
 
-  /// Called asynchronously when a meeting is detected. This is the only path that can prompt.
+  /// Called asynchronously when a meeting is detected. This recording-context path can prompt;
+  /// the meeting-brief setting also has an explicit user-initiated request path.
   /// A denied/restricted decision is terminal until macOS reports a different authorization state.
   func prepareAroundNow(now: Date = Date()) async {
     switch await provider.authorizationState() {
