@@ -551,7 +551,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (!_isCurrent(generation)) return;
         // Firmware notifies its current byte on subscribe. After a failed read,
         // that first sample inherits the initial read's observation-only gate.
-        final allowResume = initialObservationDone || (allowInitialResume && !SyncWakeScope.syncOnly);
+        // A later scope must defer transport work, not consume an authorized
+        // charge edge. Capture's scope-drop reconciliation owns that deferral.
+        final allowResume = initialObservationDone || allowInitialResume;
         initialObservationDone = true;
         final chargeStarted = _chargeStarts.observe(connectedDevice!.id, charging);
         if (chargeStarted && allowResume) captureProvider?.onChargingStarted();

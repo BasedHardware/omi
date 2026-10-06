@@ -202,6 +202,29 @@ void main() {
     }
   }
 
+  test('authorized first charging notification retains its edge during a later sync scope', () async {
+    final transport = _ChargingTransport()..failRead = true;
+    final device = _device('later-sync-charge');
+    final connection = OmiDeviceConnection(device, transport);
+    final capture = _CaptureIntent();
+    final provider = DeviceProvider(chargingConnectionLoader: (_) async => connection)
+      ..connectedDevice = device
+      ..captureProvider = capture;
+    addTearDown(transport.notifications.close);
+    addTearDown(provider.dispose);
+    addTearDown(capture.dispose);
+    await provider.initiateChargingStatusListener(allowCaptureResume: true);
+    await SyncWakeScope.run(() async {
+      transport.notifications.add([1]);
+      expect(capture.chargeStarts, 1);
+      transport.notifications.add([1]);
+      expect(capture.chargeStarts, 1);
+      transport.notifications.add([0]);
+      transport.notifications.add([1]);
+      expect(capture.chargeStarts, 2);
+    });
+  });
+
   for (final origin in ['gated connect', 'sync notify', 'notify after sync', 'ordinary connect']) {
     for (final firstCharging in [false, true]) {
       test('first notify after failed read respects $origin gate (charging=$firstCharging)', () async {
