@@ -19,6 +19,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/atomic.h>
 
+#include "aad_policy.h"
 #include "sd_card.h"
 #include "storage.h"
 #include "t5838_aad.h"
@@ -67,6 +68,7 @@ static int16_t mono_buffer[MAX_FRAMES];
  * Owned here since it shares the PDM peripheral and CLK pin.
  */
 extern bool is_connected; /* from main.c: keep SD up while a phone can sync */
+extern bool is_charging;  /* charger policy remains legacy */
 
 static const struct gpio_dt_spec aad_wake = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(pdm_wake_pin), gpios, {0});
 static struct gpio_callback aad_wake_cb;
@@ -84,6 +86,41 @@ static atomic_t aad_woke = ATOMIC_INIT(0);         /* tell mic ctx it just woke 
 static atomic_t aad_in_sleep = ATOMIC_INIT(0);     /* mic is in hardware AAD sleep */
 static atomic_t aad_req_sleep = ATOMIC_INIT(0);    /* silence timer asked to sleep */
 static int64_t aad_last_voice_ms;
+static struct k_spinlock aad_timer_lock;
+static atomic_t aad_policy_generation;
+static atomic_t aad_recheck_policy;
+static atomic_t aad_pause_for_sleep;
+static atomic_val_t aad_observed_generation;
+
+static int64_t aad_silence_timeout(void)
+{
+    struct aad_policy_inputs inputs = {
+        .connected_quiet_enabled = IS_ENABLED(CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET),
+        .connected = transport_audio_connected(),
+        .subscribed = transport_is_audio_subscribed(),
+        .live_mode = transport_audio_live_mode(),
+        .charging = is_charging,
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        .transfer_active = storage_transfer_active(),
+#endif
+    };
+#ifdef CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET
+    const int64_t live_ms = CONFIG_OMI_AAD_SILENCE_TIMEOUT_MS;
+#else
+    const int64_t live_ms = CONFIG_OMI_VAD_HOLD_MS;
+#endif
+    return aad_policy_timeout(&inputs, CONFIG_OMI_VAD_HOLD_MS, live_ms);
+}
+
+static bool aad_sleep_due(void)
+{
+    int64_t timeout = aad_silence_timeout();
+    k_spinlock_key_t key = k_spin_lock(&aad_timer_lock);
+    bool due = timeout > 0 && aad_observed_generation == atomic_get(&aad_policy_generation) &&
+               k_uptime_get() - aad_last_voice_ms >= timeout;
+    k_spin_unlock(&aad_timer_lock, key);
+    return due;
+}
 
 static void aad_track_silence(const int16_t *buf, size_t n);
 static int aad_hw_start(void);
@@ -152,6 +189,22 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
         /* Cooperative pause: honour a stop request here, between reads, so the
          * STOP never interrupts an in-flight dmic_read. */
         if (atomic_get(&mic_stop_req)) {
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+            if (atomic_get(&aad_pause_for_sleep)) {
+                /* The final read may contain speech that arrived after the
+                 * request. Deliver it, update the timer, then cancel stale
+                 * sleep. Never discard a first word at the STOP boundary. */
+                if (ret == 0 && buffer) {
+                    process_audio_buffer(buffer, size);
+                    buffer = NULL;
+                }
+                if (!aad_sleep_due()) {
+                    atomic_clear(&mic_stop_req);
+                    k_sem_give(&mic_stopped_sem);
+                    continue;
+                }
+            }
+#endif
             if (ret == 0 && buffer) {
                 k_mem_slab_free(&mem_slab, buffer);
             }
@@ -319,6 +372,15 @@ bool mic_in_aad_sleep(void)
 #endif
 }
 
+void mic_aad_policy_changed(void)
+{
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    atomic_inc(&aad_policy_generation);
+    atomic_set(&aad_recheck_policy, 1);
+    k_sem_give(&aad_sem);
+#endif
+}
+
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
 
 /* Force-disable the PDM hardware so the CLK/DIN pins revert to GPIO control.
@@ -363,10 +425,28 @@ static void aad_wake_isr(const struct device *dev, struct gpio_callback *cb, uin
 static void enter_hw_aad(void)
 {
     aad_wake_irq(false); /* mask WAKE during config bit-bang */
-    mic_pause();         /* stop PDM peripheral */
+    if (!aad_sleep_due()) {
+        return;
+    }
+    atomic_set(&aad_pause_for_sleep, 1);
+    mic_pause(); /* stop PDM between reads; final voice cancels the request */
+    atomic_clear(&aad_pause_for_sleep);
+    if (mic_running) {
+        return;
+    }
+    if (!aad_sleep_due()) {
+        mic_resume();
+        return;
+    }
     k_msleep(AAD_PDM_SETTLE_MS);
-    pdm_hw_disable();                   /* fully release the CLK pin for bit-banging */
-    t5838_aad_enter();                  /* program AAD mode-A + clock into sleep */
+    pdm_hw_disable();            /* fully release the CLK pin for bit-banging */
+    int ret = t5838_aad_enter(); /* program AAD mode-A + clock into sleep */
+    if (ret) {
+        LOG_ERR("AAD entry failed: %d", ret);
+        t5838_aad_release_clk();
+        mic_resume();
+        return;
+    }
     k_msleep(CONFIG_OMI_AAD_SETTLE_MS); /* settle noise floor; swallow entry transient */
 
     /* BLE keeps advertising during sleep so a phone can connect at any time.
@@ -374,7 +454,7 @@ static void enter_hw_aad(void)
      * slave latency here was causing dropped BLE connections. */
     /* Keep the SD powered while a phone is connected so it can sync recordings at
      * any time; only cut SD power when offline + idle. */
-    if (!is_connected) {
+    if (!is_connected && !transport_audio_connected()) {
         sd_request_power(false);
     }
 
@@ -399,7 +479,7 @@ static void exit_hw_aad(void)
     t5838_aad_release_clk(); /* hand CLK back to the PDM peripheral */
     atomic_set(&aad_in_sleep, 0);
     atomic_set(&aad_woke, 1); /* reset silence timer in mic ctx */
-    sd_request_power(true);   /* power on + remount SD before audio starts flowing */
+    sd_request_power(true);   /* original SD wake request */
     mic_resume();             /* dmic START reclaims CLK via pinctrl */
     LOG_INF("AAD: WAKE -> mic resumed");
 }
@@ -420,6 +500,12 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
             enter_hw_aad();
         }
 
+        /* Reconnect/CCC/mode changes can arrive during entry's settle wait.
+         * Continuous recording must resume without waiting for acoustic WAKE. */
+        if (atomic_cas(&aad_recheck_policy, 1, 0) && atomic_get(&aad_in_sleep) && aad_silence_timeout() == 0) {
+            exit_hw_aad();
+        }
+
         if (atomic_cas(&aad_wake_pending, 1, 0)) {
             if (atomic_get(&aad_in_sleep)) {
                 exit_hw_aad();
@@ -433,18 +519,18 @@ static void aad_track_silence(const int16_t *buf, size_t n)
 {
     int64_t now = k_uptime_get();
 
-    if (atomic_cas(&aad_woke, 1, 0)) {
+    bool woke = atomic_cas(&aad_woke, 1, 0);
+    bool voice = avg_abs_amplitude(buf, n) >= CONFIG_OMI_VAD_ABS_THRESHOLD;
+    k_spinlock_key_t key = k_spin_lock(&aad_timer_lock);
+    atomic_val_t generation = atomic_get(&aad_policy_generation);
+    if (woke || voice || generation != aad_observed_generation) {
         aad_last_voice_ms = now;
+        aad_observed_generation = generation;
     }
-    if (avg_abs_amplitude(buf, n) >= CONFIG_OMI_VAD_ABS_THRESHOLD) {
-        aad_last_voice_ms = now;
-    }
-    /* Sleep after a long silence whether online or offline. When connected, the
-     * BLE link stays up (only the mic + PDM sleep); sound resumes streaming.
-     * BUT never sleep while a BLE sync transfer is running: the AAD entry +
-     * conn-param low-power would stall the sync. Defer sleep until it finishes. */
-    if (!atomic_get(&aad_in_sleep) && !storage_transfer_active() &&
-        (now - aad_last_voice_ms) >= CONFIG_OMI_VAD_HOLD_MS) {
+    k_spin_unlock(&aad_timer_lock, key);
+    /* Gate at the same mic-frame boundary as #14156, but explicitly allow
+     * connected/live/quiet AAD. The worker rechecks after the final read. */
+    if (!atomic_get(&aad_in_sleep) && aad_sleep_due()) {
         atomic_set(&aad_req_sleep, 1);
         k_sem_give(&aad_sem);
     }
@@ -472,7 +558,10 @@ static int aad_hw_start(void)
     }
     (void) gpio_pin_interrupt_configure_dt(&aad_wake, GPIO_INT_DISABLE); /* armed on first sleep */
 
+    k_spinlock_key_t key = k_spin_lock(&aad_timer_lock);
     aad_last_voice_ms = k_uptime_get();
+    aad_observed_generation = atomic_get(&aad_policy_generation);
+    k_spin_unlock(&aad_timer_lock, key);
     k_thread_create(&aad_thread_data,
                     aad_stack,
                     K_THREAD_STACK_SIZEOF(aad_stack),

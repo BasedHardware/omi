@@ -26,4 +26,8 @@ void mic_set_gain(uint8_t gain_level);
 /* True while the mic is in hardware AAD sleep (mic off, waiting for sound).
  * Lets other subsystems (e.g. the status LED) drop to their lowest-power state. */
 bool mic_in_aad_sleep(void);
+
+/* Notify the AAD worker after connection, CCC, capture mode or charger changes.
+ * Does not touch PDM in the caller (including BLE callback) context. */
+void mic_aad_policy_changed(void);
 #endif

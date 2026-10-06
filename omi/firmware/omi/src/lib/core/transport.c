@@ -50,6 +50,63 @@ extern bool is_connected;
 extern bool is_charging;
 #endif
 static atomic_t pusher_stop_flag;
+static atomic_t audio_connected;
+static atomic_t audio_subscribed;
+static atomic_t audio_live_mode; /* 0: continuous (safe default); 1: live AAD */
+
+bool transport_audio_connected(void)
+{
+    return atomic_get(&audio_connected) != 0;
+}
+
+bool transport_is_audio_subscribed(void)
+{
+    return transport_audio_connected() && atomic_get(&audio_subscribed) != 0;
+}
+
+bool transport_audio_live_mode(void)
+{
+    return atomic_get(&audio_live_mode) != 0;
+}
+
+#ifdef CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET
+/* Draft session mode, appended to audio service without shifting audio attrs.
+ * Never persist live mode: a reconnect must opt in again, protecting batch
+ * writers that use the same audio CCC as live transcription. */
+static struct bt_uuid_128 audio_capture_mode_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10004, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t
+capture_mode_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    uint8_t mode = transport_audio_live_mode() ? 1 : 0;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &mode, sizeof(mode));
+}
+
+static ssize_t capture_mode_write(struct bt_conn *conn,
+                                  const struct bt_gatt_attr *attr,
+                                  const void *buf,
+                                  uint16_t len,
+                                  uint16_t offset,
+                                  uint8_t flags)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(attr);
+    if (offset != 0 || (flags & BT_GATT_WRITE_FLAG_PREPARE)) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+    if (len != 1) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    uint8_t mode = *(const uint8_t *) buf;
+    if (mode > 1) {
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+    atomic_set(&audio_live_mode, mode);
+    mic_aad_policy_changed();
+    return len;
+}
+#endif
 
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
@@ -166,6 +223,14 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
 #endif
 
+#ifdef CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET
+    BT_GATT_CHARACTERISTIC(&audio_capture_mode_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT,
+                           capture_mode_read,
+                           capture_mode_write,
+                           NULL),
+#endif
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
@@ -310,6 +375,12 @@ static const struct bt_data bt_sd[] = {
 
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
+    /* This callback also serves the optional speaker CCC; only audio owns
+     * capture policy. Zephyr passes the CCC attribute at index 3. */
+    if (attr == &audio_service.attrs[3]) {
+        atomic_set(&audio_subscribed, value == BT_GATT_CCC_NOTIFY);
+        mic_aad_policy_changed();
+    }
     if (value == BT_GATT_CCC_NOTIFY) {
         LOG_INF("Client subscribed for notifications");
     } else if (value == 0) {
@@ -605,6 +676,8 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     }
 
     LOG_INF("bluetooth activated");
+    atomic_clear(&audio_live_mode);
+    atomic_clear(&audio_subscribed);
     current_connection = bt_conn_ref(conn);
     uint16_t mtu = bt_gatt_get_mtu(conn);
     current_mtu = mtu;
@@ -614,6 +687,12 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
      * it is mounted well before the app fires its one-shot sync command. */
     sd_request_power(true);
 #endif
+
+    /* Publish policy only after the connection and SD power request exist.
+     * A reconnect can wake offline AAD immediately: its first PCM must not
+     * reach an unpowered SD while current_connection is still NULL. */
+    atomic_set(&audio_connected, 1);
+    mic_aad_policy_changed();
 
     LOG_INF("Transport connected");
 
@@ -672,6 +751,10 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     mtu_recheck_attempts = 0;
 
     is_connected = false;
+    atomic_clear(&audio_connected);
+    atomic_clear(&audio_subscribed);
+    atomic_clear(&audio_live_mode);
+    mic_aad_policy_changed();
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         shell_bt_nus_disable();
@@ -1234,7 +1317,13 @@ void pusher(void)
             if (conn && is_subscribed) {
                 push_to_gatt(conn);
                 bt_conn_unref(conn);
-            } else if (!conn) {
+            } else if (!conn || (IS_ENABLED(CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET) && !transport_audio_live_mode())) {
+                /* Continuous recording owns the mic in this draft, even with
+                 * a link but no audio subscriber. Phone-side batch can retain
+                 * its subscription and receives every captured frame above. */
+                if (conn) {
+                    bt_conn_unref(conn);
+                }
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
                 if (is_sd_on()) {
                     storage_full_warned = false;
