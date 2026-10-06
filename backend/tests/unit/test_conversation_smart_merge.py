@@ -67,6 +67,7 @@ class World:
         self.process_persisted = True
         self.retract_error = None
         self.on_ask = None
+        self.preceding_calls = []
         for module in (smart_merge_db, sync_bridges, conversations_db, refresh_db):
             monkeypatch.setattr(module, 'get_firestore_client', lambda: self.store)
         monkeypatch.setattr(refresh_db, 'bump_action_items_list_version', lambda uid: None)
@@ -123,17 +124,28 @@ class World:
         )
         return row
 
-    def preceding(self, uid, *, source, created_before, limit, firestore_client=None):
+    def preceding(
+        self, uid, *, source, created_before, limit=None, discarded=False, transaction=None, firestore_client=None
+    ):
+        if transaction is not None:
+            assert_read_allowed = getattr(transaction, '_assert_read_allowed', None)
+            if assert_read_allowed is not None:
+                assert_read_allowed()
+        self.preceding_calls.append(
+            {'source': source, 'discarded': discarded, 'limit': limit, 'transaction': transaction is not None}
+        )
         rows = [
             dict(value, id=key[-1])
             for key, value in self.store.rows.items()
             if key[:3] == ('users', uid, 'conversations')
-            and value.get('discarded') is False
+            and value.get('discarded') is discarded
             and value.get('source') == source
+            and value.get('status') in smart_merge_db._ALL_STATUSES
             and value['created_at'] < created_before
         ]
         rows.sort(key=lambda row: row['created_at'], reverse=True)
-        return [{k: v for k, v in row.items() if k != 'transcript_segments'} for row in rows[:limit]]
+        projected = [{k: v for k, v in row.items() if k != 'transcript_segments'} for row in rows]
+        return projected if limit is None else projected[:limit]
 
     # -- fakes
     def ask(self, state, questions, *, lane, timeout_seconds, max_attempts):

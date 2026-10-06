@@ -742,6 +742,27 @@ any error keeps both. Every answered pair stores a server-only
 For a merge verdict, the decision is persisted before the absorb transaction
 so a retry reuses the same score.
 
+One more deterministic gate never reaches Jev: a discarded capture of the same
+source and `client_device_id` whose `started_at`/`finished_at` interval
+intersects the open gap — survivor `finished_at` to the donor's
+`max(started_at, created_at)`, so the wall-clock rescue gap is covered too —
+refuses the fold with `event=smart_merge decision=skip
+reason=intervening_discarded`. Endpoint touches and rows wholly outside the
+gap do not block, so a tombstone ending exactly at the survivor's finish still
+lets future chains merge. One verified exemption: a deleted donor tombstone
+that already redirected into this survivor, carries the donor ledger entry for
+it, and is listed in the survivor's own fragment ledger or `sync_merged_from`
+set is a constituent of the predecessor — its absorbed content is not an
+independent discarded capture, and a drifted finish on it cannot fence the
+survivor off forever. Every other discarded row, deleted or not, counts. The
+scan reuses the same registered preceding query (and its
+`conversations_discarded_source_status_created` index) with `discarded=True`
+and no page limit, so barriers older than the predecessor page still count.
+The absorb transaction re-runs the identical interval check on its freshly
+read rows before planning or any write, so a discard committed between the
+decision and the absorb still rejects with the same reason. No flags or
+thresholds changed.
+
 `CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` (`off` default, `shadow`, `on`;
 unset/blank/unknown = `off`) relaxes the recorded/speech-gap window for one
 narrow case: two rows proven to be generations of the same client recording.
