@@ -39,6 +39,7 @@ overlay:
   gke:
     backend-listen:
       env:
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -74,6 +75,11 @@ overlay:
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
+        SPEAKER_MATCH_SCORES_ENABLED:
+          value: 'true'
+          category: rollout
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -111,7 +117,7 @@ overlay:
         STT_RESILIENT_RECONNECT:
           value: 'false'
         STT_FAILOVER_RECOVERY_ENABLED:
-          value: 'false'
+          value: 'true'
           category: rollout
         STT_ROUTING_MODE:
           value: shadow
@@ -256,6 +262,7 @@ overlay:
           category: rollout
     pusher:
       env:
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -291,6 +298,11 @@ overlay:
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
+        SPEAKER_MATCH_SCORES_ENABLED:
+          value: 'true'
+          category: rollout
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -484,6 +496,7 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -504,6 +517,11 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -663,6 +681,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
@@ -685,6 +704,11 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
@@ -815,6 +839,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
@@ -837,6 +862,11 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
@@ -946,6 +976,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -966,6 +997,11 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'

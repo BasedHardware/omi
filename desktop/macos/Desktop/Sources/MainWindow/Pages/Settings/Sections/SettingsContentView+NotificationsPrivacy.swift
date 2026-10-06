@@ -186,6 +186,39 @@ extension SettingsContentView {
                 updateDailySummarySettings(hour: hour)
               }
             }
+
+            GlassSeparator()
+
+            settingRow(
+              title: "Recap Depth",
+              subtitle: "Choose how much detail future daily summaries include",
+              settingId: "notifications.recapdepth"
+            ) {
+              HStack(spacing: OmiSpacing.sm) {
+                if dailySummaryDepthSaving {
+                  ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Saving recap depth")
+                }
+                SettingsMenuPicker(selection: $dailySummaryDepth) {
+                  Text("Brief").tag(DailySummaryDepth.brief)
+                  Text("Normal").tag(DailySummaryDepth.normal)
+                  Text("Deep Reflection").tag(DailySummaryDepth.deep)
+                }
+                .frame(minWidth: 155)
+                .disabled(dailySummaryDepthSaving)
+                .onChange(of: dailySummaryDepth) { _, depth in
+                  updateDailySummaryDepth(depth)
+                }
+              }
+            }
+
+            if let dailySummaryDepthError {
+              Text(dailySummaryDepthError)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.errorRed)
+                .accessibilityIdentifier("recap-depth-save-error")
+            }
           }
         }
       }

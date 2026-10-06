@@ -22,6 +22,7 @@ from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from config import merge_ancestry
+import config.speaker_match_scores as match_scores
 from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
@@ -389,6 +390,13 @@ def assign_in_transaction(
         created = current is None
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
+        try:
+            contributions = [r for record in records for r in record.get(match_scores.FIELD) or []]
+            if contributions:
+                result[match_scores.FIELD] = match_scores.merge(None, contributions)
+        except Exception:
+            # Preserve the canonical's existing blob; skip only the donor merge.
+            match_scores.record_failure(logger, reason='malformed_doc')
         result['id'] = canonical
         smart_live_target = bool(plan_target and (plan_target.get('smart_merge') or {}).get('role') == 'survivor')
         result['sync_live_target'] = bool(

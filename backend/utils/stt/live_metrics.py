@@ -6,6 +6,16 @@ import threading
 
 from config.live_stt_recovery import recovery_enabled
 
+PAID_SPILLOVER_ADMISSIONS = Counter(
+    'omi_stt_paid_spillover_admissions_total', 'Fleet paid router spillover budget decisions', ['provider', 'outcome']
+)
+NO_TEXT_RESCUE_AUDIO = Counter(
+    'omi_stt_no_text_rescue_audio_seconds_total', 'Paid audio admitted during bounded progress rescue', ['provider']
+)
+NO_TEXT_RESCUE_OUTCOME = Counter(
+    'omi_stt_no_text_rescue_total', 'Bounded no-text rescue intervals and successor proof', ['outcome']
+)
+
 REPLAY_WALL = Histogram(
     'omi_stt_replay_wall_seconds',
     'Elapsed prefix replay time',

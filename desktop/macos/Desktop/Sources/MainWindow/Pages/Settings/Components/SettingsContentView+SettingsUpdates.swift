@@ -26,10 +26,28 @@ extension SettingsContentView {
   func updateDailySummarySettings(enabled: Bool? = nil, hour: Int? = nil) {
     Task {
       do {
-        let _ = try await APIClient.shared.updateDailySummarySettings(enabled: enabled, hour: hour)
+        try await APIClient.shared.updateDailySummarySettings(enabled: enabled, hour: hour)
       } catch {
         logError("Failed to update daily summary settings", error: error)
       }
+    }
+  }
+
+  func updateDailySummaryDepth(_ depth: DailySummaryDepth) {
+    guard depth != savedDailySummaryDepth, !dailySummaryDepthSaving else { return }
+    dailySummaryDepthSaving = true
+    dailySummaryDepthRevision += 1
+    dailySummaryDepthError = nil
+    Task {
+      do {
+        try await APIClient.shared.updateDailySummarySettings(depth: depth)
+        savedDailySummaryDepth = depth
+      } catch {
+        logError("Failed to update daily summary depth", error: error)
+        dailySummaryDepth = savedDailySummaryDepth
+        dailySummaryDepthError = "Couldn't save recap depth. Choose a depth again."
+      }
+      dailySummaryDepthSaving = false
     }
   }
 

@@ -172,7 +172,8 @@
         "utils/x_connector.py"
     ],
     "extraPaths": [
-        "."
+        ".",
+        "../plugins/omi-plugin-sdk/src"
     ],
     "pythonVersion": "3.11",
     "pythonPlatform": "Linux",

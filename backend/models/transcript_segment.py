@@ -120,6 +120,9 @@ class TranscriptSegment(BaseModel):
     # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
     # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
     voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
+    # Transported only in Python-mode internal dumps; the DB folds this into
+    # the bounded conversation blob and removes it from stored segments.
+    speaker_match_scores: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
@@ -163,7 +166,7 @@ class TranscriptSegment(BaseModel):
         # rewrites; JSON-mode dumps are API responses, which must never carry them.
         if getattr(info, 'mode', 'python') == 'json':
             return data
-        for key in ('audio_capture_start', 'audio_capture_end', 'audio_source'):
+        for key in ('audio_capture_start', 'audio_capture_end', 'audio_source', 'speaker_match_scores'):
             value = getattr(self, key)
             if value is not None and key not in excluded and (included is None or key in included):
                 data[key] = value
@@ -599,7 +602,7 @@ def transcript_segment_for_client(segment: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         key: value
         for key, value in segment.items()
-        if key not in ('audio_capture_start', 'audio_capture_end', 'audio_source')
+        if key not in ('audio_capture_start', 'audio_capture_end', 'audio_source', 'speaker_match_scores')
     }
 
 

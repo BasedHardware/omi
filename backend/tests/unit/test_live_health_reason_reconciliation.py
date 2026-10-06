@@ -75,6 +75,7 @@ CASES = [
     ('soniox', 'soniox_rotation', 'vendor diagnostic', 'soniox_rotation', 'censored'),
     ('soniox', 'soniox_idle_timeout', 'vendor diagnostic', 'soniox_idle_timeout', 'censored'),
     ('soniox', 'soniox_no_audio_teardown', 'vendor diagnostic', 'soniox_no_audio_teardown', 'censored'),
+    ('soniox', 'no_text_rescue_complete', 'vendor diagnostic', 'no_text_rescue_complete', 'censored'),
     ('modulate', 'client_disconnect', None, 'client_disconnect', 'censored'),
     ('modulate', 'normal_close', None, 'normal_close', 'censored'),
 ]
@@ -250,7 +251,8 @@ def test_modulate_publishes_typed_cause_before_the_dead_latch(observe_at):
 
 def test_vocabulary_is_closed_and_classifier_cannot_accept_free_text():
     assert LIVE_STT_REASONS <= ALLOWED_REASONS
-    assert len(LIVE_STT_REASONS) == 30
+    assert len(LIVE_STT_REASONS) == 31
+    assert provider_observation('failover', 'no_text_rescue_complete') is None
     assert normalize_live_stt_reason('send ConnectionError: private') == 'connection_lost'
     assert normalize_live_stt_reason('first_text_deadline', 'send_failed') == 'first_text_deadline'
     with pytest.raises(ValueError, match='bounded'):
