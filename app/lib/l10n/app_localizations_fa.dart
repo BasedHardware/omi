@@ -12413,4 +12413,44 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'نمایش در صفحهٔ قفل';
+
+  @override
+  String get meetingActionItemsTitle => 'موارد اقدام';
+
+  @override
+  String get addToTasks => 'افزودن به وظایف';
+
+  @override
+  String get showInTranscript => 'نمایش رونوشت';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'سررسید حدود $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'سررسید احتمالی $date';
+  }
+
+  @override
+  String get openTask => 'باز کردن وظیفه';
+
+  @override
+  String get completeTask => 'تکمیل وظیفه';
+
+  @override
+  String get reopenTask => 'بازگشایی وظیفه';
+
+  @override
+  String get addingToTasks => 'در حال افزودن به وظایف';
+
+  @override
+  String get taskAddedToTasks => 'وظیفه ایجاد شد';
+
+  @override
+  String get completedStatus => 'تکمیل شده';
+
+  @override
+  String get notCompletedStatus => 'در انتظار';
 }

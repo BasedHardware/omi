@@ -3881,5 +3881,17 @@
     "dismiss": "Afvis",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Vis på låseskærmen"
+    "showOnLockScreen": "Vis på låseskærmen",
+    "meetingActionItemsTitle": "Handlingspunkter",
+    "addToTasks": "Føj til Opgaver",
+    "showInTranscript": "Vis transskription",
+    "tentativeTaskDueDate": "Frist cirka {date}",
+    "tentativeTaskDueDateSemantics": "Foreløbig frist {date}",
+    "openTask": "Åbn opgave",
+    "completeTask": "Fuldfør opgave",
+    "reopenTask": "Genåbn opgave",
+    "addingToTasks": "Føjer til Opgaver",
+    "taskAddedToTasks": "Opgave oprettet",
+    "completedStatus": "Fuldført",
+    "notCompletedStatus": "Afventende"
 }

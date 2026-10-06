@@ -3839,5 +3839,17 @@
     "dismiss": "Ignora",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Mostra sulla schermata di blocco"
+    "showOnLockScreen": "Mostra sulla schermata di blocco",
+    "meetingActionItemsTitle": "Azioni da svolgere",
+    "addToTasks": "Aggiungi alle attività",
+    "showInTranscript": "Mostra trascrizione",
+    "tentativeTaskDueDate": "Scadenza circa {date}",
+    "tentativeTaskDueDateSemantics": "Scadenza provvisoria {date}",
+    "openTask": "Apri attività",
+    "completeTask": "Completa attività",
+    "reopenTask": "Riapri attività",
+    "addingToTasks": "Aggiunta alle attività…",
+    "taskAddedToTasks": "Attività creata",
+    "completedStatus": "Completato",
+    "notCompletedStatus": "In attesa"
 }

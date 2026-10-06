@@ -3839,5 +3839,17 @@
     "dismiss": "Slėpti",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Rodyti užrakinimo ekrane"
+    "showOnLockScreen": "Rodyti užrakinimo ekrane",
+    "meetingActionItemsTitle": "Veiksmai",
+    "addToTasks": "Pridėti prie užduočių",
+    "showInTranscript": "Rodyti transkripciją",
+    "tentativeTaskDueDate": "Terminas apie {date}",
+    "tentativeTaskDueDateSemantics": "Preliminarus terminas {date}",
+    "openTask": "Atidaryti užduotį",
+    "completeTask": "Užbaigti užduotį",
+    "reopenTask": "Atnaujinti užduotį",
+    "addingToTasks": "Pridedama prie užduočių",
+    "taskAddedToTasks": "Užduotis sukurta",
+    "completedStatus": "Užbaigta",
+    "notCompletedStatus": "Laukiama"
 }

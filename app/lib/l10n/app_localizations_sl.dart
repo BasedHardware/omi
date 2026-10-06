@@ -12445,4 +12445,44 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Prikaži na zaklenjenem zaslonu';
+
+  @override
+  String get meetingActionItemsTitle => 'Dejanja';
+
+  @override
+  String get addToTasks => 'Dodaj med opravila';
+
+  @override
+  String get showInTranscript => 'Pokaži prepis';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Rok približno $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Predvideni rok $date';
+  }
+
+  @override
+  String get openTask => 'Odpri opravilo';
+
+  @override
+  String get completeTask => 'Dokončaj opravilo';
+
+  @override
+  String get reopenTask => 'Znova odpri opravilo';
+
+  @override
+  String get addingToTasks => 'Dodajanje med opravila';
+
+  @override
+  String get taskAddedToTasks => 'Naloga je ustvarjena';
+
+  @override
+  String get completedStatus => 'Završeno';
+
+  @override
+  String get notCompletedStatus => 'Čakajoče';
 }

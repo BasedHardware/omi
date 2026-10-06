@@ -3839,5 +3839,17 @@
     "dismiss": "हटाएँ",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ"
+    "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ",
+    "meetingActionItemsTitle": "कार्रवाई के आइटम",
+    "addToTasks": "टास्क में जोड़ें",
+    "showInTranscript": "ट्रांसक्रिप्ट में दिखाएँ",
+    "tentativeTaskDueDate": "संभावित समय-सीमा {date}",
+    "tentativeTaskDueDateSemantics": "अनुमानित समय-सीमा {date}",
+    "openTask": "टास्क खोलें",
+    "completeTask": "टास्क पूरा करें",
+    "reopenTask": "टास्क फिर खोलें",
+    "addingToTasks": "टास्क में जोड़ा जा रहा है",
+    "taskAddedToTasks": "कार्य बनाया गया",
+    "completedStatus": "पूर्ण",
+    "notCompletedStatus": "लंबित"
 }

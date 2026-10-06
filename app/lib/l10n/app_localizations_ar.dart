@@ -12344,4 +12344,44 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'إظهار على شاشة القفل';
+
+  @override
+  String get meetingActionItemsTitle => 'بنود العمل';
+
+  @override
+  String get addToTasks => 'إضافة إلى المهام';
+
+  @override
+  String get showInTranscript => 'إظهار في النص';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'الاستحقاق التقريبي $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'موعده المتوقع $date';
+  }
+
+  @override
+  String get openTask => 'افتح المهمة';
+
+  @override
+  String get completeTask => 'إكمال المهمة';
+
+  @override
+  String get reopenTask => 'إعادة فتح المهمة';
+
+  @override
+  String get addingToTasks => 'جارٍ الإضافة إلى المهام';
+
+  @override
+  String get taskAddedToTasks => 'تم إنشاء المهمة';
+
+  @override
+  String get completedStatus => 'مكتمل';
+
+  @override
+  String get notCompletedStatus => 'قيد الانتظار';
 }

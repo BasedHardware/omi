@@ -12428,4 +12428,44 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'لاک اسکرین پر دکھائیں';
+
+  @override
+  String get meetingActionItemsTitle => 'عمل کے نکات';
+
+  @override
+  String get addToTasks => 'ٹاسکس میں شامل کریں';
+
+  @override
+  String get showInTranscript => 'ٹرانسکرپٹ میں دکھائیں';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'ممکنہ آخری تاریخ $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'اندازاً آخری تاریخ $date';
+  }
+
+  @override
+  String get openTask => 'ٹاسک کھولیں';
+
+  @override
+  String get completeTask => 'ٹاسک مکمل کریں';
+
+  @override
+  String get reopenTask => 'ٹاسک دوبارہ کھولیں';
+
+  @override
+  String get addingToTasks => 'ٹاسکس میں شامل کیا جا رہا ہے';
+
+  @override
+  String get taskAddedToTasks => 'کام بنایا گیا';
+
+  @override
+  String get completedStatus => 'مکمل';
+
+  @override
+  String get notCompletedStatus => 'زیرِ التوا';
 }

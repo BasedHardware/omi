@@ -50,6 +50,51 @@ enum ActionItemRowActionVisibility {
   }
 }
 
+/// What an action-item row says under its description: owner and due date on one line, the
+/// context on its own line. Each is absent rather than "Unknown", so an item with none of them is
+/// just its description. The web share page and the mobile note use the same layout.
+struct ActionItemRowMetadata: Equatable {
+  /// "You" for the reader's own item, otherwise the name the extraction gave.
+  let owner: String?
+  let due: String?
+  let context: String?
+
+  var hasOwnerOrDue: Bool { owner != nil || due != nil }
+
+  init(owner: String?, due: String?, context: String?) {
+    self.owner = owner
+    self.due = due
+    self.context = context
+  }
+
+  init(_ item: ActionItem, now: Date = Date(), calendar: Calendar = .autoupdatingCurrent) {
+    let name = item.ownerName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    // Email-shaped owner values are suppressed; a plain handle like "@alex" is a
+    // name and stays visible, matching the Flutter and web adapters.
+    let emailShaped = name.range(of: #"[^\s@]+@[^\s@]+\.[^\s@]+"#, options: .regularExpression) != nil
+    if item.captureOwner == "user" {
+      owner = "You"
+    } else if name.isEmpty || emailShaped {
+      owner = nil
+    } else {
+      owner = name
+    }
+    due = item.dueAt.map {
+      "Due \(item.dueCertainty == "tentative" ? "~" : "")\(OmiDateFormat.dayHeader($0, now: now, calendar: calendar))"
+    }
+    let trimmedContext = item.context?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    context = trimmedContext.isEmpty ? nil : trimmedContext
+  }
+
+  /// One or two letters for the owner's initials disc.
+  static func initials(_ name: String) -> String {
+    let words = name.split(whereSeparator: \.isWhitespace)
+    guard let first = words.first?.first else { return "?" }
+    let last = words.count > 1 ? words.last?.first.map(String.init) ?? "" : ""
+    return (String(first) + last).uppercased()
+  }
+}
+
 /// One action item in a conversation summary. It draws no card of its own: the Action Items
 /// section groups its rows in one card with separators.
 struct ConversationActionItemRow: View {
@@ -59,6 +104,7 @@ struct ConversationActionItemRow: View {
   let transcriptTitle: String
   let onTaskAction: () -> Void
   let onOpenTranscript: () -> Void
+  let onToggleCompleted: () -> Void
 
   private enum Control: Hashable {
     case task
@@ -68,6 +114,8 @@ struct ConversationActionItemRow: View {
   @State private var isHovered = false
   @FocusState private var focusedControl: Control?
 
+  private var metadata: ActionItemRowMetadata { ActionItemRowMetadata(item) }
+
   var body: some View {
     let hasFocus = focusedControl != nil
     let showsTask = ActionItemRowActionVisibility.showsTaskAction(
@@ -76,17 +124,25 @@ struct ConversationActionItemRow: View {
       isHovered: isHovered, hasFocus: hasFocus)
 
     HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-      Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(item.completed ? Ink.listeningGreen : Ink.secondary)
-        .frame(width: 16)
+      Button(action: onToggleCompleted) {
+        Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(item.completed ? Ink.listeningGreen : Ink.secondary)
+          .frame(width: 16)
+      }
+      .buttonStyle(.plain)
+      .help(item.completed ? "Reopen task" : "Complete task")
+      .accessibilityIdentifier("action-item-completion-\(item.id)")
 
-      Text(item.description)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
-        .strikethrough(item.completed, color: Ink.secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text(item.description)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
+          .strikethrough(item.completed, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        metadataLines
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
 
       taskButton
         .focused($focusedControl, equals: .task)
@@ -111,13 +167,57 @@ struct ConversationActionItemRow: View {
     .accessibilityAction(named: Text(taskState.actionTitle)) {
       if taskState.isActionable { onTaskAction() }
     }
+    .accessibilityAction(named: Text(item.completed ? "Reopen task" : "Complete task"), onToggleCompleted)
     .accessibilityAction(named: Text("Open \(transcriptTitle)"), onOpenTranscript)
     .accessibilityIdentifier("action-item-row-\(item.id)")
+  }
+
+  @ViewBuilder private var metadataLines: some View {
+    let metadata = metadata
+    if metadata.hasOwnerOrDue {
+      HStack(spacing: OmiSpacing.xs) {
+        if let owner = metadata.owner {
+          HStack(spacing: OmiSpacing.xxs) {
+            Circle()
+              .fill(Ink.rowFillHover)
+              .frame(width: 16, height: 16)
+              .overlay(
+                Text(ActionItemRowMetadata.initials(owner))
+                  .scaledFont(size: OmiType.micro, weight: .semibold)
+                  .foregroundColor(Ink.primary)
+              )
+            Text(owner)
+          }
+        }
+        if metadata.owner != nil, metadata.due != nil {
+          Text("·").foregroundColor(Ink.tertiary)
+        }
+        if let due = metadata.due {
+          Text(due)
+        }
+      }
+      .scaledFont(size: OmiType.caption)
+      .foregroundColor(Ink.secondary)
+      .lineLimit(1)
+    }
+    if let context = metadata.context {
+      Text(context)
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
   }
 
   private var accessibilityStatus: String {
     var parts: [String] = []
     if item.completed { parts.append("Completed") }
+    let metadata = metadata
+    if let owner = metadata.owner { parts.append("Owner: \(owner)") }
+    if let due = metadata.due {
+      parts.append(
+        item.dueCertainty == "tentative" ? due.replacingOccurrences(of: "Due ~", with: "Tentatively due ") : due)
+    }
+    if let context = metadata.context { parts.append(context) }
     switch taskState {
     case .idle: break
     case .adding: parts.append("Adding to Tasks")

@@ -289,6 +289,7 @@ class AppleRemindersService {
 
         let notes = args["notes"] as? String
         let listName = args["listName"] as? String
+        let completed = args["completed"] as? Bool ?? false
         let dueDate: Date? = {
             if let dueDateMs = args["dueDate"] as? Int64 {
                 return Date(timeIntervalSince1970: TimeInterval(dueDateMs) / 1000.0)
@@ -320,6 +321,10 @@ class AppleRemindersService {
         reminder.title = title
         reminder.notes = notes
         reminder.calendar = calendar
+        if completed {
+            reminder.isCompleted = true
+            reminder.completionDate = Date()
+        }
 
         if let dueDate = dueDate {
             reminder.dueDateComponents = Calendar.current.dateComponents(

@@ -12460,4 +12460,44 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Показване на заключения екран';
+
+  @override
+  String get meetingActionItemsTitle => 'Елементи за действие';
+
+  @override
+  String get addToTasks => 'Добави в Задачи';
+
+  @override
+  String get showInTranscript => 'Покажи в транскрипцията';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Срок около $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Предполагаем срок $date';
+  }
+
+  @override
+  String get openTask => 'Отвори задачата';
+
+  @override
+  String get completeTask => 'Завърши задачата';
+
+  @override
+  String get reopenTask => 'Отвори задачата отново';
+
+  @override
+  String get addingToTasks => 'Добавя се в Задачи';
+
+  @override
+  String get taskAddedToTasks => 'Задачата е създадена';
+
+  @override
+  String get completedStatus => 'Завършено';
+
+  @override
+  String get notCompletedStatus => 'В изчакване';
 }

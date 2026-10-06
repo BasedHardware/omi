@@ -14,6 +14,7 @@ import {
   shareDateTime,
   sortParticipants,
   splitSections,
+  actionItemFacts,
 } from '../lib/shared-note.mjs';
 
 const fixture = JSON.parse(
@@ -151,12 +152,7 @@ describe('assignSectionIds', () => {
       { heading: 'next steps' },
       { heading: '' },
     ]);
-    assert.deepEqual(ids, [
-      'next-steps',
-      'next-steps-2',
-      'next-steps-3',
-      'section-4',
-    ]);
+    assert.deepEqual(ids, ['next-steps', 'next-steps-2', 'next-steps-3', 'section-4']);
     assert.equal(new Set(ids).size, ids.length);
   });
 });
@@ -225,16 +221,10 @@ describe('shareDateTime and duration', () => {
   });
 
   it('only yields a duration for valid nonnegative start/end', () => {
-    assert.equal(
-      durationMinutes('2025-03-04T14:30:00Z', '2025-03-04T15:17:00Z'),
-      47,
-    );
+    assert.equal(durationMinutes('2025-03-04T14:30:00Z', '2025-03-04T15:17:00Z'), 47);
     assert.equal(durationMinutes('bad', '2025-03-04T15:17:00Z'), null);
     assert.equal(durationMinutes('2025-03-04T14:30:00Z', null), null);
-    assert.equal(
-      durationMinutes('2025-03-04T16:00:00Z', '2025-03-04T15:00:00Z'),
-      null,
-    );
+    assert.equal(durationMinutes('2025-03-04T16:00:00Z', '2025-03-04T15:00:00Z'), null);
     assert.equal(formatDuration(47), '47 min');
     assert.equal(formatDuration(60), '1 hr');
     assert.equal(formatDuration(75), '1 hr 15 min');
@@ -260,6 +250,34 @@ describe('meetingTypeLabel', () => {
     assert.equal(meetingTypeLabel(''), '');
     assert.equal(meetingTypeLabel(null), '');
     assert.equal(meetingTypeLabel(undefined), '');
+  });
+});
+
+describe('action item rows', () => {
+  it('flags an unknown or email-shaped owner instead of naming it', () => {
+    assert.equal(actionItemFacts({ owner_name: 'Eddie Thai' }).ownerKnown, true);
+    assert.equal(actionItemFacts({ owner_name: '  ' }).ownerKnown, false);
+    assert.equal(actionItemFacts({ owner_name: 'eddie@example.com' }).ownerKnown, false);
+    assert.equal(actionItemFacts({}).due, null);
+  });
+
+  it('never renders an "Unknown" owner or due date, and gives context its own line', () => {
+    const source = readFileSync(
+      new URL('../components/memories/summary/action-items.tsx', import.meta.url),
+      'utf8',
+    );
+    assert.doesNotMatch(source, /Due Unknown|Owner: \{owner\}/);
+    assert.match(source, /ownerKnown &&/);
+    assert.match(source, /due && \(/);
+    assert.match(source, /<p className="sn-context">/);
+  });
+
+  it('keeps tentative certainty and renders the date tentatively and accessibly', () => {
+    const due = actionItemFacts({ due_at: '2026-10-07T00:00:00Z', due_certainty: 'tentative' }).due;
+    assert.equal(due?.certainty, 'tentative');
+    const source = readFileSync(new URL('../components/memories/summary/action-items.tsx', import.meta.url), 'utf8');
+    assert.match(source, /Tentatively due/);
+    assert.match(source, /certainty === 'tentative' \? '~'/);
   });
 });
 
@@ -292,10 +310,7 @@ describe('share note page wiring', () => {
     assert.doesNotMatch(layoutSource, /elfsight-app-/);
     assert.match(cssSource, /\.sn-md ul\s*,[^}]*list-style-type:\s*disc/);
     assert.match(cssSource, /\.sn-md ol\s*,[^}]*list-style-type:\s*decimal/);
-    assert.match(
-      cssSource,
-      /\.sn-md (?:ul|ol) ul\s*,[^}]*list-style-type:\s*circle/,
-    );
+    assert.match(cssSource, /\.sn-md (?:ul|ol) ul\s*,[^}]*list-style-type:\s*circle/);
     assert.match(cssSource, /li::marker\s*\{[^}]*--sn-muted/);
   });
 
@@ -336,9 +351,7 @@ describe('share note page wiring', () => {
 
   it('uses h2 for all structural share headings', () => {
     const structuralSources = SHARE_RENDER_SOURCES.filter(([path]) =>
-      /sumary|action-items|memory-events|transcription\.tsx|external-data/.test(
-        path,
-      ),
+      /sumary|action-items|memory-events|transcription\.tsx|external-data/.test(path),
     );
     for (const [path, source] of structuralSources) {
       assert.doesNotMatch(
@@ -402,11 +415,7 @@ describe('shared-note fixture contract', () => {
     const sideNotes = sections.filter((s) => s.kind === 'side_notes');
     assert.equal(sideNotes.length, 1);
     assert.equal(sideNotes[0].heading, 'Side notes');
-    assert.equal(
-      sideNotes[0],
-      sections.at(-1),
-      'side_notes must be the last section',
-    );
+    assert.equal(sideNotes[0], sections.at(-1), 'side_notes must be the last section');
     assert.ok(sections.filter((s) => s.kind === 'main').length >= 4);
 
     const participantSources = new Set(['roster', 'transcript']);

@@ -22226,6 +22226,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show on Lock Screen'**
   String get showOnLockScreen;
+
+  /// meetingActionItemsTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Action items'**
+  String get meetingActionItemsTitle;
+
+  /// addToTasks
+  ///
+  /// In en, this message translates to:
+  /// **'Add to Tasks'**
+  String get addToTasks;
+
+  /// showInTranscript
+  ///
+  /// In en, this message translates to:
+  /// **'Show in Transcript'**
+  String get showInTranscript;
+
+  /// tentativeTaskDueDate
+  ///
+  /// In en, this message translates to:
+  /// **'Due ~{date}'**
+  String tentativeTaskDueDate(String date);
+
+  /// tentativeTaskDueDateSemantics
+  ///
+  /// In en, this message translates to:
+  /// **'Tentatively due {date}'**
+  String tentativeTaskDueDateSemantics(String date);
+
+  /// openTask
+  ///
+  /// In en, this message translates to:
+  /// **'Open Task'**
+  String get openTask;
+
+  /// completeTask
+  ///
+  /// In en, this message translates to:
+  /// **'Complete task'**
+  String get completeTask;
+
+  /// reopenTask
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen task'**
+  String get reopenTask;
+
+  /// addingToTasks
+  ///
+  /// In en, this message translates to:
+  /// **'Adding to Tasks…'**
+  String get addingToTasks;
+
+  /// taskAddedToTasks
+  ///
+  /// In en, this message translates to:
+  /// **'Added to Tasks'**
+  String get taskAddedToTasks;
+
+  /// completedStatus
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get completedStatus;
+
+  /// notCompletedStatus
+  ///
+  /// In en, this message translates to:
+  /// **'Not completed'**
+  String get notCompletedStatus;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -1425,11 +1425,22 @@ def set_action_item_status(
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]
 
-            for ai in description_to_items.get(action_item.description, []):
-                action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status))
+            # A row with a durable target_task_id links exactly one standalone
+            # task; mirroring by description would flip every sibling that
+            # shares the wording. Rows without the link keep the legacy
+            # description-wide mirror for released clients.
+            linked_task_ids = [action_item.target_task_id] if action_item.target_task_id else None
+            if linked_task_ids is None:
+                linked_task_ids = [ai['id'] for ai in description_to_items.get(action_item.description, [])]
+            id_to_item = {ai['id']: ai for ai in existing_items}
+            for ai_id in linked_task_ids:
+                ai = id_to_item.get(ai_id) or action_items_db.get_action_item(uid, ai_id)
+                if ai is None:
+                    continue
+                action_items_db.mark_action_item_completed(uid, ai_id, bool(new_completed_status))
                 sync_action_item_reminder(
                     user_id=uid,
-                    action_item_id=ai['id'],
+                    action_item_id=ai_id,
                     description=ai.get('description', ''),
                     completed=bool(new_completed_status),
                     due_at=ai.get('due_at'),

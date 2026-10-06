@@ -3839,5 +3839,17 @@
     "dismiss": "Hylkää",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Näytä lukitusnäytöllä"
+    "showOnLockScreen": "Näytä lukitusnäytöllä",
+    "meetingActionItemsTitle": "Toimenpiteet",
+    "addToTasks": "Lisää tehtäviin",
+    "showInTranscript": "Näytä litterointi",
+    "tentativeTaskDueDate": "Eräpäivä noin {date}",
+    "tentativeTaskDueDateSemantics": "Alustava eräpäivä {date}",
+    "openTask": "Avaa tehtävä",
+    "completeTask": "Merkitse tehtävä valmiiksi",
+    "reopenTask": "Avaa tehtävä uudelleen",
+    "addingToTasks": "Lisätään tehtäviin",
+    "taskAddedToTasks": "Tehtävä luotu",
+    "completedStatus": "Valmis",
+    "notCompletedStatus": "Odottaa"
 }

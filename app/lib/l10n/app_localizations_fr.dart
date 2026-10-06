@@ -12517,4 +12517,44 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Afficher sur l’écran verrouillé';
+
+  @override
+  String get meetingActionItemsTitle => 'Actions à suivre';
+
+  @override
+  String get addToTasks => 'Ajouter aux tâches';
+
+  @override
+  String get showInTranscript => 'Afficher la transcription';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Échéance vers le $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Échéance provisoire le $date';
+  }
+
+  @override
+  String get openTask => 'Ouvrir la tâche';
+
+  @override
+  String get completeTask => 'Terminer la tâche';
+
+  @override
+  String get reopenTask => 'Rouvrir la tâche';
+
+  @override
+  String get addingToTasks => 'Ajout aux tâches…';
+
+  @override
+  String get taskAddedToTasks => 'Tâche créée';
+
+  @override
+  String get completedStatus => 'Terminé';
+
+  @override
+  String get notCompletedStatus => 'En attente';
 }

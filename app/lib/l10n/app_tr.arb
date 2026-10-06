@@ -3874,5 +3874,17 @@
     "dismiss": "Gizle",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Kilit ekranında göster"
+    "showOnLockScreen": "Kilit ekranında göster",
+    "meetingActionItemsTitle": "Eylem öğeleri",
+    "addToTasks": "Görevlere Ekle",
+    "showInTranscript": "Transkriptte Göster",
+    "tentativeTaskDueDate": "Yaklaşık teslim tarihi {date}",
+    "tentativeTaskDueDateSemantics": "Tahmini teslim tarihi {date}",
+    "openTask": "Görevi Aç",
+    "completeTask": "Görevi Tamamla",
+    "reopenTask": "Görevi Yeniden Aç",
+    "addingToTasks": "Görevlere Ekleniyor",
+    "taskAddedToTasks": "Görev oluşturuldu",
+    "completedStatus": "Tamamlandı",
+    "notCompletedStatus": "Beklemede"
 }

@@ -137,6 +137,7 @@ class SharedActionItem(BaseModel):
     completed: bool = False
     owner_name: Optional[str] = None
     due_at: Optional[datetime] = None
+    due_certainty: Optional[Literal['confirmed', 'tentative']] = None
     context: Optional[str] = None
 
     @field_validator('owner_name', mode='before')

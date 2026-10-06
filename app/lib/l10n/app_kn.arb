@@ -11396,5 +11396,17 @@
     "dismiss": "ಮರೆಮಾಡಿ",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ"
+    "showOnLockScreen": "ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ",
+    "meetingActionItemsTitle": "ಮಾಡಬೇಕಾದ ಕೆಲಸಗಳು",
+    "addToTasks": "ಕಾರ್ಯಗಳಿಗೆ ಸೇರಿಸಿ",
+    "showInTranscript": "ಪ್ರತಿಲಿಪಿಯಲ್ಲಿ ತೋರಿಸಿ",
+    "tentativeTaskDueDate": "ಅಂದಾಜು ಅಂತಿಮ ದಿನಾಂಕ {date}",
+    "tentativeTaskDueDateSemantics": "ತಾತ್ಕಾಲಿಕ ಅಂತಿಮ ದಿನಾಂಕ {date}",
+    "openTask": "ಕಾರ್ಯ ತೆರೆಯಿರಿ",
+    "completeTask": "ಕಾರ್ಯ ಪೂರ್ಣಗೊಳಿಸಿ",
+    "reopenTask": "ಕಾರ್ಯವನ್ನು ಮತ್ತೆ ತೆರೆಯಿರಿ",
+    "addingToTasks": "ಕಾರ್ಯಗಳಿಗೆ ಸೇರಿಸಲಾಗುತ್ತಿದೆ",
+    "taskAddedToTasks": "ಕಾರ್ಯ ರಚಿಸಲಾಗಿದೆ",
+    "completedStatus": "ಪೂರ್ಣ",
+    "notCompletedStatus": "ಪಕ್ಷಾನುಮತಿ"
 }

@@ -12415,4 +12415,44 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'লক স্ক্রিনে দেখান';
+
+  @override
+  String get meetingActionItemsTitle => 'করণীয় বিষয়';
+
+  @override
+  String get addToTasks => 'টাস্কে যোগ করুন';
+
+  @override
+  String get showInTranscript => 'ট্রান্সক্রিপ্টে দেখান';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'সম্ভাব্য সময়সীমা $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'সম্ভাব্য সময়সীমা $date';
+  }
+
+  @override
+  String get openTask => 'টাস্ক খুলুন';
+
+  @override
+  String get completeTask => 'টাস্ক সম্পূর্ণ করুন';
+
+  @override
+  String get reopenTask => 'টাস্ক আবার খুলুন';
+
+  @override
+  String get addingToTasks => 'টাস্কে যোগ হচ্ছে';
+
+  @override
+  String get taskAddedToTasks => 'কাজ তৈরি করা হয়েছে';
+
+  @override
+  String get completedStatus => 'সম্পন্ন';
+
+  @override
+  String get notCompletedStatus => 'মুলতুবি';
 }

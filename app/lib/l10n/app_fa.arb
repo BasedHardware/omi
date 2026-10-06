@@ -11396,5 +11396,17 @@
     "dismiss": "رد کردن",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "نمایش در صفحهٔ قفل"
+    "showOnLockScreen": "نمایش در صفحهٔ قفل",
+    "meetingActionItemsTitle": "موارد اقدام",
+    "addToTasks": "افزودن به وظایف",
+    "showInTranscript": "نمایش رونوشت",
+    "tentativeTaskDueDate": "سررسید حدود {date}",
+    "tentativeTaskDueDateSemantics": "سررسید احتمالی {date}",
+    "openTask": "باز کردن وظیفه",
+    "completeTask": "تکمیل وظیفه",
+    "reopenTask": "بازگشایی وظیفه",
+    "addingToTasks": "در حال افزودن به وظایف",
+    "taskAddedToTasks": "وظیفه ایجاد شد",
+    "completedStatus": "تکمیل شده",
+    "notCompletedStatus": "در انتظار"
 }

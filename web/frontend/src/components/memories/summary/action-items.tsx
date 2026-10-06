@@ -15,7 +15,10 @@ export default function ActionItems({ items }: ActionsItemsProps) {
       <h2 className="sn-h3">Action items</h2>
       <ul className="sn-actions">
         {items.map((item, index) => {
-          const { owner, context, due } = actionItemFacts(item);
+          const { owner, ownerKnown, context, due } = actionItemFacts(item);
+          // Owner and due share one line; context gets its own. An unknown owner or due
+          // date is left out rather than spelled "Unknown".
+          const hasMeta = ownerKnown || Boolean(due);
           return (
             <li
               key={index}
@@ -27,25 +30,35 @@ export default function ActionItems({ items }: ActionsItemsProps) {
               </span>
               <div className="sn-action-body">
                 <p className="sn-action-text">{item.description}</p>
-                <div className="sn-action-meta">
-                  {owner && (
-                    <span className="sn-owner">
-                      <span
-                        className={`sn-avatar sn-avatar-${avatarToneIndex(owner)}`}
-                        aria-hidden="true"
-                      >
-                        {participantInitials(owner)}
+                {hasMeta && (
+                  <div className="sn-action-meta">
+                    {ownerKnown && (
+                      <span className="sn-owner">
+                        <span
+                          className={`sn-avatar sn-avatar-${avatarToneIndex(owner)}`}
+                          aria-hidden="true"
+                        >
+                          {participantInitials(owner)}
+                        </span>
+                        {owner}
                       </span>
-                      Owner: {owner}
-                    </span>
-                  )}
-                  {context && <span className="sn-context">{context}</span>}
-                  {due ? (
-                    <time dateTime={due.iso}>Due {due.label}</time>
-                  ) : (
-                    <span>Due Unknown</span>
-                  )}
-                </div>
+                    )}
+                    {due && (
+                      <time
+                        dateTime={due.iso}
+                        aria-label={
+                          due.certainty === 'tentative'
+                            ? `Tentatively due ${due.label}`
+                            : undefined
+                        }
+                      >
+                        Due {due.certainty === 'tentative' ? '~' : ''}
+                        {due.label}
+                      </time>
+                    )}
+                  </div>
+                )}
+                {context && <p className="sn-context">{context}</p>}
               </div>
             </li>
           );

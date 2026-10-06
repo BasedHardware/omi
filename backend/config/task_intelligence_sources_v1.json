@@ -12,6 +12,7 @@
         "app/lib/pages/action_items/services/action_item_export_service.dart",
         "app/lib/pages/action_items/widgets/action_item_form_sheet.dart",
         "app/lib/pages/conversation_detail/widgets.dart",
+        "app/lib/pages/conversation_detail/widgets/conversation_action_items_section.dart",
         "app/lib/pages/conversations/widgets/goals_widget.dart",
         "backend/routers/action_items.py"
       ],
@@ -59,6 +60,7 @@
       "policy_class": "direct_command",
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
+        "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift",
         "desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",

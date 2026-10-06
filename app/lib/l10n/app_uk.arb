@@ -3839,5 +3839,17 @@
     "dismiss": "Приховати",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Показувати на екрані блокування"
+    "showOnLockScreen": "Показувати на екрані блокування",
+    "meetingActionItemsTitle": "Пункти дій",
+    "addToTasks": "Додати до Завдань",
+    "showInTranscript": "Показати транскрипт",
+    "tentativeTaskDueDate": "Термін приблизно {date}",
+    "tentativeTaskDueDateSemantics": "Попередній термін {date}",
+    "openTask": "Відкрити завдання",
+    "completeTask": "Завершити завдання",
+    "reopenTask": "Відкрити завдання знову",
+    "addingToTasks": "Додавання до Завдань…",
+    "taskAddedToTasks": "Завдання створено",
+    "completedStatus": "Завершено",
+    "notCompletedStatus": "Очікування"
 }

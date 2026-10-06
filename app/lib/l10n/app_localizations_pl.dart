@@ -12454,4 +12454,44 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Pokaż na ekranie blokady';
+
+  @override
+  String get meetingActionItemsTitle => 'Zadania do wykonania';
+
+  @override
+  String get addToTasks => 'Dodaj do zadań';
+
+  @override
+  String get showInTranscript => 'Pokaż transkrypcję';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Termin około $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Wstępny termin $date';
+  }
+
+  @override
+  String get openTask => 'Otwórz zadanie';
+
+  @override
+  String get completeTask => 'Ukończ zadanie';
+
+  @override
+  String get reopenTask => 'Otwórz zadanie ponownie';
+
+  @override
+  String get addingToTasks => 'Dodawanie do zadań';
+
+  @override
+  String get taskAddedToTasks => 'Zadanie utworzone';
+
+  @override
+  String get completedStatus => 'Ukończone';
+
+  @override
+  String get notCompletedStatus => 'Oczekujące';
 }

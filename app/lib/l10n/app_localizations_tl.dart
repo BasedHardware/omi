@@ -12516,4 +12516,44 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Ipakita sa lock screen';
+
+  @override
+  String get meetingActionItemsTitle => 'Mga hakbang';
+
+  @override
+  String get addToTasks => 'Idagdag sa Mga Gawain';
+
+  @override
+  String get showInTranscript => 'Ipakita sa Transcript';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Takdang petsa mga $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Pansamantalang takdang petsa $date';
+  }
+
+  @override
+  String get openTask => 'Buksan ang Gawain';
+
+  @override
+  String get completeTask => 'Kumpletuhin ang gawain';
+
+  @override
+  String get reopenTask => 'Muling buksan ang gawain';
+
+  @override
+  String get addingToTasks => 'Idinadagdag sa Mga Gawain';
+
+  @override
+  String get taskAddedToTasks => 'Ang gawain ay nilikha na';
+
+  @override
+  String get completedStatus => 'Kumpleto';
+
+  @override
+  String get notCompletedStatus => 'Naghihintay';
 }

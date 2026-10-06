@@ -3839,5 +3839,17 @@
     "dismiss": "Skryť",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Zobraziť na zamknutej obrazovke"
+    "showOnLockScreen": "Zobraziť na zamknutej obrazovke",
+    "meetingActionItemsTitle": "Akčné položky",
+    "addToTasks": "Pridať do úloh",
+    "showInTranscript": "Zobraziť prepis",
+    "tentativeTaskDueDate": "Termín približne {date}",
+    "tentativeTaskDueDateSemantics": "Predbežný termín {date}",
+    "openTask": "Otvoriť úlohu",
+    "completeTask": "Dokončiť úlohu",
+    "reopenTask": "Znova otvoriť úlohu",
+    "addingToTasks": "Pridáva sa do úloh",
+    "taskAddedToTasks": "Úloha bola vytvorená",
+    "completedStatus": "Dokončené",
+    "notCompletedStatus": "Čakajúce"
 }

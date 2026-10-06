@@ -12419,4 +12419,44 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Zobrazit na zamčené obrazovce';
+
+  @override
+  String get meetingActionItemsTitle => 'Akční položky';
+
+  @override
+  String get addToTasks => 'Přidat do úkolů';
+
+  @override
+  String get showInTranscript => 'Zobrazit přepis';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Termín přibližně $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Předběžný termín $date';
+  }
+
+  @override
+  String get openTask => 'Otevřít úkol';
+
+  @override
+  String get completeTask => 'Dokončit úkol';
+
+  @override
+  String get reopenTask => 'Znovu otevřít úkol';
+
+  @override
+  String get addingToTasks => 'Přidává se do úkolů';
+
+  @override
+  String get taskAddedToTasks => 'Úkol vytvořen';
+
+  @override
+  String get completedStatus => 'Dokončeno';
+
+  @override
+  String get notCompletedStatus => 'Čekající';
 }

@@ -12443,4 +12443,44 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Rādīt bloķēšanas ekrānā';
+
+  @override
+  String get meetingActionItemsTitle => 'Veicamie darbi';
+
+  @override
+  String get addToTasks => 'Pievienot uzdevumiem';
+
+  @override
+  String get showInTranscript => 'Rādīt transkripciju';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Termiņš ap $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Provizoriskais termiņš $date';
+  }
+
+  @override
+  String get openTask => 'Atvērt uzdevumu';
+
+  @override
+  String get completeTask => 'Pabeigt uzdevumu';
+
+  @override
+  String get reopenTask => 'Atvērt uzdevumu vēlreiz';
+
+  @override
+  String get addingToTasks => 'Pievieno uzdevumiem';
+
+  @override
+  String get taskAddedToTasks => 'Uzdevums izveidots';
+
+  @override
+  String get completedStatus => 'Pabeigts';
+
+  @override
+  String get notCompletedStatus => 'Gaida';
 }

@@ -12415,4 +12415,44 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Vis på låseskjermen';
+
+  @override
+  String get meetingActionItemsTitle => 'Handlingspunkter';
+
+  @override
+  String get addToTasks => 'Legg til i Oppgaver';
+
+  @override
+  String get showInTranscript => 'Vis transkripsjon';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Frist omtrent $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Foreløpig frist $date';
+  }
+
+  @override
+  String get openTask => 'Åpne oppgave';
+
+  @override
+  String get completeTask => 'Fullfør oppgave';
+
+  @override
+  String get reopenTask => 'Åpne oppgave på nytt';
+
+  @override
+  String get addingToTasks => 'Legger til i Oppgaver';
+
+  @override
+  String get taskAddedToTasks => 'Oppgave opprettet';
+
+  @override
+  String get completedStatus => 'Fullført';
+
+  @override
+  String get notCompletedStatus => 'Ventende';
 }

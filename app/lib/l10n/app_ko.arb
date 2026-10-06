@@ -3839,5 +3839,17 @@
     "dismiss": "닫기",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "잠금 화면에 표시"
+    "showOnLockScreen": "잠금 화면에 표시",
+    "meetingActionItemsTitle": "실행 항목",
+    "addToTasks": "작업에 추가",
+    "showInTranscript": "스크립트에서 보기",
+    "tentativeTaskDueDate": "기한 약 {date}",
+    "tentativeTaskDueDateSemantics": "예정 기한 {date}",
+    "openTask": "작업 열기",
+    "completeTask": "작업 완료",
+    "reopenTask": "작업 다시 열기",
+    "addingToTasks": "작업에 추가 중…",
+    "taskAddedToTasks": "작업이 생성되었습니다",
+    "completedStatus": "완료",
+    "notCompletedStatus": "대기 중"
 }

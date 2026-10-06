@@ -11396,5 +11396,17 @@
     "dismiss": "সরিয়ে দিন",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "লক স্ক্রিনে দেখান"
+    "showOnLockScreen": "লক স্ক্রিনে দেখান",
+    "meetingActionItemsTitle": "করণীয় বিষয়",
+    "addToTasks": "টাস্কে যোগ করুন",
+    "showInTranscript": "ট্রান্সক্রিপ্টে দেখান",
+    "tentativeTaskDueDate": "সম্ভাব্য সময়সীমা {date}",
+    "tentativeTaskDueDateSemantics": "সম্ভাব্য সময়সীমা {date}",
+    "openTask": "টাস্ক খুলুন",
+    "completeTask": "টাস্ক সম্পূর্ণ করুন",
+    "reopenTask": "টাস্ক আবার খুলুন",
+    "addingToTasks": "টাস্কে যোগ হচ্ছে",
+    "taskAddedToTasks": "কাজ তৈরি করা হয়েছে",
+    "completedStatus": "সম্পন্ন",
+    "notCompletedStatus": "মুলতুবি"
 }

@@ -3874,5 +3874,17 @@
     "dismiss": "Masquer",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Afficher sur l’écran verrouillé"
+    "showOnLockScreen": "Afficher sur l’écran verrouillé",
+    "meetingActionItemsTitle": "Actions à suivre",
+    "addToTasks": "Ajouter aux tâches",
+    "showInTranscript": "Afficher la transcription",
+    "tentativeTaskDueDate": "Échéance vers le {date}",
+    "tentativeTaskDueDateSemantics": "Échéance provisoire le {date}",
+    "openTask": "Ouvrir la tâche",
+    "completeTask": "Terminer la tâche",
+    "reopenTask": "Rouvrir la tâche",
+    "addingToTasks": "Ajout aux tâches…",
+    "taskAddedToTasks": "Tâche créée",
+    "completedStatus": "Terminé",
+    "notCompletedStatus": "En attente"
 }

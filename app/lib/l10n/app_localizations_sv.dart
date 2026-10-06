@@ -12420,4 +12420,44 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Visa på låsskärmen';
+
+  @override
+  String get meetingActionItemsTitle => 'Åtgärdspunkter';
+
+  @override
+  String get addToTasks => 'Lägg till i Uppgifter';
+
+  @override
+  String get showInTranscript => 'Visa transkription';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Förfaller cirka $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Preliminärt datum $date';
+  }
+
+  @override
+  String get openTask => 'Öppna uppgift';
+
+  @override
+  String get completeTask => 'Slutför uppgift';
+
+  @override
+  String get reopenTask => 'Öppna uppgift igen';
+
+  @override
+  String get addingToTasks => 'Lägger till i Uppgifter';
+
+  @override
+  String get taskAddedToTasks => 'Uppgift skapad';
+
+  @override
+  String get completedStatus => 'Klar';
+
+  @override
+  String get notCompletedStatus => 'Väntande';
 }

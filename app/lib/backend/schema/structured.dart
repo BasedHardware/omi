@@ -5,8 +5,8 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 // Phase 4.1 — Structured, ActionItem, AppResponse, and Event are kept as deliberate
 // adapters, not typedefs:
 //  - Structured: client-only `id`, getEmoji() behavior (utf8 decode + random pick),
-//    fromJson that accepts String action items, and toJson that serializes actionItems
-//    as description strings (generated emits objects).
+//    fromJson that accepts legacy String action items, and cache-safe object
+//    serialization of actionItems (generated emits objects).
 //  - ActionItem: client-only `id`/`deleted` fields absent from GeneratedActionItem.
 //  - AppResponse: client-only `id` and toJson key 'appId' (generated emits 'app_id').
 //  - Event: client-only `id`, field name `startsAt` (generated `start`), and fromJson
@@ -149,7 +149,7 @@ class Structured {
       'emoji': emoji,
       'category': category,
       'sections': sections.map((section) => section.toJson()).toList(),
-      'actionItems': actionItems.map((item) => item.description).toList(),
+      'actionItems': actionItems.map((item) => item.toJson()).toList(),
       'events': events.map((event) => event.toJson()).toList(),
     };
   }
@@ -174,23 +174,64 @@ class ActionItem {
   bool completed = false;
   bool deleted = false;
 
-  ActionItem(this.description, {this.id = 0, this.completed = false, this.deleted = false});
+  /// Extraction ownership (`capture_owner`): "user" when the item is the reader's own.
+  String? captureOwner;
 
-  factory ActionItem.fromGenerated(wire.GeneratedActionItem generated) {
-    return ActionItem(generated.description, completed: generated.completed);
-  }
+  /// Who the extraction says owns the item, when it names someone.
+  String? ownerName;
+  DateTime? dueAt;
+  String? dueCertainty;
+  String? targetTaskId;
+  List<String> sourceSegmentIds;
 
-  static fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedActionItem.fromJson(json);
+  /// Why the item exists, in a sentence ("Eddie offered to pass it on").
+  String? context;
+
+  ActionItem(
+    this.description, {
+    this.id = 0,
+    this.completed = false,
+    this.deleted = false,
+    this.captureOwner,
+    this.ownerName,
+    this.dueAt,
+    this.dueCertainty,
+    this.targetTaskId,
+    this.sourceSegmentIds = const [],
+    this.context,
+  });
+
+  factory ActionItem.fromGenerated(wire.GeneratedActionItem generated, {bool deleted = false}) {
     return ActionItem(
       generated.description,
       completed: generated.completed,
-      deleted: json['deleted'] ?? false,
+      deleted: deleted,
+      captureOwner: generated.captureOwner,
+      ownerName: generated.ownerName,
+      dueAt: generated.dueAt,
+      dueCertainty: generated.dueCertainty,
+      targetTaskId: generated.targetTaskId,
+      sourceSegmentIds: generated.sourceSegmentIds ?? const [],
+      context: generated.context,
     );
   }
 
+  static fromJson(Map<String, dynamic> json) {
+    return ActionItem.fromGenerated(wire.GeneratedActionItem.fromJson(json), deleted: json['deleted'] ?? false);
+  }
+
   wire.GeneratedActionItem toGenerated() {
-    return wire.GeneratedActionItem(description: description, completed: completed);
+    return wire.GeneratedActionItem(
+      description: description,
+      completed: completed,
+      captureOwner: captureOwner,
+      ownerName: ownerName,
+      dueAt: dueAt,
+      dueCertainty: dueCertainty,
+      targetTaskId: targetTaskId,
+      sourceSegmentIds: sourceSegmentIds,
+      context: context,
+    );
   }
 
   toJson() => {...toGenerated().toJson(), 'deleted': deleted};

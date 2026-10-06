@@ -96,10 +96,14 @@ export function sharedConversationMarkdown(memory, id) {
   lines.push('', '## Action items', '');
   for (const item of structured.action_items ?? []) {
     const { owner, due, context } = actionItemFacts(item);
+    // A tentative date reads as tentative here too, matching the HTML page.
+    const dueLabel = due
+      ? `${due.iso} (${due.label}${due.certainty === 'tentative' ? ', tentative' : ''})`
+      : 'Unknown';
     lines.push(
       `- [${item.completed ? 'x' : ' '}] ${inline(item.description)}`,
       `  - Owner: ${inline(owner)}`,
-      `  - Due: ${due ? `${due.iso} (${due.label})` : 'Unknown'}`,
+      `  - Due: ${dueLabel}`,
     );
     if (context) lines.push(`  - Context: ${inline(context)}`);
   }

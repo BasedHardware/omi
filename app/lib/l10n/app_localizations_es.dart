@@ -12451,4 +12451,44 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Mostrar en la pantalla de bloqueo';
+
+  @override
+  String get meetingActionItemsTitle => 'Acciones pendientes';
+
+  @override
+  String get addToTasks => 'Añadir a Tareas';
+
+  @override
+  String get showInTranscript => 'Mostrar transcripción';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Vence aproximadamente $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Vencimiento provisional $date';
+  }
+
+  @override
+  String get openTask => 'Abrir tarea';
+
+  @override
+  String get completeTask => 'Completar tarea';
+
+  @override
+  String get reopenTask => 'Reabrir tarea';
+
+  @override
+  String get addingToTasks => 'Añadiendo a Tareas';
+
+  @override
+  String get taskAddedToTasks => 'Tarea creada';
+
+  @override
+  String get completedStatus => 'Completado';
+
+  @override
+  String get notCompletedStatus => 'Pendiente';
 }

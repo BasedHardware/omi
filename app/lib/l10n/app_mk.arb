@@ -11396,5 +11396,17 @@
     "dismiss": "Сокриј",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Прикажи на заклучениот екран"
+    "showOnLockScreen": "Прикажи на заклучениот екран",
+    "meetingActionItemsTitle": "Активности",
+    "addToTasks": "Додај во Задачи",
+    "showInTranscript": "Прикажи транскрипт",
+    "tentativeTaskDueDate": "Рок околу {date}",
+    "tentativeTaskDueDateSemantics": "Привремен рок {date}",
+    "openTask": "Отвори задача",
+    "completeTask": "Заврши задача",
+    "reopenTask": "Повторно отвори задача",
+    "addingToTasks": "Се додава во Задачи",
+    "taskAddedToTasks": "Задачата е создадена",
+    "completedStatus": "Завршено",
+    "notCompletedStatus": "Во очекување"
 }

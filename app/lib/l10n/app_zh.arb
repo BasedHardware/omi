@@ -3839,5 +3839,17 @@
     "dismiss": "忽略",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "在锁定屏幕上显示"
+    "showOnLockScreen": "在锁定屏幕上显示",
+    "meetingActionItemsTitle": "行动事项",
+    "addToTasks": "添加到任务",
+    "showInTranscript": "在文字稿中显示",
+    "tentativeTaskDueDate": "截止日期约为 {date}",
+    "tentativeTaskDueDateSemantics": "预计截止日期 {date}",
+    "openTask": "打开任务",
+    "completeTask": "完成任务",
+    "reopenTask": "重新打开任务",
+    "addingToTasks": "正在添加到任务…",
+    "taskAddedToTasks": "任务已创建",
+    "completedStatus": "已完成",
+    "notCompletedStatus": "待处理"
 }

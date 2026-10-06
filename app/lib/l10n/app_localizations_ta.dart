@@ -12499,4 +12499,44 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'பூட்டுத் திரையில் காட்டு';
+
+  @override
+  String get meetingActionItemsTitle => 'செயல் உருப்படிகள்';
+
+  @override
+  String get addToTasks => 'பணிகளில் சேர்க்கவும்';
+
+  @override
+  String get showInTranscript => 'உரைப்பதிவில் காண்பிக்கவும்';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'தோராயமான காலக்கெடு $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'தற்காலிக காலக்கெடு $date';
+  }
+
+  @override
+  String get openTask => 'பணியைத் திறக்கவும்';
+
+  @override
+  String get completeTask => 'பணியை முடிக்கவும்';
+
+  @override
+  String get reopenTask => 'பணியை மீண்டும் திறக்கவும்';
+
+  @override
+  String get addingToTasks => 'பணிகளில் சேர்க்கப்படுகிறது';
+
+  @override
+  String get taskAddedToTasks => 'பணி உருவாக்கப்பட்டுள்ளது';
+
+  @override
+  String get completedStatus => 'முடிந்தவை';
+
+  @override
+  String get notCompletedStatus => 'நிலுவையில் உள்ளது';
 }

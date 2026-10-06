@@ -11396,5 +11396,17 @@
     "dismiss": "Схаваць",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Паказваць на экране блакіроўкі"
+    "showOnLockScreen": "Паказваць на экране блакіроўкі",
+    "meetingActionItemsTitle": "Элементы действий",
+    "addToTasks": "Дадаць у задачы",
+    "showInTranscript": "Паказаць у расшыфроўцы",
+    "tentativeTaskDueDate": "Тэрмін прыблізна {date}",
+    "tentativeTaskDueDateSemantics": "Меркаваны тэрмін {date}",
+    "openTask": "Адкрыць задачу",
+    "completeTask": "Завяршыць задачу",
+    "reopenTask": "Адкрыць задачу нанова",
+    "addingToTasks": "Дадаецца ў задачы",
+    "taskAddedToTasks": "Задача створана",
+    "completedStatus": "Завершана",
+    "notCompletedStatus": "Чакаючыя"
 }

@@ -25534,6 +25534,21 @@
             ],
             "title": "Due At"
           },
+          "due_certainty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirmed",
+                  "tentative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Certainty"
+          },
           "owner_name": {
             "anyOf": [
               {

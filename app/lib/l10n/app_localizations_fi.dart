@@ -12419,4 +12419,44 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Näytä lukitusnäytöllä';
+
+  @override
+  String get meetingActionItemsTitle => 'Toimenpiteet';
+
+  @override
+  String get addToTasks => 'Lisää tehtäviin';
+
+  @override
+  String get showInTranscript => 'Näytä litterointi';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Eräpäivä noin $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Alustava eräpäivä $date';
+  }
+
+  @override
+  String get openTask => 'Avaa tehtävä';
+
+  @override
+  String get completeTask => 'Merkitse tehtävä valmiiksi';
+
+  @override
+  String get reopenTask => 'Avaa tehtävä uudelleen';
+
+  @override
+  String get addingToTasks => 'Lisätään tehtäviin';
+
+  @override
+  String get taskAddedToTasks => 'Tehtävä luotu';
+
+  @override
+  String get completedStatus => 'Valmis';
+
+  @override
+  String get notCompletedStatus => 'Odottaa';
 }

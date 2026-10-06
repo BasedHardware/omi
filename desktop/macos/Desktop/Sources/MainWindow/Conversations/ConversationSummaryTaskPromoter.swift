@@ -98,7 +98,8 @@ final class ConversationSummaryTaskPromoter: ObservableObject {
     let item = items[index]
     items[index] = ActionItem(
       description: item.description, completed: item.completed, deleted: item.deleted,
-      captureOwner: item.captureOwner, targetTaskID: taskID, sourceSegmentIDs: item.sourceSegmentIDs)
+      captureOwner: item.captureOwner, targetTaskID: taskID, sourceSegmentIDs: item.sourceSegmentIDs,
+      ownerName: item.ownerName, dueAt: item.dueAt, dueCertainty: item.dueCertainty, context: item.context)
     let old = conversation.structured
     var linked = conversation
     linked.structured = Structured(

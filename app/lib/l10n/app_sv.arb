@@ -3839,5 +3839,17 @@
     "dismiss": "Avvisa",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Visa på låsskärmen"
+    "showOnLockScreen": "Visa på låsskärmen",
+    "meetingActionItemsTitle": "Åtgärdspunkter",
+    "addToTasks": "Lägg till i Uppgifter",
+    "showInTranscript": "Visa transkription",
+    "tentativeTaskDueDate": "Förfaller cirka {date}",
+    "tentativeTaskDueDateSemantics": "Preliminärt datum {date}",
+    "openTask": "Öppna uppgift",
+    "completeTask": "Slutför uppgift",
+    "reopenTask": "Öppna uppgift igen",
+    "addingToTasks": "Lägger till i Uppgifter",
+    "taskAddedToTasks": "Uppgift skapad",
+    "completedStatus": "Klar",
+    "notCompletedStatus": "Väntande"
 }

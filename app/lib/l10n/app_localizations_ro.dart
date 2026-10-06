@@ -12470,4 +12470,44 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Afișează pe ecranul de blocare';
+
+  @override
+  String get meetingActionItemsTitle => 'Elemente de acțiune';
+
+  @override
+  String get addToTasks => 'Adaugă la Sarcini';
+
+  @override
+  String get showInTranscript => 'Afișează transcrierea';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Scadență aproximativă $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Scadență provizorie $date';
+  }
+
+  @override
+  String get openTask => 'Deschide sarcina';
+
+  @override
+  String get completeTask => 'Finalizează sarcina';
+
+  @override
+  String get reopenTask => 'Redeschide sarcina';
+
+  @override
+  String get addingToTasks => 'Se adaugă la Sarcini';
+
+  @override
+  String get taskAddedToTasks => 'Sarcină creată';
+
+  @override
+  String get completedStatus => 'Finalizat';
+
+  @override
+  String get notCompletedStatus => 'În așteptare';
 }

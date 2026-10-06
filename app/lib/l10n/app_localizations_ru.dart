@@ -12458,4 +12458,44 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Показывать на экране блокировки';
+
+  @override
+  String get meetingActionItemsTitle => 'Пункты действий';
+
+  @override
+  String get addToTasks => 'Добавить в задачи';
+
+  @override
+  String get showInTranscript => 'Показать расшифровку';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Срок примерно $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Предварительный срок $date';
+  }
+
+  @override
+  String get openTask => 'Открыть задачу';
+
+  @override
+  String get completeTask => 'Завершить задачу';
+
+  @override
+  String get reopenTask => 'Открыть задачу снова';
+
+  @override
+  String get addingToTasks => 'Добавление в задачи…';
+
+  @override
+  String get taskAddedToTasks => 'Задача создана';
+
+  @override
+  String get completedStatus => 'Завершено';
+
+  @override
+  String get notCompletedStatus => 'Ожидание';
 }

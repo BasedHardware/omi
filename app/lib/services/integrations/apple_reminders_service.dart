@@ -74,7 +74,13 @@ class AppleRemindersService {
 
   /// Add a task to Apple Reminders.
   /// Returns the calendarItemIdentifier on success, null on failure.
-  Future<String?> addReminder({required String title, String? notes, DateTime? dueDate, String? listName}) async {
+  Future<String?> addReminder({
+    required String title,
+    String? notes,
+    DateTime? dueDate,
+    String? listName,
+    bool completed = false,
+  }) async {
     if (!isAvailable) {
       throw UnsupportedError('Apple Reminders is only available on iOS and macOS');
     }
@@ -84,6 +90,7 @@ class AppleRemindersService {
         'title': title,
         'notes': notes,
         'dueDate': dueDate?.millisecondsSinceEpoch,
+        'completed': completed,
       };
       if (listName != null) args['listName'] = listName;
       final result = await _channel.invokeMethod('addReminder', args);

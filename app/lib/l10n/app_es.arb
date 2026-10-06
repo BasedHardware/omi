@@ -3839,5 +3839,17 @@
     "dismiss": "Descartar",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Mostrar en la pantalla de bloqueo"
+    "showOnLockScreen": "Mostrar en la pantalla de bloqueo",
+    "meetingActionItemsTitle": "Acciones pendientes",
+    "addToTasks": "Añadir a Tareas",
+    "showInTranscript": "Mostrar transcripción",
+    "tentativeTaskDueDate": "Vence aproximadamente {date}",
+    "tentativeTaskDueDateSemantics": "Vencimiento provisional {date}",
+    "openTask": "Abrir tarea",
+    "completeTask": "Completar tarea",
+    "reopenTask": "Reabrir tarea",
+    "addingToTasks": "Añadiendo a Tareas",
+    "taskAddedToTasks": "Tarea creada",
+    "completedStatus": "Completado",
+    "notCompletedStatus": "Pendiente"
 }

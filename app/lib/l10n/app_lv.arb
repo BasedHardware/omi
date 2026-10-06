@@ -3839,5 +3839,17 @@
     "dismiss": "Paslēpt",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Rādīt bloķēšanas ekrānā"
+    "showOnLockScreen": "Rādīt bloķēšanas ekrānā",
+    "meetingActionItemsTitle": "Veicamie darbi",
+    "addToTasks": "Pievienot uzdevumiem",
+    "showInTranscript": "Rādīt transkripciju",
+    "tentativeTaskDueDate": "Termiņš ap {date}",
+    "tentativeTaskDueDateSemantics": "Provizoriskais termiņš {date}",
+    "openTask": "Atvērt uzdevumu",
+    "completeTask": "Pabeigt uzdevumu",
+    "reopenTask": "Atvērt uzdevumu vēlreiz",
+    "addingToTasks": "Pievieno uzdevumiem",
+    "taskAddedToTasks": "Uzdevums izveidots",
+    "completedStatus": "Pabeigts",
+    "notCompletedStatus": "Gaida"
 }

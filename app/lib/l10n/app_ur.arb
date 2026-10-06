@@ -11396,5 +11396,17 @@
     "dismiss": "چھپائیں",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "لاک اسکرین پر دکھائیں"
+    "showOnLockScreen": "لاک اسکرین پر دکھائیں",
+    "meetingActionItemsTitle": "عمل کے نکات",
+    "addToTasks": "ٹاسکس میں شامل کریں",
+    "showInTranscript": "ٹرانسکرپٹ میں دکھائیں",
+    "tentativeTaskDueDate": "ممکنہ آخری تاریخ {date}",
+    "tentativeTaskDueDateSemantics": "اندازاً آخری تاریخ {date}",
+    "openTask": "ٹاسک کھولیں",
+    "completeTask": "ٹاسک مکمل کریں",
+    "reopenTask": "ٹاسک دوبارہ کھولیں",
+    "addingToTasks": "ٹاسکس میں شامل کیا جا رہا ہے",
+    "taskAddedToTasks": "کام بنایا گیا",
+    "completedStatus": "مکمل",
+    "notCompletedStatus": "زیرِ التوا"
 }

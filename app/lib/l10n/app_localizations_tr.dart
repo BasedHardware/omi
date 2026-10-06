@@ -12427,4 +12427,44 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Kilit ekranında göster';
+
+  @override
+  String get meetingActionItemsTitle => 'Eylem öğeleri';
+
+  @override
+  String get addToTasks => 'Görevlere Ekle';
+
+  @override
+  String get showInTranscript => 'Transkriptte Göster';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Yaklaşık teslim tarihi $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Tahmini teslim tarihi $date';
+  }
+
+  @override
+  String get openTask => 'Görevi Aç';
+
+  @override
+  String get completeTask => 'Görevi Tamamla';
+
+  @override
+  String get reopenTask => 'Görevi Yeniden Aç';
+
+  @override
+  String get addingToTasks => 'Görevlere Ekleniyor';
+
+  @override
+  String get taskAddedToTasks => 'Görev oluşturuldu';
+
+  @override
+  String get completedStatus => 'Tamamlandı';
+
+  @override
+  String get notCompletedStatus => 'Beklemede';
 }
