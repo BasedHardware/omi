@@ -1301,6 +1301,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_finops_unit_cost_job.yml/deploy": {
+      "budget_p50_minutes": 45,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Manual or one-branch prod deploy of the finops unit-cost job, including one producer execution. Not a pull-request check.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_firestore_indexes.yml/apply_field_exemptions": {
       "budget_p50_minutes": 5,
       "display_name": "apply_field_exemptions",
@@ -3985,6 +4003,53 @@
               "default": "",
               "description": "Release version (optional)",
               "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_finops_unit_cost_job.yml": {
+      "name": "Deploy FinOps Unit Cost Job to Cloud Run",
+      "owner": "CI maintainers",
+      "rationale": "Manual workflow_dispatch deploy of the finops unit-cost Cloud Run job. Not a pull-request check.",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true",
+              "type": "string"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "provision_scheduler": {
+              "default": "true",
+              "description": "Also create/update the Cloud Scheduler trigger",
+              "options": [
+                "true",
+                "false"
+              ],
+              "required": "false",
+              "type": "choice"
+            },
+            "run_after_deploy": {
+              "default": "false",
+              "description": "Execute the job once after deploy (gap-fills missing settled days)",
+              "options": [
+                "false",
+                "true"
+              ],
+              "required": "false",
+              "type": "choice"
             }
           }
         }

@@ -55,6 +55,42 @@ def test_unreadable_subscription_is_not_terminal(monkeypatch):
     assert stripe_utils.is_subscription_terminal('sub_123') is False
 
 
+def test_missing_subscription_is_terminal(monkeypatch):
+    """A stored subscription id that Stripe does not know cannot bill: the goal state holds.
+
+    Regression for the account-deletion deadlock of 2026-10-06: a user doc pointed at a
+    synthetic ``sub_agent_test_model_attr`` id, cancel returned None, this returned False, and
+    the wipe failed 15 times while the auth fence kept the user out of the app.
+    """
+    monkeypatch.setattr(
+        stripe_utils.stripe.Subscription,
+        'retrieve',
+        MagicMock(
+            side_effect=stripe.InvalidRequestError(
+                "No such subscription: 'sub_agent_test_model_attr'",
+                'id',
+                code='resource_missing',
+                http_status=404,
+            )
+        ),
+    )
+
+    assert stripe_utils.is_subscription_terminal('sub_agent_test_model_attr') is True
+
+
+def test_other_invalid_requests_are_not_terminal(monkeypatch):
+    """Only a missing resource is terminal; a malformed request still fails closed."""
+    monkeypatch.setattr(
+        stripe_utils.stripe.Subscription,
+        'retrieve',
+        MagicMock(
+            side_effect=stripe.InvalidRequestError('bad id', 'id', code='parameter_invalid_empty', http_status=400)
+        ),
+    )
+
+    assert stripe_utils.is_subscription_terminal('') is False
+
+
 def _uid_subscriptions(*subscriptions: tuple[str, str, dict[str, str]]) -> stripe.SearchResultObject:
     return stripe.SearchResultObject.construct_from(
         {
