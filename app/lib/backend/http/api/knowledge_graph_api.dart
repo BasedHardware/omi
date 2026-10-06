@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
@@ -48,8 +49,17 @@ class KnowledgeGraphApi {
   /// is already derived and up to date. This method synthesizes a client-side
   /// [wire.GeneratedRebuildResponse] with status `'canonical_up_to_date'` so
   /// callers can recognize this terminal state without polling or failing.
-  static Future<Map<String, dynamic>> rebuildKnowledgeGraph() async {
-    final response = await makeApiCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
+  static Future<Map<String, dynamic>> rebuildKnowledgeGraph({
+    @visibleForTesting
+    Future<http.Response?> Function({
+      required String url,
+      required Map<String, String> headers,
+      required String body,
+      required String method,
+    })? apiCaller,
+  }) async {
+    final makeCall = apiCaller ?? makeApiCall;
+    final response = await makeCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
 
     if (response != null && response.statusCode == 200) {
       return wire.GeneratedRebuildResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();

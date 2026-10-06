@@ -228,21 +228,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Continue to rebuild below.
     }
 
-    try {
-      final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
-      final status = rebuildResult['status'];
-      // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
-      if (status == 'canonical_up_to_date') {
-        return;
-      }
-      await KnowledgeGraphApi.waitForGraphStability(
-        timeout: const Duration(seconds: 25),
-        interval: const Duration(seconds: 2),
-        stabilityChecks: 1,
-      );
-    } catch (_) {
-      // Background prebuild should never bubble errors to onboarding.
+    final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
+    final status = rebuildResult['status'];
+    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
+    if (status == 'canonical_up_to_date') {
+      return;
     }
+    await KnowledgeGraphApi.waitForGraphStability(
+      timeout: const Duration(seconds: 25),
+      interval: const Duration(seconds: 2),
+      stabilityChecks: 1,
+    );
   }
 
   void _updateBackgroundImage(int pageIndex) {
