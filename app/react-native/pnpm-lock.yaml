@@ -88,6 +88,9 @@ importers:
       react-native:
         specifier: 0.85.3
         version: 0.85.3(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3)
+      react-native-ble-plx:
+        specifier: ^3.5.1
+        version: 3.5.1(react-native@0.85.3(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
       react-native-css-interop:
         specifier: 0.2.6
         version: 0.2.6(afe7fb75629115a0e34450908c0947a5)
@@ -4660,6 +4663,13 @@ packages:
   react-is@19.2.7:
     resolution: {integrity: sha512-kZFnouyVv7eP/Phmrlo9FK+zcAdriZJvzxXHF1Sl1P377WSGe2G/JxVolhTrB/jeV47lKImhNUsijjHAAbcl/A==}
 
+  react-native-ble-plx@3.5.1:
+    resolution: {integrity: sha512-SxksmrUt9jG6DOarrrdkb5c/HBLSfZOKauo/9VQSSi3WJA4bmF78GkrtXrgSoGNk0m1ksacFTjB5DuL39xZq/g==}
+    engines: {node: '>= 18.0.0'}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
   react-native-css-interop@0.2.6:
     resolution: {integrity: sha512-uXad6EWqufupnRjrba2De30tiAx26kLEcwSV3eSLVBwpfYeOnrpDc9k6kHk6SBNbmHHlE5sc9vsfKdVRS9msYg==}
     engines: {node: '>=18'}
@@ -7778,9 +7788,7 @@ snapshots:
       metro-runtime: 0.84.4
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 
@@ -11444,6 +11452,11 @@ snapshots:
   react-is@18.3.1: {}
 
   react-is@19.2.7: {}
+
+  react-native-ble-plx@3.5.1(react-native@0.85.3(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3):
+    dependencies:
+      react: 19.2.3
+      react-native: 0.85.3(@babel/core@7.29.7)(@react-native-community/cli@20.2.0(typescript@6.0.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3)
 
   react-native-css-interop@0.2.6(afe7fb75629115a0e34450908c0947a5):
     dependencies:

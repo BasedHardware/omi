@@ -19,7 +19,10 @@
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_PHONE_STATE",
-        "android.permission.ANSWER_PHONE_CALLS"
+        "android.permission.ANSWER_PHONE_CALLS",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "plugins": [

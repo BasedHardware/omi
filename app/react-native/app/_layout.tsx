@@ -45,6 +45,7 @@ export default function RootLayout() {
         <Stack.Screen name="conversation/[id]" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="dev-local-brain" />
+        <Stack.Screen name="dev-omi-device" />
       </Stack>
     </ErrorBoundary>
   );
