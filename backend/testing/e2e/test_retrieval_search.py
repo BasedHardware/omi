@@ -255,7 +255,7 @@ def test_transcript_chunk_backfill_makes_unindexed_history_searchable(
     """#20629: history stored while chunk indexing was off becomes findable after the backfill."""
     vector_db, fake_index, _ = _install_fakes(monkeypatch)
     from database import conversations as conversations_db
-    from scripts.backfill_transcript_chunk_vectors import backfill_user
+    from scripts.backfill_transcript_chunk_vectors import backfill_user, conversation_exists, delete_chunks
 
     conversation = dict(
         sample_conversation_data,
@@ -288,7 +288,12 @@ def test_transcript_chunk_backfill_makes_unindexed_history_searchable(
     assert "No transcript excerpts found" in chunk_search()
 
     dry = backfill_user(
-        "123", conversations_db.iter_all_conversations("123", include_discarded=False), apply=False, upsert=None
+        "123",
+        conversations_db.iter_all_conversations("123", include_discarded=False),
+        apply=False,
+        upsert=None,
+        exists=None,
+        delete=None,
     )
     assert (dry.eligible, dry.chunks, dry.upserted) == (1, 1, 0)
     assert fake_index.count(namespace=vector_db.TRANSCRIPT_CHUNKS_NAMESPACE) == 0
@@ -298,6 +303,8 @@ def test_transcript_chunk_backfill_makes_unindexed_history_searchable(
         conversations_db.iter_all_conversations("123", include_discarded=False),
         apply=True,
         upsert=vector_db.upsert_transcript_chunk_vectors,
+        exists=conversation_exists,
+        delete=delete_chunks,
     )
     assert (applied.upserted, applied.failed) == (1, 0)
     assert "four hundred twelve dollars" in chunk_search()
@@ -315,5 +322,34 @@ def test_transcript_chunk_backfill_makes_unindexed_history_searchable(
         conversations_db.iter_all_conversations("123", include_discarded=False),
         apply=True,
         upsert=vector_db.upsert_transcript_chunk_vectors,
+        exists=conversation_exists,
+        delete=delete_chunks,
     )
     assert fake_index.count(namespace=vector_db.TRANSCRIPT_CHUNKS_NAMESPACE) == 1
+
+
+def test_transcript_chunk_backfill_removes_chunks_of_a_conversation_deleted_mid_run(
+    client, auth_headers, sample_conversation_data, monkeypatch
+):
+    """The delete route cleans vectors before the backfill's upsert lands; the backfill must undo that write."""
+    vector_db, fake_index, _ = _install_fakes(monkeypatch)
+    from database import conversations as conversations_db
+    from scripts.backfill_transcript_chunk_vectors import backfill_user, conversation_exists, delete_chunks
+
+    conversation = dict(sample_conversation_data, id="conv-backfill-race")
+    for field in ("created_at", "started_at", "finished_at"):
+        conversation[field] = datetime.fromisoformat(conversation[field].replace("Z", "+00:00"))
+    seed_conversation("123", conversation)
+    rows = list(conversations_db.iter_all_conversations("123", include_discarded=False))
+    assert [row["id"] for row in rows] == ["conv-backfill-race"]
+
+    def upsert_after_user_delete(uid, conversation_id, chunks):
+        deleted = client.delete(f"/v1/conversations/{conversation_id}", headers=auth_headers)
+        assert deleted.status_code in (200, 204), deleted.text
+        return vector_db.upsert_transcript_chunk_vectors(uid, conversation_id, chunks)
+
+    summary = backfill_user(
+        "123", rows, apply=True, upsert=upsert_after_user_delete, exists=conversation_exists, delete=delete_chunks
+    )
+    assert (summary.removed_after_delete, summary.failed) == (1, 0)
+    assert fake_index.count(namespace=vector_db.TRANSCRIPT_CHUNKS_NAMESPACE) == 0

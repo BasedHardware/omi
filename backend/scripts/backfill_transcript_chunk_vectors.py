@@ -12,6 +12,16 @@ chunk index hydrates back to the same verbatim text. Vector IDs are
 deterministic, so a rerun overwrites instead of duplicating. Chunk text is
 embedded but never stored in vector metadata.
 
+``--apply`` refuses to start without a configured vector index, and a
+conversation whose upsert writes fewer vectors than it has chunks counts as
+failed (exit 1), so an unconfigured or partial run never reports success.
+
+A conversation deleted while it is being indexed must not keep derived vectors.
+Deletion removes the Firestore row before it cleans up vectors, so after each
+upsert the row is read again; if it is gone, this run deletes the chunks it
+just wrote. Either the delete's own cleanup runs after the upsert, or this
+check sees the row gone.
+
 Only completed, visible (not discarded or deleted) conversations are indexed.
 Output is counts only: no conversation IDs or transcript text.
 
@@ -67,6 +77,7 @@ class Summary:
     eligible: int = 0
     chunks: int = 0
     upserted: int = 0
+    removed_after_delete: int = 0
     failed: int = 0
 
     def as_dict(self) -> dict[str, Any]:
@@ -76,6 +87,7 @@ class Summary:
             'conversations_with_chunks': self.eligible,
             'chunks': self.chunks,
             'upserted_vectors': self.upserted,
+            'removed_after_delete': self.removed_after_delete,
             'failed_conversations': self.failed,
         }
 
@@ -86,6 +98,8 @@ def backfill_user(
     *,
     apply: bool,
     upsert: Callable[[str, str, list[dict[str, Any]]], int],
+    exists: Callable[[str, str], bool],
+    delete: Callable[[str, str], None],
     limit: Optional[int] = None,
 ) -> Summary:
     summary = Summary(apply=apply)
@@ -100,13 +114,35 @@ def backfill_user(
         summary.chunks += len(chunks)
         if not apply:
             continue
+        conversation_id = str(conversation['id'])
         try:
-            summary.upserted += upsert(uid, str(conversation['id']), chunks)
+            written = upsert(uid, conversation_id, chunks)
+            summary.upserted += written
+            if not exists(uid, conversation_id):
+                delete(uid, conversation_id)
+                summary.removed_after_delete += 1
+            elif written != len(chunks):
+                summary.failed += 1
+                logger.warning('transcript chunk backfill wrote %s of %s chunks', written, len(chunks))
         except Exception as error:
             # Keep going; a rerun overwrites by deterministic ID, so failures are safe to retry.
             summary.failed += 1
-            logger.warning('transcript chunk backfill upsert failed: %s', type(error).__name__)
+            logger.warning('transcript chunk backfill write failed: %s', type(error).__name__)
     return summary
+
+
+def conversation_exists(uid: str, conversation_id: str) -> bool:
+    from database import conversations as conversations_db
+
+    row = conversations_db.get_conversation(uid, conversation_id)
+    return bool(row) and not row.get('deleted')
+
+
+def delete_chunks(uid: str, conversation_id: str) -> None:
+    from database import vector_db
+
+    # The batch form raises on failure; the single-conversation delete only logs it.
+    vector_db.delete_transcript_chunk_vectors_batch(uid, [conversation_id], raise_on_failure=True)
 
 
 def main() -> int:
@@ -116,14 +152,21 @@ def main() -> int:
     parser.add_argument('--limit', type=int, default=None, help='Max conversations to index, newest first.')
     args = parser.parse_args()
 
+    from database import vector_db
+
+    if args.apply and vector_db.index is None:
+        print('Refusing --apply: no vector index is configured, so nothing would be written.', file=sys.stderr)
+        return 2
+
     from database import conversations as conversations_db
-    from database.vector_db import upsert_transcript_chunk_vectors
 
     summary = backfill_user(
         args.uid,
         conversations_db.iter_all_conversations(args.uid, include_discarded=False),
         apply=args.apply,
-        upsert=upsert_transcript_chunk_vectors,
+        upsert=vector_db.upsert_transcript_chunk_vectors,
+        exists=conversation_exists,
+        delete=delete_chunks,
         limit=args.limit,
     )
     print(json.dumps(summary.as_dict()))
