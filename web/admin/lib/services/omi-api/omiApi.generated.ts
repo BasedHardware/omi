@@ -824,6 +824,20 @@ export interface CalendarMeetingContext {
   duration_minutes: number;
   meeting_link?: string | null;
   notes?: string | null;
+  participant_sources?: MeetingParticipantSources | null;
+  participants?: Array<MeetingParticipant>;
+  platform?: string | null;
+  start_time: string;
+  title: string;
+}
+
+export interface CalendarMeetingContext_Output {
+  calendar_event_id: string;
+  calendar_source?: string | null;
+  duration_minutes: number;
+  meeting_link?: string | null;
+  notes?: string | null;
+  participant_sources?: MeetingParticipantSources | null;
   participants?: Array<MeetingParticipant>;
   platform?: string | null;
   start_time: string;
@@ -2980,6 +2994,11 @@ export interface McpUpdateActionItem {
 export interface MeetingParticipant {
   email?: string | null;
   name?: string | null;
+}
+
+export interface MeetingParticipantSources {
+  expected_calendar?: Array<MeetingParticipant> | null;
+  observed_screen_listing?: Array<MeetingParticipant> | null;
 }
 
 export interface Memory {
@@ -5523,6 +5542,7 @@ export interface OmiApiSchemas {
   "CalendarCaptureGap": CalendarCaptureGap;
   "CalendarEventLink": CalendarEventLink;
   "CalendarMeetingContext": CalendarMeetingContext;
+  "CalendarMeetingContext-Output": CalendarMeetingContext_Output;
   "CalendarOnboardingResetResponse": CalendarOnboardingResetResponse;
   "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
@@ -5805,6 +5825,7 @@ export interface OmiApiSchemas {
   "McpStatusResponse": McpStatusResponse;
   "McpUpdateActionItem": McpUpdateActionItem;
   "MeetingParticipant": MeetingParticipant;
+  "MeetingParticipantSources": MeetingParticipantSources;
   "Memory": Memory;
   "MemoryAssistantSettings": MemoryAssistantSettings;
   "MemoryCaptureContext": MemoryCaptureContext;
@@ -6903,7 +6924,7 @@ export interface OmiApiPaths {
     get: {
       operationId: "list_calendar_meetings_v1_calendar_meetings_get";
       responses: {
-        "200": Array<CalendarMeetingContext>;
+        "200": Array<CalendarMeetingContext_Output>;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -6921,7 +6942,7 @@ export interface OmiApiPaths {
     get: {
       operationId: "get_calendar_meeting_v1_calendar_meetings__meeting_id__get";
       responses: {
-        "200": CalendarMeetingContext;
+        "200": CalendarMeetingContext_Output;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -12522,7 +12543,7 @@ export async function list_google_calendar_events_v1_calendar_google_events_get(
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function list_calendar_meetings_v1_calendar_meetings_get(query: { start_date?: string | null, end_date?: string | null, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<CalendarMeetingContext>> {
+export async function list_calendar_meetings_v1_calendar_meetings_get(query: { start_date?: string | null, end_date?: string | null, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<CalendarMeetingContext_Output>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/calendar/meetings`;
   const _params = query ? Object.entries(query)
@@ -12565,7 +12586,7 @@ export async function store_calendar_meeting_v1_calendar_meetings_post(header: {
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_calendar_meeting_v1_calendar_meetings__meeting_id__get(path: { meeting_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CalendarMeetingContext> {
+export async function get_calendar_meeting_v1_calendar_meetings__meeting_id__get(path: { meeting_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CalendarMeetingContext_Output> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/calendar/meetings/${path.meeting_id}`;
   const _search = "";

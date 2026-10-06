@@ -78,6 +78,9 @@ overlay:
         SPEAKER_MATCH_SCORES_ENABLED:
           value: 'true'
           category: rollout
+        OMI_SHAPED_AGENT_MODE:
+          value: 'cohort'
+          category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
@@ -237,7 +240,7 @@ overlay:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
-          value: '50'
+          value: '100'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -301,6 +304,9 @@ overlay:
         SPEAKER_MATCH_SCORES_ENABLED:
           value: 'true'
           category: rollout
+        OMI_SHAPED_AGENT_MODE:
+          value: 'cohort'
+          category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
@@ -362,7 +368,7 @@ overlay:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
-          value: '50'
+          value: '100'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -520,6 +526,9 @@ overlay:
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout
+          OMI_SHAPED_AGENT_MODE:
+            value: 'cohort'
+            category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
@@ -647,7 +656,7 @@ overlay:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '50'
+            value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -808,7 +817,7 @@ overlay:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '50'
+            value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -945,7 +954,7 @@ overlay:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '50'
+            value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'

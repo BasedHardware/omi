@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from zoneinfo import ZoneInfo
 from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
 from utils.conversations.meeting_participants import MeetingRoster, is_silent_recorder
+from utils.llm.shaped_agent import route_for_uid
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
@@ -52,6 +54,7 @@ class ConversationPromptPrefix:
     # evidence references.
     transcript_segment_ids: frozenset[str] = frozenset()
     has_usable_content: bool = True
+    shaped_context: Optional[str] = None
 
     @property
     def cache_key(self) -> str:
@@ -179,6 +182,7 @@ def build_conversation_prompt_prefix(
     transcript_segment_ids: Optional[Iterable[str]] = None,
     roster: Optional[MeetingRoster] = None,
     desktop_meeting_capture: bool = False,
+    uid: Optional[str] = None,
 ) -> ConversationPromptPrefix:
     """Render the shared context prefix for conversation-wide LLM tasks.
 
@@ -269,9 +273,48 @@ def build_conversation_prompt_prefix(
     if photo_descriptions and photo_descriptions != 'None':
         context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
 
+    shaped_context = None
+    if uid is not None and route_for_uid(uid) != 'old':
+        # Build from the original map, never the roster/calendar-bound copy above.
+        # Calendar invitees are expected; screen listings are observed UI data.
+        # Neither listing establishes attendance or speaker identity.
+        evidence: dict[str, Any] = {
+            'started_at': started_at.isoformat(),
+            'timezone': timezone_name,
+            'language': language_code,
+            'speaker_map': dict(speaker_map or {}),
+            'expected_calendar': None,
+            'observed_screen_listing': None,
+            'photo_descriptions': photo_descriptions,
+        }
+        if calendar_context:
+            primary_key = (
+                'observed_screen_listing'
+                if calendar_context.calendar_source == 'screen_activity'
+                else 'expected_calendar'
+            )
+            sources = calendar_context.participants_by_source()
+            for key, participants in (
+                ('expected_calendar', sources.expected_calendar),
+                ('observed_screen_listing', sources.observed_screen_listing),
+            ):
+                if participants is None:
+                    continue
+                # Scalar metadata describes the winning source only. Never copy
+                # the legacy participant union into either source's evidence.
+                source_context = (
+                    calendar_context.model_dump(mode='json', exclude={'participants', 'participant_sources'})
+                    if key == primary_key
+                    else {}
+                )
+                source_context['participants'] = [participant.model_dump(mode='json') for participant in participants]
+                evidence[key] = source_context
+        shaped_context = json.dumps(evidence, ensure_ascii=False) + f'\nFULL TRANSCRIPT\n{transcript.strip()}'
+
     source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
     return ConversationPromptPrefix(
         conversation_id=conversation_id,
+        shaped_context=shaped_context,
         context='\n\n'.join(context_parts),
         transcript_segment_ids=source_ids,
         has_usable_content=_transcript_has_source_content(transcript, source_ids)

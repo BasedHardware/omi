@@ -1316,12 +1316,9 @@ def test_all_callsites_use_get_llm():
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
 
-    # Total: 11 + 2 + 6 = 19 callsites (notes v2 adds the merged note call). This was 18 while the
-    # pattern above required the feature key on the same line as `get_llm(`: one already-wrapped
-    # conv_app_result callsite was invisible to it, so the count was calibrated against a scan that
-    # silently skipped wrapped calls.
+    # Total: notes mount adds one conv_structure callsite on top of the prior 20.
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 20, f"Expected 20 total get_llm() callsites, got {total}"
+    assert total == 21, f"Expected 21 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():
