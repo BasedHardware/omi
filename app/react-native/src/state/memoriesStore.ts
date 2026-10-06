@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getMemories, createMemory, Memory } from '@/api/omiApi';
+import { logStoreError } from './logStoreError';
 
 interface MemoriesState {
   items: Memory[];
@@ -29,8 +30,7 @@ export const useMemoriesStore = create<MemoriesState>((set, get) => ({
       }
       set({ items: all });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to load memories';
-      console.error('[memories] load failed:', msg);
+      const msg = logStoreError('memories', e, 'Failed to load memories');
       set({ error: msg });
     } finally {
       set({ loading: false });

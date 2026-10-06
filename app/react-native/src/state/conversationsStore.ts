@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { listConversations, getConversation, Conversation } from '@/api/omiApi';
+import { logStoreError } from './logStoreError';
 
 interface ConversationsState {
   items: Conversation[];
@@ -22,8 +23,7 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
       const items = await listConversations(50, 0);
       set({ items });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to load conversations';
-      console.error('[conversations] load failed:', msg);
+      const msg = logStoreError('conversations', e, 'Failed to load conversations');
       set({ error: msg });
     } finally {
       set({ loading: false });
