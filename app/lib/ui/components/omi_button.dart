@@ -77,6 +77,7 @@ class OmiButton extends StatefulWidget {
     this.width,
     this.height,
     this.labelStyle,
+    this.pill = false,
   });
 
   const OmiButton.secondary({
@@ -89,6 +90,7 @@ class OmiButton extends StatefulWidget {
     this.isLoading = false,
     this.expand = false,
     this.wrapLabel = false,
+    this.pill = false,
   })  : variant = OmiButtonVariant.secondary,
         colors = null,
         width = null,
@@ -109,7 +111,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        pill = false;
 
   const OmiButton.tertiary({
     super.key,
@@ -125,7 +128,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        pill = false;
 
   /// See [OmiButtonVariant.toolbar].
   const OmiButton.toolbar({
@@ -142,7 +146,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        pill = false;
 
   final String label;
 
@@ -181,6 +186,9 @@ class OmiButton extends StatefulWidget {
 
   /// Legacy label style. Its colour is ignored; the foreground colour always wins.
   final TextStyle? labelStyle;
+
+  /// A capsule instead of the 12 pt corners: for a button inside a pill-shaped dock.
+  final bool pill;
 
   @override
   State<OmiButton> createState() => _OmiButtonState();
@@ -301,7 +309,7 @@ class _OmiButtonState extends State<OmiButton> {
         fixedSize: widget.width != null ? WidgetStatePropertyAll(Size(widget.width!, visualHeight)) : null,
         // A toolbar button in a Settings page's bar is a capsule beside the round icon buttons.
         shape: WidgetStatePropertyAll(RoundedRectangleBorder(
-            borderRadius: widget.variant == OmiButtonVariant.toolbar && OmiGroupedScope.of(context)
+            borderRadius: widget.pill || (widget.variant == OmiButtonVariant.toolbar && OmiGroupedScope.of(context))
                 ? OmiRadius.pillAll
                 : OmiRadius.mdAll)),
         // A visual under 44pt gets padded out to a 48pt target; a 48pt button needs no padding.
