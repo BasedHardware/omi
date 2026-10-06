@@ -15,6 +15,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
@@ -197,6 +198,49 @@ void main() {
           await provider.initiateChargingStatusListener();
         }
         expect(capture.chargeStarts, 0, reason: 'a failed read must not fabricate an unplug/replug edge');
+      });
+    }
+  }
+
+  for (final origin in ['gated connect', 'sync notify', 'notify after sync', 'ordinary connect']) {
+    for (final firstCharging in [false, true]) {
+      test('first notify after failed read respects $origin gate (charging=$firstCharging)', () async {
+        final transport = _ChargingTransport()..failRead = true;
+        final device = _device('charging-notify-device');
+        final connection = OmiDeviceConnection(device, transport);
+        final capture = _CaptureIntent();
+        final provider = DeviceProvider(chargingConnectionLoader: (_) async => connection);
+        addTearDown(transport.notifications.close);
+        addTearDown(provider.dispose);
+        addTearDown(capture.dispose);
+        provider.captureProvider = capture;
+        provider.connectedDevice = device;
+
+        void notifyInitial() {
+          transport.notifications.add([]); // No observation yet.
+          transport.notifications.add([firstCharging ? 1 : 0]);
+          expect(provider.isCharging, firstCharging);
+          expect(capture.chargeStarts, origin == 'ordinary connect' && firstCharging ? 1 : 0);
+          // Repeated snapshots must not create another edge.
+          transport.notifications.add([firstCharging ? 1 : 0]);
+        }
+
+        if (origin == 'sync notify' || origin == 'notify after sync') {
+          await SyncWakeScope.run(() async {
+            await provider.initiateChargingStatusListener();
+            if (origin == 'sync notify') notifyInitial();
+          });
+          if (origin == 'notify after sync') notifyInitial();
+        } else {
+          await provider.initiateChargingStatusListener(allowCaptureResume: origin == 'ordinary connect');
+          notifyInitial();
+        }
+        final started = capture.chargeStarts;
+        transport.notifications.add([0]);
+        transport.notifications.add([1]);
+        expect(capture.chargeStarts, started + 1, reason: 'later genuine charge-start still resumes');
+        transport.notifications.add([1]);
+        expect(capture.chargeStarts, started + 1);
       });
     }
   }

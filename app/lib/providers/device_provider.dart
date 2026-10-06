@@ -532,11 +532,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     final currentStatus = await connection.readChargingStatus();
     if (!_isCurrent(generation)) return;
+    final allowInitialResume = allowCaptureResume && !SyncWakeScope.syncOnly;
+    var initialObservationDone = currentStatus != null;
     // Failed reads are unknown: retain the last successful observation and UI state.
     if (currentStatus != null) {
       final chargeStarted = _chargeStarts.observe(connectedDevice!.id, currentStatus);
       // An initial read made by a sync wake is observation, not a charge-start event.
-      if (chargeStarted && allowCaptureResume && !SyncWakeScope.syncOnly) captureProvider?.onChargingStarted();
+      if (chargeStarted && allowInitialResume) captureProvider?.onChargingStarted();
       if (isCharging != currentStatus) {
         isCharging = currentStatus;
         notifyListeners();
@@ -547,7 +549,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleChargingStatusListener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
         if (!_isCurrent(generation)) return;
-        if (_chargeStarts.observe(connectedDevice!.id, charging)) captureProvider?.onChargingStarted();
+        // Firmware notifies its current byte on subscribe. After a failed read,
+        // that first sample inherits the initial read's observation-only gate.
+        final allowResume = initialObservationDone || (allowInitialResume && !SyncWakeScope.syncOnly);
+        initialObservationDone = true;
+        final chargeStarted = _chargeStarts.observe(connectedDevice!.id, charging);
+        if (chargeStarted && allowResume) captureProvider?.onChargingStarted();
         if (isCharging != charging) {
           isCharging = charging;
 
