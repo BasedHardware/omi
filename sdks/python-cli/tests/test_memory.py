@@ -176,3 +176,22 @@ def test_memory_export_csv(authed_profile, respx_mock, cli_runner, tmp_path) -> 
     content = out_file.read_text(encoding="utf-8-sig")
     assert "id,category,visibility,content,tags,created_at" in content
     assert 'm1,core,private,"\'=SUM(1,1)",tag1;tag2,2026-04-01T00:00:00Z' in content
+
+
+def test_memory_export_csv_stdout(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[
+            {
+                "id": "m2",
+                "content": "stdout memory",
+                "category": "work",
+                "visibility": "public",
+                "tags": [],
+                "created_at": "2026-04-02T00:00:00Z",
+            }
+        ]
+    )
+    result = cli_runner.invoke(app, ["memory", "export"])
+    assert result.exit_code == 0
+    assert "id,category,visibility,content,tags,created_at" in result.stdout
+    assert "m2,work,public,stdout memory,,2026-04-02T00:00:00Z" in result.stdout

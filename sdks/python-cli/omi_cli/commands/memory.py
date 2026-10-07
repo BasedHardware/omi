@@ -167,16 +167,28 @@ def export_memories(
 ) -> None:
     """Export memories to CSV format."""
     ctx = _ctx(typer_ctx)
+    items = []
+    page_size = 100
+    offset = 0
     with ctx.make_client() as client:
-        items = client.get(
-            "/v1/dev/user/memories",
-            params={"limit": limit, "offset": 0, "categories": categories},
-        )
+        while len(items) < limit:
+            fetch_count = min(page_size, limit - len(items))
+            page = client.get(
+                "/v1/dev/user/memories",
+                params={"limit": fetch_count, "offset": offset, "categories": categories},
+            )
+            if not page:
+                break
+            items.extend(page)
+            if len(page) < fetch_count:
+                break
+            offset += len(page)
+
     fieldnames = ["id", "category", "visibility", "content", "tags", "created_at"]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
-    for m in items or []:
+    for m in items:
         row = dict(m)
         if isinstance(row.get("tags"), list):
             row["tags"] = ";".join(str(t) for t in row["tags"])
@@ -188,6 +200,6 @@ def export_memories(
     if output_file:
         with open(output_file, "w", encoding="utf-8-sig") as f:
             f.write(csv_str)
-        ctx.renderer.success(f"Exported {len(items or [])} memories to [bold]{escape(output_file)}[/bold].")
+        ctx.renderer.success(f"Exported {len(items)} memories to [bold]{escape(output_file)}[/bold].")
     else:
         typer.echo(csv_str, nl=False)
