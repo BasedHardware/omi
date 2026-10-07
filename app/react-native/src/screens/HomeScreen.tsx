@@ -128,7 +128,7 @@ export default function HomeScreen() {
       <View style={styles.topBar}>
         <TouchableOpacity
           style={styles.connectBtn}
-          onPress={() => router.push('/(tabs)/settings')}
+          onPress={() => router.push('/omi-device')}
           activeOpacity={0.8}
         >
           <Text style={styles.connectText}>Connect</Text>
