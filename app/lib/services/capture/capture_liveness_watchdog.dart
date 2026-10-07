@@ -44,7 +44,7 @@ class CaptureLivenessWatchdog {
       gapStartedAt: stalled ? _lastFrameAt! : _socketDownAt!,
       observedAt: now,
       observationEpoch: observationEpoch,
-      reason: stalled ? CaptureLivenessReason.noFrames : CaptureLivenessReason.socketDown,
+      reason: socketReady ? CaptureLivenessReason.noFrames : CaptureLivenessReason.socketDown,
     );
   }
 }

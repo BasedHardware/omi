@@ -26,7 +26,7 @@ void main() {
     expect(watchdog.check(live(), start.add(const Duration(seconds: 44)), socketReady: true), isNull);
     final failure = watchdog.check(live(), start.add(const Duration(seconds: 45)), socketReady: true)!;
     expect(failure.reason, CaptureLivenessReason.noFrames);
-    final transition = transitionCapture(live(), failure, environment(live()));
+    final transition = transitionCapture(live(), failure, environment(live(), transcriptReady: true));
     expect(transition.effects[0], isA<RunStage>().having((e) => e.stage, 'stage', isA<FlushPhoneFramesStage>()));
     expect(transition.effects[1], isA<WalFinalize>());
     expect(transition.effects[2], isA<RunStage>().having((e) => e.stage, 'stage', isA<RestartLiveMicStage>()));
@@ -46,6 +46,99 @@ void main() {
     expect(transition.effects.whereType<NativeMicStop>(), isEmpty);
     expect(transition.effects.whereType<SocketClose>(), isEmpty);
   });
+  test('both no frames and a dead socket prefer reconnect without restarting the mic', () {
+    final watchdog = CaptureLivenessWatchdog();
+    watchdog.check(live(), start, socketReady: false);
+    final failure = watchdog.check(live(), start.add(const Duration(seconds: 45)), socketReady: false)!;
+    expect(failure.reason, CaptureLivenessReason.socketDown);
+    final transition = transitionCapture(live(), failure, environment(live(), socketConnected: false));
+    expect(transition.effects[1], isA<WalFinalize>());
+    expect((transition.effects.last as RunStage).stage, isA<ReconnectPhoneStage>());
+    expect(transition.effects.whereType<RunStage>().any((effect) => effect.stage is RestartLiveMicStage), false);
+  });
+
+  test('socket failure queued before keepalive restored readiness is discarded on apply', () async {
+    final fake = HarnessPorts();
+    var ready = true;
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+        ports: fake.ports,
+        readEnvironment: () => environment(coordinator.state, socketConnected: ready, transcriptReady: ready));
+    addTearDown(coordinator.dispose);
+    await coordinator.dispatch(const PhoneStartRequested());
+    ready = false;
+    final watchdog = CaptureLivenessWatchdog();
+    watchdog.check(coordinator.state, start, socketReady: false);
+    final failure = watchdog.check(coordinator.state, start.add(const Duration(seconds: 45)), socketReady: false)!;
+    fake.log.clear();
+    final held = fake.hold = Completer<void>();
+    final head = coordinator.dispatch(const SocketError('held behind an existing effect'));
+    final queued = coordinator.dispatch(failure);
+    ready = true; // The keepalive has restored the socket before apply.
+    held.complete();
+    await head;
+    await queued;
+    expect(fake.log, ['stage:SocketErrorStage']);
+    expect(coordinator.state.phase, CapturePhase.phoneLive);
+  });
+
+  test('no-frame failure reconnects if the socket died before reducer application', () {
+    final watchdog = CaptureLivenessWatchdog();
+    watchdog.check(live(), start, socketReady: true);
+    final failure = watchdog.check(live(), start.add(const Duration(seconds: 45)), socketReady: true)!;
+    expect(failure.reason, CaptureLivenessReason.noFrames);
+    final transition = transitionCapture(live(), failure, environment(live(), socketConnected: false));
+    expect((transition.effects.last as RunStage).stage, isA<ReconnectPhoneStage>());
+  });
+
+  test('keepalive restoration during WAL persistence drops the remaining reconnect', () async {
+    final fake = HarnessPorts();
+    var ready = true;
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+        ports: fake.ports,
+        readEnvironment: () => environment(coordinator.state, socketConnected: ready, transcriptReady: ready));
+    addTearDown(coordinator.dispose);
+    await coordinator.dispatch(const PhoneStartRequested());
+    ready = false;
+    final watchdog = CaptureLivenessWatchdog();
+    watchdog.check(coordinator.state, start, socketReady: false);
+    final failure = watchdog.check(coordinator.state, start.add(const Duration(seconds: 45)), socketReady: false)!;
+    fake.log.clear();
+    final held = Completer<void>();
+    final recovery = coordinator.dispatch(failure);
+    fake.hold = held;
+    await Future<void>.delayed(Duration.zero);
+    expect(fake.log, ['stage:FlushPhoneFramesStage', 'wal:finalize']);
+    ready = true;
+    held.complete();
+    await recovery;
+    expect(fake.log, ['stage:FlushPhoneFramesStage', 'wal:finalize']);
+  });
+
+  test('socket death during the WAL write switches mic recovery to reconnect', () async {
+    final fake = HarnessPorts();
+    var ready = true;
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+        ports: fake.ports,
+        readEnvironment: () => environment(coordinator.state, socketConnected: ready, transcriptReady: ready));
+    addTearDown(coordinator.dispose);
+    await coordinator.dispatch(const PhoneStartRequested());
+    final watchdog = CaptureLivenessWatchdog();
+    watchdog.check(coordinator.state, start, socketReady: true);
+    final failure = watchdog.check(coordinator.state, start.add(const Duration(seconds: 45)), socketReady: true)!;
+    fake.log.clear();
+    final held = Completer<void>();
+    final recovery = coordinator.dispatch(failure);
+    fake.hold = held;
+    await Future<void>.delayed(Duration.zero);
+    ready = false;
+    held.complete();
+    await recovery;
+    expect(fake.log, ['stage:FlushPhoneFramesStage', 'wal:finalize', 'stage:ReconnectPhoneStage']);
+  });
+
   test('healthy frames and socket stay healthy beyond 70 minutes', () {
     final watchdog = CaptureLivenessWatchdog();
     for (var second = 0; second <= 4200; second += 15) {
@@ -107,7 +200,8 @@ void main() {
     var epoch = 0;
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
-        ports: fake.ports, readEnvironment: () => environment(coordinator.state, livenessEpoch: epoch));
+        ports: fake.ports,
+        readEnvironment: () => environment(coordinator.state, livenessEpoch: epoch, transcriptReady: true));
     addTearDown(coordinator.dispose);
     await coordinator.dispatch(const PhoneStartRequested());
     final watchdog = CaptureLivenessWatchdog();

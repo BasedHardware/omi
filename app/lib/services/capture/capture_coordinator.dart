@@ -1482,10 +1482,17 @@ class CaptureCoordinator {
         try {
           // Resume may arrive while a WAL boundary awaits disk. Revalidate
           // before the next effect, especially before restarting the mic.
-          if (event is CaptureLivenessFailure && !_livenessFailureIsCurrent(_state, event, _readEnvironment())) {
-            return CaptureDispatchOutcome.completed(state: _state);
+          var effect = transition.effects[i];
+          if (event is CaptureLivenessFailure) {
+            final currentEnvironment = _readEnvironment();
+            if (!_livenessFailureIsCurrent(_state, event, currentEnvironment)) {
+              return CaptureDispatchOutcome.completed(state: _state);
+            }
+            if (effect is RunStage && (effect.stage is RestartLiveMicStage || effect.stage is ReconnectPhoneStage)) {
+              effect = RunStage(_livenessRecoveryStage(currentEnvironment));
+            }
           }
-          final value = await _execute(transition.effects[i]);
+          final value = await _execute(effect);
           if (transition.effects[i] is CheckPhonePermission) {
             if (value != true) {
               return CaptureDispatchOutcome.completed(state: _state, result: false);
@@ -2712,8 +2719,16 @@ bool _livenessFailureIsCurrent(CaptureCoordinatorState state, CaptureLivenessFai
       (resumedAt == null || !resumedAt.isBefore(event.gapStartedAt))) {
     return false;
   }
+  // Keepalive or a previous recovery may have restored readiness while this
+  // observation waited in the queue or its WAL write was in flight.
+  if (event.reason == CaptureLivenessReason.socketDown && env.socketConnected && env.transcriptReady) {
+    return false;
+  }
   return true;
 }
+
+CaptureStage _livenessRecoveryStage(CaptureEnvironment env) =>
+    env.socketConnected && env.transcriptReady ? const RestartLiveMicStage() : const ReconnectPhoneStage();
 
 CaptureTransition _reduceLivenessFailure(
     CaptureCoordinatorState state, CaptureLivenessFailure event, CaptureEnvironment env) {
@@ -2723,9 +2738,7 @@ CaptureTransition _reduceLivenessFailure(
   return CaptureTransition(state, [
     const RunStage(FlushPhoneFramesStage()),
     const WalFinalize(),
-    RunStage(
-      event.reason == CaptureLivenessReason.noFrames ? const RestartLiveMicStage() : const ReconnectPhoneStage(),
-    ),
+    RunStage(_livenessRecoveryStage(env)),
   ]);
 }
 
