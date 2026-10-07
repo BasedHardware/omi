@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/sign_out.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -318,5 +319,40 @@ void main() {
         expect(backendProcessingChainStarted, equals(2));
       },
     );
+  });
+
+  group('Onboarding Step 1 & Sign-Out Preference Retention Tests', () {
+    test('Onboarding step 1 forces action 3 (Ask Question) regardless of configured singlePressAction', () {
+      int resolveAction(int buttonState,
+          {required bool isOnboardingActive, required int currentStep, required int savedSinglePressAction}) {
+        if (buttonState == 1) {
+          return (isOnboardingActive && currentStep == 1) ? 3 : savedSinglePressAction;
+        }
+        return 0;
+      }
+
+      // User has saved Action 1 (Mute) as single-press
+      const savedMute = 1;
+
+      // During onboarding step 1 (Ask Question tutorial): must force Action 3
+      expect(
+        resolveAction(1, isOnboardingActive: true, currentStep: 1, savedSinglePressAction: savedMute),
+        equals(3),
+        reason: 'Tutorial step 1 must always start voice session (action 3)',
+      );
+
+      // Outside onboarding: uses saved preference
+      expect(
+        resolveAction(1, isOnboardingActive: false, currentStep: 0, savedSinglePressAction: savedMute),
+        equals(1),
+        reason: 'Normal usage should respect user preference',
+      );
+    });
+
+    test('kPreferencesKeptOnSignOut contains all customizable button actions', () {
+      expect(kPreferencesKeptOnSignOut.contains('singlePressAction'), isTrue);
+      expect(kPreferencesKeptOnSignOut.contains('doubleTapAction'), isTrue);
+      expect(kPreferencesKeptOnSignOut.contains('triplePressAction'), isTrue);
+    });
   });
 }

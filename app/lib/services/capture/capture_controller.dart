@@ -1739,7 +1739,12 @@ class CaptureController extends ChangeNotifier
     // Single press (buttonState == 1)
     if (buttonState == 1) {
       Logger.debug("Single press detected");
-      final action = SharedPreferencesUtil().singlePressAction;
+      // During onboarding step 1 (ask question tutorial), force action 3 (Ask Question)
+      // so the voice session always starts regardless of saved user preferences.
+      final action =
+          (deviceOnboardingProvider?.isOnboardingActive == true && deviceOnboardingProvider!.currentStep == 1)
+              ? 3
+              : SharedPreferencesUtil().singlePressAction;
       _executeButtonAction(action, deviceId, eventType: 'single_press');
       return;
     }
