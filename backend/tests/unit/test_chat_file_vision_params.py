@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 import utils.other.chat_file as cf  # noqa: E402
 from models.chat import FileChat  # noqa: E402
+from utils.llm.gateway_client import FILE_CHAT_VISION_AUTO_LANE_ID  # noqa: E402
 
 
 class _EmptyStream:
@@ -48,10 +49,13 @@ def test_vision_stream_sends_max_completion_tokens():
 
     fake_client = SimpleNamespace(
         files=SimpleNamespace(content=fake_content),
+    )
+    fake_gateway_client = SimpleNamespace(
         chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create)),
     )
 
     tool = object.__new__(cf.FileChatTool)
+    tool.uid = 'user-1'
     files = [
         FileChat(
             id='f1',
@@ -62,9 +66,12 @@ def test_vision_stream_sends_max_completion_tokens():
         )
     ]
 
-    with patch.object(cf, '_get_async_openai', lambda: fake_client):
+    with patch.object(cf, '_get_async_openai', lambda: fake_client), patch.object(
+        cf, 'get_file_chat_gateway_async_client', lambda: fake_gateway_client
+    ):
         asyncio.run(cf.FileChatTool._ask_files_stream(tool, 'what is this?', files, _Callback()))
 
+    assert captured['model'] == FILE_CHAT_VISION_AUTO_LANE_ID
     assert 'max_tokens' not in captured
     assert captured['max_completion_tokens'] == 2048
     assert captured['messages'][0]['content'][1]['image_url']['url'].startswith('data:image/png;base64,')

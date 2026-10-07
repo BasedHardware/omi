@@ -717,13 +717,13 @@ import XCTest
 
     func testScreenTaskFallbackReasonsRemainTyped() throws {
       for reason in [
-        "ocr_unusable", "gate_invalid_response", "provider_5xx", "timeout", "offline", "dispatch_disabled",
+        "ocr_unusable", "gate_invalid_response", "provider_5xx", "timeout", "offline",
       ] {
         DesktopDiagnosticsManager.shared.resetForTests()
         DesktopDiagnosticsManager.shared.recordFallback(
-          area: "screen_task_extraction", from: "gemini_3_8", to: "legacy", reason: reason, outcome: .degraded)
+          area: "screen_task_gate", from: "jev", to: "luna", reason: reason, outcome: .degraded)
         try assertLatestHealthSnapshot(
-          event: .fallbackTriggered, contains: ["area": "screen_task_extraction", "reason": reason])
+          event: .fallbackTriggered, contains: ["area": "screen_task_gate", "reason": reason])
       }
     }
 

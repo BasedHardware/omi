@@ -2,18 +2,30 @@ import Foundation
 
 extension TaskAssistant {
   func processFrame(_ frame: CapturedFrame) async {
-    let enabled = await ScreenTaskFeature.isEnabled
-    let lease = enabled ? ScreenTaskFeature.lease() : nil
+    let binding = frame.taskBinding
+    let geminiBYOK: (key: String, fingerprint: String)?
+    if let ownerID = binding?.authorization.ownerID {
+      geminiBYOK = await APIKeyService.activeHealthyGeminiBYOK(forOwnerID: ownerID)
+    } else {
+      geminiBYOK = nil
+    }
+    let useGeminiBYOK = geminiBYOK != nil
+    let lease: ScreenTaskLease?
+    if useGeminiBYOK {
+      lease = nil
+    } else {
+      lease = await ScreenTaskFeature.lease(for: binding?.authorization)
+    }
     let metrics = ScreenTaskFrameMetrics()
     metrics.featureEnabledAtStart = lease != nil
-    if lease == nil { metrics.pipeline = "legacy" }
+    if useGeminiBYOK { metrics.pipeline = "legacy" }
     await DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isConfigured) {
       do {
         guard await isEnabled else {
           metrics.outcome = "disabled"
           return
         }
-        guard let binding = frame.taskBinding else { throw ScreenTaskFailure.ownerRevoked }
+        guard let binding else { throw ScreenTaskFailure.ownerRevoked }
         let validateFrame: @Sendable () throws -> Void = {
           guard RuntimeOwnerIdentity.isAuthorizationCurrent(binding.authorization) else {
             throw ScreenTaskFailure.ownerRevoked
@@ -29,21 +41,26 @@ extension TaskAssistant {
         let extraction: ScreenTaskExtraction
         if let lease {
           extraction = try await extractScreenTasks(frame: frame, binding: binding, lease: lease, metrics: metrics)
-        } else {
+        } else if useGeminiBYOK {
           let extractionStart = ProcessInfo.processInfo.systemUptime
           metrics.legacyAttempts = 1
           extraction = try await ScreenTaskWorkAuthority.$validate.withValue(validateFrame) {
             let (results, searches) = try await extractTaskSingleStage(
-              from: frame.jpegData, appName: frame.appName, authorization: binding.authorization)
+              from: frame.jpegData, appName: frame.appName, authorization: binding.authorization,
+              useSelectedGeminiBYOK: true)
             return ScreenTaskExtraction(results: results, searchCount: searches, extractor: "legacy")
           }
           metrics.extractionMS = (ProcessInfo.processInfo.systemUptime - extractionStart) * 1000
           metrics.extractor = "legacy"
+        } else {
+          // Managed traffic requires a current server lease. If admission is
+          // unavailable or stopped, do not re-enter the former Gemini loop.
+          throw ScreenTaskFailure.stopped
         }
         try validateFrame()
         let validateDelivery: @Sendable () throws -> Void = {
           try validateFrame()
-          if extraction.extractor == "gemini_3_8", let lease, !lease.isCurrent() { throw ScreenTaskFailure.stopped }
+          if extraction.extractor == "luna", let lease, !lease.isCurrent() { throw ScreenTaskFailure.stopped }
         }
         let deliveryStart = ProcessInfo.processInfo.systemUptime
         metrics.counts = try await ScreenTaskWorkAuthority.$validate.withValue(validateDelivery) {
@@ -77,10 +94,11 @@ extension TaskAssistant {
       } catch {
         metrics.finish(error: error)
         if metrics.outcome != "refused" {
-          if enabled {
+          if metrics.featureEnabledAtStart {
             ScreenTaskLogging.failed()
           } else if ![
-            "auth", "plan_or_quota", "backpressure", "http_terminal", "owner_revoked", "privacy_revoked", "cancelled",
+            "auth", "plan_or_quota", "backpressure", "http_terminal", "stopped", "owner_revoked",
+            "privacy_revoked", "cancelled",
           ].contains(metrics.errorClass) {
             logError("Task extraction error", error: error)
           }
@@ -98,7 +116,7 @@ extension TaskAssistant {
 
   func extractScreenTasks(
     frame: CapturedFrame, binding: ScreenTaskFrameBinding, lease: ScreenTaskLease,
-    metrics: ScreenTaskFrameMetrics
+    metrics: ScreenTaskFrameMetrics, dedupeKey: String? = nil
   ) async throws -> ScreenTaskExtraction {
     let authorization = binding.authorization
     let validateFrame: @Sendable () throws -> Void = {
@@ -128,19 +146,15 @@ extension TaskAssistant {
           body: body, authorization: authorization,
           gateOutcome: gate.gateOutcome, auditSample: gate.auditSample, clientBypass: gate.clientBypass)
       },
-      legacy: {
-        let (results, searches) = try await self.extractTaskSingleStage(
-          from: frame.jpegData, appName: frame.appName, authorization: authorization)
-        return ScreenTaskExtraction(results: results, searchCount: searches, extractor: "legacy")
-      },
       fallback: { area, reason in
         DesktopDiagnosticsManager.shared.recordFallback(
           area: area,
-          from: area == "screen_task_gate" ? "jev" : "gemini_3_8",
-          to: area == "screen_task_gate" ? "gemini_3_8" : "legacy",
+          from: "jev",
+          to: "luna",
           reason: reason, outcome: .degraded)
       })
-    let key = "\(authorization.ownerID):\(authorization.authorizationGeneration):\(Self.analyzedKey(for: frame))"
+    let key =
+      "\(authorization.ownerID):\(authorization.authorizationGeneration):\(dedupeKey ?? Self.analyzedKey(for: frame))"
     return try await screenTaskPipeline.run(frame: frame, key: key, services: services, metrics: metrics)
   }
 }

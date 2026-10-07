@@ -122,6 +122,8 @@ def commit_approved(
     # Extracted once, here, at approval time — never recomputed per read.
     ground = palette.compute_ground(canonical.jpeg_bytes)
 
+    # The signed model is the policy's approved managed/default route, not
+    # per-invocation provider telemetry; BYOK resolution is recorded in usage.
     claims = build_approval_claims(
         uid=uid,
         purpose=purpose,

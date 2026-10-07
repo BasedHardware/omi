@@ -41,7 +41,7 @@ extension APIClient {
     gateOutcome: String, auditSample: Bool, clientBypass: Bool = false
   ) async throws -> String {
     try await ScreenTaskFeature.enforceQuota()
-    let response: ScreenTaskGeminiResponse = try await screenTaskRequest(
+    let response: ScreenTaskModelResponse = try await screenTaskRequest(
       path: "v1/proxy/gemini/models/\(ScreenTaskPrompt.model):generateContent", body: body,
       authorization: authorization, timeout: 120, lane: .taskExtraction, workload: .extraction,
       headers: [

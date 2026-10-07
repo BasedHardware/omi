@@ -4,7 +4,7 @@ struct ScreenTaskExtraction: Sendable {
   let results: [TaskExtractionResult]
   let searchCount: Int
   var admission: ScreenTaskAdmission? = nil
-  var extractor = "gemini_3_8"
+  var extractor = "none"
 }
 
 struct ScreenTaskDeliveryCounts: Sendable {
@@ -59,7 +59,7 @@ struct ScreenTaskDeliveryProvenance: Equatable, Sendable {
   let auditSample: Bool
 
   init(extractor: String, gateOutcome: String = "none", auditSample: Bool = false) {
-    self.extractor = ["gemini_3_8", "legacy"].contains(extractor) ? extractor : "unknown"
+    self.extractor = ["luna", "gemini_3_8", "legacy", "none"].contains(extractor) ? extractor : "unknown"
     self.gateOutcome = ["passed", "rejected", "fail_open"].contains(gateOutcome) ? gateOutcome : "none"
     self.auditSample = auditSample && self.gateOutcome == "rejected"
   }

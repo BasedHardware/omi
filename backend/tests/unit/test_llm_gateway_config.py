@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 import yaml
@@ -26,6 +29,31 @@ def test_loads_default_gateway_config():
     assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
     assert config.route_artifacts[ACTIVE_ROUTE].primary.model == LUNA_MODEL
     assert config.route_artifacts[ACTIVE_ROUTE].provider_options['reasoning_effort'] == 'low'
+
+
+def test_byok_model_qos_still_loads_a_gemini_free_paid_gateway_config():
+    """The BYOK profile is request-scoped, never a process-wide paid route map."""
+    env = dict(os.environ)
+    env['MODEL_QOS'] = 'byok'
+    script = """
+from llm_gateway.gateway.config_loader import load_gateway_config
+from llm_gateway.gateway.schemas import Surface
+config = load_gateway_config(prod_mode=True)
+for route in config.route_artifacts.values():
+    if route.surface != Surface.OPENAI_CHAT_COMPLETIONS:
+        continue
+    refs = [route.primary, *route.fallbacks]
+    assert all(ref.provider != 'gemini' for ref in refs), route.route_artifact_id
+    assert all('gemini' not in ref.model.lower() for ref in refs), route.route_artifact_id
+"""
+    result = subprocess.run(
+        [sys.executable, '-c', script],
+        env=env,
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
@@ -73,11 +101,72 @@ def test_retired_desktop_proactive_lanes_are_absent():
 def test_translation_uses_the_gateway_translation_capability():
     config = load_gateway_config(prod_mode=True)
 
-    assert get_model('translation') == 'gemini-2.5-flash-lite'
-    assert get_provider('translation') == 'gemini'
+    assert get_model('translation') == LUNA_MODEL
+    assert get_provider('translation') == 'openai'
     lane = config.lanes['omi:auto:translation']
     assert lane.capabilities.translation is True
     assert lane.capabilities.structured_output.value == 'json_schema'
+
+
+def test_desktop_paid_and_legacy_alias_lanes_resolve_to_luna():
+    config = load_gateway_config(prod_mode=True)
+    lanes = [lane for lane in config.lanes.values() if lane.lane_id.startswith('omi:auto:desktop-')]
+    assert 'omi:auto:desktop-luna' in config.lanes
+    assert lanes
+    for lane in lanes:
+        for route_id in (lane.active_route, lane.last_known_good):
+            route = config.route_artifacts[route_id]
+            assert route.primary.provider == 'openai'
+            assert route.primary.model == LUNA_MODEL
+            assert route.provider_options == {'reasoning_effort': 'none'}
+            assert route.fallbacks == []
+
+
+@pytest.mark.parametrize('provider', ['gemini', 'openrouter'])
+@pytest.mark.parametrize('position', ['primary', 'fallback', 'last_known_good'])
+def test_paid_gemini_generation_cannot_be_restored(tmp_path, provider, position):
+    target = {'provider': provider, 'model': 'google/gemini-2.5-flash-lite'}
+    kwargs = {}
+    if position == 'last_known_good':
+        kwargs['lkg_overrides'] = {'primary': target}
+    elif position == 'fallback':
+        kwargs['active_overrides'] = {'fallbacks': [target]}
+    else:
+        kwargs['active_overrides'] = {'primary': target}
+    write_config(tmp_path, **kwargs)
+    with pytest.raises(ConfigValidationError, match='company-paid Gemini generation is retired'):
+        load_gateway_config(tmp_path, prod_mode=False)
+
+
+def test_paid_gemini_generated_override_is_rejected(tmp_path):
+    write_config(
+        tmp_path,
+        generated_route_overrides=[
+            {
+                'feature': 'translation',
+                'primary': {'provider': 'gemini', 'model': 'gemini-2.5-flash-lite'},
+            }
+        ],
+    )
+    with pytest.raises(ConfigValidationError, match='company-paid Gemini generation is retired'):
+        load_gateway_config(tmp_path, prod_mode=False)
+
+
+def test_explicit_byok_gemini_generation_is_exempt(tmp_path):
+    write_config(
+        tmp_path,
+        lane_overrides={'credential_policy': credential_policy('byok')},
+        active_overrides={
+            'primary': {'provider': 'gemini', 'model': 'gemini-2.5-flash'},
+            'credential_policy': credential_policy('byok'),
+        },
+        lkg_overrides={
+            'primary': {'provider': 'gemini', 'model': 'gemini-2.5-flash'},
+            'credential_policy': credential_policy('byok'),
+        },
+    )
+    config = load_gateway_config(tmp_path, prod_mode=False)
+    assert config.route_artifacts[ACTIVE_ROUTE].primary.provider == 'gemini'
 
 
 def test_translation_capability_requires_json_schema_output():

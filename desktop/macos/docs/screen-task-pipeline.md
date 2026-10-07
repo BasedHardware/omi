@@ -1,9 +1,14 @@
-# Screen task extraction: default-off Jev gate
+# Screen task extraction: managed JEV + Luna path
 
-`screen_task_jev_gate` defaults off for every bundle. Enabling it is separate
-from merging this code. OCR and bounded local task/profile context go to
-TypeSafe/Jev when enabled; enablement requires privacy approval. This PR does
-not change live flags, deploy anything or use personal screen frames.
+The managed path is the Mac client default for eligible, owner-bound frames and
+requires a fresh server admission lease. There is no PostHog rollout flag.
+Local OCR and bounded task/profile context go to JEV; only admitted frames send
+one bounded screenshot extraction request through the LLM gateway to Luna. A
+selected, enrolled, healthy Gemini BYOK credential for the captured owner keeps
+the legacy Gemini tool loop and bypasses JEV. Other BYOK providers do not
+exempt Gemini calls. Managed Gemini aliases are retired server-side; explicit
+user-paid BYOK remains available. This change does not deploy anything or use
+personal screen frames.
 
 Capture binds the original owner and authorization generation plus the app's
 exclusion generation before capture suspends. The immutable frame carries that
@@ -22,7 +27,7 @@ window that exposes no private marker. Excluding or re-including an app advances
 its exclusion generation, purges matching pending task pixels, and invalidates
 already running frame work. Data already transmitted cannot be recalled.
 
-When enabled, local Vision OCR feeds ordered normalized-line dedupe keyed by
+For managed frames, local Vision OCR feeds ordered normalized-line dedupe keyed by
 owner, authorization generation, app and normalized window identity. A monotonic
 processing clock gives entries a 60-second TTL and a 64-entry bound. Reusing an
 old captured frame after 60 processing seconds is eligible again. Telegram and
@@ -34,7 +39,7 @@ No fuzzy or subset matching is used.
 Local SQLite FTS selects at most eight related rows including active, completed,
 deleted and staged suppression evidence. Retrieval itself makes no embedding
 request. The assistant's existing embedding-service initialization remains, and
-ordinary legacy can use its existing network semantic search. Gate context uses
+explicit Gemini BYOK can use its existing network semantic search. Gate context uses
 four descriptions and 1024 profile characters. Gate OCR is full OCR, up to 12,000
 Swift characters, rather than the cropped dedupe line list.
 
@@ -56,35 +61,31 @@ terminal. Rejection uploads no screenshot unless audited.
 
 A fresh admission read every 30 seconds grants a 55-second lease measured from
 request start and bound to the owner/session that fetched it. An account or
-same-UID session transition revokes the lease immediately. SDK cached reload
-notifications cannot renew that lease. The
-client reads the public flag-evaluation endpoint and authenticated
-`GET /v1/screen-task/admission`; a failed refresh leaves existing leases to expire.
-`SCREEN_TASK_STOP=true` is a backend ops stop read at each gate and flagged
+same-UID session transition revokes the lease immediately. The client reads
+authenticated `GET /v1/screen-task/admission`; a failed refresh leaves existing
+leases to expire. A managed frame without a current lease stops before JEV or
+model dispatch.
+`SCREEN_TASK_STOP=true` is a backend ops stop read at each gate and managed
 screenshot dispatch. The admission endpoint reports it; gate/proxy return typed
 409 `screen_task_stopped`, never an ordinary provider error. Identified macOS
 builds below `SCREEN_TASK_MIN_MACOS_BUILD` (default 12435; invalid values keep
 that default) get a separate typed 409 `screen_task_build_below_floor` with
-`X-Omi-Retryable: false` on the gate, admission, and flagged screenshot proxy.
-Unidentified, conflicting, Windows, and other callers are unchanged, and an
-unflagged proxy request stays on its existing lane. Builds 12433 and 12434
-fail open on that gate error into flagged extraction, then take one legacy
-extraction when the proxy refuses; they do not retry the 409 or show it as a
-user error. The running client
-stops new feature gate/extraction dispatches and feature-result mutations within
+`X-Omi-Retryable: false` on the gate, admission, and managed screenshot proxy.
+The running client stops new managed gate/extraction dispatches and feature-result mutations within
 55 seconds of its last admission request (within the 60-second requirement),
 even if refresh hangs. It rechecks before every dispatch and mutation. Queued
-frames after stop use legacy with their original binding; late feature results
-are discarded. Stop during gate processing selects the ordinary owner-bound legacy loop.
-These controls stop the new pipeline, and do not disable the legacy extractor or
-change reservation routing. Already committed canonical outbox rows remain
-durable and can finish delivery under the current owner; admission leases govern
-new feature-frame work.
+managed frames after stop terminate with their original binding; late feature
+results are discarded. Stop during gate or extraction never falls back to the
+company-paid Gemini tool loop. These controls stop new managed work but do not
+disable explicit user-paid Gemini BYOK or change reservation routing. Already
+committed canonical outbox rows remain durable and can finish delivery under the
+current owner; admission leases govern new managed frame work.
 
-The screenshot extractor makes one 3.8 Flash request through the existing proxy,
-thinking level low, 2048 output tokens and bounded JSON (at most eight tasks,
-bounded strings/tags). Capacity/location selection belongs to the reservation
-routing contract; this PR does not change it. Canonical capture facts map into
+The screenshot extractor makes one `gpt-6-luna` request through the existing
+Gemini-compatible proxy, with 2048 output tokens and bounded JSON (at most eight
+tasks, bounded strings/tags). Gemini-only thinking options are omitted.
+Capacity/location selection belongs to the reservation routing contract; this
+PR does not change it. Canonical capture facts map into
 the existing policy/outbox/pending-candidate path (INV-TASK-2). Only supplied
 active canonical IDs may authorize relation targets. Items decode and validate
 independently; one invalid sibling does not discard valid items. `MAX_TOKENS`
@@ -99,13 +100,13 @@ An extraction provider 5xx/timeout/offline terminates the frame with
 `outcome=failed`, `error_class=provider_outage`, `extractor=none` and a bounded
 `fallback_reason` identifying 5xx/timeout/offline. No legacy request, observation,
 staging or content-dedupe entry is created; the next trigger retries naturally.
-A feature frame has at most one gate and one new screenshot request. A typed legacy retirement
-refusal is terminal and quiet. Feature-off retains the existing legacy loop,
-with original-owner/privacy hardening and its existing retry/header behavior.
-Ordinary feature-off work does not acquire the separate gate/extraction cooldown.
-Legacy model responses are revalidated before any tool executes, and semantic
-search passes the original authorization into embedding. Auth acquisition and
-actual embedding dispatch both revalidate the original owner/session and app privacy.
+A managed frame has at most one gate and one new screenshot request. Admission,
+plan, auth, quota and backpressure failures terminate without another model
+request. Explicit Gemini BYOK retains the existing owner-bound tool loop and
+retry/header behavior. Legacy model responses are revalidated before any tool
+executes, and semantic search passes the original authorization into embedding.
+Auth acquisition and actual embedding dispatch both revalidate the original
+owner/session and app privacy.
 The screenshot test runner captures its job owner before loading database rows,
 binds each app/window before loading pixels, and uses the same required original
 authorization through replay inference and tools. Revoked replay results never
@@ -120,12 +121,13 @@ its synthetic `no_task_found` as inference. Terminal `outcome=refused`,
 counts and `pipeline=legacy` identify the refusal. No retry, observation or candidate is created.
 
 Every processed frame emits `Screen Task Frame Terminal` with `schema_version=2`,
-`pipeline` (`screen_task_v2`, `legacy`), `gate_outcome`,
-`audit_sample`, actual `extractor` (`gemini_3_8`, `legacy`, `none`), terminal
+`pipeline` (`screen_task_v2`, `legacy` for explicit Gemini BYOK), `gate_outcome`,
+`audit_sample`, actual `extractor` (`luna`, `legacy`, `none`; historical persisted
+`gemini_3_8` values remain readable), terminal
 `outcome`, `error_class`, `fallback_reason`, `eligible_frames` (one for a valid owner/privacy-bound frame),
-`feature_enabled_at_start`, `client_bypass`,
+`feature_enabled_at_start` (a current managed admission lease), `client_bypass`,
 `invalid_items`, stage attempt counts (`legacy_attempts` counts loop invocations,
-not inner feature-off tool/model requests), and delivery counts `policy_rejected`,
+not inner explicit-BYOK tool/model requests), and delivery counts `policy_rejected`,
 `outbox_saved`, `coalesced`, `pending_delivered`, `failed`. Stage durations are
 `ocr_ms`, `retrieval_ms` (including profile lookup), `gate_ms`, `extraction_ms`,
 `delivery_ms`, and `capture_to_terminal_ms` (includes queue delay). A stage that
@@ -137,14 +139,14 @@ an account swap cannot attribute a prior owner’s delivery to the incoming user
 
 `desktop_health_event` / `event=fallback_triggered` retains the registered areas
 `screen_task_gate` and `screen_task_extraction`, with bounded reasons
-`ocr_unusable`, `gate_invalid_response`, `provider_5xx`, `timeout`, `offline`,
-`dispatch_disabled`. Backend Jev fail-open uses
+`ocr_unusable`, `gate_invalid_response`, `provider_5xx`, `timeout`, `offline`.
+JEV fail-open routes the admitted frame to Luna. Backend Jev fail-open uses
 `omi_fallback_total{component="screen_task_gate",reason="gate_unavailable"}`.
 `omi_screen_task_gate_frames_total{outcome}` counts backend gate admissions,
 including terminal plan/quota/stop states;
 `omi_screen_task_build_floor_refusals_total{surface}` counts build-floor refusals
 on `gate`, `admission`, and `proxy` with no build number or user agent;
-`omi_screen_task_client_bypass_total` counts flagged screenshot requests carrying
+`omi_screen_task_client_bypass_total` counts managed screenshot requests carrying
 client-bypass metadata. Client terminal events are the authoritative eligible
 frame denominator, since rejected and pre-upload-failed frames send no screenshot.
 Backend counters cannot deduplicate ambiguous client transport outcomes.
@@ -176,8 +178,8 @@ completion events for both immediate and deferred audit suggestions; use frame
 terminal events and `Task Extracted` for the original processing denominator.
 An audit is model disagreement evidence, not human recall ground
 truth. Existing candidate-attribution events retain canonical IDs separately.
-Flag-configured logging suppresses inherited content-bearing task logs through
-extraction, ordinary legacy and staging. Other capture/coordinator logs are outside that
+Screen-task logging suppresses inherited content-bearing task logs through
+managed extraction, explicit Gemini BYOK and staging. Other capture/coordinator logs are outside that
 scope, and derived context/task content still persists in observations/outbox and
 candidates. Provider residency, retention and real cost are not verified here.
 
@@ -186,8 +188,8 @@ At each consented ramp stage read these signals:
 | Signal | Event/fields or metric |
 | --- | --- |
 | Gate pass rate | Within terminal events filtered to `feature_enabled_at_start=true`, count `gate_outcome=passed` / sum of `eligible_frames`; report rejected, fail-open, dedupe and bypass separately. Backend gate counter cross-checks received calls; report `outcome=gate_budget_exhausted` separately |
-| Audited-reject misses | Completion events filtered to `gate_outcome=rejected`, `audit_sample=true`, `extractor=gemini_3_8`, sum `pending_delivered`; show terminal audited frame count and human labels separately |
-| Fallback rate | `desktop_health_event`, `event=fallback_triggered`, the two areas and `reason`; terminal `fallback_reason` supplies cause context (extraction outages issue no fallback request); distinguish gate bypass from admission-loss legacy |
+| Audited-reject misses | Completion events filtered to `gate_outcome=rejected`, `audit_sample=true`, `extractor=luna`, sum `pending_delivered`; show terminal audited frame count and human labels separately |
+| Fallback rate | `desktop_health_event`, `event=fallback_triggered`, the gate area and `reason`; terminal `fallback_reason` supplies cause context (Luna outages terminate without a fallback request); distinguish gate bypass from admission stops |
 | Delivered suggestions/user-day | Sum completion `pending_delivered` by analytics user/receipt day and original extractor, sliced by `delivery_path`; compare a contemporaneous legacy baseline and active-user exposure |
 | Latency | Terminal stage `*_ms`, especially `capture_to_terminal_ms`; slice by pipeline/extractor and messaging cohort using existing cohort metadata |
 | Errors | Terminal `outcome=failed`, `error_class` (including `provider_outage` and `gate_budget_cooldown`), `invalid_items`, `failed`; backend gate terminal outcome counts and existing proxy status/error telemetry |

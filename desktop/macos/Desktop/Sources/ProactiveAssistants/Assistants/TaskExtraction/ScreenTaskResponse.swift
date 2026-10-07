@@ -105,7 +105,7 @@ struct ScreenTaskResponse: Decodable {
 }
 
 /// Vertex candidates carry camelCase on the existing proxy wire. Ignore thinking parts.
-struct ScreenTaskGeminiResponse: Decodable {
+struct ScreenTaskModelResponse: Decodable {
   struct Candidate: Decodable {
     struct Content: Decodable {
       struct Part: Decodable {

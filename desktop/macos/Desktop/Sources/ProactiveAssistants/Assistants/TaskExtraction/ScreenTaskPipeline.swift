@@ -9,7 +9,6 @@ struct ScreenTaskPipelineServices: Sendable {
   var profile: @Sendable () async -> String
   var gate: @Sendable (String, String, [String]) async throws -> ScreenTaskAdmission
   var extract: @Sendable (Data, ScreenTaskAdmission) async throws -> String
-  var legacy: @Sendable () async throws -> ScreenTaskExtraction
   var fallback: @Sendable (String, String) -> Void
   var now: @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
 }
@@ -114,40 +113,18 @@ actor ScreenTaskPipeline {
       let results = try response.results(app: frame.appName, context: context, today: today)
       metrics.invalidItems = response.invalidItemCount + response.tasks.count - results.filter { $0.hasNewTask }.count
       dedupe.record(key: key, lines: lines, now: services.now())
-      metrics.extractor = "gemini_3_8"
+      metrics.extractor = "luna"
       return ScreenTaskExtraction(results: results, searchCount: 1, admission: gate)
     } catch {
       try services.validateFrame()
       try Task.checkCancellation()
-      // Stop means rollback, not a provider fault. Old feature results never reach delivery.
-      let stopped =
-        (error as? ScreenTaskHTTPFailure)?.stopped == true
-        || (error as? ScreenTaskFailure).map {
-          if case .stopped = $0 { return true }
-          return false
-        } == true
-      // Extraction outages terminate this frame. No legacy request, observation or dedupe entry.
-      guard stopped else {
-        if let reason = ScreenTaskErrorPolicy.outageReason(error) {
-          metrics.fallbackReason = reason
-          throw ScreenTaskFailure.providerOutage
-        }
-        throw error
+      // Provider outages and stop/admission denials terminate the frame. Never
+      // re-enter the retired paid Gemini tool loop from the managed pipeline.
+      if let reason = ScreenTaskErrorPolicy.outageReason(error) {
+        metrics.fallbackReason = reason
+        throw ScreenTaskFailure.providerOutage
       }
-      let reason = "dispatch_disabled"
-      metrics.fallbackReason = reason
-      services.fallback("screen_task_extraction", reason)
-      metrics.legacyAttempts += 1
-      metrics.pipeline = "legacy"
-      let start = services.now()
-      var fallback = try await ScreenTaskWorkAuthority.$validate.withValue(services.validateFrame) {
-        try await services.legacy()
-      }
-      try services.validateFrame()
-      metrics.extractionMS += (services.now() - start) * 1000
-      metrics.extractor = "legacy"
-      fallback.extractor = "legacy"
-      return fallback
+      throw error
     }
   }
 }

@@ -78,6 +78,7 @@ from .first_open_obligations import (
 from config.translation import resolve_ondemand_config
 from config.sync_lineage import sync_lineage_resolve_active_for
 from database.translation_admission import TranslationReservation, reservation_is_current
+from utils.llm.model_config import LUNA_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -3220,7 +3221,8 @@ def materialize_translation(
             'translation': value_digest,
             'source_hint': source_hint.strip().lower() or 'detect-v1',
             'policy': policy_version,
-            'model': 'gemini-2.5-flash-lite' if policy_version == 'viewed_v1' else 'legacy-configured',
+            # Policy model identity; provider usage records the actual route, including BYOK.
+            'model': LUNA_MODEL if policy_version == 'viewed_v1' else 'legacy-configured',
             'prompt': 'v1' if policy_version == 'viewed_v1' else 'legacy',
         }
         metadata[segment_id] = by_target

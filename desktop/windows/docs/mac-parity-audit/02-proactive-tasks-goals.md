@@ -26,17 +26,20 @@
 > sits on top of. `git log --format=%ad -1` on every cited file establishes ship date relative to
 > the 2026-07-19 coordinator landing and the 2026-08-20 audit date.
 
+> **Post-audit implementation update (2026-10-06):** Windows screen-task extraction now uses
+> local OCR → the JEV screen-task gate → one Luna request through the desktop LLM gateway. The
+> original Gemini tool loop and its standalone prompt/context modules were retired. References
+> below to that loop describe the implementation at the August audit date; the current path is
+> documented in the updated screen-extraction sections.
+
 ## Changed since the 2026-08-20 audit
 
-- **Screen-based AI task extraction is fully present, not absent, and shipped 2026-07-15** — over
-  five weeks before the audit that called it "Absent." `src/main/assistants/tasks/` is a
-  line-for-line port: the same 15-app whitelist + 7-browser keyword filter
-  (`appLists.ts`), the same context-switch/fallback/messaging-fast-path triggers with a
-  per-window dedupe TTL (`taskAssistant.ts`), the same 5-tool (`search_similar`,
-  `search_keywords`, `extract_task`, `reject_task`, `no_task_found`) up-to-8-iteration
-  tool-calling loop (`loop.ts`, `tools.ts`), the same title-specificity validator and 0.75
-  confidence gate (`models.ts`, `create.ts`), and the same source-category/subcategory
-  classification. This was the single largest claimed gap in the old file; it does not exist.
+- **Screen-based AI task extraction was present at the August audit and remains present.** The
+  original July implementation used the 5-tool, up-to-8-iteration Gemini loop. On 2026-10-06,
+  Windows replaced that route with local OCR → JEV admission → one structured Luna extraction
+  through the desktop LLM gateway. The whitelist, triggers, confidence gate and source
+  classification remain; duplicate/refine/complete relations are suppressed because Windows'
+  staged-task sink has no relation-mutation API. See the current implementation below.
 - **The staged→action-item promotion pipeline is present**, including the 30s inline debounce,
   a 60s-floor backoff-ladder safety-net timer, and a startup promote
   (`assistants/tasks/promotionService.ts`, shipped the same day as the old audit,
@@ -46,7 +49,7 @@
 - **The AI user profile is present and shared**, not "Mac-local-only" as the old file's
   cross-reference section claimed. `assistants/aiUserProfile/{service,synthesis}.ts` shipped
   2026-08-09 as an explicit "SSOT AI user profile synthesis for Mac and Windows" and is read
-  by the task-extraction context assembler (`tasks/context.ts`).
+  by the screen-task pipeline (`tasks/screenTaskPipeline.ts`).
 - **Automatic daily goal generation and stale-goal auto-completion are both present**, shipped
   2026-07-15 (`assistants/goals/{generate,schedule,staleCleanup}.ts`). The trigger mechanism
   is a deliberate, documented deviation from Mac (a 4-hour heartbeat + once-per-calendar-day
@@ -104,7 +107,7 @@
 
 | Feature | Mac location(s) | Windows status | Value (H/M/L) |
 |---|---|---|---|
-| Screen-based AI task extraction (whitelisted apps, 5-tool loop, confidence gate) | `TaskAssistant.swift`, `TaskAssistantSettings.swift` | **Present** — `assistants/tasks/{taskAssistant,loop,tools,models,create,appLists}.ts`, shipped 2026-07-15 | — (closed) |
+| Screen-based AI task extraction (whitelist, JEV gate, Luna, confidence gate) | `TaskAssistant.swift`, `TaskAssistantSettings.swift` | **Present** — `assistants/tasks/{taskAssistant,screenTaskPipeline,toolBackends,models,create,appLists}.ts`; original Gemini loop replaced 2026-10-06 | — (closed) |
 | Task source classification (category/subcategory) | `TaskModels.swift` | **Present internally** — captured + stored in staged/backend metadata (`create.ts`); not surfaced as a filter chip in `Tasks.tsx` | L |
 | Staged-task semantic deduplication (hourly Gemini pass over the whole staged pool) | `TaskDeduplicationService.swift` | **Absent** on Windows (no client job). Backend has only a lightweight exact-normalized-string duplicate guard at promote time (`routers/staged_tasks.py` via `candidate_service`), not a semantic hourly pass | M |
 | Task relevance prioritization (hourly re-rank) + daily AI user profile | `TaskPrioritizationService.swift`, `AIUserProfileService` | **Absent** as a ranking job — `relevance_score` is a real synced column (`ipc/taskStore.ts`) but nothing on Windows computes it; `Tasks.tsx` still sorts by due-date bucket only. AI user profile itself **is present** (`assistants/aiUserProfile/`, shared w/ Mac, 2026-08-09) and already feeds task-extraction context | M |
@@ -124,20 +127,19 @@
 | Onboarding goal AI generation | `GoalsAIService.normalizeOnboardingGoalInput` (local Gemini) | **Present-but-weaker**, confirmed unchanged — `GoalStep.tsx` → `lib/goals.ts::generateGoal` is a single generic agent-LLM prompt, not the rich context generator the main Goals page now has | L |
 | Onboarding "auto-created tasks" explainer | `AutoCreatedTasksStep.tsx` | **Present**, and now literally true rather than aspirational — the screen-extraction feature its copy describes ("mentioned in Slack") is real and shipped | — |
 
-## Screen-based AI task extraction — PRESENT (old audit's headline claim was wrong)
+## Screen-based AI task extraction — PRESENT; route updated 2026-10-06
 
 **What it is:** Watch the screen for unaddressed requests/commitments and auto-create tasks
 without user action.
 
-**Where (Windows):** `src/main/assistants/tasks/taskAssistant.ts` (301 lines, the coordinator
-peer implementing `ProactiveAssistant`), `loop.ts` (the dispatch loop), `tools.ts` (tool
-schemas), `models.ts` (parse/validate), `create.ts` (save/sync/embed/promote), `context.ts`
-(prompt-context assembly), `appLists.ts` (whitelist), `prompt.ts` (system/user prompt),
-`toolBackends.ts` (search backends), `geminiWire.ts` (transport). All shipped 2026-07-15, per
-`git log`, more than five weeks before the 2026-08-20 audit that called this "Absent" with a
-repo-wide-grep citation.
+**Where (Windows):** `taskAssistant.ts` owns triggers and staging; `screenTaskPipeline.ts` owns
+local OCR, JEV admission, and the single Luna extraction request; `toolBackends.ts` supplies
+query-ranked local FTS task context; `models.ts` validates task titles and maps the schema to
+`ExtractedTask`; `create.ts` runs the existing save/sync/embed/promote lifecycle; and
+`appLists.ts` owns the whitelist and browser-window filter. The original July implementation's
+`loop.ts`, `tools.ts`, `prompt.ts`, `geminiWire.ts`, and `context.ts` have been retired.
 
-**How it works, verified against the current file:**
+**How the current path works:**
 - **Whitelist + window gate**: `appLists.ts` ports Mac's exact 15-app whitelist (Telegram,
   WhatsApp, Messages, Slack, Discord, Zoom, Chrome/Arc/Safari/Firefox/Edge/Brave/Opera, Notes,
   Superhuman) and the ~50-keyword browser-window filter, matched by lowercase substring —
@@ -146,34 +148,35 @@ repo-wide-grep citation.
   messaging app via `MESSAGING_INTERVAL_MS`, else `taskFallbackIntervalMin` minutes, default 10)
   and `onContextSwitch()` (the primary trigger, extracting from the departing frame). Both funnel
   into the shared `runPipeline`, which takes a re-entrancy lock (`running`) and a per-window
-  dedupe TTL (`analyzedWindows`, 60s non-messaging / 15s messaging) so the two triggers can't
-  double-analyze the same window (lines 178–200).
-- **Tool-calling loop**: `loop.ts::runExtractionLoop` forces a tool call on iteration 0 (JPEG
-  present from the start) and dispatches up to `TASK_MAX_ITERS = 8` model calls across the same 5
-  tools Mac has — `search_similar`, `search_keywords`, `extract_task`, `reject_task`,
-  `no_task_found` (`tools.ts` lines 40–235) — with the same "look again, is there another
-  distinct commitment" re-prompt after a successful extract, so one frame can yield multiple
-  tasks (lines 74–94).
-- **Validation + confidence gate**: `models.ts::validateTaskTitle` ports Mac's ≥6-word +
-  proper-noun-after-the-verb + generic-pattern-rejection heuristic verbatim (lines 175–206).
-  `create.ts::createStagedTaskFromExtraction` gates on `DEFAULT_MIN_CONFIDENCE = 0.75` (line 41),
-  matching the user-configurable Mac default.
+  dedupe TTL (`analyzedWindows`, 60s non-messaging / 15s messaging) so the two triggers cannot
+  double-analyze the same window.
+- **Session and privacy guard**: the task assistant pins the session epoch before obtaining the
+  backend session and checks it immediately after resolution, then rechecks settings, screen
+  privacy and session state before OCR/model work and before staging.
+- **Local OCR + JEV gate**: `screenTaskPipeline.ts` extracts bounded OCR text locally and posts
+  the app, OCR, related task descriptions and a bounded profile excerpt to
+  `/v1/screen-task/gate`. A rejection skips extraction except for an audit sample. Terminal
+  authorization, plan, quota and stop denials remain terminal; unavailable or malformed gate
+  results admit one extraction request.
+- **Single Luna call**: the pipeline sends the JPEG and bounded task context in a structured JSON
+  request to the gateway's Gemini-compatible `gpt-6-luna:generateContent` route. Model failures
+  stop the frame; there is no Gemini fallback.
+- **Task authority**: the schema can classify `new`, `duplicate`, `refines` and `completes`, but
+  Windows stages only `new` tasks because its current storage path has no relation-mutation API.
+  It also rejects inferred-next-step captures at extraction and again at the staging sink.
+- **Validation + confidence gate**: `models.ts::validateTaskTitle` retains the ≥6-word,
+  specific-title checks; `create.ts::createStagedTaskFromExtraction` gates on
+  `DEFAULT_MIN_CONFIDENCE = 0.75`, matching the user-configurable Mac default.
 - **Source classification**: `ExtractedTask.sourceCategory`/`sourceSubcategory` (`models.ts`
-  lines 41–42) are parsed from the model's `extract_task` call and written into both the local
-  staged row and the backend `metadata` JSON (`create.ts` lines 165–166, 189–190) — present, just
-  not exposed as a UI filter (see the Rich Tasks page item).
-- **Dedup/prioritization search tools**: `toolBackends.ts` ports Mac's vector (`> 0.3` cosine
-  similarity, top 10) and FTS5 keyword (prefix-OR, ≥3-char tokens) search backends 1:1, including
-  the exact `TaskSearchResult` JSON shape the model sees.
-- **Context grounding**: `context.ts::assembleTaskContext` reads the AI user profile (local),
-  merges top-relevance + recent-active + staged tasks for dedup evidence, lists recently
-  completed tasks, and fetches active goals (300s-cached) — the same five-slice merge order as
-  Mac's `refreshContext`, minus Mac's "user-deleted tasks" slice (Windows hard-deletes, so
-  there's no `deleted=1` row to read — a documented, intentional deviation).
+  are parsed from the structured response and written into local staged-task and backend metadata;
+  they are not exposed as a UI filter.
+- **Related-task context**: `toolBackends.ts` uses bounded FTS search over active action items and
+  staged tasks. The local AI user profile is read by `screenTaskPipeline.ts`; the retired
+  five-slice assembler and its 300-second goals cache are no longer part of task extraction.
 
-**Windows status:** Present, essentially feature-complete relative to Mac's extraction engine.
-The old audit's "Absent... single biggest Tasks gap" verdict is simply wrong for current source;
-it was already wrong on the audit's own date.
+**Windows status:** The capture path is present and gateway-routed through JEV and Luna. It is a
+bounded single-call implementation; it does not apply duplicate/refine/complete relations to
+existing Windows tasks because the current staged-task storage contract has no such mutation.
 
 **Value / notes:** This closes what was the highest-value item in the old audit. The genuine
 remaining gaps are downstream of extraction (dedup, prioritization, notification, UI richness),
@@ -216,8 +219,8 @@ there; the column is populated only when the backend (or another client) supplie
 `Tasks.tsx` still sorts by due-date bucket + created-at tiebreak only. The **AI user profile
 itself is present**, correcting the old audit's cross-reference note that called it
 "Mac-local-only" — `assistants/aiUserProfile/{service,synthesis}.ts` (2026-08-09) generates it
-locally on the same ~24h cadence as Mac and it already feeds `tasks/context.ts`'s prompt
-grounding; it is simply not (yet) wired into a Windows-side ranking pass.
+locally on the same ~24h cadence as Mac and it is included in screen-task gate/extraction
+context; it is simply not (yet) wired into a Windows-side ranking pass.
 
 **Value / notes:** Medium, unchanged — due-date sort remains a reasonable fallback, so the loss
 is "smart ordering of no-due-date/AI-noise tasks," not unusability.
@@ -527,8 +530,8 @@ extraction gap closing.
 
 - **AI user profile** (`assistants/aiUserProfile/`) is present and shared with Mac (2026-08-09),
   correcting the old audit's cross-reference note that called it "Mac-local-only." It already
-  feeds task-extraction context (`tasks/context.ts`); it does not yet feed a Windows-side task
-  *ranking* pass, since no such pass exists (see the prioritization item above).
+  feeds the JEV/Luna task path through `tasks/screenTaskPipeline.ts`; it does not feed a
+  Windows-side task *ranking* pass, since no such pass exists (see the prioritization item above).
 - The coding-agent/ACP stack (`codingAgent/`) and the desktop-automation "agent kernel"
   (`agentKernel/`) both exist generally on Windows now, correcting the old audit's framing of
   both as wholesale-missing. Neither is wired to a task-specific surface — that wiring gap, not

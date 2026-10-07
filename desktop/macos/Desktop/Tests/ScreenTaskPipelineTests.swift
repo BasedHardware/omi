@@ -12,8 +12,20 @@ final class ScreenTaskPipelineTests: XCTestCase {
       }, processedAt: Date(timeIntervalSince1970: 0))
   }
 
-  @MainActor func testFlagDefaultsOffWithoutPostHogAdmission() {
-    XCTAssertFalse(ScreenTaskFeature.isEnabled)
+  @MainActor func testManagedJevPathDefaultsOnBehindServerAdmissionAndExemptsGeminiBYOK() {
+    XCTAssertTrue(ScreenTaskFeature.isConfigured)
+    XCTAssertTrue(
+      ScreenTaskFeature.shouldUseManagedPath(
+        serverAdmitted: true, ownerCurrent: true, hasSelectedGeminiBYOK: false))
+    XCTAssertFalse(
+      ScreenTaskFeature.shouldUseManagedPath(
+        serverAdmitted: false, ownerCurrent: true, hasSelectedGeminiBYOK: false))
+    XCTAssertFalse(
+      ScreenTaskFeature.shouldUseManagedPath(
+        serverAdmitted: true, ownerCurrent: false, hasSelectedGeminiBYOK: false))
+    XCTAssertFalse(
+      ScreenTaskFeature.shouldUseManagedPath(
+        serverAdmitted: true, ownerCurrent: true, hasSelectedGeminiBYOK: true))
   }
 
   func testMainPaneDedupeIgnoresSidebarAndLayoutJitterButPassesNovelTask() {
@@ -121,7 +133,7 @@ final class ScreenTaskPipelineTests: XCTestCase {
       jpeg: Data([1, 2]), app: "Telegram", profile: "synthetic user", tasks: selected, today: "2026-10-02")
     let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
     let config = try XCTUnwrap(payload["generationConfig"] as? [String: Any])
-    XCTAssertEqual(config["thinkingConfig"] as? [String: String], ["thinkingLevel": "low"])
+    XCTAssertNil(config["thinkingConfig"], "Luna requests must not carry Gemini-only thinking options")
     let contents = try XCTUnwrap(payload["contents"] as? [[String: Any]])
     let parts = try XCTUnwrap(contents[0]["parts"] as? [[String: Any]])
     XCTAssertFalse((parts[0]["text"] as? String ?? "").contains("task-8"))
@@ -212,12 +224,13 @@ final class ScreenTaskPipelineTests: XCTestCase {
       "candidates": [["finishReason": "MAX_TOKENS", "content": ["parts": [["text": truncated]]]]]
     ]
     let response = try JSONDecoder().decode(
-      ScreenTaskGeminiResponse.self, from: JSONSerialization.data(withJSONObject: wire))
+      ScreenTaskModelResponse.self, from: JSONSerialization.data(withJSONObject: wire))
     let recovered = try JSONDecoder().decode(ScreenTaskResponse.self, from: Data(response.text().utf8))
     XCTAssertEqual(try recovered.results(app: "Messages", context: [], today: "2026-10-02").count, 1)
   }
 
   func testSchemaBoundsEightItemsAndEveryStringUnderOutputCap() throws {
+    XCTAssertEqual(ScreenTaskPrompt.model, "gpt-6-luna")
     let data = try ScreenTaskPrompt.request(jpeg: Data(), app: "Messages", profile: "", tasks: [], today: "2026-10-02")
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     let config = try XCTUnwrap(object["generationConfig"] as? [String: Any])
@@ -232,6 +245,7 @@ final class ScreenTaskPipelineTests: XCTestCase {
     XCTAssertEqual(tags["maxItems"] as? Int, 3)
     XCTAssertEqual((tags["items"] as? [String: Any])?["maxLength"] as? Int, 16)
     XCTAssertEqual(config["maxOutputTokens"] as? Int, 2048)
+    XCTAssertNil(config["thinkingConfig"])
   }
 
   func testDecoderEnforcesStringAndTagBoundsWithoutDroppingValidSibling() throws {

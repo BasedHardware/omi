@@ -7,7 +7,7 @@ a non-empty response.
 
 Default profile is premium. Set MODEL_QOS=max to test max profile.
 
-Requires: OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, PERPLEXITY_API_KEY, GEMINI_API_KEY in .env.
+Requires: a configured Omi LLM gateway and any provider credentials needed by non-gateway paths.
 Run: cd backend && python3 -m pytest tests/integration/test_qos_real_llm.py -v -s
 """
 
@@ -37,7 +37,6 @@ from utils.llm.clients import (
 )
 
 SIMPLE_PROMPT = "Reply with exactly one word: hello"
-HAS_GEMINI_KEY = bool(os.environ.get('GEMINI_API_KEY', ''))
 
 
 # ---------------------------------------------------------------------------
@@ -158,24 +157,27 @@ class TestPremiumVision:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — gemini-2.5-flash-lite features (free-text cost optimization)
+# Premium profile — features migrated from Gemini/OpenRouter to the Luna gateway
 # ---------------------------------------------------------------------------
-class TestPremiumGemini:
-    """Test gemini-2.5-flash-lite features in premium profile respond to real prompts."""
+class TestPremiumLunaMigrated:
+    """Former Gemini and OpenRouter features use the paid Luna gateway route."""
 
-    GEMINI_FEATURES = [
+    MIGRATED_FEATURES = [
         'session_titles',
         'followup',
         'onboarding',
         'app_integration',
         'trends',
+        'translation',
+        'screen_frame_judge',
+        'wrapped_analysis',
     ]
 
-    @pytest.mark.skipif(not HAS_GEMINI_KEY, reason="GEMINI_API_KEY not set")
-    @pytest.mark.parametrize("feature", GEMINI_FEATURES)
-    def test_gemini_feature_responds(self, feature):
+    @pytest.mark.parametrize("feature", MIGRATED_FEATURES)
+    def test_migrated_feature_uses_luna_gateway(self, feature):
         model = get_model(feature)
-        assert model == 'gemini-2.5-flash-lite', f"{feature} should be gemini-2.5-flash-lite in premium, got {model}"
+        assert model == LUNA_MODEL, f"{feature} should use {LUNA_MODEL}, got {model}"
+        assert get_provider(feature) == 'openai'
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} ({model}) returned empty response"
@@ -183,14 +185,15 @@ class TestPremiumGemini:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — OpenRouter (only wrapped_analysis)
+# Premium profile — wrapped_analysis is no longer a company-paid OpenRouter call
 # ---------------------------------------------------------------------------
-class TestPremiumOpenRouter:
-    """Test OpenRouter feature responds."""
+class TestPremiumWrappedAnalysis:
+    """Test wrapped_analysis uses the Luna gateway."""
 
     def test_wrapped_analysis(self):
         model = get_model('wrapped_analysis')
-        assert model == 'gemini-3-flash-preview'
+        assert model == LUNA_MODEL
+        assert get_provider('wrapped_analysis') == 'openai'
         llm = get_llm('wrapped_analysis')
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"wrapped_analysis ({model}) returned empty response"

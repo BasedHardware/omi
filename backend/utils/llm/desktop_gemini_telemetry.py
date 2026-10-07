@@ -28,10 +28,11 @@ from llm_gateway.gateway.accounting import ProviderResponseMetadata, vertex_usag
 from llm_gateway.gateway.request_context import resolve_request_id
 from utils.journey_metrics_contract import resolve_client_kind_from_headers
 from utils.llm import desktop_gemini_gateway, vertex_pt_routing as ptr
+from utils.llm.model_config import LUNA_MODEL
 from utils.llm.managed_spend_ledger import DESKTOP_PROXY_CALLER, ManagedAttempt, schedule_managed_attempt
 
 ALLOWED_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
-ALLOWED_MODELS = frozenset(ptr.DESKTOP_TEXT_LANES) | {ptr.DESKTOP_EMBEDDING_MODEL}
+ALLOWED_MODELS = frozenset(ptr.DESKTOP_TEXT_LANES) | {ptr.DESKTOP_EMBEDDING_MODEL, LUNA_MODEL}
 _ALLOWED_WORKLOADS = GEMINI_WORKLOADS
 _ALLOWED_TRAFFIC_TYPES = frozenset({'PROVISIONED_THROUGHPUT', 'ON_DEMAND'})
 # Provider routes this proxy calls itself. Company-paid traffic that hops the

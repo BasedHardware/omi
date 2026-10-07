@@ -377,19 +377,37 @@ actor TaskAssistant: ProactiveAssistant {
   /// Used by the test runner to replay past screenshots.
   /// Returns (results, searchCount) — results is one entry per extracted task plus one
   /// terminator entry (no_task_found/reject_task) when no tasks were extracted.
-  func testAnalyze(jpegData: Data, appName: String, binding: ScreenTaskFrameBinding) async throws -> (
-    [TaskExtractionResult], Int
-  ) {
+  func testAnalyze(
+    jpegData: Data, appName: String, windowTitle: String?, screenshotID: Int64?,
+    binding: ScreenTaskFrameBinding
+  ) async throws -> ([TaskExtractionResult], Int) {
     let validate: @Sendable () throws -> Void = {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(binding.authorization) else {
         throw ScreenTaskFailure.ownerRevoked
       }
-      guard binding.exclusion.appName == appName, binding.isCurrent() else { throw ScreenTaskFailure.privacyRevoked }
+      guard binding.exclusion.appName == appName, binding.isCurrent(),
+        !ScreenTaskPrivacy.isPrivateWindow(app: appName, title: windowTitle)
+      else { throw ScreenTaskFailure.privacyRevoked }
       try Task.checkCancellation()
     }
     try validate()
+    let frame = CapturedFrame(
+      jpegData: jpegData, appName: appName, windowTitle: windowTitle,
+      frameNumber: Int(screenshotID ?? 0), screenshotId: screenshotID, taskBinding: binding)
     return try await ScreenTaskWorkAuthority.$validate.withValue(validate) {
-      try await extractTaskSingleStage(from: jpegData, appName: appName, authorization: binding.authorization)
+      if await APIKeyService.activeHealthyGeminiBYOK(forOwnerID: binding.authorization.ownerID) != nil {
+        let (results, searches) = try await extractTaskSingleStage(
+          from: jpegData, appName: appName, authorization: binding.authorization, useSelectedGeminiBYOK: true)
+        return (results, searches)
+      }
+      guard let lease = await ScreenTaskFeature.lease(for: binding.authorization) else {
+        throw ScreenTaskFailure.stopped
+      }
+      let metrics = ScreenTaskFrameMetrics()
+      let extraction = try await extractScreenTasks(
+        frame: frame, binding: binding, lease: lease, metrics: metrics,
+        dedupeKey: "test-runner:\(screenshotID.map(String.init) ?? UUID().uuidString)")
+      return (extraction.results, extraction.searchCount)
     }
   }
 
@@ -441,7 +459,7 @@ actor TaskAssistant: ProactiveAssistant {
   /// the regular context-switch + fallback-timer path.
   private func armFastFallbackIfNeeded(frame: CapturedFrame) async {
     guard Self.messagingFastPathApps.contains(frame.appName) else { return }
-    if await ScreenTaskFeature.isEnabled {
+    if await ScreenTaskFeature.isEnabled(for: frame.taskBinding?.authorization) {
       enqueue(frame, kind: .timerFallback)
       return
     }
@@ -535,7 +553,7 @@ actor TaskAssistant: ProactiveAssistant {
         ? Self.messagingFastPathDelay
         : TimeInterval(analysisDelay)
       let now = Date()
-      let screenTaskEnabled = await ScreenTaskFeature.isEnabled
+      let screenTaskEnabled = await ScreenTaskFeature.isEnabled(for: frame.taskBinding?.authorization)
       if !screenTaskEnabled, dedupeTTL > 0, let last = lastAnalyzedByKey[dedupeKey] {
         let elapsed = now.timeIntervalSince(last)
         if elapsed < dedupeTTL {
@@ -610,7 +628,8 @@ actor TaskAssistant: ProactiveAssistant {
   /// Returns (results, searchCount) — one TaskExtractionResult per extract_task plus a
   /// terminator result when zero tasks were extracted.
   func extractTaskSingleStage(
-    from jpegData: Data, appName: String, authorization: RuntimeOwnerAuthorizationSnapshot
+    from jpegData: Data, appName: String, authorization: RuntimeOwnerAuthorizationSnapshot,
+    useSelectedGeminiBYOK: Bool = false
   ) async throws -> (
     [TaskExtractionResult], Int
   ) {
@@ -782,7 +801,8 @@ actor TaskAssistant: ProactiveAssistant {
         tools: [tools],
         forceToolCall: iteration == 0,
         thinkingBudget: 1024,
-        authorization: authorization
+        authorization: authorization,
+        useSelectedGeminiBYOK: useSelectedGeminiBYOK
       )
 
       try ScreenTaskWorkAuthority.require()

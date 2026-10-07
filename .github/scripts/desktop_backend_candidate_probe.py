@@ -36,13 +36,10 @@ MAX_CHAT_SECONDS = 70
 MAX_FIRST_EVENT_SECONDS = 20
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 CONTRACT_PATTERN = re.compile(r"^[1-9][0-9]{0,5}$")
-REAL_GEMINI_PROVIDER_ROUTES = frozenset({"vertex_ai", "ai_studio", "ai_studio_byok", "llm_gateway"})
-# `llm_gateway` is the route the desktop proxy stamps on X-Omi-Provider for
-# company-paid Gemini traffic since #12337 routed it through the LLM gateway
-# (backend/utils/llm/desktop_gemini_gateway.py proxy_company_paid_via_gateway).
-# The gateway's desktop-vertex lanes pin the Vertex provider with no fallbacks
-# (backend/llm_gateway/gateway/config_loader.py), so the hop is still real
-# Gemini-on-Vertex; stub and unknown routes stay rejected fail-closed.
+PAID_DESKTOP_PROVIDER_ROUTES = frozenset({"llm_gateway"})
+# Exercise the new Luna-only endpoint. A pre-cutover BFF rejects this model;
+# the new BFF uses a new gateway lane and cannot reach an old Vertex route.
+# Keep the Gemini-wire evidence key for the existing release receipt schema.
 
 
 class ProbeError(RuntimeError):
@@ -93,9 +90,9 @@ def _require_object(value: object, *, stage: str) -> dict[str, Any]:
     return value
 
 
-def _require_real_gemini_provider(value: object) -> str:
+def _require_paid_desktop_gateway(value: object) -> str:
     provider = value if isinstance(value, str) else ""
-    if provider not in REAL_GEMINI_PROVIDER_ROUTES:
+    if provider not in PAID_DESKTOP_PROVIDER_ROUTES:
         raise ProbeError("gemini_proxy: response did not come from an admitted provider route")
     return provider
 
@@ -267,13 +264,13 @@ def _gemini_request(
     token: str,
     timeout: int = HTTP_TIMEOUT_SECONDS,
 ) -> dict[str, object]:
-    """Exercise the actual Gemini proxy without retaining generated content."""
+    """Exercise Luna through the desktop compatibility proxy without retaining content."""
     payload = {
         "contents": [{"role": "user", "parts": [{"text": "Reply with OK."}]}],
-        "generationConfig": {"maxOutputTokens": 16, "thinkingConfig": {"thinkingBudget": 0}},
+        "generationConfig": {"maxOutputTokens": 16},
     }
     request = urllib.request.Request(
-        f"{base_url.rstrip('/')}/v1/proxy/gemini/models/gemini-2.5-flash:generateContent",
+        f"{base_url.rstrip('/')}/v1/proxy/gemini/models/gpt-6-luna:generateContent",
         data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
         headers={
             "Accept": "application/json",
@@ -295,7 +292,7 @@ def _gemini_request(
                 candidates = response_payload.get("candidates")
                 if not isinstance(candidates, list) or not candidates:
                     raise ProbeError("gemini_proxy: provider response has no candidates")
-                provider = _require_real_gemini_provider(response.headers.get("x-omi-provider"))
+                provider = _require_paid_desktop_gateway(response.headers.get("x-omi-provider"))
                 request_id = response.headers.get("x-omi-request-id") or response.headers.get("x-request-id")
                 if not request_id:
                     raise ProbeError("gemini_proxy: typed proxy headers are missing")

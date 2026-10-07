@@ -11,7 +11,7 @@ os.environ.setdefault(
 
 from models.chat import FileChat  # noqa: E402
 from utils.other import chat_file  # noqa: E402
-from utils.llm.model_config import LUNA_MODEL
+from utils.llm.gateway_client import FILE_CHAT_VISION_AUTO_LANE_ID
 
 
 class _Callback:
@@ -53,13 +53,17 @@ async def test_vision_chat_uses_luna_completion_budget_field(monkeypatch):
             [SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='A test image.'))])]
         )
 
-    client = SimpleNamespace(
+    file_client = SimpleNamespace(
         files=SimpleNamespace(content=get_file_content),
+    )
+    gateway_client = SimpleNamespace(
         chat=SimpleNamespace(completions=SimpleNamespace(create=create_completion)),
     )
-    monkeypatch.setattr(chat_file, '_get_async_openai', lambda: client)
+    monkeypatch.setattr(chat_file, '_get_async_openai', lambda: file_client)
+    monkeypatch.setattr(chat_file, 'get_file_chat_gateway_async_client', lambda: gateway_client)
 
     tool = object.__new__(chat_file.FileChatTool)
+    tool.uid = 'user-1'
     callback = _Callback()
     image = FileChat(
         id='file-1',
@@ -74,6 +78,6 @@ async def test_vision_chat_uses_luna_completion_budget_field(monkeypatch):
     assert answer == 'A test image.'
     assert callback.chunks == ['A test image.']
     assert callback.ended is True
-    assert request['model'] == LUNA_MODEL
+    assert request['model'] == FILE_CHAT_VISION_AUTO_LANE_ID
     assert request['max_completion_tokens'] == 2048
     assert 'max_tokens' not in request

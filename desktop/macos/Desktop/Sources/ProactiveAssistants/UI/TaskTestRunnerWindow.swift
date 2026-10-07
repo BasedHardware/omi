@@ -545,9 +545,11 @@ struct TaskTestRunnerView: View {
           // Run extraction pipeline
           let analyzeStart = Date()
           let (allResults, searchCount) = try await DesktopLogPrivacy.$suppressContent.withValue(
-            ScreenTaskFeature.isEnabled
+            ScreenTaskFeature.isConfigured
           ) {
-            try await taskAssistant.testAnalyze(jpegData: jpegData, appName: screenshot.appName, binding: binding)
+            try await taskAssistant.testAnalyze(
+              jpegData: jpegData, appName: screenshot.appName, windowTitle: screenshot.windowTitle,
+              screenshotID: screenshot.id, binding: binding)
           }
           let duration = Date().timeIntervalSince(analyzeStart)
 

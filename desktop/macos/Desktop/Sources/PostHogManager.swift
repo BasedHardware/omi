@@ -249,36 +249,6 @@ class PostHogManager {
       "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
   }
 
-  /// Fresh admission for the screen-task kill switch. SDK reload callbacks may
-  /// return cached values on quota/failure, so they cannot renew an upload lease.
-  func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {
-    guard isInitialized, !PostHogSDK.shared.isOptOut(), RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
-      let url = URL(string: host + "/flags/?v=2")
-    else { throw ScreenTaskFailure.stopped }
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = 5
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.httpBody = try JSONSerialization.data(withJSONObject: [
-      "token": apiKey, "distinct_id": authorization.ownerID,
-      "person_properties": [
-        "platform": "macos",
-        "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
-        "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
-        "update_channel": AppBuild.currentUpdateChannel,
-      ],
-    ])
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
-      throw ScreenTaskFailure.stopped
-    }
-    return try ScreenTaskFreshFlagResponse.enabled(data)
-  }
-
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
@@ -939,7 +909,9 @@ extension PostHogManager {
       properties["audit_sample"] = auditSample
       properties["extracted_candidate_count"] = max(0, min(candidateCount, 8))
     }
-    if let extractor { properties["extractor"] = ["gemini_3_8", "legacy"].contains(extractor) ? extractor : "none" }
+    if let extractor {
+      properties["extractor"] = ["luna", "gemini_3_8", "legacy"].contains(extractor) ? extractor : "none"
+    }
     track("Task Extracted", properties: properties)
   }
 

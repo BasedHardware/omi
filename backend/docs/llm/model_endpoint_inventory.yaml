@@ -78,9 +78,8 @@ model_config_features:
   gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini,
     openrouter, perplexity, and anthropic; OpenAI-compatible /v1/embeddings surface with openai and native Vertex :predict
     adapters.
-  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway
-    and does not retain a direct-provider fallback; gateway Gemini uses native Vertex generateContent authenticated by GKE
-    Workload Identity; Gemini BYOK remains unsupported and fails closed.
+  migration_status: get_llm routes company-paid generation to generated gateway lanes after explicit BYOK selection,
+    independent of feature mode. No direct-provider fallback or Gemini paid generation route is retained.
   test_guardrail_coverage:
   - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
   - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
@@ -169,7 +168,7 @@ surfaces:
   fallback_on_deny: n/a_allowed
   call_sites:
   - utils/retrieval/agentic.py::feature:chat_agent
-  current_provider_model: gateway lane omi:auto:chat-agent (openai/gpt-x-luna); direct OpenAI only when OMI_LLM_CHAT_AGENT_ROUTE=direct
+  current_provider_model: mandatory gateway lane omi:auto:chat-agent (openai/gpt-6-luna) after BYOK selection
   request_shape: streaming OpenAI chat-completions with function tools; independent tool_use blocks run concurrently
   gateway_lane_capability_needed: openai.chat_completions surface with streaming and tools on omi:auto:chat-agent
   migration_status: gateway_luna_chat_agent; Omi-managed traffic is get_llm('chat_agent') through the generated OpenAI lane
@@ -212,14 +211,12 @@ surfaces:
   funding_owner: omi
   fallback_on_deny: none_unwired
   call_sites: []
-  current_provider_model: gateway lane omi:auto:file-chat-vision (openai/gpt-x-luna); direct OpenAI when OMI_LLM_GATEWAY_FEATURE_MODE
-    is off, and as a degrade when the gateway answers the lane with model-not-found (is_gateway_model_not_found)
+  current_provider_model: mandatory gateway lane omi:auto:file-chat-vision (openai/gpt-6-luna)
   request_shape: streaming vision chat completion (image_url data URIs)
   gateway_lane_capability_needed: generated omi:auto:file-chat-vision lane with image_url content parts
-  migration_status: gateway_routed_file_chat; OpenAI Files upload/download stays direct by design (file bytes/file_id lifecycle,
-    no model tokens) and the completions call hops the gateway in feature mode; the model-not-found degrade calls OpenAI directly,
-    so that request is not recorded in llm_gateway_attempts and carries no lane accounting; BYOK OpenAI is not used (Files
-    file_id namespace is company-owned, so completions stay Omi-paid)
+  migration_status: gateway_only_generation; OpenAI Files upload/download stays direct for the company-owned
+    file_id lifecycle. Model-not-found and gateway faults do not fall back to direct generation.
+    BYOK OpenAI is not used for the company-owned Files namespace.
   test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py and backend/tests/unit/test_chat_file_completions.py
 - surface: file_chat_completions
   code_path: backend/utils/other/chat_file.py:FileChatTool
@@ -229,13 +226,11 @@ surfaces:
   funding_owner: omi
   fallback_on_deny: none_unwired
   call_sites: []
-  current_provider_model: gateway lane omi:auto:file-chat-documents (openai/gpt-x-luna file parts for PDFs); direct OpenAI
-    when OMI_LLM_GATEWAY_FEATURE_MODE is off, and as a degrade when the gateway answers the lane with model-not-found (is_gateway_model_not_found)
-  request_shape: file upload purpose=user_data, streaming chat completion file input parts
-  gateway_lane_capability_needed: generated omi:auto:file-chat-documents lane with OpenAI file content parts
-  migration_status: gateway_routed_file_chat; Assistants/Threads retired after the 2026-08-26 sunset; OpenAI Files upload/download
-    stays direct by design; the model-not-found degrade calls OpenAI directly, so that request is not recorded in llm_gateway_attempts
-    and carries no lane accounting; BYOK OpenAI is not used (same company-owned file_id namespace as vision)
+  current_provider_model: mandatory gateway lane omi:auto:file-chat-documents (openai/gpt-6-luna)
+  request_shape: chat completion with company-owned file parts
+  gateway_lane_capability_needed: generated omi:auto:file-chat-documents lane with file parts
+  migration_status: gateway_only_generation; OpenAI Files upload/download stays direct for the company-owned
+    file_id lifecycle. Model-not-found and gateway faults do not fall back to direct generation.
   test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py and backend/tests/unit/test_chat_file_completions.py
 - surface: desktop_gemini_proxy
   code_path: backend/routers/desktop_proxy.py:_proxy_unobserved
@@ -247,20 +242,14 @@ surfaces:
   call_sites:
   - routers/desktop_proxy.py::host:generativelanguage.googleapis.com
   - utils/llm/vertex_pt_routing.py::host:aiplatform.googleapis.com
-  current_provider_model: gateway lanes omi:auto:desktop-vertex-{flash,pro,target,flash-lite} and omi:auto:gemini-embeddings
-    for company-paid generateContent/streamGenerateContent/embedContent; Gemini BYOK keeps a thin direct AI Studio path; batchEmbedContents
-    stays direct AI Studio
-  request_shape: Gemini JSON proxied for desktop clients; translated to OpenAI shape at the BFF (utils/llm/desktop_gemini_gateway.py)
-    and back to Gemini native in the gateway Vertex adapter
-  gateway_lane_capability_needed: desktop vertex lanes with PT pin/overflow and multi-region host policy in VertexGeminiProvider;
-    OpenAI-shaped /v1/embeddings with task_type pass-through
-  migration_status: gateway_routed_desktop_vertex; the BFF keeps auth, trial paywall, S14 generate/stream
-    plan gate (402 plan_gated via authorize_managed_compute on screen_frame_judge for generate/stream and both embed
-    actions), redis metering, body limits, and model
-    allowlist; PT pin/overflow/host policy moved into the gateway provider via vertex_pt_routing (no second policy); FEATURE_MODE=off
-    keeps the legacy direct Vertex path; operator pins (OMI_VERTEX_PT_MODEL, OMI_GEMINI_OVERFLOW_MODEL) are
-    validated against vertex_pt_routing.COMPANY_PAID_VERTEX_TEXT_MODELS and Pro/image-output shapes fail closed
-    at both the BFF and the gateway provider (SCA-481)
+  current_provider_model: mandatory gateway lane omi:auto:desktop-luna (openai/gpt-6-luna) for company-paid
+    generateContent/streamGenerateContent, including legacy Gemini model aliases; explicit Gemini BYOK keeps direct
+    AI Studio generation. Embeddings retain omi:auto:gemini-embeddings and their existing vector contract.
+  request_shape: Gemini JSON and SSE translated to OpenAI chat completions at the BFF, then responses translated back
+  gateway_lane_capability_needed: text, images, JSON schema, function tools, and streaming; reasoning_effort none
+  migration_status: company-paid Gemini generation retired independent of FEATURE_MODE or reservation state;
+    BFF preserves auth, trial/plan gates, metering, limits, and explicit BYOK exemption. The new desktop-luna lane
+    fails closed against old gateway images; legacy desktop-vertex lane IDs resolve to Luna in new gateway images.
   test_guardrail_coverage: backend/tests/unit/test_desktop_proxy.py and backend/tests/unit/test_vertex_pt_routing.py
 - surface: openai_embeddings
   code_path: backend/utils/llm/clients.py:_OpenAIEmbeddingsProxy
@@ -464,7 +453,7 @@ surfaces:
   fallback_on_deny: none_unwired
   call_sites:
   - utils/wrapped/generate_2025.py::feature:wrapped_analysis
-  current_provider_model: openrouter/gemini-3-flash-preview via get_llm('wrapped_analysis')
+  current_provider_model: gateway openai/gpt-6-luna via get_llm('wrapped_analysis')
   request_shape: multiple plain-chat invokes per generation
   gateway_lane_capability_needed: generated omi:auto:wrapped-analysis lane
   migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)
@@ -478,7 +467,7 @@ surfaces:
   fallback_on_deny: none_unwired
   call_sites:
   - utils/onboarding.py::feature:onboarding
-  current_provider_model: gemini-2.5-flash-lite via get_llm('onboarding')
+  current_provider_model: gateway openai/gpt-6-luna via get_llm('onboarding')
   request_shape: plain chat answer check
   gateway_lane_capability_needed: generated omi:auto:onboarding lane
   migration_status: get_llm_routed from listen runtime; not authorize_managed_compute-gated (follow-up)
@@ -492,7 +481,7 @@ surfaces:
   fallback_on_deny: n/a_allowed
   call_sites:
   - routers/chat_sessions.py::feature:session_titles
-  current_provider_model: gemini-2.5-flash-lite via get_llm('session_titles')
+  current_provider_model: gateway openai/gpt-6-luna via get_llm('session_titles')
   request_shape: short plain chat title
   gateway_lane_capability_needed: generated omi:auto:session-titles lane
   migration_status: get_llm_routed; S1 allowlists the feature; this route does not call authorize_managed_compute
@@ -522,7 +511,7 @@ surfaces:
   - routers/apps.py::feature:app_integration
   - utils/app_integrations.py::feature:app_integration
   - utils/llm/app_generator.py::feature:app_integration
-  current_provider_model: gemini-2.5-flash-lite via get_llm('app_integration')
+  current_provider_model: gateway openai/gpt-6-luna via get_llm('app_integration')
   request_shape: plain chat
   gateway_lane_capability_needed: generated omi:auto:app-integration lane
   migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)

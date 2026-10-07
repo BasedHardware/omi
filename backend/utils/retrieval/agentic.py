@@ -100,14 +100,6 @@ from models.geolocation import Geolocation
 from utils.conversations.location import async_get_google_maps_city
 import logging
 
-try:
-    from utils.llm.gateway_client import should_route_chat_agent_through_gateway
-except ImportError:
-
-    def should_route_chat_agent_through_gateway() -> bool:
-        return False
-
-
 # Import langsmith traceable if available
 try:
     from langsmith import traceable as _traceable
@@ -246,11 +238,7 @@ AGENT_STREAM_PROGRESS_HEARTBEAT = 'Still working…'
 AGENT_STREAM_SETUP_PROGRESS = 'Preparing response…'
 AGENT_STREAM_TIMEOUT_MESSAGE = 'The response took too long. Please try again.'
 AGENT_STREAM_FAILURE_MESSAGE = 'Unable to complete the response. Please try again.'
-# File chat still uses direct OpenAI Assistants/vision while gateway feature mode is on;
-# until that surface is migrated, fail with a typed user-safe copy instead of the generic canned reply.
-FILE_CHAT_GATEWAY_BLOCKED_MESSAGE = (
-    "File chat isn't available right now. Try again without attachments, or try again later."
-)
+# File chat uses dedicated gateway lanes; this module owns the managed agentic chat route.
 # Delivered when a provider safety classifier declines the turn. Retrying the same prompt would
 # be declined again, so this says the request cannot be answered rather than inviting a retry.
 AGENT_REFUSAL_MESSAGE = "I can't help with that one. Try asking me something else."
@@ -1691,7 +1679,6 @@ async def execute_agentic_chat_stream(
 
     # Setup and post-setup TTFT use separate clocks so multi-second prompt/tool
     # loading cannot silently consume the first-stream-event window.
-    gateway_feature_mode = False
     try:
         # Resolve the user's timezone once and reuse it for both the system prompt and the
         # injected datetime block, avoiding a duplicate notification_db lookup per request.
@@ -1703,11 +1690,9 @@ async def execute_agentic_chat_stream(
         if setup_remaining <= 0:
             raise asyncio.TimeoutError()
         async with asyncio.timeout(setup_remaining):
-            # Omi-managed chat-agent is always the OpenAI/Luna runner. Anthropic BYOK
-            # no longer selects a second Messages path. CHAT_AGENT_ROUTE=direct is
-            # honored inside get_llm() as a kill switch onto direct OpenAI.
-            gateway_feature_mode = should_route_chat_agent_through_gateway()
-            logger.debug('Chat agent live runner=openai gateway_lane=%s', gateway_feature_mode)
+            # Company-paid chat-agent generation is mandatory gateway traffic;
+            # BYOK provider selection remains inside get_llm().
+            logger.debug('Chat agent live runner=openai gateway_lane=company-paid')
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             jit_conversation_retrieval_enabled = await _resolve_jit_conversation_retrieval(uid)
@@ -1925,7 +1910,7 @@ user chose not to send; acknowledge that rather than retrying.
                 'references': evidence_references[:24],
             }
 
-    # Live path is always the OpenAI-compatible runner (gateway Luna or direct OpenAI).
+    # Managed generation is gateway-routed inside get_llm(); BYOK stays provider-scoped.
     agent_runner = _run_openai_agent_stream
     if shaped_invocation and route_for_uid(uid) != 'old':
         configurable['shaped_selected_app'] = (

@@ -76,15 +76,10 @@ class TestP1_GetLlmRouting:
         assert response.content.strip(), f"{feature} returned empty response"
         print(f"  P1 {feature} ({get_model(feature)}): {response.content.strip()[:60]}")
 
-    @pytest.mark.skipif(not HAS_GEMINI_KEY, reason="GEMINI_API_KEY not set")
-    def test_gemini_features_respond(self):
-        """Gemini features in premium profile (flash-lite) respond to real prompts."""
+    def test_paid_profile_has_no_gemini_features(self):
+        """Gemini remains only in the request-scoped BYOK profile."""
         gemini_features = [f for f, (m, p) in MODEL_QOS_PROFILES['premium'].items() if p == 'gemini']
-        for feature in gemini_features:
-            llm = get_llm(feature)
-            response = llm.invoke(SIMPLE_PROMPT)
-            assert response.content.strip(), f"{feature} returned empty"
-            print(f"  P1 gemini {feature} ({get_model(feature)}): {response.content.strip()[:60]}")
+        assert gemini_features == []
 
 
 # ---------------------------------------------------------------------------
@@ -238,9 +233,8 @@ class TestP6_StructuredOutput:
         assert isinstance(result, self.SimpleOutput)
         print(f"  P6 structured external_structure: {result.word}")
 
-    @pytest.mark.skipif(not HAS_GEMINI_KEY, reason="GEMINI_API_KEY not set — trends is on Gemini in premium")
-    def test_structured_output_trends_gemini(self):
-        """trends is on gemini-2.5-flash-lite in premium — test SO on Gemini."""
+    def test_structured_output_trends_luna(self):
+        """trends uses Luna through the gateway and retains structured output."""
         llm = get_llm('trends')
         structured = llm.with_structured_output(self.SimpleOutput)
         result = structured.invoke("Reply with a JSON object containing a single word: hello")

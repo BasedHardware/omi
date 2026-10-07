@@ -8,6 +8,7 @@ name a purpose, and the server looks up everything else.
 from dataclasses import dataclass
 
 from models.screen_frame import ScreenFrameEgressPurpose, ScreenFrameRetentionClass
+from utils.llm.model_config import LUNA_MODEL
 
 # David's ruling, 2026-08-24: faces are INCLUDED. "Faces are the fastest way to remind a
 # person what their meeting was about and who it was with."
@@ -33,6 +34,8 @@ class ScreenFramePurposePolicy:
     max_persisted: int  # one banner + six strip
     setting_key: str
     share_default: bool
+    # Approved company-paid/default route for the signed policy. BYOK inference
+    # may resolve another provider; its actual model remains in the usage ledger.
     model: str
     policy_version: str
     prompt_version: str
@@ -46,7 +49,7 @@ SCREEN_FRAME_PURPOSES: dict[ScreenFrameEgressPurpose, ScreenFramePurposePolicy] 
         max_persisted=7,
         setting_key="meeting_note_screenshots_enabled",
         share_default=True,
-        model="gemini-2.5-flash-lite",
+        model=LUNA_MODEL,
         policy_version="meeting_note_privacy.v1",
         prompt_version="meeting_note_frame_judge.v2",
     )

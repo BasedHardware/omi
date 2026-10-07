@@ -862,6 +862,10 @@ actor GeminiClient {
     throw lastError!
   }
 
+  private func selectedGeminiBYOKKey(for ownerID: String) async -> String? {
+    await APIKeyService.activeHealthyGeminiBYOK(forOwnerID: ownerID)?.key
+  }
+
 }
 
 // MARK: - Tool Calling Support
@@ -1099,7 +1103,8 @@ extension GeminiClient {
     tools: [GeminiTool],
     forceToolCall: Bool = false,
     thinkingBudget: Int = 0,
-    authorization: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorization: RuntimeOwnerAuthorizationSnapshot? = nil,
+    useSelectedGeminiBYOK: Bool = false
   ) async throws -> ToolChatResult {
     if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) { throw CancellationError() }
     try ScreenTaskWorkAuthority.require()
@@ -1152,6 +1157,12 @@ extension GeminiClient {
             header = try await authHeader(authorization: authorization)
           }
           urlRequest.applyGeminiProxyHeaders(lane: lane, workload: workload, authorization: header)
+          if useSelectedGeminiBYOK {
+            guard let authorization,
+              let key = await selectedGeminiBYOKKey(for: authorization.ownerID)
+            else { throw ScreenTaskFailure.stopped }
+            urlRequest.setValue(key, forHTTPHeaderField: BYOKProvider.gemini.headerName)
+          }
           urlRequest.timeoutInterval = 300
           urlRequest.httpBody = requestBody
 
@@ -1283,4 +1294,5 @@ struct GeminiToolResponse: Decodable {
   struct GeminiError: Decodable {
     let message: String
   }
+
 }

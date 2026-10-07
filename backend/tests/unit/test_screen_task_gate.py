@@ -44,6 +44,7 @@ def test_error_passes_without_inventing_a_score(monkeypatch):
     monkeypatch.setattr(gate, 'record_fallback', lambda **k: seen.append(k))
     assert gate.decide_screen_task('private screen') == gate.ScreenTaskGateDecision(True, 'fail_open')
     assert seen[0]['outcome'] == 'recovered'
+    assert seen[0]['to_mode'] == 'luna'
 
 
 def test_rejected_audit_is_independent_and_configurable(monkeypatch):

@@ -13,6 +13,7 @@ from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, L
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.model_config import (
+    LUNA_MODEL,
     get_all_configured_features,
     get_model,
     get_provider,
@@ -50,7 +51,7 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
     generated_lane_items, generated_artifact_items, generated_bundle_items = _generated_feature_route_items(
         generated_route_overrides
     )
-    desktop_lane_items, desktop_artifact_items = _generated_desktop_vertex_items()
+    desktop_lane_items, desktop_artifact_items = _generated_desktop_generation_items()
     embedding_lane_items, embedding_artifact_items = _generated_embedding_items()
     systemone_lane_items, systemone_artifact_items = _generated_systemone_items()
 
@@ -71,8 +72,23 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
 
     _validate_lane_routes(lanes, route_artifacts)
     _validate_feature_bundles(feature_bundles, lanes)
+    _validate_company_paid_generation(route_artifacts)
 
     return GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=feature_bundles)
+
+
+def _validate_company_paid_generation(artifacts: Mapping[str, RouteArtifact]) -> None:
+    """A stale override or LKG must never restore company-paid Gemini generation.
+
+    Embeddings retain their separate model/vector contract. Explicit Gemini
+    BYOK generation is handled by the desktop BFF, outside these paid lanes.
+    """
+    for artifact in artifacts.values():
+        if artifact.surface == 'openai.embeddings' or artifact.credential_policy.mode != 'omi_paid':
+            continue
+        for provider in (artifact.primary, *artifact.fallbacks):
+            if provider.provider == 'gemini' or 'gemini' in provider.model.lower():
+                raise ConfigValidationError(f'company-paid Gemini generation is retired: {artifact.route_artifact_id}')
 
 
 def load_generated_route_overrides(
@@ -302,30 +318,19 @@ def _generated_feature_route_items(
     return lanes, artifacts, bundles
 
 
-def _desktop_overflow_origin_options(anchor: str) -> dict[str, str]:
-    """Origin ceiling for a desktop anchor, omitted entirely when unset.
+def _generated_desktop_generation_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
+    """Legacy desktop Gemini lane IDs now serve Luna for installed clients.
 
-    An empty dict keeps generated routes byte-identical until a lane declares
-    an origin in LANE_OVERFLOW_ORIGINS.
-    """
-    origin = ptr.lane_overflow_origin(anchor)
-    if not origin:
-        return {}
-    return {ptr.OVERFLOW_ORIGIN_OPTION: origin}
-
-
-def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
-    """Company-paid desktop Gemini text lanes, generated from the PT policy.
-
-    One lane per desktop-requested anchor model: the desktop BFF maps the
-    requested model to `vertex_pt_routing.DESKTOP_TEXT_LANES`, and the Vertex
-    provider applies pin/overflow to the anchor at request time — so this
-    table and the policy stay derived from the same module, never forked.
+    Keep the wire identifiers stable while retiring the paid Vertex provider.
+    No reservation state, capacity error, or fallback selects Gemini again.
     """
     lanes: list[ConfigItem] = []
     artifacts: list[ConfigItem] = []
-    for anchor, lane_id in ptr.DESKTOP_TEXT_LANES.items():
-        route_id = f'route.{lane_id.removeprefix("omi:auto:")}.vertex_pt.001'
+    # The new BFF uses a new lane so deployment against an older gateway fails
+    # closed instead of reaching its old Vertex routes. Retain old aliases for
+    # BFFs deployed before this gateway image.
+    for lane_id in (*ptr.DESKTOP_TEXT_LANES.values(), 'omi:auto:desktop-luna'):
+        route_id = f'route.{lane_id.removeprefix("omi:auto:")}.luna.001'
         capabilities = {
             'text_input': True,
             'streaming': True,
@@ -349,16 +354,18 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
                 'route_artifact_id': route_id,
                 'lane_id': lane_id,
                 'surface': 'openai.chat_completions',
-                'primary': {'provider': 'gemini', 'model': anchor},
+                'primary': {'provider': 'openai', 'model': LUNA_MODEL},
                 'fallbacks': [],
-                'provider_options': _desktop_overflow_origin_options(anchor),
+                # Installed clients can send function tools; Luna's chat
+                # completions tool surface requires reasoning effort none.
+                'provider_options': {'reasoning_effort': 'none'},
                 'output_budget': None,
                 'timeouts': {'request_ms': 120000},
                 'retry': {'max_attempts': 1},
                 'capabilities': capabilities,
                 'evidence': {
-                    'benchmark_snapshot': 'vertex_pt_routing.source_of_truth',
-                    'eval_report': f'{lane_id}.desktop_vertex_coverage',
+                    'benchmark_snapshot': 'contract.company_paid_luna_cutover',
+                    'eval_report': 'backend.tests.unit.test_desktop_gemini_gateway',
                     'benchmark_source': 'omi_eval',
                     'dev_only': False,
                 },

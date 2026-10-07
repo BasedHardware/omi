@@ -2,6 +2,14 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class GeminiBYOKRequestRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value: URLRequest?
+  func record(_ request: URLRequest) { lock.withLock { value = request } }
+  func reset() { lock.withLock { value = nil } }
+  var request: URLRequest? { lock.withLock { value } }
+}
+
 /// Verifies BYOK enrollment, owner binding, and paywall precedence.
 @MainActor final class BYOKPaywallTests: XCTestCase {
   private let paywallKey = "desktop_isPaywalled"
@@ -32,6 +40,31 @@ import XCTest
     var fingerprints = APIKeyService.enrolledFingerprints()
     fingerprints[p.rawValue] = APIKeyService.byokFingerprint(key)
     APIKeyService.persistEnrolledFingerprints(fingerprints)
+  }
+
+  private func installSyntheticRuntimeOwner(_ ownerID: String) -> () -> Void {
+    let defaults = UserDefaults.standard
+    let previousEffectiveOwner = RuntimeOwnerIdentity.currentOwnerId()
+    let previousAuthUserID = defaults.object(forKey: .authUserId)
+    let previousAutomationOwner = defaults.object(forKey: .automationOwnerOverride)
+    defaults.removeObject(forKey: .automationOwnerOverride)
+    defaults.set(ownerID, forKey: .authUserId)
+    RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: ownerID)
+    return {
+      if let previousAuthUserID {
+        defaults.set(previousAuthUserID, forKey: .authUserId)
+      } else {
+        defaults.removeObject(forKey: .authUserId)
+      }
+      if let previousAutomationOwner {
+        defaults.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+      } else {
+        defaults.removeObject(forKey: .automationOwnerOverride)
+      }
+      RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+      RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: previousEffectiveOwner)
+    }
   }
 
   override func tearDown() async throws {
@@ -232,6 +265,80 @@ import XCTest
       Set(APIKeyService.activeBYOKSnapshot.keys),
       Set([.deepgram]),
       "each runtime capability independently requires its current enrolled fingerprint")
+  }
+
+  func testLegacyGeminiToolLoopAttachesOnlyTheSelectedOwnersEnrolledHealthyGeminiKey() async throws {
+    clearAllBYOKKeys()
+    let ownerID = "synthetic-gemini-owner"
+    let restoreOwner = installSyntheticRuntimeOwner(ownerID)
+    defer { restoreOwner() }
+    let key = "synthetic-gemini-key"
+    // omi-test-quality: shared-defaults -- integration: exercise the singleton BYOK owner binding
+    UserDefaults.standard.set(ownerID, forKey: .byokOwnerUid)
+    // omi-test-quality: shared-defaults -- integration: exercise the singleton selected-provider lookup
+    UserDefaults.standard.set(BYOKLLMProvider.gemini.rawValue, forKey: .byokLLMProvider)
+    // omi-test-quality: shared-defaults -- integration: exercise the singleton enrolled-key request path
+    UserDefaults.standard.set(key, forKey: BYOKProvider.gemini.storageKey)
+    enroll(.gemini)
+
+    XCTAssertTrue(APIKeyService.isGeminiBYOKActive)
+    XCTAssertNotNil(APIKeyService.activeGeminiBYOK(forOwnerID: ownerID))
+    XCTAssertNil(APIKeyService.activeGeminiBYOK(forOwnerID: "another-owner"))
+
+    let authorization = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID))
+    let recorder = GeminiBYOKRequestRecorder()
+    let transport = GeminiToolLoopTransport(
+      admit: {}, authHeader: { _ in "Bearer synthetic-session" },
+      send: { request in
+        recorder.record(request)
+        let response = try XCTUnwrap(
+          HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+        return (Data(#"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#.utf8), response)
+      })
+    let client = try GeminiClient(
+      model: "gemini-2.5-flash", lane: .taskExtraction, workload: .extraction, toolLoopTransport: transport)
+    _ = try await client.sendImageToolLoop(
+      contents: [], systemPrompt: "synthetic", tools: [], authorization: authorization, useSelectedGeminiBYOK: true)
+
+    XCTAssertEqual(recorder.request?.value(forHTTPHeaderField: BYOKProvider.gemini.headerName), key)
+
+    CredentialHealthManager.shared.recordProviderFailure(
+      .providerAuthFailed(provider: .gemini, mode: .byok), provider: .gemini, authMode: .byok,
+      fingerprint: APIKeyService.byokFingerprint(key), context: "test")
+    let unhealthyCredential = await APIKeyService.activeHealthyGeminiBYOK(forOwnerID: ownerID)
+    XCTAssertNil(unhealthyCredential)
+    recorder.reset()
+    do {
+      _ = try await client.sendImageToolLoop(
+        contents: [], systemPrompt: "synthetic", tools: [], authorization: authorization, useSelectedGeminiBYOK: true)
+      XCTFail("An unhealthy BYOK selection must never fall through to a company-paid Gemini request")
+    } catch let failure as ScreenTaskFailure {
+      if case .stopped = failure {
+      } else {
+        XCTFail("Expected a terminal stop, got \(failure)")
+      }
+    }
+    XCTAssertNil(recorder.request)
+  }
+
+  func testOnlySelectedGeminiBYOKQualifiesForScreenTaskExemption() async throws {
+    clearAllBYOKKeys()
+    let ownerID = "synthetic-gemini-owner"
+    // omi-test-quality: shared-defaults -- integration: exercise owner-bound BYOK singleton resolution
+    UserDefaults.standard.set(ownerID, forKey: .byokOwnerUid)
+    // omi-test-quality: shared-defaults -- integration: exercise enrolled Gemini key filtering
+    UserDefaults.standard.set("synthetic-gemini-key", forKey: BYOKProvider.gemini.storageKey)
+    // omi-test-quality: shared-defaults -- integration: exercise another enrolled provider alongside Gemini
+    UserDefaults.standard.set("synthetic-openai-key", forKey: BYOKProvider.openai.storageKey)
+    // omi-test-quality: shared-defaults -- integration: verify selected provider controls the exemption
+    UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
+    enroll(.gemini)
+    enroll(.openai)
+
+    XCTAssertTrue(APIKeyService.isByokActive)
+    XCTAssertNil(APIKeyService.activeGeminiBYOK(forOwnerID: ownerID))
+    let nonGeminiCredential = await APIKeyService.activeHealthyGeminiBYOK(forOwnerID: ownerID)
+    XCTAssertNil(nonGeminiCredential)
   }
 
   func testLegacyUnownedKeysAreClearedAndLeaveDurableReentryNotice() throws {

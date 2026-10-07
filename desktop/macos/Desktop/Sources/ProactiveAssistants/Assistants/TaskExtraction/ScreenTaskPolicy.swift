@@ -1,19 +1,28 @@
 import Foundation
 
 enum ScreenTaskFeature {
-  static let flagName = "screen_task_jev_gate"
-  /// All bundles default off; Beta/dev must also have explicit consent and enablement.
-  @MainActor static var isConfigured: Bool { PostHogManager.shared.isFeatureEnabled(flagName) }
-  @MainActor static var isEnabled: Bool {
-    ScreenTaskFlagRefresh.start()
-    if !PostHogManager.shared.isFeatureEnabled(flagName) { authority.disable() }
-    return lease() != nil
+  /// This path is enabled by the client build. The server admission lease remains
+  /// the live kill switch, while privacy, owner and quota checks stay per-frame.
+  @MainActor static var isConfigured: Bool { true }
+  @MainActor static func lease(for authorization: RuntimeOwnerAuthorizationSnapshot?) async -> ScreenTaskLease? {
+    guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return nil }
+    guard await APIKeyService.activeHealthyGeminiBYOK(forOwnerID: authorization.ownerID) == nil else { return nil }
+    ScreenTaskAdmissionRefresh.start()
+    guard let server = serverAuthority.snapshot() else { return nil }
+    return ScreenTaskLease(server: server)
   }
-  static let authority = ScreenTaskAdmissionAuthority()
+
+  @MainActor static func isEnabled(for authorization: RuntimeOwnerAuthorizationSnapshot?) async -> Bool {
+    let lease = await lease(for: authorization)
+    return lease != nil
+  }
+
   static let serverAuthority = ScreenTaskAdmissionAuthority()
-  static func lease() -> ScreenTaskLease? {
-    guard let flag = authority.snapshot(), let server = serverAuthority.snapshot() else { return nil }
-    return ScreenTaskLease(flag: flag, server: server)
+
+  static func shouldUseManagedPath(
+    serverAdmitted: Bool, ownerCurrent: Bool, hasSelectedGeminiBYOK: Bool
+  ) -> Bool {
+    serverAdmitted && ownerCurrent && !hasSelectedGeminiBYOK
   }
 
   static func enforceQuota() async throws {

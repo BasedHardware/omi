@@ -1,18 +1,13 @@
-"""Gemini↔OpenAI translation for company-paid desktop traffic on the LLM gateway.
+"""Gemini-wire compatibility for desktop traffic served by the LLM gateway.
 
-The desktop proxy (``routers/desktop_proxy.py``) stays the BFF: Firebase auth,
-trial paywall, redis metering, body limits, and the model allowlist never move.
-The *model call* hops the gateway's OpenAI-compatible surfaces — chat
-completions on the ``omi:auto:desktop-vertex-*`` lanes and embeddings on
-``omi:auto:gemini-embeddings`` — so company-paid Vertex spend lands in the one
-gateway ledger. The Mac app keeps its Gemini wire format; translation happens
-here (BFF) and in the gateway's Vertex adapter, never in a desktop client.
-
-Lane selection, PT pin/overflow, and the regional vs multi-region host split
-live in ``utils.llm.vertex_pt_routing`` and the gateway's ``VertexGeminiProvider``.
-
-Gemini BYOK keeps the thin direct AI Studio path in the proxy: the gateway's
-Vertex adapter fail-closes BYOK by design.
+The desktop proxy (``routers/desktop_proxy.py``) stays the BFF for auth, trial
+and plan gates, Redis metering, body limits, and old model aliases. Company-paid
+text and single/batch embeddings cross the gateway's OpenAI-compatible surfaces:
+text uses ``omi:auto:desktop-luna`` and embeddings use
+``omi:auto:gemini-embeddings``. Mac and Windows clients keep their Gemini
+JSON/SSE contracts; this module translates at the BFF and wraps responses back
+into Gemini shape. Explicit Gemini BYOK requests keep their direct AI Studio
+path, while the explicit Luna model alias is always Omi-paid.
 """
 
 from __future__ import annotations
@@ -21,6 +16,7 @@ import json
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID, NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException
 
@@ -29,12 +25,12 @@ import httpx
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.byok import get_byok_key
 from utils.llm import vertex_pt_routing as ptr
-from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.gateway_client import (
     GEMINI_EMBEDDINGS_AUTO_LANE_ID,
     get_llm_gateway_base_url,
     llm_gateway_headers,
 )
+from utils.llm.model_config import LUNA_MODEL
 
 DESKTOP_GATEWAY_FEATURE = 'desktop_proactivity'
 DESKTOP_GATEWAY_TIMEOUT_SECONDS = 75.0
@@ -44,7 +40,9 @@ _DEFAULT_THINKING_BUDGET = 1024
 _MAX_CONTENT_ITEMS = 128
 _MAX_CONTENT_PARTS = 512
 _MAX_INLINE_MEDIA_PARTS = 16
-_GATEWAY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent'})
+_GATEWAY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
+_DESKTOP_LUNA_LANE_ID = 'omi:auto:desktop-luna'
+_MAX_BATCH_EMBED_REQUESTS = 100
 
 
 class DesktopGeminiGatewayError(Exception):
@@ -69,13 +67,80 @@ class GatewayEmbeddingResult:
     values: list[float]
 
 
+@dataclass(frozen=True)
+class GatewayBatchEmbeddingResult:
+    embeddings: list[list[float]]
+
+
 def desktop_gateway_actions() -> frozenset[str]:
     """Actions whose company-paid traffic can hop the gateway."""
     return _GATEWAY_ACTIONS
 
 
 def desktop_gateway_text_lane(model: str) -> str | None:
-    return ptr.desktop_text_lane_id(model)
+    # Retain the old model allowlist as the compatibility boundary, while
+    # routing every accepted company-paid desktop request to one Luna lane.
+    if model == LUNA_MODEL:
+        return _DESKTOP_LUNA_LANE_ID
+    if ptr.desktop_text_lane_id(model) is None:
+        return None
+    return _DESKTOP_LUNA_LANE_ID
+
+
+_GEMINI_SCHEMA_TYPES = {
+    'ARRAY': 'array',
+    'BOOLEAN': 'boolean',
+    'INTEGER': 'integer',
+    'NUMBER': 'number',
+    'OBJECT': 'object',
+    'STRING': 'string',
+    'NULL': 'null',
+}
+
+
+def _normalize_gemini_schema(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Convert Gemini's uppercase types and ``nullable`` marker to JSON Schema."""
+    schema_map_keywords = {'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas'}
+    schema_list_keywords = {'allOf', 'anyOf', 'oneOf', 'prefixItems'}
+    schema_keywords = {
+        'additionalItems',
+        'additionalProperties',
+        'contains',
+        'else',
+        'if',
+        'items',
+        'not',
+        'propertyNames',
+        'then',
+        'unevaluatedItems',
+        'unevaluatedProperties',
+    }
+    normalized: dict[str, Any] = {}
+    for key, item in value.items():
+        if key == 'nullable':
+            continue
+        if key == 'type' and isinstance(item, str):
+            normalized[key] = _GEMINI_SCHEMA_TYPES.get(item.upper(), item.lower())
+        elif key in schema_map_keywords and isinstance(item, Mapping):
+            # Keys here are user-defined property or definition names, not
+            # schema keywords. Preserve names such as "type" and "nullable".
+            normalized[key] = {
+                name: _normalize_gemini_schema(schema) if isinstance(schema, Mapping) else schema
+                for name, schema in item.items()
+            }
+        elif key in schema_list_keywords and isinstance(item, list):
+            normalized[key] = [
+                _normalize_gemini_schema(schema) if isinstance(schema, Mapping) else schema for schema in item
+            ]
+        elif key in schema_keywords and isinstance(item, Mapping):
+            normalized[key] = _normalize_gemini_schema(item)
+        else:
+            normalized[key] = item
+
+    schema_type = normalized.get('type')
+    if value.get('nullable') is True and schema_type is not None:
+        return {'anyOf': [normalized, {'type': 'null'}]}
+    return normalized
 
 
 def _join_system_text(payload: Mapping[str, Any]) -> str | None:
@@ -126,8 +191,7 @@ def gemini_body_to_openai_chat(
         messages.append({'role': 'system', 'content': system_text})
 
     contents = payload.get('contents')
-    tool_name_by_id: dict[str, str] = {}
-    tool_id_by_name: dict[str, str] = {}
+    tool_ids_by_name: dict[str, list[str]] = {}
     tool_ordinal = 0
     if isinstance(contents, list):
         for content in contents:
@@ -143,11 +207,12 @@ def gemini_body_to_openai_chat(
                     response = part.get('functionResponse')
                     name = response.get('name') if isinstance(response, Mapping) else None
                     if not isinstance(name, str) or not name:
-                        name = tool_name_by_id.get(_tool_call_id('', max(tool_ordinal - 1, 0)), '')
+                        name = next((candidate for candidate, ids in tool_ids_by_name.items() if ids), '')
                     payload_out = response.get('response') if isinstance(response, Mapping) else None
                     if not isinstance(payload_out, Mapping):
                         payload_out = {}
-                    call_id = tool_id_by_name.get(name or '') or _tool_call_id(name or 'fn', max(tool_ordinal - 1, 0))
+                    queued_ids = tool_ids_by_name.get(name or '', [])
+                    call_id = queued_ids.pop(0) if queued_ids else _tool_call_id(name or 'fn', max(tool_ordinal - 1, 0))
                     messages.append(
                         {
                             'role': 'tool',
@@ -167,9 +232,8 @@ def gemini_body_to_openai_chat(
                     raw_args = call.get('args')
                     arguments: dict[str, Any] = dict(raw_args) if isinstance(raw_args, Mapping) else {}
                     call_id = _tool_call_id(name, tool_ordinal)
-                    tool_name_by_id[call_id] = name
                     if name:
-                        tool_id_by_name[name] = call_id
+                        tool_ids_by_name.setdefault(name, []).append(call_id)
                     tool_ordinal += 1
                     tool_calls.append(
                         {
@@ -178,9 +242,6 @@ def gemini_body_to_openai_chat(
                             'function': {'name': name, 'arguments': json.dumps(dict(arguments))},
                         }
                     )
-                    signature = part.get('thoughtSignature') or part.get('thought_signature')
-                    if isinstance(signature, str) and signature:
-                        tool_calls[-1]['extra_content'] = {'google': {'thought_signature': signature}}
                 text_parts = [p.get('text') for p in parts if isinstance(p, Mapping) and isinstance(p.get('text'), str)]
                 messages.append(
                     {
@@ -205,29 +266,15 @@ def gemini_body_to_openai_chat(
     request: dict[str, Any] = {'model': lane_id, 'messages': messages, 'stream': stream}
     config = payload.get('generationConfig') or payload.get('generation_config')
     if isinstance(config, Mapping):
-        if isinstance(config.get('maxOutputTokens') or config.get('max_output_tokens'), int):
-            request['max_completion_tokens'] = config.get('maxOutputTokens') or config.get('max_output_tokens')
-        if isinstance(config.get('temperature'), (int, float)):
-            request['temperature'] = config['temperature']
-        if isinstance(config.get('topP') or config.get('top_p'), (int, float)):
-            request['top_p'] = config.get('topP') or config.get('top_p')
-        stop = config.get('stopSequences') or config.get('stop_sequences')
-        if isinstance(stop, list) and stop:
-            request['stop'] = stop
-        thinking = config.get('thinkingConfig') or config.get('thinking_config')
-        if isinstance(thinking, Mapping):
-            level = thinking.get('thinkingLevel', thinking.get('thinking_level'))
-            budget = thinking.get('thinkingBudget', thinking.get('thinking_budget'))
-            if level in {'minimal', 'low', 'medium', 'high'}:
-                request['google'] = {'thinking_config': {'thinking_level': level}}
-            elif isinstance(budget, int):
-                request['google'] = {'thinking_config': {'thinking_budget': budget}}
+        output_tokens = config.get('maxOutputTokens', config.get('max_output_tokens'))
+        if isinstance(output_tokens, int) and not isinstance(output_tokens, bool):
+            request['max_completion_tokens'] = output_tokens
         response_schema = config.get('responseSchema') or config.get('response_schema')
         mime = config.get('responseMimeType') or config.get('response_mime_type')
         if isinstance(response_schema, Mapping):
             request['response_format'] = {
                 'type': 'json_schema',
-                'json_schema': {'name': 'desktop_response', 'schema': dict(response_schema)},
+                'json_schema': {'name': 'desktop_response', 'schema': _normalize_gemini_schema(response_schema)},
             }
         elif mime == 'application/json':
             request['response_format'] = {'type': 'json_object'}
@@ -257,7 +304,7 @@ def _gemini_tools_to_openai(value: Any) -> list[dict[str, Any]] | None:
                 if isinstance(declaration.get('description'), str):
                     function['description'] = declaration['description']
                 if isinstance(declaration.get('parameters'), Mapping):
-                    function['parameters'] = dict(declaration['parameters'])
+                    function['parameters'] = _normalize_gemini_schema(declaration['parameters'])
                 tools.append({'type': 'function', 'function': function})
     return tools or None
 
@@ -289,7 +336,7 @@ _OPENAI_TO_GEMINI_FINISH_REASON = {
 }
 
 
-def openai_completion_to_gemini(body: Mapping[str, Any]) -> dict[str, Any]:
+def openai_completion_to_gemini(body: Mapping[str, Any], *, requested_model: str | None = None) -> dict[str, Any]:
     """Translate a gateway chat-completions response back into Gemini wire shape."""
     raw_choices = body.get('choices')
     choices = raw_choices if isinstance(raw_choices, list) else []
@@ -313,11 +360,6 @@ def openai_completion_to_gemini(body: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(arguments, Mapping):
             arguments = {}
         part: dict[str, Any] = {'functionCall': {'name': function.get('name'), 'args': dict(arguments)}}
-        extra = call.get('extra_content')
-        google = extra.get('google') if isinstance(extra, Mapping) else None
-        signature = google.get('thought_signature') if isinstance(google, Mapping) else None
-        if isinstance(signature, str) and signature:
-            part['thoughtSignature'] = signature
         parts.append(part)
     if not parts:
         parts = [{'text': ''}]
@@ -326,8 +368,9 @@ def openai_completion_to_gemini(body: Mapping[str, Any]) -> dict[str, Any]:
         'finishReason': _OPENAI_TO_GEMINI_FINISH_REASON.get(str(choice.get('finish_reason') or ''), 'STOP'),
     }
     response: dict[str, Any] = {'candidates': [candidate]}
-    if isinstance(body.get('model'), str):
-        response['modelVersion'] = body['model']
+    model_version = requested_model if isinstance(requested_model, str) and requested_model else body.get('model')
+    if isinstance(model_version, str):
+        response['modelVersion'] = model_version
     usage = body.get('usage') if isinstance(body.get('usage'), Mapping) else None
     if usage is not None:
         response['usageMetadata'] = {
@@ -341,6 +384,8 @@ def openai_completion_to_gemini(body: Mapping[str, Any]) -> dict[str, Any]:
 def openai_sse_payload_to_gemini_event(
     payload: Mapping[str, Any],
     pending_tool_calls: dict[int, dict[str, Any]],
+    *,
+    requested_model: str | None = None,
 ) -> dict[str, Any] | None:
     """Translate one OpenAI SSE data payload into one Gemini SSE event.
 
@@ -364,11 +409,6 @@ def openai_sse_payload_to_gemini_event(
         raw_index = call.get('index')
         index = raw_index if isinstance(raw_index, int) else 0
         accumulated = pending_tool_calls.setdefault(index, {'name': '', 'arguments': ''})
-        extra = call.get('extra_content')
-        google = extra.get('google') if isinstance(extra, Mapping) else None
-        signature = google.get('thought_signature') if isinstance(google, Mapping) else None
-        if isinstance(signature, str) and signature:
-            accumulated['thoughtSignature'] = signature
         function = call.get('function')
         if isinstance(function, Mapping):
             if isinstance(function.get('name'), str) and function['name']:
@@ -385,11 +425,9 @@ def openai_sse_payload_to_gemini_event(
             if not isinstance(arguments, Mapping):
                 arguments = {}
             part = {'functionCall': {'name': accumulated['name'], 'args': dict(arguments)}}
-            if 'thoughtSignature' in accumulated:
-                part['thoughtSignature'] = accumulated['thoughtSignature']
             parts.append(part)
         pending_tool_calls.clear()
-        return {
+        event = {
             'candidates': [
                 {
                     'content': {'parts': parts or [{'text': ''}]},
@@ -397,9 +435,15 @@ def openai_sse_payload_to_gemini_event(
                 }
             ]
         }
+        if requested_model:
+            event['modelVersion'] = requested_model
+        return event
     if not parts:
         return None
-    return {'candidates': [{'content': {'parts': parts}}]}
+    event = {'candidates': [{'content': {'parts': parts}}]}
+    if requested_model:
+        event['modelVersion'] = requested_model
+    return event
 
 
 def _gateway_error(result: httpx.Response) -> DesktopGeminiGatewayError:
@@ -436,7 +480,7 @@ async def gateway_desktop_chat(
 ) -> GatewayChatResult:
     """Run a company-paid desktop generateContent request through the gateway."""
     payload = json.loads(body)
-    lane_id = ptr.desktop_text_lane_id(model)
+    lane_id = desktop_gateway_text_lane(model)
     if lane_id is None:
         raise DesktopGeminiGatewayError(
             status_code=400, code='validation_rejected', message=f'Gemini model {model} has no gateway lane'
@@ -454,7 +498,7 @@ async def gateway_desktop_chat(
         )
     if result.status_code >= 400:
         raise _gateway_error(result)
-    return GatewayChatResult(gemini_payload=openai_completion_to_gemini(result.json()))
+    return GatewayChatResult(gemini_payload=openai_completion_to_gemini(result.json(), requested_model=model))
 
 
 async def gateway_desktop_chat_stream(
@@ -468,7 +512,7 @@ async def gateway_desktop_chat_stream(
 ) -> AsyncIterator[bytes]:
     """Stream a company-paid desktop streamGenerateContent request through the gateway."""
     payload = json.loads(body)
-    lane_id = ptr.desktop_text_lane_id(model)
+    lane_id = desktop_gateway_text_lane(model)
     if lane_id is None:
         raise DesktopGeminiGatewayError(
             status_code=400, code='validation_rejected', message=f'Gemini model {model} has no gateway lane'
@@ -506,27 +550,52 @@ async def gateway_desktop_chat_stream(
                         continue
                     if not isinstance(parsed, Mapping):
                         continue
-                    event = openai_sse_payload_to_gemini_event(parsed, pending_tool_calls)
+                    event = openai_sse_payload_to_gemini_event(parsed, pending_tool_calls, requested_model=model)
                     if event is not None:
                         yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode('utf-8')
 
 
-async def gateway_desktop_embed_content(
-    body: bytes, *, uid: str, request_id: str, product_lane: str, client_platform: str
-) -> GatewayEmbeddingResult:
-    """Run a company-paid desktop embedContent request through the gateway embeddings lane."""
-    payload = json.loads(body)
+def _embedding_text(payload: Mapping[str, Any]) -> str:
     try:
-        text = payload['content']['parts'][0]['text']
+        content = payload['content']
+        parts = content['parts']
+        text = parts[0]['text']
     except (KeyError, IndexError, TypeError) as exc:
         raise DesktopGeminiGatewayError(
-            status_code=400, code='validation_rejected', message='embedContent requires content.parts[0].text'
+            status_code=400, code='validation_rejected', message='embedding request requires content.parts[0].text'
         ) from exc
-    request: dict[str, Any] = {'model': GEMINI_EMBEDDINGS_AUTO_LANE_ID, 'input': [text]}
-    if isinstance(payload.get('taskType') or payload.get('task_type'), str):
-        request['task_type'] = payload.get('taskType') or payload.get('task_type')
-    if isinstance(payload.get('title'), str):
-        request['title'] = payload['title']
+    if not isinstance(text, str) or not text:
+        raise DesktopGeminiGatewayError(
+            status_code=400, code='validation_rejected', message='embedding text must be a non-empty string'
+        )
+    return text
+
+
+def _batch_embedding_request_id(request_id: str, group_index: int) -> str:
+    try:
+        base_id = UUID(request_id)
+    except (TypeError, ValueError, AttributeError):
+        base_id = uuid5(NAMESPACE_URL, request_id)
+    if group_index == 0:
+        return str(base_id)
+    return str(uuid5(base_id, f'desktop-embedding-batch-{group_index}'))
+
+
+async def _gateway_embedding_vectors(
+    texts: list[str],
+    *,
+    task_type: str | None,
+    title: str | None,
+    uid: str,
+    request_id: str,
+    product_lane: str,
+    client_platform: str,
+) -> list[list[float]]:
+    request: dict[str, Any] = {'model': GEMINI_EMBEDDINGS_AUTO_LANE_ID, 'input': texts}
+    if task_type is not None:
+        request['task_type'] = task_type
+    if title is not None:
+        request['title'] = title
     async with get_llm_gateway_semaphore():
         client = get_llm_gateway_client()
         result = await client.post(
@@ -540,12 +609,115 @@ async def gateway_desktop_embed_content(
     if result.status_code >= 400:
         raise _gateway_error(result)
     data = result.json().get('data')
-    values = data[0].get('embedding') if isinstance(data, list) and data and isinstance(data[0], Mapping) else None
-    if not isinstance(values, list):
+    if not isinstance(data, list) or len(data) != len(texts):
         raise DesktopGeminiGatewayError(
-            status_code=502, code='invalid_response', message='gateway embeddings response had no vector'
+            status_code=502, code='invalid_response', message='gateway embeddings response had the wrong item count'
         )
-    return GatewayEmbeddingResult(values=[float(value) for value in values])
+    vectors: list[list[float] | None] = [None] * len(texts)
+    for position, item in enumerate(data):
+        if not isinstance(item, Mapping):
+            continue
+        raw_index = item.get('index', position)
+        index = raw_index if isinstance(raw_index, int) and not isinstance(raw_index, bool) else position
+        values = item.get('embedding')
+        if 0 <= index < len(vectors) and isinstance(values, list):
+            try:
+                vectors[index] = [float(value) for value in values]
+            except (TypeError, ValueError):
+                pass
+    if any(vector is None for vector in vectors):
+        raise DesktopGeminiGatewayError(
+            status_code=502, code='invalid_response', message='gateway embeddings response had a missing vector'
+        )
+    return [vector for vector in vectors if vector is not None]
+
+
+async def gateway_desktop_embed_content(
+    body: bytes, *, uid: str, request_id: str, product_lane: str, client_platform: str
+) -> GatewayEmbeddingResult:
+    """Run a company-paid desktop embedContent request through the gateway embeddings lane."""
+    payload = json.loads(body)
+    if not isinstance(payload, Mapping):
+        raise DesktopGeminiGatewayError(
+            status_code=400, code='validation_rejected', message='invalid embedding request'
+        )
+    task_type = payload.get('taskType') or payload.get('task_type')
+    title = payload.get('title')
+    if task_type is not None and (not isinstance(task_type, str) or not task_type.strip()):
+        raise DesktopGeminiGatewayError(
+            status_code=400, code='validation_rejected', message='invalid embedding taskType'
+        )
+    if title is not None and (not isinstance(title, str) or not title.strip()):
+        raise DesktopGeminiGatewayError(status_code=400, code='validation_rejected', message='invalid embedding title')
+    vectors = await _gateway_embedding_vectors(
+        [_embedding_text(payload)],
+        task_type=task_type.strip() if isinstance(task_type, str) else None,
+        title=title.strip() if isinstance(title, str) else None,
+        uid=uid,
+        request_id=request_id,
+        product_lane=product_lane,
+        client_platform=client_platform,
+    )
+    return GatewayEmbeddingResult(values=vectors[0])
+
+
+async def gateway_desktop_batch_embed_contents(
+    body: bytes, *, uid: str, request_id: str, product_lane: str, client_platform: str
+) -> GatewayBatchEmbeddingResult:
+    """Translate Gemini's homogeneous or mixed-metadata batch to gateway embeddings."""
+    payload = json.loads(body)
+    raw_requests = payload.get('requests') if isinstance(payload, Mapping) else None
+    if not isinstance(raw_requests, list) or not raw_requests or len(raw_requests) > _MAX_BATCH_EMBED_REQUESTS:
+        raise DesktopGeminiGatewayError(
+            status_code=400,
+            code='validation_rejected',
+            message=f'batch embedding requires between 1 and {_MAX_BATCH_EMBED_REQUESTS} requests',
+        )
+
+    # Vertex :predict accepts per-instance task metadata. The gateway's public
+    # embeddings contract applies one task type/title to a list, so group only
+    # when legacy callers actually vary those values, then restore input order.
+    groups: dict[tuple[str | None, str | None], list[tuple[int, str]]] = {}
+    for index, raw_request in enumerate(raw_requests):
+        if not isinstance(raw_request, Mapping):
+            raise DesktopGeminiGatewayError(
+                status_code=400, code='validation_rejected', message='each batch embedding request must be an object'
+            )
+        text = _embedding_text(raw_request)
+        task_type = raw_request.get('taskType') or raw_request.get('task_type')
+        title = raw_request.get('title')
+        if task_type is not None and (not isinstance(task_type, str) or not task_type.strip()):
+            raise DesktopGeminiGatewayError(
+                status_code=400, code='validation_rejected', message='invalid embedding taskType'
+            )
+        if title is not None and (not isinstance(title, str) or not title.strip()):
+            raise DesktopGeminiGatewayError(
+                status_code=400, code='validation_rejected', message='invalid embedding title'
+            )
+        group = (
+            task_type.strip() if isinstance(task_type, str) else None,
+            title.strip() if isinstance(title, str) else None,
+        )
+        groups.setdefault(group, []).append((index, text))
+
+    ordered_vectors: list[list[float] | None] = [None] * len(raw_requests)
+    for group_index, ((task_type, title), items) in enumerate(groups.items()):
+        vectors = await _gateway_embedding_vectors(
+            [text for _, text in items],
+            task_type=task_type,
+            title=title,
+            uid=uid,
+            request_id=_batch_embedding_request_id(request_id, group_index),
+            product_lane=product_lane,
+            client_platform=client_platform,
+        )
+        for (index, _), vector in zip(items, vectors, strict=True):
+            ordered_vectors[index] = vector
+    if any(vector is None for vector in ordered_vectors):
+        raise DesktopGeminiGatewayError(
+            status_code=502, code='invalid_response', message='gateway embeddings response omitted an item'
+        )
+    return GatewayBatchEmbeddingResult(embeddings=[vector for vector in ordered_vectors if vector is not None])
 
 
 @dataclass(frozen=True)
@@ -569,21 +741,16 @@ class ProxyEnvelope:
 def company_paid_via_gateway(model: str, action: str) -> bool:
     """Whether this request's model call hops the LLM gateway.
 
-    Company-paid text and single-embed traffic only: BYOK keeps the thin
-    direct AI Studio path (the gateway Vertex adapter fail-closes BYOK) and
-    batchEmbedContents stays on AI Studio because the Vertex batch wire shape
-    is not compatible. FEATURE_MODE=off keeps the legacy direct Vertex path.
+    Company-paid text and single/batch embedding traffic always use the gateway.
+    Old Gemini model aliases retain direct AI Studio for explicit Gemini BYOK;
+    the explicit Luna alias always selects Omi-paid gateway routing.
     """
-    if get_byok_key('gemini'):
+    is_explicit_luna = model == LUNA_MODEL
+    if get_byok_key('gemini') and not is_explicit_luna:
         return False
     if action not in desktop_gateway_actions():
         return False
-    try:
-        if not should_route_features_through_gateway():
-            return False
-    except RuntimeError:
-        return False
-    if action == 'embedContent':
+    if action in {'embedContent', 'batchEmbedContents'}:
         return model == ptr.DESKTOP_EMBEDDING_MODEL
     return desktop_gateway_text_lane(model) is not None
 
@@ -635,11 +802,18 @@ async def proxy_company_paid_via_gateway(
         request_id=telemetry.request_id, product_lane=telemetry.lane, client_platform=telemetry.client_platform
     )
     try:
-        if action == 'embedContent':
-            result = await envelope.cancel_on_disconnect(
-                request, gateway_desktop_embed_content(body, uid=uid, **attribution)
-            )
-            content = json.dumps({'embedding': {'values': result.values}}, separators=(',', ':')).encode()
+        if action in {'embedContent', 'batchEmbedContents'}:
+            if action == 'embedContent':
+                result = await envelope.cancel_on_disconnect(
+                    request, gateway_desktop_embed_content(body, uid=uid, **attribution)
+                )
+                response_payload = {'embedding': {'values': result.values}}
+            else:
+                result = await envelope.cancel_on_disconnect(
+                    request, gateway_desktop_batch_embed_contents(body, uid=uid, **attribution)
+                )
+                response_payload = {'embeddings': [{'values': values} for values in result.embeddings]}
+            content = json.dumps(response_payload, separators=(',', ':')).encode()
             telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
             return Response(
                 content,

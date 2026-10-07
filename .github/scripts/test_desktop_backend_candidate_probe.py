@@ -31,7 +31,7 @@ class CandidateProbeDeadlineTests(unittest.TestCase):
     @unittest.skipUnless(hasattr(signal, "SIGALRM"), "requires POSIX interval timers")
     def test_gemini_response_read_is_interrupted_at_total_budget(self) -> None:
         class DripFeedResponse:
-            headers = {"x-omi-provider": "vertex_ai", "x-omi-request-id": "server-request-id"}
+            headers = {"x-omi-provider": "llm_gateway", "x-omi-request-id": "server-request-id"}
 
             def __enter__(self):
                 return self
@@ -66,7 +66,7 @@ class CandidateProbeTests(unittest.TestCase):
 
     def test_gemini_request_uses_unique_uuid_request_id(self) -> None:
         class Response:
-            headers = {"x-omi-provider": "vertex_ai", "x-omi-request-id": "server-request-id"}
+            headers = {"x-omi-provider": "llm_gateway", "x-omi-request-id": "server-request-id"}
 
             def __enter__(self):
                 return self
@@ -85,19 +85,22 @@ class CandidateProbeTests(unittest.TestCase):
 
         request = urlopen.call_args.args[0]
         self.assertEqual(request.get_header("X-omi-request-id"), f"candidate-probe-{request_id}")
+        self.assertTrue(request.full_url.endswith("/models/gpt-6-luna:generateContent"))
+        self.assertEqual(json.loads(request.data)["generationConfig"], {"maxOutputTokens": 16})
 
     def test_gemini_probe_rejects_stub_or_unknown_provider_routes(self) -> None:
-        for provider in ("offline_stub", "desktop_llm_stub", "unknown", ""):
+        for provider in (
+            "vertex_ai", "ai_studio", "ai_studio_byok", "offline_stub", "desktop_llm_stub", "unknown", ""
+        ):
             with self.assertRaisesRegex(PROBE.ProbeError, "admitted provider"):
-                PROBE._require_real_gemini_provider(provider)
-        for admitted in ("vertex_ai", "ai_studio", "ai_studio_byok"):
-            self.assertEqual(PROBE._require_real_gemini_provider(admitted), admitted)
+                PROBE._require_paid_desktop_gateway(provider)
+        for admitted in ("llm_gateway",):
+            self.assertEqual(PROBE._require_paid_desktop_gateway(admitted), admitted)
 
     def test_gemini_probe_admits_post_gateway_llm_gateway_route(self) -> None:
-        # Since #12337 the desktop proxy serves company-paid Gemini traffic via
-        # the LLM gateway's Vertex-backed desktop-vertex lanes and stamps
-        # `llm_gateway` on X-Omi-Provider; the probe must admit that real route.
-        self.assertEqual(PROBE._require_real_gemini_provider("llm_gateway"), "llm_gateway")
+        # The compatibility proxy serves paid generation only through Luna's
+        # gateway lane; direct Gemini provider routes are rejected above.
+        self.assertEqual(PROBE._require_paid_desktop_gateway("llm_gateway"), "llm_gateway")
 
         class GatewayResponse:
             headers = {"x-omi-provider": "llm_gateway", "x-omi-request-id": "server-request-id"}
@@ -378,7 +381,7 @@ class CandidateProbeTests(unittest.TestCase):
         with mock.patch.object(PROBE, "_request_json", side_effect=[health, readiness]), mock.patch.object(
             PROBE, "_require_firestore_read", return_value={"status": "passed"}
         ), mock.patch.object(
-            PROBE, "_gemini_request", return_value={"status": "passed", "provider_route": "vertex_ai"}
+            PROBE, "_gemini_request", return_value={"status": "passed", "provider_route": "llm_gateway"}
         ) as gemini, mock.patch.object(
             PROBE, "_chat_request", side_effect=chat_results
         ) as chat:
@@ -395,7 +398,7 @@ class CandidateProbeTests(unittest.TestCase):
             )
         self.assertEqual(chat.call_count, 2)
         self.assertEqual(gemini.call_count, 1)
-        self.assertEqual(evidence["gemini_proxy"]["provider_route"], "vertex_ai")
+        self.assertEqual(evidence["gemini_proxy"]["provider_route"], "llm_gateway")
         self.assertEqual(evidence["chat"]["initial_turn"], "passed")
         self.assertEqual(evidence["chat"]["ordinary_follow_up"], "passed")
         self.assertEqual(evidence["target"]["revision"], "desktop-backend-abc")
@@ -413,7 +416,7 @@ class CandidateProbeTests(unittest.TestCase):
         with mock.patch.object(PROBE, "_request_json", side_effect=[health, readiness]), mock.patch.object(
             PROBE, "_require_firestore_read", return_value={"status": "passed"}
         ), mock.patch.object(
-            PROBE, "_gemini_request", return_value={"status": "passed", "provider_route": "vertex_ai"}
+            PROBE, "_gemini_request", return_value={"status": "passed", "provider_route": "llm_gateway"}
         ), mock.patch.object(
             PROBE,
             "_chat_request",

@@ -54,13 +54,13 @@ this is new work done since then.
    salvages only the `screenshots` table), Windows salvages every table with per-row isolation.
    This was "Absent" in the prior audit; it is now arguably ahead of Mac (see the note at the
    bottom of that section).
-8. **Action-item extraction from screen now exists as a full pipeline.** `assistants/tasks/`
-   (`taskAssistant.ts`, `create.ts`, `loop.ts`, `toolBackends.ts`, `prompt.ts` — landed
-   2026-07-15/16) is a faithful port of Mac's `TaskAssistant.swift`: `screenshotId`, `sourceApp`,
-   `windowTitle`, `confidence`, `contextSummary`, `currentActivity` all flow from a `RewindFrame`
-   through Gemini extraction into a `staged_tasks` promotion pipeline. The prior audit called
-   this "zero equivalent hook" at High value — it is now close to full parity, and is arguably the
-   single most consequential correction in this rewrite alongside the semantic-search one.
+8. **Action-item extraction from screen now uses the JEV + Luna path.** `assistants/tasks/`
+   (`taskAssistant.ts`, `screenTaskPipeline.ts`, `toolBackends.ts`, `models.ts`, `create.ts`)
+   runs local OCR, JEV admission, and one structured Luna request through the desktop gateway.
+   `screenshotId`, `sourceApp`, `windowTitle`, `confidence`, `contextSummary`, and
+   `currentActivity` flow from a `RewindFrame` into the existing `staged_tasks` lifecycle. The
+   initial Gemini tool loop was retired on 2026-10-06. Windows stages only new tasks; applying
+   duplicate/refine/complete relations remains unsupported by its current storage contract.
 9. **A Windows-specific orphaned-JPEG sweep and rebuild-from-disk path were added** (`orphanSweep.ts`,
    `rebuildIndex.ts`) — not present at all in the prior audit's model of the retention system, and
    not something Mac needs (its capture path doesn't have the write-then-insert race Windows does).
@@ -415,8 +415,9 @@ this rewrite):** Present. `assistants/tasks/` is a full port, landed 2026-07-15/
   fire-and-forget, re-entrancy-locked against the coordinator's own cadence path), a fallback tick
   (`taskFallbackIntervalMin`, Mac default 600s), and a 15s messaging fast-path
   (`MESSAGING_INTERVAL_MS`, line 39) — mirroring Mac's trigger set per the file's own header.
-- `loop.ts` runs the single-phase multi-tool Gemini extraction loop against the frame image;
-  `models.ts` parses `extract_task` tool-call args 1:1 from Mac's schema.
+- `screenTaskPipeline.ts` runs local OCR → JEV gate → one Luna extraction through the desktop
+  gateway; `models.ts` validates the structured response and task title. The former Gemini
+  tool-loop transport and prompt modules have been retired.
 - `create.ts` `createStagedTaskFromExtraction` (lines 234-278) gates on confidence
   (`DEFAULT_MIN_CONFIDENCE = 0.75`, matching Mac's `TaskAssistantSettings.defaultMinConfidence`),
   then writes a local `staged_tasks` row carrying `screenshotId: frame.id`, `sourceApp`,
@@ -424,8 +425,9 @@ this rewrite):** Present. `assistants/tasks/` is a full port, landed 2026-07-15/
   audit cited as missing on Windows — before `POST /v1/staged-tasks`, embedding the title
   (`taskEmbeddingService.ts`), and running `promoteIfNeeded` (a 30s debounce,
   `PROMOTION_DEBOUNCE_MS`, matching Mac's `promotionDebounceInterval`).
-- `toolBackends.ts` implements the `search_similar` (vector) and `search_keywords` tool backends
-  the extraction loop can call mid-analysis, per `TaskAssistant.swift:1450-1560`.
+- `toolBackends.ts` supplies bounded FTS context from active action items and staged tasks before
+  the Luna call. The Windows sink stages only genuinely new tasks; relation updates and
+  completions are not applied.
 
 **Value / notes:** Not a gap in the sense the prior audit meant it (no hook at all). What remains
 different from Mac: Windows drops Mac's `candidate_outbox` staging concept (`source: 'screenshot'`

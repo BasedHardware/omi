@@ -2,7 +2,8 @@ import Foundation
 
 /// Measured compact prompt with canonical capture facts added. Screen pixels are untrusted evidence.
 enum ScreenTaskPrompt {
-  static let model = "gemini-3.8-flash"
+  /// Explicit managed-model alias: the backend LLM gateway routes this to Luna.
+  static let model = "gpt-6-luna"
   static let system = #"""
     You find tasks for the user from what is on their screen. Output JSON only.
 
@@ -239,7 +240,7 @@ enum ScreenTaskPrompt {
       ],
       "generationConfig": [
         "responseMimeType": "application/json", "responseSchema": schema,
-        "maxOutputTokens": 2048, "thinkingConfig": ["thinkingLevel": "low"],
+        "maxOutputTokens": 2048,
       ],
     ])
   }

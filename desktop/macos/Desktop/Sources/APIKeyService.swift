@@ -269,6 +269,34 @@ final class APIKeyService: ObservableObject {
     return enrolledFingerprints()[provider.rawValue] == byokFingerprint(key)
   }
 
+  /// A usable, enrolled Gemini key selected for this account's LLM work.
+  /// Callers must use `activeBYOKSnapshot` to obtain the key itself; an unvalidated
+  /// or rotated Developer Keys value must never be attached to an inference request.
+  nonisolated static var isGeminiBYOKActive: Bool {
+    selectedBYOKLLMProvider == .gemini && isByokActive && activeBYOKSnapshot[.gemini] != nil
+  }
+
+  /// Resolve the selected Gemini credential only for the owner that captured the
+  /// work. This prevents an old screen frame from borrowing a later account's key.
+  nonisolated static func activeGeminiBYOK(forOwnerID ownerID: String) -> (key: String, fingerprint: String)? {
+    guard !ownerID.isEmpty,
+      UserDefaults.standard.string(forKey: DefaultsKey.byokOwnerUid.rawValue) == ownerID,
+      isGeminiBYOKActive
+    else { return nil }
+    return activeBYOKSnapshot[.gemini]
+  }
+
+  /// A selected Gemini credential that is still healthy for this captured owner.
+  nonisolated static func activeHealthyGeminiBYOK(forOwnerID ownerID: String) async -> (
+    key: String, fingerprint: String
+  )? {
+    guard let credential = activeGeminiBYOK(forOwnerID: ownerID) else { return nil }
+    let usable = await MainActor.run {
+      CredentialHealthManager.shared.canUseBYOK(provider: .gemini, fingerprint: credential.fingerprint)
+    }
+    return usable ? credential : nil
+  }
+
   nonisolated static var hasTranscriptionBYOK: Bool {
     selectedBYOKLLMProvider != nil && activeBYOKSnapshot[.deepgram] != nil
   }

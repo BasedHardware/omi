@@ -100,30 +100,11 @@ final class ScreenTaskAdmissionAuthority: @unchecked Sendable {
 }
 
 struct ScreenTaskLease: Sendable {
-  let flag: UInt64
   let server: UInt64
-  func isCurrent() -> Bool {
-    ScreenTaskFeature.authority.isCurrent(flag) && ScreenTaskFeature.serverAuthority.isCurrent(server)
-  }
+  func isCurrent() -> Bool { ScreenTaskFeature.serverAuthority.isCurrent(server) }
 }
 
-enum ScreenTaskFreshFlagResponse {
-  static func enabled(_ data: Data) throws -> Bool {
-    guard let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      body["errorsWhileComputingFlags"] as? Bool != true,
-      !(body["quotaLimited"] as? [String] ?? []).contains("feature_flags")
-    else { throw ScreenTaskFailure.stopped }
-    if let flags = body["featureFlags"] as? [String: Any] {
-      return flags[ScreenTaskFeature.flagName] as? Bool ?? false
-    }
-    if let flags = body["flags"] as? [String: [String: Any]] {
-      return flags[ScreenTaskFeature.flagName]?["enabled"] as? Bool ?? false
-    }
-    throw ScreenTaskFailure.invalidResponse
-  }
-}
-
-@MainActor enum ScreenTaskFlagRefresh {
+@MainActor enum ScreenTaskAdmissionRefresh {
   private static var timer: Timer?
   private static var reloadInFlight = false
   static func start() {
@@ -135,18 +116,12 @@ enum ScreenTaskFreshFlagResponse {
   }
 
   private static func reload() {
-    PostHogManager.shared.reloadFeatureFlags()
-    guard !reloadInFlight, PostHogManager.shared.isFeatureEnabled(ScreenTaskFeature.flagName),
-      let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
-    else { return }
+    guard !reloadInFlight, let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     reloadInFlight = true
     let requestedAt = ProcessInfo.processInfo.systemUptime
     Task { @MainActor in
       defer { reloadInFlight = false }
       do {
-        let flagEnabled = try await PostHogManager.shared.screenTaskFlagAdmission(authorization: owner)
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
-        ScreenTaskFeature.authority.refresh(enabled: flagEnabled, requestedAt: requestedAt, authorization: owner)
         let serverEnabled = try await APIClient.shared.screenTaskAdmissionStatus(authorization: owner)
         guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
         ScreenTaskFeature.serverAuthority.refresh(

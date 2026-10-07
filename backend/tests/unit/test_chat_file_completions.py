@@ -21,7 +21,7 @@ from utils.other import chat_file  # noqa: E402
 from utils.retrieval import graph  # noqa: E402
 from utils.retrieval.agentic import AGENT_STREAM_FAILURE_MESSAGE  # noqa: E402
 import utils.retrieval.tools.file_tools as file_tools  # noqa: E402
-from utils.llm.model_config import LUNA_MODEL
+from utils.llm.gateway_client import FILE_CHAT_DOCUMENTS_AUTO_LANE_ID
 
 
 class _Callback:
@@ -88,8 +88,8 @@ async def test_doc_file_chat_uses_completions_and_never_assistants(monkeypatch):
         request.update(kwargs)
         return _AsyncStream([_token('PDF summary')])
 
-    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_completion)))
-    monkeypatch.setattr(chat_file, '_get_async_openai', lambda: client)
+    gateway_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_completion)))
+    monkeypatch.setattr(chat_file, 'get_file_chat_gateway_async_client', lambda: gateway_client)
     monkeypatch.setattr(chat_file.openai, 'beta', _ForbiddenAssistants())
     monkeypatch.setattr(
         chat_file.chat_db,
@@ -106,7 +106,7 @@ async def test_doc_file_chat_uses_completions_and_never_assistants(monkeypatch):
     assert answer == 'PDF summary'
     assert callback.chunks == ['PDF summary']
     assert callback.ended is True
-    assert request['model'] == LUNA_MODEL
+    assert request['model'] == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID
     assert request['max_completion_tokens'] == 2048
     assert 'max_tokens' not in request
     assert request['messages'][0]['content'][1] == {'type': 'file', 'file': {'file_id': 'openai-file-1'}}

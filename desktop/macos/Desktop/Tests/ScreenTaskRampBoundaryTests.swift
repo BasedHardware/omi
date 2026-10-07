@@ -16,7 +16,6 @@ private final class RampState: @unchecked Sendable {
   var change: String?
   var gateError: Error?
   var extractionError: Error?
-  var legacyError: Error?
 
   func boundary(_ stage: String) {
     lock.withLock {
@@ -81,12 +80,7 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
         if let error = state.extractionError { throw error }
         return output
       },
-      legacy: {
-        try ScreenTaskWorkAuthority.require()
-        state.append("legacy")
-        if let error = state.legacyError { throw error }
-        return ScreenTaskExtraction(results: [], searchCount: 0, extractor: "legacy")
-      }, fallback: { _, _ in }, now: { state.now })
+      fallback: { _, _ in }, now: { state.now })
   }
 
   private func frame(title: String = "synthetic conversation") -> CapturedFrame {
@@ -158,24 +152,25 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     }
   }
 
-  func testDisableDuringGateRollsBackWithOriginalFrameAuthorityAndNoNewScreenshotCall() async throws {
+  func testDisableDuringGateStopsWithoutEnteringTheRetiredToolLoop() async throws {
     let state = RampState()
     state.suspendAt = "gate"
     state.change = "feature"
     let metrics = ScreenTaskFrameMetrics()
-    let result = try await ScreenTaskPipeline().run(
-      frame: frame(), key: "owner:1:window", services: services(state), metrics: metrics)
-    XCTAssertEqual(state.sent, ["gate", "legacy"])
-    XCTAssertEqual(result.extractor, "legacy")
-    XCTAssertEqual(metrics.fallbackReason, "dispatch_disabled")
-    state.change = "owner"
-    state.boundary("gate")
     do {
       _ = try await ScreenTaskPipeline().run(
-        frame: frame(), key: "owner:1:window", services: services(state), metrics: ScreenTaskFrameMetrics())
-      XCTFail("rollback rebound a revoked frame")
-    } catch {}
-    XCTAssertEqual(state.sent, ["gate", "legacy"])
+        frame: frame(), key: "owner:1:window", services: services(state), metrics: metrics)
+      XCTFail("a revoked feature lease must stop this frame")
+    } catch let failure as ScreenTaskFailure {
+      if case .stopped = failure {
+      } else {
+        XCTFail("Expected stopped, got \(failure)")
+      }
+    } catch {
+      XCTFail("Unexpected failure: \(error)")
+    }
+    XCTAssertEqual(state.sent, ["gate"])
+    XCTAssertEqual(metrics.fallbackReason, "none")
   }
 
   func testExpiredLeaseStopsWithoutReloadAndDoesNotReauthorizeOldGeneration() throws {
@@ -219,20 +214,14 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     }
   }
 
-  func testFlagTransportErrorsAndDelayedResponsesCannotRenewCachedTrueLease() throws {
+  func testServerAdmissionFailureAndDelayedResponseCannotRenewCachedLease() throws {
     let state = RampState()
     let authority = ScreenTaskAdmissionAuthority(now: { state.now })
     authority.refresh(enabled: true, requestedAt: state.time)
     let old = try XCTUnwrap(authority.snapshot())
-    XCTAssertThrowsError(
-      try ScreenTaskFreshFlagResponse.enabled(
-        Data(#"{"featureFlags":{"screen_task_jev_gate":true},"quotaLimited":["feature_flags"]}"#.utf8)))
-    XCTAssertThrowsError(
-      try ScreenTaskFreshFlagResponse.enabled(
-        Data(#"{"featureFlags":{"screen_task_jev_gate":true},"errorsWhileComputingFlags":true}"#.utf8)))
-    XCTAssertFalse(
-      try ScreenTaskFreshFlagResponse.enabled(Data(#"{"featureFlags":{"screen_task_jev_gate":false}}"#.utf8)))
     state.time += 60
+    // A transport failure leaves the prior server lease untouched; only a fresh
+    // admission response can renew it, and a delayed response expires from request start.
     authority.refresh(enabled: true, requestedAt: 100)
     XCTAssertNil(authority.snapshot())
     XCTAssertFalse(authority.isCurrent(old))
@@ -307,7 +296,7 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     XCTAssertEqual(state.sent, ["gate"])
   }
 
-  func testHTTP200LegacyReservationRefusalIsQuietAndNeverCountedAsExtraction() async throws {
+  func testHTTP200LegacyReservationRefusalRemainsTerminalForRetiredCompanyPaidClients() async throws {
     let url = try XCTUnwrap(URL(string: "http://local"))
     let body = Data(
       #"{"candidates":[{"content":{"parts":[{"functionCall":{"name":"no_task_found","args":{"context_summary":"","current_activity":""}}}]},"finishReason":"STOP"}]}"#
@@ -324,21 +313,9 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     XCTAssertTrue(refusal.isExpectedProductState)
     let normalResponse = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [:]))
     XCTAssertNil(GeminiClient.httpError(response: normalResponse, data: body))
-    let state = RampState()
-    state.suspendAt = "gate"
-    state.change = "feature"
-    state.legacyError = refusal
     let metrics = ScreenTaskFrameMetrics()
-    do {
-      _ = try await ScreenTaskPipeline().run(
-        frame: frame(), key: "owner:1:window", services: services(state), metrics: metrics)
-      XCTFail("refusal was treated as a successful extraction")
-    } catch {
-      metrics.finish(error: error)
-    }
-    XCTAssertEqual(state.sent, ["gate", "legacy"])
-    XCTAssertEqual(metrics.pipeline, "legacy")
-    XCTAssertEqual(metrics.legacyAttempts, 1)
+    metrics.finish(error: refusal)
+    XCTAssertEqual(metrics.legacyAttempts, 0)
     XCTAssertEqual(metrics.outcome, "refused")
     XCTAssertEqual(metrics.errorClass, "legacy_task_reservation_inactive")
     XCTAssertEqual(metrics.extractor, "none")

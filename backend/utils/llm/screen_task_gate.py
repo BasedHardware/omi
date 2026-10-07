@@ -61,7 +61,7 @@ def decide_screen_task(state: str, *, audit_draw: float | None = None) -> Screen
         record_fallback(
             component='screen_task_gate',
             from_mode='jev',
-            to_mode='gemini_3_8',
+            to_mode='luna',
             reason='gate_unavailable',
             outcome='recovered',
         )
