@@ -282,6 +282,39 @@ async def test_start_background_task_tracks_and_removes():
     assert task not in _background_tasks
 
 
+def test_submit_with_context_defers_destructive_operation_fence_without_traceback(caplog):
+    """A live account gate refuses the write. That is not a background crash."""
+
+    class DestructiveOperationInProgress(RuntimeError):
+        pass
+
+    def blocked():
+        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+
+    with caplog.at_level(logging.INFO, logger='utils.executors'):
+        future = submit_with_context(_test_executor, blocked)
+        with pytest.raises(DestructiveOperationInProgress):
+            future.result(timeout=2)
+        time.sleep(0.05)
+
+    assert any('deferred reason=destructive_operation' in record.message for record in caplog.records)
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert not any(record.exc_info not in (None, (None, None, None)) for record in caplog.records)
+
+
+def test_submit_with_context_still_logs_unexpected_background_failures(caplog):
+    def boom():
+        raise RuntimeError('bg-boom')
+
+    with caplog.at_level(logging.ERROR, logger='utils.executors'):
+        future = submit_with_context(_test_executor, boom)
+        with pytest.raises(RuntimeError):
+            future.result(timeout=2)
+        time.sleep(0.05)
+
+    assert any(record.levelno >= logging.ERROR and 'bg-boom' in record.message for record in caplog.records)
+
+
 @pytest.mark.asyncio
 async def test_start_background_task_logs_exceptions(caplog):
     """Exceptions in background tasks must be logged, not silently swallowed."""

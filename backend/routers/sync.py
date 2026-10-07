@@ -2378,7 +2378,27 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
             )
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'empty_audio'})
 
-        await run_blocking(storage_executor, upload_playback_artifact, uid, conversation_id, audio_file_id, mp3_data)
+        try:
+            await run_blocking(
+                storage_executor, upload_playback_artifact, uid, conversation_id, audio_file_id, mp3_data
+            )
+        except Exception as e:
+            # The upload fence raises DestructiveOperationInProgress while a
+            # destructive operation owns the account. Leaving it unhandled
+            # reports that frame to Error Reporting and skips the unavailable
+            # marker the build path writes on its final attempt.
+            max_attempts = get_sync_tasks_max_attempts()
+            if task_retry_count >= max_attempts - 1:
+                logger.error(f'audio_merge_failed_final conv={conversation_id} file={audio_file_id}: {e}')
+                await run_blocking(
+                    storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'merge_failed'
+                )
+                return JSONResponse(status_code=200, content={'status': 'failed_final'})
+            logger.warning(
+                f'audio_merge: attempt {task_retry_count + 1} failed conv={conversation_id} '
+                f'file={audio_file_id}, will retry: {e}'
+            )
+            return JSONResponse(status_code=500, content={'status': 'retry'})
         logger.info(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
@@ -2470,7 +2490,28 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
-        await run_blocking(storage_executor, upload_conversation_playback_artifact, uid, conversation_id, mp3_data)
+        try:
+            await run_blocking(storage_executor, upload_conversation_playback_artifact, uid, conversation_id, mp3_data)
+        except Exception as e:
+            # Same contract as the build: a destructive-operation fence on the
+            # upload must retry (or mark unavailable on the final attempt)
+            # instead of escaping as an unhandled legal_holds traceback.
+            max_attempts = get_sync_tasks_max_attempts()
+            if task_retry_count >= max_attempts - 1:
+                logger.error(f'audio_merge_failed_final conversation artifact conv={conversation_id}: {e}')
+                await run_blocking(
+                    storage_executor,
+                    mark_conversation_playback_unavailable,
+                    uid,
+                    conversation_id,
+                    fingerprint,
+                    'merge_failed',
+                )
+                return JSONResponse(status_code=200, content={'status': 'failed_final'})
+            logger.warning(
+                f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}'
+            )
+            return JSONResponse(status_code=500, content={'status': 'retry'})
         mp3_size = len(mp3_data)
         del mp3_data
 

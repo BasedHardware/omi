@@ -164,8 +164,15 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if future.cancelled():
         return
     error = future.exception()
-    if error is not None:
-        logger.error("background task %s failed: %s", name, error, exc_info=error)
+    if error is None:
+        return
+    # external_write_fence raises this while a deletion or retention cleanup
+    # owns the account. The write is refused on purpose. A traceback here is
+    # what Cloud Error Reporting groups as a crash at legal_holds.py.
+    if type(error).__name__ == 'DestructiveOperationInProgress':
+        logger.info('background task %s deferred reason=destructive_operation', name)
+        return
+    logger.error("background task %s failed: %s", name, error, exc_info=error)
 
 
 def submit_with_context(

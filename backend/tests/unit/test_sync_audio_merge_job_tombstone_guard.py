@@ -168,6 +168,92 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         mock_upload.assert_called_once()
         mock_update.assert_called_once()
 
+    @pytest.mark.anyio
+    async def test_v2_upload_fence_retries_instead_of_escaping(self):
+        """A destructive-operation fence on the artifact upload is a retry, not a crash."""
+        from database.legal_holds import DestructiveOperationInProgress
+
+        active_conv = _make_conversation(deleted=False, conversation_id='conv-active')
+        payload = {
+            'schema_version': 2,
+            'uid': 'user-1',
+            'conversation_id': 'conv-active',
+            'fingerprint': 'fp-active',
+        }
+        mock_upload = MagicMock(
+            side_effect=DestructiveOperationInProgress('external data write blocked by destructive operation')
+        )
+        mock_update = MagicMock()
+        mock_unavailable = MagicMock()
+
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=active_conv
+        ), patch.object(
+            routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
+        ), patch.object(
+            routers_sync, 'get_conversation_playback_signed_url', return_value=None
+        ), patch.object(
+            routers_sync.sync_playback,
+            'build_conversation_playback_artifact',
+            return_value=(b'fake_mp3', [{'len': 1.0, 'wall_offset': 0.0}]),
+        ), patch.object(
+            routers_sync, 'upload_conversation_playback_artifact', mock_upload
+        ), patch.object(
+            routers_sync.conversations_db, 'update_conversation', mock_update
+        ), patch.object(
+            routers_sync, 'mark_conversation_playback_unavailable', mock_unavailable
+        ), patch.object(
+            routers_sync, 'get_sync_tasks_max_attempts', return_value=5
+        ):
+            resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
+
+        assert resp.status_code == 500
+        assert b'"status":"retry"' in resp.body
+        mock_update.assert_not_called()
+        mock_unavailable.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_v2_upload_fence_marks_unavailable_on_final_attempt(self):
+        from database.legal_holds import DestructiveOperationInProgress
+
+        active_conv = _make_conversation(deleted=False, conversation_id='conv-active')
+        payload = {
+            'schema_version': 2,
+            'uid': 'user-1',
+            'conversation_id': 'conv-active',
+            'fingerprint': 'fp-active',
+        }
+        mock_unavailable = MagicMock()
+
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=active_conv
+        ), patch.object(
+            routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
+        ), patch.object(
+            routers_sync, 'get_conversation_playback_signed_url', return_value=None
+        ), patch.object(
+            routers_sync.sync_playback,
+            'build_conversation_playback_artifact',
+            return_value=(b'fake_mp3', [{'len': 1.0, 'wall_offset': 0.0}]),
+        ), patch.object(
+            routers_sync,
+            'upload_conversation_playback_artifact',
+            side_effect=DestructiveOperationInProgress('external data write blocked by destructive operation'),
+        ), patch.object(
+            routers_sync, 'mark_conversation_playback_unavailable', mock_unavailable
+        ), patch.object(
+            routers_sync, 'get_sync_tasks_max_attempts', return_value=1
+        ):
+            resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
+
+        assert resp.status_code == 200
+        assert b'"status":"failed_final"' in resp.body
+        mock_unavailable.assert_called_once()
+
 
 class TestV1SingleFileAudioMergeTombstoneGuard:
     """Tests for run_audio_merge_job (schema_version != 2 legacy) tombstone handling."""
