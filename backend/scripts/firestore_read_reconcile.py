@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterable, Mapping
@@ -193,28 +194,46 @@ WHERE _PARTITIONTIME >= TIMESTAMP_SUB(TIMESTAMP('{start}'), INTERVAL 2 DAY)
         # credentialed gcloud *account* it enters a first-run prompt a
         # non-TTY runner aborts (FC-bq-federated-quota-project: six
         # dispatches across --billing_project/--headless/--force attempts).
-        # The REST path has no account layer at all.
+        # The REST path has no account layer at all. timeoutMs is raised to
+        # the full HTTP budget: jobs.query answers HTTP 200 with
+        # jobComplete=false and no rows when the aggregate outlives the
+        # default 10s server wait, which would read as a zero bill.
         token = subprocess.run(
             ["gcloud", "auth", "print-access-token"],
             check=True,
             capture_output=True,
             text=True,
         ).stdout.strip()
-        request = urllib.request.Request(
-            f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT_ID}/queries",
-            data=json.dumps({"query": sql, "useLegacySql": False}).encode(),
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(request, timeout=120) as response:
-            payload = json.load(response)
+        endpoint = f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT_ID}/queries"
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        body = json.dumps({"query": sql, "useLegacySql": False, "timeoutMs": 120000}).encode()
+        last_error = "no attempt"
+        payload: dict[str, Any] | None = None
+        for attempt in range(3):
+            request = urllib.request.Request(endpoint, data=body, headers=headers)
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    loaded = json.load(response)
+                if not isinstance(loaded, dict) or not loaded.get("jobComplete"):
+                    last_error = f"jobs.query incomplete after timeoutMs: jobComplete=false (attempt {attempt + 1})"
+                    continue
+                payload = loaded
+                break
+            except urllib.error.HTTPError as exc:
+                body_text = exc.read().decode(errors="replace")
+                last_error = f"HTTP {exc.code}: {body_text[:400]}"
+                if exc.code < 500 and exc.code != 429:
+                    break
+            except (urllib.error.URLError, TimeoutError) as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+            time.sleep(5 * (attempt + 1))
+        if payload is None or not payload.get("jobComplete"):
+            raise RuntimeError(f"billing query failed after 3 attempts; last: {last_error}")
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip().splitlines()
         raise RuntimeError(
             f"bq token mint failed (rc={exc.returncode}): {detail[-1] if detail else '<no stderr>'}"
         ) from exc
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode(errors="replace")
-        raise RuntimeError(f"billing query failed: HTTP {exc.code}: {body[:400]}") from exc
     billing_rows = [{"billed": row["f"][0]["v"]} for row in payload.get("rows", [])]
     billed = float(billing_rows[0]["billed"]) if billing_rows else 0.0
     records: list[dict[str, Any]] = []

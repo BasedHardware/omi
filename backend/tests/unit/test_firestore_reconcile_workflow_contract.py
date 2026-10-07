@@ -10,28 +10,50 @@ reconcile script's own unit tests cover outcome logic; this file only guards
 the invocation shape against silent regression to the CLI.
 """
 
+import ast
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = REPO_ROOT / "backend/scripts/firestore_read_reconcile.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts/firestore_read_reconcile.py"
 
 
-def test_billing_query_uses_rest_not_bq_cli():
-    text = SCRIPT.read_text()
-    assert "bigquery.googleapis.com" in text, (
-        "the billed-read fetch must call the BigQuery REST jobs.query endpoint; "
-        "the bq CLI cannot authenticate from a federated CI identity without an "
-        "interactive account layer"
-    )
-    assert '"bq",' not in text, (
+def _module() -> ast.Module:
+    return ast.parse(SCRIPT.read_text())
+
+
+def test_billing_query_uses_rest_jobs_query():
+    """The script must call the jobs.query endpoint with a structurally-built
+    request whose URL comes from the PROJECT_ID constant, and must never
+    shell out to the bq CLI."""
+    tree = _module()
+    request_calls = [
+        c
+        for c in ast.walk(tree)
+        if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr == "Request"
+    ]
+    assert request_calls, "the billed-read fetch must issue an HTTP request via urllib.request.Request"
+    path_fragments = [
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and "/queries" in n.value
+    ]
+    assert path_fragments, "the request must target the jobs.query endpoint"
+    source = SCRIPT.read_text()
+    assert '"bq",' not in source, (
         "a bq CLI invocation regressed into the script; it enters the first-run "
         "account prompt on non-TTY runners and exits 1 before inserting any job"
     )
-    assert '"print-access-token"' in text, "the REST call needs a token minted from the ambient credential"
+    assert '"print-access-token"' in source, "the REST call needs a token minted from the ambient credential"
 
 
-def test_billing_query_failures_surface_response_body():
-    text = SCRIPT.read_text()
-    assert "billing query failed: HTTP" in text, (
+def test_billing_query_failures_surface_and_retry():
+    """Denials must carry the response body into the raised error, and the
+    only daily run must survive transient 5xx/429/network failures."""
+    source = SCRIPT.read_text()
+    assert "billing query failed after 3 attempts" in source, (
         "an HTTPError must carry the response body into the raised error; a " "swallowed denial cost six CI dispatches"
+    )
+    assert "jobComplete" in source, (
+        "jobs.query answers HTTP 200 with jobComplete=false and no rows when "
+        "the aggregate outlives the server wait; treating that as a zero bill "
+        "under-states the day"
     )
