@@ -183,8 +183,21 @@ WHERE _PARTITIONTIME >= TIMESTAMP_SUB(TIMESTAMP('{start}'), INTERVAL 2 DAY)
   AND sku.description = 'Cloud Firestore Read Ops'
   AND usage.unit = 'requests'"""
     try:
+        # --billing_project is bq's native per-invocation quota project. WIF
+        # credentials have no ADC file, so `gcloud auth application-default
+        # set-quota-project` cannot work here; bq still refuses federated
+        # credentials without a quota project ("User is not authorized as a
+        # quota project") and exits 1 before inserting any job.
         bq = subprocess.run(
-            ["bq", "query", "--project_id=based-hardware", "--use_legacy_sql=false", "--format=json", sql],
+            [
+                "bq",
+                "query",
+                "--billing_project=based-hardware",
+                "--project_id=based-hardware",
+                "--use_legacy_sql=false",
+                "--format=json",
+                sql,
+            ],
             check=True,
             capture_output=True,
             text=True,
