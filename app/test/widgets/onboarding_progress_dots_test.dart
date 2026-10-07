@@ -25,8 +25,10 @@ void main() {
     handle.dispose();
   });
 
-  test('the progress steps are the six real first-run steps', () {
-    expect(OnboardingProgressStepsForTest.steps, hasLength(6));
+  test('the progress steps are the five real first-run steps while Knowledge Graph is hidden', () {
+    expect(OnboardingProgressStepsForTest.knowledgeGraphStepEnabled, isFalse);
+    expect(OnboardingProgressStepsForTest.steps, hasLength(5));
+    expect(OnboardingProgressStepsForTest.steps, isNot(contains(OnboardingProgressStepsForTest.knowledgeGraphPage)));
   });
 
   testWidgets('floating navigation reserves its row, so a step SafeArea starts below the dots and back button', (
