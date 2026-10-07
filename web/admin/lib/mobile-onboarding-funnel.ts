@@ -57,7 +57,7 @@ export const TUTORIAL_STEPS = [
 ];
 const ACTOR = "COALESCE(person_id, distinct_id)";
 const MOBILE = "properties.platform IN ('ios', 'android')";
-const quote = (s: string) => `'${s.replace(/'/g, "\\'")}'`;
+const quote = (s: string) => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
 function firstRunQuery(days: number) {
   return `WITH entrants AS (
