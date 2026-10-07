@@ -19,6 +19,12 @@ from prometheus_client import (
 # series for every Counter and Histogram child, including idle zero children.
 disable_created_metrics()
 
+OMI_MCP_OAUTH_TOKEN_TOTAL = Counter(
+    'omi_mcp_oauth_token_total',
+    'MCP OAuth token requests by bounded grant type and terminal outcome',
+    ['grant_type', 'outcome'],
+)
+
 SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
     'omi_screen_task_gate_frames_total', 'Screen-task gate HTTP admissions by bounded terminal outcome', ['outcome']
 )
@@ -293,6 +299,11 @@ for _mode in ('legacy', 'v2'):
 # bounded reason (enumerated in routers/listen/speakers.py). The reason is the
 # only label — never uid, session, or conversation identifiers; those travel on
 # the paired log line instead, which is how a single user report is attributed.
+OMI_LIVE_SPEAKER_COLLAPSE_TOTAL = Counter(
+    'omi_live_speaker_collapse_total',
+    'Single-voice live segment runs with repeated rejected voice matches (observational)',
+)
+
 OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
     'omi_speaker_id_match_exits_total',
     'Live speaker-ID detections that returned before a match decision, by bounded reason',

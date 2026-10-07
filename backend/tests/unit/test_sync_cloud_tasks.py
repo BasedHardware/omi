@@ -1360,7 +1360,16 @@ def _load_sync_router_for_fast_path():
     fallback_mod.record_fallback = _track_record_fallback
     transcription_mod = types.ModuleType('utils.observability.transcription')
     transcription_mod.record_sync_transcription_outcome = MagicMock()
+    transcription_mod.record_sync_intake_outcome = MagicMock()
+    journeys_mod = types.ModuleType('utils.observability.journeys')
+    journeys_mod.record_client_journey_accepted = MagicMock()
+    journeys_mod.record_client_journey_terminal = MagicMock()
+    journeys_mod.record_journey_accepted = MagicMock()
+    shape_mod = types.ModuleType('utils.conversation_shape')
+    shape_mod.observe_completed_conversation_shape = MagicMock()
     saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
+    saved_modules['utils.observability.journeys'] = sys.modules.get('utils.observability.journeys')
+    saved_modules['utils.conversation_shape'] = sys.modules.get('utils.conversation_shape')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
     saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
@@ -1368,8 +1377,11 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.observability'] = obs_pkg
     sys.modules['utils.observability.fallback'] = fallback_mod
     sys.modules['utils.observability.transcription'] = transcription_mod
+    sys.modules['utils.observability.journeys'] = journeys_mod
+    sys.modules['utils.conversation_shape'] = shape_mod
     obs_pkg.fallback = fallback_mod
     obs_pkg.transcription = transcription_mod
+    obs_pkg.journeys = journeys_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
     # Keep the decision policy real (pure, dependency-free): the sync pipeline now
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock

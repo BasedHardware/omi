@@ -70,6 +70,7 @@ def _build_pipeline_fakes() -> dict:
         'utils.byok',
         'utils.cloud_tasks',
         'utils.conversations.factory',
+        'utils.conversations.lifecycle',
         'utils.conversations.location',
         'utils.conversations.process_conversation',
         'utils.sync.bridge',

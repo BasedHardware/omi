@@ -562,6 +562,8 @@ final class OmiBleManager: NSObject {
         if !authorized { captureReconnects[uuid]?.finish(false) }
     }
 
+    private let ingressPolicyDecoder = CaptureAdmissionPolicyDecoder()
+
     private func captureSession(_ uuid: String) -> OmiBleCaptureSession {
         if let session = captureSessions[uuid] { return session }
         let health = OmiCaptureHealth(record: OmiCaptureHealthStore.load(uuid)) {
@@ -569,7 +571,10 @@ final class OmiBleManager: NSObject {
         }
         let session = OmiBleCaptureSession(
             health: health,
-            permitted: { !CaptureAdmissionPolicy.load(from: .standard).muted },
+            permitted: { [weak self] in
+                guard let self else { return false }
+                return !CaptureAdmissionPolicy.load(from: .standard, decoder: self.ingressPolicyDecoder).muted
+            },
             linkAvailable: { [weak self] in
                 self?.captureStorageProgress.isActive(uuid, now: ProcessInfo.processInfo.systemUptime) != true
             },

@@ -21,6 +21,7 @@ from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
+from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
@@ -32,6 +33,7 @@ from utils.manual_speaker_assignments import (
     replay_receipt_commits,
     apply_manual_assignments,
     donor_selected_ids,
+    validate_assignment_range,
     manual_assignment,
     merge_live_segments,
     normalize_rejection,
@@ -492,6 +494,8 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
 
     data = copy.deepcopy(conversation_data)
     data.pop('live_transcript_replay_receipt', None)
+    if is_completed_rule_discard(data):
+        data['discarded'] = True
     # User titles are durable overrides. Conversation processing owns the
     # generated title, but must never erase an explicit user edit.
     user_title = effective_user_title(data.get('user_title'))
@@ -676,8 +680,9 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
         return False
     if is_soft_deleted(conversation):
         return False
-    if conversation.get('discarded') and not include_discarded:
-        return False
+    if not include_discarded:
+        if conversation.get('discarded') or is_completed_rule_discard(conversation):
+            return False
     return True
 
 
@@ -752,6 +757,13 @@ def _count_matching_tombstones(
     return matching
 
 
+# Legacy completed rule-discards still match ``discarded == False``. Skip at
+# most this many of them while filling one page: one stale row must not empty
+# the page, and a pile must not walk the collection. Past the cap the page
+# may be short; that bound is preferable to an unbounded scan or a new index.
+_RULE_DISCARD_PAGE_SKIP_CAP = 64
+
+
 def _collect_visible_conversation_page(
     conversations_ref: Any,
     *,
@@ -760,14 +772,13 @@ def _collect_visible_conversation_page(
     include_discarded: bool,
     budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
-    """Page visible rows. `include_discarded=True` cannot use Firestore offset.
+    """Page visible rows.
 
-    Flutter lists with `include_discarded=True`, so donor tombstones would steal
-    page slots if we `limit`/`offset` then drop `deleted` in Python. Scan and
-    fill visible rows instead. `include_discarded=False` keeps server-side
-    offset so the list-read budget still charges the skipped prefix without
-    iterating it; `discarded=True` on donors, discarded fragments, and the
-    relevance backfill keeps those rows out of that indexed query.
+    ``include_discarded=True`` scans and fills, because donor tombstones are not
+    excluded by an indexed flag. ``include_discarded=False`` keeps the indexed
+    ``discarded == False`` query's server ``limit``/``offset`` (desktop parity).
+    If that window is full but some rows are completed rule-discards, keep
+    reading after the last snapshot until the page is full or the skip cap hits.
     """
     if include_discarded:
         skipped_visible = 0
@@ -794,16 +805,52 @@ def _collect_visible_conversation_page(
             budget.charge(offset)
         except ListReadBudgetExhausted:
             return []
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
-    conversations: List[Dict[str, Any]] = []
+    page_query = conversations_ref.limit(limit).offset(offset)
+    conversations = []
+    last_doc = None
+    fetched = 0
+    batch_limit = limit
     try:
-        for doc in budgeted_stream_iter(conversations_ref, budget):
+        for doc in budgeted_stream_iter(page_query, budget):
+            fetched += 1
+            last_doc = doc
             conversation = document_data_with_revision(doc)
-            if conversation is None or not is_visible_conversation(conversation, include_discarded=include_discarded):
+            if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
                 continue
             conversations.append(conversation)
     except ListReadBudgetExhausted:
-        pass
+        return conversations
+
+    skipped = fetched - len(conversations)
+    while (
+        len(conversations) < limit
+        and fetched == batch_limit
+        and last_doc is not None
+        and skipped <= _RULE_DISCARD_PAGE_SKIP_CAP
+        and hasattr(conversations_ref, 'start_after')
+    ):
+        # A shortfall-sized follow-up lets one stale row end the scan while
+        # visible rows remain. Ask for another full window; the skip cap still
+        # bounds the walk.
+        follow = conversations_ref.start_after(last_doc).limit(batch_limit)
+        fetched = 0
+        try:
+            for doc in budgeted_stream_iter(follow, budget):
+                fetched += 1
+                last_doc = doc
+                conversation = document_data_with_revision(doc)
+                if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
+                    skipped += 1
+                    if skipped > _RULE_DISCARD_PAGE_SKIP_CAP:
+                        return conversations
+                    continue
+                conversations.append(conversation)
+                if len(conversations) >= limit:
+                    return conversations
+        except ListReadBudgetExhausted:
+            return conversations
+        if fetched < batch_limit:
+            break
     return conversations
 
 
@@ -2273,7 +2320,13 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     _sync_conversation_search_index(uid, conversation_id)
 
 
-def discard_by_relevance(uid: str, conversation_id: str, relevance_decision: dict) -> bool:
+def discard_by_relevance(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict,
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> bool:
     """Hide a row the relevance rules settled after the fact (backfill).
 
     Transactional so it never overrides what happened since the scan: a
@@ -2288,7 +2341,13 @@ def discard_by_relevance(uid: str, conversation_id: str, relevance_decision: dic
         if not getattr(snapshot, 'exists', False):
             return False
         current = snapshot.to_dict() or {}
-        if is_soft_deleted(current) or current.get('discarded') or current.get('sync_relevance_user_kept'):
+        status = getattr(current.get('status'), 'value', current.get('status'))
+        if is_soft_deleted(current) or current.get('discarded') or status != 'completed' or is_user_curated(current):
+            return False
+        if (
+            expected_sync_content_revision is not None
+            and current.get('sync_content_revision') != expected_sync_content_revision
+        ):
             return False
         transaction.update(conversation_ref, {'discarded': True, 'relevance_decision': relevance_decision})
         return True
@@ -2733,11 +2792,13 @@ def assign_conversation_speaker(
     firestore_client=None,
     rejection=None,
     owner_segment_ids=None,
+    time_range=None,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
     from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
     from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
 
+    validate_assignment_range(time_range)
     rejection = normalize_rejection(rejection)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
@@ -2773,6 +2834,7 @@ def assign_conversation_speaker(
                 speaker_id=speaker_id,
                 segment_index=segment_index,
                 strict_speaker=rejection is not None,
+                time_range=time_range,
             )
             selected_speaker_id = selected_segment_index = None
         current = copy.deepcopy(raw)
@@ -2797,6 +2859,8 @@ def assign_conversation_speaker(
             segment_index=selected_segment_index,
             use_for_speech_training=use_for_speech_training,
             rejection=rejection,
+            time_range=time_range if source_segments is None else None,
+            segment_only=time_range is not None,
         )
         removed, relabeled = persist_assignment_effects(
             transaction,

@@ -206,6 +206,8 @@ env:
     value: "false"
   - name: SONIOX_WIRE_LEDGER
     value: "false"
+  - name: SONIOX_ORDERED_FINALIZE
+    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "false"
   # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.

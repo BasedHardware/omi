@@ -58,6 +58,7 @@ from database.memory_apply_store import (
     privacy_deletion_receipt_id,
 )
 from database.legal_holds import (
+    DestructiveOperationInProgress,
     LegalHoldAuthorityUnavailable,
     assert_account_deletion_permitted,
     current_destructive_operation_token,
@@ -66,6 +67,7 @@ from database.legal_holds import (
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.other.list_budget import ListReadBudget, budgeted_document_get, budgeted_stream_list
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
@@ -1896,18 +1898,21 @@ def write_canonical_extraction_memory(
         apply_patch = (
             apply_direct_user_long_term_patch_firestore if direct_user_authorized else apply_long_term_patch_firestore
         )
-        result = apply_patch(
-            uid=uid,
-            operation_id=write.operation.operation_id,
-            patch_payload=write.patch_payload,
-            proposed_operation=write.operation,
-            proposed_evidence=write.evidence,
-            review_resolution=review_resolution,
-            required_source_item=required_source_item,
-            ledger_reopen_receipt=ledger_reopen_receipt,
-            allow_ledger_migration=False,
-            db_client=client,
-        )
+        try:
+            result = apply_patch(
+                uid=uid,
+                operation_id=write.operation.operation_id,
+                patch_payload=write.patch_payload,
+                proposed_operation=write.operation,
+                proposed_evidence=write.evidence,
+                review_resolution=review_resolution,
+                required_source_item=required_source_item,
+                ledger_reopen_receipt=ledger_reopen_receipt,
+                allow_ledger_migration=False,
+                db_client=client,
+            )
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         if result.status != ApplyStatus.retryable_head_mismatch:
             break
     assert result is not None
@@ -2713,6 +2718,8 @@ def replace_conversation_sourced_memories(
                 db_client=client,
             )
             break
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         except ConversationSourceReplacementConflict as exc:
             last_conflict = exc
             _backoff_before_replacement_retry(_attempt, conflict_backoff_seconds)
@@ -2768,7 +2775,10 @@ def _apply_canonical_user_mutation(
             or memory_use_feedback.target_memory_id != memory_id
         ):
             raise ValueError("memory-use feedback requires exact owner mutation authority")
-        replay = read_memory_use_feedback_replay(uid, memory_use_feedback, db_client=db_client)
+        try:
+            replay = read_memory_use_feedback_replay(uid, memory_use_feedback, db_client=db_client)
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         if replay is not None:
             return replay, replay
     for _attempt in range(3):
@@ -2856,17 +2866,20 @@ def _apply_canonical_user_mutation(
         )
         if memory_use_feedback is not None:
             source_fence["memory_use_feedback"] = memory_use_feedback
-        result = apply_patch(
-            uid=uid,
-            operation_id=operation.operation_id,
-            patch_payload=patch_payload,
-            proposed_operation=operation,
-            review_resolution=review_resolution,
-            allow_ledger_migration=allow_ledger_migration,
-            trigger_feedback_receipt=trigger_feedback_receipt,
-            db_client=db_client,
-            **source_fence,
-        )
+        try:
+            result = apply_patch(
+                uid=uid,
+                operation_id=operation.operation_id,
+                patch_payload=patch_payload,
+                proposed_operation=operation,
+                review_resolution=review_resolution,
+                allow_ledger_migration=allow_ledger_migration,
+                trigger_feedback_receipt=trigger_feedback_receipt,
+                db_client=db_client,
+                **source_fence,
+            )
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
             updated = (
                 result.memory_items[0]

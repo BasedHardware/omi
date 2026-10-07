@@ -99,3 +99,8 @@ def live_capture_window_translator_sends_enabled() -> bool:
 def soniox_wire_ledger_enabled() -> bool:
     """Account every emitted Soniox sample, refusing unknown capture origins. Default off."""
     return os.getenv('SONIOX_WIRE_LEDGER', 'false').strip().lower() == 'true'
+
+
+def soniox_ordered_finalize_enabled() -> bool:
+    """Verify FIFO finalize predictions at the probed 16 kHz wire rate. Default off."""
+    return os.getenv('SONIOX_ORDERED_FINALIZE', 'false').strip().lower() == 'true'

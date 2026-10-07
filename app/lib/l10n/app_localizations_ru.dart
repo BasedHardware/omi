@@ -9960,11 +9960,6 @@ class AppLocalizationsRu extends AppLocalizations {
       'Память Pendant заполнена, и он всё ещё в режиме записи, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Не записано ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Голосовой профиль: $name';
   }
@@ -12495,6 +12490,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Не совсем';
+
+  @override
+  String get partialRecording => 'Частичная запись';
 
   @override
   String get thisWeek => 'Эта неделя';

@@ -9991,11 +9991,6 @@ class AppLocalizationsEl extends AppLocalizations {
       'Ο αποθηκευτικός χώρος του Pendant είναι πλήρης και βρίσκεται ακόμα σε λειτουργία εγγραφής, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την εγγραφή και μετά συγχρονίστε ξανά.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Δεν καταγράφηκε ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Φωνητικό προφίλ: $name';
   }
@@ -12532,6 +12527,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Όχι ακριβώς';
+
+  @override
+  String get partialRecording => 'Μερική ηχογράφηση';
 
   @override
   String get thisWeek => 'Αυτή την εβδομάδα';

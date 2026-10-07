@@ -9932,11 +9932,6 @@ class AppLocalizationsSr extends AppLocalizations {
       'Меморија Pendant-а је пуна и он је и даље у режиму снимања, па сачувани звук не може да се пренесе. Притисните дугме на Pendant-у да зауставите снимање, а затим поново синхронизујте.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Није снимљено ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Гласовни профил: $name';
   }
@@ -12464,6 +12459,9 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Не баш';
+
+  @override
+  String get partialRecording => 'Делимичан снимак';
 
   @override
   String get thisWeek => 'Ова недеља';

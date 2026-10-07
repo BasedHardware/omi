@@ -9946,11 +9946,6 @@ class AppLocalizationsNl extends AppLocalizations {
       'De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Niet opgenomen ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Stemprofiel van $name';
   }
@@ -12488,6 +12483,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Niet echt';
+
+  @override
+  String get partialRecording => 'Gedeeltelijke opname';
 
   @override
   String get thisWeek => 'Deze week';

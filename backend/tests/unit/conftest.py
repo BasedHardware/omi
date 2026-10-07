@@ -233,12 +233,19 @@ def _reset_live_stt_fleet_health():
     shared = live_health.health
     fresh = type(shared)()
     with shared._lock:
-        vars(shared).update(vars(fresh))
+        vars(shared).update({key: value for key, value in vars(fresh).items() if key != '_lock'})
     if 'utils.stt.streaming' in sys.modules:
-        # Family circuits re-derive their per-family endpoint/credential identity
-        # each test; a stale latch must not reset a bench the next test arms on
-        # a freshly swapped breaker.
+        # Clear both breaker evidence and its identity latch so the next test
+        # starts with closed family circuits, including account quarantine.
         from utils.stt import streaming
 
-        streaming._family_circuits_identity.clear()
+        with streaming._family_circuits_lock:
+            for circuit in (
+                streaming._parakeet_circuit,
+                streaming._deepgram_circuit,
+                streaming._modulate_circuit,
+                streaming._soniox_circuit,
+            ):
+                circuit.reset()
+            streaming._family_circuits_identity.clear()
     yield

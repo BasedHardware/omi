@@ -115,17 +115,18 @@ def test_low_signal_policy_protects_only_curated_rows():
     assert is_low_signal_sync_fragment(_review())
     for protected in (
         {'status': 'processing'},
+        {'status': 'in_progress', 'sync_live_target': True},
         {'sync_relevance': 'keep'},
-        {'sync_live_target': True},
         {'has_photos': True},
         {'user_title': 'Keep this'},
         {'starred': True},
         {'folder_user_set': True},
-        {'visibility': 'shared'},
         {'sync_relevance_user_kept': True},
     ):
         row = _review(**protected)
         assert not is_low_signal_sync_fragment(row), protected
+    assert is_low_signal_sync_fragment(_review(sync_live_target=True))
+    assert is_low_signal_sync_fragment(_review(visibility='shared'))
     # Generated output is not curation: the pipeline writes it for everything.
     for generated in (
         {'structured': {'overview': 'Generated summary'}},

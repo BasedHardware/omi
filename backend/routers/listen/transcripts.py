@@ -1333,6 +1333,12 @@ class TranscriptProcessor:
         matcher's covered-audio subtraction dedupes overlapping re-sends).
         """
         speaker = self.host.speakers
+        observer = getattr(speaker, 'observe_segment', None)
+        if observer is not None:
+            observed = queue_from_raw if queue_from_raw is not None else [s.model_dump() for s in segments]
+            for raw in observed:
+                if raw.get('speaker_id') is not None:
+                    observer(raw['speaker_id'], raw.get('speaker_id_scope') or '', raw.get('id') or '')
         for segment in segments:
             segment_id = cast(str, segment.id)
             if should_skip_speaker_detection(

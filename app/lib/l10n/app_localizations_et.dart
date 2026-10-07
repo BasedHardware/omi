@@ -9913,11 +9913,6 @@ class AppLocalizationsEt extends AppLocalizations {
       'Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Salvestamata ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name: hääleprofiil';
   }
@@ -12446,6 +12441,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Pigem mitte';
+
+  @override
+  String get partialRecording => 'Osaline salvestus';
 
   @override
   String get thisWeek => 'See nädal';

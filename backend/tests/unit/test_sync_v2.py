@@ -1300,11 +1300,17 @@ def _install_sync_observability_stubs():
     fallback_mod.record_fallback = MagicMock()
     transcription_mod = types.ModuleType('utils.observability.transcription')
     transcription_mod.record_sync_transcription_outcome = MagicMock()
+    transcription_mod.record_sync_intake_outcome = MagicMock()
+    journeys_mod = types.ModuleType('utils.observability.journeys')
+    journeys_mod.record_client_journey_accepted = MagicMock()
+    journeys_mod.record_client_journey_terminal = MagicMock()
     sys.modules['utils.observability'] = obs_pkg
     sys.modules['utils.observability.fallback'] = fallback_mod
     sys.modules['utils.observability.transcription'] = transcription_mod
+    sys.modules['utils.observability.journeys'] = journeys_mod
     obs_pkg.fallback = fallback_mod
     obs_pkg.transcription = transcription_mod
+    obs_pkg.journeys = journeys_mod
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=MagicMock())
     return fallback_mod
 

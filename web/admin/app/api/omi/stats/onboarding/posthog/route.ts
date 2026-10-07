@@ -44,7 +44,7 @@ function retryDelayMs(attempt: number): number {
 
 function funnelQuery(days: number): string {
   const escapedEventNames = ALL_EVENT_NAMES.map(
-    (name) => `'${name.replace(/'/g, "\\'")}'`
+    (name) => `'${name.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`
   ).join(", ");
   // Entrants are still actors whose first event falls inside `days`. The
   // events reads use a wider window (days + 60) so someone who enters inside

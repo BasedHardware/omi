@@ -12,8 +12,49 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
+The live calendar stamp includes the meeting title (an empty string when absent)
+so it is a valid `CalendarMeetingContext` for finalization and summarization even
+when its scheduled window makes continuity hydration unnecessary.
+
+Live calendar-backed conversations with content retain their conversation across
+silence until the stored `external_data.calendar_meeting_context.start_time` +
+`duration_minutes` + 120 seconds of grace. The stored calendar event id owns this
+window; screen-derived identity does not extend it, and meeting-treatment
+eligibility does not gate it. Reconnect admission, continuation-pointer lookup,
+and the active lifecycle loop use the same deadline. Source/device/lock partitions
+and empty-generation deletion keep their existing checks; non-meeting recordings
+keep the 120-second silence rule. The continuation transaction reads the complete
+conversation metadata, including the stored calendar context, without decoding
+transcripts; compressed rows use the durable `has_content` marker. If only an
+existing calendar event id is available (partial meeting context, external
+calendar event id, or a linked Google event), the same paths read that exact
+`users/{uid}/meetings` document using the calendar source + event id natural key.
+They never infer a meeting from an overlap query. Missing/mismatched records keep
+the ordinary silence deadline; lookup faults emit fallback telemetry.
+
+`PATCH /v1/conversations/{id}/assign-speaker/{speaker_id}` accepts optional paired
+`start` / `end` query parameters in conversation-offset seconds. Only complete
+segments inside `[start, end)` are assigned; segments crossing a boundary stay
+unchanged. Range edits write segment-only manual receipts and never promote their
+labels or rejections to a whole voice or a future rollover. Omitting the range
+retains the existing whole-cluster assignment, including clearing older selected
+overrides. Stable-id redirects select the range on the donor's original timeline.
+
+The live path observes a run of at least ten distinct segments on one scoped
+speaker plus three consecutive rejected voice matches. It emits one
+`omi_live_speaker_collapse_total` increment and an `event=live_speaker_collapse`
+log per run, with segment/match counts only. A different voice/provider scope or
+conversation resets the observation; accepted matches reset the rejection count.
+This signal does not change diarization, thresholds, provider choice or labeling.
+
+Conversation responses project the internal receipt's `capture_evidence.coverage`
+into optional `capture_coverage` (`mapped` / `incomplete` / `unknown`). Internal
+source-position receipts remain excluded from the wire. Mobile conversation
+detail shows the localized “Partial recording” chip only for `incomplete`; legacy,
+unknown and mapped rows stay quiet. No conversation-list placeholder is added.
+
 Phone safety-WAL uploads may carry the client recording id and audio interval.
-Listen creates a new server recording id and conversation on every silence
+Listen creates a new server recording id and conversation on a silence
 rollover, while the phone tags all WALs with `client_conversation_id`, stored
 on each live generation as `external_data.recording_origin_id`. Sync binds each
 VAD segment to the one generation whose source, device, lock and interval
@@ -2126,7 +2167,8 @@ and collapsed candidates; `vad_uncovered` includes decisions evicted from the
 supplied production `unknown` aggregate. None of these metrics changes capture
 placement or enables the elapsed hypothesis.
 
-`SONIOX_WIRE_LEDGER` defaults to `false` in code and every deployment. New
+`SONIOX_WIRE_LEDGER` defaults to `false` in code. Production listen and pusher
+declarations are enabled; other services and dev stay off. New
 managed Soniox transports snapshot it. ON carries receiver-observed capture
 spans through the VAD output, replay and idle-onset queues, and registers them
 only after the actual binary WebSocket write succeeds. Every emitted sample
@@ -2137,12 +2179,14 @@ slide backward across that interval. Failed writes grant no capture proof.
 Repeated manual finalization advances Soniox's processed-audio axis without
 wire PCM. Synthetic probes at the production 16 kHz configuration measured
 strict advancement to the next 120 ms boundary, including a further 120 ms for
-an exact-boundary or no-audio finalize. This measured quantum is not a runtime
-assumption. ON sends every audio and control frame exactly as OFF does,
+an exact-boundary or no-audio finalize. The base wire ledger uses reported
+positions; the separately gated ordered-finalize path below verifies the measured
+quantum. ON sends every audio and control frame exactly as OFF does,
 including VAD-pause finalize, keepalive, terminal end and planned idle drain.
 No acknowledgment wait, altered pacing or transcription latency policy is added.
 
-The provider cursor is separate from the emitted-PCM ledger. Only a final
+The provider cursor is separate from the emitted-PCM ledger. With
+`SONIOX_ORDERED_FINALIZE=false`, only a final
 `<fin>` response to the sole outstanding finalize, received before any subsequent
 audio write begins, may anchor the cursor. Both `total_audio_proc_ms` and
 `final_audio_proc_ms` must report the same nonnegative integer position, exactly
@@ -2151,11 +2195,79 @@ reserves a provider-only hole with no capture or ownership proof. Token endpoint
 and ordinary progress responses never authorize padding. A write begun before
 acknowledgment, even if it completes afterward, is unplaceable; subsequent PCM
 remains unplaceable until a later uncontested finalize establishes an anchor.
-Missing, malformed, overlapping or regressing acknowledgments also fail closed.
+A single valid acknowledgement racing PCM preserves control association and
+may recover at a later uncontested checkpoint. Duplicate or unsolicited `<fin>`,
+combined `<fin>`s, overlapping controls whose identity is unprovable, malformed
+progress or a contradictory/regressing/repeated position permanently lose
+association on that socket. A repeated exact position cannot distinguish a
+duplicate from a new zero-padding control; it is conservatively refused.
+After loss, no number of sole-pending, PCM-conserving reports can grant capture.
+Only a fresh transport with a new local clock (including idle reopen) recovers;
+the wire carries no independently verifiable control IDs. On reported-only
+clocks, legacy reported-hole/display-origin bookkeeping continues after loss
+so visible timing and idle rebase match main. That cursor is never capture
+proof: uncertainty stays latched and all later sends carry no capture spans.
 Every successful binary write still counts as emitted PCM regardless of origin.
 The switch selects the compact-with-reported-holes axis over the experimental
 elapsed axis and retains strict observed-send containment. Unknown text persists
 without an audio window. OFF retains the admission-time ledger exactly.
+
+`SONIOX_ORDERED_FINALIZE` is one additional default-off switch, effective only
+with the wire ledger, production Soniox endpoint/model (`stt-rt-v5`) and mono
+pcm_s16le at 16 kHz. Controlled synthetic probes covered sub-boundary offsets,
+back-to-back finalizes and five finalizes in flight: all 28 individual `<fin>`
+reports and 18 post-finalize speech starts matched the ordered padding model.
+For local provider cursor P, sending a finalize reserves the provider-only hole
+through `(floor(P / 1920) + 1) * 1920`, including another full quantum at an
+exact boundary. PCM/control bytes, FIFO ordering, pacing and finalize policy
+stay unchanged. No transport or transcript wait is introduced.
+
+A queue of at most 64 predictions matches each subsequent single `<fin>` to its
+own sent control. Both integer progress fields must equal that predicted
+position; current PCM count at acknowledgement time is irrelevant. Capture maps
+for subsequent successful writes use the predicted origin, but intervals after
+the earliest unverified checkpoint remain unplaced until verification. This
+prevents persisting a speculative window before a later mismatch. Tokens already
+emitted while unverified retain text without a window; no historical repair is
+attempted. A mismatch discards the mapped suffix starting at that checkpoint,
+including coalesced-span tails, and permanently refuses subsequent sends on
+that socket. PCM conservation and a sole pending control cannot prove identity
+after association loss. No reported-only recovery or model reanchor is allowed
+on that transport, including a clean-looking report below a rejected prediction.
+Missing acknowledgements, failed writes, queue overflow, duplicate/unsolicited
+acknowledgements and multi-`<fin>` responses also fail closed; the latter cannot
+associate multiple controls with a single shared progress position. Ordinary
+progress frames and token times never authorize padding. Teardown invalidates
+pending capture maps before flushing tokens; idle reopen uses a fresh clock.
+
+`omi_soniox_ordered_finalize_checkpoints_total{outcome="verified|mismatch|unverified"}`
+is registered only when the new switch is effective. Every outcome now counts
+one successfully written control, including controls sent after loss: verified
+counts matched FIFO reports; mismatch settles the entire queue cleared by an
+unassociable report; unverified settles each discarded prediction at overflow
+(64 queued controls plus the overflow control), teardown, or later writes on a
+locked transport. Failed writes do not count as sent or settled. It mirrors the
+ordered-mode settlements of the complete gate below; it is not a frame counter.
+The existing clean/raced/missing-ack family still describes wire ordering;
+a raced checkpoint can now be verified and produce known windows. Positive holes
+are reserved at send time on this path, so their existing counters include
+predictions (which may subsequently be disproven); they are never PCM or capture.
+Both switches OFF retain exact main behavior and metric deltas. With the wire
+ledger ON and ordered OFF, the correctness repair only removes unsafe capture
+grants; new gate metrics describe that conservative change.
+
+`other_refused` counts refused translator candidates outside retained raced-PCM
+attribution, not a single causal cohort. It includes nonnumeric/nonfinite and
+zero/reversed intervals, missing/unknown send origins, padding holes or outside
+accepted sends (including early token-edge jitter), provider/capture or wall gaps,
+collapsed intervals and compacted/evicted proof. Historical races outside the
+bounded diagnostic history also land here. On the new path, unverified predictions
+can temporarily land here. Existing capture-window attribution and outside-send
+geometry counters further describe these reasons; this aggregate alone cannot
+split a production count into causes. A whole continuous capture window across
+a hole/gap, or without receiver evidence, is not provable. Race verification can
+recover some candidates even when this label obscured their race attribution;
+zero-duration source text does not prove an audio duration in clock-only mode.
 
 Idle reopen freezes its provider offset after the old writer and receiver drain,
 including any acknowledged provider-only padding. The replacement transport starts
@@ -2193,19 +2305,28 @@ start fresh after idle reopen; prior logical-epoch race history stays available
 for delayed intervals. These are local evidence cohorts, not provider-confirmed
 source-word boundaries or counts of distinct persisted segments.
 
-For rollout, first independently conserve actual binary PCM at the wire boundary
-and require no known window to span a provider hole, raced interval, unknown
-origin or unobserved capture gap. Compare checkpoint fractions using all three
-outcomes as the denominator; unmatched controls appear only at receive teardown,
-so compare settled cohorts over a window long enough to include socket closes.
-The `known` candidate fraction and committed coverage should rise where
-reported anchors recover mapping. The measured clean checkpoint share describes
-that opportunity, while race/missing-ack shares explain the coverage ceiling.
-ON preserves the protocol, so it does not itself improve the checkpoint mix. The race-refusal fraction should track uncertain emitted
-audio and may rise when the old false grant is correctly removed. A lower total
-refusal rate alone is never success. Track these candidate rates alongside
-distinct/committed capture-window coverage and inspect placement evidence before
-widening; increased known counts without correct containment are a stop signal.
+The complete rollout gate is active on both reported and ordered wire clocks,
+with fixed `mode="reported|ordered"` labels only:
+
+| Metric | Unit and settlement |
+| --- | --- |
+| `omi_soniox_wire_ledger_controls_total{mode,outcome="sent\|verified\|mismatch\|unverified"}` | `sent` counts successful finalize WebSocket writes. Each settles exactly once: verified identity/position, mismatch on loss (entire cleared queue), or unverified on a normal PCM race, overflow, teardown or a later control on a locked transport. Acks inside a send await defer settlement until that write succeeds; failed writes count neither sent nor settled. At drained transport closure, sent equals the sum of the three settled outcomes. During operation their difference is pending successful controls, never a failure fraction. |
+| `omi_soniox_wire_ledger_association_lost_total{mode}` | One irreversible association-loss event per socket, including ambiguous acks, queue overflow or failed transport writes; never one per later ack. Ordinary teardown with missing acks is unverified, not a new loss event. |
+| `omi_soniox_wire_ledger_sockets{mode,state="placeable\|pending\|uncertain\|association_lost"}` | Active socket occupancy. Pending is the ordered suffix fence awaiting verification; uncertain is a reported PCM race; association_lost is locked until a fresh transport. Close releases occupancy exactly once; late queued writes cannot re-enter it. Integrate pending/uncertain/lost occupancy over time for socket-seconds of refused coverage. |
+| `omi_soniox_wire_ledger_recoveries_total{mode}` | Ordered pending queue fully verified, or reported uncertainty recovered with intact association. Association-lost sockets have no same-socket recovery. Fresh clocks start placeable; inspect idle/reconnect counts separately. |
+
+Stop rollout on **any mismatch or association-lost delta > 0 pending diagnosis**,
+any false known window, or unexplained missing-ack/overflow cohort growth. There
+is zero tolerated mismatch percentage. Compare sent and settled units for both
+modes over intervals including drain; use the old clean/raced/missing_ack cohorts
+to distinguish ordering from verification. Conserving actual PCM, candidate
+refusals/known fraction, distinct and committed coverage, fallback occupancy and
+independently inspected known placements are all required together. A lower
+refusal rate alone is never success. Prior proven prefix windows stay valid;
+new PCM on a locked socket loses known coverage through its remaining lifetime,
+and pending ordered suffixes are discarded. Text and wire bytes remain intact.
+The anomaly frequency and fleet coverage cost require these new cohorts; no
+production-data reads or fleet-rate estimate are implied by synthetic tests.
 There is no expected reduction in `wire=past` or
 `total_audio_proc_ms` minus written PCM: ON retains every finalize frame and
 provider-only padding. R12's finalize-suppression drift-collapse criterion is
@@ -3395,6 +3516,12 @@ conversation surface. Finalization, reprocessing, and receipt backfill do not po
 capture or meeting-note cards into Chat; rich conversation links remain available
 in agent replies to a user message.
 
+Malformed allocation values encountered by the configured live-STT chain's
+hard-permission pass produce `ProviderChainUnavailable` with a bounded five-second
+retry in ON, SHADOW and OFF modes. No provider is dialed and no provider-failure
+vote is written when permission cannot be established. The selection seam emits
+`router_error` and `config_incomplete` diagnostics without the raw configuration
+value. The kill switch retains the same permission checks.
 
 ### Internal voice-match score snapshots
 

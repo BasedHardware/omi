@@ -9962,11 +9962,6 @@ class AppLocalizationsHu extends AppLocalizations {
       'A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Nincs rögzítve ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name hangprofilja';
   }
@@ -12500,6 +12495,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Nem igazán';
+
+  @override
+  String get partialRecording => 'Részleges felvétel';
 
   @override
   String get thisWeek => 'Ez a hét';

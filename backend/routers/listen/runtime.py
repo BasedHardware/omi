@@ -49,6 +49,7 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
     LiveSessionTranscriptOutcome,
@@ -363,6 +364,7 @@ class ListenSessionRuntime:
 
     def _capture_cost_routing_arm(self) -> None:
         self._cost_routing_arm: str | None = None
+        self._routing_cohort: RoutingCohort | None = None
         if managed_chain_enabled(self):
             try:
                 self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
@@ -370,6 +372,12 @@ class ListenSessionRuntime:
                 # Selection owns invalid-config diagnostics and static fallback.
                 # A cohort metric must never prevent that serving path running.
                 self._cost_routing_arm = 'control'
+            arm = (
+                'on'
+                if self._cost_routing_arm == 'on'
+                else 'shadow' if os.getenv('STT_ROUTING_MODE', 'off').lower() == 'shadow' else 'off'
+            )
+            self._routing_cohort = RoutingCohort(arm)
 
     def _record_session_transcript_outcome(self) -> None:
         """Emit omi_live_session_transcript_outcome_total exactly once per session.
@@ -420,6 +428,16 @@ class ListenSessionRuntime:
                     or 'unknown'
                 )
                 LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=provider_family(provider)).inc()
+            cohort = getattr(self, '_routing_cohort', None)
+            if cohort is not None:
+                self._routing_cohort_completion = (
+                    outcome,
+                    bool(
+                        session_recovery_enabled(self)
+                        and self.state.live_transcript_delivered
+                        and self.state.stt_terminal_failure
+                    ),
+                )
         except Exception as error:
             logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
@@ -924,9 +942,11 @@ class ListenSessionRuntime:
         if not isinstance(getattr(self, 'recovery_enabled', None), bool):
             self.recovery_enabled = session_recovery_enabled(self)
         token = current_recovery_enabled.set(self.recovery_enabled)
+        cohort_token = current_routing_cohort.set(None)
         try:
             await self._run()
         finally:
+            current_routing_cohort.reset(cohort_token)
             current_recovery_enabled.reset(token)
 
     async def _run(self) -> None:
@@ -959,6 +979,7 @@ class ListenSessionRuntime:
             # Intent-to-treat cohort: snapshot before selection, including
             # initialization failures and fail-open sessions in the on arm.
             self._capture_cost_routing_arm()
+            current_routing_cohort.set(self._routing_cohort)
             if not await self.receiver.initialize_stt():
                 return
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
@@ -1077,6 +1098,12 @@ class ListenSessionRuntime:
         try:
             await self._teardown_components()
         finally:
+            # Receiver finish/drain can settle an exhausted leg or admit a
+            # pending paid onset. Count the complete socket after those seams.
+            cohort = getattr(self, '_routing_cohort', None)
+            completion = getattr(self, '_routing_cohort_completion', None)
+            if cohort is not None and completion is not None:
+                cohort.finish(completion[0], terminal_after_text=completion[1])
             if not self.request.owner_persistence_blocked.is_set():
                 try:
                     await run_blocking(storage_executor, self.parity_capture.persist)

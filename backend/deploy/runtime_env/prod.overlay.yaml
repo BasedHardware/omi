@@ -83,6 +83,7 @@ overlay:
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
+        SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -128,7 +129,15 @@ overlay:
           value: '45'
           category: rollout
         STT_ROUTING_MODE:
-          value: shadow
+          value: 'on'
+        # 2026-10-06: sticky-UID ON ramp, gated per step on the
+        # omi_stt_routing_cohort_* counters (GATES.md): 5%/25%/50% holds were
+        # clean; this commit completes the ramp at 100%.
+        STT_ROUTING_ON_PERCENT:
+          value: '100'
+        STT_NO_TEXT_RESCUE_ENABLED:
+          value: 'true'
+          category: rollout
         SONIOX_MONTHLY_CEILING_USD:
           value: '10000'
         # 2026-09-28: learn each user's expected languages from observed output. About 75% of
@@ -247,6 +256,12 @@ overlay:
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
           category: rollout
+        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+          value: 'true'
+          category: rollout
+        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+          value: '1'
+          category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
@@ -314,6 +329,7 @@ overlay:
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
+        SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -374,6 +390,12 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
+          category: rollout
+        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+          value: 'true'
+          category: rollout
+        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+          value: '1'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -536,6 +558,7 @@ overlay:
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -663,6 +686,12 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -723,6 +752,7 @@ overlay:
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
@@ -824,6 +854,12 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -881,6 +917,7 @@ overlay:
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
@@ -961,6 +998,12 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -1016,6 +1059,7 @@ overlay:
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
@@ -1082,7 +1126,19 @@ overlay:
         # the notifications identity without a new secret grant.
         flags:
           --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        secrets:
+          REDIS_DB_PASSWORD:
+            secret: REDIS_DB_PASSWORD
+            version: latest
         env:
+          REDIS_DB_HOST:
+            value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+          REDIS_DB_PORT:
+            value: '13151'
+          # The canonical intake fence reads MEMORY_ENABLED; without it the job's
+          # memory writes 503 with 'globally paused'.
+          MEMORY_ENABLED:
+            value: 'on'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           PINECONE_INDEX_NAME:
