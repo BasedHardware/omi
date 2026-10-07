@@ -315,8 +315,8 @@ def test_attach_frame_request_rejects_soft_deleted_conversation_tombstone():
         return MagicMock()
 
     user_doc.collection.side_effect = user_doc_collection
-    client.collection.side_effect = (
-        lambda name: MagicMock(document=lambda _id: user_doc) if name == "users" else MagicMock()
+    client.collection.side_effect = lambda name: (
+        MagicMock(document=lambda _id: user_doc) if name == "users" else MagicMock()
     )
 
     with pytest.raises(KeyError, match="conversation not found"):
