@@ -2946,6 +2946,9 @@ environments:
           SONIOX_IDLE_CLOSE_SECONDS:
             value: '45'
             category: rollout
+          STT_NO_TEXT_RESCUE_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BUCKET_SCREEN_FRAMES:

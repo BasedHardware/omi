@@ -233,7 +233,7 @@ and an explicit empty literal renders as `''`.
 | `STT_LEARNED_LANGUAGE_PROFILE` | Use a bounded per-user spoken-language history for live STT routing and Soniox hints | backend | env | closed | false | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | backend |
 | `STT_MULTI_LANGUAGE_HINTS` | Send primary and English hints to Soniox in non-English multilingual live sessions | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
 | `STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT` | Prefer Soniox for allocated non-English multilingual live sessions | backend | env | closed | 0 | 100 (backend-listen (chart), gke/backend-listen) | 100 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
-| `STT_NO_TEXT_RESCUE_ENABLED` | Default-off bounded paid rescue and cheap failback for silent window episodes; requires recovery enabled | backend | env | closed | — | — | — | — | pending | 2026-11-04 | backend |
+| `STT_NO_TEXT_RESCUE_ENABLED` | Default-off bounded paid rescue and cheap failback for silent window episodes; requires recovery enabled | backend | env | closed | — | — | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-11-04 | backend |
 | `STT_PAID_SPILLOVER_BUDGET_ENABLED` | Default-off fleet budget for paid router promotions after Parakeet capacity refusal; denial restores static order | backend | env | closed | — | — | — | — | pending | 2026-11-04 | backend |
 | `STT_RESILIENT_RECONNECT` | Replay bounded live audio on eligible Soniox reconnects | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | backend |
 | `STT_ROUTING_MODE` | Off shadow or cost-ordered health-gated live STT routing | backend | env | closed | off | shadow (backend-listen (chart), gke/backend-listen) | on (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | dazheng |
@@ -422,7 +422,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SCREEN_TASK_STOP` — Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease (fail: inverted)
 - `SELFHEAL_MODE` — Conversation self-heal sweeper mode: off/detect-only/nudge/heal (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
-- `STT_NO_TEXT_RESCUE_ENABLED` — Default-off bounded paid rescue and cheap failback for silent window episodes; requires recovery enabled (fail: closed)
 - `STT_NO_TEXT_RESCUE_SECONDS` — Maximum paid wall and admitted audio seconds per no-text rescue; default 60 bounded 5-120 (fail: closed)
 - `STT_PAID_SPILLOVER_BUDGET_ENABLED` — Default-off fleet budget for paid router promotions after Parakeet capacity refusal; denial restores static order (fail: closed)
 - `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` — Deepgram fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
