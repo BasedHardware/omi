@@ -89,7 +89,8 @@ struct ring_buf {
 };
 static void ring_buf_init(struct ring_buf *r, size_t capacity, uint8_t *data)
 {
-    *r = (struct ring_buf) {.data = data, .capacity = capacity};
+    r->data = data;
+    r->capacity = capacity;
 }
 static size_t ring_buf_put(struct ring_buf *r, const uint8_t *data, size_t size)
 {
