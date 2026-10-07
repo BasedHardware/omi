@@ -12,6 +12,7 @@ path, while the explicit Luna model alias is always Omi-paid.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
@@ -446,6 +447,24 @@ def openai_sse_payload_to_gemini_event(
     return event
 
 
+async def _gateway_post(url: str, *, headers: dict[str, str], payload: Mapping[str, Any]) -> httpx.Response:
+    """POST to the gateway under a wall-clock deadline.
+
+    ``timeout=`` on the httpx call is only the idle gap between socket reads.
+    A trickled Vertex body resets that gap and will otherwise run until Cloud
+    Run closes the desktop request at its 300s limit.
+    """
+    async with asyncio.timeout(DESKTOP_GATEWAY_TIMEOUT_SECONDS):
+        async with get_llm_gateway_semaphore():
+            client = get_llm_gateway_client()
+            return await client.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
+            )
+
+
 def _gateway_error(result: httpx.Response) -> DesktopGeminiGatewayError:
     try:
         body = result.json()
@@ -486,16 +505,13 @@ async def gateway_desktop_chat(
             status_code=400, code='validation_rejected', message=f'Gemini model {model} has no gateway lane'
         )
     request = gemini_body_to_openai_chat(payload, lane_id=lane_id, stream=False)
-    async with get_llm_gateway_semaphore():
-        client = get_llm_gateway_client()
-        result = await client.post(
-            f'{get_llm_gateway_base_url()}/v1/chat/completions',
-            headers=_desktop_gateway_headers(
-                uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
-            ),
-            json=request,
-            timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
-        )
+    result = await _gateway_post(
+        f'{get_llm_gateway_base_url()}/v1/chat/completions',
+        headers=_desktop_gateway_headers(
+            uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
+        ),
+        payload=request,
+    )
     if result.status_code >= 400:
         raise _gateway_error(result)
     return GatewayChatResult(gemini_payload=openai_completion_to_gemini(result.json(), requested_model=model))
@@ -596,16 +612,13 @@ async def _gateway_embedding_vectors(
         request['task_type'] = task_type
     if title is not None:
         request['title'] = title
-    async with get_llm_gateway_semaphore():
-        client = get_llm_gateway_client()
-        result = await client.post(
-            f'{get_llm_gateway_base_url()}/v1/embeddings',
-            headers=_desktop_gateway_headers(
-                uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
-            ),
-            json=request,
-            timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
-        )
+    result = await _gateway_post(
+        f'{get_llm_gateway_base_url()}/v1/embeddings',
+        headers=_desktop_gateway_headers(
+            uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
+        ),
+        payload=request,
+    )
     if result.status_code >= 400:
         raise _gateway_error(result)
     data = result.json().get('data')
@@ -701,18 +714,20 @@ async def gateway_desktop_batch_embed_contents(
         groups.setdefault(group, []).append((index, text))
 
     ordered_vectors: list[list[float] | None] = [None] * len(raw_requests)
-    for group_index, ((task_type, title), items) in enumerate(groups.items()):
-        vectors = await _gateway_embedding_vectors(
-            [text for _, text in items],
-            task_type=task_type,
-            title=title,
-            uid=uid,
-            request_id=_batch_embedding_request_id(request_id, group_index),
-            product_lane=product_lane,
-            client_platform=client_platform,
-        )
-        for (index, _), vector in zip(items, vectors, strict=True):
-            ordered_vectors[index] = vector
+    # One wall-clock budget covers the entire mixed-metadata batch.
+    async with asyncio.timeout(DESKTOP_GATEWAY_TIMEOUT_SECONDS):
+        for group_index, ((task_type, title), items) in enumerate(groups.items()):
+            vectors = await _gateway_embedding_vectors(
+                [text for _, text in items],
+                task_type=task_type,
+                title=title,
+                uid=uid,
+                request_id=_batch_embedding_request_id(request_id, group_index),
+                product_lane=product_lane,
+                client_platform=client_platform,
+            )
+            for (index, _), vector in zip(items, vectors, strict=True):
+                ordered_vectors[index] = vector
     if any(vector is None for vector in ordered_vectors):
         raise DesktopGeminiGatewayError(
             status_code=502, code='invalid_response', message='gateway embeddings response omitted an item'

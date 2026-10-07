@@ -269,6 +269,42 @@ def test_streaming_tool_fragments_assemble_into_one_function_call():
     assert final['candidates'][0]['content']['parts'] == [{'functionCall': {'name': 'take_photo', 'args': {'q': 'x'}}}]
 
 
+class _TricklingGateway:
+    """A gateway body that keeps the socket busy without ever finishing."""
+
+    async def post(self, *args, **kwargs):
+        await asyncio.sleep(30)
+        raise AssertionError('gateway call ran past the wall-clock deadline')
+
+
+@pytest.mark.asyncio
+async def test_nonstreaming_gateway_calls_stop_at_the_wall_clock_deadline(monkeypatch):
+    monkeypatch.setattr(dgg, 'DESKTOP_GATEWAY_TIMEOUT_SECONDS', 0.05)
+    monkeypatch.setattr(dgg, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
+    monkeypatch.setattr(dgg, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(dgg, 'llm_gateway_headers', lambda **kwargs: {})
+    monkeypatch.setattr(dgg, 'get_llm_gateway_client', lambda: _TricklingGateway())
+    attribution = dict(
+        uid='synthetic-user',
+        request_id='11111111-1111-1111-1111-111111111111',
+        product_lane='focus',
+        client_platform='macos',
+    )
+
+    with pytest.raises(TimeoutError):
+        await dgg.gateway_desktop_chat(
+            b'{"contents":[{"parts":[{"text":"hi"}]}]}',
+            model='gemini-2.5-flash',
+            action='generateContent',
+            **attribution,
+        )
+    with pytest.raises(TimeoutError):
+        await dgg.gateway_desktop_embed_content(
+            b'{"content":{"parts":[{"text":"hi"}]}}',
+            **attribution,
+        )
+
+
 def test_lane_selection_covers_every_desktop_text_model():
     assert dgg.desktop_gateway_text_lane('gemini-2.5-flash') == 'omi:auto:desktop-luna'
     assert dgg.desktop_gateway_text_lane('gemini-2.5-pro') == 'omi:auto:desktop-luna'
@@ -433,3 +469,30 @@ async def test_luna_compatible_desktop_request_reaches_openai_provider_without_g
     }
     assert not {'google', 'temperature', 'top_p', 'stop'} & sent.keys()
     await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_mixed_metadata_embedding_batch_shares_one_wall_clock_budget(monkeypatch):
+    monkeypatch.setattr(dgg, 'DESKTOP_GATEWAY_TIMEOUT_SECONDS', 0.1)
+
+    async def slow_group(texts, **kwargs):
+        await asyncio.sleep(0.06)
+        return [[1.0] for _ in texts]
+
+    monkeypatch.setattr(dgg, '_gateway_embedding_vectors', slow_group)
+    body = json.dumps(
+        {
+            'requests': [
+                {'content': {'parts': [{'text': 'query'}]}, 'taskType': 'RETRIEVAL_QUERY'},
+                {'content': {'parts': [{'text': 'document'}]}, 'taskType': 'RETRIEVAL_DOCUMENT'},
+            ]
+        }
+    ).encode()
+    with pytest.raises(TimeoutError):
+        await dgg.gateway_desktop_batch_embed_contents(
+            body,
+            uid='synthetic-user',
+            request_id='11111111-1111-1111-1111-111111111111',
+            product_lane='focus',
+            client_platform='macos',
+        )
