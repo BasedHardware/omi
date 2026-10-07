@@ -105,11 +105,6 @@ def _get_async_openai() -> AsyncOpenAI:
     return _async_openai
 
 
-def _get_sync_openai() -> Any:
-    """Injectable seam around the OpenAI module's lazy synchronous client."""
-    return openai
-
-
 def _reraise_provider_file_error(error: Exception) -> NoReturn:
     if isinstance(error, openai.NotFoundError):
         raise StaleChatFileError("Unsupported attachment: the uploaded file is no longer available.") from error

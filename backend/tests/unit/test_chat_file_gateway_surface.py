@@ -265,7 +265,7 @@ def test_sync_completion_fails_closed_when_deployed_gateway_lacks_lane(monkeypat
 
     tool = _tool(_pdf_files())
     with patch.object(cf, 'get_file_chat_gateway_sync_client', return_value=gateway_client), patch.object(
-        cf, '_get_sync_openai', return_value=direct_client
+        cf.openai, 'chat', direct_client.chat
     ), patch.object(
         cf.FileChatTool, '_completion_messages_sync', MagicMock(return_value=[{'role': 'user', 'content': 'q'}])
     ):

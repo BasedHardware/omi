@@ -427,7 +427,7 @@ def openai_sse_payload_to_gemini_event(
             part = {'functionCall': {'name': accumulated['name'], 'args': dict(arguments)}}
             parts.append(part)
         pending_tool_calls.clear()
-        event = {
+        event: dict[str, Any] = {
             'candidates': [
                 {
                     'content': {'parts': parts or [{'text': ''}]},
