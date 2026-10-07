@@ -61,8 +61,9 @@ async def import_limitless_data(
     job = await run_blocking(db_executor, create_import_job, uid, ImportSourceType.limitless)
 
     # Save uploaded file to temp directory
+    safe_filename = os.path.basename(file.filename or 'upload.zip')
     os.makedirs(TEMP_DIR, exist_ok=True)
-    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{file.filename}")
+    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{safe_filename}")
 
     try:
         # Stream the file to disk to avoid loading it all into memory
@@ -73,14 +74,23 @@ async def import_limitless_data(
         finally:
             f.close()
     except Exception as e:
+        logger.error(f"Failed to save uploaded import file for job {job.id}: {e}", exc_info=True)
         # Clean up on error
-        await run_blocking(
-            db_executor,
-            import_jobs_db.update_import_job,
-            job.id,
-            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"},
-        )
-        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
+        if os.path.exists(zip_path):
+            try:
+                os.remove(zip_path)
+            except Exception:
+                pass
+        try:
+            await run_blocking(
+                db_executor,
+                import_jobs_db.update_import_job,
+                job.id,
+                {'status': ImportJobStatus.failed.value, 'error': "Failed to save uploaded file"},
+            )
+        except Exception as db_err:
+            logger.error(f"Failed to update import job {job.id} status on upload failure: {db_err}")
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file")
 
     # Start background processing
     storage_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
@@ -109,7 +119,11 @@ def get_import_jobs(
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection.
     limit = max(1, min(limit, 1000))
-    jobs = import_jobs_db.get_import_jobs(uid, limit=limit)
+    try:
+        jobs = import_jobs_db.get_import_jobs(uid, limit=limit)
+    except Exception as e:
+        logger.error(f"Failed to get import jobs for uid {uid}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve import jobs")
 
     # Build each response individually so one malformed/legacy job (missing id, or a status value not in
     # the ImportJobStatus enum) doesn't fail the whole list with a 500.
@@ -152,7 +166,11 @@ def get_import_job_status(
     Returns:
         ImportJobResponse with current job status and progress
     """
-    job = import_jobs_db.get_import_job(job_id)
+    try:
+        job = import_jobs_db.get_import_job(job_id)
+    except Exception as e:
+        logger.error(f"Failed to fetch import job {job_id} for uid {uid}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve import job status")
 
     if not job:
         raise HTTPException(status_code=404, detail="Import job not found")
@@ -182,7 +200,12 @@ def get_import_job_status(
 @router.post('/v1/import/jobs/{job_id}/cancel', response_model=ImportJobResponse, tags=['import'])
 def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Cancel a pending or processing import job."""
-    job = import_jobs_db.get_import_job(job_id)
+    try:
+        job = import_jobs_db.get_import_job(job_id)
+    except Exception as e:
+        logger.error(f"Failed to fetch import job {job_id} for cancellation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to cancel import job")
+
     if not job:
         raise HTTPException(status_code=404, detail="Import job not found")
     if job['uid'] != uid:
@@ -190,7 +213,14 @@ def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)
     if job.get('status') not in (ImportJobStatus.pending.value, ImportJobStatus.processing.value):
         raise HTTPException(status_code=409, detail="Only a pending or processing import can be cancelled")
 
-    import_jobs_db.update_import_job(job_id, {'status': ImportJobStatus.cancelled.value, 'error': 'Cancelled by user'})
+    try:
+        import_jobs_db.update_import_job(
+            job_id, {'status': ImportJobStatus.cancelled.value, 'error': 'Cancelled by user'}
+        )
+    except Exception as e:
+        logger.error(f"Failed to update import job {job_id} to cancelled: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to cancel import job")
+
     return ImportJobResponse(
         job_id=job['id'],
         status=ImportJobStatus.cancelled,
@@ -211,7 +241,12 @@ class DeleteImportJobResponse(BaseModel):
 @router.delete('/v1/import/jobs/{job_id}', response_model=DeleteImportJobResponse, tags=['import'])
 def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete a finished (completed, failed, or cancelled) import job."""
-    job = import_jobs_db.get_import_job(job_id)
+    try:
+        job = import_jobs_db.get_import_job(job_id)
+    except Exception as e:
+        logger.error(f"Failed to fetch import job {job_id} for deletion: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete import job")
+
     if not job:
         raise HTTPException(status_code=404, detail="Import job not found")
     if job['uid'] != uid:
@@ -219,7 +254,12 @@ def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)
     if job.get('status') in (ImportJobStatus.pending.value, ImportJobStatus.processing.value):
         raise HTTPException(status_code=409, detail="Cancel the in-progress import before deleting it")
 
-    import_jobs_db.delete_import_job(job_id)
+    try:
+        import_jobs_db.delete_import_job(job_id)
+    except Exception as e:
+        logger.error(f"Failed to delete import job {job_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete import job")
+
     return {'status': 'ok', 'job_id': job_id}
 
 
