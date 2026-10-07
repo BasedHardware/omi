@@ -126,7 +126,7 @@ class CaptureController extends ChangeNotifier
   final CalendarCaptureGapMonitor? _calendarGapMonitor;
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
   bool _livenessCheckRunning = false;
-  DateTime? _calendarSocketDownAt;
+  Timer? _calendarGapTimer;
   Timer? _captureHealthTimer;
 
   String? _sourceCaptureRoot;
@@ -343,6 +343,10 @@ class CaptureController extends ChangeNotifier
       }),
     );
     lifetime.own(() => _calendarGapMonitor?.dispose());
+    if (calendarGapMonitor != null) {
+      lifetime.listenTo(calendarGapMonitor.localMeetings, _syncCalendarGapTimer);
+      _syncCalendarGapTimer();
+    }
     _syncCaptureHealthTimer(null);
     final omiCall = _omiCallState;
     if (omiCall != null) {
@@ -476,7 +480,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void _syncCaptureHealthTimer(CaptureCoordinatorState? state) {
-    if (_calendarGapMonitor == null && state?.phase != CapturePhase.phoneLive) {
+    if (state?.phase != CapturePhase.phoneLive) {
       _captureHealthTimer?.cancel();
       _captureHealthTimer = null;
       _livenessWatchdog.reset();
@@ -484,32 +488,33 @@ class CaptureController extends ChangeNotifier
     }
     _captureHealthTimer ??= lifetime.periodic(const Duration(seconds: 15), (_) {
       unawaited(_checkCaptureLiveness());
-      unawaited(_calendarGapMonitor?.check(_now(),
-              gapReason: _calendarCaptureGapReason, phase: () => _capture.state.phase.name) ??
-          Future<void>.value());
     });
   }
 
-  String? _calendarCaptureGapReason() {
-    final phase = _capture.state.phase;
-    if (phase == CapturePhase.phoneBatchLive ||
-        phase == CapturePhase.pendantBatchLive ||
-        phase == CapturePhase.callActive) {
-      _calendarSocketDownAt = null;
-      return null;
-    }
-    if (phase != CapturePhase.phoneLive && phase != CapturePhase.pendantLive) {
-      _calendarSocketDownAt = null;
-      return 'not_capturing';
-    }
-    if (_socket?.state != SocketServiceState.connected || !_transcriptServiceReady) {
-      _calendarSocketDownAt ??= _now();
-      if (_now().difference(_calendarSocketDownAt!) >= CaptureLivenessWatchdog.stallThreshold) return 'socket_down';
-    } else {
-      _calendarSocketDownAt = null;
-    }
-    if (phase == CapturePhase.phoneLive && _livenessWatchdog.framesStalledAt(_now())) return 'no_frames';
-    return null;
+  bool get _calendarCaptureOwns => _capture.state.phoneOwns || _capture.state.pendantOwns || _capture.state.callActive;
+
+  void _syncCalendarGapTimer() {
+    _calendarGapTimer?.cancel();
+    _calendarGapTimer = null;
+    final monitor = _calendarGapMonitor;
+    if (_captureControllerDisposed || monitor == null) return;
+    final now = _now();
+    final due = monitor.nextCheckAt(now, captureOwns: _calendarCaptureOwns);
+    if (due == null) return;
+    _calendarGapTimer = lifetime.once(due.difference(now), () {
+      _calendarGapTimer = null;
+      unawaited(_checkCalendarCaptureGap());
+    });
+  }
+
+  Future<void> _checkCalendarCaptureGap() async {
+    await _calendarGapMonitor?.check(
+      _now(),
+      captureOwns: () => _calendarCaptureOwns,
+      gapReason: () => _calendarCaptureOwns ? null : 'not_capturing',
+      phase: () => _capture.state.phase.name,
+    );
+    _syncCalendarGapTimer();
   }
 
   Future<void> _checkCaptureLiveness() async {
@@ -554,7 +559,7 @@ class CaptureController extends ChangeNotifier
   /// would race native recovery and restart a healthy session).
   void onAppResumed() {
     _livenessWatchdog.reset();
-    _calendarSocketDownAt = null;
+    _syncCalendarGapTimer();
     unawaited(_resumeSilenceLogged());
     unawaited(_dispatchLogged(const AppForegrounded()));
   }
@@ -875,6 +880,7 @@ class CaptureController extends ChangeNotifier
       onCommit: (state) {
         if (!_captureControllerDisposed) {
           _syncCaptureHealthTimer(state);
+          _syncCalendarGapTimer();
           notifyListeners();
         }
       },
@@ -2500,6 +2506,8 @@ class CaptureController extends ChangeNotifier
     _captureControllerDisposed = true;
     _captureHealthTimer?.cancel();
     _captureHealthTimer = null;
+    _calendarGapTimer?.cancel();
+    _calendarGapTimer = null;
     unawaited(_setIngressAuthorized(false));
     _captureInstance?.dispose();
     _rollCaptureSession('disposed');
