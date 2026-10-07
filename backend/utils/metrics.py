@@ -19,6 +19,12 @@ from prometheus_client import (
 # series for every Counter and Histogram child, including idle zero children.
 disable_created_metrics()
 
+OMI_MCP_OAUTH_TOKEN_TOTAL = Counter(
+    'omi_mcp_oauth_token_total',
+    'MCP OAuth token requests by bounded grant type and terminal outcome',
+    ['grant_type', 'outcome'],
+)
+
 SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
     'omi_screen_task_gate_frames_total', 'Screen-task gate HTTP admissions by bounded terminal outcome', ['outcome']
 )
