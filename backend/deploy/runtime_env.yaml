@@ -2693,7 +2693,7 @@ environments:
             value: '0.075'
             category: rollout
           STT_ROUTING_ON_PERCENT:
-            value: '25'
+            value: '50'
             category: rollout
           STT_ROUTING_TARGETS_JSON:
             value: ''
