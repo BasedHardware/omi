@@ -48,9 +48,15 @@ def coverage_accounting(conversation: Any) -> tuple[str, float | None, float | N
         if not isinstance(run, dict):
             return coverage, end - start, None
         low, high = run.get('receipt_wall_start'), run.get('receipt_wall_end')
-        if any(type(v) not in (int, float) or not math.isfinite(v) for v in (low, high)) or high <= low:
+        low_ok = type(low) in (int, float)
+        high_ok = type(high) in (int, float)
+        if not low_ok or not high_ok:
             return coverage, end - start, None
-        low, high = max(start, low), min(end, high)
+        low_f: float = float(low)  # type: ignore[arg-type]
+        high_f: float = float(high)  # type: ignore[arg-type]
+        if not math.isfinite(low_f) or not math.isfinite(high_f) or high_f <= low_f:
+            return coverage, end - start, None
+        low, high = max(start, low_f), min(end, high_f)
         if high > low:
             spans.append((low, high))
     covered = 0.0
