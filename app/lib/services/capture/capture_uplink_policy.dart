@@ -2,6 +2,20 @@ part of 'capture_controller.dart';
 
 /// Pendant uplink effects share the existing admission and session owners.
 extension _CaptureUplinkPolicy on CaptureController {
+  Future<void> _recoverCaptureRestoreMarkers() async {
+    // Upgrade from #20837: an automatic power pause is not user mute intent.
+    // The serialized reducer rechecks the marker so a newer manual mute wins.
+    if (silencePaused) {
+      final outcome = await _dispatchWithResumeFence(const ResumeSilencePaused());
+      outcome.throwIfFailed();
+    }
+    final pending = _preferences.getBool(CaptureController._phoneRestorePendingKey);
+    if (!pending) return;
+    final mutedBefore = _preferences.getBool(CaptureController._phoneRestoreMutedKey);
+    final outcome = await _capture.dispatch(LaunchRecovery(markerPending: pending, mutedBefore: mutedBefore));
+    outcome.throwIfFailed();
+  }
+
   Future<void> _resumeSilenceLogged() async {
     await _dispatchLogged(const ResumeSilencePaused());
   }

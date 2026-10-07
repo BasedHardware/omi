@@ -16,3 +16,18 @@ Uint8List encodeWalFrames(List<List<int>> frames) {
   }
   return bytes;
 }
+
+/// Unchanged serializer for non-pendant WALs. Keeping this path separate leaves
+/// phone and batch allocation behavior intact while optimizing the live pendant.
+List<int> encodeLegacyWalFrames(List<List<int>> frames) {
+  final data = <int>[];
+  for (final frame in frames) {
+    final byteFrame = ByteData(frame.length);
+    for (var j = 0; j < frame.length; j++) {
+      byteFrame.setUint8(j, frame[j]);
+    }
+    data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
+    data.addAll(byteFrame.buffer.asUint8List());
+  }
+  return data;
+}

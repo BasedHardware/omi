@@ -329,7 +329,7 @@ class CaptureController extends ChangeNotifier
     ble.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
     unawaited(
       _recoverCaptureRestoreMarkers().catchError((Object e) {
-        Logger.debug('[CaptureProvider] phone restore recovery failed: $e');
+        Logger.debug('[CaptureProvider] capture restore recovery failed: $e');
       }),
     );
     final omiCall = _omiCallState;
@@ -828,20 +828,6 @@ class CaptureController extends ChangeNotifier
   Future<void> _clearPhoneRestoreMarker() async {
     if (!_preferences.getBool(_phoneRestorePendingKey)) return;
     await _preferences.saveBool(_phoneRestorePendingKey, false);
-  }
-
-  Future<void> _recoverCaptureRestoreMarkers() async {
-    // Upgrade from #20837: an automatic power pause is not user mute intent.
-    // The serialized reducer rechecks the marker so a newer manual mute wins.
-    if (silencePaused) {
-      final outcome = await _dispatchWithResumeFence(const ResumeSilencePaused());
-      outcome.throwIfFailed();
-    }
-    final pending = _preferences.getBool(_phoneRestorePendingKey);
-    if (!pending) return;
-    final mutedBefore = _preferences.getBool(_phoneRestoreMutedKey);
-    final outcome = await _capture.dispatch(LaunchRecovery(markerPending: pending, mutedBefore: mutedBefore));
-    outcome.throwIfFailed();
   }
 
   /// Completes when the last Process Now request has an answer.

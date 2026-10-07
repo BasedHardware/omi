@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:disk_space_2/disk_space_2.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:path_provider/path_provider.dart';
@@ -938,22 +936,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           throw Exception('Flushing to storage failed. Cannot get file path.');
         }
 
-        final List<int> data;
-        if (_isPendantWal(wal)) {
-          data = encodeWalFrames(wal.data);
-        } else {
-          data = [];
-          for (int i = 0; i < wal.data.length; i++) {
-            var frame = wal.data[i];
-
-            final byteFrame = ByteData(frame.length);
-            for (int j = 0; j < frame.length; j++) {
-              byteFrame.setUint8(j, frame[j]);
-            }
-            data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-            data.addAll(byteFrame.buffer.asUint8List());
-          }
-        }
+        final data = _isPendantWal(wal) ? encodeWalFrames(wal.data) : encodeLegacyWalFrames(wal.data);
         if (!await _checkStorageAdmission(
           bytes: data.length,
           admittedGeneration: generation,

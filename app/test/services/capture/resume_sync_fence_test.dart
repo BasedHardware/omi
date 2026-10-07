@@ -77,11 +77,19 @@ void main() {
     await world.settle();
     await world.controller.pendingSourceSwitch;
     await world.settle();
-    // Reconciliation is deliberately unawaited by the capture dispatcher. Its
-    // I/O can finish after coordinator/timer quiescence; allow queued event-loop
-    // continuations to settle before asserting the committed transport state.
-    for (var i = 0; i < 5; i++) {
-      await world.settle();
+    // Reconciliation runs outside the dispatcher's pendingSourceSwitch. Wait
+    // for observable completion of its async WAL/transport I/O after scope drop,
+    // rather than mistaking coordinator quiescence for transport quiescence.
+    if (!SyncWakeScope.syncOnly && !world.controller.isPaused) {
+      final deadline = Stopwatch()..start();
+      while (!world.controller.keepAliveScheduledForTesting ||
+          (world.socket?.status == PureSocketStatus.connected && world.deviceConnection!.openAudioSubscriptions != 1)) {
+        if (deadline.elapsed > const Duration(seconds: 5)) {
+          throw StateError('scope-drop transport reconciliation did not settle');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        await world.settle();
+      }
     }
   }
 
