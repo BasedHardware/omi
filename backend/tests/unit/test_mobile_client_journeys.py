@@ -123,9 +123,33 @@ def _terminal_labels(client_kind, outcome):
     return {**_accepted_labels(client_kind), 'outcome': outcome}
 
 
+def _journeys_stubbed() -> bool:
+    import sys
+
+    import utils.observability as obs
+
+    if not getattr(obs, '__path__', None):
+        return True
+    journeys = sys.modules.get('utils.observability.journeys')
+    if journeys is None:
+        return True
+    # A stub harness ModuleType exposes only the attributes its file set;
+    # the real module exposes the full contract. Probe two names from
+    # different consumers.
+    if not hasattr(journeys, 'record_journey_accepted') or not hasattr(journeys, 'ClientJourneyAttempt'):
+        return True
+    return False
+
+
 def _run_sync_reprocess(monkeypatch, row, conversation, processed):
     from unittest.mock import MagicMock
 
+    if _journeys_stubbed():
+        pytest.skip(
+            'utils.observability.journeys is stubbed in this worker (the '
+            'sync_v2 behavioral harness shares the process), so the sync '
+            'journey counters cannot be observed'
+        )
     from utils.sync import pipeline
 
     monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args, **_kwargs: row)
