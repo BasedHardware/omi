@@ -29,7 +29,8 @@ The design had been accepted through two review rounds as an "accepted trade." A
 
 ## Guard tests
 
-- `app/test/services/capture/resume_sync_fence_test.dart` — cases 7 and 8 pin charging-edge admission and zero-transport sync wakes for the fence machinery as it exists on main.
+- `app/test/services/capture/tiered_capture_test.dart` — current firmware keeps live delivery beyond silence, queued expiry has no pause effects, historical automatic pauses recover, and manual mute survives restart.
+- `app/test/services/capture/resume_sync_fence_test.dart` — historical pause recovery reconciles the uplink after coalesced sync scopes, including charging-edge admission and zero-transport sync wakes.
 
 ## Surfaces
 
@@ -37,3 +38,12 @@ The design had been accepted through two review rounds as an "accepted trade." A
 - iOS/Android BLE managers' subscription lifecycle (`omi:app/ios/Runner/Ble/`, Android BLE service)
 - Pendant firmware audio transport and storage paths (`omi:omi/firmware/omi/src/lib/core/transport.c`, mic capture, SD/ring writers)
 - Any future tiered capture, silence detection, or battery-optimization policy on any platform
+
+## Path globs
+
+- `app/lib/services/capture/**`
+- `app/lib/services/devices/connectors/**`
+- `app/lib/services/wals/**`
+- `app/ios/Runner/Ble/**`
+- `app/android/app/src/main/kotlin/com/friend/ios/ble/**`
+- `omi/firmware/omi/src/lib/core/**`
