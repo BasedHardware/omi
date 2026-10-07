@@ -196,20 +196,16 @@ int read_audio_data(uint8_t *buf, int amount, int offset)
 {
     struct fs_file_t read_file;
     fs_file_t_init(&read_file);
-    uint8_t *temp_ptr = buf;
-    struct fs_dirent entry;
-
-    int rc = fs_open(&read_file, read_buffer, FS_O_READ | FS_O_RDWR);
-    rc = fs_seek(&read_file, offset, FS_SEEK_SET);
-    rc = fs_read(&read_file, temp_ptr, amount);
-    // LOG_PRINTK("read data :");
-    // for (int i = 0; i < amount;i++) {
-    //     LOG_PRINTK("%d ",temp_ptr[i]);
-    // }
-    // LOG_PRINTK("\n");
-    fs_close(&read_file);
-
-    return rc;
+    int result = fs_open(&read_file, read_buffer, FS_O_READ);
+    if (result < 0) {
+        return result;
+    }
+    result = fs_seek(&read_file, offset, FS_SEEK_SET);
+    if (result == 0) {
+        result = fs_read(&read_file, buf, amount);
+    }
+    int close_result = fs_close(&read_file);
+    return result < 0 ? result : (close_result < 0 ? close_result : result);
 }
 
 int write_to_file(uint8_t *data, uint32_t length)
