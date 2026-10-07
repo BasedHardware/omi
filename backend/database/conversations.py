@@ -2027,19 +2027,18 @@ def update_conversation(
     doc_snapshot = doc_ref.get()
     if not doc_snapshot.exists:
         return False
-
+    doc_data = doc_snapshot.to_dict() or {}
+    if is_soft_deleted(doc_data):
+        return False
     if record_owner_out is not None:
-        owner = doc_snapshot.to_dict().get('record_lane_owner')
-        if owner in {'batch_live_v1', 'batch_sync_v1'}:
+        if (owner := doc_data.get('record_lane_owner')) in {'batch_live_v1', 'batch_sync_v1'}:
             record_owner_out[conversation_id] = owner
-    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    doc_level = doc_data.get('data_protection_level', 'standard')
     if isinstance(update_data.get('audio_files'), list):
-        update_data = {
-            **update_data,
-            'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
-        }
+        aliased = retain_aliases(update_data['audio_files'], doc_data.get('audio_files') or [])
+        update_data = {**update_data, 'audio_files': aliased}
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
-    guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
+    guard_match_score_size(prepared_data, doc_data, getattr(doc_ref, 'path', None))
     try:
         doc_ref.update(prepared_data)
     except NotFound:
