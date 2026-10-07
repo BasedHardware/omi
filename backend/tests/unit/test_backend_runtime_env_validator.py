@@ -3402,7 +3402,7 @@ def test_prod_jev_stage_contract_enables_stage_values_only_on_process_hosts():
         expected = {
             'CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT': '100',
             'MEMORY_OWNER_JEV_SHADOW_PERCENT': '100',
-            'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT': '20',
+            'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT': '0',
             'CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP': '60000',
             'MEMORY_OWNER_JEV_SHADOW_DAILY_CAP': '60000',
         }
@@ -3410,7 +3410,7 @@ def test_prod_jev_stage_contract_enables_stage_values_only_on_process_hosts():
     assert hosts == _JEV_PROCESS_CONVERSATION_HOSTS
     # backend-sync-backfill is not a shadow host but also processes conversations.
     backfill = dict(_manifest_env_blocks(prod))['cloud_run/backend-sync-backfill']
-    assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '20'
+    assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '0'
     assert backfill[CONVERSATION_RELEVANCE_JEV_ENABLED_ENV]['value'] == 'true'
     assert backfill['CONVERSATION_RELEVANCE_JEV_PERCENT']['value'] in {'1', '10', '50', '100'}
 
