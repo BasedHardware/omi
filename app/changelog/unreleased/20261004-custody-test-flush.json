@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Adds a flush() for queued pendant custody writes that test teardown awaits, and replaces two fixed test sleeps with awaited completions, to stop flaky custody tests; no shipping app behavior changes."
+}

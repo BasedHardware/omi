@@ -318,6 +318,20 @@ Future<http.StreamedResponse> makeRawApiCall({
       );
       if (response.statusCode == 401) return _authUnavailableStreamedResponse();
     }
+    if (requireAuthCheck && response.statusCode == HttpStatus.forbidden) {
+      // The fence is in the body; read it once and hand the caller an
+      // equivalent response.
+      final materialized = await _materializeErrorResponse(response);
+      await _expireSessionIfAccountDeleted(materialized.statusCode, materialized.body, authService: service);
+      return http.StreamedResponse(
+        Stream<List<int>>.value(materialized.bodyBytes),
+        materialized.statusCode,
+        contentLength: materialized.bodyBytes.length,
+        request: response.request,
+        headers: materialized.headers,
+        reasonPhrase: materialized.reasonPhrase,
+      );
+    }
     return response;
   } on AuthTokenUnavailableException catch (e) {
     await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
@@ -369,6 +383,43 @@ Future<http.Response> _materializeErrorResponse(http.StreamedResponse response) 
     Logger.debug('Failed to materialize streaming error response: ${e.runtimeType}');
     return http.Response('{}', response.statusCode, reasonPhrase: response.reasonPhrase, headers: response.headers);
   }
+}
+
+/// The backend's deleted-account fence (`enforce_account_deletion_http_access`):
+/// every request of an account whose deletion wipe is pending or failed is
+/// answered 403 with this `detail.code`; WebSockets close with
+/// [accountDeletionWebSocketCloseCode]. Nothing the app can do with that
+/// account succeeds, so the session is terminal and the user goes back to
+/// sign-in instead of being walked into dead-end prompts (the forced
+/// language sheet whose save then fails).
+const String accountDeletionInProgressCode = 'account_deletion_in_progress';
+const int accountDeletionWebSocketCloseCode = 4005;
+
+/// The wipe status carried by a deleted-account 403 body, or null when
+/// [body] is any other response.
+String? accountDeletionStatusOf(String body) {
+  if (body.isEmpty) return null;
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) return null;
+    final detail = decoded['detail'];
+    if (detail is! Map || detail['code'] != accountDeletionInProgressCode) return null;
+    return detail['status']?.toString() ?? '';
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Expires the session (once; [AuthService.expireSession] is idempotent) when
+/// a 403 is the deleted-account fence. Any other 403 is left to the caller.
+Future<void> _expireSessionIfAccountDeleted(int statusCode, String body, {AuthService? authService}) async {
+  if (statusCode != HttpStatus.forbidden) return;
+  final status = accountDeletionStatusOf(body);
+  if (status == null) return;
+  Logger.debug('Account deletion in progress (wipe status: $status): expiring the session');
+  await (authService ?? AuthService.instance).expireSession(
+    AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.accountDeleted, code: status),
+  );
 }
 
 Future<void> _handleAuthUnavailable(
@@ -507,6 +558,7 @@ Future<http.Response> sendUncaughtApiCall({
         },
       );
     }
+    await _expireSessionIfAccountDeleted(response.statusCode, response.body, authService: execution.auth);
     return response;
   }
 
@@ -556,6 +608,7 @@ Future<http.Response> sendUncaughtApiCall({
       },
     );
   }
+  if (requireAuthCheck) await _expireSessionIfAccountDeleted(response.statusCode, response.body);
 
   _checkClockSkewResponse(response);
   return response;
@@ -745,6 +798,7 @@ Future<http.Response> makeMultipartApiCall({
         },
       );
     }
+    if (requireAuthCheck) await _expireSessionIfAccountDeleted(response.statusCode, response.body);
 
     _checkClockSkewResponse(response);
     return response;
@@ -816,6 +870,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
         },
       );
     }
+    if (requireAuthCheck) await _expireSessionIfAccountDeleted(response.statusCode, response.body);
 
     _checkClockSkewResponse(response);
     return response;
@@ -1126,14 +1181,15 @@ dynamic extractContentFromResponse(
     }
     return data['choices'][0]['message']['content'];
   } else {
-    Logger.debug('Error fetching data: ${response?.statusCode}');
-    // TODO: handle error, better specially for script migration
+    var errorBody = response?.body;
+    Logger.debug('Error fetching data: ${response?.statusCode} Body: $errorBody');
     PlatformManager.instance.crashReporter.reportCrash(
       Exception('Error fetching data: ${response?.statusCode}'),
       StackTrace.current,
       userAttributes: {
         'response_null': (response == null).toString(),
         'response_status_code': response?.statusCode.toString() ?? '',
+        'response_body': errorBody ?? '',
         'is_embedding': isEmbedding.toString(),
         'is_function_calling': isFunctionCalling.toString(),
       },

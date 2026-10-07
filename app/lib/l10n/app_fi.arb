@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Esitallenne",
     "pendantRecordingSyncBlocked": "Pendant tallentaa edelleen, joten tallennettua ääntä ei voi siirtää. Pysäytä tallennus painamalla Pendantin painiketta ja synkronoi sitten uudelleen.",
     "pendantFullSyncBlocked": "Pendantin muisti on täynnä ja se on yhä äänitystilassa, joten tallennettua ääntä ei voi siirtää. Pysäytä äänitys painamalla Pendantin painiketta ja synkronoi sitten uudelleen.",
-    "conversationsNotCapturedCount": "Ei tallennettu ({count})",
     "transcriptionNoAudio": "Transkriptio ei vastaanota ääntä",
     "chatBlockTask": "Tehtävä",
     "chatBlockGoal": "Tavoite",
@@ -3838,5 +3837,19 @@
     "stopThese": "Lopeta nämä",
     "dismiss": "Hylkää",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Näytä lukitusnäytöllä",
+    "accountDeletionInProgressSignInAgain": "Tätä tiliä poistetaan. Kirjaudu sisään toisella tilillä tai odota muutama minuutti ja yritä uudelleen.",
+    "onboardingSetupTitle": "Omia otetaan käyttöön",
+    "onboardingSetupSubtitle": "Anna Omille hetki mukautua",
+    "onboardingSetupStepWorkspace": "Työtilaasi valmistellaan",
+    "onboardingSetupStepLanguage": "Tekstitystä mukautetaan kielellesi",
+    "onboardingSetupStepMemory": "Muistiasi otetaan käyttöön",
+    "onboardingSetupStepDevices": "Laitteitasi yhdistetään",
+    "onboardingSetupStepPersonalize": "Kokemustasi personoidaan",
+    "onboardingRatingPromptTitle": "Odotellessasi: onko Omin käyttö ollut mukavaa?",
+    "onboardingRatingPromptBody": "5 tähteä auttaa meitä todella paljon ❤️",
+    "onboardingRatingPromptYes": "Kyllä, haluan tukea teitä!",
+    "onboardingRatingPromptNo": "Ei oikeastaan",
+    "partialRecording": "Osittainen tallenne"
 }

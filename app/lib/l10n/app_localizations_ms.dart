@@ -9946,11 +9946,6 @@ class AppLocalizationsMs extends AppLocalizations {
       'Storan Pendant penuh dan ia masih dalam mod rakaman, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Tidak dirakam ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profil Suara $name';
   }
@@ -12443,4 +12438,47 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dismiss => 'Tutup';
+
+  @override
+  String get showOnLockScreen => 'Tunjukkan pada skrin kunci';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Akaun ini sedang dipadamkan. Log masuk dengan akaun lain, atau tunggu beberapa minit dan cuba lagi.';
+
+  @override
+  String get onboardingSetupTitle => 'Menyediakan Omi anda';
+
+  @override
+  String get onboardingSetupSubtitle => 'Beri Omi sedikit masa untuk memperibadikan';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Menyediakan ruang kerja anda';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Menala transkripsi mengikut bahasa anda';
+
+  @override
+  String get onboardingSetupStepMemory => 'Menyediakan memori anda';
+
+  @override
+  String get onboardingSetupStepDevices => 'Menyambungkan peranti anda';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Memperibadikan pengalaman anda';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Sementara menunggu, adakah Omi menyenangkan untuk digunakan?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Memberi kami 5 bintang sangat membantu kami ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Ya, saya mahu menyokong anda!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Tidak begitu';
+
+  @override
+  String get partialRecording => 'Rakaman separa';
 }

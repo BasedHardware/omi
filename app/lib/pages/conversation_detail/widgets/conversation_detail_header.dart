@@ -67,6 +67,12 @@ class ConversationDetailHeader extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _whenChip(context, conversation),
+                  if (conversation.captureCoverage == 'incomplete')
+                    ConversationDetailChip(
+                      key: const Key('conversation_partial_recording'),
+                      icon: const Icon(Icons.mic_none_outlined),
+                      label: context.l10n.partialRecording,
+                    ),
                   // Only a filed conversation shows its folder; Move to Folder is in the ⋯ menu.
                   if (folder != null) _FolderChip(conversation: conversation, folder: folder),
                   if (peopleLabel != null)

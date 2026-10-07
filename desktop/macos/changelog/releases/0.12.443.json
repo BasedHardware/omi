@@ -1,0 +1,7 @@
+{
+  "version": "0.12.443",
+  "date": "2026-10-04",
+  "changes": [
+    "Removed automatic goal, task, and meeting-note cards from Chat while keeping rich cards in replies"
+  ]
+}

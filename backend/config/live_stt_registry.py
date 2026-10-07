@@ -12,6 +12,8 @@ from urllib.parse import urlsplit
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, STTServingSurface, parakeet_supports_language
 from config.live_stt_replay import ReplayLimits, parse_replay_limits
 
+MAX_REGISTRY_TARGETS = 16
+
 
 @dataclass(frozen=True)
 class Target:
@@ -77,7 +79,7 @@ def registry() -> tuple[Target, ...]:
     targets: tuple[Target, ...] = DEFAULT_TARGETS
     if raw:
         entries = json.loads(raw)
-        if not isinstance(entries, list) or not 1 <= len(entries) <= 16:
+        if not isinstance(entries, list) or not 1 <= len(entries) <= MAX_REGISTRY_TARGETS:
             raise ValueError('live STT registry must be a list of 1-16 targets')
         parsed: list[Target] = []
         for entry in entries:
@@ -114,7 +116,7 @@ def registry() -> tuple[Target, ...]:
             except TypeError as error:
                 raise ValueError('invalid live STT target fields') from error
         targets = tuple(parsed)
-    if not 1 <= len(targets) <= 16 or len({target.id for target in targets}) != len(targets):
+    if not 1 <= len(targets) <= MAX_REGISTRY_TARGETS or len({target.id for target in targets}) != len(targets):
         raise ValueError('live STT registry must have 1-16 unique targets')
     for target in targets:
         if not re.fullmatch(r'[a-z][a-z0-9-]{0,47}', target.id):

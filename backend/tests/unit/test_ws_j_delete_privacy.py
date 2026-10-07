@@ -1781,8 +1781,10 @@ def test_delete_all_final_rescan_tombstones_concurrent_write(monkeypatch, canoni
         snapshot = original_fetch(**kwargs)
         if not injected:
             injected = True
-            with pytest.raises(RuntimeError, match="destructive operation"):
+            with pytest.raises(Exception, match="account_gate_busy") as caught:
                 write_canonical_extraction_memory(uid, concurrent_payload, db_client=canonical_db)
+            assert getattr(caught.value, "status_code", None) == 409
+            assert "destructive operation" in str(caught.value.__cause__)
             concurrent_write_blocked = True
         return snapshot
 

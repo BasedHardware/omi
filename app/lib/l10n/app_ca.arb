@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Pregravat",
     "pendantRecordingSyncBlocked": "El Pendant encara està gravant, així que el seu àudio emmagatzemat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar.",
     "pendantFullSyncBlocked": "L'emmagatzematge del Pendant és ple i encara està en mode de gravació, així que l'àudio desat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar.",
-    "conversationsNotCapturedCount": "No enregistrat ({count})",
     "transcriptionNoAudio": "La transcripció no rep àudio",
     "chatBlockTask": "Tasca",
     "chatBlockGoal": "Objectiu",
@@ -3838,5 +3837,19 @@
     "stopThese": "Atura aquests",
     "dismiss": "Descarta",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Mostra a la pantalla de bloqueig",
+    "accountDeletionInProgressSignInAgain": "Aquest compte s'està suprimint. Inicia la sessió amb un altre compte o espera uns minuts i torna-ho a provar.",
+    "onboardingSetupTitle": "Configurant el teu Omi",
+    "onboardingSetupSubtitle": "Dona un moment a Omi per personalitzar-se",
+    "onboardingSetupStepWorkspace": "Preparant el teu espai de treball",
+    "onboardingSetupStepLanguage": "Ajustant la transcripció al teu idioma",
+    "onboardingSetupStepMemory": "Configurant la teva memòria",
+    "onboardingSetupStepDevices": "Connectant els teus dispositius",
+    "onboardingSetupStepPersonalize": "Personalitzant la teva experiència",
+    "onboardingRatingPromptTitle": "Mentre esperes, t'agrada utilitzar Omi?",
+    "onboardingRatingPromptBody": "Valorar-nos amb 5 estrelles ens ajuda molt ❤️",
+    "onboardingRatingPromptYes": "Sí, vull donar-vos suport!",
+    "onboardingRatingPromptNo": "No gaire",
+    "partialRecording": "Enregistrament parcial"
 }

@@ -22,13 +22,13 @@ from testing.import_isolation import stub_modules  # noqa: E402
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant  # noqa: E402
 from models.conversation_enums import ConversationSource  # noqa: E402
 from models.transcript_segment import TranscriptSegment  # noqa: E402
-from utils.conversations.meeting_context_pack import (  # noqa: E402
+from utils.conversations.meeting_context_gate import should_gather_meeting_context
+from utils.conversations.meeting_context_render import (
     MAX_CONTEXT_PACK_CHARACTERS,
     MeetingContextPack,
     PersonFact,
     PriorMeetingNote,
     render_meeting_context_pack,
-    should_gather_meeting_context,
 )
 from utils.conversations.meeting_participants import (  # noqa: E402
     MeetingRoster,
@@ -399,7 +399,7 @@ class TestNormalizeMeetingParticipants:
 
 class TestRosterPromptPrefix:
     def _build(self, *, roster=None, speaker_map=None, calendar_context=None, desktop_capture=False):
-        from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+        from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
         return build_conversation_prompt_prefix(
             conversation_id='conv-rich',
@@ -524,7 +524,7 @@ class TestRosterPromptPrefix:
 class TestRichConversationNotes:
     def _call(self, monkeypatch, *, payload, meeting_context=None, roster=None, rich_enabled=True):
         from utils.llm import conversation_processing
-        from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+        from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
         captured: dict = {}
 
@@ -1029,8 +1029,10 @@ class TestRichFailOpen:
             raise ValueError('malformed people document with private details')
 
         monkeypatch.setattr(wiring, 'should_gather_meeting_context', lambda *a, **k: True)
-        monkeypatch.setattr(wiring, 'load_people_documents', lambda uid: [])
-        monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
+        monkeypatch.setattr(wiring.meeting_context_sources(), 'load_people_documents', lambda uid: [])
+        monkeypatch.setattr(
+            wiring.meeting_context_sources(), 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',))
+        )
         monkeypatch.setattr(wiring, 'normalize_meeting_participants', boom)
         conversation = SimpleNamespace(source=ConversationSource.omi, external_data={})
         roster, people_docs, desktop_capture, _evidence = wiring._rich_meeting_roster('uid', conversation, None)
@@ -1060,7 +1062,7 @@ class TestRichFailOpen:
         import utils.conversations.meeting_notes_wiring as wiring
 
         monkeypatch.setattr(
-            wiring,
+            wiring.meeting_context_sources(),
             'gather_meeting_context_pack',
             lambda *a, **k: (_ for _ in ()).throw(RuntimeError('pack exploded')),
         )
@@ -1070,7 +1072,7 @@ class TestRichFailOpen:
             is None
         )
         monkeypatch.setattr(
-            wiring,
+            wiring.meeting_context_sources(),
             'gather_meeting_context_pack',
             lambda *a, **k: MeetingContextPack(goals=('g',)),
         )
@@ -1106,10 +1108,12 @@ class TestRichFailOpen:
         monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a, **k: [])
         monkeypatch.setattr(pc, 'validate_structured_source_segment_ids', lambda *a, **k: None)
         monkeypatch.setattr(wiring, 'should_gather_meeting_context', lambda *a, **k: True)
-        monkeypatch.setattr(wiring, 'load_people_documents', lambda uid: [])
-        monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
+        monkeypatch.setattr(wiring.meeting_context_sources(), 'load_people_documents', lambda uid: [])
+        monkeypatch.setattr(
+            wiring.meeting_context_sources(), 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',))
+        )
         monkeypatch.setattr(wiring, 'normalize_meeting_participants', boom)
-        monkeypatch.setattr(wiring, 'gather_meeting_context_pack', boom)
+        monkeypatch.setattr(wiring.meeting_context_sources(), 'gather_meeting_context_pack', boom)
 
         captured = {}
 

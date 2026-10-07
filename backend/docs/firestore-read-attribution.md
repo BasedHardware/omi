@@ -13,9 +13,14 @@ use `DD_SERVICE` (`backend-listen` and `pusher`). `memory-maintenance-job`
 uses `CLOUD_RUN_JOB` so runtime env does not add another copy of that job name. The ledger reuses the probe's billed
 `amount` and `kind`, scoped to clients in `based-hardware`; unknown client
 projects are counted and mark the day incomplete. It is sampled at p=1, so
-sampling error is zero. `backend`, `backend-listen`, and `pusher` must show
-a snapshot in the last 15 minutes of the UTC day; other required services
-must appear at least once. A cron job that exits earlier does not fail the
+sampling error is zero. `backend` and `backend-listen` must show a snapshot
+in the last 15 minutes of the UTC day; other required services must appear
+at least once. `pusher` stays in the shipped set and its rows still count,
+but prod pusher is still the pre-ledger image, so a missing pusher snapshot
+is a recorded exclusion and does not make the day incomplete. Clear
+`COMPLETENESS_EXCLUDED` in `backend/scripts/firestore_read_reconcile.py`
+once a normal promotion is serving pusher on a ledger SHA. That puts the
+loud missing-snapshot exit back. A cron job that exits earlier does not fail the
 day. Crash loss after the last snapshot stays unquantified. Index-entry and other
 billing-model bias is not quantified. The ±2% band is an operational allowance,
 not proof that bias is under 2%.

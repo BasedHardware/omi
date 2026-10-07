@@ -451,7 +451,7 @@ class _Stack:
             return False
 
     def start_pusher_server(self, peer=None):
-        self.server_ws = FakeServerWebSocket()
+        self.server_ws = HeldServerWebSocket()
         self.server_task = asyncio.create_task(
             (peer or pusher)._websocket_util_trigger(
                 self.server_ws, UID, RATE, 'test', 2 if (self.v2 or self.spans) else None
@@ -459,8 +459,10 @@ class _Stack:
         )
 
     async def stop_pusher_server(self):
-        # Exhausting the server's frames ends receive_tasks; the drain flushes
-        # every queued/batched chunk before the task completes.
+        # End input explicitly after the listen flush; idle time under CPU
+        # contention must not disconnect before accepted audio is delivered.
+        self.server_ws.released.set()
+        # The server drains every queued/batched chunk before completing.
         deadline = time.monotonic() + 30
         while not self.server_task.done() and time.monotonic() < deadline:
             await asyncio.sleep(0.05)

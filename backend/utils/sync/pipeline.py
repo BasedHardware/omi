@@ -7,6 +7,8 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.observability.sync_phases import sync_phase, sync_attempt
+
 import asyncio
 import contextlib
 import hashlib
@@ -82,10 +84,13 @@ from models.geolocation import Geolocation
 from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
+from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations.relevance import sync_intake_decision
 from utils.executors import (
     db_executor,
     postprocess_executor,
@@ -182,13 +187,15 @@ from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
 from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
 from utils.sync.merge_audio import store_partial_merge_survivor_audio
-from utils.sync.assignment import fragment_rule, needs_fragment_review
+from utils.sync.assignment import fragment_rule
 from utils.sync.speaker_identity import PersonEmbeddingsCache, SpeakerIdentityDependencies, USER_SELF_PERSON_ID
 from utils.sync.speaker_identity import build_person_embeddings_cache as _build_person_embeddings_cache
 from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
 from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.journey_metrics_contract import resolve_client_kind
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
+from utils.observability.journeys import record_client_journey_accepted, record_client_journey_terminal
 
 logger = logging.getLogger(__name__)
 
@@ -965,6 +972,7 @@ def _merge_and_cap_vad_segments(voice_segments: list) -> list:
     return segments
 
 
+@sync_phase('decode_vad')
 def retrieve_vad_segments(
     path: str,
     segmented_paths: set,
@@ -1037,11 +1045,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
-    if (
-        (sync_lineage_resolve_active_for(uid) or language == _LINEAGE_RETRY_LANGUAGE)
-        and conversation_data.get('sync_live_target')
-        and conversation_data.get('status') == 'in_progress'
-    ):
+    if conversation_data.get('sync_live_target') and conversation_data.get('status') == 'in_progress':
         # Live finalization owns the open row. SYNC_UPDATE would mark it
         # completed while the socket is still adding speech, after which the
         # finalizer skips processing that later content.
@@ -1051,11 +1055,23 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # spend. Everything else goes through the relevance step (SYNC_UPDATE),
     # which reassesses the whole merged transcript, so later speech promotes it.
     segments = conversation_data.get('transcript_segments', [])
-    if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(segments):
-        record_conversation_relevance(
-            trigger='sync_intake', verdict='discard', decided_by='rule', reason=fragment_rule(segments)[1]
-        )
-        return
+    status = getattr(conversation_data.get('status'), 'value', conversation_data.get('status'))
+    if (
+        status == 'completed'
+        and conversation_data.get('sync_relevance') == 'review'
+        and not is_user_curated(conversation_data)
+    ):
+        verdict, rule = fragment_rule(segments)
+        if verdict == 'discard':
+            persisted = lifecycle_service.discard_by_relevance(
+                uid,
+                conversation_id,
+                sync_intake_decision(rule),
+                expected_sync_content_revision=conversation_data.get('sync_content_revision'),
+            )
+            if persisted:
+                record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
+            return
 
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
@@ -1063,14 +1079,35 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         language = conversation.language or 'en'
 
     was_discarded = conversation.discarded
+    prior_decision = conversation_data.get('relevance_decision')
+    # process_conversation persists relevance_decision.trigger == 'sync_update'.
+    # Intake only writes 'sync_intake' (or nothing). A later WAL segment re-enters
+    # this function; that stored trigger is the already-processed signal.
+    already_sync_processed = (
+        isinstance(prior_decision, dict) and prior_decision.get('trigger') == ProcessingTrigger.SYNC_UPDATE.value
+    )
+    # Visible rows must not accept again. A prior discard is not a visible
+    # finalization, so discarded -> visible still accepts once.
+    already_visible_finalized = already_sync_processed and not was_discarded
+    started = time.monotonic()
     processed_conversation = process_conversation(
         uid=uid,
         language_code=language or 'en',
         conversation=conversation,
         trigger=ProcessingTrigger.SYNC_UPDATE,
-        user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
+        user_kept=is_user_curated(conversation_data),
         persistence_observer=_require_current_conversation_persistence,
     )
+    elapsed = time.monotonic() - started
+    # Persistence is guaranteed here: a fenced write raises before return.
+    # client_platform is the Conversation field set at sync intake; None -> unknown.
+    client_kind = resolve_client_kind(x_app_platform=getattr(conversation, 'client_platform', None), user_agent=None)
+    if processed_conversation.discarded:
+        if not already_sync_processed:
+            record_client_journey_terminal('conversation_finalization', client_kind, 'cancelled', elapsed)
+    elif not already_visible_finalized:
+        record_client_journey_accepted('conversation_finalization', client_kind)
+        record_client_journey_terminal('conversation_finalization', client_kind, 'success', elapsed)
 
     # Limitless uploads commonly begin as a short discarded fragment and only
     # become a real conversation after later WAL segments are merged. The
@@ -1106,6 +1143,7 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
     return _build_person_embeddings_cache(uid, dependencies=_speaker_identity_dependencies())
 
 
+@sync_phase('gcs')
 def _download_audio_bytes(url: str) -> Optional[bytes]:
     """Download audio from a signed URL. Returns WAV bytes or None on failure."""
     try:
@@ -1117,6 +1155,7 @@ def _download_audio_bytes(url: str) -> Optional[bytes]:
         return None
 
 
+@sync_phase('speaker_id')
 def identify_speakers_for_segments(
     transcript_segments: List['TranscriptSegment'],
     audio_bytes: Optional[bytes],
@@ -1605,6 +1644,7 @@ def _store_sync_audio_chunk(
         logger.warning(f'sync: failed to store audio chunk for {conversation_id}@{timestamp}: {e}')
 
 
+@sync_phase('firestore')
 def _finalize_sync_audio_files(uid: str, response: dict):
     """After all segments are assigned, build audio_files from the uploaded chunks and
     persist them on each conversation — exactly as the realtime flush does — then warm the
@@ -1873,6 +1913,7 @@ async def _resolve_safety_wal_target(
     )
 
 
+@sync_attempt
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -2128,22 +2169,20 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             except asyncio.CancelledError:
                 preserve_retry_material = True
                 raise
-            if (
-                use_lineage
-                and sync_recording_lineage.sync_lineage_s1_required()
-                and len(source_frame_maps) != len(wav_paths)
-            ):
-                use_lineage = False
-                target_conversation_id = await _resolve_safety_wal_target(
-                    uid,
-                    target_conversation_id,
-                    recording_session_id,
-                    source,
-                    client_device_id,
-                    should_lock,
-                    audio_start_seconds,
-                    audio_end_seconds,
-                )
+            if use_lineage and sync_recording_lineage.sync_lineage_s1_required():
+                if len(source_frame_maps) != len(wav_paths):
+                    sync_recording_lineage.emit_s1_refusal('count_mismatch')
+                    use_lineage = False
+                    target_conversation_id = await _resolve_safety_wal_target(
+                        uid,
+                        target_conversation_id,
+                        recording_session_id,
+                        source,
+                        client_device_id,
+                        should_lock,
+                        audio_start_seconds,
+                        audio_end_seconds,
+                    )
             # --- Phase 2: VAD ---
             job_phase = 'vad'
             await run_blocking(
@@ -2495,6 +2534,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         is_locked,
                         job_id,
                         segment_binding_reasons,
+                        **({'segment_source_maps': segment_source_maps} if segment_source_maps else {}),
                     )
                 except Exception:
                     # Span construction and the executor call are also part of

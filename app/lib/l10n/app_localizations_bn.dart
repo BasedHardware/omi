@@ -9924,11 +9924,6 @@ class AppLocalizationsBn extends AppLocalizations {
       'Pendant-এর স্টোরেজ পূর্ণ এবং এটি এখনও রেকর্ডিং মোডে আছে, তাই সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'রেকর্ড করা হয়নি ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name-এর ভয়েস প্রোফাইল';
   }
@@ -12412,4 +12407,47 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get dismiss => 'সরিয়ে দিন';
+
+  @override
+  String get showOnLockScreen => 'লক স্ক্রিনে দেখান';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'এই অ্যাকাউন্টটি মুছে ফেলা হচ্ছে। অন্য অ্যাকাউন্ট দিয়ে সাইন ইন করুন, অথবা কয়েক মিনিট অপেক্ষা করে আবার চেষ্টা করুন।';
+
+  @override
+  String get onboardingSetupTitle => 'আপনার Omi সেট আপ করা হচ্ছে';
+
+  @override
+  String get onboardingSetupSubtitle => 'Omi-কে একটু সময় দিন, আপনার জন্য সাজিয়ে নিচ্ছে';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'আপনার ওয়ার্কস্পেস প্রস্তুত করা হচ্ছে';
+
+  @override
+  String get onboardingSetupStepLanguage => 'আপনার ভাষার জন্য ট্রান্সক্রিপশন টিউন করা হচ্ছে';
+
+  @override
+  String get onboardingSetupStepMemory => 'আপনার মেমরি সেট আপ করা হচ্ছে';
+
+  @override
+  String get onboardingSetupStepDevices => 'আপনার ডিভাইস সংযুক্ত করা হচ্ছে';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'আপনার অভিজ্ঞতা ব্যক্তিগতকরণ করা হচ্ছে';
+
+  @override
+  String get onboardingRatingPromptTitle => 'অপেক্ষা করার সময় বলুন, Omi ব্যবহার করতে কেমন লাগছে?';
+
+  @override
+  String get onboardingRatingPromptBody => '৫ স্টার রেটিং দিলে আমরা সত্যিই অনেক সাহায্য পাই ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'হ্যাঁ, আমি আপনাদের সমর্থন করতে চাই!';
+
+  @override
+  String get onboardingRatingPromptNo => 'তেমন না';
+
+  @override
+  String get partialRecording => 'আংশিক রেকর্ডিং';
 }

@@ -9969,11 +9969,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Neînregistrat ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profilul vocal al lui $name';
   }
@@ -12467,4 +12462,47 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dismiss => 'Ascunde';
+
+  @override
+  String get showOnLockScreen => 'Afișează pe ecranul de blocare';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Acest cont este în curs de ștergere. Conectează-te cu alt cont sau așteaptă câteva minute și încearcă din nou.';
+
+  @override
+  String get onboardingSetupTitle => 'Se configurează Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Dă-i lui Omi un moment să se personalizeze';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Se pregătește spațiul tău de lucru';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Se ajustează transcrierea pentru limba ta';
+
+  @override
+  String get onboardingSetupStepMemory => 'Se configurează memoria ta';
+
+  @override
+  String get onboardingSetupStepDevices => 'Se conectează dispozitivele tale';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Se personalizează experiența ta';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Cât aștepți, ți-a plăcut să folosești Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'O evaluare de 5 stele ne ajută cu adevărat ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Da, vreau să vă susțin!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Nu prea';
+
+  @override
+  String get partialRecording => 'Înregistrare parțială';
 }

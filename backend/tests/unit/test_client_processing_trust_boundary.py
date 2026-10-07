@@ -627,6 +627,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # projection-family would make `_invalidate_client_processing` and
         # `strip_client_processing` strip/delete the dark write itself.
         'capture_evidence',
+        # Server-computed capture badge, NOT client-authored projection-family.
+        # Retained by persistence/transcript-edit sinks and app views; explicitly
+        # stripped as private capture metadata by the integration redactor.
+        'capture_coverage',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',
@@ -680,6 +684,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # the participant speaker ids. No client-authored text, so not
         # projection-family.
         'speaker_resolution',
+        # Server-derived numeric voice evidence; not client-authored display projection.
+        'speaker_match_scores',
     }
 )
 
@@ -2175,3 +2181,38 @@ def test_red_proof_walrus_alias_fails_rebind_scan() -> None:
     assert any(site.startswith('walrus:conversation_ref:') for site in rebinds)
     # The production source has no assignment expression to report.
     assert not [site for site in collect_intent_txn_write_surface(source)[1] if site.startswith('walrus:')]
+
+
+@pytest.mark.parametrize('coverage', ['unknown', 'incomplete', 'mapped', None])
+@pytest.mark.parametrize('locked', [False, True])
+def test_capture_coverage_stays_on_app_views_and_out_of_integrations(render_mod, projection_sink_fns, coverage, locked):
+    conv = _make_conversation(is_locked=locked)
+    conv.capture_coverage = coverage
+    assert 'capture_coverage' not in render_mod.PROJECTION_FAMILY_FIELDS
+    public = render_mod.conversation_to_dict(conv)
+    assert public['capture_coverage'] == coverage
+    assert render_mod.redact_conversation_for_list(dict(public))['capture_coverage'] == coverage
+    assert 'capture_coverage' not in render_mod.redact_conversation_for_integration(dict(public))
+    for sink in ('strip', 'invalidate'):
+        payload = dict(public)
+        projection_sink_fns[sink](payload)
+        assert payload['capture_coverage'] == coverage
+    projection_sink_fns['drop'](conv)
+    assert conv.capture_coverage == coverage
+    public.pop('capture_coverage')
+    assert 'capture_coverage' not in render_mod.redact_conversation_for_integration(public)
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_internal_voice_match_scores_are_absent_from_client_and_integration_views(render_mod, locked):
+    conv = _make_conversation(is_locked=locked)
+    evidence = {'speaker_id': 0, 'stage': 'capture', 'owner_distance': 0.321}
+    conv.speaker_match_scores = [evidence]
+    conv.transcript_segments[0].speaker_match_scores = evidence
+    # Storage still carries the internal values.
+    assert conv.model_dump()['speaker_match_scores'] == [evidence]
+    assert 'speaker_match_scores' not in render_mod.conversation_to_dict(conv)
+    for redact in (render_mod.redact_conversation_for_list, render_mod.redact_conversation_for_integration):
+        public = redact(conv.model_dump())
+        assert 'speaker_match_scores' not in public
+        assert all('speaker_match_scores' not in s for s in public.get('transcript_segments', []))

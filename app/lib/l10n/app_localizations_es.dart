@@ -9947,11 +9947,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'El almacenamiento de tu Pendant está lleno y sigue en modo de grabación, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'No capturado ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Perfil de voz de $name';
   }
@@ -12448,4 +12443,47 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dismiss => 'Descartar';
+
+  @override
+  String get showOnLockScreen => 'Mostrar en la pantalla de bloqueo';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Esta cuenta se está eliminando. Inicia sesión con otra cuenta o espera unos minutos e inténtalo de nuevo.';
+
+  @override
+  String get onboardingSetupTitle => 'Configurando tu Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Dale un momento a Omi para personalizarse';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Preparando tu espacio de trabajo';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Ajustando la transcripción a tu idioma';
+
+  @override
+  String get onboardingSetupStepMemory => 'Configurando tu memoria';
+
+  @override
+  String get onboardingSetupStepDevices => 'Conectando tus dispositivos';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Personalizando tu experiencia';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Mientras esperas, ¿te ha gustado usar Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Valorarnos con 5 estrellas nos ayuda muchísimo ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => '¡Sí, quiero apoyaros!';
+
+  @override
+  String get onboardingRatingPromptNo => 'No mucho';
+
+  @override
+  String get partialRecording => 'Grabación parcial';
 }

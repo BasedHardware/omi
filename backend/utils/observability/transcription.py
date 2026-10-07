@@ -39,6 +39,7 @@ from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
 from utils.stt.soniox_runway import meter_audio_seconds
+from utils.observability.routing_cohort import current_routing_cohort
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,7 @@ class LiveSTTAttempt:
         self._clock = clock
         self._started_at = clock()
         self._finished = False
+        self._routing_cohort = current_routing_cohort.get()
         OMI_LIVE_STT_ACCEPTED_TOTAL.labels(
             provider=self.provider,
             client_platform=self.platform,
@@ -211,6 +213,8 @@ class LiveSTTAttempt:
             deployment_environment=self.deployment_environment,
             phase=phase,
         ).inc()
+        if self._routing_cohort is not None:
+            self._routing_cohort.terminal(outcome)
         properties = {
             **self._base_properties(),
             'duration_seconds': max(0.0, self._clock() - self._started_at),
@@ -296,6 +300,9 @@ def record_live_stt_pre_audio_failure(
         outcome='failure',
         phase=bounded_phase,
     ).inc()
+    cohort = current_routing_cohort.get()
+    if cohort is not None:
+        cohort.terminal('failure')
 
 
 def record_sync_intake_outcome(*, created: bool) -> None:

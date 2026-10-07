@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import sync_phase
 import logging
 import os
 import re
@@ -249,6 +250,7 @@ def detect_source_from_filenames(filenames: List[Optional[str]]) -> Conversation
     return ConversationSource.omi
 
 
+@sync_phase('decode_vad')
 def decode_files_to_wav(files_path: List[str], decoded_frames: Optional[dict[str, list[int]]] = None) -> List[str]:
     """Decode each uploaded sync file, isolating unreadable files from their batch.
 

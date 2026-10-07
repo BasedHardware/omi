@@ -234,11 +234,10 @@ async def test_finalizer_completion_schedules_learning_retry(monkeypatch):
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'smart_merge_step', AsyncMock(return_value=False))
     monkeypatch.setattr(persisted_finalizer, 'link_duplicate_captures', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', AsyncMock())
-    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'schedule_person_voice_learning_retry', scheduled)
 
     async def disabled(*_args, **_kwargs):
@@ -299,11 +298,10 @@ async def test_finalizer_fenced_or_failed_fanout_never_schedules(monkeypatch, fa
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
-    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'smart_merge_step', AsyncMock(return_value=False))
     monkeypatch.setattr(persisted_finalizer, 'link_duplicate_captures', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', AsyncMock())
-    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', MagicMock())
     monkeypatch.setattr(persisted_finalizer, 'schedule_person_voice_learning_retry', scheduled)
 
     async def disabled(*_args, **_kwargs):

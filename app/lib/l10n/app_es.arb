@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Pregrabado",
     "pendantRecordingSyncBlocked": "Tu Pendant sigue grabando, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.",
     "pendantFullSyncBlocked": "El almacenamiento de tu Pendant está lleno y sigue en modo de grabación, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.",
-    "conversationsNotCapturedCount": "No capturado ({count})",
     "transcriptionNoAudio": "La transcripción no recibe audio",
     "chatBlockTask": "Tarea",
     "chatBlockGoal": "Objetivo",
@@ -3838,5 +3837,19 @@
     "stopThese": "Dejar de recibir esto",
     "dismiss": "Descartar",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Mostrar en la pantalla de bloqueo",
+    "accountDeletionInProgressSignInAgain": "Esta cuenta se está eliminando. Inicia sesión con otra cuenta o espera unos minutos e inténtalo de nuevo.",
+    "onboardingSetupTitle": "Configurando tu Omi",
+    "onboardingSetupSubtitle": "Dale un momento a Omi para personalizarse",
+    "onboardingSetupStepWorkspace": "Preparando tu espacio de trabajo",
+    "onboardingSetupStepLanguage": "Ajustando la transcripción a tu idioma",
+    "onboardingSetupStepMemory": "Configurando tu memoria",
+    "onboardingSetupStepDevices": "Conectando tus dispositivos",
+    "onboardingSetupStepPersonalize": "Personalizando tu experiencia",
+    "onboardingRatingPromptTitle": "Mientras esperas, ¿te ha gustado usar Omi?",
+    "onboardingRatingPromptBody": "Valorarnos con 5 estrellas nos ayuda muchísimo ❤️",
+    "onboardingRatingPromptYes": "¡Sí, quiero apoyaros!",
+    "onboardingRatingPromptNo": "No mucho",
+    "partialRecording": "Grabación parcial"
 }

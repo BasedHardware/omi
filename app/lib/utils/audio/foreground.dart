@@ -87,6 +87,9 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onRepeatEvent(DateTime timestamp) async {
     Logger.debug("Foreground repeat event triggered");
+    // The main isolate owns WAL state. A fresh headless capture engine must
+    // never be booted for this opportunistic recovery pass.
+    FlutterForegroundTask.sendDataToMain({'recordingSyncWake': true});
     await _locationInBackground();
   }
 

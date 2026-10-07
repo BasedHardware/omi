@@ -9,12 +9,15 @@ from collections import deque
 from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
 import av
+import config.speaker_match_scores as match_scores
+import utils.stt.speaker_match as match_policy
 import numpy as np
 from pydantic import ValidationError
 
 from config.speaker_prior import pinned_speaker_prior_enabled
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.audio import AudioRingBuffer
+from utils.live_speaker_collapse import LiveSpeakerCollapseMonitor
 from utils.live_speaker_suggestions import reconcile_pinned_suggestion
 from utils.log_sanitizer import sanitize
 from utils.executors import storage_executor, sync_executor, run_blocking
@@ -35,7 +38,7 @@ from utils.stt.speaker_match import (
 )
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
 from utils.transcribe_store import conversations_db, get_user_name, user_db
-from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL
+from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL, OMI_LIVE_SPEAKER_COLLAPSE_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +93,7 @@ class SpeakerMatcher:
         # Pinned-speaker prior (flagged): people an unmatched voice resembles, and the
         # pinned near-miss already offered as a suggestion, per diarized speaker.
         self.voice_candidates: Dict[int, list] = {}
+        self.match_scores: list = []
         self._suggested_person: Dict[int, str] = {}
         # Recent (embedding, clip seconds) per diarized speaker. A decision is made on
         # the centroid once enough audio has accumulated, instead of letting the first
@@ -100,6 +104,7 @@ class SpeakerMatcher:
         self._speaker_locks: Dict[int, asyncio.Lock] = {}
         self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
         self._generation = 0
+        self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self.tasks: set[asyncio.Task[Any]] = set()
         self._profile_conversation_id: Optional[str] = None
         self._profile_lock = asyncio.Lock()
@@ -240,6 +245,18 @@ class SpeakerMatcher:
                 self._record_exit('already_mapped' if speaker_id in self.speaker_to_person else 'too_short', speaker_id)
         state.speaker_id_done.set()
 
+    def observe_segment(self, speaker_id: int, scope: str, segment_id: str) -> None:
+        if self.collapse_monitor.observe(speaker_id, scope, segment_id):
+            self._record_collapse()
+
+    def _record_collapse(self) -> None:
+        OMI_LIVE_SPEAKER_COLLAPSE_TOTAL.inc()
+        logger.warning(
+            'event=live_speaker_collapse consecutive_segments=%d rejected_matches=%d',
+            self.collapse_monitor.consecutive_segments,
+            self.collapse_monitor.rejected_matches,
+        )
+
     def _session_log_id(self) -> Any:
         """Recording session id for speaker-ID log attribution; never the uid."""
         return getattr(self.host, 'recording_session_id', None)
@@ -349,7 +366,7 @@ class SpeakerMatcher:
         candidates += [
             entry
             for entry in (receipt.get('segments') or {}).values()
-            if isinstance(entry, Mapping) and entry.get('speaker_id') == speaker_id
+            if isinstance(entry, Mapping) and not entry.get('segment_only') and entry.get('speaker_id') == speaker_id
         ]
         positive = [entry for entry in candidates if not entry.get('rejection')]
         if not positive:
@@ -485,6 +502,7 @@ class SpeakerMatcher:
                 for voice in rejected:
                     self._retract_rejected_voice(voice, self._voice_segments.get(voice))
                 self.host.state.speaker_map_dirty = True
+                self._record_match_score(speaker_id, self._voice_decisions[speaker_id], 'manual_rejected')
                 self._record_exit('rejected', speaker_id)
                 return
             manual = self._manual_voice_decision(receipt, speaker_id)
@@ -515,6 +533,7 @@ class SpeakerMatcher:
                     self.voice_identity_status[speaker_id] = status
                     self.segment_identity_status[segment['id']] = status
                     self.host.state.speaker_map_dirty = True
+                self._record_match_score(speaker_id, self._voice_decisions[speaker_id], 'manual_decision', manual)
                 self._record_exit('manual_decision', speaker_id)
                 return
             voice_groups = self._provider_epoch_voice_groups()
@@ -541,6 +560,10 @@ class SpeakerMatcher:
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return
+            if decision is not None and self.collapse_monitor.match(
+                speaker_id, segment.get('speaker_id_scope') or '', segment['id'], accepted=decision.accepted
+            ):
+                self._record_collapse()
             # No awaits between arbitration and publishing the maps: another
             # speaker may finish embedding concurrently, but cannot publish a
             # decision based on a stale set of owner claims.
@@ -577,6 +600,7 @@ class SpeakerMatcher:
                     )
                     if prior:
                         self._offer_pinned_suggestion(voice, result, pinned, segment_id, assigned)
+                self._record_match_score(voice, result)
                 self.voice_identity_status[voice] = status
                 self.segment_identity_status[segment_id] = status
             self.host.state.speaker_map_dirty = True
@@ -605,6 +629,38 @@ class SpeakerMatcher:
                     type(error).__name__,
                     self._session_log_id(),
                 )
+
+    def _record_match_score(
+        self,
+        voice: int,
+        decision: SpeakerMatchDecision,
+        outcome: Optional[str] = None,
+        manual: Optional[Mapping] = None,
+    ) -> None:
+        try:
+            if match_scores.enabled():
+                row = match_scores.summarize(
+                    voice,
+                    self._voice_distances[voice],
+                    decision,
+                    sum(seconds for _, seconds in self.speaker_evidence[voice]),
+                    'capture',
+                    threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
+                    margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
+                    scope=self._voice_scopes.get(voice, ''),
+                    outcome=outcome,
+                )
+                if outcome == 'manual_rejected':
+                    row['accepted_person_id'] = None
+                    row['status'] = 'no_match'
+                if manual is not None:
+                    row['accepted_person_id'] = (
+                        USER_SELF_PERSON_ID if manual.get('is_user') else manual.get('person_id')
+                    )
+                    row['status'] = 'user' if manual.get('is_user') else 'not_user'
+                self.match_scores = match_scores.merge(self.match_scores, [row])
+        except Exception:
+            match_scores.record_failure(logger)
 
     def _offer_pinned_suggestion(
         self, voice: int, result: SpeakerMatchDecision, pinned: set, segment_id: str, assigned: set
@@ -643,6 +699,7 @@ class SpeakerMatcher:
 
     def clear(self) -> None:
         self._generation += 1
+        self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self._profile_conversation_id = None
         self._named_speakers_allowed = None
         self._covered_audio.clear()
@@ -658,4 +715,5 @@ class SpeakerMatcher:
         self._voice_centroids.clear()
         self._voice_scopes.clear()
         self.voice_candidates.clear()
+        self.match_scores.clear()
         self._suggested_person.clear()

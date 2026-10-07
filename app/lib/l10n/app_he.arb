@@ -10751,7 +10751,6 @@
     "prerecordedTranscript": "הוקלט מראש",
     "pendantRecordingSyncBlocked": "ה-Pendant עדיין מקליט, ולכן לא ניתן להעביר את השמע השמור בו. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ואז סנכרנו שוב.",
     "pendantFullSyncBlocked": "האחסון של ה-Pendant מלא והוא עדיין במצב הקלטה, ולכן לא ניתן להעביר את השמע השמור. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ולאחר מכן סנכרנו שוב.",
-    "conversationsNotCapturedCount": "לא הוקלט ({count})",
     "transcriptionNoAudio": "התמליל אינו מקבל שמע",
     "chatBlockTask": "משימה",
     "chatBlockGoal": "יעד",
@@ -11395,5 +11394,19 @@
     "stopThese": "הפסקת אלה",
     "dismiss": "סגירה",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "הצגה במסך הנעילה",
+    "accountDeletionInProgressSignInAgain": "החשבון הזה נמחק כעת. היכנסו עם חשבון אחר, או המתינו כמה דקות ונסו שוב.",
+    "onboardingSetupTitle": "מגדירים את ה-Omi שלך",
+    "onboardingSetupSubtitle": "תנו ל-Omi רגע להתאים את עצמו אליכם",
+    "onboardingSetupStepWorkspace": "מכינים את סביבת העבודה שלך",
+    "onboardingSetupStepLanguage": "מכוונים את התמלול לשפה שלך",
+    "onboardingSetupStepMemory": "מגדירים את הזיכרון שלך",
+    "onboardingSetupStepDevices": "מחברים את המכשירים שלך",
+    "onboardingSetupStepPersonalize": "מתאימים אישית את החוויה שלך",
+    "onboardingRatingPromptTitle": "בזמן שמחכים, נעים לכם להשתמש ב-Omi?",
+    "onboardingRatingPromptBody": "דירוג של 5 כוכבים עוזר לנו מאוד ❤️",
+    "onboardingRatingPromptYes": "כן, אני רוצה לתמוך בכם!",
+    "onboardingRatingPromptNo": "לא ממש",
+    "partialRecording": "הקלטה חלקית"
 }

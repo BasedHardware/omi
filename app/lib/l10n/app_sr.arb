@@ -10751,7 +10751,6 @@
     "prerecordedTranscript": "Унапред снимљено",
     "pendantRecordingSyncBlocked": "Pendant и даље снима, па сачувани звук не може да се пренесе. Притисните дугме на Pendant-у да зауставите снимање, а затим поново синхронизујте.",
     "pendantFullSyncBlocked": "Меморија Pendant-а је пуна и он је и даље у режиму снимања, па сачувани звук не може да се пренесе. Притисните дугме на Pendant-у да зауставите снимање, а затим поново синхронизујте.",
-    "conversationsNotCapturedCount": "Није снимљено ({count})",
     "transcriptionNoAudio": "Транскрипција не прима аудио",
     "chatBlockTask": "Задатак",
     "chatBlockGoal": "Циљ",
@@ -11395,5 +11394,19 @@
     "stopThese": "Заустави ово",
     "dismiss": "Сакриј",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Прикажи на закључаном екрану",
+    "accountDeletionInProgressSignInAgain": "Овај налог се брише. Пријавите се другим налогом или сачекајте неколико минута и покушајте поново.",
+    "onboardingSetupTitle": "Подешавамо ваш Omi",
+    "onboardingSetupSubtitle": "Дајте Omi-ју тренутак да се прилагоди",
+    "onboardingSetupStepWorkspace": "Припремамо ваш радни простор",
+    "onboardingSetupStepLanguage": "Прилагођавамо транскрипцију вашем језику",
+    "onboardingSetupStepMemory": "Подешавамо вашу меморију",
+    "onboardingSetupStepDevices": "Повезујемо ваше уређаје",
+    "onboardingSetupStepPersonalize": "Персонализујемо ваше искуство",
+    "onboardingRatingPromptTitle": "Док чекате, да ли вам је пријатно да користите Omi?",
+    "onboardingRatingPromptBody": "Оцена са 5 звездица нам заиста много помаже ❤️",
+    "onboardingRatingPromptYes": "Да, желим да вас подржим!",
+    "onboardingRatingPromptNo": "Не баш",
+    "partialRecording": "Делимичан снимак"
 }

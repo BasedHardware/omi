@@ -9933,11 +9933,6 @@ class AppLocalizationsTr extends AppLocalizations {
       'Pendant\'ın depolama alanı dolu ve hâlâ kayıt modunda olduğu için kayıtlı ses aktarılamıyor. Kaydı durdurmak için Pendant\'ın düğmesine basın, ardından yeniden senkronize edin.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Kaydedilmedi ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name adlı kişinin ses profili';
   }
@@ -12424,4 +12419,47 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dismiss => 'Gizle';
+
+  @override
+  String get showOnLockScreen => 'Kilit ekranında göster';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Bu hesap siliniyor. Başka bir hesapla giriş yapın ya da birkaç dakika bekleyip tekrar deneyin.';
+
+  @override
+  String get onboardingSetupTitle => 'Omi\'niz ayarlanıyor';
+
+  @override
+  String get onboardingSetupSubtitle => 'Omi\'ye kişiselleştirmek için biraz zaman tanıyın';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Çalışma alanınız hazırlanıyor';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Transkripsiyon diliniz için ayarlanıyor';
+
+  @override
+  String get onboardingSetupStepMemory => 'Belleğiniz ayarlanıyor';
+
+  @override
+  String get onboardingSetupStepDevices => 'Cihazlarınız bağlanıyor';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Deneyiminiz kişiselleştiriliyor';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Beklerken, Omi\'yi kullanmak hoşunuza gitti mi?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 yıldız vermeniz bize gerçekten çok yardımcı olur ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Evet, size destek olmak istiyorum!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Pek değil';
+
+  @override
+  String get partialRecording => 'Kısmi kayıt';
 }

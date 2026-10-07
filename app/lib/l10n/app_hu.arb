@@ -3290,7 +3290,6 @@
     "prerecordedTranscript": "Előre rögzített",
     "pendantRecordingSyncBlocked": "A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.",
     "pendantFullSyncBlocked": "A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.",
-    "conversationsNotCapturedCount": "Nincs rögzítve ({count})",
     "transcriptionNoAudio": "Az átírás nem kap hangot",
     "chatBlockTask": "Feladat",
     "chatBlockGoal": "Cél",
@@ -3934,5 +3933,19 @@
     "stopThese": "Ezek leállítása",
     "dismiss": "Elrejtés",
     "syncCardDownloadPercent": "{percent}%",
-    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s"
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "Megjelenítés a zárolási képernyőn",
+    "accountDeletionInProgressSignInAgain": "Ez a fiók törlés alatt áll. Jelentkezz be egy másik fiókkal, vagy várj néhány percet, és próbáld újra.",
+    "onboardingSetupTitle": "Az Omi beállítása",
+    "onboardingSetupSubtitle": "Adj egy pillanatot az Ominak a testreszabásra",
+    "onboardingSetupStepWorkspace": "A munkaterületed előkészítése",
+    "onboardingSetupStepLanguage": "Az átírás hangolása a nyelvedhez",
+    "onboardingSetupStepMemory": "A memóriád beállítása",
+    "onboardingSetupStepDevices": "Az eszközeid csatlakoztatása",
+    "onboardingSetupStepPersonalize": "Az élményed személyre szabása",
+    "onboardingRatingPromptTitle": "Amíg vársz, jó élmény volt az Omi használata?",
+    "onboardingRatingPromptBody": "Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️",
+    "onboardingRatingPromptYes": "Igen, szeretnék támogatni titeket!",
+    "onboardingRatingPromptNo": "Nem igazán",
+    "partialRecording": "Részleges felvétel"
 }

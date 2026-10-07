@@ -131,6 +131,7 @@ void main() {
     }
     expect(world.socketCreates - createsAfterRestore, lessThanOrEqualTo(2),
         reason: 'reconnect attempts are rate-limited to the 15s keepalive cadence');
+    await world.controller.pendingSourceSwitch; // WAL recovery finishes before native reports the fresh session.
     world.emitNativeState(PhoneMicCaptureState.running); // native engine is up on the fresh session
     await world.settle();
     expect(world.controller.recordingState, RecordingState.record,
@@ -655,6 +656,7 @@ void main() {
     // The keepalive reconnects within ~15s and the session resumes; a second
     // rejection inside the 30s window must not refresh again.
     await flowFor(16, 100);
+    await world.controller.pendingSourceSwitch;
     world.emitNativeState(PhoneMicCaptureState.running);
     await world.settle();
     expect(world.controller.recordingState, RecordingState.record);

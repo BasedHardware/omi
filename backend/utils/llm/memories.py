@@ -13,7 +13,8 @@ from models.daily_sweep_dispatch import SweepDispatchScope
 from models.memories import Memory, MemoryCategory
 from models.memory_contracts import L1MemoryArchiveClass, MemoryExtractionError
 from models.other import Person
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, shared_conversation_cache_supported
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+from utils.llm.conversation_prompt_prefix import shared_conversation_cache_supported
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner

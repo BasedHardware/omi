@@ -8,6 +8,7 @@ import re
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 from pydantic.json_schema import SkipJsonSchema
 
+from models.capture_window_proof import CaptureWindowProof
 from models.other import Person
 from models.speaker_label_provenance import project_source
 
@@ -119,11 +120,33 @@ class TranscriptSegment(BaseModel):
     # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
     # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
     voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
+    # Transported only in Python-mode internal dumps; the DB folds this into
+    # the bounded conversation blob and removes it from stored segments.
+    speaker_match_scores: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
     # looks real after a round-trip.
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
+    # Transaction-local attribution, never serialized or persisted.
+    _audio_capture_reason: str = PrivateAttr(default='missing_window')
+    _capture_merge_proof: Optional[CaptureWindowProof] = PrivateAttr(default=None)
+
+    @property
+    def capture_merge_proof(self) -> Optional[CaptureWindowProof]:
+        return self._capture_merge_proof
+
+    @capture_merge_proof.setter
+    def capture_merge_proof(self, proof: Optional[CaptureWindowProof]) -> None:
+        self._capture_merge_proof = proof if proof and proof.matches(self.capture_window_bounds()) else None
+
+    @property
+    def capture_window_reason(self) -> str:
+        return self._audio_capture_reason
+
+    @capture_window_reason.setter
+    def capture_window_reason(self, reason: str) -> None:
+        self._audio_capture_reason = reason
 
     @model_serializer(mode='wrap')
     def _serialize_internal_evidence(self, handler, info):
@@ -143,7 +166,7 @@ class TranscriptSegment(BaseModel):
         # rewrites; JSON-mode dumps are API responses, which must never carry them.
         if getattr(info, 'mode', 'python') == 'json':
             return data
-        for key in ('audio_capture_start', 'audio_capture_end', 'audio_source'):
+        for key in ('audio_capture_start', 'audio_capture_end', 'audio_source', 'speaker_match_scores'):
             value = getattr(self, key)
             if value is not None and key not in excluded and (included is None or key in included):
                 data[key] = value
@@ -177,11 +200,19 @@ class TranscriptSegment(BaseModel):
         else:
             self.speaker_id = 0
 
+    def capture_window_bounds(self) -> Optional[Tuple[float, float]]:
+        start, end = self.audio_capture_start, self.audio_capture_end
+        if start is None or end is None or not math.isfinite(start) or not math.isfinite(end) or start >= end:
+            return None
+        return start, end
+
     def _clear_audio_capture_window(self) -> None:
         self.audio_capture_start = self.audio_capture_end = None
+        self._capture_merge_proof = None
 
     def _clear_audio_evidence(self) -> None:
         self._clear_audio_capture_window()
+        self._audio_capture_reason = 'partial_redistribution'
         self.audio_source = None
 
     def _merge_audio_source(self, other: 'TranscriptSegment') -> None:
@@ -209,6 +240,24 @@ class TranscriptSegment(BaseModel):
         }
 
     def _merge_audio_capture_window(self, other: 'TranscriptSegment') -> None:
+        from config.audio_timeline import live_capture_window_merge_union_enabled
+
+        proof = None
+        if live_capture_window_merge_union_enabled():
+            left, right = self._capture_merge_proof, other._capture_merge_proof
+            if (
+                left
+                and right
+                and left.matches(self.capture_window_bounds())
+                and right.matches(other.capture_window_bounds())
+            ):
+                proof = left.union(right)
+        if proof is not None:
+            self.audio_capture_start, self.audio_capture_end = proof.window
+            self._capture_merge_proof = proof
+            self._audio_capture_reason = 'known_window'
+            return
+        self._capture_merge_proof = None
         a_start, a_end = self.audio_capture_start, self.audio_capture_end
         b_start, b_end = other.audio_capture_start, other.audio_capture_end
         if (
@@ -224,6 +273,18 @@ class TranscriptSegment(BaseModel):
             self.audio_capture_start = min(a_start, b_start)
             self.audio_capture_end = max(a_end, b_end)
         else:
+            if self._audio_capture_reason == 'inherited_unknown' or other._audio_capture_reason == 'inherited_unknown':
+                self._audio_capture_reason = 'inherited_unknown'
+            elif a_start is None or a_end is None or b_start is None or b_end is None:
+                self._audio_capture_reason = 'merge_unknown_side'
+            elif (
+                not all(math.isfinite(v) for v in (a_start, a_end, b_start, b_end))
+                or a_start >= a_end
+                or b_start >= b_end
+            ):
+                self._audio_capture_reason = 'merge_invalid_window'
+            else:
+                self._audio_capture_reason = 'merge_gap'
             self._clear_audio_capture_window()
 
     def assign_resolved_speaker(self, speaker_id: int, scope: str) -> None:
@@ -279,6 +340,7 @@ class TranscriptSegment(BaseModel):
         *,
         protected_segment_ids: Optional[set[str]] = None,
         speaker_bound_ids: Optional[set[int]] = None,
+        preserve_capture_windows: bool = False,
     ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
             return CombineSegmentsResult(segments, [], [], {})
@@ -433,6 +495,15 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if b.audio_capture_run != a.audio_capture_run:
                 return a, b
+            preserve_known_window = preserve_capture_windows and (
+                a.capture_window_bounds() is not None or b.capture_window_bounds() is not None
+            )
+            if preserve_known_window:
+                left, right = a.capture_window_bounds(), b.capture_window_bounds()
+                if left is None or right is None or max(left[0], right[0]) > min(left[1], right[1]):
+                    # Keep provider text/window pairs intact, rather than clear
+                    # proof while absorbing an unknown or disjoint contributor.
+                    return a, b
             if speaker_bound_ids and a.speaker_id in speaker_bound_ids:
                 return _append_decided_speaker(a, b)
 
@@ -447,6 +518,8 @@ class TranscriptSegment(BaseModel):
                 if last_incomplete:
                     first_sentence, rest = _split_first_sentence(b.text)
                     if _can_backward_merge_first_sentence(first_sentence, rest, last_incomplete):
+                        if preserve_known_window:
+                            return a, b
                         a.text = f'{a.text} {first_sentence}'.strip()
                         b.text = rest
                         a._clear_audio_evidence()
@@ -459,6 +532,8 @@ class TranscriptSegment(BaseModel):
                         _absorb(b, a)
                         return a, None
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
+                    if prefix and preserve_known_window:
+                        return a, b
                     b.text = f'{last_incomplete} {b.text}'.strip()
                     if prefix:
                         a.text = prefix
@@ -527,7 +602,7 @@ def transcript_segment_for_client(segment: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         key: value
         for key, value in segment.items()
-        if key not in ('audio_capture_start', 'audio_capture_end', 'audio_source')
+        if key not in ('audio_capture_start', 'audio_capture_end', 'audio_source', 'speaker_match_scores')
     }
 
 

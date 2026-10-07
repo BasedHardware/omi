@@ -4,6 +4,17 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: ui-evidence
+    command: ["python3", ".github/scripts/check_ui_evidence.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
+    triggers: ["app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", "web/frontend/src/**", "web/admin/app/**", ".github/scripts/check_ui_evidence.py", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
+    lanes: ["local", "ci"]
+    requires_pr_body: true
+    reason: "UI changes require a tracked screenshot reference or an explicit UI-Evidence: none declaration; added screenshots must follow the shared UI evidence filename and manifest contract"
+  - id: ui-evidence-tests
+    command: ["python3", ".github/scripts/test_check_ui_evidence.py"]
+    triggers: [".github/scripts/check_ui_evidence.py", ".github/scripts/test_check_ui_evidence.py", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
+    lanes: ["local", "ci"]
+    reason: "Hermetic Git fixtures cover UI screenshot presence, tracked HEAD references, filename/manifest validation, the explicit escape, and deleted-only UI changes"
   - id: firestore-index-guard
     command: ["python3", "backend/scripts/run_firestore_index_guard.py"]
     triggers: ["@firestore-index-guard", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/actions/release-eligibility/action.yml"]
@@ -44,6 +55,16 @@ checks:
     triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
+  - id: plugin-request-timeouts
+    command: ["python3", "scripts/check_plugin_request_timeouts.py"]
+    triggers: ["plugins/**/*.py", "scripts/check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "requests applies no default timeout, so an upstream that accepts the connection and stops answering pins the worker; 19 of these calls ran inside async handlers, where one wedged token exchange blocked the event loop and the app stopped serving every user"
+  - id: plugin-request-timeout-check-tests
+    command: ["python3", "scripts/test_check_plugin_request_timeouts.py"]
+    triggers: ["scripts/check_plugin_request_timeouts.py", "scripts/test_check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the timeout scanner is the guard for this class, so its own detection of bare calls, requests.Session aliases and async call sites stays executable"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
@@ -499,6 +520,16 @@ checks:
     triggers: ["app/scripts/mobile_store_promote.py", "app/scripts/mobile_store_promote_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manual public promotion requires exact already-processed build, matching release notes and roll-forward checks"
+  - id: mobile-daily-train-contract
+    command: ["python3", "app/scripts/mobile_daily_train_test.py"]
+    triggers: ["app/scripts/mobile_daily_train.py", "app/scripts/mobile_daily_train_test.py", "app/scripts/mobile_store_promote.py", "codemagic.yaml", ".github/workflows/mobile_daily_train.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the daily store train may only queue builds for a human release: hold while a submission is in flight, replace only an unreleased approval, iOS MANUAL release type, Play production draft never completed"
+  - id: mobile-daily-train-dispatch
+    command: ["python3", ".github/scripts/test_dispatch_mobile_daily_train.py"]
+    triggers: [".github/scripts/dispatch_mobile_daily_train.py", ".github/scripts/test_dispatch_mobile_daily_train.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/workflows/mobile_daily_train.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Codemagic drops a variables object holding an empty string, so the daily dispatch must always send a non-empty TRAIN_DRY_RUN and target the train workflow on main"
   - id: omi-macos-dev-cli
     command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
     triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]
@@ -510,6 +541,16 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
+  - id: rewind-repository-ownership-guard-tests
+    command: ["python3", "desktop/macos/scripts/check-rewind-repository-ownership.py", "--self-test"]
+    triggers: ["desktop/macos/scripts/check-rewind-repository-ownership.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #9519: the guard must prove it rejects copied private Rewind DatabasePool/generation caches while accepting repository-owned storage"
+  - id: rewind-repository-ownership
+    command: ["python3", "desktop/macos/scripts/check-rewind-repository-ownership.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-rewind-repository-ownership.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #9519: all Rewind-backed actors must acquire replaceable pools through RewindRepository so owner switches and recovery cannot leave a private stale pool cache"
   - id: desktop-agent-credential-boundary
     command: ["python3", "desktop/macos/scripts/check-agent-credentials.py"]
     triggers: ["desktop/macos/Desktop/Sources/Chat/**", "desktop/macos/agent/src/**", "desktop/macos/pi-mono-extension/**", "desktop/macos/scripts/check-agent-credentials.py", ".github/checks-manifest.yaml"]
@@ -829,6 +870,11 @@ checks:
     triggers: ["web/frontend/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
     lanes: ["local", "ci"]
     reason: "web/frontend's node --test suite had no lane, so its guards never ran in CI and a deleted frontend test had to be re-homed into a backend pytest to keep running"
+  - id: web-share-http-tests
+    command: ["bash", "scripts/run-web-share-http-tests.sh"]
+    triggers: ["web/frontend/**", "scripts/run-web-share-http-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-599: public share URLs returned HTML for Markdown and JSON requests and omitted public speaker/time/task facts; synthetic HTTP requests exercise the shared rendering primitives through actual Next routing"
   - id: web-admin-tests
     command: ["bash", "scripts/run-web-admin-tests.sh"]
     triggers: ["web/admin/lib/**", "web/admin/app/api/**", "scripts/run-web-admin-tests.sh", ".github/checks-manifest.yaml"]

@@ -166,7 +166,7 @@ void registerNativeRemainingHostChecks(Future<void> Function(WidgetTester, Strin
     await tester.pumpWidget(_advancedHost(const AutoSyncPage(), storage: owner));
     await checkNativeHost(tester, 'real-native-offline-sync-dark');
     expect(_advancedRow(tester, 'offline_status_title').title,
-        AppLocalizations.of(tester.element(find.byType(IosNativeSurface)))!.syncCardAllBackedUp);
+        AppLocalizations.of(tester.element(find.byType(IosNativeSurface))).syncCardAllBackedUp);
     expect(owner.retries, 0);
     owner.change(const SyncState(
         status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice, progress: .5, speedKBps: 8));

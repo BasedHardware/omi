@@ -9959,11 +9959,6 @@ class AppLocalizationsBg extends AppLocalizations {
       'Паметта на Pendant е пълна и той все още е в режим на запис, затова съхраненото аудио не може да бъде прехвърлено. Натиснете бутона на Pendant, за да спрете записа, и след това синхронизирайте отново.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Не е записано ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Гласов профил на $name';
   }
@@ -12457,4 +12452,47 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get dismiss => 'Скрий';
+
+  @override
+  String get showOnLockScreen => 'Показване на заключения екран';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Този акаунт се изтрива. Влезте с друг акаунт или изчакайте няколко минути и опитайте отново.';
+
+  @override
+  String get onboardingSetupTitle => 'Настройване на вашия Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Дайте на Omi малко време да се персонализира';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Подготвяне на работното ви пространство';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Настройване на транскрипцията за вашия език';
+
+  @override
+  String get onboardingSetupStepMemory => 'Настройване на паметта ви';
+
+  @override
+  String get onboardingSetupStepDevices => 'Свързване на устройствата ви';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Персонализиране на вашето изживяване';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Докато чакате, приятно ли ви е да използвате Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Оценка от 5 звезди наистина ни помага ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Да, искам да ви подкрепя!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Не особено';
+
+  @override
+  String get partialRecording => 'Частичен запис';
 }

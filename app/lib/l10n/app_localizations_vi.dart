@@ -9917,11 +9917,6 @@ class AppLocalizationsVi extends AppLocalizations {
       'Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Không được ghi âm ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Hồ sơ giọng nói của $name';
   }
@@ -12407,4 +12402,47 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dismiss => 'Ẩn';
+
+  @override
+  String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Tài khoản này đang được xóa. Hãy đăng nhập bằng tài khoản khác, hoặc chờ vài phút rồi thử lại.';
+
+  @override
+  String get onboardingSetupTitle => 'Đang thiết lập Omi của bạn';
+
+  @override
+  String get onboardingSetupSubtitle => 'Hãy cho Omi một chút thời gian để cá nhân hóa';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Đang chuẩn bị không gian làm việc của bạn';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Đang tinh chỉnh phiên âm theo ngôn ngữ của bạn';
+
+  @override
+  String get onboardingSetupStepMemory => 'Đang thiết lập bộ nhớ của bạn';
+
+  @override
+  String get onboardingSetupStepDevices => 'Đang kết nối các thiết bị của bạn';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Đang cá nhân hóa trải nghiệm của bạn';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Trong lúc chờ, bạn thấy dùng Omi có thích không?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Đánh giá 5 sao thực sự giúp ích cho chúng tôi rất nhiều ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Có, tôi muốn ủng hộ các bạn!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Không hẳn';
+
+  @override
+  String get partialRecording => 'Bản ghi một phần';
 }

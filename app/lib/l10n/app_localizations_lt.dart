@@ -9941,11 +9941,6 @@ class AppLocalizationsLt extends AppLocalizations {
       'Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Neįrašyta ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name balso profilis';
   }
@@ -12434,4 +12429,47 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get dismiss => 'Slėpti';
+
+  @override
+  String get showOnLockScreen => 'Rodyti užrakinimo ekrane';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Ši paskyra šalinama. Prisijunkite kita paskyra arba palaukite kelias minutes ir bandykite dar kartą.';
+
+  @override
+  String get onboardingSetupTitle => 'Ruošiamas jūsų Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Duokite Omi akimirką prisitaikyti';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Ruošiama jūsų darbo erdvė';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Derinama transkripcija jūsų kalbai';
+
+  @override
+  String get onboardingSetupStepMemory => 'Nustatoma jūsų atmintis';
+
+  @override
+  String get onboardingSetupStepDevices => 'Jungiami jūsų įrenginiai';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Personalizuojama jūsų patirtis';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Kol laukiate, ar Omi buvo malonu naudoti?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 žvaigždučių įvertinimas mums labai padeda ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Taip, noriu jus palaikyti!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Ne visai';
+
+  @override
+  String get partialRecording => 'Dalinis įrašas';
 }

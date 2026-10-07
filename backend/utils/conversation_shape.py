@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 
 from utils.metrics import (
     CONVERSATION_DURATION_BUCKETS,
@@ -59,14 +59,22 @@ def classify_conversation_source(payload: object) -> str:
 
 
 def _as_datetime(raw: object) -> datetime | None:
+    """Parse a stored timestamp, reading a naive value as UTC.
+
+    Payloads can mix naive and aware timestamps. Subtracting one from the other
+    raises TypeError, which drops the whole shape observation.
+    """
+    value: datetime | None = None
     if isinstance(raw, datetime):
-        return raw
-    if isinstance(raw, str) and raw:
+        value = raw
+    elif isinstance(raw, str) and raw:
         try:
-            return datetime.fromisoformat(raw.replace('Z', '+00:00'))
+            value = datetime.fromisoformat(raw.replace('Z', '+00:00'))
         except ValueError:
             return None
-    return None
+    if value is not None and value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def wall_clock_seconds(payload: object) -> float | None:

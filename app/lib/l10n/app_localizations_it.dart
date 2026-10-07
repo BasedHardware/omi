@@ -9979,11 +9979,6 @@ class AppLocalizationsIt extends AppLocalizations {
       'La memoria del Pendant è piena ed è ancora in modalità registrazione, quindi l\'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Non registrato ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profilo vocale di $name';
   }
@@ -12481,4 +12476,47 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get dismiss => 'Ignora';
+
+  @override
+  String get showOnLockScreen => 'Mostra sulla schermata di blocco';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Questo account è in fase di eliminazione. Accedi con un altro account oppure attendi qualche minuto e riprova.';
+
+  @override
+  String get onboardingSetupTitle => 'Configurazione del tuo Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Dai a Omi un momento per personalizzarsi';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Preparazione del tuo spazio di lavoro';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Ottimizzazione della trascrizione per la tua lingua';
+
+  @override
+  String get onboardingSetupStepMemory => 'Configurazione della tua memoria';
+
+  @override
+  String get onboardingSetupStepDevices => 'Connessione dei tuoi dispositivi';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Personalizzazione della tua esperienza';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Mentre aspetti, ti sta piacendo usare Omi?';
+
+  @override
+  String get onboardingRatingPromptBody => 'Una valutazione di 5 stelle ci aiuta davvero tanto ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Sì, voglio supportarvi!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Non proprio';
+
+  @override
+  String get partialRecording => 'Registrazione parziale';
 }
