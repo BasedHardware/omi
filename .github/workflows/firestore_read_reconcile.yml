@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       day:
-        description: Closed UTC day to reconcile (YYYY-MM-DD; blank uses yesterday UTC)
+        description: Closed UTC day to reconcile (YYYY-MM-DD; blank uses the D-2 settled day)
         required: false
         type: string
   schedule:
@@ -43,6 +43,10 @@ jobs:
           set -euo pipefail
           day="$REQUESTED_DAY"
           if [[ -z "$day" ]]; then
-            day="$(date -u -d yesterday +%F)"
+            # Score D-2, not D-1: Firestore billing-export rows keep monetizing
+            # into later _PARTITIONTIME partitions for 10-30+ hours, so a D-1 run
+            # under-counts the bill and can flip the residual sign (measured on
+            # Oct 6: 32% of usage landed in the next day's partition).
+            day="$(date -u -d '2 days ago' +%F)"
           fi
           python3 backend/scripts/firestore_read_reconcile.py --day "$day"
