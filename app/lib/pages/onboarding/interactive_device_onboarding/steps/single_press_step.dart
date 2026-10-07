@@ -49,6 +49,13 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
+
+    final onboardingProvider = context.read<DeviceOnboardingProvider>();
+    if (onboardingProvider.aiResponse != null) {
+      _aiResponse = onboardingProvider.aiResponse;
+      _userQuestion = onboardingProvider.userQuestion;
+      _showContinue = true;
+    }
   }
 
   void _onMessagesChanged() {
@@ -63,13 +70,18 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     for (final msg in newMessages) {
       if (msg.sender == MessageSender.human && _userQuestion == null) {
         _userQuestion = msg.text;
+        onboardingProvider.userQuestion = msg.text;
       }
     }
 
     for (final msg in newMessages) {
-      if (msg.sender == MessageSender.ai && msg.text.isNotEmpty && msg.id != '0000' && !msg.fromIntegration) {
+      if (msg.sender == MessageSender.ai && msg.text.isNotEmpty && !msg.fromIntegration) {
+        if (msg.id == '0000' || msg.text == context.l10n.voiceQuestionNoSpeech) {
+          onboardingProvider.onVoiceQuestionFailed();
+          return;
+        }
         _aiResponse = msg.text;
-        onboardingProvider.onVoiceResponseReceived(msg.text);
+        onboardingProvider.onVoiceResponseReceived(msg.text, question: _userQuestion);
         setState(() => _showContinue = true);
         return;
       }
@@ -95,9 +107,23 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
           _wasListening = false;
         }
 
+        if (provider.voiceSessionActive && _aiResponse != null) {
+          _aiResponse = null;
+          _showContinue = false;
+        }
+
+        final String subtitle;
+        if (_aiResponse != null) {
+          subtitle = '';
+        } else if (provider.questionFailed) {
+          subtitle = context.l10n.voiceQuestionNoSpeech;
+        } else {
+          subtitle = context.l10n.deviceOnboardingAskQuestionSubtitle;
+        }
+
         return OnboardingStepScaffold(
           title: context.l10n.deviceOnboardingAskQuestionTitle,
-          subtitle: _aiResponse != null ? '' : context.l10n.deviceOnboardingAskQuestionSubtitle,
+          subtitle: subtitle,
           content: Column(children: [const Spacer(flex: 1), _buildContent(provider), const Spacer(flex: 2)]),
           bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
         );
