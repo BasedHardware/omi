@@ -3014,7 +3014,7 @@ environments:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '20'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
@@ -3217,7 +3217,7 @@ environments:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '20'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
@@ -3757,7 +3757,7 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '20'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
@@ -4080,7 +4080,7 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '20'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
@@ -4372,7 +4372,7 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '20'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
