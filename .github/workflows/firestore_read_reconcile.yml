@@ -36,12 +36,6 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v3
 
-      # bq refuses federated credentials without a quota project ("User is
-      # not authorized as a quota project" -> exit 1, no job inserted). The
-      # bill read belongs to based-hardware.
-      - name: Bind the ADC quota project for bq
-        run: gcloud auth application-default set-quota-project based-hardware
-
       - name: Reconcile closed UTC day
         env:
           REQUESTED_DAY: ${{ inputs.day }}
