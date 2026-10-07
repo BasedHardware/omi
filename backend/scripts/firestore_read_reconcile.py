@@ -69,8 +69,13 @@ def _parse_time(value: Any) -> dt.datetime | None:
 
 def reduce_ledger(
     day: str, records: Iterable[Mapping[str, Any]]
-) -> tuple[int, bool, set[str], dict[tuple[str, str], dt.datetime | None]]:
-    """Deduplicate snapshots by service/epoch/day and sum their cumulative values."""
+) -> tuple[int, bool, set[str], dict[tuple[str, str], dt.datetime | None], dict[str, int]]:
+    """Deduplicate snapshots by service/epoch/day and sum their cumulative values.
+
+    Tier counts (schema 2) are summed from each latest snapshot exactly like the
+    kind counters; schema-1 snapshots without ``tier_counts`` contribute nothing
+    and leave that service's reads in the unattributed share of the day.
+    """
     latest: dict[tuple[str, str], dict[str, Any]] = {}
     for record in records:
         if record.get("event") != "firestore_read_ledger" or record.get("day") != day:
@@ -94,17 +99,25 @@ def reduce_ledger(
             candidate["_emitted_at"] = max((t for t in (prior_time, new_time) if t is not None), default=None)
             latest[key] = candidate
     instrumented = sum(int(record.get(counter, 0) or 0) for record in latest.values() for counter in COUNTERS)
+    tier_totals: dict[str, int] = {}
+    for record in latest.values():
+        tier_counts = record.get("tier_counts")
+        if not isinstance(tier_counts, Mapping):
+            continue
+        for tier, count in tier_counts.items():
+            if isinstance(tier, str) and isinstance(count, int) and not isinstance(count, bool) and count > 0:
+                tier_totals[tier] = tier_totals.get(tier, 0) + count
     unscoped = any(bool(record.get("unscoped")) for record in latest.values())
     services = {service for service, _ in latest}
     emitted = {(service, epoch): record.get("_emitted_at") for (service, epoch), record in latest.items()}
-    return instrumented, unscoped, services, emitted
+    return instrumented, unscoped, services, emitted, tier_totals
 
 
 def reconcile(day: str, billed: float, records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """Pure day outcome calculation. emitted_at/timestamp values must be parseable for healthy."""
     parsed_day = dt.date.fromisoformat(day)
     day_end = dt.datetime.combine(parsed_day + dt.timedelta(days=1), dt.time(), tzinfo=dt.timezone.utc)
-    instrumented, unscoped, services, emitted = reduce_ledger(day, records)
+    instrumented, unscoped, services, emitted, tier_totals = reduce_ledger(day, records)
     billed = float(billed)
     residual = billed - instrumented
     residual_pct = residual / billed * 100 if billed else None
@@ -137,6 +150,7 @@ def reconcile(day: str, billed: float, records: Iterable[Mapping[str, Any]]) -> 
         "residual": residual,
         "residual_pct": residual_pct,
         "outcome": outcome,
+        "reads_by_tier": dict(sorted(tier_totals.items())),
         "completeness_excluded": sorted(COMPLETENESS_EXCLUDED),
         "error_bar": error_bar,
     }
@@ -244,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
                 "residual": 0,
                 "residual_pct": None,
                 "outcome": "incomplete",
+                "reads_by_tier": {},
                 "completeness_excluded": sorted(COMPLETENESS_EXCLUDED),
                 "error_bar": dict(ERROR_BAR),
             }
