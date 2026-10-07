@@ -681,7 +681,12 @@ def test_retrieve_in_progress_conversation_rejects_soft_deleted_pointer_and_fall
         return 'conv-tombstone'
 
     def _pointer_conversation(uid: str, conversation_id: str, **kwargs: Any):
-        return {'id': 'conv-tombstone', 'status': 'in_progress', 'deleted': True, 'finished_at': datetime.now(timezone.utc)}
+        return {
+            'id': 'conv-tombstone',
+            'status': 'in_progress',
+            'deleted': True,
+            'finished_at': datetime.now(timezone.utc),
+        }
 
     def _firestore_in_progress(uid: str):
         return {'id': 'conv-fs-valid', 'status': 'in_progress', 'finished_at': datetime.now(timezone.utc)}
@@ -703,7 +708,12 @@ def test_retrieve_in_progress_conversation_rejects_soft_deleted_pointer_when_no_
         return 'conv-tombstone'
 
     def _pointer_conversation(uid: str, conversation_id: str, **kwargs: Any):
-        return {'id': 'conv-tombstone', 'status': 'in_progress', 'deleted': True, 'finished_at': datetime.now(timezone.utc)}
+        return {
+            'id': 'conv-tombstone',
+            'status': 'in_progress',
+            'deleted': True,
+            'finished_at': datetime.now(timezone.utc),
+        }
 
     monkeypatch.setattr(pc.redis_db, 'get_in_progress_conversation_id', _pointer)
     monkeypatch.setattr(pc.conversations_db, 'get_conversation', _pointer_conversation)
