@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/calendar_capture_telemetry.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -128,7 +129,10 @@ CaptureProvider composeProductionCaptureProvider({
           SharedPreferencesUtil().getBool('google_calendar_connected') && SharedPreferencesUtil().uid.isNotEmpty
               ? '${SharedPreferencesUtil().uid}:${AnalyticsManager.identityEpoch}'
               : '',
-      load: fetchCalendarCaptureWindows,
+      load: (start, end) async => switch (await fetchCalendarCaptureWindows(start, end)) {
+        ApiSuccess(:final data) => data,
+        ApiFailure() => null, // Unavailable evidence is never an empty-success claim.
+      },
       emit: (fields) => AnalyticsManager().track('Calendar Capture Gap Detected', properties: fields),
     ),
     sessionOwner: CaptureSessionOwner(

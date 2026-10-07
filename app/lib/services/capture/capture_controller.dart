@@ -127,6 +127,7 @@ class CaptureController extends ChangeNotifier
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
   bool _livenessCheckRunning = false;
   DateTime? _calendarSocketDownAt;
+  Timer? _captureHealthTimer;
 
   String? _sourceCaptureRoot;
   LocalWalSync? _captureEvidenceSync;
@@ -342,17 +343,7 @@ class CaptureController extends ChangeNotifier
       }),
     );
     lifetime.own(() => _calendarGapMonitor?.dispose());
-    lifetime.periodic(const Duration(seconds: 15), (_) {
-      unawaited(_checkCaptureLiveness());
-      unawaited(
-        _calendarGapMonitor?.check(
-              _now(),
-              gapReason: _calendarCaptureGapReason,
-              phase: () => _capture.state.phase.name,
-            ) ??
-            Future<void>.value(),
-      );
-    });
+    _syncCaptureHealthTimer(null);
     final omiCall = _omiCallState;
     if (omiCall != null) {
       omiCall.addListener(_onOmiCallStateChanged);
@@ -418,11 +409,12 @@ class CaptureController extends ChangeNotifier
       // _activeSource is cleared if the user manually stopped — bail in that case.
       if (_activeSource is! PhoneMicSource) return null;
       // Frames may have arrived while the first WAL boundary awaited disk.
-      // Stop ingress, drain that final source tail, and make it durable before
-      // replacing PhoneMicSource. Never apply this recovery to a pendant.
+      // Drain the stopped source's final tail before replacing PhoneMicSource.
+      // The liveness recovery stage already finalized its WAL boundary. A
+      // healthy socket reconnect must not split its current retention window.
+      // Never apply this microphone recovery to a pendant.
       final sessionKey = _capture.state.active?.sessionKey;
       _flushPhoneFrames();
-      await _wal.getSyncs().phone.finalizeCurrentSession();
       if (!_captureSessionIsCurrent(token) || _capture.state.active?.sessionKey != sessionKey) return null;
       final revision = _preferences.capturePolicy.revision;
       if (_phoneMicPaused || !_admitsCapture(revision)) {
@@ -481,6 +473,21 @@ class CaptureController extends ChangeNotifier
       onStalled: _onMicStalled,
       onInterruption: _onMicInterruption,
     );
+  }
+
+  void _syncCaptureHealthTimer(CaptureCoordinatorState? state) {
+    if (_calendarGapMonitor == null && state?.phase != CapturePhase.phoneLive) {
+      _captureHealthTimer?.cancel();
+      _captureHealthTimer = null;
+      _livenessWatchdog.reset();
+      return;
+    }
+    _captureHealthTimer ??= lifetime.periodic(const Duration(seconds: 15), (_) {
+      unawaited(_checkCaptureLiveness());
+      unawaited(_calendarGapMonitor?.check(_now(),
+              gapReason: _calendarCaptureGapReason, phase: () => _capture.state.phase.name) ??
+          Future<void>.value());
+    });
   }
 
   String? _calendarCaptureGapReason() {
@@ -865,8 +872,11 @@ class CaptureController extends ChangeNotifier
     return _captureInstance ??= CaptureCoordinator(
       ports: _buildCapturePorts(),
       readEnvironment: _readCaptureEnvironment,
-      onCommit: (_) {
-        if (!_captureControllerDisposed) notifyListeners();
+      onCommit: (state) {
+        if (!_captureControllerDisposed) {
+          _syncCaptureHealthTimer(state);
+          notifyListeners();
+        }
       },
     );
   }
@@ -2488,6 +2498,8 @@ class CaptureController extends ChangeNotifier
   void dispose() {
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;
+    _captureHealthTimer?.cancel();
+    _captureHealthTimer = null;
     unawaited(_setIngressAuthorized(false));
     _captureInstance?.dispose();
     _rollCaptureSession('disposed');
