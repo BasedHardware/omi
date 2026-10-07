@@ -116,12 +116,6 @@ overlay:
           value: 'false'
         REFERRAL_PUBLIC_BASE_URL:
           value: https://api.omiapi.com
-        OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-          value: 'false'
-          category: rollout
-        OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-          value: '1.0'
-          category: rollout
         OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
           value: 'false'
           category: rollout
@@ -573,12 +567,6 @@ overlay:
           HOSTED_PUSHER_API_URL:
             value: http://pusher.omiapi.com
             category: service_discovery
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -731,12 +719,6 @@ overlay:
           OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
             value: '3600'
             category: replay_capture
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -859,12 +841,6 @@ overlay:
           OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
             value: '3600'
             category: replay_capture
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -974,12 +950,6 @@ overlay:
           OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
             value: '3600'
             category: replay_capture
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
             value: 'false'
             category: rollout

@@ -225,13 +225,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     # utils.llm.conversation_processing — stub with the names process_conversation imports.
     conv_proc = ModuleType("utils.llm.conversation_processing")
     for attr in [
-        "get_transcript_structure",
         "get_app_result",
         "should_discard_conversation",
-        "get_suggested_apps_for_conversation",
-        "get_reprocess_transcript_structure",
         "assign_conversation_to_folder",
-        "extract_action_items",
         "get_conversation_notes",
         "validate_structured_source_segment_ids",
     ]:
@@ -323,7 +319,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     for attr in [
         "retrieve_metadata_from_text",
         "retrieve_metadata_from_message",
-        "retrieve_metadata_fields_from_transcript",
         "obtain_emotional_message",
     ]:
         setattr(llm_chat, attr, MagicMock())
@@ -559,7 +554,6 @@ def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls):
 
 def test_explicit_selection_success_persists_that_apps_result(monkeypatch):
     """SCA-359: opt-in + explicit app_id persists the selected app's non-empty result."""
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
 
     def _successful_trigger_apps(uid, conversation, **kwargs):
         conversation.apps_results.append(process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY'))
@@ -581,7 +575,6 @@ def test_explicit_selection_failure_surfaces_a_real_error_and_persists_as_today(
     app's summary. The persist-as-today write-back still runs (the ed2ba41c5b opt-in
     empty persist that clears a stale selection) so the failure contract changes the
     response, not the durable shape."""
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
 
     def _failing_trigger_apps(uid, conversation, **kwargs):
         conversation.apps_results = []  # execution failed: nothing appended
@@ -732,7 +725,7 @@ def test_discard_call_uses_discard_feature_tracking():
 
     # Patch on the process_conversation module (where it's imported/bound)
     with patch.object(process_conversation, "should_discard_conversation", fake_discard), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
+        process_conversation, "get_conversation_notes", MagicMock()
     ):
         try:
             process_conversation._get_structured("user-1", "en", conversation)
@@ -792,47 +785,6 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
     assert captured['duration_seconds'] == 5
 
 
-def test_primary_user_name_reaches_action_item_extraction(monkeypatch):
-    conversation = CreateConversation(
-        started_at=datetime(2026, 8, 20, tzinfo=timezone.utc),
-        finished_at=datetime(2026, 8, 20, 0, 0, 5, tzinfo=timezone.utc),
-        transcript_segments=[
-            TranscriptSegment(
-                id='user-request',
-                text='Send the budget.',
-                speaker='SPEAKER_00',
-                is_user=True,
-                start=0,
-                end=5,
-            )
-        ],
-        source=ConversationSource.phone,
-    )
-    structured = Structured(title='Budget', overview='Send the budget')
-    extract_mock = MagicMock(return_value=[])
-
-    monkeypatch.setattr(process_conversation, 'get_user_name', lambda *_args, **_kwargs: 'David')
-    monkeypatch.setattr(
-        process_conversation,
-        'conversation_transcripts_for_llm',
-        lambda *_args, **_kwargs: (
-            'David: Send the budget.',
-            '[user-request 0] Send the budget.',
-            {0: 'David'},
-        ),
-    )
-    monkeypatch.setattr(process_conversation, 'should_discard_conversation', lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(process_conversation, 'get_transcript_structure', lambda *_args, **_kwargs: structured)
-    monkeypatch.setattr(process_conversation, 'extract_action_items', extract_mock)
-    monkeypatch.setattr(process_conversation, '_fetch_dedup_candidates', lambda *_args, **_kwargs: [])
-
-    result, discarded = process_conversation._get_structured('uid', 'en', conversation)
-
-    assert discarded is False
-    assert result is structured
-    assert extract_mock.call_args.kwargs['primary_user_name'] == 'David'
-
-
 def test_track_usage_context_resets_after_call():
     """Verify context is properly reset after each sub-feature tracking block."""
     assert usage_tracker.get_current_context() is None
@@ -871,7 +823,7 @@ def test_byok_rate_limit_reaches_conversation_composition_as_safe_actionable_429
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
     monkeypatch.setattr(
         process_conversation,
-        'get_transcript_structure',
+        'get_conversation_notes',
         MagicMock(
             side_effect=GatewayCredentialFailureError(
                 sensitive_provider_body,
@@ -914,7 +866,7 @@ def test_unwrapped_openai_byok_rate_limit_reaches_conversation_composition(monke
         },
     )
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
-    monkeypatch.setattr(process_conversation, 'get_transcript_structure', MagicMock(side_effect=sdk_error))
+    monkeypatch.setattr(process_conversation, 'get_conversation_notes', MagicMock(side_effect=sdk_error))
 
     with pytest.raises(HTTPException) as exc_info:
         process_conversation._get_structured('uid', 'en', conversation)
@@ -946,7 +898,7 @@ def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch,
     conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
 
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
-    monkeypatch.setattr(process_conversation, 'get_transcript_structure', MagicMock(side_effect=error))
+    monkeypatch.setattr(process_conversation, 'get_conversation_notes', MagicMock(side_effect=error))
 
     with pytest.raises(HTTPException) as exc_info:
         process_conversation._get_structured('uid', 'en', conversation)
@@ -955,49 +907,6 @@ def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch,
     assert exc_info.value.detail == 'Error processing conversation, please try again later'
     assert type(error).__name__ in caplog.text
     assert str(error) not in caplog.text
-
-
-def test_byok_rate_limit_in_action_item_extraction_reaches_composition_boundary(monkeypatch):
-    """A BYOK rate-limit during action-item extraction must not be swallowed by extract_action_items's catch-all.
-
-    extract_action_items catches every exception and returns [] by default. A typed
-    BYOK rate-limit must escape so the composition boundary (_get_structured) maps
-    it to the actionable 429 contract instead of persisting an incomplete conversation.
-    """
-    conversation = MagicMock()
-    conversation.source = ConversationSource.phone
-    conversation.get_transcript.return_value = 'a conversation transcript'
-    conversation.transcript_segments = _segments_saying('a conversation transcript')
-    conversation.photos = []
-    conversation.external_data = None
-    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
-
-    monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
-    monkeypatch.setattr(
-        process_conversation,
-        'get_transcript_structure',
-        MagicMock(return_value=Structured(emoji='🧠', title='Test', overview='Overview', action_items=[])),
-    )
-    monkeypatch.setattr(
-        process_conversation,
-        'extract_action_items',
-        MagicMock(
-            side_effect=GatewayCredentialFailureError(
-                'rate limited',
-                failure_class=FailureClass.BYOK_RATE_LIMIT,
-            )
-        ),
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        process_conversation._get_structured('uid', 'en', conversation)
-
-    assert exc_info.value.status_code == 429
-    assert exc_info.value.detail == {
-        'code': 'byok_rate_limit',
-        'message': 'The configured provider account is rate limited. Please retry later or check its limits.',
-    }
 
 
 def test_no_umbrella_conversation_processing_tracking():
@@ -1032,7 +941,6 @@ def test_no_umbrella_conversation_processing_tracking():
     action_items_mod.get_action_items = MagicMock(return_value=[])
 
     llm_conv.should_discard_conversation = MagicMock(return_value=False)
-    llm_conv.get_transcript_structure = MagicMock()
 
     with patch.object(process_conversation, "track_usage", spy_track_usage):
         try:
@@ -1047,53 +955,6 @@ def test_no_umbrella_conversation_processing_tracking():
         usage_tracker.Features.CONVERSATION_DISCARD in captured_contexts
         or usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
     )
-
-
-def test_action_items_tracked_separately_from_structure():
-    """Verify action items extraction uses CONVERSATION_ACTION_ITEMS, not CONVERSATION_STRUCTURE."""
-    import sys
-
-    captured_contexts = []
-
-    original_track = process_conversation.track_usage
-
-    @contextmanager
-    def spy_track_usage(uid, feature):
-        captured_contexts.append(feature)
-        with original_track(uid, feature):
-            yield
-
-    conversation = MagicMock()
-    conversation.source = "phone"
-    conversation.get_transcript.return_value = "short transcript"
-    conversation.transcript_segments = _segments_saying("short transcript")
-    conversation.photos = []
-    conversation.get_person_ids.return_value = []
-    conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
-
-    notifications_mod = sys.modules["database.notifications"]
-    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
-
-    action_items_mod = sys.modules["database.action_items"]
-    action_items_mod.get_action_items = MagicMock(return_value=[])
-
-    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
-    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
-        process_conversation, "track_usage", spy_track_usage
-    ):
-        try:
-            process_conversation._get_structured("user-3", "en", conversation)
-        except Exception:
-            pass
-
-    assert usage_tracker.Features.CONVERSATION_ACTION_ITEMS in captured_contexts
-    # Action items should be tracked separately from structure
-    assert captured_contexts.count(usage_tracker.Features.CONVERSATION_ACTION_ITEMS) >= 1
-    # Structure should also be tracked
-    assert usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
 
 
 def test_structure_and_apps_tracked_at_runtime():
@@ -1117,8 +978,8 @@ def test_structure_and_apps_tracked_at_runtime():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
     conversation.structured = MagicMock()
     conversation.structured.title = "Test"
     conversation.structured.overview = "Test overview"
@@ -1147,8 +1008,8 @@ def test_structure_and_apps_tracked_at_runtime():
     redis_mod.get_conversation_summary_app_ids = MagicMock(return_value=[])
 
     with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
-    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
+        process_conversation, "get_conversation_notes", MagicMock()
+    ), patch.object(
         process_conversation, "assign_conversation_to_folder", MagicMock(return_value=("f1", 0.9, "match"))
     ), patch.object(
         process_conversation, "track_usage", spy_track_usage
@@ -1163,8 +1024,8 @@ def test_structure_and_apps_tracked_at_runtime():
     assert usage_tracker.Features.CONVERSATION_DISCARD in captured_contexts
 
 
-def test_action_items_skipped_on_discard():
-    """Verify extract_action_items is NOT called when conversation is discarded."""
+def test_notes_skipped_on_discard():
+    """Verify the notes writer (which extracts action items) is NOT called when the conversation is discarded."""
     import sys
 
     conversation = MagicMock()
@@ -1183,16 +1044,15 @@ def test_action_items_skipped_on_discard():
     action_items_mod = sys.modules["database.action_items"]
     action_items_mod.get_action_items = MagicMock(return_value=[])
 
-    extract_mock = MagicMock(return_value=[])
+    notes_mock = MagicMock()
 
     with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=True)), patch.object(
-        process_conversation, "extract_action_items", extract_mock
+        process_conversation, "get_conversation_notes", notes_mock
     ):
         structured, discarded = process_conversation._get_structured("user-5", "en", conversation)
 
     assert discarded is True
-    # extract_action_items should NOT have been called
-    extract_mock.assert_not_called()
+    notes_mock.assert_not_called()
 
 
 def test_conversation_action_items_never_fall_back_to_a_task_writer(monkeypatch):
@@ -1242,17 +1102,6 @@ def test_llm_calls_use_omi_qos_tier_system():
     conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
     conv_proc_source = conv_proc_path.read_text(encoding="utf-8")
 
-    # get_transcript_structure should use the conv_structure QoS lane.
-    struct_match = re.search(
-        r'def get_transcript_structure.*?get_llm\(\s*[\'"](\w+)[\'"]\s*,\s*cache_key=',
-        conv_proc_source,
-        re.DOTALL,
-    )
-    assert struct_match is not None
-    assert (
-        struct_match.group(1) == "conv_structure"
-    ), f"Expected get_llm('conv_structure') for structure, got {struct_match.group(1)}"
-
     # get_app_result should use the conv_app_result QoS lane.
     app_match = re.search(
         r'def get_app_result.*?get_llm\(\s*[\'"](\w+)[\'"]\s*,\s*cache_key=',
@@ -1277,7 +1126,6 @@ def test_llm_calls_use_omi_qos_tier_system():
 
     # Verify cache keys are passed through get_llm's cache_key param (model-safe)
     assert 'ACTION_ITEMS_CACHE_KEY' in conv_proc_source, "Missing stable cache key for action items"
-    assert 'TRANSCRIPT_STRUCTURE_CACHE_KEY' in conv_proc_source, "Missing stable cache key for structure"
     assert "else 'omi-app-result'" in conv_proc_source, "Missing cache_key for app result"
     assert "cache_key='omi-daily-summary'" in conv_proc_source, "Missing cache_key for daily summary"
 
@@ -1286,7 +1134,7 @@ def test_all_callsites_use_get_llm():
     """Verify ALL callsites across conversation_processing, knowledge_graph, and memories use get_llm()."""
     backend_dir = Path(__file__).resolve().parent.parent.parent
 
-    # Processor and its episode model factory: 14 calls, including repair, selection, and the shaped mount
+    # Processor and its episode model factory: 11 calls, including repair, selection, and the shaped mount
     conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text(encoding="utf-8")
     conv_proc_source += (backend_dir / "utils" / "llm" / "episode_writer.py").read_text(encoding="utf-8")
     conv_proc_calls = re.findall(r"get_llm\(\s*'(\w+)'", conv_proc_source)
@@ -1296,10 +1144,10 @@ def test_all_callsites_use_get_llm():
     assert 'conv_folder' in conv_proc_calls, "Missing get_llm('conv_folder') in conversation_processing.py"
     assert 'conv_discard' in conv_proc_calls, "Missing get_llm('conv_discard') in conversation_processing.py"
     assert 'daily_summary' in conv_proc_calls, "Missing get_llm('daily_summary') in conversation_processing.py"
-    # conv_structure appears in both get_transcript_structure and get_reprocess_transcript_structure
+    # conv_structure appears in both notes writers (old and shaped)
     assert (
         conv_proc_calls.count('conv_structure') >= 2
-    ), f"Expected at least 2 get_llm('conv_structure') calls (structure + reprocess), got {conv_proc_calls.count('conv_structure')}"
+    ), f"Expected at least 2 get_llm('conv_structure') calls (notes writers), got {conv_proc_calls.count('conv_structure')}"
 
     # knowledge_graph.py: 2 callsites
     kg_source = (backend_dir / "utils" / "llm" / "knowledge_graph.py").read_text(encoding="utf-8")
@@ -1319,7 +1167,7 @@ def test_all_callsites_use_get_llm():
 
     # Episode retry factory plus the shaped notes mount.
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 23, f"Expected 23 total get_llm() callsites, got {total}"
+    assert total == 20, f"Expected 20 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():
@@ -1383,7 +1231,7 @@ def _make_mock_app(app_id, name="TestApp"):
     return app
 
 
-def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, available_apps=None):
+def _setup_trigger_apps_mocks(preferred_app_id=None, available_apps=None):
     """Set up the module-level mocks needed by trigger_conversation_apps."""
     import sys
 
@@ -1396,11 +1244,7 @@ def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, availabl
     utils_apps_mod = sys.modules["utils.apps"]
     utils_apps_mod.get_available_apps = MagicMock(return_value=available_apps or [])
 
-    llm_conv_mod = llm_conv
-    llm_conv_mod.get_app_result = MagicMock(return_value="App result content")
-    llm_conv_mod.get_suggested_apps_for_conversation = MagicMock(return_value=(["suggested-app"], "reasoning"))
-
-    return llm_conv_mod, default_apps or []
+    llm_conv.get_app_result = MagicMock(return_value="App result content")
 
 
 def _make_trigger_conversation(suggested_apps=None):
@@ -1414,7 +1258,7 @@ def _make_trigger_conversation(suggested_apps=None):
     return conv
 
 
-def _trigger_apps_context(default_apps=None, availability_app=None):
+def _trigger_apps_context(available_apps=None, availability_app=None):
     """Context manager that patches all external dependencies of trigger_conversation_apps.
 
     `availability_app` stands in for `get_available_app_model_by_id` — the
@@ -1422,99 +1266,68 @@ def _trigger_apps_context(default_apps=None, availability_app=None):
     deleted/inaccessible app; an app object models one the setter admitted even
     though it is outside the enabled-installed slice.
     """
-    suggestion_mock = MagicMock(return_value=(["suggested-app"], "reasoning"))
     app_result_mock = MagicMock(return_value="App result content")
     record_mock = MagicMock()
     return (
-        suggestion_mock,
         app_result_mock,
-        patch.object(process_conversation, "get_default_conversation_summarized_apps", return_value=default_apps or []),
-        patch.object(process_conversation, "get_available_apps", return_value=[]),
-        patch.object(process_conversation, "get_suggested_apps_for_conversation", suggestion_mock),
+        patch.object(process_conversation, "get_available_apps", return_value=available_apps or []),
         patch.object(process_conversation, "get_app_result", app_result_mock),
         patch.object(process_conversation, "record_app_usage", record_mock),
         patch.object(process_conversation, "get_available_app_model_by_id", return_value=availability_app),
     )
 
 
-def test_trigger_apps_uses_preferred_app_skips_llm_suggestion():
-    """When user has a valid preferred app, use it and skip the suggestion LLM call."""
+def test_trigger_apps_uses_preferred_app():
+    """When user has a valid preferred app, run it automatically."""
     preferred = _make_mock_app("preferred-app-1", "PreferredApp")
     _setup_trigger_apps_mocks(preferred_app_id="preferred-app-1", available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    # Override get_available_apps to return the preferred app
-    p2 = patch.object(process_conversation, "get_available_apps", return_value=[preferred])
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context(available_apps=[preferred])
 
-    with p1, p2, p3, p4, p5, p6:
+    with p1, p2, p3, p4:
         process_conversation.trigger_conversation_apps("user-preferred", conv)
 
-    # The suggestion LLM call must NOT have been invoked
-    suggestion_mock.assert_not_called()
     # The preferred app should have been executed
     app_result_mock.assert_called_once()
     # The app result should be stored on the conversation
     assert len(conv.apps_results) == 1
 
 
-def test_trigger_apps_stale_preferred_app_falls_through_to_suggestion():
-    """When preferred app ID exists in Redis but not in apps dict, fall through to LLM suggestion."""
-    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
+def test_trigger_apps_stale_preferred_app_runs_nothing():
+    """A preferred app ID that no longer resolves selects no app; apps are opt-in."""
     _setup_trigger_apps_mocks(preferred_app_id="deleted-app-999")
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context()
 
-    with p1, p2, p3, p4, p5, p6:
+    with p1, p2, p3, p4:
         process_conversation.trigger_conversation_apps("user-stale", conv)
 
-    # The suggestion LLM call SHOULD have been invoked since preferred app was invalid
-    suggestion_mock.assert_called_once()
+    app_result_mock.assert_not_called()
+    assert conv.apps_results == []
 
 
-def test_trigger_apps_no_preferred_app_runs_suggestion():
-    """When no preferred app is set, the suggestion LLM call should run."""
-    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
+def test_trigger_apps_opt_in_only_runs_nothing_without_a_preferred_app(monkeypatch):
+    """Notes v2 leaves the canonical note as the only default summary path."""
     _setup_trigger_apps_mocks(preferred_app_id=None)
-    conv = _make_trigger_conversation()
+    conv = _make_trigger_conversation(suggested_apps=['suggested-app'])
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
-
-    with p1, p2, p3, p4, p5, p6:
-        process_conversation.trigger_conversation_apps("user-no-pref", conv)
-
-    # The suggestion LLM call SHOULD have been invoked
-    suggestion_mock.assert_called_once()
-
-
-def test_trigger_apps_opt_in_only_skips_default_and_suggestion(monkeypatch):
-    """Notes v2 leaves the canonical note as the only default summary path.
-
-    Apps-opt-in is derived from the pipeline mode, not separately configured, so this drives
-    the one rollout switch rather than a second boolean."""
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
-    suggestion_app = _make_mock_app('suggested-app', 'SuggestedApp')
-    _setup_trigger_apps_mocks(preferred_app_id=None)
-    conv = _make_trigger_conversation()
-
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
-    with p1, p2, p3, p4, p5, p6:
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context(available_apps=[_make_mock_app('suggested-app')])
+    with p1, p2, p3, p4:
         process_conversation.trigger_conversation_apps('user-opt-in-only', conv)
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_not_called()
     assert conv.apps_results == []
 
 
 def test_trigger_apps_counts_a_successful_explicit_reprocess_selection(monkeypatch):
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
     selected = _make_mock_app('selected-app', 'SelectedApp')
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    with p1, p2, p3, p4, p5 as record_usage, p6:
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context()
+    with p1, p2, p3 as record_usage, p4:
         process_conversation.trigger_conversation_apps(
             'user-explicit',
             conv,
@@ -1524,7 +1337,6 @@ def test_trigger_apps_counts_a_successful_explicit_reprocess_selection(monkeypat
             usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
         )
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     record_usage.assert_called_once_with(
         'user-explicit',
@@ -1540,9 +1352,8 @@ def test_trigger_apps_does_not_count_non_user_reprocessing(is_reprocess):
     _setup_trigger_apps_mocks(preferred_app_id=preferred.id, available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
-    with p1, p2, p3, p4, p5 as record_usage, p6:
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context(available_apps=[preferred])
+    with p1, p2, p3 as record_usage, p4:
         process_conversation.trigger_conversation_apps(
             'user-non-selection',
             conv,
@@ -1550,38 +1361,33 @@ def test_trigger_apps_does_not_count_non_user_reprocessing(is_reprocess):
             usage_attribution=process_conversation.AppUsageAttribution.NON_USER_REPROCESS,
         )
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     record_usage.assert_not_called()
 
 
 def test_trigger_apps_opt_in_preferred_app_still_auto_runs(monkeypatch):
     """SCA-359: under notes v2 the Redis preferred app remains the one automatic app run."""
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
     preferred = _make_mock_app('preferred-app', 'PreferredApp')
     _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
-    with p1, p2, p3, p4, p5, p6:
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context(available_apps=[preferred])
+    with p1, p2, p3, p4:
         process_conversation.trigger_conversation_apps('user-preferred-opt-in', conv)
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     assert len(conv.apps_results) == 1
 
 
 def test_trigger_apps_explicit_selection_execution_failure_is_fail_closed(monkeypatch):
     """SCA-359: an explicitly selected app whose execution fails must not read as success."""
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
     selected = _make_mock_app('selected-app', 'SelectedApp')
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context()
     app_result_mock.side_effect = RuntimeError('LLM unavailable')
-    with p1, p2, p3, p4, p5, p6:
+    with p1, p2, p3, p4:
         with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
             process_conversation.trigger_conversation_apps(
                 'user-explicit',
@@ -1592,20 +1398,18 @@ def test_trigger_apps_explicit_selection_execution_failure_is_fail_closed(monkey
                 usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
             )
 
-    suggestion_mock.assert_not_called()
     assert conv.apps_results == []
 
 
 def test_trigger_apps_explicit_selection_empty_content_is_fail_closed(monkeypatch):
     """SCA-359: empty model output is a failed selection, not a silent notes fallback."""
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
     selected = _make_mock_app('selected-app', 'SelectedApp')
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context()
     app_result_mock.return_value = '   '
-    with p1, p2, p3, p4, p5, p6:
+    with p1, p2, p3, p4:
         with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
             process_conversation.trigger_conversation_apps(
                 'user-explicit',
@@ -1623,41 +1427,17 @@ def test_trigger_apps_explicit_selection_empty_content_is_fail_closed(monkeypatc
 
 def test_trigger_apps_automatic_app_failure_stays_fail_open(monkeypatch):
     """Only explicit selections fail closed; automatic runs keep log-and-continue."""
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
     preferred = _make_mock_app('preferred-app', 'PreferredApp')
     _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context(available_apps=[preferred])
     app_result_mock.side_effect = RuntimeError('LLM unavailable')
-    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
-    with p1, p2, p3, p4, p5, p6:
+    with p1, p2, p3, p4:
         process_conversation.trigger_conversation_apps('user-automatic', conv)
 
     app_result_mock.assert_called_once()
     assert conv.apps_results == []
-
-
-def test_summary_pipeline_mode_cannot_reach_the_regressing_combination(monkeypatch):
-    """Legacy notes must never be paired with opt-in apps.
-
-    That pair takes the app summary away and falls back to the short legacy overview — worse
-    than either whole configuration. Deriving both from one switch makes it unrepresentable.
-    """
-    monkeypatch.delenv('CONVERSATION_NOTES_V2_ENABLED', raising=False)
-    assert process_conversation.summary_pipeline_mode() is process_conversation.SummaryPipelineMode.LEGACY_APP_PRIMARY
-    assert process_conversation.conversation_apps_opt_in_only() is False
-    assert process_conversation._conversation_notes_v2_enabled() is False
-
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
-    assert process_conversation.summary_pipeline_mode() is process_conversation.SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
-    assert process_conversation.conversation_apps_opt_in_only() is True
-    assert process_conversation._conversation_notes_v2_enabled() is True
-
-    # A stale standalone override must not resurrect the fourth state.
-    monkeypatch.delenv('CONVERSATION_NOTES_V2_ENABLED', raising=False)
-    monkeypatch.setenv('CONVERSATION_APPS_OPT_IN_ONLY', 'true')
-    assert process_conversation.conversation_apps_opt_in_only() is False
 
 
 def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
@@ -1668,33 +1448,30 @@ def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
     _setup_trigger_apps_mocks(preferred_app_id="template-app-1")
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(availability_app=preferred)
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context(availability_app=preferred)
 
-    with p1, p2, p3, p4, p5, p6:
+    with p1, p2, p3, p4:
         process_conversation.trigger_conversation_apps("user-template", conv)
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     assert len(conv.apps_results) == 1
 
 
-def test_trigger_apps_preferred_app_without_memories_capability_falls_through():
+def test_trigger_apps_preferred_app_without_memories_capability_is_not_run():
     """A resolvable preferred app that cannot summarize (no memories capability)
-    falls back to suggestions rather than running as a summarizer."""
+    never runs as a summarizer; with apps opt-in, nothing runs in its place."""
     persona = _make_mock_app("persona-app-1", "ChatPersona")
     persona.works_with_memories.return_value = False
-    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
     _setup_trigger_apps_mocks(preferred_app_id="persona-app-1")
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(
-        default_apps=[suggestion_app], availability_app=persona
-    )
+    app_result_mock, p1, p2, p3, p4 = _trigger_apps_context(availability_app=persona)
 
-    with p1, p2, p3, p4, p5, p6:
+    with p1, p2, p3, p4:
         process_conversation.trigger_conversation_apps("user-persona", conv)
 
-    suggestion_mock.assert_called_once()
+    app_result_mock.assert_not_called()
+    assert conv.apps_results == []
 
 
 # Regression: the durable write happens before trigger_conversation_apps runs, so its app summary
@@ -2086,7 +1863,7 @@ def test_dedup_candidates_exclude_own_and_merge_source_items():
         "find_similar_action_items",
         MagicMock(return_value=similar),
     ):
-        eligible = process_conversation._fetch_dedup_candidates('user-1', structured, conversation)
+        eligible = process_conversation._fetch_dedup_candidates_for_query('user-1', structured.overview, conversation)
     assert [item['id'] for item in eligible] == ['unrelated']
 
 
@@ -2108,7 +1885,7 @@ def test_dedup_candidates_unchanged_without_conversation_context():
         "find_similar_action_items",
         MagicMock(return_value=similar),
     ):
-        eligible = process_conversation._fetch_dedup_candidates('user-1', structured)
+        eligible = process_conversation._fetch_dedup_candidates_for_query('user-1', structured.overview)
     assert [item['id'] for item in eligible] == ['open-item']
 
 

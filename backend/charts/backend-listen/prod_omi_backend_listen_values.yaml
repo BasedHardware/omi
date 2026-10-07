@@ -202,8 +202,6 @@ env:
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
     value: "cohort"
-  - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "true"
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED

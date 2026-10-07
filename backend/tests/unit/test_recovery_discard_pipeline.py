@@ -74,16 +74,12 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
     monkeypatch.setattr(pc, 'has_structural_wake_word_marker', lambda text: False)
     monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *args: False)
-    monkeypatch.setattr(pc, '_conversation_notes_v2_enabled', lambda: False)
     monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *args: ('', '', {}))
     # Restored rows may attempt structuring; a minimum must still terminalize
     # visibly, rather than persisting an incoherent discard/keep combination.
     paid_notes = MagicMock(return_value=Structured())
-    monkeypatch.setattr(pc, 'get_reprocess_transcript_structure', paid_notes)
     monkeypatch.setattr(pc, 'get_conversation_notes', paid_notes)
-    monkeypatch.setattr(pc, 'extract_action_items', lambda *args, **kwargs: [])
-    monkeypatch.setattr(pc, '_fetch_dedup_candidates', lambda *args: [])
-    monkeypatch.setattr(pc, '_primary_user_name', lambda uid: None)
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *args, **kwargs: [])
     decisions = []
     decide = pc.decide_relevance
 

@@ -1,7 +1,7 @@
-"""Where the conversation-notes-v2 rollout is on, and where it is not.
+"""Where the summary-pipeline rollout flags are on, and where they are not.
 
-`CONVERSATION_NOTES_V2_ENABLED` went prod-on 2026-09-01 after the dev/Beta bake; the calendar
-context read and OCR context flags are still dev-only pending their own bakes. The dev
+Notes v2 is the only summary path: `CONVERSATION_NOTES_V2_ENABLED` went prod-on 2026-09-01 and
+was retired after its four-week bake. The remaining flags still gate the same pipeline. The dev
 environment doubles as the Beta ring: the `mobile_beta` profile and the beta desktop bundle
 are pinned to the dev backend (`api.omiapi.com`) while authenticating against the production
 Firebase project, so a flag still dark in prod reaches Beta users by turning dev on.
@@ -19,7 +19,6 @@ import yaml
 BACKEND = Path(__file__).resolve().parents[2]
 
 ROLLOUT_FLAGS = (
-    'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
     'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
@@ -67,13 +66,6 @@ def test_dev_enables_every_rollout_flag_on_every_summary_pipeline_service():
             assert _value(env_maps[scope], flag) == 'true', f'{scope}:{flag}'
 
 
-def test_prod_enables_conversation_notes_v2_on_every_summary_pipeline_service():
-    """Notes v2 went prod-on 2026-09-01 after the dev/Beta bake."""
-    env_maps = _env_maps(_composed()['environments']['prod'])
-    for scope in SUMMARY_PIPELINE_SCOPES:
-        assert _value(env_maps[scope], 'CONVERSATION_NOTES_V2_ENABLED') == 'true', f'{scope}'
-
-
 def test_prod_enables_meeting_context_and_screen_evidence_flags_everywhere():
     """Graduated to prod on 2026-09-30 (David: screen evidence in one pass).
 
@@ -103,8 +95,8 @@ def test_prod_keeps_basic_plan_eager_extraction_gate_dark():
 def test_reprocess_cannot_disagree_with_live_finalization():
     """The defect this guards is silent: flags declared on only one service.
 
-    Live capture would produce a v2 note and "regenerate" would quietly fall back to the
-    legacy pipeline, which reads as a model regression rather than a config gap.
+    Live capture and "regenerate" would quietly run different pipelines, which reads as a
+    model regression rather than a config gap.
     """
     for environment in _composed()['environments'].values():
         env_maps = _env_maps(environment)

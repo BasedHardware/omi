@@ -2,25 +2,25 @@
 
 Verifies that:
 1. _build_conversation_context() produces deterministic, identical output for the same inputs
-2. get_transcript_structure() and extract_action_items() use conversation context
-   as the second system message (after static instructions) to enable OpenAI prompt caching
+2. extract_action_items() uses conversation context as the second system message
+   (after static instructions) to enable OpenAI prompt caching
 3. Calendar context is unified (includes meeting_link in both functions)
 """
 
 import inspect
 import re
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.conversation_photo import ConversationPhoto
 from utils.llm.model_config import LUNA_MODEL
+from utils.llm import conversation_processing as conv_proc
 from utils.llm.conversation_processing import (
     ACTION_ITEMS_CACHE_KEY,
-    TRANSCRIPT_STRUCTURE_CACHE_KEY,
     _build_conversation_context,
     _gpt56_cacheable_system_message,
     extract_action_items,
-    get_transcript_structure,
 )
 
 
@@ -189,17 +189,6 @@ class TestPromptMessageOrdering:
         source = inspect.getsource(func)
         return re.findall(r'from_messages\(\s*\[(.*?)\]\s*\)', source, re.DOTALL)
 
-    def test_get_transcript_structure_instructions_first(self):
-        """Static instructions must be the first system message for cross-conversation caching."""
-        calls = self._get_from_messages_calls(get_transcript_structure)
-        assert len(calls) == 1, "Expected exactly one from_messages call"
-        args = calls[0].strip()
-        # The cached prefix is a concrete message so parser-schema braces are
-        # never treated as ChatPromptTemplate variables.
-        instructions_pos = args.index('_gpt56_cacheable_system_message(')
-        context_pos = args.index('context_message')
-        assert instructions_pos < context_pos, "instructions_text must come before context_message"
-
     def test_extract_action_items_instructions_first(self):
         """Static instructions must be the first system message for cross-conversation caching."""
         calls = self._get_from_messages_calls(extract_action_items)
@@ -209,13 +198,12 @@ class TestPromptMessageOrdering:
         context_pos = args.index('context_message')
         assert instructions_pos < context_pos, "instructions_text must come before context_message"
 
-    def test_both_functions_use_two_system_messages(self):
-        """Both functions must use exactly two system messages."""
-        for func in [get_transcript_structure, extract_action_items]:
-            calls = self._get_from_messages_calls(func)
-            assert len(calls) == 1, f"{func.__name__}: expected one from_messages call"
-            assert calls[0].count('_gpt56_cacheable_system_message(') == 1
-            assert calls[0].count("('system', context_message)") == 1
+    def test_action_items_uses_two_system_messages(self):
+        """The action-items prompt must use exactly two system messages."""
+        calls = self._get_from_messages_calls(extract_action_items)
+        assert len(calls) == 1, "expected one from_messages call"
+        assert calls[0].count('_gpt56_cacheable_system_message(') == 1
+        assert calls[0].count("('system', context_message)") == 1
 
     def test_existing_items_context_not_in_instructions(self):
         """existing_items_context must be in the context message, not the instructions."""
@@ -328,25 +316,11 @@ class TestPromptCacheRetention:
         for block in mk_blocks:
             assert 'prompt_cache_retention' not in block, f"prompt_cache_retention must not be in model_kwargs: {block}"
 
-    def test_prompt_cache_key_in_structure_function(self):
-        """The structure path keeps a fixed, non-user-derived cache routing key."""
-        source = inspect.getsource(get_transcript_structure)
-        assert 'TRANSCRIPT_STRUCTURE_CACHE_KEY' in source
-        assert "cache_key = 'omi-transcript-structure'" in source
-
     def test_prompt_cache_key_in_action_items_function(self):
         """The action-items path keeps a fixed, non-user-derived cache routing key."""
         source = inspect.getsource(extract_action_items)
         assert 'ACTION_ITEMS_CACHE_KEY' in source
         assert "cache_key = 'omi-extract-actions'" in source
-
-    def test_distinct_cache_keys_per_function(self):
-        """Each function must have a distinct cache_key to avoid cache conflation."""
-        source_structure = inspect.getsource(get_transcript_structure)
-        source_actions = inspect.getsource(extract_action_items)
-        assert 'TRANSCRIPT_STRUCTURE_CACHE_KEY' in source_structure
-        assert 'ACTION_ITEMS_CACHE_KEY' in source_actions
-        assert TRANSCRIPT_STRUCTURE_CACHE_KEY != ACTION_ITEMS_CACHE_KEY
 
 
 def test_explicit_cache_system_message_preserves_parser_schema_braces():
@@ -387,3 +361,56 @@ def test_gateway_formatted_instructions_without_explicit_cache_stay_a_concrete_m
     prompt = ChatPromptTemplate.from_messages([message, ('system', 'Content: {conversation_context}')])
     rendered = prompt.format_messages(conversation_context='Transcript: hello')
     assert rendered[0].content[0]['text'] == 'Schema: {"title": "string"}'
+
+
+def test_gpt56_cache_keys_are_stable_versioned_and_never_include_request_content():
+    assert ACTION_ITEMS_CACHE_KEY == 'omi-extract-actions-v1'
+    assert conv_proc._has_gpt56_cacheable_static_prefix('static ' * 1_100)
+    assert not conv_proc._has_gpt56_cacheable_static_prefix('short prefix')
+
+
+def test_gpt56_explicit_cache_defaults_on_in_gateway_and_honors_kill_switch(monkeypatch):
+    monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.delenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
+    assert conv_proc._gpt56_explicit_cache_enabled()
+
+    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'false')
+    assert not conv_proc._gpt56_explicit_cache_enabled()
+
+    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'true')
+    assert conv_proc._gpt56_explicit_cache_enabled()
+
+    monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: False)
+    assert not conv_proc._gpt56_explicit_cache_enabled()
+
+
+def test_unique_prompt_app_result_drops_legacy_cache_key_whenever_gateway_mode_is_on(monkeypatch):
+    """Regression (cubic review): the None/legacy cache_key split keys on gateway mode.
+
+    get_app_result has no cacheable static prefix. With the gateway on it must still pass
+    cache_key=None: a legacy prompt_cache_key would opt these unique-prompt requests back into
+    implicit, billable cache writes. The explicit cache kill switch is set below to verify the
+    old fully-disabled behavior remains available.
+    """
+    monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'false')
+
+    captured: dict = {}
+
+    class _LLM:
+        def invoke(self, *_args, **_kwargs):
+            return MagicMock(content='{}')
+
+    def _fake_get_llm(_feature, **kwargs):
+        captured.update(kwargs)
+        return _LLM()
+
+    app = MagicMock()
+    app.name = 'Test App'
+    app.description = 'desc'
+    app.memory_prompt = 'memory prompt'
+    with patch.object(conv_proc, 'get_llm', side_effect=_fake_get_llm):
+        conv_proc.get_app_result(transcript='Lunch meeting', photos=[], app=app, language_code='en')
+
+    assert captured['cache_key'] is None
+    assert captured['prompt_cache_options'] is None

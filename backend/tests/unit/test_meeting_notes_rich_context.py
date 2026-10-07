@@ -1098,7 +1098,6 @@ class TestRichFailOpen:
         def boom(*a, **k):
             raise ValueError('malformed legacy data')
 
-        monkeypatch.setattr(pc, '_conversation_notes_v2_enabled', lambda: True)
         monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: True)
         monkeypatch.setattr(pc, '_meeting_notes_screen_text_context_enabled', lambda: False)
         monkeypatch.setattr(pc, '_proposes_task_candidates', lambda conversation: False)

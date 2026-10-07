@@ -233,7 +233,7 @@ Speaker 0: Good point. I'll add that to my list. Also, remind me to pick up the 
 class TestSameUserSameConversation:
     """Test intra-conversation caching: same user calls structure + action_items on the same transcript.
 
-    In production, each conversation triggers two sequential LLM calls (get_transcript_structure
+    Each conversation could trigger two sequential LLM calls (structure
     then extract_action_items). Since both share the same static instruction prefix, the second
     call should get a cache hit on that prefix even though the instructions differ after the prefix.
 

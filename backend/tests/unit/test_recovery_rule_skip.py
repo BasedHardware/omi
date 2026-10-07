@@ -145,8 +145,6 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
         patch.object(pc, 'is_release_probe_uid', return_value=False),
         patch.object(pc, '_calendar_overlap_retains_conversation', return_value=True),
         patch.object(pc, 'get_conversation_notes', return_value=Structured()),
-        patch.object(pc, 'get_reprocess_transcript_structure', return_value=Structured()),
-        patch.object(pc, 'get_transcript_structure', return_value=Structured(), create=True),
     ):
         _structured, discarded = pc._get_structured(
             'uid-recovery',

@@ -52,30 +52,10 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "submit_with_context", run_selected_postprocess)
     monkeypatch.setattr(
         process_module,
-        "get_transcript_structure",
-        lambda *args, **kwargs: Structured(
-            title="Hermetic Conversation Lifecycle",
-            overview="A deterministic processing result created by the E2E harness.",
-            emoji="🧪",
-            category="work",
+        "get_conversation_notes",
+        _deterministic_notes(
+            "Hermetic Conversation Lifecycle", "A deterministic processing result created by the E2E harness."
         ),
-    )
-    monkeypatch.setattr(
-        process_module,
-        "get_reprocess_transcript_structure",
-        lambda *args, **kwargs: Structured(
-            title="Hermetic Conversation Lifecycle Reprocessed",
-            overview="A deterministic reprocess result created by the E2E harness.",
-            emoji="🧪",
-            category="work",
-        ),
-    )
-    monkeypatch.setattr(
-        process_module,
-        "extract_action_items",
-        lambda *args, **kwargs: [
-            ActionItem(description="Ship deterministic conversation lifecycle coverage", completed=False)
-        ],
     )
 
     def extract_canonical_candidates(_uid, _source_id, segments, **_kwargs):
@@ -89,6 +69,23 @@ def _patch_process_conversation_boundaries(monkeypatch):
 
     monkeypatch.setattr(process_module, "extract_canonical_l1_memory_candidates", extract_canonical_candidates)
     return []
+
+
+def _deterministic_notes(title, overview):
+    """Notes v2 returns the structure and its action items from one writer."""
+
+    def notes(*args, **kwargs):
+        return Structured(
+            title=title,
+            overview=overview,
+            emoji="🧪",
+            category="work",
+            action_items=[
+                ActionItem(description="Ship deterministic conversation lifecycle coverage", completed=False)
+            ],
+        )
+
+    return notes
 
 
 class _NoopContext:
@@ -162,6 +159,16 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
 
 def test_reprocess_route_persists_deterministic_processing_result(client, auth_headers, monkeypatch):
     kg_calls = _patch_process_conversation_boundaries(monkeypatch)
+    import utils.conversations.process_conversation as process_module
+
+    monkeypatch.setattr(
+        process_module,
+        "get_conversation_notes",
+        _deterministic_notes(
+            "Hermetic Conversation Lifecycle Reprocessed",
+            "A deterministic reprocess result created by the E2E harness.",
+        ),
+    )
     conv_id = "deterministic-processing-001"
     seed_conversation(
         "123",

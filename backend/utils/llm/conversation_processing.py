@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from importlib import import_module
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TYPE_CHECKING, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, TYPE_CHECKING, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -24,7 +24,7 @@ from models.structured_extraction import (
     RichStructuredExtraction,
     StructuredExtraction,
 )
-from .clients import get_llm, get_llm_gateway_chat_structured, parser
+from .clients import get_llm, get_llm_gateway_chat_structured
 from .discard_parser import DiscardConversation, LenientDiscardParser
 from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
@@ -56,7 +56,6 @@ from utils.llm.meeting_notes_validation import (
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
     validate_rich_meeting_notes,
-    validate_structured_source_segment_ids,
 )
 from utils.llm.notes_observability import current_run, observe_notes
 from utils.llm.shaped_agent import Budget, Mount, Turn, run_loop, serve_notes
@@ -65,7 +64,7 @@ from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
     EXPLICIT_CACHE_OPTIONS,
-    GPT56_EXPLICIT_CACHE_ENABLED_ENV,  # noqa: F401  — compatibility re-export; test_conversation_structure_timezone reads it via this module
+    GPT56_EXPLICIT_CACHE_ENABLED_ENV,  # noqa: F401  — compatibility re-export; test_prompt_caching reads it via this module
     explicit_cache_switch_enabled,
     has_cacheable_prefix,
     marked_prefix_request,
@@ -83,14 +82,10 @@ except ImportError:  # pragma: no cover - isolated legacy tests provide only the
 
 
 logger = logging.getLogger(__name__)
-CONVERSATION_STRUCTURE_SHADOW_FEATURE = 'conversation_structure.extract.shadow'
-CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED'
-CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE'
 CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE = 'conversation_action_items.extract.shadow'
 CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED'
 CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE'
 GPT56_EXPLICIT_CACHE_OPTIONS = EXPLICIT_CACHE_OPTIONS
-TRANSCRIPT_STRUCTURE_CACHE_KEY = 'omi-transcript-structure-v1'
 CONVERSATION_NOTES_CACHE_KEY = 'omi-conversation-notes-v1'
 ACTION_ITEMS_CACHE_KEY = 'omi-extract-actions-v1'
 APP_RESULT_CACHE_NAMESPACE = 'omi-app-result-v1'
@@ -239,17 +234,6 @@ def _should_run_gateway_shadow(
     return False
 
 
-def _should_run_conversation_structure_shadow(uid: str, started_at: datetime, conversation_context: str) -> bool:
-    return _should_run_gateway_shadow(
-        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
-        enabled_env=CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV,
-        sample_rate_env=CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV,
-        sample_id=uid,
-        started_at=started_at,
-        conversation_context=conversation_context,
-    )
-
-
 def _should_run_conversation_action_items_shadow(
     sample_id: str, started_at: datetime, conversation_context: str
 ) -> bool:
@@ -286,66 +270,6 @@ def _text_similarity_bucket(left: object, right: object) -> str:
     if ratio >= 0.60:
         return 'medium_similarity'
     return 'low_similarity'
-
-
-def _length_ratio_bucket(left: object, right: object) -> str:
-    normalized_left = _normalized_text(left)
-    normalized_right = _normalized_text(right)
-    left_len = len(normalized_left)
-    right_len = len(normalized_right)
-    if left_len == 0 and right_len == 0:
-        return 'both_empty'
-    if left_len == 0:
-        return 'legacy_empty_gateway_present'
-    if right_len == 0:
-        return 'legacy_present_gateway_empty'
-    ratio = right_len / left_len
-    if ratio < 0.5:
-        return 'gateway_much_shorter'
-    if ratio < 0.8:
-        return 'gateway_shorter'
-    if ratio <= 1.25:
-        return 'similar_length'
-    if ratio <= 2.0:
-        return 'gateway_longer'
-    return 'gateway_much_longer'
-
-
-def _record_conversation_structure_shadow_comparison(
-    gateway_response: Structured | None,
-    legacy_response: Structured,
-) -> None:
-    if gateway_response is None:
-        return
-
-    legacy_category = getattr(legacy_response.category, 'value', legacy_response.category)
-    gateway_category = getattr(gateway_response.category, 'value', gateway_response.category)
-
-    _record_chat_extraction_comparison(
-        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
-        field='category',
-        outcome='exact_match' if legacy_category == gateway_category else 'mismatch',
-    )
-    _record_chat_extraction_comparison(
-        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
-        field='emoji',
-        outcome='exact_match' if legacy_response.emoji == gateway_response.emoji else 'mismatch',
-    )
-    _record_chat_extraction_comparison(
-        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
-        field='title_similarity',
-        outcome=_text_similarity_bucket(legacy_response.title, gateway_response.title),
-    )
-    _record_chat_extraction_comparison(
-        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
-        field='overview_similarity',
-        outcome=_text_similarity_bucket(legacy_response.overview, gateway_response.overview),
-    )
-    _record_chat_extraction_comparison(
-        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
-        field='overview_length_ratio',
-        outcome=_length_ratio_bucket(legacy_response.overview, gateway_response.overview),
-    )
 
 
 def _count_comparison_bucket(legacy_count: int, gateway_count: int) -> str:
@@ -437,24 +361,6 @@ def _record_conversation_action_items_shadow_comparison(
     )
 
 
-def _run_conversation_structure_shadow(
-    prompt: ChatPromptTemplate, prompt_values: dict[str, Any], legacy_response: Structured
-) -> None:
-    gateway_chain = cast(
-        Any,
-        prompt | get_llm_gateway_chat_structured(cache_key='omi-transcript-structure') | parser,
-    )
-    gateway_response = _invoke_gateway_shadow_chain(
-        gateway_chain,
-        prompt_values,
-        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
-    )
-    if gateway_response is not None:
-        _record_conversation_structure_shadow_comparison(
-            _coerce_structured(cast(Structured | StructuredExtraction, gateway_response)), legacy_response
-        )
-
-
 def _run_conversation_action_items_shadow(
     prompt: ChatPromptTemplate,
     prompt_values: dict[str, Any],
@@ -510,19 +416,6 @@ def _submit_gateway_shadow(
             logger.exception('%s shadow task failed', log_label)
 
     future.add_done_callback(_log_shadow_failure)
-
-
-def _submit_conversation_structure_shadow(
-    prompt: ChatPromptTemplate, prompt_values: dict[str, Any], legacy_response: Structured
-) -> None:
-    _submit_gateway_shadow(
-        _run_conversation_structure_shadow,
-        CONVERSATION_STRUCTURE_SHADOW_FEATURE,
-        'conversation_structure',
-        prompt,
-        prompt_values,
-        legacy_response,
-    )
 
 
 def _submit_conversation_action_items_shadow(
@@ -1126,21 +1019,6 @@ def extract_action_items(
         return []
 
 
-def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
-    """Render the capture time as the user's local wall-clock for prompt date context (#4773).
-
-    The LLM is unreliable at converting UTC to the user's timezone, which mislabels the time of day
-    in titles and overviews. Convert deterministically here instead. Naive datetimes are treated as
-    UTC; a missing or invalid timezone falls back to UTC.
-    """
-    try:
-        user_tz = ZoneInfo(tz) if tz else timezone.utc
-    except Exception:  # noqa: BLE001 - any unknown/invalid tz falls back to UTC
-        user_tz = timezone.utc
-    aware = started_at if started_at.tzinfo is not None else started_at.replace(tzinfo=timezone.utc)
-    return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
-
-
 # Notes must use the foreground structure budget, not the gateway's background
 # first-byte deadline. The owning feature route declares it in model_config.
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
@@ -1163,12 +1041,11 @@ def get_conversation_notes(
     prefix: ConversationPromptPrefix,
     *,
     uid: Optional[str] = None,
-    legacy_writer: Optional[Callable[[], Structured]] = None,
     **kwargs: Any,
 ) -> Structured:
     return serve_notes(
         uid,
-        legacy_writer or (lambda: _get_conversation_notes_legacy(prefix, **kwargs)),
+        lambda: _get_conversation_notes_legacy(prefix, **kwargs),
         lambda: _get_shaped_conversation_notes(prefix, **kwargs),
     )
 
@@ -1510,246 +1387,6 @@ def _get_conversation_notes_legacy(
     return structured
 
 
-def get_transcript_structure(
-    transcript: str,
-    started_at: datetime,
-    language_code: str,
-    tz: str,
-    uid: str,
-    photos: Optional[List[ConversationPhoto]] = None,
-    calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
-    output_language_code: Optional[str] = None,
-    transcript_segment_ids: Optional[Iterable[str]] = None,
-) -> Structured:
-    # Legacy writer: with CONVERSATION_NOTES_V2_ENABLED prod-on (2026-09-01) this runs
-    # only where the flag is still off. Retire 2026-09-29 after the four-week prod bake —
-    # a follow-up PR then deletes get_transcript_structure / get_reprocess_transcript_structure
-    # and makes notes v2 the only path. Do not build on this writer.
-    # Keep this import at the invocation boundary: selected unit tests load
-    # this pure processing module in isolation without the full LLM package.
-    from utils.llm.usage_tracker import Features, track_usage
-
-    conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
-    if not conversation_context:
-        return Structured()  # Should be caught by discard logic, but as a safeguard.
-
-    response_language = output_language_code or language_code
-
-    # First system message: task-specific instructions (static prefix enables cross-conversation caching)
-    # NOTE: language instructions are in context_message (second message) to keep this prefix fully static.
-    instructions_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
-
-    CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
-    - The conversation DEFINITELY happened between the named participants
-    - Diarization placeholders ("Speaker 0", "Speaker 1", "Speaker 2", "SPEAKER_00", etc.) are NEVER
-      names. Do not emit them in the title, overview, or any generated content, whether or not
-      calendar context exists. Use a real name only when it comes from meeting-identity metadata or
-      a non-placeholder transcript label; otherwise state the fact without a speaker label. Do not
-      invent names.
-    - Match transcript speakers to participant names by carefully analyzing the conversation context
-    - Use participant names throughout the title, overview, and all generated content
-    - Use the meeting title as a strong signal for the conversation title (but you can refine it based on the actual discussion)
-    - Use the meeting platform and scheduled time to provide better context in the overview
-    - Consider the meeting notes/description when analyzing the conversation's purpose
-    - If there are 2-3 participants with known names, naturally mention them in the title (e.g., "Sarah and John Discuss Q2 Budget", "Team Meeting with Alex, Maria, and Chris")
-
-    For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip"). If calendar context provides participant names (2-3 people), naturally include them when relevant (e.g., "John and Sarah Plan Marketing Campaign").
-    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details. When calendar context provides participant names, you MUST use their actual names to make the summary readable and personal. Analyze the transcript to understand who said what and match speakers to participant names. Never write "Speaker 0", "Speaker 1", "SPEAKER_00", etc. in the title or overview; if a speaker's identity is unknown, state the fact without a speaker label. Do not invent names.
-    For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
-
-    For the category, classify the content into one of the available categories.
-
-    For Calendar Events, apply strict filtering to include ONLY events that meet ALL these criteria:
-    • **Confirmed commitment**: Not suggestions or "maybe" - actual scheduled events
-    • **User involvement**: The user is expected to attend, participate, or take action
-    • **Specific timing**: Has concrete date/time, not vague references like "sometime" or "soon"
-    • **Important/actionable**: Missing it would have real consequences or impact
-
-    INCLUDE these event types:
-    • Meetings & appointments (business meetings, doctor visits, interviews)
-    • Hard deadlines (project due dates, payment deadlines, submission dates)
-    • Personal commitments (family events, social gatherings user committed to)
-    • Travel & transportation (flights, trains, scheduled pickups)
-    • Recurring obligations (classes, regular meetings, scheduled calls)
-
-    EXCLUDE these:
-    • Casual mentions ("we should meet sometime", "maybe next week")
-    • Historical references (past events being discussed)
-    • Other people's events (events user isn't involved in)
-    • Vague suggestions ("let's grab coffee soon")
-    • Hypothetical scenarios ("if we meet Tuesday...")
-
-    {format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
-
-    # Second system message contains every per-conversation value, including timestamp.
-    context_message = (
-        'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\n'
-        'For date context, this content was captured at {started_at}, which is already the user\'s local time ({tz}). '
-        'Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this '
-        'timestamp as UTC.\n\nContent:\n{conversation_context}'
-    )
-    gateway_mode_enabled = should_route_features_through_gateway()
-    if gateway_mode_enabled:
-        instructions_text = instructions_text.format(format_instructions=parser.get_format_instructions())
-    explicit_cache_enabled = _gpt56_explicit_cache_enabled()
-    gateway_cache_enabled = explicit_cache_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
-    prompt = cast(Any, ChatPromptTemplate).from_messages(
-        [
-            _gpt56_cacheable_system_message(
-                instructions_text, cache_enabled=gateway_cache_enabled, formatted=gateway_mode_enabled
-            ),
-            ('system', context_message),
-        ]
-    )
-    legacy_prompt_values = {
-        'conversation_context': conversation_context,
-        'language_code': language_code,
-        'response_language': response_language,
-        'started_at': _local_started_at_iso(started_at, tz),
-        'tz': tz or 'UTC',
-    }
-    if not gateway_cache_enabled:
-        legacy_prompt_values['format_instructions'] = parser.get_format_instructions()
-
-    with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-        if gateway_cache_enabled:
-            cache_key = TRANSCRIPT_STRUCTURE_CACHE_KEY
-        elif gateway_mode_enabled:
-            cache_key = None
-        else:
-            cache_key = 'omi-transcript-structure'
-        cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
-        structure_llm = get_llm(
-            'conv_structure',
-            cache_key=cache_key,
-            prompt_cache_options=cache_options,
-            request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
-        )
-        chain = prompt | structure_llm | parser
-        response = _coerce_structured(chain.invoke(legacy_prompt_values))
-    if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
-        _submit_conversation_structure_shadow(
-            prompt,
-            legacy_prompt_values,
-            response,
-        )
-
-    for event in response.events or []:
-        if event.duration > 180:
-            event.duration = 180
-        event.created = False
-
-    return validate_structured_source_segment_ids(
-        sanitize_structured_speaker_placeholders(response), transcript_segment_ids
-    )
-
-
-def get_reprocess_transcript_structure(
-    transcript: str,
-    started_at: datetime,
-    language_code: str,
-    tz: str,
-    photos: Optional[List[ConversationPhoto]] = None,
-    output_language_code: Optional[str] = None,
-    transcript_segment_ids: Optional[Iterable[str]] = None,
-) -> Structured:
-    context_parts: List[str] = []
-    if transcript and transcript.strip():
-        context_parts.append(f"Transcript: ```{transcript.strip()}```")
-
-    if photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos)
-        if photo_descriptions != 'None':
-            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
-
-    if not context_parts:
-        return Structured()
-
-    full_context = "\n\n".join(context_parts)
-    response_language = output_language_code or language_code
-
-    prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
-    The content language is {language_code}. You MUST respond entirely in {response_language}.
-
-    For the title, generate a concise title from the current content. Do not reuse a previous title.
-    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
-    Never emit diarization placeholders ("Speaker 0", "Speaker 1", "SPEAKER_00", etc.) in the title or overview; they are transcript machinery, not names. Use a real person name only when it appears in meeting-identity metadata or a non-placeholder transcript label; otherwise state the fact without a speaker label. Do not invent names.
-    For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
-
-    For the category, classify the content into one of the available categories.
-
-    For Calendar Events, apply strict filtering to include ONLY events that meet ALL these criteria:
-    • **Confirmed commitment**: Not suggestions or "maybe" - actual scheduled events
-    • **User involvement**: The user is expected to attend, participate, or take action
-    • **Specific timing**: Has concrete date/time, not vague references like "sometime" or "soon"
-    • **Important/actionable**: Missing it would have real consequences or impact
-    
-    INCLUDE these event types:
-    • Meetings & appointments (business meetings, doctor visits, interviews)
-    • Hard deadlines (project due dates, payment deadlines, submission dates)
-    • Personal commitments (family events, social gatherings user committed to)
-    • Travel & transportation (flights, trains, scheduled pickups)
-    • Recurring obligations (classes, regular meetings, scheduled calls)
-    
-    EXCLUDE these:
-    • Casual mentions ("we should meet sometime", "maybe next week")
-    • Historical references (past events being discussed)
-    • Other people's events (events user isn't involved in)
-    • Vague suggestions ("let's grab coffee soon")
-    • Hypothetical scenarios ("if we meet Tuesday...")
-    
-    For date context, this content was captured at {started_at}, which is already the user's local time ({tz}). Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this timestamp as UTC.
-
-    Content:
-    {full_context}
-
-    {format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
-
-    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
-    gateway_mode_enabled = should_route_features_through_gateway()
-    explicit_cache_enabled = _gpt56_explicit_cache_enabled()
-    # Reprocessing has no eligible static prefix, so explicit mode avoids both
-    # cache reads and billable cache writes on the GPT-5.6 route. The
-    # None/legacy split keys on gateway mode (like get_transcript_structure):
-    # with the gateway on, a legacy routing key would opt these unique-prompt
-    # requests back into implicit, billable cache writes.
-    cache_key = None if gateway_mode_enabled else 'omi-transcript-structure'
-    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
-    structure_llm = get_llm(
-        'conv_structure',
-        cache_key=cache_key,
-        prompt_cache_options=cache_options,
-        request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
-    )
-    chain = prompt | structure_llm | parser
-
-    response = _coerce_structured(
-        chain.invoke(
-            {
-                'full_context': full_context,
-                'format_instructions': parser.get_format_instructions(),
-                'language_code': language_code,
-                'response_language': response_language,
-                'started_at': _local_started_at_iso(started_at, tz),
-                'tz': tz or 'UTC',
-            }
-        )
-    )
-
-    for event in response.events or []:
-        if event.duration > 180:
-            event.duration = 180
-        event.created = False
-
-    return validate_structured_source_segment_ids(
-        sanitize_structured_speaker_placeholders(response), transcript_segment_ids
-    )
-
-
 def get_app_result(
     transcript: str,
     photos: List[ConversationPhoto],
@@ -1827,8 +1464,8 @@ Task: {app.memory_prompt}'''
         if explicit_cache_enabled and not has_byok_keys()
         else (None, None)
     )
-    # The None/legacy split keys on gateway mode (like get_transcript_structure) so
-    # gateway-on requests never fall back to a legacy implicit routing key.
+    # The None/legacy split keys on gateway mode so gateway-on requests never
+    # fall back to a legacy implicit routing key.
     cache_key = marked_key or (None if gateway_mode_enabled else 'omi-app-result')
     cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled and not has_byok_keys() else None
     app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
@@ -1837,97 +1474,10 @@ Task: {app.memory_prompt}'''
     return content
 
 
-class SuggestedAppsSelection(BaseModel):
-    suggested_apps: List[str] = Field(
-        description='List of up to 3 app IDs that are most suitable for processing this conversation, ordered by relevance. Empty list if none are suitable.'
-    )
-    reasoning: str = Field(
-        description='Brief explanation of why these apps were selected based on the conversation content.'
-    )
-
-
 class BestAppSelection(BaseModel):
     app_id: str = Field(
         description='The ID of the best app for processing this conversation, or an empty string if none are suitable.'
     )
-
-
-def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[App]) -> Tuple[List[str], str]:
-    """
-    Get top 3 suggested apps for the given conversation based on its structured content
-    and the specific task/outcome each app provides.
-    Returns tuple of (suggested_app_ids, reasoning)
-    """
-    if not apps:
-        return [], "No apps available"
-
-    if not conversation.structured:
-        return [], "No structured content available"
-
-    structured_data = conversation.structured
-    conversation_details = f"""
-    Title: {structured_data.title or 'N/A'}
-    Category: {structured_data.category.value if structured_data.category else 'N/A'}
-    Overview: {structured_data.overview or 'N/A'}
-    Action Items: {ActionItem.actions_to_string(structured_data.action_items) if structured_data.action_items else 'None'}
-    Events Mentioned: {Event.events_to_string(structured_data.events) if structured_data.events else 'None'}
-    """
-
-    apps_xml = "<apps>\n"
-    for app in apps:
-        apps_xml += f"""  <app>
-    <id>{app.id}</id>
-    <name>{app.name}</name>
-    <description>{app.description}</description>
-    <memory_prompt>{app.memory_prompt}</memory_prompt>
-  </app>\n"""
-    apps_xml += "</apps>"
-
-    prompt = f"""
-    You are an expert app recommendation system. Your goal is to suggest the top 3 most suitable apps for processing the given conversation based on the conversation's structured content and each app's specific capabilities.
-
-    <conversation_details>
-    {conversation_details.strip()}
-    </conversation_details>
-
-    <available_apps>
-    {apps_xml.strip()}
-    </available_apps>
-
-    Task:
-    1. Analyze the conversation's structured content: title, category, overview, action items, and events.
-    2. For each app, evaluate how well its description and memory_prompt align with the conversation's content and themes.
-    3. Consider the potential value and relevance of each app's output for this specific conversation.
-    4. Select up to 3 apps that would provide the most meaningful and valuable analysis, ordered by relevance (most relevant first).
-
-    Selection Criteria:
-    - **Content Alignment**: App's purpose should directly relate to the conversation's topics, category, or themes
-    - **Value Potential**: App should be able to extract meaningful insights from this specific conversation
-    - **Specificity**: Prefer apps with specific, targeted functionality over generic ones
-    - **Actionability**: Prioritize apps that can provide actionable insights or useful analysis
-
-    Quality Standards:
-    - Only suggest apps that have clear relevance to the conversation content
-    - If fewer than 3 apps are truly suitable, suggest only the relevant ones
-    - If no apps are genuinely suitable, return an empty list
-    - Do not force matches - quality over quantity
-
-    Provide your suggestions with brief reasoning explaining why these apps are most suitable for this conversation.
-    """
-
-    try:
-        with_parser = get_llm('conv_app_select').with_structured_output(SuggestedAppsSelection)
-        response: SuggestedAppsSelection = cast(SuggestedAppsSelection, with_parser.invoke(prompt))
-
-        # Validate that suggested app IDs exist in the available apps
-        valid_app_ids = {app.id for app in apps}
-        suggested_apps = [app_id for app_id in response.suggested_apps if app_id in valid_app_ids]
-
-        return suggested_apps, response.reasoning
-
-    except Exception as e:
-        logger.error(f"Error getting suggested apps: {e}")
-        return [], f"Error in app suggestion: {str(e)}"
 
 
 def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:

@@ -54,7 +54,6 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
 # silently run different pipelines. An omitted flag must fail admission, not
 # fall through to the process-local False default.
 SUMMARY_PIPELINE_FLAGS = (
-    'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
     'MEETING_NOTES_RICH_CONTEXT_ENABLED',

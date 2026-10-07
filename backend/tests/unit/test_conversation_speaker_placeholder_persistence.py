@@ -2,8 +2,9 @@
 
 `sanitize_structured_speaker_placeholders` (#12503) only ran inside the v2 note
 path (`get_conversation_notes`). At the time, prod ran `CONVERSATION_NOTES_V2_ENABLED=false`,
-so the legacy writers below produced most summaries — and could persist
-`Speaker 1` / `SPEAKER_00` verbatim. Speaker N is a diarization placeholder that
+so the legacy writers produced most summaries — and could persist
+`Speaker 1` / `SPEAKER_00` verbatim. The legacy structure writers are retired; the
+action-item extractor below remains. Speaker N is a diarization placeholder that
 is not stable across conversations; it must never reach the saved Structured.
 
 Each test drives the real writer with a mocked LLM chain whose response carries
@@ -43,28 +44,6 @@ def _conv_proc():
     return conversation_processing
 
 
-def _poisoned_structured():
-    """What a non-compliant model returns: placeholders everywhere, no real names."""
-    from models.structured import Section
-    from utils.llm.conversation_processing import ActionItem, Structured
-
-    return Structured(
-        title='Speaker 1 Discusses Budget',
-        overview='SPEAKER_00 covers the budget delay; Speaker 1 agreed to the plan.',
-        emoji='💬',
-        category='work',
-        sections=[Section(heading='Budget', body_markdown='- Speaker 1: budget is late')],
-        action_items=[
-            ActionItem(
-                description='Follow up with Speaker 1',
-                owner_name='Speaker 1',
-                context='Speaker 1: raised the delay',
-            )
-        ],
-        events=[],
-    )
-
-
 def _run_with_chain(response, fn, **kwargs):
     """Run a writer end-to-end with the LLM chain mocked to return `response`."""
     conv_proc = _conv_proc()
@@ -96,49 +75,6 @@ def _system_text(mock_prompt_cls):
         else:
             parts.append(str(getattr(message, 'content', message)))
     return '\n'.join(parts)
-
-
-def test_get_transcript_structure_strips_speaker_placeholders(monkeypatch):
-    conv_proc = _conv_proc()
-    monkeypatch.setattr(conv_proc, '_should_run_conversation_structure_shadow', lambda *a, **k: False)
-
-    structured, _prompt_cls = _run_with_chain(
-        _poisoned_structured(),
-        conv_proc.get_transcript_structure,
-        transcript='Speaker 0: We need the budget numbers. Speaker 1: They are late.',
-        started_at=_STARTED_AT,
-        language_code='en',
-        tz='UTC',
-        uid='u1',
-    )
-
-    assert _SPEAKER_LEFTOVER.search(structured.title) is None
-    assert _SPEAKER_LEFTOVER.search(structured.overview) is None
-    assert _SPEAKER_LEFTOVER.search(structured.sections[0].body_markdown) is None
-    assert _SPEAKER_LEFTOVER.search(structured.action_items[0].description) is None
-    assert _SPEAKER_LEFTOVER.search(structured.action_items[0].context) is None
-    assert structured.action_items[0].owner_name is None
-    # The fact survives; only the fake label is dropped.
-    assert 'Budget' in structured.title
-    assert 'budget delay' in structured.overview
-
-
-def test_get_reprocess_transcript_structure_strips_speaker_placeholders():
-    structured, _prompt_cls = _run_with_chain(
-        _poisoned_structured(),
-        _conv_proc().get_reprocess_transcript_structure,
-        transcript='Speaker 0: We need the budget numbers. Speaker 1: They are late.',
-        started_at=_STARTED_AT,
-        language_code='en',
-        tz='UTC',
-    )
-
-    assert _SPEAKER_LEFTOVER.search(structured.title) is None
-    assert _SPEAKER_LEFTOVER.search(structured.overview) is None
-    assert _SPEAKER_LEFTOVER.search(structured.sections[0].body_markdown) is None
-    assert _SPEAKER_LEFTOVER.search(structured.action_items[0].description) is None
-    assert structured.action_items[0].owner_name is None
-    assert 'Budget' in structured.title
 
 
 def test_extract_action_items_strips_speaker_placeholders(monkeypatch):
@@ -176,7 +112,6 @@ def test_extract_action_items_strips_speaker_placeholders(monkeypatch):
 def test_legacy_prompts_forbid_placeholders_unconditionally(monkeypatch):
     """The prompt rule must not be gated on calendar context (the #12503 leak)."""
     conv_proc = _conv_proc()
-    monkeypatch.setattr(conv_proc, '_should_run_conversation_structure_shadow', lambda *a, **k: False)
     monkeypatch.setattr(conv_proc, '_should_run_conversation_action_items_shadow', lambda *a, **k: False)
 
     common = dict(
@@ -185,19 +120,6 @@ def test_legacy_prompts_forbid_placeholders_unconditionally(monkeypatch):
         language_code='en',
         tz='UTC',
     )
-
-    _result, structure_cls = _run_with_chain(
-        _poisoned_structured(), conv_proc.get_transcript_structure, uid='u1', **common
-    )
-    structure_text = _system_text(structure_cls)
-    assert 'when participant names are available' not in structure_text
-    assert 'whether or not' in structure_text
-    assert 'SPEAKER_00' in structure_text
-
-    _result, reprocess_cls = _run_with_chain(
-        _poisoned_structured(), conv_proc.get_reprocess_transcript_structure, **common
-    )
-    assert 'transcript machinery, not names' in _system_text(reprocess_cls)
 
     from models.structured_extraction import ActionItemsExtraction
 

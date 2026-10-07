@@ -35,18 +35,15 @@ def test_corrected_person_reaches_summary_provider(monkeypatch):
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *a, **k: 'Owner')
-    monkeypatch.setattr(pc, '_primary_user_name', lambda uid: 'Owner')
-    monkeypatch.setattr(pc, '_conversation_notes_v2_enabled', lambda: False)
     monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: nullcontext())
-    monkeypatch.setattr(pc, '_fetch_dedup_candidates', lambda *a: [])
-    monkeypatch.setattr(pc, 'extract_action_items', lambda *a, **k: [])
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a, **k: [])
     prompts = []
 
-    def summarize(transcript, *a, **k):
-        prompts.append(transcript)
+    def summarize(prefix, **_kwargs):
+        prompts.append(prefix.context)
         return Structured(overview='Updated summary')
 
-    monkeypatch.setattr(pc, 'get_reprocess_transcript_structure', summarize)
+    monkeypatch.setattr(pc, 'get_conversation_notes', summarize)
     result, discarded = pc._get_structured(
         'synthetic',
         'en',
@@ -55,4 +52,5 @@ def test_corrected_person_reaches_summary_provider(monkeypatch):
         trigger=pc.ProcessingTrigger.USER_REPROCESS,
     )
     assert not discarded and result.overview == 'Updated summary'
-    assert len(prompts) == 1 and 'Correct Name: Synthetic meeting text' in prompts[0]
+    # Notes deliver identity once through the speaker map, not as a `Name:` dialogue label.
+    assert len(prompts) == 1 and 'Correct Name' in prompts[0] and 'Synthetic meeting text' in prompts[0]
