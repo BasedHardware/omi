@@ -4,6 +4,17 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: ui-evidence
+    command: ["python3", ".github/scripts/check_ui_evidence.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
+    triggers: ["app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", "web/frontend/src/**", "web/admin/app/**", ".github/scripts/check_ui_evidence.py", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
+    lanes: ["local", "ci"]
+    requires_pr_body: true
+    reason: "UI changes require a tracked screenshot reference or an explicit UI-Evidence: none declaration; added screenshots must follow the shared UI evidence filename and manifest contract"
+  - id: ui-evidence-tests
+    command: ["python3", ".github/scripts/test_check_ui_evidence.py"]
+    triggers: [".github/scripts/check_ui_evidence.py", ".github/scripts/test_check_ui_evidence.py", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
+    lanes: ["local", "ci"]
+    reason: "Hermetic Git fixtures cover UI screenshot presence, tracked HEAD references, filename/manifest validation, the explicit escape, and deleted-only UI changes"
   - id: firestore-index-guard
     command: ["python3", "backend/scripts/run_firestore_index_guard.py"]
     triggers: ["@firestore-index-guard", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/actions/release-eligibility/action.yml"]
