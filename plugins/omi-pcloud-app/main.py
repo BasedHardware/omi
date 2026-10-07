@@ -52,15 +52,24 @@ except ImportError:
 
     class HTMLResponse:
         def __init__(self, content="", status_code=200):
-            self.content, self.status_code = content, status_code
+            self.content = content
+            self.status_code = status_code
+            self.body = content.encode("utf-8") if isinstance(content, str) else bytes(content)
 
     class JSONResponse:
         def __init__(self, content=None, status_code=200):
-            self.content, self.status_code = content or {}, status_code
+            self.content = content or {}
+            self.status_code = status_code
+            import json as _json
+
+            self.body = _json.dumps(self.content).encode("utf-8")
 
     class RedirectResponse:
         def __init__(self, url="", status_code=307):
-            self.url, self.status_code = url, status_code
+            self.url = str(url)
+            self.status_code = status_code
+            self.headers = {"location": str(url)}
+            self.body = b""
 
 
 from db import (
@@ -297,7 +306,7 @@ def get_setup_page_html(
       <strong>Privacy & Retention Policy:</strong><br>
       • Your access credentials are encrypted at rest using per-account isolation.<br>
       • Private transcripts and audio files require explicit opt-in consent above.<br>
-      • Disconnecting revokes access and deletes local tokens. Existing files already backed up to pCloud remain permanently preserved in your private personal storage and are never deleted by Omi.
+      • Disconnecting revokes access on pCloud and permanently removes local credentials. Existing files already backed up to pCloud remain permanently preserved in your private personal storage and are never deleted by Omi.
     </div>
   </div>
 </body>
@@ -399,7 +408,10 @@ async def auth_pcloud_callback(
             timeout=20,
         )
         if resp.status_code != 200:
-            return HTMLResponse(f"<h2>Token Exchange Error</h2><p>{html.escape(resp.text)}</p>", status_code=502)
+            return HTMLResponse(
+                "<h2>Token Exchange Error</h2><p>Failed to exchange authorization code with pCloud API.</p>",
+                status_code=502,
+            )
 
         data = resp.json()
         if data.get("result") != 0:
@@ -425,15 +437,26 @@ async def auth_pcloud_callback(
             email=email,
         )
         return RedirectResponse(f"/setup/pcloud?uid={quote(uid, safe='')}&status=connected")
-    except Exception as ex:
-        return HTMLResponse(f"<h2>Unexpected Server Exception</h2><p>{html.escape(str(ex))}</p>", status_code=500)
+    except Exception:
+        return HTMLResponse(
+            "<h2>Unexpected Server Exception</h2><p>An unexpected error occurred during authorization.</p>",
+            status_code=500,
+        )
 
 
 @app.get("/disconnect")
 async def disconnect_pcloud(uid: str = Query(...)):
-    """Revokes credentials and disconnects user from pCloud."""
+    """Revokes credentials on pCloud and disconnects user from local database."""
     tokens = get_pcloud_tokens(uid)
     if tokens:
+        access_token = tokens.get("access_token")
+        location_id = tokens.get("location_id", 1)
+        if access_token:
+            try:
+                client = PCloudClient(access_token, location_id=location_id)
+                client.logout()
+            except Exception:
+                pass
         # Erase encrypted tokens from database
         delete_pcloud_tokens(uid)
 

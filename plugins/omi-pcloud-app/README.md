@@ -16,7 +16,7 @@ Addresses [BasedHardware/omi #20213](https://github.com/BasedHardware/omi/issues
 - **Least-Privilege OAuth & Account Isolation**:
   - Secure authorization flow with per-account token encryption at rest.
   - One-time CSRF state expiration.
-  - Complete credential revocation on disconnect.
+  - Complete credential revocation on disconnect (remotely on pCloud via `/logout` and locally from database).
 - **Automated Conversation Synchronization**:
   - `/conversation` webhook automatically exports finalized conversations.
   - Supports `summary.md`, `transcript.md`, and raw audio WAV (`audio.wav`).
@@ -27,7 +27,7 @@ Addresses [BasedHardware/omi #20213](https://github.com/BasedHardware/omi/issues
   - Creates parent folder hierarchies sequentially to prevent pCloud API error 2002.
   - Rejects relative directory traversal (`.` and `..`).
   - Safe overwrite retries (`renameifexists=0`) to eliminate duplicate numbered files.
-- **Hermetic Test Suite**: 25 mocked unit and integration tests with zero external
+- **Hermetic Test Suite**: 28 mocked unit and integration tests with zero external
   network or server dependencies.
 
 ## Endpoints
@@ -38,7 +38,7 @@ Addresses [BasedHardware/omi #20213](https://github.com/BasedHardware/omi/issues
 | `GET` | `/setup/pcloud?uid={uid}` | Webview setup interface showing connection status & settings |
 | `GET` | `/auth/pcloud?uid={uid}` | Initiates OAuth 2.0 flow with pCloud |
 | `GET` | `/auth/pcloud/callback` | Exchanges code for access token and saves encrypted credentials |
-| `GET` | `/disconnect?uid={uid}` | Revokes access and erases local user credentials |
+| `GET` | `/disconnect?uid={uid}` | Revokes token on pCloud and erases local user credentials |
 | `POST` | `/settings?uid={uid}` | Saves folder name, region, and privacy consent preferences |
 | `POST` | `/conversation?uid={uid}` | Webhook invoked by Omi to export finalized conversation |
 | `POST` | `/audio?uid={uid}` | Buffers raw conversation audio chunks |
@@ -46,6 +46,6 @@ Addresses [BasedHardware/omi #20213](https://github.com/BasedHardware/omi/issues
 ## Privacy & Retention Policy
 
 - **Token Storage**: Credentials are encrypted at rest using per-account authenticated keystreams.
-- **Disconnect Behavior**: Disconnecting deletes all local tokens and revokes OAuth access.
+- **Disconnect Behavior**: Disconnecting calls pCloud's `/logout` endpoint to revoke the access token remotely and deletes local encrypted credentials.
 - **Remote File Retention**: Existing files already uploaded to pCloud remain permanently preserved
   in the user's private personal storage and are never deleted by Omi.

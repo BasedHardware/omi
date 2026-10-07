@@ -106,6 +106,42 @@ class TestPCloudClientAndProvider(unittest.TestCase):
         self.assertIsNone(info)
         self.assertIn("Log in required", err)
 
+    @patch("requests.get")
+    def test_logout_success(self, mock_get):
+        """Logout endpoint calls /logout with Bearer token and returns success."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"result": 0, "auth_deleted": True}
+        mock_get.return_value = mock_resp
+
+        client = PCloudClient("tok123", location_id=1)
+        ok, err = client.logout()
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+        mock_get.assert_called_once_with(
+            "https://api.pcloud.com/logout",
+            headers={"Authorization": "Bearer tok123"},
+            timeout=10,
+        )
+
+    @patch("requests.get")
+    def test_logout_error(self, mock_get):
+        """Logout endpoint handles error response gracefully."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        mock_resp.text = "Bad Request"
+        mock_get.return_value = mock_resp
+
+        client = PCloudClient("tok123", location_id=2)
+        ok, err = client.logout()
+        self.assertFalse(ok)
+        self.assertIn("HTTP error 400", err)
+        mock_get.assert_called_once_with(
+            "https://eapi.pcloud.com/logout",
+            headers={"Authorization": "Bearer tok123"},
+            timeout=10,
+        )
+
     @patch("requests.post")
     def test_ensure_folder_success_and_sanitization(self, mock_post):
         """Ensure folder sanitizes components and creates sequential paths."""

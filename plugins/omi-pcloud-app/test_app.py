@@ -25,6 +25,30 @@ from models import ActionItem, Conversation, Structured, TranscriptSegment
 from pcloud_client import BackupUploadResult
 
 
+def _get_body_text(response) -> str:
+    """Extracts text content across Starlette Response (.body bytes) and fallback shim (.content/.body)."""
+    if hasattr(response, "body") and response.body is not None:
+        if isinstance(response.body, bytes):
+            return response.body.decode("utf-8", errors="replace")
+        return str(response.body)
+    if hasattr(response, "content") and response.content is not None:
+        if isinstance(response.content, bytes):
+            return response.content.decode("utf-8", errors="replace")
+        return str(response.content)
+    return ""
+
+
+def _get_redirect_location(response) -> str:
+    """Extracts redirect target across Starlette Response (headers['location']) and fallback shim (.url)."""
+    if hasattr(response, "headers") and response.headers is not None:
+        loc = response.headers.get("location") or response.headers.get("Location")
+        if loc:
+            return str(loc)
+    if hasattr(response, "url") and response.url:
+        return str(response.url)
+    return ""
+
+
 class TestPCloudAppHermetic(unittest.TestCase):
     """Hermetic test suite exercising main.py endpoints, webhooks, and privacy gates."""
 
@@ -40,11 +64,13 @@ class TestPCloudAppHermetic(unittest.TestCase):
         main.audio_buffer_created.clear()
 
         # Set default test environment variables
+        os.environ["PCLOUD_TOKEN_ENCRYPTION_KEY"] = "test-encryption-key-for-hermetic-unit-tests"
         main.PCLOUD_CLIENT_ID = "test_client_id_123"
         main.PCLOUD_CLIENT_SECRET = "test_client_secret_xyz"
         main.PCLOUD_REDIRECT_URI = "https://test.omi.me/auth/pcloud/callback"
 
     def tearDown(self):
+        os.environ.pop("PCLOUD_TOKEN_ENCRYPTION_KEY", None)
         if os.path.exists(self.test_data_dir):
             shutil.rmtree(self.test_data_dir, ignore_errors=True)
 
@@ -57,7 +83,7 @@ class TestPCloudAppHermetic(unittest.TestCase):
     def test_setup_page_disconnected(self):
         """Setup page renders Not Connected badge and connect button for unauthenticated users."""
         res = asyncio.run(main.setup_page(uid="user_anon"))
-        html_content = res.content
+        html_content = _get_body_text(res)
         self.assertIn("pCloud Backup for Omi", html_content)
         self.assertIn("Not Connected", html_content)
         self.assertIn("Connect pCloud Account", html_content)
@@ -73,7 +99,7 @@ class TestPCloudAppHermetic(unittest.TestCase):
             email="contributor@example.com",
         )
         res = asyncio.run(main.setup_page(uid="user_authed"))
-        html_content = res.content
+        html_content = _get_body_text(res)
         self.assertIn("Connected as contributor@example.com", html_content)
         self.assertIn("Disconnect pCloud", html_content)
 
@@ -81,13 +107,15 @@ class TestPCloudAppHermetic(unittest.TestCase):
         """OAuth initiate generates secure state and redirects to correct region."""
         # US region (location_id=1)
         res_us = asyncio.run(main.auth_pcloud(uid="user_1", location_id=1))
-        self.assertTrue(res_us.url.startswith("https://my.pcloud.com/oauth2/authorize"))
-        self.assertIn("client_id=test_client_id_123", res_us.url)
-        self.assertIn("state=", res_us.url)
+        loc_us = _get_redirect_location(res_us)
+        self.assertTrue(loc_us.startswith("https://my.pcloud.com/oauth2/authorize"))
+        self.assertIn("client_id=test_client_id_123", loc_us)
+        self.assertIn("state=", loc_us)
 
         # EU region (location_id=2)
         res_eu = asyncio.run(main.auth_pcloud(uid="user_1", location_id=2))
-        self.assertTrue(res_eu.url.startswith("https://e-my.pcloud.com/oauth2/authorize"))
+        loc_eu = _get_redirect_location(res_eu)
+        self.assertTrue(loc_eu.startswith("https://e-my.pcloud.com/oauth2/authorize"))
 
     @patch("requests.post")
     @patch.object(main.PCloudClient, "get_user_info")
@@ -109,7 +137,8 @@ class TestPCloudAppHermetic(unittest.TestCase):
         mock_get_user_info.return_value = ({"email": "oauth_user@example.com"}, None)
 
         res = asyncio.run(main.auth_pcloud_callback(code="auth_code_xyz", state="csrf_state_123"))
-        self.assertIn("/setup/pcloud?uid=user_callback&status=connected", res.url)
+        loc = _get_redirect_location(res)
+        self.assertIn("/setup/pcloud?uid=user_callback&status=connected", loc)
 
         # Verify token was encrypted and stored in database
         tokens = db.get_pcloud_tokens("user_callback")
@@ -124,16 +153,27 @@ class TestPCloudAppHermetic(unittest.TestCase):
         """OAuth callback rejects invalid or expired state with 400 Bad Request."""
         res = asyncio.run(main.auth_pcloud_callback(code="auth_code_xyz", state="invalid_expired_state"))
         self.assertEqual(res.status_code, 400)
-        self.assertIn("Invalid or Expired OAuth State", res.content)
+        self.assertIn("Invalid or Expired OAuth State", _get_body_text(res))
 
-    def test_disconnect(self):
-        """Disconnect endpoint erases stored tokens and redirects with disconnected status."""
+    @patch.object(main.PCloudClient, "logout")
+    def test_disconnect(self, mock_logout):
+        """Disconnect endpoint calls pCloud /logout, erases stored tokens, and redirects."""
+        mock_logout.return_value = (True, None)
         db.store_pcloud_tokens("user_disc", "tok_disc", location_id=1)
         self.assertIsNotNone(db.get_pcloud_tokens("user_disc"))
 
         res = asyncio.run(main.disconnect_pcloud(uid="user_disc"))
-        self.assertIn("status=disconnected", res.url)
+        loc = _get_redirect_location(res)
+        self.assertIn("status=disconnected", loc)
         self.assertIsNone(db.get_pcloud_tokens("user_disc"))
+        mock_logout.assert_called_once()
+
+    def test_fail_fast_encryption_key_missing(self):
+        """Encryption functions fail fast with RuntimeError if no encryption key is configured."""
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(RuntimeError) as ctx:
+                db._get_encryption_key()
+            self.assertIn("PCLOUD_TOKEN_ENCRYPTION_KEY or APP_SECRET", str(ctx.exception))
 
     def test_save_settings(self):
         """Settings endpoint updates user preferences and retention defaults."""
@@ -147,7 +187,7 @@ class TestPCloudAppHermetic(unittest.TestCase):
                 save_audio=None,  # Audio unchecked
             )
         )
-        self.assertIn("status=settings_saved", res.url)
+        self.assertIn("status=settings_saved", _get_redirect_location(res))
 
         s = db.get_user_settings("user_settings")
         self.assertEqual(s["folder_name"], "Custom Backups")

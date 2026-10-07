@@ -63,6 +63,23 @@ class PCloudClient(CloudBackupProvider):
         except Exception as ex:
             return None, f"Network exception: {str(ex)}"
 
+    def logout(self) -> Tuple[bool, Optional[str]]:
+        """Revokes the current access token on pCloud servers via /logout."""
+        try:
+            resp = requests.get(
+                f"{self.base_url}/logout",
+                headers=self._headers(),
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("result") == 0 or data.get("auth_deleted", False):
+                    return True, None
+                return False, f"pCloud logout error: {data.get('error', 'Unknown')}"
+            return False, f"HTTP error {resp.status_code}: {resp.text}"
+        except Exception as ex:
+            return False, f"Network exception during logout: {str(ex)}"
+
     def ensure_folder(self, folder_path: str) -> Tuple[Optional[int], Optional[str]]:
         """Ensures a folder hierarchy exists via sequential parent creation in /createfolderifnotexists.
 

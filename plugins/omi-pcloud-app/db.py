@@ -39,10 +39,13 @@ _redis_client = None
 
 
 def _get_encryption_key() -> str:
-    """Retrieves or derives the token encryption key."""
+    """Retrieves the token encryption key from environment. Fails fast if unconfigured."""
     key = os.getenv("PCLOUD_TOKEN_ENCRYPTION_KEY") or os.getenv("APP_SECRET")
     if not key:
-        key = "omi-pcloud-default-secret-salt-32b"
+        raise RuntimeError(
+            "pCloud plugin misconfiguration: PCLOUD_TOKEN_ENCRYPTION_KEY or APP_SECRET "
+            "environment variable must be set for secure token encryption at rest."
+        )
     return key
 
 
