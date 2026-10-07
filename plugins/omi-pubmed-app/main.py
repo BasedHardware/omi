@@ -107,7 +107,7 @@ def _extract_abstract_from_efetch_xml(xml_text: str) -> str:
         return ""
     try:
         root = ET.fromstring(xml_text)
-    except (ET.ParseError, Exception):
+    except Exception:
         return ""
     abstract_parts = root.findall(".//AbstractText")
     if not abstract_parts:
@@ -359,7 +359,8 @@ async def get_pubmed_article(request: Request):
             # Abstract enrichment is optional so ESummary still works if efetch fails.
             try:
                 abstract = await _fetch_abstract(client, pmid)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to fetch efetch abstract for PMID %s: %s", pmid, e)
                 abstract = ""
             if abstract:
                 record_data["abstract"] = abstract
