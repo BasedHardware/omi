@@ -2519,7 +2519,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (source) (increase(omi_conversation_duration_seconds_count[24h]))",
+              "expr": "sum by (source) (increase(omi_conversation_duration_seconds_count[$__range]))",
               "refId": "A",
               "legendFormat": "{{source}}"
             }
