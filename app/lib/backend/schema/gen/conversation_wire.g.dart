@@ -945,6 +945,7 @@ class GeneratedConversation {
   final GeneratedAudioTimelineProvenance? audioTimeline;
   final GeneratedCalendarEventLink? calendarEvent;
   final String? callId;
+  final String? captureCoverage;
   final GeneratedCaptureGroup? captureGroup;
   final String? clientDeviceId;
   final String? clientPlatform;
@@ -996,6 +997,7 @@ class GeneratedConversation {
     this.audioTimeline,
     this.calendarEvent,
     this.callId,
+    this.captureCoverage,
     this.captureGroup,
     this.clientDeviceId,
     this.clientPlatform,
@@ -1049,6 +1051,7 @@ class GeneratedConversation {
       audioTimeline: _readFieldValue<GeneratedAudioTimelineProvenance>(_readField(json, const ["audio_timeline"]), "audio_timeline", (value) => _readObject(value, GeneratedAudioTimelineProvenance.fromJson), requiredField: false, nullable: true),
       calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
       callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
+      captureCoverage: _readFieldValue<String>(_readField(json, const ["capture_coverage"]), "capture_coverage", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
@@ -1103,6 +1106,7 @@ class GeneratedConversation {
       'audio_timeline': audioTimeline?.toJson(),
       'calendar_event': calendarEvent?.toJson(),
       'call_id': callId,
+      'capture_coverage': captureCoverage,
       'capture_group': captureGroup?.toJson(),
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
@@ -1345,6 +1349,7 @@ class GeneratedConversationSearchItem {
   final GeneratedAudioTimelineProvenance? audioTimeline;
   final GeneratedCalendarEventLink? calendarEvent;
   final String? callId;
+  final String? captureCoverage;
   final GeneratedCaptureGroup? captureGroup;
   final String? clientDeviceId;
   final String? clientPlatform;
@@ -1397,6 +1402,7 @@ class GeneratedConversationSearchItem {
     this.audioTimeline,
     this.calendarEvent,
     this.callId,
+    this.captureCoverage,
     this.captureGroup,
     this.clientDeviceId,
     this.clientPlatform,
@@ -1451,6 +1457,7 @@ class GeneratedConversationSearchItem {
       audioTimeline: _readFieldValue<GeneratedAudioTimelineProvenance>(_readField(json, const ["audio_timeline"]), "audio_timeline", (value) => _readObject(value, GeneratedAudioTimelineProvenance.fromJson), requiredField: false, nullable: true),
       calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
       callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
+      captureCoverage: _readFieldValue<String>(_readField(json, const ["capture_coverage"]), "capture_coverage", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
@@ -1506,6 +1513,7 @@ class GeneratedConversationSearchItem {
       'audio_timeline': audioTimeline?.toJson(),
       'calendar_event': calendarEvent?.toJson(),
       'call_id': callId,
+      'capture_coverage': captureCoverage,
       'capture_group': captureGroup?.toJson(),
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,

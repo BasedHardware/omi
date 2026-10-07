@@ -12548,4 +12548,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Hindi masyado';
+
+  @override
+  String get partialRecording => 'Bahagyang pagrekord';
 }

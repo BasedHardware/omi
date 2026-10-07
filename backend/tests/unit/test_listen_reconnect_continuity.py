@@ -290,3 +290,131 @@ async def test_external_processing_transition_can_still_create_an_overlapping_li
     assert current != previous
     assert harness.rows[current]['started_at'] == harness.rows[previous]['started_at']
     assert harness.rows[previous]['transcript_segments'] == [{'text': 'kept'}]
+
+
+def meeting_context(start):
+    return {
+        'calendar_meeting_context': {
+            'calendar_event_id': 'event-1',
+            'title': 'Planning',
+            'start_time': start.isoformat(),
+            'duration_minutes': 120,
+            'meeting_treatment_eligible': False,
+        }
+    }
+
+
+@pytest.mark.anyio
+async def test_calendar_meeting_reconnect_and_lifecycle_continue_until_scheduled_end_grace(monkeypatch):
+    harness = CaptureHarness(monkeypatch)
+    controller = harness.connect()
+    await controller.prepare()
+    cid = controller.host.state.current_conversation_id
+    row = harness.rows[cid]
+    start = harness.now - timedelta(minutes=60)
+    row.update(transcript_segments=[{'text': 'kept'}], external_data=meeting_context(start))
+    harness.now += timedelta(minutes=15)
+    reconnect = harness.connect()
+    await reconnect.prepare()
+    assert reconnect.host.state.current_conversation_id == cid
+    assert harness.creates == 1
+    reconnect.host.wait = AsyncMock(side_effect=[False, True])
+    await reconnect.lifecycle_loop()
+    assert harness.creates == 1
+    # The exact deadline is a split, even when the context is still on the row.
+    harness.now = start + timedelta(minutes=122)
+    reconnect.process_conversation = AsyncMock(return_value=True)
+    reconnect.host.wait = AsyncMock(side_effect=[False, True])
+    await reconnect.lifecycle_loop()
+    assert reconnect.host.state.current_conversation_id != cid
+    reconnect.process_conversation.assert_awaited_once_with(cid)
+
+
+@pytest.mark.parametrize(
+    'empty,device,eligible', [(False, 'phone', False), (False, 'other', False), (True, 'phone', False)]
+)
+def test_meeting_continuation_keeps_device_and_empty_generation_fences(empty, device, eligible):
+    from utils.conversation_continuity import resumable_continuation
+
+    now = datetime(2026, 10, 7, tzinfo=timezone.utc)
+    row = dict(
+        status='in_progress',
+        source='omi',
+        client_device_id='phone',
+        finished_at=now,
+        external_data=meeting_context(now),
+        transcript_segments=[] if empty else [{'text': 'kept'}],
+    )
+    assert resumable_continuation(
+        row, source='omi', device_id=device, now=now + timedelta(minutes=10), timeout=120
+    ) is (not empty and device == 'phone')
+
+
+def test_metadata_only_continuation_lookup_reads_stored_calendar_context():
+    store = StrictFirestore()
+    now = datetime(2026, 10, 7, tzinfo=timezone.utc)
+    store.rows[('users', 'u', 'recording_sessions', 'origin')] = {
+        'uid': 'u',
+        'recording_session_id': 'origin',
+        'conversation_id': 'old',
+        'live_continuation': {'conversation_id': 'meeting', 'recording_session_id': 'meeting'},
+    }
+    store.rows[('users', 'u', 'conversations', 'meeting')] = {
+        'status': 'in_progress',
+        'source': 'omi',
+        'client_device_id': 'phone',
+        'finished_at': now,
+        'has_content': True,
+        'external_data': meeting_context(now),
+    }
+    result, retired = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id='phone',
+        now=now + timedelta(minutes=10),
+        timeout=120,
+        firestore_client=store,
+    )
+    assert result == {'conversation_id': 'meeting', 'recording_session_id': 'meeting'}
+    assert retired is None
+
+
+@pytest.mark.parametrize(
+    'context',
+    [
+        None,
+        {},
+        {'calendar_event_id': 'bad', 'start_time': 'bad', 'duration_minutes': 120},
+        {'calendar_event_id': 'screen-activity', 'start_time': '2026-10-07T00:00:00Z', 'duration_minutes': 120},
+    ],
+)
+def test_missing_or_invalid_calendar_context_keeps_120_second_boundary(context):
+    from utils.conversation_continuity import resumable_continuation
+
+    now = datetime(2026, 10, 7, tzinfo=timezone.utc)
+    row = dict(
+        status='in_progress',
+        source='omi',
+        client_device_id='phone',
+        finished_at=now,
+        external_data={'calendar_meeting_context': context},
+        has_content=True,
+    )
+    assert resumable_continuation(row, source='omi', device_id='phone', now=now + timedelta(seconds=119), timeout=120)
+    assert not resumable_continuation(
+        row, source='omi', device_id='phone', now=now + timedelta(seconds=120), timeout=120
+    )
+
+
+def test_compressed_empty_recording_does_not_extend_meeting_deadline():
+    from utils.conversation_continuity import continuation_timeout
+
+    now = datetime(2026, 10, 7, tzinfo=timezone.utc)
+    row = dict(
+        finished_at=now,
+        transcript_segments='compressed-empty-blob',
+        transcript_segments_compressed=True,
+        external_data=meeting_context(now),
+    )
+    assert continuation_timeout(row, 120) == 120

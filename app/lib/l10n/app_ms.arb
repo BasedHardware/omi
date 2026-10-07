@@ -3850,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Sementara menunggu, adakah Omi menyenangkan untuk digunakan?",
     "onboardingRatingPromptBody": "Memberi kami 5 bintang sangat membantu kami ❤️",
     "onboardingRatingPromptYes": "Ya, saya mahu menyokong anda!",
-    "onboardingRatingPromptNo": "Tidak begitu"
+    "onboardingRatingPromptNo": "Tidak begitu",
+    "partialRecording": "Rakaman separa"
 }

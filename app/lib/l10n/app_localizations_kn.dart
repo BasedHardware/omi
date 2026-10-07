@@ -12484,4 +12484,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'ಅಷ್ಟಾಗಿ ಇಲ್ಲ';
+
+  @override
+  String get partialRecording => 'ಭಾಗಶಃ ಧ್ವನಿಮುದ್ರಣ';
 }

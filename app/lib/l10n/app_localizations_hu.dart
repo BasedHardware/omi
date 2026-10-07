@@ -12495,4 +12495,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Nem igazán';
+
+  @override
+  String get partialRecording => 'Részleges felvétel';
 }

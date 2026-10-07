@@ -3850,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Medan du väntar, har Omi varit trevlig att använda?",
     "onboardingRatingPromptBody": "5 stjärnor hjälper oss verkligen mycket ❤️",
     "onboardingRatingPromptYes": "Ja, jag vill stötta er!",
-    "onboardingRatingPromptNo": "Inte direkt"
+    "onboardingRatingPromptNo": "Inte direkt",
+    "partialRecording": "Delvis inspelning"
 }

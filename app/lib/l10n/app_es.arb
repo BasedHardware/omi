@@ -3850,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Mientras esperas, ¿te ha gustado usar Omi?",
     "onboardingRatingPromptBody": "Valorarnos con 5 estrellas nos ayuda muchísimo ❤️",
     "onboardingRatingPromptYes": "¡Sí, quiero apoyaros!",
-    "onboardingRatingPromptNo": "No mucho"
+    "onboardingRatingPromptNo": "No mucho",
+    "partialRecording": "Grabación parcial"
 }

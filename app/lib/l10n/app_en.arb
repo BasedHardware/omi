@@ -14883,5 +14883,9 @@
     "onboardingRatingPromptNo": "Not really",
     "@onboardingRatingPromptNo": {
         "description": "Store rating pre-prompt: decline"
+    },
+    "partialRecording": "Partial recording",
+    "@partialRecording": {
+        "description": "Conversation detail badge shown when capture evidence says the recording is incomplete."
     }
 }

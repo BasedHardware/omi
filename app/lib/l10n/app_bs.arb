@@ -11407,5 +11407,6 @@
     "onboardingRatingPromptTitle": "Dok čekaš, je li ti ugodno koristiti Omi?",
     "onboardingRatingPromptBody": "Ocjena od 5 zvjezdica nam zaista puno pomaže ❤️",
     "onboardingRatingPromptYes": "Da, želim vas podržati!",
-    "onboardingRatingPromptNo": "Ne baš"
+    "onboardingRatingPromptNo": "Ne baš",
+    "partialRecording": "Djelimičan snimak"
 }

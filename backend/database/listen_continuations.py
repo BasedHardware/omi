@@ -8,7 +8,7 @@ from typing import Any, Mapping
 from google.cloud import firestore
 
 from database._client import get_firestore_client
-from utils.conversation_continuity import gap_splits, resumable_continuation
+from utils.conversation_continuity import continuation_timeout, gap_splits, resumable_continuation
 
 
 def resolve_live_continuation(
@@ -52,7 +52,7 @@ def resolve_live_continuation(
                 and row.get('client_device_id') == device_id
                 and not row.get('is_locked')
                 and isinstance(finish, datetime)
-                and gap_splits((now - finish).total_seconds(), timeout)
+                and gap_splits((now - finish).total_seconds(), continuation_timeout(row, timeout))
             ):
                 retired = {'conversation_id': cid, 'recording_session_id': sid}
         if proposed is None:

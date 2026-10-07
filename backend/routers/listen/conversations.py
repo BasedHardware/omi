@@ -21,7 +21,7 @@ from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.live_continuation import resolve_live_continuation
-from utils.conversation_continuity import resumable_continuation
+from utils.conversation_continuity import continuation_timeout, resumable_continuation
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.projection_payload import omit_null_processing_state
@@ -591,7 +591,7 @@ class LiveConversationController:
         if (
             decide_existing_conversation_action(
                 seconds_since_last_segment=seconds,
-                conversation_creation_timeout=self.host.conversation_creation_timeout,
+                conversation_creation_timeout=continuation_timeout(existing, self.host.conversation_creation_timeout),
             )
             == ConversationLifecycleAction.process_and_create_new
         ):
@@ -765,7 +765,9 @@ class LiveConversationController:
                 status=conversation.get('status'),
                 in_progress_status=ConversationStatus.in_progress,
                 seconds_since_last_update=(self.clock() - finished_at).total_seconds(),
-                conversation_creation_timeout=self.host.conversation_creation_timeout,
+                conversation_creation_timeout=continuation_timeout(
+                    conversation, self.host.conversation_creation_timeout
+                ),
             )
             if action == ConversationLifecycleAction.create_new:
                 await self.create_new_in_progress_conversation(rollover=True)

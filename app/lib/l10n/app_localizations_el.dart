@@ -12527,4 +12527,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Όχι ακριβώς';
+
+  @override
+  String get partialRecording => 'Μερική ηχογράφηση';
 }

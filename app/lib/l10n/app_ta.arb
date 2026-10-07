@@ -11407,5 +11407,6 @@
     "onboardingRatingPromptTitle": "காத்திருக்கும் நேரத்தில், Omi பயன்படுத்த இனிமையாக இருக்கிறதா?",
     "onboardingRatingPromptBody": "5 நட்சத்திர மதிப்பீடு எங்களுக்கு மிகவும் உதவும் ❤️",
     "onboardingRatingPromptYes": "ஆம், உங்களுக்கு ஆதரவளிக்க விரும்புகிறேன்!",
-    "onboardingRatingPromptNo": "அவ்வளவாக இல்லை"
+    "onboardingRatingPromptNo": "அவ்வளவாக இல்லை",
+    "partialRecording": "பகுதியளவு பதிவு"
 }

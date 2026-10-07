@@ -12443,4 +12443,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Nie celkom';
+
+  @override
+  String get partialRecording => 'Čiastočná nahrávka';
 }

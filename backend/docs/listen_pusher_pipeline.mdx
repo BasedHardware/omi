@@ -12,8 +12,40 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
+Live calendar-backed conversations with content retain their conversation across
+silence until the stored `external_data.calendar_meeting_context.start_time` +
+`duration_minutes` + 120 seconds of grace. The stored calendar event id owns this
+window; screen-derived identity does not extend it, and meeting-treatment
+eligibility does not gate it. Reconnect admission, continuation-pointer lookup,
+and the active lifecycle loop use the same deadline. Source/device/lock partitions
+and empty-generation deletion keep their existing checks; non-meeting recordings
+keep the 120-second silence rule. The continuation transaction reads the complete
+conversation metadata, including the stored calendar context, without decoding
+transcripts; compressed rows use the durable `has_content` marker.
+
+`PATCH /v1/conversations/{id}/assign-speaker/{speaker_id}` accepts optional paired
+`start` / `end` query parameters in conversation-offset seconds. Only complete
+segments inside `[start, end)` are assigned; segments crossing a boundary stay
+unchanged. Range edits write segment-only manual receipts and never promote their
+labels or rejections to a whole voice or a future rollover. Omitting the range
+retains the existing whole-cluster assignment, including clearing older selected
+overrides. Stable-id redirects select the range on the donor's original timeline.
+
+The live path observes a run of at least ten distinct segments on one scoped
+speaker plus three consecutive rejected voice matches. It emits one
+`omi_live_speaker_collapse_total` increment and an `event=live_speaker_collapse`
+log per run, with segment/match counts only. A different voice/provider scope or
+conversation resets the observation; accepted matches reset the rejection count.
+This signal does not change diarization, thresholds, provider choice or labeling.
+
+Conversation responses project the internal receipt's `capture_evidence.coverage`
+into optional `capture_coverage` (`mapped` / `incomplete` / `unknown`). Internal
+source-position receipts remain excluded from the wire. Mobile conversation
+detail shows the localized “Partial recording” chip only for `incomplete`; legacy,
+unknown and mapped rows stay quiet. No conversation-list placeholder is added.
+
 Phone safety-WAL uploads may carry the client recording id and audio interval.
-Listen creates a new server recording id and conversation on every silence
+Listen creates a new server recording id and conversation on a silence
 rollover, while the phone tags all WALs with `client_conversation_id`, stored
 on each live generation as `external_data.recording_origin_id`. Sync binds each
 VAD segment to the one generation whose source, device, lock and interval

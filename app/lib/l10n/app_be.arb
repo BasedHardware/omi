@@ -11407,5 +11407,6 @@
     "onboardingRatingPromptTitle": "Пакуль вы чакаеце, ці прыемна вам карыстацца Omi?",
     "onboardingRatingPromptBody": "Ацэнка ў 5 зорак вельмі нам дапаможа ❤️",
     "onboardingRatingPromptYes": "Так, хачу вас падтрымаць!",
-    "onboardingRatingPromptNo": "Не асабліва"
+    "onboardingRatingPromptNo": "Не асабліва",
+    "partialRecording": "Частковы запіс"
 }

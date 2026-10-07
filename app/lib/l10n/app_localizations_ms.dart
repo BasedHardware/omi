@@ -12478,4 +12478,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Tidak begitu';
+
+  @override
+  String get partialRecording => 'Rakaman separa';
 }

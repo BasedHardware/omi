@@ -12256,4 +12256,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'あまり';
+
+  @override
+  String get partialRecording => '一部のみの録音';
 }

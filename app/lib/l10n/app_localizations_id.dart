@@ -12459,4 +12459,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Kurang';
+
+  @override
+  String get partialRecording => 'Rekaman sebagian';
 }

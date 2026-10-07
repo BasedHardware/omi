@@ -3885,5 +3885,6 @@
     "onboardingRatingPromptTitle": "Пока вы ждёте, приятно ли вам пользоваться Omi?",
     "onboardingRatingPromptBody": "Оценка в 5 звёзд очень нам поможет ❤️",
     "onboardingRatingPromptYes": "Да, хочу вас поддержать!",
-    "onboardingRatingPromptNo": "Не совсем"
+    "onboardingRatingPromptNo": "Не совсем",
+    "partialRecording": "Частичная запись"
 }

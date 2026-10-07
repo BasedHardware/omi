@@ -3850,5 +3850,6 @@
     "onboardingRatingPromptTitle": "ระหว่างรอ Omi ใช้งานแล้วถูกใจไหม",
     "onboardingRatingPromptBody": "การให้ 5 ดาวช่วยเราได้มากจริงๆ ❤️",
     "onboardingRatingPromptYes": "ใช่ ฉันอยากสนับสนุนคุณ!",
-    "onboardingRatingPromptNo": "ไม่ค่อย"
+    "onboardingRatingPromptNo": "ไม่ค่อย",
+    "partialRecording": "การบันทึกบางส่วน"
 }

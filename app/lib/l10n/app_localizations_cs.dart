@@ -12451,4 +12451,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Moc ne';
+
+  @override
+  String get partialRecording => 'Částečná nahrávka';
 }

@@ -3892,5 +3892,6 @@
     "onboardingRatingPromptTitle": "Mens du venter, har Omi været rar at bruge?",
     "onboardingRatingPromptBody": "5 stjerner hjælper os virkelig meget ❤️",
     "onboardingRatingPromptYes": "Ja, jeg vil gerne støtte jer!",
-    "onboardingRatingPromptNo": "Ikke rigtig"
+    "onboardingRatingPromptNo": "Ikke rigtig",
+    "partialRecording": "Delvis optagelse"
 }

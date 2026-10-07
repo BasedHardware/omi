@@ -12479,4 +12479,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Не асабліва';
+
+  @override
+  String get partialRecording => 'Частковы запіс';
 }

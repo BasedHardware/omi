@@ -12235,4 +12235,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => '不太满意';
+
+  @override
+  String get partialRecording => '部分录音';
 }

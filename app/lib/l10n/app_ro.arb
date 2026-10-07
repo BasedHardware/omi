@@ -3850,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Cât aștepți, ți-a plăcut să folosești Omi?",
     "onboardingRatingPromptBody": "O evaluare de 5 stele ne ajută cu adevărat ❤️",
     "onboardingRatingPromptYes": "Da, vreau să vă susțin!",
-    "onboardingRatingPromptNo": "Nu prea"
+    "onboardingRatingPromptNo": "Nu prea",
+    "partialRecording": "Înregistrare parțială"
 }

@@ -12452,4 +12452,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Inte direkt';
+
+  @override
+  String get partialRecording => 'Delvis inspelning';
 }

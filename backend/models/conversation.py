@@ -490,6 +490,21 @@ class Conversation(BaseModel):
     audio_timeline: Optional[AudioTimelineProvenance] = None
     # S1 internal receipt is written explicitly at existing persistence seams.
     capture_evidence: Optional[CaptureEvidenceMetadata] = Field(default=None, exclude=True)
+    # Public coverage projection only; the source-position receipt stays internal.
+    capture_coverage: Optional[Literal['unknown', 'incomplete', 'mapped']] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _project_capture_coverage(cls, data):
+        if isinstance(data, dict):
+            evidence = data.get('capture_evidence')
+            coverage = (
+                evidence.get('coverage') if isinstance(evidence, Mapping) else getattr(evidence, 'coverage', None)
+            )
+            if coverage in ('unknown', 'incomplete', 'mapped'):
+                return {**data, 'capture_coverage': coverage}
+        return data
+
     # Absent on conversations processed before speakers were resolved: count no ids as people.
     speaker_resolution: Optional[ConversationSpeakers] = None
     speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)

@@ -3885,5 +3885,6 @@
     "onboardingRatingPromptTitle": "Pendant que vous patientez, Omi vous plaît-il ?",
     "onboardingRatingPromptBody": "Une note de 5 étoiles nous aide vraiment beaucoup ❤️",
     "onboardingRatingPromptYes": "Oui, je veux vous soutenir !",
-    "onboardingRatingPromptNo": "Pas vraiment"
+    "onboardingRatingPromptNo": "Pas vraiment",
+    "partialRecording": "Enregistrement partiel"
 }

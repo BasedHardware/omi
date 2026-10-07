@@ -11407,5 +11407,6 @@
     "onboardingRatingPromptTitle": "ಕಾಯುತ್ತಿರುವಾಗ, Omi ಬಳಸುವುದು ಚೆನ್ನಾಗಿದೆಯೇ?",
     "onboardingRatingPromptBody": "5 ಸ್ಟಾರ್ ರೇಟಿಂಗ್ ನೀಡಿದರೆ ನಮಗೆ ತುಂಬಾ ಸಹಾಯವಾಗುತ್ತದೆ ❤️",
     "onboardingRatingPromptYes": "ಹೌದು, ನಾನು ನಿಮ್ಮನ್ನು ಬೆಂಬಲಿಸಲು ಬಯಸುತ್ತೇನೆ!",
-    "onboardingRatingPromptNo": "ಅಷ್ಟಾಗಿ ಇಲ್ಲ"
+    "onboardingRatingPromptNo": "ಅಷ್ಟಾಗಿ ಇಲ್ಲ",
+    "partialRecording": "ಭಾಗಶಃ ಧ್ವನಿಮುದ್ರಣ"
 }
