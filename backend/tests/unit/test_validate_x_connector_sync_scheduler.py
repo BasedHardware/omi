@@ -34,7 +34,7 @@ def _contract():
 def _valid_state() -> dict[str, Any]:
     return {
         "name": EXPECTED_RESOURCE_NAME,
-        "schedule": "0 */6 * * *",
+        "schedule": "0 3,15 * * *",
         "state": "ENABLED",
         "timeZone": "Etc/UTC",
         "httpTarget": {
