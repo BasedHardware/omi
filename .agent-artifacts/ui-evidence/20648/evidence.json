@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-recap-week-overview.png",
+      "platform": "mobile-android",
+      "description": "This Week: totals against last week, busiest day and the people talked to most",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-recap-week-highlights-tasks.png",
+      "platform": "mobile-android",
+      "description": "This Week, scrolled: highlights, decisions, unresolved questions and open tasks",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-recap-month-empty.png",
+      "platform": "mobile-android",
+      "description": "This Month with nothing recorded: empty state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-recap-load-failed.png",
+      "platform": "mobile-android",
+      "description": "A failed load shows an error with Try Again, never an empty recap",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

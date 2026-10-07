@@ -14,6 +14,7 @@ import 'scenarios/device.dart';
 import 'scenarios/home.dart';
 import 'scenarios/memories.dart';
 import 'scenarios/onboarding.dart';
+import 'scenarios/recaps.dart';
 import 'scenarios/search.dart';
 import 'scenarios/settings.dart';
 import 'scenarios/settings_pages.dart';
@@ -32,6 +33,7 @@ final auditSuite = AuditSuite(
     ...captureScenarios,
     ...deviceScenarios,
     ...conversationsScenarios,
+    ...recapsScenarios,
     ...speakerPromptScenarios,
     ...speakerLabelScenarios,
     ...conversationDetailScenarios,
