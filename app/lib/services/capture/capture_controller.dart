@@ -328,7 +328,7 @@ class CaptureController extends ChangeNotifier
     }
     ble.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
     unawaited(
-      _recoverPhoneRestoreMarker().catchError((Object e) {
+      _recoverCaptureRestoreMarkers().catchError((Object e) {
         Logger.debug('[CaptureProvider] phone restore recovery failed: $e');
       }),
     );
@@ -830,7 +830,13 @@ class CaptureController extends ChangeNotifier
     await _preferences.saveBool(_phoneRestorePendingKey, false);
   }
 
-  Future<void> _recoverPhoneRestoreMarker() async {
+  Future<void> _recoverCaptureRestoreMarkers() async {
+    // Upgrade from #20837: an automatic power pause is not user mute intent.
+    // The serialized reducer rechecks the marker so a newer manual mute wins.
+    if (silencePaused) {
+      final outcome = await _dispatchWithResumeFence(const ResumeSilencePaused());
+      outcome.throwIfFailed();
+    }
     final pending = _preferences.getBool(_phoneRestorePendingKey);
     if (!pending) return;
     final mutedBefore = _preferences.getBool(_phoneRestoreMutedKey);
@@ -1895,6 +1901,12 @@ class CaptureController extends ChangeNotifier
         _metrics.addBleBytes(snapshot.length);
         _recordingTelemetry.observeAudio(snapshot.length);
 
+        final source = _activeSource;
+        final frames = source?.processBytes(snapshot) ?? [];
+        // A BLE packet has one headerless payload. WAL, upload and command
+        // buffering can share these owned bytes without another full copy.
+        final blePayload = source is BleDeviceSource && frames.length == 1 ? frames.single.payload : null;
+
         // Command button triggered
         bool voiceCommandSupported = _recordingDevice != null
             ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
@@ -1905,7 +1917,7 @@ class CaptureController extends ChangeNotifier
         // receives command audio (its step-1 session runs while disabled).
         final collectCommandAudio = !_omiButtonActionsDisabled || deviceOnboardingProvider?.isOnboardingActive == true;
         if (_voiceCommandSession != null && voiceCommandSupported && collectCommandAudio) {
-          final payload = _activeSource?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
+          final payload = blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
           _commandBytes.add(payload);
         }
 
@@ -1921,7 +1933,6 @@ class CaptureController extends ChangeNotifier
         }
 
         // Process bytes through audio source and feed to WAL
-        final frames = _activeSource?.processBytes(snapshot) ?? [];
         WalFrame? positionedFrame;
         if (_isWalSupported) {
           for (final frame in frames) {
@@ -1932,7 +1943,7 @@ class CaptureController extends ChangeNotifier
 
         // Send WS
         if (_socket?.state == SocketServiceState.connected) {
-          final socketPayload = _activeSource?.getSocketPayload(snapshot) ?? snapshot;
+          final socketPayload = blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot;
           if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
             _socket?.sendEvidenceFrame(positionedFrame);
           } else {

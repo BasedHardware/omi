@@ -77,6 +77,12 @@ void main() {
     await world.settle();
     await world.controller.pendingSourceSwitch;
     await world.settle();
+    // Reconciliation is deliberately unawaited by the capture dispatcher. Its
+    // I/O can finish after coordinator/timer quiescence; allow queued event-loop
+    // continuations to settle before asserting the committed transport state.
+    for (var i = 0; i < 5; i++) {
+      await world.settle();
+    }
   }
 
   void expectLive() {
@@ -100,7 +106,10 @@ void main() {
     world = await CaptureReplayWorld.boot(tempDir: directory);
     world.deviceConnection = ScriptedDeviceConnection();
     await world.controller.streamDeviceRecording(device: pendant);
-    await world.elapse(const Duration(seconds: 120));
+    // Seed the persisted #20837 marker; current firmware can no longer trigger
+    // a silence pause. Exercise upgrade recovery against the real sync fence.
+    await world.controller.pauseCapture();
+    await SharedPreferencesUtil().saveBool('uplinkSilencePaused', true);
     await settle();
     expect(world.controller.silencePaused, true);
     SharedPreferencesUtil.capturePolicyBridgeForTesting = (method, args) async {

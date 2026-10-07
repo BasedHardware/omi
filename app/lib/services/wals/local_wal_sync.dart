@@ -18,6 +18,7 @@ import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -937,16 +938,21 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           throw Exception('Flushing to storage failed. Cannot get file path.');
         }
 
-        List<int> data = [];
-        for (int i = 0; i < wal.data.length; i++) {
-          var frame = wal.data[i];
+        final List<int> data;
+        if (_isPendantWal(wal)) {
+          data = encodeWalFrames(wal.data);
+        } else {
+          data = [];
+          for (int i = 0; i < wal.data.length; i++) {
+            var frame = wal.data[i];
 
-          final byteFrame = ByteData(frame.length);
-          for (int j = 0; j < frame.length; j++) {
-            byteFrame.setUint8(j, frame[j]);
+            final byteFrame = ByteData(frame.length);
+            for (int j = 0; j < frame.length; j++) {
+              byteFrame.setUint8(j, frame[j]);
+            }
+            data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
+            data.addAll(byteFrame.buffer.asUint8List());
           }
-          data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-          data.addAll(byteFrame.buffer.asUint8List());
         }
         if (!await _checkStorageAdmission(
           bytes: data.length,

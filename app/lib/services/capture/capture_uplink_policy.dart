@@ -93,9 +93,9 @@ extension _CaptureUplinkPolicy on CaptureController {
   }
 
   void _armUplinkSilence() {
-    if (_capture.stagedReadModel.phase == CapturePhase.pendantLive && !isPaused && !_preferences.batchModeEnabled) {
-      _uplinkSilence.speechOrStart();
-    }
+    // Disabled until firmware advertises a verified retain-and-drain protocol.
+    // Keep manual pause/resume and legacy marker recovery available.
+    _uplinkSilence.cancel();
   }
 
   Future<void> _pauseDeviceTailBody() async {
