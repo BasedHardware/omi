@@ -27,7 +27,8 @@ Output is counts only: no conversation IDs or transcript text.
 
 Dry-run is the default: it reads Firestore and counts the chunks it would embed,
 with no embedding or vector writes. ``--apply`` embeds and upserts; it needs
-explicit approval before it is pointed at production.
+explicit approval before it is pointed at production. Operator steps:
+backend/docs/runbooks/transcript-chunk-backfill.md.
 
 Usage:
     python scripts/backfill_transcript_chunk_vectors.py --uid <uid>
