@@ -162,6 +162,8 @@ extension _NativeConversationDetail on ConversationDetailPageState {
                 ? null
                 : (_) => showCalendarEventDetailsSheet(context, conversation.calendarEvent!,
                     onUnlink: provider.unlinkCalendarEvent)),
+        if (conversation.captureCoverage == 'incomplete')
+          NativeRow('detail_partial_recording', l10n.partialRecording, kind: 'label', symbol: 'mic'),
         if (folder != null)
           NativeRow('detail_folder', folder.name, symbol: 'folder', action: (_) {
             trackConversationAction(ConversationActionAction.moveFolder, ConversationActionSurface.detailBody);

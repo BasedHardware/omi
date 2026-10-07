@@ -153,6 +153,7 @@ void main() {
           id: 'native-reader-fixture',
           createdAt: DateTime(2026, 10, 4, 10),
           status: ConversationStatus.completed,
+          captureCoverage: 'incomplete',
           structured: Structured('Native conversation',
               '## Next steps\n- **Ship** the reader\n- Check playback\n\n> Preserve the session.'),
           transcriptSegments: [
@@ -195,6 +196,8 @@ void main() {
             ...?surface().reader?.actions
           ].singleWhere((row) => row.id == id);
       expect(row('detail_summary_content').kind, 'rich_text');
+      expect(row('detail_partial_recording').title,
+          AppLocalizations.of(tester.element(find.byType(IosNativeSurface))).partialRecording);
       expect(row('detail_summary_content').blocks.any((block) => block['kind'] == 'heading'), true);
       final player = tester.state(find.byType(ConversationBottomBar, skipOffstage: false));
       final viewId = nativeViewId(tester, find.byType(UiKitView));

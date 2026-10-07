@@ -6,30 +6,35 @@ import 'package:omi/services/bridges/live_activity_bridge.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-class LiveActivitySettings extends StatefulWidget {
-  const LiveActivitySettings({super.key});
-  @override
-  State<LiveActivitySettings> createState() => _LiveActivitySettingsState();
-}
-
-class _LiveActivitySettingsState extends State<LiveActivitySettings> with WidgetsBindingObserver {
-  static const _channel = MethodChannel(LiveActivityBridge.channelName);
-  bool _supported = false;
-  bool _saving = false;
-  bool _enabled = true;
-
-  bool get _isIOS => defaultTargetPlatform == TargetPlatform.iOS;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = SharedPreferencesUtil().showCaptureLiveActivity;
+/// The Lock Screen Live Activity choice and its iOS availability. One owner serves both the
+/// Flutter row and a native settings projection, so both save and roll back the same way.
+class LiveActivitySettingsController extends ChangeNotifier with WidgetsBindingObserver {
+  LiveActivitySettingsController() : _enabled = SharedPreferencesUtil().showCaptureLiveActivity {
     WidgetsBinding.instance.addObserver(this);
     if (_isIOS) _load();
   }
 
+  static const _channel = MethodChannel(LiveActivityBridge.channelName);
+  bool _supported = false;
+  bool _saving = false;
+  bool _enabled;
+  bool _disposed = false;
+
+  bool get supported => _supported;
+  bool get saving => _saving;
+  bool get enabled => _enabled;
+
+  bool get _isIOS => defaultTargetPlatform == TargetPlatform.iOS;
+
+  void _update(VoidCallback change) {
+    if (_disposed) return;
+    change();
+    notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -44,7 +49,7 @@ class _LiveActivitySettingsState extends State<LiveActivitySettings> with Widget
     try {
       final value = await _channel.invokeMapMethod<String, Object?>('availability');
       // While iOS has Live Activities off for Omi, this switch would change nothing.
-      if (mounted) setState(() => _supported = value?['supported'] == true && value?['authorized'] == true);
+      _update(() => _supported = value?['supported'] == true && value?['authorized'] == true);
     } on PlatformException {
       // A system presentation is optional on older iOS versions.
     } on MissingPluginException {
@@ -52,16 +57,17 @@ class _LiveActivitySettingsState extends State<LiveActivitySettings> with Widget
     }
   }
 
-  Future<void> _setEnabled(bool value) async {
+  /// Saves [value], restoring the previous choice when either write fails. Returns whether it stuck.
+  Future<bool> setEnabled(bool value) async {
     final previous = _enabled;
-    setState(() => _saving = true);
+    _update(() => _saving = true);
     try {
       if (!await SharedPreferencesUtil().setShowCaptureLiveActivity(value)) {
         // The cache already holds the rejected value, and the next card update would send it.
         await SharedPreferencesUtil().setShowCaptureLiveActivity(previous);
         throw StateError('Preference was not saved');
       }
-      if (mounted) setState(() => _enabled = value);
+      _update(() => _enabled = value);
       try {
         await _channel.invokeMethod<void>('setEnabled', value);
       } catch (_) {
@@ -69,31 +75,71 @@ class _LiveActivitySettingsState extends State<LiveActivitySettings> with Widget
         await SharedPreferencesUtil().setShowCaptureLiveActivity(previous);
         rethrow;
       }
+      return true;
     } catch (_) {
-      if (mounted) {
-        setState(() => _enabled = previous);
-        OmiFeedback.error(context, context.l10n.somethingWentWrong);
-      }
+      _update(() => _enabled = previous);
+      return false;
     } finally {
-      if (mounted) setState(() => _saving = false);
+      _update(() => _saving = false);
+    }
+  }
+}
+
+class LiveActivitySettings extends StatefulWidget {
+  const LiveActivitySettings({super.key, this.controller});
+
+  /// Shared with a native projection of the same page; without one the row owns its controller.
+  final LiveActivitySettingsController? controller;
+
+  @override
+  State<LiveActivitySettings> createState() => _LiveActivitySettingsState();
+}
+
+class _LiveActivitySettingsState extends State<LiveActivitySettings> {
+  LiveActivitySettingsController? _owned;
+
+  LiveActivitySettingsController get _controller => widget.controller ?? (_owned ??= LiveActivitySettingsController());
+
+  @override
+  void initState() {
+    super.initState();
+    // Start the availability check with the row, as before the controller existed.
+    if (widget.controller == null) _owned = LiveActivitySettingsController();
+  }
+
+  @override
+  void dispose() {
+    _owned?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _setEnabled(bool value) async {
+    if (!await _controller.setEnabled(value) && mounted) {
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_supported) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.all(OmiSpacing.md),
-      child: OmiSettingsGroup(
-        children: [
-          OmiSettingsRow.toggle(
-            key: const ValueKey('capture_live_activity_toggle'),
-            title: context.l10n.showOnLockScreen,
-            value: _enabled,
-            onChanged: _saving ? null : _setEnabled,
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        final settings = _controller;
+        if (!settings.supported) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.all(OmiSpacing.md),
+          child: OmiSettingsGroup(
+            children: [
+              OmiSettingsRow.toggle(
+                key: const ValueKey('capture_live_activity_toggle'),
+                title: context.l10n.showOnLockScreen,
+                value: settings.enabled,
+                onChanged: settings.saving ? null : _setEnabled,
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
