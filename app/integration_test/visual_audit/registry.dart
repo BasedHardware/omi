@@ -17,6 +17,7 @@ import 'scenarios/offline_processing.dart';
 import 'scenarios/imports.dart';
 import 'scenarios/memories.dart';
 import 'scenarios/onboarding.dart';
+import 'scenarios/recaps.dart';
 import 'scenarios/review.dart';
 import 'scenarios/search.dart';
 import 'scenarios/settings.dart';
@@ -38,6 +39,7 @@ final auditSuite = AuditSuite(
     ...deviceScenarios,
     ...conversationsScenarios,
     ...offlineProcessingScenarios,
+    ...recapsScenarios,
     ...speakerPromptScenarios,
     ...speakerLabelScenarios,
     ...reviewScenarios,
