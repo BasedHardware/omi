@@ -89,7 +89,7 @@ static inline bool atomic_cas(atomic_t *v, int old, int n)
 #define DEVICE_DT_GET(node) (&test_device)
 #define DT_ALIAS(node) 0
 #define DT_NODELABEL(node) 0
-#define GPIO_DT_SPEC_GET_OR(node, property, fallback) (&(test_device))
+#define GPIO_DT_SPEC_GET_OR(node, property, fallback) {&test_device, 2}
 #ifdef CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET
 #define IS_ENABLED(v) (v)
 #else
