@@ -6,6 +6,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/capture/capture_coordinator.dart';
+import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 
@@ -28,9 +30,17 @@ void main() {
     await world.settle();
   }
 
+  // Historical state from #20837. New capture never creates this marker;
+  // recovery must remain covered for users upgrading from that version.
+  Future<void> legacySilencePause() async {
+    await world.controller.pauseCapture();
+    await SharedPreferencesUtil().saveBool('uplinkSilencePaused', true);
+    await world.settle();
+  }
+
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('tiered_capture_');
-    world = await CaptureReplayWorld.boot(tempDir: directory);
+    world = await CaptureReplayWorld.boot(tempDir: directory, pendantCodec: BleAudioCodec.opus);
     await connect();
   });
   tearDown(() async {
@@ -39,31 +49,93 @@ void main() {
     directory.deleteSync(recursive: true);
   });
 
-  test('default 120 second deadline pauses BLE and socket, finalizes once, and stays paused on reconnect', () async {
+  test('silence beyond the deadline keeps every packet flowing through BLE, socket and WAL', () async {
+    world.uploads.failAll = true;
     final socket = world.socket!;
-    await elapse(const Duration(seconds: 119));
+    final recording = world.controller.activeRecordingId;
+    for (var second = 0; second < 300; second++) {
+      world.deviceConnection!.emitAudio(value: second & 255);
+      await elapse(const Duration(seconds: 1));
+    }
+    expect(world.controller.silencePaused, false);
     expect(world.controller.isPaused, false);
-    await elapse(const Duration(seconds: 1));
-    expect(world.controller.silencePaused, true);
-    expect(world.controller.isPaused, true);
-    expect(socket.closeCalls, 1);
-    expect(world.deviceConnection!.openAudioSubscriptions, 0);
-    expect(world.processCalls, 1);
-    final sockets = world.sockets.length;
+    expect(world.controller.activeRecordingId, recording);
+    expect(socket.closeCalls, 0);
+    expect(socket.sentBinary, hasLength(300));
+    for (var i = 0; i < 300; i++) {
+      expect(socket.sentBinary[i], List<int>.filled(80, i & 255));
+    }
+    expect(world.deviceConnection!.openAudioSubscriptions, 1);
+    expect(world.processCalls, 0);
+    final retained = await world.wal.syncs.phone.getAllWals();
+    expect(retained.fold<int>(0, (count, wal) => count + wal.totalFrames), 300);
     world.controller.updateRecordingDevice(null);
     await world.settle();
     await connect();
-    await world.controller.streamDeviceRecording(); // Home's check-only start
-    await elapse(const Duration(seconds: 150));
+    expect(world.controller.isPaused, false);
+    expect(world.socket!.status, PureSocketStatus.connected);
+    expect(world.deviceConnection!.openAudioSubscriptions, 1);
+  });
+
+  test('queued silence event cannot change ownership or run pause effects', () {
+    final state = CaptureCoordinatorState.idle().copyWith(phase: CapturePhase.pendantLive);
+    final transition = transitionCapture(
+        state,
+        const UplinkSilenceElapsed(null),
+        CaptureEnvironment(
+            policyMuted: false,
+            paused: false,
+            batchModeEnabled: false,
+            batchModeSuspendedForOnboarding: false,
+            deviceSupportsTranscribeLater: false,
+            networkConnected: true,
+            signedIn: () => true,
+            phoneMicSupportsBatch: false,
+            transcriptReady: true,
+            socketConnected: true,
+            deviceServiceReady: true,
+            callActive: false,
+            deviceRecording: true,
+            micCapturing: false,
+            uplinkSilenceExpired: true));
+    expect(transition.state, same(state));
+    expect(transition.effects, isEmpty);
+  });
+
+  test('upgrade clears a persisted automatic pause, while explicit mute still survives restart', () async {
+    await legacySilencePause();
+    world.disposeController();
+    await world.reconstructProcess();
+    expect(world.controller.silencePaused, false);
+    expect(world.controller.isPaused, false);
+    await connect();
+    expect(world.deviceConnection!.openAudioSubscriptions, 1);
+    await world.controller.pauseCapture();
+    world.disposeController();
+    await world.reconstructProcess();
     expect(world.controller.isPaused, true);
-    expect(world.sockets.length, sockets);
-    expect(world.deviceConnection!.openAudioSubscriptions, 0);
+    expect(world.controller.silencePaused, false);
+  });
+
+  test('shared WAL/socket payload owns bytes before the BLE producer reuses its buffer', () async {
+    final raw = [1, 0, 0, ...List<int>.generate(80, (i) => i)];
+    world.deviceConnection!.emitRawAudio(raw);
+    final saved = world.wal.syncs.phone.testFrames.last;
+    expect(identical(saved.payload, world.socket!.sentBinary.last), true);
+    raw.fillRange(0, raw.length, 255);
+    expect(saved.payload, List<int>.generate(80, (i) => i));
+    expect(world.socket!.sentBinary.last, saved.payload);
+    await world.wal.syncs.phone.finalizeCurrentSession();
+    final wals = await world.wal.syncs.phone.getAllWals();
+    final disk = wals.where((w) => w.storage == WalStorage.disk).single;
+    final bytes = await File('${directory.path}/${disk.filePath}').readAsBytes();
+    expect(bytes, [80, 0, 0, 0, ...List<int>.generate(80, (i) => i)]);
   });
 
   for (final foreground in [false, true]) {
     for (final control in ['resume', 'doubleTap', 'liveActivity']) {
       test('resume during reconnect drain restores uplink (foreground=$foreground, control=$control)', () async {
-        await elapse(const Duration(seconds: 120));
+        await legacySilencePause();
         expect(world.controller.silencePaused, true);
         expect(world.controller.keepAliveScheduledForTesting, false);
         final socketCount = world.sockets.length;
@@ -121,7 +193,7 @@ void main() {
     }
   }
 
-  test('speech resets the configured deadline, audio packets do not', () async {
+  test('changing silence timeout and speech cannot arm an automatic pause', () async {
     SharedPreferencesUtil().conversationSilenceDuration = 300;
     await connect();
     await elapse(const Duration(seconds: 200));
@@ -141,13 +213,13 @@ void main() {
     expect(world.controller.isPaused, false);
     world.deviceConnection!.emitAudio();
     await elapse(const Duration(seconds: 100));
-    expect(world.controller.silencePaused, true);
+    expect(world.controller.silencePaused, false);
   });
 
   for (final charging in [false, true]) {
     test('${charging ? 'charging' : 'foreground'} resumes silence as a fresh session but respects manual mute',
         () async {
-      await elapse(const Duration(seconds: 120));
+      await legacySilencePause();
       final recording = world.controller.activeRecordingId;
       final sockets = world.sockets.length;
       if (charging) {
@@ -172,15 +244,15 @@ void main() {
   }
 
   test('manual pause takes over silence reason and prevents auto resume', () async {
-    await elapse(const Duration(seconds: 120));
+    await legacySilencePause();
     await world.controller.pauseCapture();
     expect(world.controller.silencePaused, false);
     await world.controller.resumeAfterSilence();
     expect(world.controller.isPaused, true);
   });
 
-  test('late transcript delivery cannot reopen an expired capture', () async {
-    await elapse(const Duration(seconds: 120));
+  test('late transcript delivery cannot reopen a manually paused capture', () async {
+    await world.controller.pauseCapture();
     await world.controller.pendingSourceSwitch;
     world.controller.onSegmentReceived([
       TranscriptSegment(
