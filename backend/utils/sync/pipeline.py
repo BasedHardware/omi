@@ -183,6 +183,7 @@ from utils.sync.telemetry import bounded_correlation_ref as _bounded_correlation
 from utils.sync.telemetry import bounded_exception_class
 from utils.sync.telemetry import bounded_exception_type as _bounded_exception_type
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
+from utils.sync.telemetry import bounded_sync_language as _bounded_retry_language
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
 from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
@@ -1273,17 +1274,27 @@ def process_segment(
         # retry further. Counting it as a failed segment finalized the whole
         # job failed, and the client re-uploaded the same noise on every pass
         # until it gave up and showed the recording as permanently failed.
-        def _log_empty_retry(outcome: str) -> None:
+        def _log_empty_retry(outcome: str, words: int = 0, raw_empty: bool = False) -> None:
             logger.info(
-                'event=sync_transcription_empty_retry outcome=%s provider=%s lane=%s job_ref=%s attempt_ref=%s',
+                'event=sync_transcription_empty_retry outcome=%s provider=%s model=%s lane=%s '
+                'raw_empty=%s words=%s detected_language=%s job_ref=%s attempt_ref=%s',
                 outcome,
                 bounded_provider(provider),
+                _bounded_sync_model(model),
                 _bounded_sync_lane(sync_lane),
+                str(bool(raw_empty)).lower(),
+                min(int(words), 100000),
+                (
+                    _bounded_retry_language(detected_language)
+                    if outcome != 'started'
+                    else _bounded_retry_language(req_language)
+                ),
                 _bounded_correlation_ref(job_id),
                 _bounded_correlation_ref(attempt_ref),
             )
 
         empty_retried = False
+        recovered_via_retry = False
         transcript_segments: List[TranscriptSegment] = []
         while True:
             phase = 'provider_call'
@@ -1300,12 +1311,13 @@ def process_segment(
             transcript_segments = postprocess_words(words, 0) if words else []
             if transcript_segments:
                 if empty_retried:
-                    _log_empty_retry('recovered')
+                    _log_empty_retry('recovered', words=len(words or []), raw_empty=not words)
+                    recovered_via_retry = True
                 break
             if empty_retried:
                 # Words survived the provider but nothing survived post-processing:
                 # again no transcribable speech, valid and empty rather than failed.
-                _log_empty_retry('still_empty')
+                _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
                 _record_empty_segment_as_silence(
                     provider=provider,
                     model=model,
@@ -1317,7 +1329,7 @@ def process_segment(
                 )
                 return False
             empty_retried = True
-            _log_empty_retry('started')
+            _log_empty_retry('started', words=len(words or []), raw_empty=not words)
 
         # Chronological scheduling reduces bridge work; the transaction remains
         # correct when independent jobs or a timed-out worker arrive out of order.
@@ -1397,6 +1409,21 @@ def process_segment(
             candidate_id=closest_memory['id'] if closest_memory else None,
             target_id=target_conversation_id,
         )
+        if recovered_via_retry:
+            # The 'recovered' event fires at the provider boundary; this one
+            # confirms the recovered segment actually persisted. Measured
+            # durable recovery is the input a gate/kill decision needs — do
+            # not price the retry from 'recovered' alone.
+            logger.info(
+                'event=sync_transcription_empty_retry outcome=durable_recovered provider=%s model=%s lane=%s '
+                'segments=%s job_ref=%s attempt_ref=%s',
+                bounded_provider(provider),
+                _bounded_sync_model(model),
+                _bounded_sync_lane(sync_lane),
+                len(transcript_segments),
+                _bounded_correlation_ref(job_id),
+                _bounded_correlation_ref(attempt_ref),
+            )
         record_capture_evidence_metric(incoming)
 
         def mark_finalize():
