@@ -301,7 +301,7 @@ class SttProviderConfig {
       requiresApiKey: true,
       requestType: SttRequestType.jsonBase64,
       supportedLanguages: SttLanguages.geminiSupported,
-      supportedModels: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+      supportedModels: ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'],
       defaultLanguage: 'en',
       defaultModel: 'gemini-3.6-flash',
       responseSchema: SttResponseSchema.gemini,
