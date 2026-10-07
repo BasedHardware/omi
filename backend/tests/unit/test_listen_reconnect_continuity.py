@@ -464,7 +464,11 @@ def test_calendar_id_only_continuation_resolves_exact_users_meeting(identity):
     )
     assert result == {'conversation_id': 'meeting', 'recording_session_id': 'meeting'}
     assert retired is None
-    assert store.rows[path] == row  # hydration does not stamp a new client/server field
+    cached = store.rows[path]['external_data']['calendar_meeting_context']
+    assert cached == store.rows[event_path]
+    assert {key: value for key, value in store.rows[path].items() if key != 'external_data'} == {
+        key: value for key, value in row.items() if key != 'external_data'
+    }
 
 
 @pytest.mark.parametrize(
@@ -578,3 +582,118 @@ async def test_live_created_row_honors_active_calendar_window(monkeypatch, meeti
     await controller.lifecycle_loop()
     assert (controller.host.state.current_conversation_id == cid) is (meeting_state == 'active')
     assert harness.creates == (1 if meeting_state == 'active' else 2)
+
+
+@pytest.mark.anyio
+async def test_lifecycle_polls_read_an_id_only_meeting_once_per_window(monkeypatch):
+    from database.document_ids import calendar_meeting_doc_id
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+
+    harness = CaptureHarness(monkeypatch)
+    controller = harness.connect()
+    await controller.prepare()
+    cid = controller.host.state.current_conversation_id
+    row = harness.rows[cid]
+    row.update(has_content=True, transcript_segments=[{'text': 'kept'}])
+    row['external_data']['calendar_event_id'] = 'event-1'
+    event_path = ('users', 'u', 'meetings', calendar_meeting_doc_id('u', 'system_calendar', 'event-1'))
+    harness.store.rows[event_path] = {
+        'calendar_event_id': 'event-1',
+        'calendar_source': 'system_calendar',
+        'start_time': harness.now,
+        'duration_minutes': 120,
+    }
+    reads = 0
+    original_get = StrictFirestoreDocument.get
+
+    def count_lookup(ref, *args, **kwargs):
+        nonlocal reads
+        if ref.path == event_path:
+            reads += 1
+        return original_get(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', count_lookup)
+    prior_call = harness.call
+
+    async def call(fn, *args, **kwargs):
+        if fn is listen_continuations.calendar_continuity_row:
+            return fn(*args, **kwargs, firestore_client=harness.store)
+        return await prior_call(fn, *args, **kwargs)
+
+    controller.host.persistence.call = call
+    ticks = iter([False] * 12 + [True])
+
+    async def wait(seconds):
+        harness.now += timedelta(seconds=seconds)
+        return next(ticks)
+
+    controller.host.wait = wait
+    harness.now += timedelta(minutes=15)
+    await controller.lifecycle_loop()
+    assert reads == 1
+    assert harness.creates == 1
+    assert row['external_data']['calendar_meeting_context']['duration_minutes'] == 120
+    assert row['external_data']['recording_session_id'] == controller.host.recording_session_id
+
+
+def test_reconnect_window_cache_defers_writes_until_candidate_reads(monkeypatch):
+    from database.document_ids import calendar_meeting_doc_id
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+
+    store = StrictFirestore()
+    now = datetime(2026, 10, 7, tzinfo=timezone.utc)
+    root = ('users', 'u', 'recording_sessions', 'origin')
+    store.rows[root] = {
+        'uid': 'u',
+        'recording_session_id': 'origin',
+        'live_continuation': {'conversation_id': 'old', 'recording_session_id': 'old'},
+    }
+    event_path = ('users', 'u', 'meetings', calendar_meeting_doc_id('u', 'system_calendar', 'event-1'))
+    store.rows[event_path] = {
+        'calendar_event_id': 'event-1',
+        'calendar_source': 'system_calendar',
+        'start_time': now,
+        'duration_minutes': 120,
+    }
+    store.rows[('users', 'u', 'conversations', 'old')] = {
+        'status': 'completed',
+        'source': 'omi',
+        'client_device_id': 'phone',
+        'finished_at': now,
+        'has_content': True,
+        'external_data': {'calendar_event_id': 'event-1'},
+    }
+    store.rows[('users', 'u', 'conversations', 'new')] = {
+        'status': 'in_progress',
+        'source': 'omi',
+        'client_device_id': 'phone',
+        'finished_at': now,
+        'has_content': True,
+    }
+    reads = 0
+    original_get = StrictFirestoreDocument.get
+
+    def count_lookup(ref, *args, **kwargs):
+        nonlocal reads
+        if ref.path == event_path:
+            reads += 1
+        return original_get(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', count_lookup)
+    for _ in range(3):
+        selected, _ = listen_continuations.resolve_live_continuation(
+            'u',
+            'origin',
+            source='omi',
+            device_id='phone',
+            now=now,
+            timeout=120,
+            proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+            firestore_client=store,
+        )
+        assert selected == {'conversation_id': 'new', 'recording_session_id': 'new'}
+    assert reads == 1
+    assert (
+        store.rows[('users', 'u', 'conversations', 'old')]['external_data']['calendar_meeting_context']['start_time']
+        == now
+    )
