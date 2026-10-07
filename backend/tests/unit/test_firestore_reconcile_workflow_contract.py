@@ -42,7 +42,7 @@ def test_billing_query_uses_rest_jobs_query():
         "a bq CLI invocation regressed into the script; it enters the first-run "
         "account prompt on non-TTY runners and exits 1 before inserting any job"
     )
-    assert '"print-access-token"' in source, "the REST call needs a token minted from the ambient credential"
+    assert "google.auth.default" in source, "the REST call needs a token minted from the ambient credential"
 
 
 def test_billing_query_failures_surface_and_retry():
