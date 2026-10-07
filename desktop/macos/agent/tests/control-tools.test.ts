@@ -84,6 +84,30 @@ function createCapabilityBroker(store: SqliteAgentStore): RunToolCapabilityBroke
 }
 
 describe("agent control tools", () => {
+  it("prepares task threads with the owner's selected provider instead of implicit Claude billing", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    kernel.configureDefaultExecutionProfile({
+      ownerId: "owner",
+      adapterId: "pi-mono",
+      modelProfile: "omi-sonnet",
+      workingDirectory: "/tmp/task-workspace",
+    });
+    const prepared = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "prepare_workstream_continuity", {
+        workstreamId: "task-credit-report",
+        taskIds: ["task-credit-report"],
+      }),
+    );
+    const sessionId = (prepared.session as { agentSessionId: string }).agentSessionId;
+    expect(kernel.sessionExecutionProfile(sessionId, "owner")).toMatchObject({
+      adapterId: "pi-mono",
+      credentialScope: "managed_cloud",
+      modelProfile: "omi-sonnet",
+      workingDirectory: "/tmp/task-workspace",
+    });
+    store.close();
+  });
+
   it("bridges workstream migration, artifact versioning, checkpointing, and idempotent replay", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const context = ownerContext(kernel);
