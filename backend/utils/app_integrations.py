@@ -41,7 +41,7 @@ from database.webhook_health import (
 from database.chat import add_app_message, get_app_messages
 from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
-from database.users import get_user_language_preference
+from database.users import get_user_language_preference  # used via module attribute by proactivity_producers
 from utils.subscription import is_trial_paywalled
 from utils.mentor_admission import mentor_plan_allows_evaluation
 from database.redis_db import (
