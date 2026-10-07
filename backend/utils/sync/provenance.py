@@ -22,7 +22,11 @@ def capture_matches_server_conversation(
     conversation = read_metadata(conversations_db, uid, conversation_id, operation='provenance')
     if snapshot_out is not None and conversation:
         snapshot_out.update(conversation)
-    if not conversation or conversation.get('client_device_id') != client_device_id:
+    if (
+        not conversation
+        or conversations_db.is_soft_deleted(conversation)
+        or conversation.get('client_device_id') != client_device_id
+    ):
         return False
     started_at = conversation.get('started_at')
     finished_at = conversation.get('finished_at') or started_at
