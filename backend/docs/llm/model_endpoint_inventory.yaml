@@ -157,7 +157,8 @@ surfaces:
   current_provider_model: utils.llm.model_config feature profile
   request_shape: plain chat, structured output, parser chain, streaming, tool calling via LangChain
   gateway_lane_capability_needed: generated feature lanes
-  migration_status: gateway_capable_central_flip
+  migration_status: gateway_only_managed_get_llm; company-paid get_llm calls always use the mandatory feature lane
+    regardless of rollout flags. BYOK requests may use their provider-scoped key directly or through the optional gateway path.
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: openai_agentic_chat
   code_path: backend/utils/retrieval/agentic.py:_run_openai_agent_stream

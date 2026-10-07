@@ -195,22 +195,26 @@ def test_get_llm_gateway_mode_passes_memory_l1_the_foreground_deadline(monkeypat
     assert captured["feature"] == "memory_l1"
 
 
-def test_get_llm_direct_route_carries_the_foreground_deadline(monkeypatch):
+def test_paid_route_keeps_foreground_deadline_when_legacy_gateway_flag_is_off(monkeypatch):
     import utils.llm.clients as clients
 
-    monkeypatch.setattr("utils.llm.clients.should_route_features_through_gateway", lambda: False)
-    monkeypatch.setattr("utils.llm.clients.get_byok_key", lambda *_a, **_k: None)
     captured: dict = {}
+    monkeypatch.setenv("OMI_LLM_GATEWAY_FEATURE_MODE", "off")
+    monkeypatch.setattr(clients, "get_byok_key", lambda *_a, **_k: None)
 
-    def fake_default_client(model, provider, streaming, options=None):
-        captured.update(model=model, provider=provider, options=dict(options or {}))
+    def fake_gateway_client(lane_id, streaming=False, options=None, *, feature=None):
+        captured.update(lane=lane_id, feature=feature, options=dict(options or {}))
         return object()
 
-    monkeypatch.setattr(clients, "get_default_client", fake_default_client)
-    monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **_k: _k["legacy_model"])
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway_client)
+    monkeypatch.setattr(
+        clients, "get_default_client", lambda *_a, **_k: pytest.fail("Paid inference must use the gateway")
+    )
 
     clients.get_llm("memory_l1")
 
+    assert captured["lane"] == "omi:auto:memory-l1"
+    assert captured["feature"] == "memory_l1"
     assert captured["options"]["request_timeout"] == model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS
 
 

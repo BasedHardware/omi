@@ -829,13 +829,14 @@ def get_llm(
             route_options = {**route_options, "max_retries": max_retries}
         result = get_default_client(model, provider, streaming, route_options)
 
-    result = maybe_wrap_dev_gateway_shadow(
-        feature=feature,
-        model=model,
-        provider=provider,
-        streaming=streaming,
-        legacy_model=result,
-    )
+    if not route_through_gateway and not byok_key:
+        result = maybe_wrap_dev_gateway_shadow(
+            feature=feature,
+            model=model,
+            provider=provider,
+            streaming=streaming,
+            legacy_model=result,
+        )
 
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):

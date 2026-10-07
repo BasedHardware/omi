@@ -42,19 +42,12 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 def _chat_file_gateway_stub() -> ModuleType:
-    """The exact attribute recipe test_chat_file_upload_unsupported installs."""
+    """Minimal gateway-client surface directly imported by the real chat_file module."""
     gateway_client = ModuleType("utils.llm.gateway_client")
-    gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
-    gateway_client.CHAT_AGENT_ROUTE_DIRECT = "direct"
-    gateway_client.CHAT_AGENT_ROUTE_GATEWAY = "gateway"
-    gateway_client.get_chat_agent_route = MagicMock(return_value="direct")
     gateway_client.file_chat_auto_lane_id = MagicMock(return_value="omi:auto:file-chat-vision")
     gateway_client.file_chat_feature_header = MagicMock(return_value={})
     gateway_client.get_file_chat_gateway_async_client = MagicMock()
     gateway_client.get_file_chat_gateway_sync_client = MagicMock()
-    gateway_client.is_gateway_model_not_found = MagicMock(return_value=False)
-    # chat_file imports LUNA_MODEL from model_config, which imports this name.
-    gateway_client.is_auto_lane_id = MagicMock(return_value=False)
     return gateway_client
 
 
@@ -97,7 +90,7 @@ def test_chat_file_imports_against_the_suite_gateway_stub():
 def test_a_stale_stub_fails_on_the_exact_missing_attribute():
     """If chat_file grows a gateway import the stub lacks, the failure names it.
 
-    Builds the PRE-FIX stub recipe (no ``is_gateway_model_not_found``) and
+    Builds a stale stub recipe without ``get_file_chat_gateway_async_client`` and
     asserts the ImportError carries the missing attribute name, so the
     recurring failure mode of this class is a one-line diagnosis instead of
     seven opaque setup errors. If this ever raises AssertionError instead,
@@ -106,12 +99,12 @@ def test_a_stale_stub_fails_on_the_exact_missing_attribute():
     saved = {k: v for k, v in sys.modules.items()}
     try:
         stale = _chat_file_gateway_stub()
-        del stale.is_gateway_model_not_found
+        del stale.get_file_chat_gateway_async_client
         _install_stack(stale)
         try:
             harness.load_real_module("utils.other.chat_file", BACKEND_DIR / "utils" / "other" / "chat_file.py")
         except ImportError as e:
-            assert "is_gateway_model_not_found" in str(e), (
+            assert "get_file_chat_gateway_async_client" in str(e), (
                 "import must fail on the exact missing attribute so the stub " "fix is actionable, got: %s" % e
             )
         else:

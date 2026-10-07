@@ -36,6 +36,10 @@ DIRECT_PROVIDER_CALL_PREFIXES = {
     'openai.files',
     'anthropic_client.messages',
 }
+GATEWAY_PROVIDER_ACCESSORS = {
+    'utils.llm.gateway_client.get_file_chat_gateway_async_client',
+    'utils.llm.gateway_client.get_file_chat_gateway_sync_client',
+}
 DIRECT_PROVIDER_ENV_VARS = {
     'OPENAI_API_KEY',
     'OPENROUTER_API_KEY',
@@ -74,7 +78,6 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/tts.py', 'GEMINI_API_KEY'),
     DirectUse('utils/memory_ingestion/export_runner.py', 'OPENAI_API_KEY'),
     DirectUse('utils/other/chat_file.py', 'AsyncOpenAI'),
-    DirectUse('utils/other/chat_file.py', 'openai.chat.completions'),
     DirectUse('utils/other/chat_file.py', 'openai.files'),
     # gateway_client.py constructs SDK clients pointed at the gateway itself
     # (OpenAI-compatible surface); these never reach a provider directly.
@@ -372,7 +375,30 @@ _ACCESSOR_PROBE_SOURCE = textwrap.dedent("""
     async def ask():
         await _get_async_openai().chat.completions.create(model='m', messages=[])
         _get_sync_openai().files.create(file=None, purpose='assistants')
-    """)
+""")
+
+
+_GATEWAY_ACCESSOR_PROBE_SOURCE = textwrap.dedent("""
+    from utils.llm.gateway_client import get_file_chat_gateway_async_client as get_gateway_client
+
+
+    async def ask():
+        await get_gateway_client().chat.completions.create(model='omi:auto:file-chat-vision', messages=[])
+""")
+
+
+def test_direct_provider_scan_recognizes_exact_gateway_client_imports():
+    tree = ast.parse(_GATEWAY_ACCESSOR_PROBE_SOURCE)
+    aliases = _import_aliases(tree)
+    completion_call = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and _dotted_name(node.func) == 'chat.completions.create'
+    )
+
+    assert aliases['get_gateway_client'] == 'utils.llm.gateway_client.get_file_chat_gateway_async_client'
+    assert _uses_gateway_provider_accessor(completion_call.func, aliases)
+    assert _direct_provider_uses('gateway_probe.py', tree) == set()
 
 
 def test_direct_provider_scan_sees_through_a_provider_accessor():
@@ -398,21 +424,20 @@ def test_direct_provider_scan_sees_through_a_provider_accessor():
     assert 'openai.files' in uses, 'the provider module itself returned by an accessor'
 
 
-def test_direct_provider_scan_reports_the_file_chat_direct_fallback():
-    """The live site the accessor blind spot hid.
-
-    ``chat_file.py`` falls back to direct OpenAI when the gateway lane is
-    missing or returns a model-not-found. That call is real, it is
-    allowlisted, and the scan must keep seeing it: an inventory that silently
-    stops detecting a direct provider call is worse than one that never had
-    the entry.
-    """
+def test_direct_provider_scan_classifies_file_chat_gateway_accessors_exactly():
+    """File-chat completions use gateway accessors while its Files API stays direct."""
     rel = 'utils/other/chat_file.py'
     tree = ast.parse((BACKEND_DIR / rel).read_text(encoding='utf-8'))
+    aliases = _import_aliases(tree)
 
     uses = {use.symbol for use in _direct_provider_uses(rel, tree)}
 
-    assert 'openai.chat.completions' in uses
+    assert aliases['get_file_chat_gateway_async_client'] == (
+        'utils.llm.gateway_client.get_file_chat_gateway_async_client'
+    )
+    assert aliases['get_file_chat_gateway_sync_client'] == 'utils.llm.gateway_client.get_file_chat_gateway_sync_client'
+    assert 'openai.chat.completions' not in uses
+    assert {'AsyncOpenAI', 'openai.files'} <= uses
 
 
 _REST_HOST_PROBE_SOURCE = textwrap.dedent("""
@@ -735,12 +760,11 @@ def test_resolver_feature_literals_are_configured_and_dynamic_sites_are_reviewed
 
 
 def test_file_chat_completions_hop_the_gateway_in_feature_mode():
-    """File chat's model call is gateway-routed; only the kill-switch path stays direct.
+    """File chat's managed model call always uses its mandatory gateway lane.
 
-    Static tripwire for the file-chat gateway lanes: under
-    OMI_LLM_GATEWAY_FEATURE_MODE=gateway the completions call must go through
-    the gateway client, never a raw direct SDK call, and the surface must not
-    swing back to the fail-closed blocking gate. Behavioral coverage lives in
+    Static tripwire for the file-chat gateway lanes: the completions call must
+    go through the gateway client regardless of rollout flags, never a raw
+    direct SDK call. Behavioral coverage lives in
     test_chat_file_gateway_surface.py.
     """
     source = (BACKEND_DIR / 'utils/other/chat_file.py').read_text(encoding='utf-8')
@@ -939,12 +963,24 @@ def _direct_provider_uses(rel: str, tree: ast.AST) -> set[DirectUse]:
                 # accessor resolved to its provider root.
                 through = _expanded_name(_dotted_name_through_accessors(node.func, accessors), aliases)
                 matched = _direct_symbol(through)
+            if matched == 'openai.chat.completions' and _uses_gateway_provider_accessor(node.func, aliases):
+                continue
             if matched is not None:
                 uses.add(DirectUse(rel, matched))
             env_var = _provider_env_var_from_call(node)
             if env_var is not None:
                 uses.add(DirectUse(rel, env_var))
     return uses
+
+
+def _uses_gateway_provider_accessor(node: ast.AST, aliases: dict[str, str]) -> bool:
+    """True when this call receiver comes from an explicitly imported gateway client."""
+    if isinstance(node, ast.Call):
+        callee = _expanded_name(_dotted_name(node.func), aliases)
+        return callee in GATEWAY_PROVIDER_ACCESSORS
+    if isinstance(node, ast.Attribute):
+        return _uses_gateway_provider_accessor(node.value, aliases)
+    return False
 
 
 # Provider roots reachable through an accessor, derived from the constructor
