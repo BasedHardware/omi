@@ -9941,11 +9941,6 @@ class AppLocalizationsLt extends AppLocalizations {
       'Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Neįrašyta ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name balso profilis';
   }
@@ -12474,6 +12469,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Ne visai';
+
+  @override
+  String get partialRecording => 'Dalinis įrašas';
 
   @override
   String get importTranscriptFiles => 'Transkripcijų failai';

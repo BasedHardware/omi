@@ -410,6 +410,9 @@ environments:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -604,6 +607,9 @@ environments:
             category: rollout
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
+            category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
             category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -1179,6 +1185,9 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST:
               value: https://us.posthog.com
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -1492,6 +1501,9 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST:
               value: https://us.posthog.com
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             BUCKET_SCREEN_FRAMES:
               value: based-hardware-dev-screen-frames
               category: storage_retention
@@ -1788,6 +1800,9 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST:
               value: https://us.posthog.com
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2023,6 +2038,9 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST:
               value: https://us.posthog.com
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2136,6 +2154,9 @@ environments:
             RAPID_API_KEY:
               secret: RAPID_API_KEY
               version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -2159,6 +2180,10 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            REDIS_DB_HOST:
+              value: redis-10797.c62.us-east-1-4.ec2.redns.redis-cloud.com
+            REDIS_DB_PORT:
+              value: '10797'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2662,13 +2687,13 @@ environments:
             value: 'true'
             category: rollout
           STT_ROUTING_MODE:
-            value: shadow
+            value: 'on'
             category: rollout
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
           STT_ROUTING_ON_PERCENT:
-            value: '0'
+            value: '100'
             category: rollout
           STT_ROUTING_TARGETS_JSON:
             value: ''
@@ -2906,6 +2931,9 @@ environments:
           OMI_SHAPED_AGENT_MODE:
             value: cohort
             category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -2917,6 +2945,9 @@ environments:
             category: reliability
           SONIOX_IDLE_CLOSE_SECONDS:
             value: '45'
+            category: rollout
+          STT_NO_TEXT_RESCUE_ENABLED:
+            value: 'true'
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -2990,6 +3021,12 @@ environments:
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -3147,6 +3184,9 @@ environments:
           OMI_SHAPED_AGENT_MODE:
             value: cohort
             category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -3184,6 +3224,12 @@ environments:
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -3624,6 +3670,9 @@ environments:
             OMI_SHAPED_AGENT_MODE:
               value: cohort
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -3715,6 +3764,12 @@ environments:
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '100'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+              value: '1'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3960,6 +4015,9 @@ environments:
             SPEAKER_MATCH_SCORES_ENABLED:
               value: 'true'
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
               value: 'true'
               category: rollout
@@ -4029,6 +4087,12 @@ environments:
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '100'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+              value: '1'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -4252,6 +4316,9 @@ environments:
             SPEAKER_MATCH_SCORES_ENABLED:
               value: 'true'
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -4312,6 +4379,12 @@ environments:
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '100'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+              value: '1'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -4504,6 +4577,9 @@ environments:
             SPEAKER_MATCH_SCORES_ENABLED:
               value: 'true'
               category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             ACCOUNT_DELETION_DISPATCH_MODE:
@@ -4606,6 +4682,9 @@ environments:
             RAPID_API_KEY:
               secret: RAPID_API_KEY
               version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -4629,6 +4708,12 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            REDIS_DB_HOST:
+              value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+            REDIS_DB_PORT:
+              value: '13151'
+            MEMORY_ENABLED:
+              value: 'on'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
         memory-maintenance-job:

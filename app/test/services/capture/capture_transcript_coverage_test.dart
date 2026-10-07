@@ -27,7 +27,14 @@ void main() {
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('capture_safety_copy_');
-    world = await CaptureReplayWorld.boot(tempDir: directory, pendantCodec: BleAudioCodec.opus);
+    // These custody fixtures intentionally delay transcripts for several minutes.
+    // Keep capture admitted using the existing four-hour setting; default silence
+    // pause is exercised separately in tiered_capture_test.dart.
+    world = await CaptureReplayWorld.boot(
+      tempDir: directory,
+      pendantCodec: BleAudioCodec.opus,
+      initialPrefs: {'conversationSilenceDuration': -1},
+    );
   });
 
   tearDown(() async {

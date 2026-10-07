@@ -1444,7 +1444,7 @@ def _seed_mcp_refresh_replay(client, combo, trial):
         'resource': 'res-1',
         'grant_id': 'grant-1',
         'scopes': [],
-        'used_at': T0,
+        'used_at': T0 - timedelta(minutes=10),
         'expires_at': T1,
     }
 
@@ -1479,6 +1479,7 @@ _add(
         'database.mcp_oauth.rotate_refresh_token',
         base={'refresh_token': 'token-1', 'client_id': 'client-1', 'resource': 'res-1'},
         domains={'scope': [None, 'scope-1']},
+        neutrals={'on_outcome': _NOOP},
         setup=_seed_mcp_refresh_replay,
         patchers=_MCP_NOOP_CACHE,
     )

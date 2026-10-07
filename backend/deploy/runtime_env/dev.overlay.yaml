@@ -33,6 +33,7 @@ overlay:
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+        SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -191,6 +192,7 @@ overlay:
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+        SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
         MENTOR_GATE_DEBOUNCE_ENABLED:
           value: 'true'
@@ -503,6 +505,7 @@ overlay:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -658,6 +661,7 @@ overlay:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
@@ -815,6 +819,7 @@ overlay:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
@@ -931,6 +936,7 @@ overlay:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
@@ -1003,7 +1009,15 @@ overlay:
         flags:
           --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
           --remove-env-vars: HOSTED_PUSHER_API_URL
+        secrets:
+          REDIS_DB_PASSWORD:
+            secret: REDIS_DB_PASSWORD
+            version: latest
         env:
+          REDIS_DB_HOST:
+            value: redis-10797.c62.us-east-1-4.ec2.redns.redis-cloud.com
+          REDIS_DB_PORT:
+            value: '10797'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:

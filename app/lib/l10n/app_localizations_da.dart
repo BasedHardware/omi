@@ -9910,11 +9910,6 @@ class AppLocalizationsDa extends AppLocalizations {
       'Din Pendants lager er fuldt, og den er stadig i optagetilstand, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser derefter igen.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Ikke optaget ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Stemmeprofil for $name';
   }
@@ -12440,6 +12435,9 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Ikke rigtig';
+
+  @override
+  String get partialRecording => 'Delvis optagelse';
 
   @override
   String get importTranscriptFiles => 'Transskriptionsfiler';

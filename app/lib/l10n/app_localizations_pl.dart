@@ -9954,11 +9954,6 @@ class AppLocalizationsPl extends AppLocalizations {
       'Pamięć Pendanta jest pełna i wciąż jest on w trybie nagrywania, więc zapisanego dźwięku nie można przenieść. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Nie nagrano ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profil głosowy: $name';
   }
@@ -12491,6 +12486,9 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Niezbyt';
+
+  @override
+  String get partialRecording => 'Częściowe nagranie';
 
   @override
   String get importTranscriptFiles => 'Pliki transkrypcji';

@@ -20,6 +20,7 @@ from utils.stt.socket import STTSocket
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics
 from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.live_metrics import soniox_idle_metrics
+from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_reason import normalize_live_stt_reason
 
@@ -81,6 +82,7 @@ class IdleSonioxSocket(STTSocket):
         self._resumed_audio = b''
         self._resume_offset: float | None = None
         self._admitted_samples = 0
+        self._routing_cohort = current_routing_cohort.get()
         self._metrics = soniox_idle_metrics()
         self._writer_pacing: tuple[Any, ...] | None = None
         self._socket_epoch = 0
@@ -176,6 +178,8 @@ class IdleSonioxSocket(STTSocket):
         accepted = self._transport.send(data)
         if accepted:
             self._admitted_samples += len(data) // 2
+            if self._routing_cohort is not None:
+                self._routing_cohort.paid_audio('soniox', len(data) / (self._rate * 2))
         return accepted
 
     async def complete_send(self) -> bool:

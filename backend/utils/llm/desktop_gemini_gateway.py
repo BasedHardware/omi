@@ -17,6 +17,7 @@ Vertex adapter fail-closes BYOK by design.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
@@ -402,6 +403,24 @@ def openai_sse_payload_to_gemini_event(
     return {'candidates': [{'content': {'parts': parts}}]}
 
 
+async def _gateway_post(url: str, *, headers: dict[str, str], payload: Mapping[str, Any]) -> httpx.Response:
+    """POST to the gateway under a wall-clock deadline.
+
+    ``timeout=`` on the httpx call is only the idle gap between socket reads.
+    A trickled Vertex body resets that gap and will otherwise run until Cloud
+    Run closes the desktop request at its 300s limit.
+    """
+    async with asyncio.timeout(DESKTOP_GATEWAY_TIMEOUT_SECONDS):
+        async with get_llm_gateway_semaphore():
+            client = get_llm_gateway_client()
+            return await client.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
+            )
+
+
 def _gateway_error(result: httpx.Response) -> DesktopGeminiGatewayError:
     try:
         body = result.json()
@@ -442,16 +461,13 @@ async def gateway_desktop_chat(
             status_code=400, code='validation_rejected', message=f'Gemini model {model} has no gateway lane'
         )
     request = gemini_body_to_openai_chat(payload, lane_id=lane_id, stream=False)
-    async with get_llm_gateway_semaphore():
-        client = get_llm_gateway_client()
-        result = await client.post(
-            f'{get_llm_gateway_base_url()}/v1/chat/completions',
-            headers=_desktop_gateway_headers(
-                uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
-            ),
-            json=request,
-            timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
-        )
+    result = await _gateway_post(
+        f'{get_llm_gateway_base_url()}/v1/chat/completions',
+        headers=_desktop_gateway_headers(
+            uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
+        ),
+        payload=request,
+    )
     if result.status_code >= 400:
         raise _gateway_error(result)
     return GatewayChatResult(gemini_payload=openai_completion_to_gemini(result.json()))
@@ -527,16 +543,13 @@ async def gateway_desktop_embed_content(
         request['task_type'] = payload.get('taskType') or payload.get('task_type')
     if isinstance(payload.get('title'), str):
         request['title'] = payload['title']
-    async with get_llm_gateway_semaphore():
-        client = get_llm_gateway_client()
-        result = await client.post(
-            f'{get_llm_gateway_base_url()}/v1/embeddings',
-            headers=_desktop_gateway_headers(
-                uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
-            ),
-            json=request,
-            timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
-        )
+    result = await _gateway_post(
+        f'{get_llm_gateway_base_url()}/v1/embeddings',
+        headers=_desktop_gateway_headers(
+            uid=uid, request_id=request_id, product_lane=product_lane, client_platform=client_platform
+        ),
+        payload=request,
+    )
     if result.status_code >= 400:
         raise _gateway_error(result)
     data = result.json().get('data')

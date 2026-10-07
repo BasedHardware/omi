@@ -9969,11 +9969,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Neînregistrat ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profilul vocal al lui $name';
   }
@@ -12507,6 +12502,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Nu prea';
+
+  @override
+  String get partialRecording => 'Înregistrare parțială';
 
   @override
   String get importTranscriptFiles => 'Fișiere de transcriere';

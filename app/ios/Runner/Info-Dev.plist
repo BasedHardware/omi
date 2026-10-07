@@ -25,6 +25,7 @@
 	</dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
+		<string>com.omi.recording-sync.refresh</string>
 		<string>daily-summary</string>
 		<string>com.friend-app-with-wearable.ios12.daily-summary</string>
 		<string>dev.flutter.background.refresh</string>
