@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from typing import TYPE_CHECKING, Optional
 
 import typer
@@ -164,9 +166,6 @@ def export_memories(
     output_file: Optional[str] = typer.Option(None, "--output", "-o", help="File path to save CSV output."),
 ) -> None:
     """Export memories to CSV format."""
-    import csv
-    import io
-
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         items = client.get(
@@ -181,10 +180,13 @@ def export_memories(
         row = dict(m)
         if isinstance(row.get("tags"), list):
             row["tags"] = ";".join(str(t) for t in row["tags"])
+        for k, v in row.items():
+            if isinstance(v, str) and v.startswith(("=", "+", "-", "@")):
+                row[k] = "'" + v
         writer.writerow(row)
     csv_str = output.getvalue()
     if output_file:
-        with open(output_file, "w", encoding="utf-8") as f:
+        with open(output_file, "w", encoding="utf-8-sig") as f:
             f.write(csv_str)
         ctx.renderer.success(f"Exported {len(items or [])} memories to [bold]{escape(output_file)}[/bold].")
     else:
