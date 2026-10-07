@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "O evaluare de 5 stele ne ajută cu adevărat ❤️",
     "onboardingRatingPromptYes": "Da, vreau să vă susțin!",
     "onboardingRatingPromptNo": "Nu prea",
-    "partialRecording": "Înregistrare parțială"
+    "partialRecording": "Înregistrare parțială",
+    "dateRangeStart": "Data de început",
+    "dateRangeEnd": "Data de sfârșit",
+    "openInMaps": "Deschide în Hărți"
 }

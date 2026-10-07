@@ -3886,5 +3886,8 @@
     "onboardingRatingPromptBody": "Une note de 5 étoiles nous aide vraiment beaucoup ❤️",
     "onboardingRatingPromptYes": "Oui, je veux vous soutenir !",
     "onboardingRatingPromptNo": "Pas vraiment",
-    "partialRecording": "Enregistrement partiel"
+    "partialRecording": "Enregistrement partiel",
+    "dateRangeStart": "Date de début",
+    "dateRangeEnd": "Date de fin",
+    "openInMaps": "Ouvrir dans Plans"
 }

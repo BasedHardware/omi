@@ -14887,5 +14887,17 @@
     "partialRecording": "Partial recording",
     "@partialRecording": {
         "description": "Conversation detail badge shown when capture evidence says the recording is incomplete."
+    },
+    "dateRangeStart": "Start date",
+    "@dateRangeStart": {
+        "description": "Label for the first day of a search date range"
+    },
+    "dateRangeEnd": "End date",
+    "@dateRangeEnd": {
+        "description": "Label for the last day of a search date range"
+    },
+    "openInMaps": "Open in Maps",
+    "@openInMaps": {
+        "description": "Button that opens a place in the system maps app"
     }
 }

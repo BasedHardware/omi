@@ -12478,4 +12478,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get partialRecording => 'Частковий запис';
+
+  @override
+  String get dateRangeStart => 'Дата початку';
+
+  @override
+  String get dateRangeEnd => 'Дата закінчення';
+
+  @override
+  String get openInMaps => 'Відкрити в Картах';
 }

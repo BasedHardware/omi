@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "5 sterren helpen ons echt enorm ❤️",
     "onboardingRatingPromptYes": "Ja, ik wil jullie steunen!",
     "onboardingRatingPromptNo": "Niet echt",
-    "partialRecording": "Gedeeltelijke opname"
+    "partialRecording": "Gedeeltelijke opname",
+    "dateRangeStart": "Startdatum",
+    "dateRangeEnd": "Einddatum",
+    "openInMaps": "Openen in Kaarten"
 }

@@ -12384,4 +12384,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get partialRecording => 'การบันทึกบางส่วน';
+
+  @override
+  String get dateRangeStart => 'วันที่เริ่มต้น';
+
+  @override
+  String get dateRangeEnd => 'วันที่สิ้นสุด';
+
+  @override
+  String get openInMaps => 'เปิดในแผนที่';
 }

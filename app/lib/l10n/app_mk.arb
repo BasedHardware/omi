@@ -11408,5 +11408,8 @@
     "onboardingRatingPromptBody": "Оцена со 5 ѕвезди навистина ни помага ❤️",
     "onboardingRatingPromptYes": "Да, сакам да ве поддржам!",
     "onboardingRatingPromptNo": "Не баш",
-    "partialRecording": "Делумна снимка"
+    "partialRecording": "Делумна снимка",
+    "dateRangeStart": "Датум на почеток",
+    "dateRangeEnd": "Датум на завршување",
+    "openInMaps": "Отвори во Мапи"
 }

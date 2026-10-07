@@ -3947,5 +3947,8 @@
     "onboardingRatingPromptBody": "Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️",
     "onboardingRatingPromptYes": "Igen, szeretnék támogatni titeket!",
     "onboardingRatingPromptNo": "Nem igazán",
-    "partialRecording": "Részleges felvétel"
+    "partialRecording": "Részleges felvétel",
+    "dateRangeStart": "Kezdő dátum",
+    "dateRangeEnd": "Befejező dátum",
+    "openInMaps": "Megnyitás a Térképekben"
 }

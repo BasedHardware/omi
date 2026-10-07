@@ -12482,4 +12482,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get partialRecording => 'Частковы запіс';
+
+  @override
+  String get dateRangeStart => 'Дата пачатку';
+
+  @override
+  String get dateRangeEnd => 'Дата завяршэння';
+
+  @override
+  String get openInMaps => 'Адкрыць у Картах';
 }

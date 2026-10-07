@@ -12501,4 +12501,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get partialRecording => 'పాక్షిక రికార్డింగ్';
+
+  @override
+  String get dateRangeStart => 'ప్రారంభ తేదీ';
+
+  @override
+  String get dateRangeEnd => 'ముగింపు తేదీ';
+
+  @override
+  String get openInMaps => 'మ్యాప్స్‌లో తెరవండి';
 }

@@ -22298,6 +22298,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Partial recording'**
   String get partialRecording;
+
+  /// Label for the first day of a search date range
+  ///
+  /// In en, this message translates to:
+  /// **'Start date'**
+  String get dateRangeStart;
+
+  /// Label for the last day of a search date range
+  ///
+  /// In en, this message translates to:
+  /// **'End date'**
+  String get dateRangeEnd;
+
+  /// Button that opens a place in the system maps app
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Maps'**
+  String get openInMaps;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

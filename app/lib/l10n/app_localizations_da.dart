@@ -12438,4 +12438,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get partialRecording => 'Delvis optagelse';
+
+  @override
+  String get dateRangeStart => 'Startdato';
+
+  @override
+  String get dateRangeEnd => 'Slutdato';
+
+  @override
+  String get openInMaps => 'Åbn i Kort';
 }

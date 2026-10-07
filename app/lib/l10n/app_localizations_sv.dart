@@ -12455,4 +12455,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get partialRecording => 'Delvis inspelning';
+
+  @override
+  String get dateRangeStart => 'Startdatum';
+
+  @override
+  String get dateRangeEnd => 'Slutdatum';
+
+  @override
+  String get openInMaps => 'Öppna i Kartor';
 }

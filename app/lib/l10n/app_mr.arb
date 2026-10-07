@@ -11408,5 +11408,8 @@
     "onboardingRatingPromptBody": "५ स्टार रेटिंग दिल्याने आम्हाला खरोखर खूप मदत होते ❤️",
     "onboardingRatingPromptYes": "हो, मला तुम्हाला पाठिंबा द्यायचा आहे!",
     "onboardingRatingPromptNo": "फारसं नाही",
-    "partialRecording": "अंशतः रेकॉर्डिंग"
+    "partialRecording": "अंशतः रेकॉर्डिंग",
+    "dateRangeStart": "सुरुवातीची तारीख",
+    "dateRangeEnd": "समाप्तीची तारीख",
+    "openInMaps": "नकाशात उघडा"
 }

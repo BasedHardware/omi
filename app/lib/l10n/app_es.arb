@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "Valorarnos con 5 estrellas nos ayuda muchísimo ❤️",
     "onboardingRatingPromptYes": "¡Sí, quiero apoyaros!",
     "onboardingRatingPromptNo": "No mucho",
-    "partialRecording": "Grabación parcial"
+    "partialRecording": "Grabación parcial",
+    "dateRangeStart": "Fecha de inicio",
+    "dateRangeEnd": "Fecha de finalización",
+    "openInMaps": "Abrir en Mapas"
 }

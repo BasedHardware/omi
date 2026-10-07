@@ -3886,5 +3886,8 @@
     "onboardingRatingPromptBody": "Оценка в 5 звёзд очень нам поможет ❤️",
     "onboardingRatingPromptYes": "Да, хочу вас поддержать!",
     "onboardingRatingPromptNo": "Не совсем",
-    "partialRecording": "Частичная запись"
+    "partialRecording": "Частичная запись",
+    "dateRangeStart": "Дата начала",
+    "dateRangeEnd": "Дата окончания",
+    "openInMaps": "Открыть в Картах"
 }

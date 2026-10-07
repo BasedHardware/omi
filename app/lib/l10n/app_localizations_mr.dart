@@ -12457,4 +12457,13 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get partialRecording => 'अंशतः रेकॉर्डिंग';
+
+  @override
+  String get dateRangeStart => 'सुरुवातीची तारीख';
+
+  @override
+  String get dateRangeEnd => 'समाप्तीची तारीख';
+
+  @override
+  String get openInMaps => 'नकाशात उघडा';
 }

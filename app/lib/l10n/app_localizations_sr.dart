@@ -12462,4 +12462,13 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get partialRecording => 'Делимичан снимак';
+
+  @override
+  String get dateRangeStart => 'Датум почетка';
+
+  @override
+  String get dateRangeEnd => 'Датум завршетка';
+
+  @override
+  String get openInMaps => 'Отвори у Мапама';
 }

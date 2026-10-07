@@ -12546,4 +12546,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get partialRecording => 'Teilweise Aufnahme';
+
+  @override
+  String get dateRangeStart => 'Startdatum';
+
+  @override
+  String get dateRangeEnd => 'Enddatum';
+
+  @override
+  String get openInMaps => 'In Karten öffnen';
 }

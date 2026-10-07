@@ -12472,4 +12472,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get partialRecording => 'Dalinis įrašas';
+
+  @override
+  String get dateRangeStart => 'Pradžios data';
+
+  @override
+  String get dateRangeEnd => 'Pabaigos data';
+
+  @override
+  String get openInMaps => 'Atidaryti „Žemėlapiuose“';
 }

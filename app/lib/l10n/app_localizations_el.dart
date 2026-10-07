@@ -12530,4 +12530,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get partialRecording => 'Μερική ηχογράφηση';
+
+  @override
+  String get dateRangeStart => 'Ημερομηνία έναρξης';
+
+  @override
+  String get dateRangeEnd => 'Ημερομηνία λήξης';
+
+  @override
+  String get openInMaps => 'Άνοιγμα στους Χάρτες';
 }

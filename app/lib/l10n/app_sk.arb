@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "Hodnotenie 5 hviezdičiek nám naozaj veľmi pomáha ❤️",
     "onboardingRatingPromptYes": "Áno, chcem vás podporiť!",
     "onboardingRatingPromptNo": "Nie celkom",
-    "partialRecording": "Čiastočná nahrávka"
+    "partialRecording": "Čiastočná nahrávka",
+    "dateRangeStart": "Počiatočný dátum",
+    "dateRangeEnd": "Koncový dátum",
+    "openInMaps": "Otvoriť v Mapách"
 }

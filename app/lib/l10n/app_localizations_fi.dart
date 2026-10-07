@@ -12454,4 +12454,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get partialRecording => 'Osittainen tallenne';
+
+  @override
+  String get dateRangeStart => 'Alkupäivä';
+
+  @override
+  String get dateRangeEnd => 'Loppupäivä';
+
+  @override
+  String get openInMaps => 'Avaa Kartoissa';
 }

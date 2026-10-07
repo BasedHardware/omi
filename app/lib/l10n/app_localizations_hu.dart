@@ -12498,4 +12498,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get partialRecording => 'Részleges felvétel';
+
+  @override
+  String get dateRangeStart => 'Kezdő dátum';
+
+  @override
+  String get dateRangeEnd => 'Befejező dátum';
+
+  @override
+  String get openInMaps => 'Megnyitás a Térképekben';
 }

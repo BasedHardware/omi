@@ -12519,4 +12519,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get partialRecording => 'Registrazione parziale';
+
+  @override
+  String get dateRangeStart => 'Data di inizio';
+
+  @override
+  String get dateRangeEnd => 'Data di fine';
+
+  @override
+  String get openInMaps => 'Apri in Mappe';
 }

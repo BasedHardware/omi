@@ -12444,4 +12444,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get partialRecording => 'Osaline salvestus';
+
+  @override
+  String get dateRangeStart => 'Alguskuupäev';
+
+  @override
+  String get dateRangeEnd => 'Lõppkuupäev';
+
+  @override
+  String get openInMaps => 'Ava kaardirakenduses';
 }

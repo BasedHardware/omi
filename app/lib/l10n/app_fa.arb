@@ -11408,5 +11408,8 @@
     "onboardingRatingPromptBody": "امتیاز ۵ ستاره واقعاً به ما کمک می‌کند ❤️",
     "onboardingRatingPromptYes": "بله، می‌خواهم از شما حمایت کنم!",
     "onboardingRatingPromptNo": "نه چندان",
-    "partialRecording": "ضبط ناقص"
+    "partialRecording": "ضبط ناقص",
+    "dateRangeStart": "تاریخ شروع",
+    "dateRangeEnd": "تاریخ پایان",
+    "openInMaps": "باز کردن در نقشه‌ها"
 }

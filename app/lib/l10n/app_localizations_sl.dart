@@ -12480,4 +12480,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get partialRecording => 'Delni posnetek';
+
+  @override
+  String get dateRangeStart => 'Datum začetka';
+
+  @override
+  String get dateRangeEnd => 'Datum konca';
+
+  @override
+  String get openInMaps => 'Odpri v Zemljevidih';
 }

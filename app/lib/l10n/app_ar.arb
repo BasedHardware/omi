@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "تقييمك لنا بخمس نجوم يساعدنا كثيرًا ❤️",
     "onboardingRatingPromptYes": "نعم، أريد أن أدعمكم!",
     "onboardingRatingPromptNo": "ليس تمامًا",
-    "partialRecording": "تسجيل جزئي"
+    "partialRecording": "تسجيل جزئي",
+    "dateRangeStart": "تاريخ البدء",
+    "dateRangeEnd": "تاريخ الانتهاء",
+    "openInMaps": "فتح في الخرائط"
 }

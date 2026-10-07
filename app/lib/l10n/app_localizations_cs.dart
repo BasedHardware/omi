@@ -12454,4 +12454,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get partialRecording => 'Částečná nahrávka';
+
+  @override
+  String get dateRangeStart => 'Počáteční datum';
+
+  @override
+  String get dateRangeEnd => 'Koncové datum';
+
+  @override
+  String get openInMaps => 'Otevřít v Mapách';
 }

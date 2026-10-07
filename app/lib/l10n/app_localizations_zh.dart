@@ -12238,4 +12238,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get partialRecording => '部分录音';
+
+  @override
+  String get dateRangeStart => '开始日期';
+
+  @override
+  String get dateRangeEnd => '结束日期';
+
+  @override
+  String get openInMaps => '在地图中打开';
 }

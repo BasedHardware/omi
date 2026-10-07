@@ -12520,4 +12520,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get partialRecording => 'Enregistrament parcial';
+
+  @override
+  String get dateRangeStart => 'Data d\'inici';
+
+  @override
+  String get dateRangeEnd => 'Data de finalització';
+
+  @override
+  String get openInMaps => 'Obre a Mapes';
 }

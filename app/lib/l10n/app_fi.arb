@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "5 tähteä auttaa meitä todella paljon ❤️",
     "onboardingRatingPromptYes": "Kyllä, haluan tukea teitä!",
     "onboardingRatingPromptNo": "Ei oikeastaan",
-    "partialRecording": "Osittainen tallenne"
+    "partialRecording": "Osittainen tallenne",
+    "dateRangeStart": "Alkupäivä",
+    "dateRangeEnd": "Loppupäivä",
+    "openInMaps": "Avaa Kartoissa"
 }

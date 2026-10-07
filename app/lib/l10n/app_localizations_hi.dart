@@ -12433,4 +12433,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get partialRecording => 'आंशिक रिकॉर्डिंग';
+
+  @override
+  String get dateRangeStart => 'शुरू होने की तारीख';
+
+  @override
+  String get dateRangeEnd => 'समाप्त होने की तारीख';
+
+  @override
+  String get openInMaps => 'मानचित्र में खोलें';
 }

@@ -12481,4 +12481,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get partialRecording => 'Rakaman separa';
+
+  @override
+  String get dateRangeStart => 'Tarikh mula';
+
+  @override
+  String get dateRangeEnd => 'Tarikh tamat';
+
+  @override
+  String get openInMaps => 'Buka dalam Peta';
 }

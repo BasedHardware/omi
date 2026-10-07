@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "5 स्टार रेटिंग देने से हमें सच में बहुत मदद मिलती है ❤️",
     "onboardingRatingPromptYes": "हाँ, मुझे आपको सपोर्ट करना है!",
     "onboardingRatingPromptNo": "ज़्यादा नहीं",
-    "partialRecording": "आंशिक रिकॉर्डिंग"
+    "partialRecording": "आंशिक रिकॉर्डिंग",
+    "dateRangeStart": "शुरू होने की तारीख",
+    "dateRangeEnd": "समाप्त होने की तारीख",
+    "openInMaps": "मानचित्र में खोलें"
 }

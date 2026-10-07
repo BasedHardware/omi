@@ -12462,4 +12462,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get partialRecording => 'Rekaman sebagian';
+
+  @override
+  String get dateRangeStart => 'Tanggal mulai';
+
+  @override
+  String get dateRangeEnd => 'Tanggal berakhir';
+
+  @override
+  String get openInMaps => 'Buka di Peta';
 }

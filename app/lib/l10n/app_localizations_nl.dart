@@ -12486,4 +12486,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get partialRecording => 'Gedeeltelijke opname';
+
+  @override
+  String get dateRangeStart => 'Startdatum';
+
+  @override
+  String get dateRangeEnd => 'Einddatum';
+
+  @override
+  String get openInMaps => 'Openen in Kaarten';
 }

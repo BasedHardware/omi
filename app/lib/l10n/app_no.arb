@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "5 stjerner hjelper oss virkelig mye ❤️",
     "onboardingRatingPromptYes": "Ja, jeg vil støtte dere!",
     "onboardingRatingPromptNo": "Ikke egentlig",
-    "partialRecording": "Delvis opptak"
+    "partialRecording": "Delvis opptak",
+    "dateRangeStart": "Startdato",
+    "dateRangeEnd": "Sluttdato",
+    "openInMaps": "Åpne i Kart"
 }

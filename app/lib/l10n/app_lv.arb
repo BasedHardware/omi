@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "5 zvaigžņu vērtējums mums ļoti palīdz ❤️",
     "onboardingRatingPromptYes": "Jā, es vēlos jūs atbalstīt!",
     "onboardingRatingPromptNo": "Ne gluži",
-    "partialRecording": "Daļējs ieraksts"
+    "partialRecording": "Daļējs ieraksts",
+    "dateRangeStart": "Sākuma datums",
+    "dateRangeEnd": "Beigu datums",
+    "openInMaps": "Atvērt Kartēs"
 }

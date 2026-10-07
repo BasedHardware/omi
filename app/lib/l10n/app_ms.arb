@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "Memberi kami 5 bintang sangat membantu kami ❤️",
     "onboardingRatingPromptYes": "Ya, saya mahu menyokong anda!",
     "onboardingRatingPromptNo": "Tidak begitu",
-    "partialRecording": "Rakaman separa"
+    "partialRecording": "Rakaman separa",
+    "dateRangeStart": "Tarikh mula",
+    "dateRangeEnd": "Tarikh tamat",
+    "openInMaps": "Buka dalam Peta"
 }

@@ -11408,5 +11408,8 @@
     "onboardingRatingPromptBody": "Ocjena od 5 zvjezdica nam zaista puno pomaže ❤️",
     "onboardingRatingPromptYes": "Da, želim vas podržati!",
     "onboardingRatingPromptNo": "Ne baš",
-    "partialRecording": "Djelimičan snimak"
+    "partialRecording": "Djelimičan snimak",
+    "dateRangeStart": "Datum početka",
+    "dateRangeEnd": "Datum završetka",
+    "openInMaps": "Otvori u Mapama"
 }

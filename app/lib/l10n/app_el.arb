@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "Μια βαθμολογία 5 αστέρων μας βοηθά πραγματικά ❤️",
     "onboardingRatingPromptYes": "Ναι, θέλω να σας στηρίξω!",
     "onboardingRatingPromptNo": "Όχι ακριβώς",
-    "partialRecording": "Μερική ηχογράφηση"
+    "partialRecording": "Μερική ηχογράφηση",
+    "dateRangeStart": "Ημερομηνία έναρξης",
+    "dateRangeEnd": "Ημερομηνία λήξης",
+    "openInMaps": "Άνοιγμα στους Χάρτες"
 }

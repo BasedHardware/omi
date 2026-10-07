@@ -12379,4 +12379,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get partialRecording => 'تسجيل جزئي';
+
+  @override
+  String get dateRangeStart => 'تاريخ البدء';
+
+  @override
+  String get dateRangeEnd => 'تاريخ الانتهاء';
+
+  @override
+  String get openInMaps => 'فتح في الخرائط';
 }
