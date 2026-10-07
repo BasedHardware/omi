@@ -71,6 +71,8 @@ class OnboardingSyncService {
       if (acquisitionSource != null) fields['acquisition_source'] = acquisitionSource;
       if (deviceOnboardingCompleted != null) fields['device_onboarding_completed'] = deviceOnboardingCompleted;
       if (fields.isEmpty) return true;
+      // The revision changes the persisted snapshot even when fields repeat,
+      // so an older acknowledgement cannot clear a newer identical submission.
       final old = read(session.ownerUid);
       final revision = old.isEmpty ? 0 : (jsonDecode(old) as Map)['revision'] as int;
       final ok = await write(session.ownerUid, jsonEncode({'revision': revision + 1, 'fields': fields}));
