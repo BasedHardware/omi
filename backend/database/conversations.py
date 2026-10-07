@@ -1553,9 +1553,13 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
     if not doc_snapshot.exists:
         return False
 
-    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    doc_data = doc_snapshot.to_dict() or {}
+    if is_soft_deleted(doc_data):
+        return False
+
+    doc_level = doc_data.get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
-    _guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
+    _guard_match_score_size(prepared_data, doc_data, getattr(doc_ref, 'path', None))
     try:
         doc_ref.update(prepared_data)
     except NotFound:
