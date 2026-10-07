@@ -36,6 +36,13 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v3
 
+      # bq does not read GOOGLE_APPLICATION_CREDENTIALS; without a credentialed
+      # gcloud account it enters a first-run prompt that a non-TTY runner
+      # aborts. Authorize the account layer from the WIF-minted credential
+      # file, exactly as a key file would be.
+      - name: Credential the gcloud account layer for bq
+        run: gcloud auth login --cred-file="$GOOGLE_APPLICATION_CREDENTIALS"
+
       - name: Reconcile closed UTC day
         env:
           REQUESTED_DAY: ${{ inputs.day }}
