@@ -561,7 +561,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               },
               child: _walRow(wal),
             ),
-          if (!isLast) const Divider(height: 1, color: Color(0xFF2C2C2E), indent: 16, endIndent: 16),
+          if (!isLast) _rowDivider,
         ],
       ),
     );
@@ -583,18 +583,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 children: [
                   Text(
                     _blockTitle(block),
-                    style: TextStyle(
-                      color: state == WalSyncDisplayState.synced ? Colors.grey.shade500 : OmiColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400),
+                    style: _rowSubtitleStyle(color),
                   ),
                 ],
               ),
@@ -634,6 +630,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
   }
 
+  // One title, subtitle and divider for file rows and recording rows, so the two never drift.
+  static const _rowDivider = Divider(height: 1, color: Color(0xFF2C2C2E), indent: 16, endIndent: 16);
+
+  static TextStyle _rowTitleStyle({required bool synced}) => TextStyle(
+        color: synced ? Colors.grey.shade500 : OmiColors.textPrimary,
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+      );
+
+  static TextStyle _rowSubtitleStyle(Color color) => TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400);
+
   String _blockTitle(RecordingBlock block) {
     final date = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000).toLocal();
     final dates = OmiDateFormat.of(context);
@@ -658,8 +665,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: wals.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: Color(0xFF2C2C2E), indent: 16, endIndent: 16),
+              separatorBuilder: (_, __) => _rowDivider,
               itemBuilder: (_, i) => _walRow(wals[i]),
             ),
           );
@@ -717,18 +723,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 children: [
                   Text(
                     '$dateStr \u00b7 $timeStr${duration != null ? ' \u00b7 $duration' : ''}',
-                    style: TextStyle(
-                      color: isSynced ? Colors.grey.shade500 : OmiColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: _rowTitleStyle(synced: isSynced),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400),
+                    style: _rowSubtitleStyle(color),
                   ),
                   if (_rowDownloadFraction(wal) != null) ...[
                     const SizedBox(height: 8),
