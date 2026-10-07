@@ -23,10 +23,10 @@
 #include <zephyr/sys/atomic.h>
 
 #include "aad_policy.h"
-#include "sd_card.h"
-#include "storage.h"
+#include "lib/core/sd_card.h"
+#include "lib/core/storage.h"
+#include "lib/core/transport.h"
 #include "t5838_aad.h"
-#include "transport.h"
 #endif
 
 LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);

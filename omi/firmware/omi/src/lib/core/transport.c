@@ -32,10 +32,10 @@
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
 #endif
+#include "lib/core/sd_card.h"
+#include "lib/core/storage.h"
 #include "rtc.h"
-#include "sd_card.h"
 #include "settings.h"
-#include "storage.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL

@@ -5,7 +5,7 @@ source_dir="$(cd "$test_dir/../../src" && pwd)"
 aad_test_out="$(mktemp -d)"
 trap 'rm -rf "$aad_test_out"' EXIT
 compiler="${CC:-cc}"
-flags=(-std=c99 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer)
+flags=(-std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer)
 "$compiler" "${flags[@]}" -I"$source_dir" "$test_dir/test_policy.c" -o "$aad_test_out/policy"
 "$aad_test_out/policy"
 "$compiler" "${flags[@]}" -I"$source_dir" "$source_dir/software_vad.c" \
@@ -15,21 +15,21 @@ mic_flags=(-DCONFIG_OMI_ENABLE_T5838_AAD=1 -DCONFIG_OMI_ENABLE_OFFLINE_STORAGE=1
   -DCONFIG_OMI_VAD_ABS_THRESHOLD=250 -DCONFIG_OMI_VAD_HOLD_MS=10000 -DCONFIG_OMI_AAD_SETTLE_MS=800)
 "$compiler" "${flags[@]}" "${mic_flags[@]}" -DCONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET=1 \
   -DCONFIG_OMI_AAD_SILENCE_TIMEOUT_MS=120000 -I"$test_dir/include" \
-  -I"$source_dir" -I"$source_dir/lib/core" "$test_dir/test_mic.c" \
+  -I"$source_dir" "$test_dir/test_mic.c" \
   "$source_dir/software_vad.c" -o "$aad_test_out/mic"
 "$aad_test_out/mic"
 # Re-run production mic policy with durable retention: CCC-off may remain in
 # AAD, first wake PCM survives without a subscriber, sampled quiet is forwarded.
 "$compiler" "${flags[@]}" "${mic_flags[@]}" -DCONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET=1 \
   -DCONFIG_OMI_ENABLE_CONNECTED_RETENTION=1 -DCONFIG_OMI_AAD_SILENCE_TIMEOUT_MS=120000 \
-  -I"$test_dir/include" -I"$source_dir" -I"$source_dir/lib/core" \
+  -I"$test_dir/include" -I"$source_dir" \
   "$test_dir/test_mic.c" "$source_dir/software_vad.c" "$source_dir/connected_retention.c" -o "$aad_test_out/mic-retention"
 "$aad_test_out/mic-retention"
 "$compiler" "${flags[@]}" -I"$source_dir" "$test_dir/test_retention.c" \
   "$source_dir/connected_retention.c" -o "$aad_test_out/retention"
 "$aad_test_out/retention"
 sd_flags=(-DCONFIG_OMI_ENABLE_OFFLINE_STORAGE=1 -I"$test_dir/sd_include"
-  -I"$test_dir/include" -I"$source_dir" -I"$source_dir/lib/core")
+  -I"$test_dir/include" -I"$source_dir")
 "$compiler" "${flags[@]}" "${sd_flags[@]}" "$test_dir/test_sd_retention.c" \
   "$source_dir/connected_retention.c" -o "$aad_test_out/sd-retention"
 "$aad_test_out/sd-retention"
@@ -57,7 +57,7 @@ done
 # Compile the actual mic module with connected gate off and storage absent.
 # This is a host header seam, NOT an NCS/DT/board integration build.
 "$compiler" "${flags[@]}" "${mic_flags[@]}" -UCONFIG_OMI_ENABLE_OFFLINE_STORAGE \
-  -fsyntax-only -I"$test_dir/include" -I"$source_dir" -I"$source_dir/lib/core" "$source_dir/mic.c"
+  -fsyntax-only -I"$test_dir/include" -I"$source_dir" "$source_dir/mic.c"
 "$compiler" "${flags[@]}" "${mic_flags[@]}" -UCONFIG_OMI_ENABLE_OFFLINE_STORAGE \
   -DCONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET=1 -DCONFIG_OMI_AAD_SILENCE_TIMEOUT_MS=120000 \
-  -fsyntax-only -I"$test_dir/include" -I"$source_dir" -I"$source_dir/lib/core" "$source_dir/mic.c"
+  -fsyntax-only -I"$test_dir/include" -I"$source_dir" "$source_dir/mic.c"
