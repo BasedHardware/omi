@@ -136,6 +136,7 @@ def test_post_unsubscribe_one_click_with_valid_token_succeeds(_opt_outs):
     )
     assert response.status_code == 200
     assert _opt_outs == [('uid-post', True)]
+    assert 'text/html' in response.headers.get('content-type', '').lower()
 
 
 def test_post_unsubscribe_missing_token_is_a_neutral_400(_opt_outs):
@@ -152,3 +153,13 @@ def test_post_unsubscribe_is_idempotent(_opt_outs):
     assert first.status_code == 200
     assert second.status_code == 200
     assert _opt_outs == [('uid-post-twice', True), ('uid-post-twice', True)]
+
+
+def test_unsubscribe_whitespace_token_handled(_opt_outs):
+    token = mint_unsubscribe_token('uid-whitespace')
+    client = _client()
+    get_res = client.get('/email/unsubscribe', params={'token': f'  {token}  '})
+    assert get_res.status_code == 200
+    post_res = client.post('/email/unsubscribe', params={'token': f'  {token}  '})
+    assert post_res.status_code == 200
+    assert _opt_outs == [('uid-whitespace', True)]
