@@ -699,6 +699,15 @@ class NativeMicStalled extends CaptureEvent {
   const NativeMicStalled();
 }
 
+enum CaptureLivenessReason { noFrames, socketDown }
+
+/// A bounded watchdog observation tied to the session that was sampled.
+class CaptureLivenessFailure extends CaptureEvent {
+  const CaptureLivenessFailure({required this.sessionKey, required this.reason});
+  final String sessionKey;
+  final CaptureLivenessReason reason;
+}
+
 /// `onAppResumed`.
 class AppForegrounded extends CaptureEvent {
   const AppForegrounded();
@@ -1686,6 +1695,7 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       CallStateChanged() => _reduceCall(state, env),
       MicInterruptionChanged() => _reduceMicInterruption(state, event),
       NativeMicStalled() => _reduceMicStalled(state),
+      CaptureLivenessFailure() => _reduceLivenessFailure(state, event),
       AppForegrounded() => _reduceAppForegrounded(state),
       SocketClosed() => CaptureTransition(state, [RunStage(SocketClosedStage(closeCode: event.closeCode))]),
       SocketConnected() => CaptureTransition(state, const [RunStage(SocketConnectedStage())]),
@@ -2239,9 +2249,7 @@ CaptureTransition _reduceResume(CaptureCoordinatorState state, CaptureEnvironmen
         const [],
       ),
     _ when env.policyMuted && state.connectedDevice != null && !state.phoneOwns && !state.callActive =>
-      CaptureTransition(state, const [
-        PolicyWrite(false),
-      ]),
+      CaptureTransition(state, const [PolicyWrite(false)]),
     _ => CaptureTransition(state, const []),
   };
 }
@@ -2654,9 +2662,24 @@ CaptureTransition _reduceMicInterruption(CaptureCoordinatorState state, MicInter
   ]);
 }
 
+CaptureTransition _reduceLivenessFailure(CaptureCoordinatorState state, CaptureLivenessFailure event) {
+  if (state.phase != CapturePhase.phoneLive || state.micInterrupted || state.active?.sessionKey != event.sessionKey) {
+    return CaptureTransition(state, const []);
+  }
+  return CaptureTransition(state, [
+    const RunStage(FlushPhoneFramesStage()),
+    const WalFinalize(),
+    RunStage(
+      event.reason == CaptureLivenessReason.noFrames ? const RestartLiveMicStage() : const ReconnectPhoneStage(),
+    ),
+  ]);
+}
+
 CaptureTransition _reduceMicStalled(CaptureCoordinatorState state) {
   return switch (state.phase) {
     CapturePhase.phoneLive when !state.micInterrupted => CaptureTransition(state, const [
+        RunStage(FlushPhoneFramesStage()),
+        WalFinalize(),
         RunStage(RestartLiveMicStage()),
       ]),
     CapturePhase.phoneBatchLive when !state.micInterrupted => CaptureTransition(state, const [

@@ -27,6 +27,8 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
+import 'package:omi/services/capture/capture_liveness_watchdog.dart';
+import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_lifetime.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
@@ -121,6 +123,11 @@ class CaptureController extends ChangeNotifier
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
+  final CalendarCaptureGapMonitor? _calendarGapMonitor;
+  final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
+  bool _livenessCheckRunning = false;
+  DateTime? _calendarSocketDownAt;
+
   String? _sourceCaptureRoot;
   LocalWalSync? _captureEvidenceSync;
   int? _captureEvidenceGeneration;
@@ -294,6 +301,7 @@ class CaptureController extends ChangeNotifier
     ValueListenable<PhoneCallState>? omiCallState,
     CaptureNativeWriterGate? nativeWriterGate,
     CaptureWedgeMonitor? captureWedgeMonitor,
+    CalendarCaptureGapMonitor? calendarGapMonitor,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
@@ -317,6 +325,7 @@ class CaptureController extends ChangeNotifier
         _omiCallState = omiCallState,
         _nativeWriterGate = nativeWriterGate ?? const NoopCaptureNativeWriterGate(),
         _wedgeMonitorOverride = captureWedgeMonitor,
+        _calendarGapMonitor = calendarGapMonitor,
         _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
@@ -332,6 +341,18 @@ class CaptureController extends ChangeNotifier
         Logger.debug('[CaptureProvider] capture restore recovery failed: $e');
       }),
     );
+    lifetime.own(() => _calendarGapMonitor?.dispose());
+    lifetime.periodic(const Duration(seconds: 15), (_) {
+      unawaited(_checkCaptureLiveness());
+      unawaited(
+        _calendarGapMonitor?.check(
+              _now(),
+              gapReason: _calendarCaptureGapReason,
+              phase: () => _capture.state.phase.name,
+            ) ??
+            Future<void>.value(),
+      );
+    });
     final omiCall = _omiCallState;
     if (omiCall != null) {
       omiCall.addListener(_onOmiCallStateChanged);
@@ -388,6 +409,7 @@ class CaptureController extends ChangeNotifier
   Future<Object?> _restartPhoneMicRecording() async {
     if (_phoneMicRestartInFlight || _capture.readModel.phase != CapturePhase.phoneLive) return null;
     _phoneMicRestartInFlight = true;
+    final token = _sessionOwner?.token;
     try {
       _phoneMic.stop();
       if (_capture.readModel.phase != CapturePhase.phoneLive) return null;
@@ -395,6 +417,13 @@ class CaptureController extends ChangeNotifier
       updateRecordingState(RecordingState.interrupted);
       // _activeSource is cleared if the user manually stopped — bail in that case.
       if (_activeSource is! PhoneMicSource) return null;
+      // Frames may have arrived while the first WAL boundary awaited disk.
+      // Stop ingress, drain that final source tail, and make it durable before
+      // replacing PhoneMicSource. Never apply this recovery to a pendant.
+      final sessionKey = _capture.state.active?.sessionKey;
+      _flushPhoneFrames();
+      await _wal.getSyncs().phone.finalizeCurrentSession();
+      if (!_captureSessionIsCurrent(token) || _capture.state.active?.sessionKey != sessionKey) return null;
       final revision = _preferences.capturePolicy.revision;
       if (_phoneMicPaused || !_admitsCapture(revision)) {
         return CaptureStageFailure(StateError('phone mic restart refused: capture not admitted'));
@@ -422,6 +451,7 @@ class CaptureController extends ChangeNotifier
       onByteReceived: (bytes) {
         if (!_admitsCapture(revision)) return;
         _recordingTelemetry.observeAudio(bytes.length);
+        if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
         final frames = _activeSource?.processBytes(bytes) ?? [];
         for (final frame in frames) {
           final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
@@ -453,6 +483,47 @@ class CaptureController extends ChangeNotifier
     );
   }
 
+  String? _calendarCaptureGapReason() {
+    final phase = _capture.state.phase;
+    if (phase == CapturePhase.phoneBatchLive ||
+        phase == CapturePhase.pendantBatchLive ||
+        phase == CapturePhase.callActive) {
+      _calendarSocketDownAt = null;
+      return null;
+    }
+    if (phase != CapturePhase.phoneLive && phase != CapturePhase.pendantLive) {
+      _calendarSocketDownAt = null;
+      return 'not_capturing';
+    }
+    if (_socket?.state != SocketServiceState.connected || !_transcriptServiceReady) {
+      _calendarSocketDownAt ??= _now();
+      if (_now().difference(_calendarSocketDownAt!) >= CaptureLivenessWatchdog.stallThreshold) return 'socket_down';
+    } else {
+      _calendarSocketDownAt = null;
+    }
+    if (phase == CapturePhase.phoneLive && _livenessWatchdog.framesStalledAt(_now())) return 'no_frames';
+    return null;
+  }
+
+  Future<void> _checkCaptureLiveness() async {
+    if (_captureControllerDisposed || _livenessCheckRunning) return;
+    final failure = _livenessWatchdog.check(
+      _capture.state,
+      _now(),
+      socketReady: _socket?.state == SocketServiceState.connected && _transcriptServiceReady,
+    );
+    if (failure == null) return;
+    _livenessCheckRunning = true;
+    try {
+      _recordingTelemetry.captureGap(reason: failure.reason.name, phase: _capture.readModel.phase.name);
+      await _dispatchLogged(failure);
+    } catch (e) {
+      Logger.debug('[CaptureProvider] liveness recovery failed: ${e.runtimeType}');
+    } finally {
+      _livenessCheckRunning = false;
+    }
+  }
+
   void _onMicStalled() {
     unawaited(_dispatchLogged(const NativeMicStalled()));
   }
@@ -475,6 +546,8 @@ class CaptureController extends ChangeNotifier
   /// the stall clock so suspended timers don't false-trigger stop→start (which
   /// would race native recovery and restart a healthy session).
   void onAppResumed() {
+    _livenessWatchdog.reset();
+    _calendarSocketDownAt = null;
     unawaited(_resumeSilenceLogged());
     unawaited(_dispatchLogged(const AppForegrounded()));
   }
@@ -2573,6 +2646,7 @@ class CaptureController extends ChangeNotifier
         onByteReceived: (bytes) {
           if (!_admitsCapture(revision)) return;
           _recordingTelemetry.observeAudio(bytes.length);
+          if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
           // Process through AudioSource for frame splitting and sync key generation
           final frames = _activeSource?.processBytes(bytes) ?? [];
 
@@ -3084,7 +3158,8 @@ class CaptureController extends ChangeNotifier
   Future<void> _reconnectPhoneCaptureBody() async {
     final token = _sessionOwner?.token;
     if (!_captureSessionIsCurrent(token)) return;
-    if (recordingState == RecordingState.record ||
+    if (_capture.stagedReadModel.phase == CapturePhase.phoneLive ||
+        recordingState == RecordingState.record ||
         recordingState == RecordingState.interrupted ||
         recordingState == RecordingState.systemAudioRecord) {
       await _initiateWebsocket(

@@ -300,6 +300,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @override
   void clearUserData() {
     _sessionGeneration++;
+    _lastStaleWalReportAt = null;
     cancelSync();
     // Back-fill the owner on retiring records that predate stamping, while the
     // logout path still has the signing-out uid available (clearUserData runs
@@ -343,6 +344,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final Future<void> Function(List<Wal> wals)? _persistWalsOverride;
   final Future<List<Wal>> Function()? _loadWalsOverride;
   final WalCoverageTelemetryEmitter? _coverageTelemetryOverride;
+  final WalCoverageTelemetryEmitter? _staleWalTelemetry;
+  DateTime? _lastStaleWalReportAt;
   final Future<int?> Function()? _freeDiskBytesOverride;
   final PendantRingCustody _custody;
   final Future<DeviceConnection?> Function(String deviceId)? _connectionResolver;
@@ -362,6 +365,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     Future<void> Function(List<Wal> wals)? persistWals,
     Future<List<Wal>> Function()? loadWals,
     WalCoverageTelemetryEmitter? coverageTelemetry,
+    WalCoverageTelemetryEmitter? staleWalTelemetry,
     Future<int?> Function()? freeDiskBytes,
     PendantRingCustody? custody,
     Future<DeviceConnection?> Function(String deviceId)? connectionResolver,
@@ -372,6 +376,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _persistWalsOverride = persistWals,
         _loadWalsOverride = loadWals,
         _coverageTelemetryOverride = coverageTelemetry,
+        _staleWalTelemetry = staleWalTelemetry,
         _freeDiskBytesOverride = freeDiskBytes,
         _custody = custody ?? PendantRingCustody.shared,
         _connectionResolver = connectionResolver;
@@ -470,6 +475,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final generation = _sessionGeneration;
+      unawaited(_reportStaleWalsWhenReady(generation));
+    }
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
@@ -479,6 +488,53 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           Logger.debug('LocalWalSync: lifecycle pendant drain failed: $e');
         }),
       );
+    }
+  }
+
+  Future<void> _reportStaleWalsWhenReady(int generation) async {
+    await _walReady.future;
+    if (_isCurrent(generation)) reportStaleMissingWals(trigger: 'foreground');
+  }
+
+  /// Reports durable local backlog separately from retry attempts. Age starts
+  /// at the WAL's end, so a long current recording cannot look stuck early.
+  /// A successful upload of one file never hides another stale recording.
+  void reportStaleMissingWals({required String trigger}) {
+    final now = _now();
+    final cutoff = now.subtract(const Duration(minutes: 15)).millisecondsSinceEpoch ~/ 1000;
+    final stale = _wals
+        .where(
+          (w) =>
+              w.status == WalStatus.miss &&
+              w.storage == WalStorage.disk &&
+              walAudioSeconds(w) > 0 &&
+              w.timerStart > 0 &&
+              w.timerStart + w.seconds <= cutoff,
+        )
+        .toList();
+    if (stale.isEmpty) {
+      _lastStaleWalReportAt = null;
+      return;
+    }
+    if (_lastStaleWalReportAt != null && now.difference(_lastStaleWalReportAt!) < const Duration(minutes: 5)) return;
+    _lastStaleWalReportAt = now;
+    final oldestEnd = stale.map((w) => w.timerStart + w.seconds).reduce(min);
+    final fields = <String, Object?>{
+      'trigger': trigger,
+      'pending_wal_count': stale.length,
+      'pending_audio_seconds': stale.fold<double>(0.0, (total, w) => total + walAudioSeconds(w)),
+      'oldest_pending_age_seconds': now.millisecondsSinceEpoch ~/ 1000 - oldestEnd,
+      'exhausted_retry_count': stale.where((w) => w.retryCount >= walMaxAutoRetries).length,
+    };
+    try {
+      if (_staleWalTelemetry != null) {
+        _staleWalTelemetry!(fields);
+      } else {
+        DebugLogManager.logEvent('wal_stale_missing', fields);
+        AnalyticsManager().track('Local WAL Stuck', properties: fields);
+      }
+    } catch (_) {
+      // Reporting cannot change custody or prevent retry.
     }
   }
 
@@ -541,6 +597,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
 
     if (!_walReady.isCompleted) _walReady.complete();
+    if (_isCurrent(generation)) reportStaleMissingWals(trigger: 'startup');
     _notifyUpdated(generation);
   }
 
@@ -623,7 +680,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         evidenceFrames,
         _frameSynced.sublist(low, high),
         captureSelectionStartSeconds(
-            now.subtract(const Duration(seconds: newFrameSyncDelaySeconds)), chunkFrameCount, _framesPerSecond),
+          now.subtract(const Duration(seconds: newFrameSyncDelaySeconds)),
+          chunkFrameCount,
+          _framesPerSecond,
+        ),
         generation,
         extendMemWal: true,
         legacySelectionTimerStart: timerStart,

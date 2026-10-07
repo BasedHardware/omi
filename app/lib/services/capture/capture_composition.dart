@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/calendar_capture_telemetry.dart';
+import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
@@ -121,6 +123,14 @@ CaptureProvider composeProductionCaptureProvider({
     throw UnsupportedError('composeProductionCaptureProvider refuses FLUTTER_TEST');
   }
   final provider = CaptureProvider(
+    calendarGapMonitor: CalendarCaptureGapMonitor(
+      ownerKey: () =>
+          SharedPreferencesUtil().getBool('google_calendar_connected') && SharedPreferencesUtil().uid.isNotEmpty
+              ? '${SharedPreferencesUtil().uid}:${AnalyticsManager.identityEpoch}'
+              : '',
+      load: fetchCalendarCaptureWindows,
+      emit: (fields) => AnalyticsManager().track('Calendar Capture Gap Detected', properties: fields),
+    ),
     sessionOwner: CaptureSessionOwner(
       coordinator: RecordingTransferCoordinator.instance,
       startForeground: () async {
