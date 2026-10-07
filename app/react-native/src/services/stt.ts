@@ -6,6 +6,15 @@ export interface DeepgramMessage {
 export interface TranscriptSegment {
   text: string;
   speaker: string;
+  /**
+   * Whether the voiceprint attributed this to the enrolled user.
+   *
+   * Optional because a segment straight off the wire has no such attribution --
+   * it is the voiceprint's judgement, not the transcriber's. Optional on purpose:
+   * absent means "not attributed", which is different from "known to be someone
+   * else", and conflating the two would let a wrong speaker answer for you.
+   */
+  isUser?: boolean;
   start: number;
   end: number;
   isFinal: boolean;

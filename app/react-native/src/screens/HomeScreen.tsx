@@ -14,8 +14,9 @@ import {
   type Route,
 } from '@/services/localBrainRouter';
 import { createNativeRouter, isLocalBrainAvailable } from '../../modules/local-brain';
+import { answerLocally } from '@/services/localAssistant';
 import { LocalBrainBar, type RouteTrace } from '@/components/LocalBrainBar';
-import { DEV_LOCAL_BRAIN } from '@/devFlags';
+import { DEV_LOCAL_BRAIN, GUEST_MODE } from '@/devFlags';
 import type { Conversation, Memory } from '@/api/omiApi';
 
 function dayLabel(iso?: string): string {
@@ -72,6 +73,8 @@ export default function HomeScreen() {
   );
 
   const [trace, setTrace] = useState<RouteTrace | null>(null);
+  const [answer, setAnswer] = useState<{ text: string; kind: string } | null>(null);
+  const [answering, setAnswering] = useState(false);
 
   // On-device local agent: a task/reminder command is handled without the cloud;
   // anything else falls through to "Ask Omi" chat.
@@ -90,11 +93,20 @@ export default function HomeScreen() {
     })
     const action = outcome.decision
     if (action.kind === 'chat') {
-      // Chat streaming isn't wired on this surface yet; don't pretend to answer.
-      Alert.alert('Ask Omi', 'Chat isn’t wired on this screen yet — task/reminder commands work: try "add a task: …".')
+      // Answered from on-device storage, not generated. See localAssistant: the
+      // brain is an embedder, so every answer is either something recorded or an
+      // explicit refusal. Shown in the transcript rather than an Alert, because
+      // an answer belongs in the conversation, not a dialog the user dismisses.
+      setAnswering(true)
+      try {
+        const reply = await answerLocally(text)
+        setAnswer({ text: reply.text, kind: reply.kind })
+      } finally {
+        setAnswering(false)
+      }
       return
     }
-    if (!uid) {
+    if (!uid && !GUEST_MODE) {
       Alert.alert('Sign in required', 'Sign in so tasks sync to your account.')
       return
     }
@@ -180,6 +192,23 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
+      {answer && (
+        <View style={styles.answerCard}>
+          <Text style={styles.answerKind}>
+            {answering
+              ? 'thinking…'
+              : answer.kind === 'quote'
+                ? 'from your recordings'
+                : answer.kind === 'summary'
+                  ? 'closest match'
+                  : answer.kind === 'unsupported'
+                    ? 'needs the server'
+                    : 'no match'}
+          </Text>
+          <Text style={styles.answerText}>{answer.text}</Text>
+        </View>
+      )}
+
       {/* Routing transparency: which layer decided, and how confident it was. */}
       <LocalBrainBar trace={trace} />
 
@@ -261,6 +290,15 @@ const styles = StyleSheet.create({
   },
   mindTag: { color: '#FFF', fontSize: 13, fontWeight: '600' },
   mindCount: { color: '#8E8E93', fontSize: 11 },
+  answerCard: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: '#111827',
+  },
+  answerKind: { fontSize: 11, color: '#6b7280', marginBottom: 6 },
+  answerText: { fontSize: 14, color: '#f9fafb', lineHeight: 20 },
   devRow: {
     flexDirection: 'row',
     gap: 8,

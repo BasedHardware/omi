@@ -3,6 +3,7 @@ import { DeepgramStream, TranscriptSegment } from '@/services/stt';
 import { createVoiceprint, Voiceprint } from '@/services/voiceprint';
 import { startMic, MicHandle } from '@/services/mic';
 import { omiBle, sttCodecName, omiStreamParams, type OmiCodec } from '@/services/omiBle';
+import { appendSegments } from '@/services/localConversations';
 import { ENV } from '@/config/env';
 import { useAuthStore } from '@/state/authStore';
 
@@ -80,8 +81,10 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
         onSegment: (seg) => {
           if (!vp.isEnrolled()) vp.enroll(seg.speaker);
           const { label, isUser } = vp.labelForSpeaker(seg.speaker);
-          get().pushSegment({ ...seg, speaker: label });
-          void isUser;
+          // Kept, not discarded: this is the only signal that separates "you" from
+          // "everyone else" locally, and answering "what did marco say" depends on
+          // it. `void isUser` used to sit here, throwing the verdict away.
+          get().pushSegment({ ...seg, speaker: label, isUser });
         },
         onOpen: () => {
           // Socket is live; only then start the mic and flip to recording.
@@ -139,8 +142,8 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
       {
         onSegment: (seg) => {
           if (!vp.isEnrolled()) vp.enroll(seg.speaker);
-          const { label } = vp.labelForSpeaker(seg.speaker);
-          get().pushSegment({ ...seg, speaker: label });
+          const { label, isUser } = vp.labelForSpeaker(seg.speaker);
+          get().pushSegment({ ...seg, speaker: label, isUser });
         },
         onOpen: () => {
           set({ connecting: false, recording: true, error: null, source: 'omi' });
@@ -179,12 +182,26 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
     next.connect();
   },
   stop: () => {
+    const { segments, source } = get();
     teardownMic();
     // Unsubscribe before closing the socket: leaving the notification enabled
     // after a stop means the device keeps pushing audio into a dead stream.
     omiBle.stopAudio();
     get().stream?.close();
     set({ recording: false, connecting: false, stream: null, source: null });
+
+    // Persist before clearing, so a stop still leaves the words behind. This is
+    // what makes the assistant work with no account: there is nothing on the
+    // server to fall back on, so on-device storage is the record.
+    const saved = segments.filter((x) => x.isFinal && x.text.trim());
+    if (saved.length > 0) {
+      void appendSegments(
+        saved.map((x) => ({ text: x.text, speaker: x.speaker, isUser: x.isUser, start: x.start })),
+        source ?? 'mic'
+      ).catch((e) => console.warn('[capture] could not save locally:', e));
+    }
+    set({ segments: [], voiceprint: createVoiceprint() });
   },
   pushSegment: (seg) => set({ segments: [...get().segments, seg] }),
+  /** Writes this session's segments to on-device storage. Called on stop(). */
 }));
