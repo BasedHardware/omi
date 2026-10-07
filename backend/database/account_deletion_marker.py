@@ -3,6 +3,8 @@
 Writers (the deletion executor) and readers (the auth fence) must resolve the
 same database. The marker is stored on the customer data plane; a compute-plane
 default on desktop-backend is a clean miss that reopens a deleting account.
+
+Design: identifier validation fails fast with ValueError; missing documents degrade cleanly to None.
 """
 
 from __future__ import annotations
@@ -14,6 +16,17 @@ from database.account_deletion_policy import normalize_account_deletion_status
 from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 
 ACCOUNT_DELETION_COLLECTION = "account_deletions"
+
+
+def _validate_uid(uid: object) -> str:
+    """Validate opaque uid string without trimming or mutating."""
+    if not isinstance(uid, str) or not uid:
+        raise ValueError("uid must be a non-empty string without whitespace")
+    if uid != uid.strip():
+        raise ValueError("uid must be a non-empty string without whitespace")
+    if "/" in uid:
+        raise ValueError("uid cannot contain path delimiters")
+    return uid
 
 
 def account_deletion_firestore_client(*, firestore_client: Any | None = None) -> Any:
@@ -29,11 +42,15 @@ def account_deletion_firestore_client(*, firestore_client: Any | None = None) ->
 
 
 def account_deletion_collection(*, firestore_client: Any | None = None) -> Any:
-    return account_deletion_firestore_client(firestore_client=firestore_client).collection(ACCOUNT_DELETION_COLLECTION)
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
+    if client is None:
+        raise ValueError("firestore client is required")
+    return client.collection(ACCOUNT_DELETION_COLLECTION)
 
 
 def account_deletion_document(uid: str, *, firestore_client: Any | None = None) -> Any:
-    return account_deletion_collection(firestore_client=firestore_client).document(uid)
+    clean_uid = _validate_uid(uid)
+    return account_deletion_collection(firestore_client=firestore_client).document(clean_uid)
 
 
 def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
@@ -43,15 +60,20 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     access barrier on the very next request, and a cached pre-delete miss would
     reopen the exact half-deleted-account window this marker closes.
     """
+    clean_uid = _validate_uid(uid)
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    snapshot = account_deletion_document(uid, firestore_client=client).get()
+    snapshot = account_deletion_document(clean_uid, firestore_client=client).get()
+
+    exists = getattr(snapshot, "exists", False)
     record_document_read(
         FirestoreReadSite.USER_DELETION_WIPE_STATUS,
-        FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
+        FirestoreReadOutcome.HIT if exists else FirestoreReadOutcome.MISS,
     )
-    if not snapshot.exists:
+    if not exists:
         return None
-    status = (snapshot.to_dict() or {}).get("wipe_status")
+    raw_dict = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
+    data = raw_dict if isinstance(raw_dict, dict) else {}
+    status = data.get("wipe_status")
     return normalize_account_deletion_status(marker_exists=True, raw_status=status)
 
 
@@ -62,3 +84,4 @@ __all__ = [
     "account_deletion_firestore_client",
     "get_user_deletion_wipe_status",
 ]
+
