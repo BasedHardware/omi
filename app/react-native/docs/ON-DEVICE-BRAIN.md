@@ -107,32 +107,63 @@ on Android; v0.15 added `AutoToolChat`.
 Audio input means one model could theoretically do **STT + tool calling + chat**.
 See the risk in §5 before believing that.
 
+### Measured on the SM-A145F — it does not fit
+
+Run twice via `GemmaBenchActivity`, tag `[GemmaBench]`:
+
+| | Run 1 | Run 2 |
+|---|---|---|
+| Model file | 2,468 MB | 2,468 MB |
+| **Engine load** | **70,590 ms** | **70,826 ms** |
+| **Peak RSS at load** | **1,522 MB** | **1,721 MB** |
+| Decode / TTFT | **not reached** | **not reached** |
+| Tool-call accuracy | **not reached** | **not reached** |
+
+The process was killed during the first generation turn, both times. `lmkd`
+gives the reason:
+
+```
+Reclaim 'com.google.android.apps.messaging' ... reason: device is low on swap
+(1187808kB < 2222976kB) and thrashing (301%)
+```
+
+70 seconds is already disqualifying on its own — a cold start you wait a minute
+for is indistinguishable from a crash. The kill is the deeper problem: the model
+loads, then the first token request pushes the device into swap thrashing and
+Android reclaims the process.
+
+**The LiteRT cache does not rescue this.** The second run was 236 ms slower, not
+faster. That is expected in hindsight: `.litertlm` files are already compiled, so
+there is no compilation to warm.
+
+### What this rules out, and what it does not
+
+Ruled out on this hardware: **Gemma 4 E2B via LiteRT-LM, CPU backend.**
+
+Not ruled out, and still open:
+
+- **A smaller model.** Tool selection does not need 2.3B effective parameters. A
+  0.5B-class tool-use model at ~400 MB would fit alongside the 285 MB router, and
+  the tool-call accuracy question is unanswered because it was never reached.
+- **GPU backend.** Untested — this phone has no NPU and LiteRT-LM's GPU path is
+  aimed at devices with it.
+- **Android AI Core / Gemini Nano.** Not available on this device.
+
+The honest summary is that the *first* candidate failed, and the failure was
+memory and latency rather than capability. Nobody has yet measured whether the
+model would have chosen the right tool, because the phone could not keep it alive
+long enough to ask.
+
 ### Vendor numbers on other hardware
 
-**Not measured on the SM-A145F.** These are Google's published figures:
+For reference only — none of these are the SM-A145F:
 
 | Device | Backend | Decode tok/s | CPU memory |
 |---|---|---|---|
 | S26 Ultra (flagship) | CPU | 46.9 | 1,733 MB |
 | iPhone 17 Pro | CPU | 25.0 | 607 MB |
 | Raspberry Pi 5 (A76) | CPU | 35.0 | 1,628 MB |
-| Raspberry Pi 4 | CPU | **1.7** | — |
-| Pi 4, E4B | CPU | **0.87** (timed out) | — |
-
-### What that implies for the SM-A145F
-
-The Exynos 3830 is a 2019 budget part: two Cortex-A53 at 1.6 GHz plus four
-A53 at 1.5 GHz. **A Raspberry Pi 4 is the honest reference point, not a Pi 5 or a
-flagship** — and a Pi 4 managed 1.7 tok/s for E2B, with E4B timing out.
-
-Extrapolating: **single-digit tok/s, possibly low single digit.** That is enough
-for a short composed sentence after a tool call. It is not enough for streaming
-paragraphs, and it is nowhere near enough for reliable multi-step planning.
-
-This extrapolation is exactly why the next step is a benchmark (§7) rather than an
-implementation.
-
----
+| Raspberry Pi 4 | CPU | 1.7 | — |
 
 ## 4. Memory budget — the real constraint
 
@@ -223,19 +254,30 @@ Two design rules learned the hard way:
 
 Each step is gated on a measurement, not an assumption.
 
-### Step 1 — benchmark (do this first)
+### Step 1 — benchmark Gemma 4 E2B — **done, it failed**
 
-Run Gemma 4 E2B on the SM-A145F and record: load time, prefill tok/s, decode
-tok/s, peak RSS, and **tool-call correctness** on ~30 prompts. The repo already
-has the harness pattern in `mobile-1b-model/scripts/measure_*.py`; the same
-approach applied here answers the question that matters.
+Measured twice on the SM-A145F: 70 s load, 1.5-1.7 GB RSS, killed during the
+first generation turn by swap thrashing. See §3.
 
-Decision rule:
+### Step 2 — benchmark a 0.5B-class tool-use model
 
-- **≥ 8 tok/s and tool accuracy ≥ 80%** → proceed to Step 2
-- **2–8 tok/s** → proceed, but restrict it to composing short tool replies
-- **< 2 tok/s, or tool accuracy < 60%** → keep retrieval-only, and revisit when
-  the LLM only has to select a tool, not write a reply
+The unanswered question, and now the only one worth asking. Tool selection needs
+far less than 2.3B effective parameters, and the accuracy number is unknown
+because the 2B model could not stay alive long enough to be asked.
+
+Constraint: the model must coexist with the 285 MB router and ~200 MB of Whisper
+inside ~2,800 MB, so **~1.5 GB is the ceiling for the whole tier** and a
+~400 MB model is the comfortable target.
+
+Decision rule, unchanged:
+
+- **≥ 8 tok/s and tool accuracy ≥ 80%** → proceed to composition
+- **2–8 tok/s** → restrict it to composing short tool replies
+- **< 2 tok/s, or tool accuracy < 60%** → keep retrieval-only as the ceiling
+
+Add a hard gate before anything else: **if load exceeds 5 seconds, stop.** A
+model that takes 70 seconds to become usable cannot be behind a button, whatever
+it scores.
 
 ### Step 2 — tool selection only
 
