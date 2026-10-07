@@ -55,7 +55,11 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     if (!mounted || _aiResponse != null) return;
 
     final onboardingProvider = context.read<DeviceOnboardingProvider>();
-    if (!onboardingProvider.questionSent) return;
+    if (onboardingProvider.voiceSessionActive) {
+      onboardingProvider.onQuestionSubmitted();
+    } else if (!onboardingProvider.questionSent) {
+      return;
+    }
 
     if (_messageProvider.messages.length <= _messageCountAtStart) return;
     final newMessages = _messageProvider.messages.sublist(_messageCountAtStart);
