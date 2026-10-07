@@ -33,7 +33,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate dashboard JSON
         run: |
           set -euo pipefail
@@ -65,7 +65,7 @@ jobs:
           - environment: dev
             url: https://monitor.omiapi.com
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Skip environments outside the trigger
         id: gate
         env:
