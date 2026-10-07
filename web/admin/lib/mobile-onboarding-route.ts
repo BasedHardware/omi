@@ -20,7 +20,7 @@ export function mobileOnboardingCacheKey(
 }
 
 // Like macOS: compute is independently callable by precompute, while HTTP
-// access uses admin verification. No cron changes are needed for this draft.
+// access uses admin verification. First-run and tutorial are precomputed; attach stays on-demand.
 export function mobileOnboardingHandler(kind: MobileOnboardingKind) {
   return async function GET(request: NextRequest) {
     const auth = await verifyAdmin(request);

@@ -3180,7 +3180,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Pendant is a capture source, not a client_kind. Live listen admissions over the selected range; not unique users.",
+          "description": "Pendant is a capture source, not a client_kind. Live listen admissions over the selected range; not unique users. Offline pendant capture arrives through the WAL/sync path, which never enters the finalization journey and whose service is not scraped by Prometheus, so this row covers live listen sessions only.",
           "fieldConfig": {
             "defaults": {
               "noValue": "no traffic",
@@ -3235,7 +3235,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Pendant is a capture source, not a client_kind. First-audio observations / accepted sessions over the selected range. Audio arrival health, not transcript production; window boundaries can differ.",
+          "description": "Pendant is a capture source, not a client_kind. First-audio observations / accepted sessions over the selected range. Audio arrival health, not transcript production; window boundaries can differ. Offline pendant capture arrives through the WAL/sync path, which never enters the finalization journey and whose service is not scraped by Prometheus, so this row covers live listen sessions only.",
           "fieldConfig": {
             "defaults": {
               "max": 100,
