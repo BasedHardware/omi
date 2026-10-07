@@ -182,12 +182,20 @@ WHERE _PARTITIONTIME >= TIMESTAMP_SUB(TIMESTAMP('{start}'), INTERVAL 2 DAY)
   AND service.description = 'App Engine'
   AND sku.description = 'Cloud Firestore Read Ops'
   AND usage.unit = 'requests'"""
-    bq = subprocess.run(
-        ["bq", "query", "--project_id=based-hardware", "--use_legacy_sql=false", "--format=json", sql],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        bq = subprocess.run(
+            ["bq", "query", "--project_id=based-hardware", "--use_legacy_sql=false", "--format=json", sql],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        # A swallowed stderr here cost four CI dispatches: the script printed
+        # only "non-zero exit status 1" while bq's actual denial stayed hidden.
+        detail = (exc.stderr or "").strip().splitlines()
+        raise RuntimeError(
+            f"bq billing query failed (rc={exc.returncode}): {detail[-1] if detail else '<no stderr>'}"
+        ) from exc
     billing_rows = json.loads(bq.stdout)
     billed = float(billing_rows[0]["billed"]) if billing_rows else 0.0
     records: list[dict[str, Any]] = []
