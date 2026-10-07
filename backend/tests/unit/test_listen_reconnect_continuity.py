@@ -418,3 +418,125 @@ def test_compressed_empty_recording_does_not_extend_meeting_deadline():
         external_data=meeting_context(now),
     )
     assert continuation_timeout(row, 120) == 120
+
+
+@pytest.mark.parametrize('identity', ['partial_context', 'external_event', 'calendar_link'])
+def test_calendar_id_only_continuation_resolves_exact_users_meeting(identity):
+    from database.document_ids import calendar_meeting_doc_id
+
+    store = StrictFirestore()
+    now = datetime(2026, 10, 7, tzinfo=timezone.utc)
+    source = 'google' if identity == 'calendar_link' else 'system_calendar'
+    root = ('users', 'u', 'recording_sessions', 'origin')
+    store.rows[root] = {
+        'uid': 'u',
+        'recording_session_id': 'origin',
+        'live_continuation': {'conversation_id': 'meeting', 'recording_session_id': 'meeting'},
+    }
+    row = dict(status='in_progress', source='omi', client_device_id='phone', finished_at=now, has_content=True)
+    if identity == 'partial_context':
+        row['external_data'] = {'calendar_meeting_context': {'calendar_event_id': 'event-1'}}
+    elif identity == 'external_event':
+        row['external_data'] = {'calendar_event_id': 'event-1'}
+    else:
+        row['calendar_event'] = {'event_id': 'event-1'}
+    path = ('users', 'u', 'conversations', 'meeting')
+    store.rows[path] = deepcopy(row)
+    event_path = ('users', 'u', 'meetings', calendar_meeting_doc_id('u', source, 'event-1'))
+    store.rows[event_path] = {
+        'calendar_event_id': 'event-1',
+        'calendar_source': source,
+        'start_time': now,
+        'duration_minutes': 120,
+        'title': 'Planning',
+    }
+    result, retired = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id='phone',
+        now=now + timedelta(minutes=10),
+        timeout=120,
+        firestore_client=store,
+    )
+    assert result == {'conversation_id': 'meeting', 'recording_session_id': 'meeting'}
+    assert retired is None
+    assert store.rows[path] == row  # hydration does not stamp a new client/server field
+
+
+@pytest.mark.parametrize(
+    'record',
+    [
+        None,
+        {'calendar_event_id': 'other', 'calendar_source': 'system_calendar'},
+        {'calendar_event_id': 'event-1', 'calendar_source': 'screen_activity'},
+    ],
+)
+def test_calendar_id_fallback_does_not_join_a_different_event(record):
+    from database.document_ids import calendar_meeting_doc_id
+    from utils.conversation_continuity import resumable_continuation
+
+    store = StrictFirestore()
+    now = datetime(2026, 10, 7, tzinfo=timezone.utc)
+    row = dict(
+        status='in_progress',
+        source='omi',
+        client_device_id='phone',
+        finished_at=now,
+        has_content=True,
+        external_data={'calendar_event_id': 'event-1'},
+    )
+    if record:
+        store.rows[('users', 'u', 'meetings', calendar_meeting_doc_id('u', 'system_calendar', 'event-1'))] = record
+    resolved = listen_continuations.calendar_continuity_row('u', row, firestore_client=store)
+    assert resolved is row
+    assert not resumable_continuation(
+        resolved, source='omi', device_id='phone', now=now + timedelta(seconds=120), timeout=120
+    )
+
+
+def test_calendar_lookup_failure_preserves_silence_rule_and_emits_fallback(monkeypatch):
+    from unittest.mock import Mock
+
+    record = Mock()
+    monkeypatch.setattr(listen_continuations, 'record_fallback', record)
+    client = Mock()
+    client.collection.side_effect = RuntimeError('fixture lookup failure')
+    row = {'external_data': {'calendar_event_id': 'event-1'}}
+    assert listen_continuations.calendar_continuity_row('u', row, firestore_client=client) is row
+    record.assert_called_once()
+    assert record.call_args.kwargs['to_mode'] == 'silence_boundary'
+
+
+@pytest.mark.anyio
+async def test_controller_hydrates_calendar_id_before_resume_and_live_timeout(monkeypatch):
+    from database.document_ids import calendar_meeting_doc_id
+
+    harness = CaptureHarness(monkeypatch)
+    controller = harness.connect()
+    await controller.prepare()
+    cid = controller.host.state.current_conversation_id
+    harness.rows[cid].update(
+        has_content=True, transcript_segments=[{'text': 'kept'}], external_data={'calendar_event_id': 'event-1'}
+    )
+    harness.store.rows[('users', 'u', 'meetings', calendar_meeting_doc_id('u', 'system_calendar', 'event-1'))] = {
+        'calendar_event_id': 'event-1',
+        'calendar_source': 'system_calendar',
+        'start_time': harness.now,
+        'duration_minutes': 120,
+    }
+    prior_call = harness.call
+
+    async def call(fn, *args, **kwargs):
+        if fn is listen_continuations.calendar_continuity_row:
+            return fn(*args, **kwargs, firestore_client=harness.store)
+        return await prior_call(fn, *args, **kwargs)
+
+    harness.now += timedelta(minutes=10)
+    reconnect = harness.connect()
+    reconnect.host.persistence.call = call
+    await reconnect.prepare()
+    assert reconnect.host.state.current_conversation_id == cid
+    reconnect.host.wait = AsyncMock(side_effect=[False, True])
+    await reconnect.lifecycle_loop()
+    assert harness.creates == 1

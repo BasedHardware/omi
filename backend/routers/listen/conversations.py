@@ -21,7 +21,8 @@ from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.live_continuation import resolve_live_continuation
-from utils.conversation_continuity import continuation_timeout, resumable_continuation
+from database.listen_continuations import calendar_continuity_row
+from utils.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.projection_payload import omit_null_processing_state
@@ -95,6 +96,11 @@ class LiveConversationController:
             name='recording_session_lease_renewal',
         )
 
+    async def _continuity_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        if calendar_continuity_identity(row) is None:
+            return row
+        return dict(await self.host.persistence.call(calendar_continuity_row, self.host.request.uid, row))
+
     async def _continuation(self, proposed: dict[str, str] | None = None) -> dict[str, str] | None:
         if not self.host.client_conversation_id or self.host.is_multi_channel:
             return None
@@ -126,6 +132,8 @@ class LiveConversationController:
                 binding['conversation_id'],
                 read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
             )
+        if existing:
+            existing = await self._continuity_row(existing)
         if not existing or not resumable_continuation(
             existing,
             source=normalize_listen_source(self.host.request.source),
@@ -390,6 +398,7 @@ class LiveConversationController:
                 read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
             )
         if existing:
+            existing = await self._continuity_row(existing)
             action = decide_recording_session_reconnect_action(
                 status=existing.get('status'),
                 discarded=bool(existing.get('discarded')),
@@ -586,6 +595,7 @@ class LiveConversationController:
         ):
             await self.create_new_in_progress_conversation()
             return None
+        existing = await self._continuity_row(existing)
         finished_at = datetime.fromisoformat(existing['finished_at'].isoformat())
         seconds = (self.clock() - finished_at).total_seconds()
         if (
@@ -759,6 +769,7 @@ class LiveConversationController:
             if not conversation:
                 await self.create_new_in_progress_conversation(rollover=True)
                 continue
+            conversation = await self._continuity_row(conversation)
             finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
             action = decide_lifecycle_action(
                 conversation_exists=True,

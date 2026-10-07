@@ -15,6 +15,24 @@ def intervals_connect(start: float, end: float, other_start: float, other_end: f
     return not gap_splits(max(start - other_end, other_start - end))
 
 
+def calendar_continuity_identity(row: Mapping[str, Any]) -> tuple[str, str] | None:
+    """An existing event id whose scheduled window still needs a server-side read."""
+    external = row.get('external_data')
+    external = external if isinstance(external, Mapping) else {}
+    context = external.get('calendar_meeting_context')
+    context = context if isinstance(context, Mapping) else {}
+    if context.get('start_time') is not None and context.get('duration_minutes') is not None:
+        return None
+    event_id = context.get('calendar_event_id') or external.get('calendar_event_id')
+    source = context.get('calendar_source') or external.get('calendar_source') or 'system_calendar'
+    link = row.get('calendar_event')
+    if not event_id and isinstance(link, Mapping):
+        event_id, source = link.get('event_id'), 'google'
+    if not isinstance(event_id, str) or not event_id or event_id == 'screen-activity' or source == 'screen_activity':
+        return None
+    return (event_id, source) if isinstance(source, str) else None
+
+
 def continuation_timeout(row: Mapping[str, Any], timeout: float = DEFAULT_GAP_SECONDS) -> float:
     """A stored calendar identity extends silence only through its scheduled window.
 

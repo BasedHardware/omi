@@ -21,7 +21,12 @@ and the active lifecycle loop use the same deadline. Source/device/lock partitio
 and empty-generation deletion keep their existing checks; non-meeting recordings
 keep the 120-second silence rule. The continuation transaction reads the complete
 conversation metadata, including the stored calendar context, without decoding
-transcripts; compressed rows use the durable `has_content` marker.
+transcripts; compressed rows use the durable `has_content` marker. If only an
+existing calendar event id is available (partial meeting context, external
+calendar event id, or a linked Google event), the same paths read that exact
+`users/{uid}/meetings` document using the calendar source + event id natural key.
+They never infer a meeting from an overlap query. Missing/mismatched records keep
+the ordinary silence deadline; lookup faults emit fallback telemetry.
 
 `PATCH /v1/conversations/{id}/assign-speaker/{speaker_id}` accepts optional paired
 `start` / `end` query parameters in conversation-offset seconds. Only complete
