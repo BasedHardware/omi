@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import time
+from datetime import timedelta
 from pathlib import Path
 from types import ModuleType
 
@@ -105,7 +106,7 @@ class _DB:
         self._collections.setdefault(name, _Collection())
         return self._collections[name]
 
-    def transaction(self):
+    def transaction(self, **_kwargs):
         return _Transaction()
 
 
@@ -123,7 +124,7 @@ class _FailDB:
     def collection(self, name):
         raise AssertionError(f"Firestore touched on cache hit: {name}")
 
-    def transaction(self):
+    def transaction(self, **kwargs):
         raise AssertionError("Firestore touched on cache hit")
 
 
@@ -521,6 +522,9 @@ def test_replay_outage_propagates_and_retry_completes_revocation(_fake_redis):
     mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)
     rotated = mcp_oauth.rotate_refresh_token(pair["refresh_token"], "omi-chatgpt-prod", mcp_oauth.MCP_RESOURCE_URL)
     mcp_oauth.validate_access_token(rotated["access_token"], mcp_oauth.MCP_RESOURCE_URL)
+    mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(mcp_oauth.hash_secret(pair['refresh_token'])).update(
+        {'used_at': mcp_oauth._now() - timedelta(minutes=10)}
+    )
 
     fake_redis.failing = True
     with pytest.raises(token_cache.McpTokenStoreUnavailable):
@@ -559,7 +563,10 @@ def test_refresh_replay_revokes_and_invalidates_cached_token(_fake_redis):
     rotated = mcp_oauth.rotate_refresh_token(pair["refresh_token"], "omi-chatgpt-prod", mcp_oauth.MCP_RESOURCE_URL)
     mcp_oauth.validate_access_token(rotated["access_token"], mcp_oauth.MCP_RESOURCE_URL)
 
-    # Replaying the used refresh token revokes the whole grant family.
+    # Replaying beyond the grace window revokes the whole grant family.
+    mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(mcp_oauth.hash_secret(pair['refresh_token'])).update(
+        {'used_at': mcp_oauth._now() - timedelta(minutes=10)}
+    )
     assert mcp_oauth.rotate_refresh_token(pair["refresh_token"], "omi-chatgpt-prod", mcp_oauth.MCP_RESOURCE_URL) is None
     assert fake_redis.exists(_revoked_key(grant["id"])) == 1
     assert mcp_oauth.validate_access_token(rotated["access_token"], mcp_oauth.MCP_RESOURCE_URL) is None
