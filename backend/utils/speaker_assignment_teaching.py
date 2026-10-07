@@ -40,7 +40,7 @@ def commit_manual_assignment(
         segment_index=segment_index,
         use_for_speech_training=use_for_speech_training,
         rejection=rejection,
-        **({"time_range": time_range} if time_range is not None else {}),
+        time_range=time_range,
     )
     if background_tasks is not None:
         schedule_assignment_teaching(
