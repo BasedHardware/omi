@@ -1,24 +1,23 @@
+import importlib.util
 import json
 import os
-import sys
 import tempfile
 import unittest
 from datetime import timedelta
+from pathlib import Path
 
-# Add examples folder to sys.path
-examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples"))
-if examples_dir not in sys.path:
-    sys.path.insert(0, examples_dir)
+recipe_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_digest.py"
+spec = importlib.util.spec_from_file_location("conversations_digest", recipe_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
 
-from conversations_digest import (
-    text,
-    parse_time,
-    parse_offset,
-    hours,
-    digest,
-    convert,
-    main,
-)
+text = module.text
+parse_time = module.parse_time
+parse_offset = module.parse_offset
+hours = module.hours
+digest = module.digest
+convert = module.convert
+main = module.main
 
 
 class TestConversationsDigest(unittest.TestCase):
