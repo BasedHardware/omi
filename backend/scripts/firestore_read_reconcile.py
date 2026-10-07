@@ -8,10 +8,14 @@ import datetime as dt
 import json
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 TABLE = "based-hardware.gcp_billing_export.gcp_billing_export_resource_v1_01B287_9348DC_02D256"
+PROJECT_ID = "based-hardware"
 # Services we ship that read Firestore. A ledger row from any of them,
 # including pusher, still sums into the scaled sample.
 SHIPPED_SERVICES = frozenset(
@@ -183,33 +187,54 @@ WHERE _PARTITIONTIME >= TIMESTAMP_SUB(TIMESTAMP('{start}'), INTERVAL 2 DAY)
   AND sku.description = 'Cloud Firestore Read Ops'
   AND usage.unit = 'requests'"""
     try:
-        # --headless + a credentialed gcloud account (see the workflow's
-        # "Credential the gcloud account layer" step): bq does not read
-        # GOOGLE_APPLICATION_CREDENTIALS, and without an account it enters a
-        # first-run prompt that a non-TTY runner aborts before inserting any
-        # job. The billing project follows --project_id.
-        bq = subprocess.run(
-            [
-                "bq",
-                "query",
-                "--headless",
-                "--project_id=based-hardware",
-                "--use_legacy_sql=false",
-                "--format=json",
-                sql,
-            ],
+        # BigQuery REST jobs.query with a token minted from the ambient
+        # credential (auth@v3's env credential under WIF, a key file
+        # otherwise). The `bq` CLI is unusable from a federated CI identity:
+        # it ignores GOOGLE_APPLICATION_CREDENTIALS, and without a
+        # credentialed gcloud *account* it enters a first-run prompt a
+        # non-TTY runner aborts (FC-bq-federated-quota-project: six
+        # dispatches across --billing_project/--headless/--force attempts).
+        # The REST path has no account layer at all. timeoutMs is raised to
+        # the full HTTP budget: jobs.query answers HTTP 200 with
+        # jobComplete=false and no rows when the aggregate outlives the
+        # default 10s server wait, which would read as a zero bill.
+        token = subprocess.run(
+            ["gcloud", "auth", "print-access-token"],
             check=True,
             capture_output=True,
             text=True,
-        )
+        ).stdout.strip()
+        endpoint = f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT_ID}/queries"
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        body = json.dumps({"query": sql, "useLegacySql": False, "timeoutMs": 120000}).encode()
+        last_error = "no attempt"
+        payload: dict[str, Any] | None = None
+        for attempt in range(3):
+            request = urllib.request.Request(endpoint, data=body, headers=headers)
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    loaded = json.load(response)
+                if not isinstance(loaded, dict) or not loaded.get("jobComplete"):
+                    last_error = f"jobs.query incomplete after timeoutMs: jobComplete=false (attempt {attempt + 1})"
+                    continue
+                payload = loaded
+                break
+            except urllib.error.HTTPError as exc:
+                body_text = exc.read().decode(errors="replace")
+                last_error = f"HTTP {exc.code}: {body_text[:400]}"
+                if exc.code < 500 and exc.code != 429:
+                    break
+            except (urllib.error.URLError, TimeoutError) as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+            time.sleep(5 * (attempt + 1))
+        if payload is None or not payload.get("jobComplete"):
+            raise RuntimeError(f"billing query failed after 3 attempts; last: {last_error}")
     except subprocess.CalledProcessError as exc:
-        # A swallowed stderr here cost four CI dispatches: the script printed
-        # only "non-zero exit status 1" while bq's actual denial stayed hidden.
         detail = (exc.stderr or "").strip().splitlines()
         raise RuntimeError(
-            f"bq billing query failed (rc={exc.returncode}): {detail[-1] if detail else '<no stderr>'}"
+            f"bq token mint failed (rc={exc.returncode}): {detail[-1] if detail else '<no stderr>'}"
         ) from exc
-    billing_rows = json.loads(bq.stdout)
+    billing_rows = [{"billed": row["f"][0]["v"]} for row in payload.get("rows", [])]
     billed = float(billing_rows[0]["billed"]) if billing_rows else 0.0
     records: list[dict[str, Any]] = []
     for hour in range(24):
