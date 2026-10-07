@@ -99,16 +99,16 @@ python memories_to_opml.py memories.json memories.opml --category work,skills
 
 ### Workflowy
 1. In Workflowy, click the **Settings** menu or open a parent node.
-2. Select **Import** $\rightarrow$ **OPML**.
+2. Select **Import** → **OPML**.
 3. Upload `memories.opml`. Your categories and memory items will be imported as interactive nested bullet trees.
 
 ### Logseq
 1. In Logseq, click the **...** menu in the top right.
-2. Select **Import** $\rightarrow$ **OPML**.
+2. Select **Import** → **OPML**.
 3. Select `memories.opml` to populate a dedicated outline page in your local graph.
 
 ### OmniFocus / Dynalist
-1. Drag and drop `memories.opml` into the application or use File $\rightarrow$ Import OPML.
+1. Drag and drop `memories.opml` into the application or use File → Import OPML.
 
 ---
 
