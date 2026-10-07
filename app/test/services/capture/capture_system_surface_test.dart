@@ -123,6 +123,8 @@ void main() {
 
   test('stall recovery is not shown as a user pause and keeps Pause available', () async {
     await world.elapse(const Duration(seconds: 5));
+    await world.controller.pendingSourceSwitch; // Recovery first makes the WAL boundary durable.
+    await world.settle();
     expect(presentation.snapshot['status'], isIn(['interrupted', 'connecting']));
     expect(presentation.snapshot['paused'], true);
     expect(presentation.snapshot['canPause'], true);
