@@ -17,6 +17,8 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
+import '../support/capture/virtual_capture_time.dart';
+
 const int _notifyAck = 0x01;
 const int _notifyInfo = 0x02;
 const int _cmdInfo = 0x10;
@@ -171,50 +173,49 @@ void main() {
   });
 
   test('pendant BLE frames drain to disk within the 10s custody window', () async {
-    final timers = <MapEntry<Duration, void Function(Timer)>>[];
+    final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
     final sync = LocalWalSyncImpl(
       _Listener(),
-      periodic: (d, cb) {
-        timers.add(MapEntry(d, cb));
-        return Timer(const Duration(days: 1), () {});
-      },
+      periodic: scheduler.periodic,
       persistWals: WalFileManager.saveWals,
     );
     sync.setDeviceInfo('dev', 'Omi');
     sync.start();
-    await sync.walReady;
+    try {
+      await sync.walReady;
 
-    for (var i = 0; i < 1000; i++) {
-      sync.onFrameCaptured(WalFrame(payload: [0xAA, i & 0xFF], syncKey: FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF, 0])));
-    }
+      for (var i = 0; i < 1000; i++) {
+        final syncKey = FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF, 0]);
+        sync.onFrameCaptured(WalFrame(payload: [0xAA, i & 0xFF], syncKey: syncKey));
+      }
 
-    final tenSecond = timers.where((e) => e.key.inSeconds == 10).toList();
-    expect(
-      tenSecond,
-      isNotEmpty,
-      reason: 'a 10s pendant drain timer must exist — the 75s/105s batch timers cannot prove custody',
-    );
-    final dummy = Timer(const Duration(days: 1), () {});
-    tenSecond.last.value(dummy);
-    dummy.cancel();
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+      // Fire only what comes due inside the 10s window; the 75s/105s batch timers stay pending.
+      scheduler.elapse(const Duration(seconds: 10));
+      expect(
+        scheduler.pendingTimers.where((t) => t.fires > 0),
+        isNotEmpty,
+        reason: 'a pendant drain timer must fire within 10s — the 75s/105s batch timers cannot prove custody',
+      );
+      // Await the Future the drain callback returned (audio write, then WAL index save) instead of
+      // a fixed sleep: under CI load a 300 ms sleep ended before the index save landed (#20500).
+      await scheduler.waitForCallbackIo();
 
-    final wals = await WalFileManager.loadWals();
-    expect(
-      wals.where((w) => w.storage == WalStorage.disk),
-      isNotEmpty,
-      reason: 'pendant frames must reach the disk index inside the custody window',
-    );
-    final wal = wals.firstWhere((w) => w.storage == WalStorage.disk);
-    expect(
-      File('${tempDir.path}/${wal.filePath}').existsSync(),
-      isTrue,
-      reason: 'the audio file must be durable, not just the index entry',
-    );
-
-    await sync.stop();
-    for (final entry in timers) {
-      entry.value;
+      final wals = await WalFileManager.loadWals();
+      expect(
+        wals.where((w) => w.storage == WalStorage.disk),
+        isNotEmpty,
+        reason: 'pendant frames must reach the disk index inside the custody window',
+      );
+      final wal = wals.firstWhere((w) => w.storage == WalStorage.disk);
+      expect(
+        File('${tempDir.path}/${wal.filePath}').existsSync(),
+        isTrue,
+        reason: 'the audio file must be durable, not just the index entry',
+      );
+    } finally {
+      // stop() queues behind any drain still running, so its WAL index write lands before tearDown
+      // deletes tempDir even when an expectation above failed (#20500).
+      await sync.stop();
     }
   });
 
