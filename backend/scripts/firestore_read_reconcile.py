@@ -192,6 +192,7 @@ WHERE _PARTITIONTIME >= TIMESTAMP_SUB(TIMESTAMP('{start}'), INTERVAL 2 DAY)
             [
                 "bq",
                 "query",
+                "--headless",
                 "--billing_project=based-hardware",
                 "--project_id=based-hardware",
                 "--use_legacy_sql=false",
