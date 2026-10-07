@@ -21,7 +21,6 @@ import pytest
 
 import database.conversations as conversations_db
 
-
 UID = "test-uid"
 CONVERSATION_ID = "test-conversation-id"
 CONVERSATION_PATH = ("users", UID, "conversations", CONVERSATION_ID)
