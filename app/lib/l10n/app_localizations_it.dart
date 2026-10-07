@@ -4391,7 +4391,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get saveKeyWarning => 'Salva questa chiave ora! Non potrai vederla di nuovo.';
 
   @override
-  String get yourApiKey => 'LA TUA CHIAVE API';
+  String get yourApiKey => 'La tua chiave API';
 
   @override
   String get tapToCopy => 'Tocca per copiare';
@@ -4406,13 +4406,13 @@ class AppLocalizationsIt extends AppLocalizations {
   String get accessDataProgrammatically => 'Accedi ai tuoi dati in modo programmatico';
 
   @override
-  String get keyNameLabel => 'NOME CHIAVE';
+  String get keyNameLabel => 'Nome chiave';
 
   @override
   String get keyNamePlaceholder => 'es., La mia integrazione';
 
   @override
-  String get permissionsLabel => 'PERMESSI';
+  String get permissionsLabel => 'Permessi';
 
   @override
   String get permissionsInfoNote =>

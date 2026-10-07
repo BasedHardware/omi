@@ -8346,7 +8346,7 @@ abstract class AppLocalizations {
   /// Label for API key display section
   ///
   /// In en, this message translates to:
-  /// **'YOUR API KEY'**
+  /// **'Your API Key'**
   String get yourApiKey;
 
   /// Hint text for tap to copy action
@@ -8376,7 +8376,7 @@ abstract class AppLocalizations {
   /// Label for key name input field
   ///
   /// In en, this message translates to:
-  /// **'KEY NAME'**
+  /// **'Key Name'**
   String get keyNameLabel;
 
   /// Placeholder text for key name input
@@ -8388,7 +8388,7 @@ abstract class AppLocalizations {
   /// Label for permissions section
   ///
   /// In en, this message translates to:
-  /// **'PERMISSIONS'**
+  /// **'Permissions'**
   String get permissionsLabel;
 
   /// Info note explaining permission toggles

@@ -76,23 +76,12 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   }
 
   Widget _buildEncryptionBanner(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.lgAll,
-        border: Border.all(color: OmiColors.border),
-      ),
+    return OmiGroupedCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-            child: Icon(Icons.lock_outline, color: OmiColors.textPrimary, size: 20),
-          ),
-          const SizedBox(width: 14),
+          const OmiSettingsIconTile(Icon(Icons.lock_outline)),
+          const SizedBox(width: OmiSpacing.sm),
           Expanded(
             child: RichText(
               text: TextSpan(
@@ -163,31 +152,31 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
         final isLoading = provider.isLoading;
         final isMigrating = provider.isMigrating;
 
-        return Scaffold(
-          appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.dataPrivacy)),
+        return OmiGroupedPage(
+          // Matches the "Data Protection" row that opens this page.
+          title: context.l10n.dataProtection,
           body: Stack(
             children: [
               ListView(
-                padding: const EdgeInsets.all(OmiSpacing.md),
+                padding: OmiGroupedPage.padding,
                 children: [
                   _buildEncryptionBanner(context),
                   if (Platform.isIOS) ...[
-                    const SizedBox(height: OmiSpacing.xxl),
-                    Container(
-                      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-                      child: SwitchListTile(
-                        title: Text(context.l10n.siriIndexSetting),
-                        subtitle: Text(context.l10n.siriIndexSettingDescription),
-                        value: _siriEnabled,
-                        onChanged: _setSiriEnabled,
-                      ),
+                    const SizedBox(height: OmiSpacing.xl),
+                    OmiSettingsGroup(
+                      children: [
+                        OmiSettingsRow.toggle(
+                          title: context.l10n.siriIndexSetting,
+                          subtitle: context.l10n.siriIndexSettingDescription,
+                          value: _siriEnabled,
+                          onChanged: _setSiriEnabled,
+                        ),
+                      ],
                     ),
                     if (_shortcutsHintSupported && _appShortcutsAvailable) ...[
                       const SizedBox(height: OmiSpacing.md),
-                      Container(
+                      OmiGroupedCard(
                         key: const Key('siri_shortcuts_settings'),
-                        padding: const EdgeInsets.all(OmiSpacing.md),
-                        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -207,7 +196,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                       ),
                     ],
                   ],
-                  const SizedBox(height: OmiSpacing.xxl),
+                  const SizedBox(height: OmiSpacing.xl),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
                       final appsWithDataAccess =
@@ -218,8 +207,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             OmiSectionHeader(context.l10n.appAccess, subtitle: context.l10n.appAccessDesc),
-                            Container(
-                              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                            OmiGroupedCard(
                               child: OmiEmptyState(icon: Icons.apps_outlined, title: context.l10n.noAppsExternalAccess),
                             ),
                           ],

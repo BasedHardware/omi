@@ -125,9 +125,8 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
     final provider = context.watch<PeopleProvider>();
     final index = provider.people.indexWhere((p) => p.id == widget.personId);
     if (index == -1) {
-      return Scaffold(
-        backgroundColor: OmiColors.surface0,
-        appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.people)),
+      return OmiGroupedPage(
+        title: l10n.people,
         body: OmiEmptyState(icon: Icons.person_off_outlined, title: l10n.noPeopleYet),
       );
     }
@@ -135,23 +134,19 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
     final dates = OmiDateFormat.of(context);
     final samples = person.speechSamples ?? const <String>[];
     final transcripts = person.speechSampleTranscripts ?? const <String>[];
-    return Scaffold(
-      backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        actions: [
-          OmiIconButton(
-            icon: const Icon(Icons.edit_outlined),
-            label: l10n.editPerson,
-            onPressed: () => showPersonNameDialog(context, provider, person: person),
-          ),
-          OmiIconButton(
-            icon: const Icon(Icons.delete_outline),
-            label: l10n.deletePersonLabel,
-            onPressed: () => _confirmDeletePerson(provider, person),
-          ),
-        ],
-      ),
+    return OmiGroupedPage(
+      actions: [
+        OmiIconButton(
+          icon: const OmiLineIcon(OmiLineGlyph.edit),
+          label: l10n.editPerson,
+          onPressed: () => showPersonNameDialog(context, provider, person: person),
+        ),
+        OmiIconButton(
+          icon: const OmiLineIcon(OmiLineGlyph.trash),
+          label: l10n.deletePersonLabel,
+          onPressed: () => _confirmDeletePerson(provider, person),
+        ),
+      ],
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
@@ -474,7 +469,7 @@ class PersonSampleRow extends StatelessWidget {
             ),
           ),
           OmiIconButton(
-            icon: const Icon(Icons.delete_outline, size: 20),
+            icon: const OmiLineIcon(OmiLineGlyph.trash, size: 20),
             label: l10n.deleteSample,
             color: OmiColors.textSecondary,
             onPressed: onDelete,

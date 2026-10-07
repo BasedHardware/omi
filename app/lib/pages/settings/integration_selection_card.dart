@@ -85,15 +85,15 @@ class IntegrationConnectedBanner extends StatelessWidget {
       padding: const EdgeInsets.all(OmiSpacing.sm),
       margin: const EdgeInsets.only(bottom: OmiSpacing.md),
       decoration: BoxDecoration(
-        color: OmiColors.successSurface,
+        color: OmiColors.groupedCard,
         borderRadius: OmiRadius.smAll,
-        border: Border.all(color: OmiColors.success.withValues(alpha: 0.3)),
+        border: Border.all(color: OmiColors.groupedBorder),
       ),
       child: Row(
         children: [
-          Icon(Icons.check_circle, color: OmiColors.success, size: 16),
+          Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 16),
           const SizedBox(width: OmiSpacing.xs),
-          Expanded(child: Text(message, style: OmiType.footnote.copyWith(color: OmiColors.success))),
+          Expanded(child: Text(message, style: OmiType.footnote.copyWith(color: OmiColors.textPrimary))),
         ],
       ),
     );

@@ -130,8 +130,8 @@ class _TrainingProgramPageState extends State<TrainingProgramPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(widget.title)),
+    return OmiGroupedPage(
+      title: widget.title,
       body: _failed
           ? OmiErrorState(message: context.l10n.couldNotLoadPage, onRetry: _load)
           : Stack(

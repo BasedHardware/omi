@@ -42,7 +42,7 @@ class DeviceInfoGroups extends StatelessWidget {
     final unknown = context.l10n.unknown;
     final known = _known(value);
     return OmiSettingsRow(
-      leading: FaIcon(icon),
+      leading: OmiSettingsIconTile(FaIcon(icon)),
       title: title,
       value: known ? (truncate ? _truncate(value!) : value) : unknown,
       showChevron: false,
@@ -81,7 +81,6 @@ class DeviceInfoGroups extends StatelessWidget {
               _copyRow(context, icon: FontAwesomeIcons.microchip, title: l10n.deviceName, value: device?.name),
             if (isRayBan) ...[
               OmiSettingsRow(
-                leading: const FaIcon(FontAwesomeIcons.microphone),
                 title: l10n.microphone,
                 value: isDeviceConnected ? l10n.raybanMetaMicrophoneReady : l10n.disconnected,
               ),
@@ -98,7 +97,6 @@ class DeviceInfoGroups extends StatelessWidget {
                     label = l10n.raybanMetaAllowCamera;
                   }
                   return OmiSettingsRow(
-                    leading: const FaIcon(FontAwesomeIcons.camera),
                     title: l10n.raybanMetaCamera,
                     value: snapshot.hasData ? label : null,
                   );

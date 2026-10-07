@@ -4377,7 +4377,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get saveKeyWarning => 'Захаваць гэты ключ зараз! Вы не зможаце убачыць яго зноў.';
 
   @override
-  String get yourApiKey => 'ВАШ API КЛЮЧ';
+  String get yourApiKey => 'Ваш API ключ';
 
   @override
   String get tapToCopy => 'Клацніце для копіяванна';
@@ -4392,13 +4392,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get accessDataProgrammatically => 'Мець доступ да вашых даных праграматычна';
 
   @override
-  String get keyNameLabel => 'НАЗВА КЛЮЧА';
+  String get keyNameLabel => 'Назва ключа';
 
   @override
   String get keyNamePlaceholder => 'напр., Мая інтэграцыя прыкладання';
 
   @override
-  String get permissionsLabel => 'ДАЗВОЛЫ';
+  String get permissionsLabel => 'Дазволы';
 
   @override
   String get permissionsInfoNote => 'R = Чытанне, W = Запіс. Па змаўчанні чытанне толькі, калі нічога не выбрана.';

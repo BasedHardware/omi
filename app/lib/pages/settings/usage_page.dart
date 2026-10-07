@@ -3,11 +3,9 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -333,47 +331,33 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     super.dispose();
   }
 
-  Widget _periodSegment(String label) => SizedBox(
-        height: 44,
-        child: Center(child: Text(label, maxLines: 1, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600))),
-      );
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: const OmiBackButton(),
-        // Matches the "Plan & Usage" row that opens this page.
-        title: Text(context.l10n.planAndUsage),
-        actions: [
-          OmiIconButton(
-            key: _shareButtonKey,
-            icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, size: 20),
-            label: context.l10n.share,
-            onPressed: _shareUsage,
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 2, OmiSpacing.md, 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: CupertinoSlidingSegmentedControl<int>(
-                groupValue: _tabController.index,
-                backgroundColor: OmiColors.surface1,
-                thumbColor: OmiColors.surface3,
-                onValueChanged: (index) {
-                  if (index != null) _tabController.animateTo(index);
-                },
-                children: {
-                  0: _periodSegment(context.l10n.today),
-                  1: _periodSegment(context.l10n.usageMonth),
-                  2: _periodSegment(context.l10n.usageYear),
-                  3: _periodSegment(context.l10n.usageAll),
-                },
-              ),
-            ),
+    return OmiGroupedPage(
+      // Matches the "Plan & Usage" row that opens this page.
+      title: context.l10n.planAndUsage,
+      actions: [
+        OmiIconButton.filled(
+          key: _shareButtonKey,
+          icon: const OmiLineIcon(OmiLineGlyph.export, size: 20),
+          label: context.l10n.share,
+          fillColor: OmiColors.iconTile,
+          onPressed: _shareUsage,
+        ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(60),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 2, OmiSpacing.md, 8),
+          child: OmiSegmentedControl<int>(
+            value: _tabController.index,
+            onChanged: _tabController.animateTo,
+            segments: {
+              0: context.l10n.today,
+              1: context.l10n.usageMonth,
+              2: context.l10n.usageYear,
+              3: context.l10n.usageAll,
+            },
           ),
         ),
       ),
@@ -478,9 +462,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       margin: const EdgeInsets.only(bottom: OmiSpacing.sm),
       padding: EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: isPaid ? OmiSpacing.xs : OmiSpacing.md),
       decoration: BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.lgAll,
-        border: Border.all(color: OmiColors.border),
+        color: OmiColors.groupedCard,
+        borderRadius: OmiRadius.xlAll,
+        border: Border.all(color: OmiColors.groupedBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -492,7 +476,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                   child: isPaid
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
-                          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                          decoration: BoxDecoration(color: OmiColors.iconTile, borderRadius: OmiRadius.pillAll),
                           child: Text(planLabel, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700)),
                         )
                       : Text(planLabel, style: OmiType.headline)),
@@ -638,7 +622,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       child: RepaintBoundary(
         key: key,
         child: Container(
-          color: OmiColors.surface0,
+          color: OmiColors.groupedPage,
           child: ListView(
             key: Key('usage_scroll_$period'),
             physics: const AlwaysScrollableScrollPhysics(),
@@ -663,24 +647,20 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                   children: [
                     UsageStatTile(
                         label: l10n.usageListened,
-                        value: formatUsageDuration(stats.transcriptionSeconds),
-                        exactValue: '${format.format((stats.transcriptionSeconds / 60).round())} ${l10n.minutes}',
-                        color: Colors.blue.shade300),
+                        value: formatUsageDuration(stats.transcriptionSeconds, l10n.localeName),
+                        exactValue: '${format.format((stats.transcriptionSeconds / 60).round())} ${l10n.minutes}'),
                     UsageStatTile(
                         label: l10n.usageWordsHeard,
                         value: formatUsageCount(stats.wordsTranscribed, l10n.localeName),
-                        exactValue: format.format(stats.wordsTranscribed),
-                        color: Colors.green.shade300),
+                        exactValue: format.format(stats.wordsTranscribed)),
                     UsageStatTile(
                         label: l10n.usageTasksNotes,
                         value: formatUsageCount(stats.insightsGained, l10n.localeName),
-                        exactValue: format.format(stats.insightsGained),
-                        color: Colors.orange.shade300),
+                        exactValue: format.format(stats.insightsGained)),
                     UsageStatTile(
                         label: l10n.memories,
                         value: formatUsageCount(stats.memoriesCreated, l10n.localeName),
-                        exactValue: format.format(stats.memoriesCreated),
-                        color: _memoriesColor),
+                        exactValue: format.format(stats.memoriesCreated)),
                   ],
                 ),
                 if (history != null && history.isNotEmpty) ...[
@@ -718,7 +698,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       rows.add(_UsageMeter(
           text: l10n.minsUsedThisMonth(format.format(used), limit),
           percentage: ratio,
-          color: Colors.blue.shade300,
           hint: ratio >= 1
               ? _OnDeviceHint(
                   before: '${l10n.premiumMinutesUsed} ',
@@ -735,15 +714,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       rows.add(_UsageMeter(
           text: l10n.wordsUsedThisMonth(
               format.format(subscription.wordsTranscribedUsed), format.format(subscription.wordsTranscribedLimit)),
-          percentage: (subscription.wordsTranscribedUsed / subscription.wordsTranscribedLimit).clamp(0.0, 1.0),
-          color: Colors.green.shade300));
+          percentage: (subscription.wordsTranscribedUsed / subscription.wordsTranscribedLimit).clamp(0.0, 1.0)));
     }
     if (subscription.insightsGainedLimit > 0) {
       rows.add(_UsageMeter(
           text: l10n.insightsUsedThisMonth(
               format.format(subscription.insightsGainedUsed), format.format(subscription.insightsGainedLimit)),
-          percentage: (subscription.insightsGainedUsed / subscription.insightsGainedLimit).clamp(0.0, 1.0),
-          color: Colors.orange.shade300));
+          percentage: (subscription.insightsGainedUsed / subscription.insightsGainedLimit).clamp(0.0, 1.0)));
     }
     if (rows.isEmpty) return [];
     return [
@@ -751,7 +728,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       Container(
         padding: const EdgeInsets.all(OmiSpacing.md),
         decoration: BoxDecoration(
-            color: OmiColors.surface1, borderRadius: OmiRadius.lgAll, border: Border.all(color: OmiColors.border)),
+            color: OmiColors.groupedCard,
+            borderRadius: OmiRadius.xlAll,
+            border: Border.all(color: OmiColors.groupedBorder)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: OmiSpacing.md), rows[i]],
         ]),
@@ -767,7 +746,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     final numberFormatter = NumberFormat.decimalPattern(l10n.localeName);
     final used = sub.chatQuotaUsed;
     final limits = sub.subscription.limits;
-    final color = Colors.blue.shade300;
+    final color = OmiColors.textPrimary;
 
     final String value;
     String? usageText;
@@ -797,9 +776,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       child: Container(
         padding: const EdgeInsets.all(OmiSpacing.md),
         decoration: BoxDecoration(
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.lgAll,
-          border: Border.all(color: OmiColors.border),
+          color: OmiColors.groupedCard,
+          borderRadius: OmiRadius.xlAll,
+          border: Border.all(color: OmiColors.groupedBorder),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
@@ -823,16 +802,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
   }
 }
 
-/// Series colour for memories; pink keeps the chart off the brand-banned hues (INV-UI-1).
-final Color _memoriesColor = Colors.pink.shade200;
-
 /// "12 of 30 min used this month" with a progress bar, and an optional hint under it.
 class _UsageMeter extends StatelessWidget {
-  const _UsageMeter({required this.text, required this.percentage, required this.color, this.hint});
+  const _UsageMeter({required this.text, required this.percentage, this.hint});
 
   final String text;
   final double percentage;
-  final Color color;
   final Widget? hint;
 
   @override
@@ -845,7 +820,7 @@ class _UsageMeter extends StatelessWidget {
         LinearProgressIndicator(
           value: percentage,
           backgroundColor: OmiColors.surface3,
-          valueColor: AlwaysStoppedAnimation<Color>(color),
+          valueColor: AlwaysStoppedAnimation<Color>(OmiColors.textPrimary),
           minHeight: 4,
           borderRadius: OmiRadius.pillAll,
         ),

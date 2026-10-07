@@ -52,10 +52,10 @@ InputDecoration transcriptionInputDecoration({String? hint, Widget? suffixIcon})
     hintText: hint,
     hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
     filled: true,
-    fillColor: OmiColors.surface1,
+    fillColor: OmiColors.groupedCard,
     contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
-    border: border(OmiColors.border),
-    enabledBorder: border(OmiColors.border),
+    border: border(OmiColors.groupedBorder),
+    enabledBorder: border(OmiColors.groupedBorder),
     focusedBorder: border(OmiColors.accent),
     suffixIcon: suffixIcon,
   );
@@ -184,9 +184,9 @@ class TranscriptionDropdown<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
       decoration: BoxDecoration(
-        color: OmiColors.surface1,
+        color: OmiColors.groupedCard,
         borderRadius: OmiRadius.mdAll,
-        border: Border.all(color: OmiColors.border),
+        border: Border.all(color: OmiColors.groupedBorder),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
@@ -308,10 +308,10 @@ class TranscriptionJsonCard extends StatelessWidget {
     }
 
     return Material(
-      color: OmiColors.surface1,
+      color: OmiColors.groupedCard,
       shape: RoundedRectangleBorder(
         borderRadius: OmiRadius.mdAll,
-        side: BorderSide(color: isCustomized ? OmiColors.accent : OmiColors.border),
+        side: BorderSide(color: isCustomized ? OmiColors.accent : OmiColors.groupedBorder),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -370,8 +370,9 @@ class TranscriptionSaveBar extends StatelessWidget {
       // twice the inset of dead space under the content on inset devices.
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
       decoration: BoxDecoration(
-        color: OmiColors.surface0,
-        border: Border(top: BorderSide(color: OmiColors.border)),
+        // Pinned under a grouped page, so it shares the page's colour and hairline.
+        color: OmiColors.groupedPage,
+        border: Border(top: BorderSide(color: OmiColors.groupedBorder)),
       ),
       child: SafeArea(
         top: false,
