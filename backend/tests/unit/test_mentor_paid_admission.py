@@ -12,7 +12,6 @@ from utils import mentor_admission as admission_module
 from database.cache_manager import InMemoryCacheManager
 
 SECRET = 'PRIVATE_TRANSCRIPT_NEVER_STORED_5921'
-MESSAGES = [{'text': SECRET, 'is_user': True}, {'text': 'other speaker', 'is_user': False}]
 
 
 @pytest.fixture
@@ -97,19 +96,12 @@ def pipeline(integration_harness, monkeypatch):  # noqa: F811
     app = integration_harness.app
     monkeypatch.setenv('MENTOR_GATE_DEBOUNCE_ENABLED', 'false')
     app.get_mentor_notification_frequency.return_value = 3
-    app.evaluate_relevance.return_value = SimpleNamespace(
-        is_relevant=True, relevance_score=0.9, context_summary=SECRET, reasoning=SECRET
-    )
-    app.generate_notification.return_value = SimpleNamespace(
-        notification_text='Useful synthetic advice', confidence=0.9, reasoning=SECRET, category='advice'
-    )
-    app.validate_notification.return_value = SimpleNamespace(approved=True, reasoning=SECRET)
-    monkeypatch.setattr(app, 'send_app_notification', MagicMock())
     return app
 
 
 @pytest.mark.parametrize('debounce', [True, False])
 def test_free_skip_precedes_all_model_and_context_calls(pipeline, monkeypatch, debounce):
+    """A free user consumes neither a gate evaluation nor any context/model work."""
     app = pipeline
     monkeypatch.setenv('MENTOR_GATE_DEBOUNCE_ENABLED', str(debounce))
     for name, result in [
@@ -121,11 +113,8 @@ def test_free_skip_precedes_all_model_and_context_calls(pipeline, monkeypatch, d
     ]:
         monkeypatch.setattr(app.mentor_gate_state, name, MagicMock(return_value=result))
     app.mentor_plan_allows_evaluation.return_value = False
-    assert app._process_mentor_proactive_notification('synthetic', [{'text': 'word ' * 120, 'is_user': True}]) is None
+    assert app.admit_mentor_evaluation('synthetic', [{'text': 'word ' * 120, 'is_user': True}]) is None
     for call in (
-        app.evaluate_relevance,
-        app.generate_notification,
-        app.validate_notification,
         app.get_prompt_memories,
         app.generate_embedding,
         app.query_vectors_by_metadata,
@@ -135,33 +124,6 @@ def test_free_skip_precedes_all_model_and_context_calls(pipeline, monkeypatch, d
     app.mentor_gate_state.record.assert_not_called()
     if debounce:
         app.mentor_gate_state.release.assert_called_once_with('synthetic')
-
-
-@pytest.mark.parametrize(
-    'end', ['gate_reject', 'gate_low_score', 'critic_reject', 'send', 'gate_error', 'draft_error', 'critic_error']
-)
-def test_mentor_pipeline_logs_only_metadata(pipeline, end, caplog):
-    app = pipeline
-    app.generate_notification.return_value.notification_text = SECRET
-    app.generate_notification.return_value.category = SECRET
-    if end == 'gate_reject':
-        app.evaluate_relevance.return_value.is_relevant = False
-    elif end == 'gate_low_score':
-        app.evaluate_relevance.return_value.relevance_score = 0.0
-    elif end == 'critic_reject':
-        app.validate_notification.return_value.approved = False
-    elif end.endswith('error'):
-        stage = {
-            'gate_error': app.evaluate_relevance,
-            'draft_error': app.generate_notification,
-            'critic_error': app.validate_notification,
-        }[end]
-        stage.side_effect = RuntimeError(SECRET)
-    with caplog.at_level('INFO'):
-        app._process_mentor_proactive_notification('synthetic', MESSAGES)
-    assert 'mentor_proactive' in caplog.text
-    assert SECRET not in caplog.text
-    assert 'context=' not in caplog.text and 'reasoning=' not in caplog.text
 
 
 def test_runtime_env_and_charts_enable_debounce_on_all_mentor_hosts():

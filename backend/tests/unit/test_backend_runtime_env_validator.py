@@ -3513,7 +3513,8 @@ def test_mentor_pipeline_runtime_values(pipeline, kind):
         config = [{'name': 'MENTOR_PIPELINE', 'value': pipeline}]
     elif kind == 'binding':
         config = {'MENTOR_PIPELINE': {'env_var': 'MENTOR_PIPELINE', 'default': pipeline}}
-    assert bool(validate_mentor_pipeline(scope='host', config=config)) == (pipeline == 'typo')
+    # The legacy/v2 modes were removed: only cohort validates (no errors).
+    assert bool(validate_mentor_pipeline(scope='host', config=config)) == (pipeline != 'cohort')
 
 
 def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts():

@@ -2,7 +2,7 @@
 
 Proactive notifications were always generated in English even when the user's language was set (the
 daily summary already respected it). The generator and critic prompts now carry a language
-instruction derived from get_user_language_preference(uid), threaded in by the orchestrator.
+instruction derived from get_user_language_preference(uid), threaded in by the mentor pipeline.
 """
 
 from pathlib import Path
@@ -118,9 +118,10 @@ def test_critic_prompt_clean_for_english():
 
 
 # ---------------------------------------------------------------------------
-# orchestrator wiring (source guard — app_integrations import is heavy)
+# v2 mentor producer wiring (source guard — producer imports are heavy)
 # ---------------------------------------------------------------------------
-def test_orchestrator_fetches_and_threads_language():
-    src = (BACKEND_DIR / "utils" / "app_integrations.py").read_text(encoding="utf-8")
-    assert "get_user_language_preference" in src  # language is fetched
-    assert src.count("output_language=output_language") >= 2  # passed to BOTH generate and critic
+def test_mentor_producer_fetches_and_threads_language():
+    src = (BACKEND_DIR / "utils" / "proactivity_producers.py").read_text(encoding="utf-8")
+    assert "get_user_language_preference(uid)" in src  # language is fetched into the mentor context
+    assert src.count("legacy.language_instruction(context['output_language']") >= 2  # generate AND critic
+    assert "for_critic=True" in src  # one of the two threadings targets the critic
