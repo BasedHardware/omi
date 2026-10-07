@@ -1,3 +1,4 @@
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -5,7 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
@@ -76,6 +76,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Future<void>? _knowledgeGraphPrebuildFuture;
   Future<bool>? _setupPageEnabled;
   ProductAttempt? _onboardingAttempt;
+  bool _finishing = false;
 
   @override
   void initState() {
@@ -430,12 +431,20 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         },
       ),
       OnboardingCompleteScreen(
-        onComplete: () {
+        onComplete: () async {
+          if (_finishing) return;
+          _finishing = true;
+          final saved = await OnboardingSyncRuntime.enqueue(completed: true);
+          _finishing = false;
+          if (!mounted || !context.mounted) return;
+          if (!saved) {
+            OmiFeedback.error(context, context.l10n.somethingWentWrong);
+            return;
+          }
           SharedPreferencesUtil().onboardingCompleted = true;
           SharedPreferencesUtil().permissionsCompleted = true;
           SharedPreferencesUtil().remove(_resumeKey);
           _completeOnboardingTelemetry();
-          updateUserOnboardingState(completed: true);
           PlatformManager.instance.analytics.onboardingCompleted();
           PaintingBinding.instance.imageCache.clear();
           routeToPage(context, const HomePageWrapper(), replace: true);

@@ -945,3 +945,44 @@ def test_get_memory_summary_rating_without_score():
         result = users_router.get_memory_summary_rating(memory_id='mem-1')
 
     assert result == {'has_rating': False}
+
+
+@pytest.mark.parametrize(
+    'payload',
+    [
+        {'completed': True},
+        {'acquisition_source': 'Friend'},
+        {'device_onboarding_completed': True},
+        {'completed': False, 'acquisition_source': ''},
+        {},
+    ],
+)
+def test_onboarding_patch_writes_only_submitted_fields(payload):
+    with patch.object(users_router, 'get_user_onboarding_state') as read, patch.object(
+        users_router, 'set_user_onboarding_state'
+    ) as write:
+        result = users_router.update_onboarding_state(users_router.OnboardingStateUpdate(**payload), uid='owner')
+    assert result == {'status': 'ok'}
+    read.assert_not_called()
+    write.assert_called_once_with('owner', payload)
+
+
+def test_onboarding_patch_http_preserves_previous_completion(monkeypatch):
+    state = {'completed': False, 'acquisition_source': '', 'future_field': 'keep'}
+    monkeypatch.setattr(users_router, 'get_user_onboarding_state', lambda uid: dict(state))
+    monkeypatch.setattr(users_router, 'set_user_onboarding_state', lambda uid, updates: state.update(updates))
+    app = FastAPI()
+    app.include_router(users_router.router)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = lambda: 'fixture-owner'
+    with TestClient(app) as client:
+        completed = client.patch('/v1/users/onboarding', json={'completed': True})
+        source = client.patch('/v1/users/onboarding', json={'acquisition_source': 'Friend'})
+        tutorial = client.patch('/v1/users/onboarding', json={'device_onboarding_completed': True})
+    assert completed.status_code == source.status_code == tutorial.status_code == 200
+    assert completed.json() == {'status': 'ok', 'message': None}
+    assert state == {
+        'completed': True,
+        'acquisition_source': 'Friend',
+        'device_onboarding_completed': True,
+        'future_field': 'keep',
+    }
