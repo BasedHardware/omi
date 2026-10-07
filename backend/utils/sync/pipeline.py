@@ -193,7 +193,9 @@ from utils.sync.speaker_identity import build_person_embeddings_cache as _build_
 from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
 from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.journey_metrics_contract import resolve_client_kind
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
+from utils.observability.journeys import record_client_journey_accepted, record_client_journey_terminal
 
 logger = logging.getLogger(__name__)
 
@@ -1077,6 +1079,17 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         language = conversation.language or 'en'
 
     was_discarded = conversation.discarded
+    prior_decision = conversation_data.get('relevance_decision')
+    # process_conversation persists relevance_decision.trigger == 'sync_update'.
+    # Intake only writes 'sync_intake' (or nothing). A later WAL segment re-enters
+    # this function; that stored trigger is the already-processed signal.
+    already_sync_processed = (
+        isinstance(prior_decision, dict) and prior_decision.get('trigger') == ProcessingTrigger.SYNC_UPDATE.value
+    )
+    # Visible rows must not accept again. A prior discard is not a visible
+    # finalization, so discarded -> visible still accepts once.
+    already_visible_finalized = already_sync_processed and not was_discarded
+    started = time.monotonic()
     processed_conversation = process_conversation(
         uid=uid,
         language_code=language or 'en',
@@ -1085,6 +1098,16 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         user_kept=is_user_curated(conversation_data),
         persistence_observer=_require_current_conversation_persistence,
     )
+    elapsed = time.monotonic() - started
+    # Persistence is guaranteed here: a fenced write raises before return.
+    # client_platform is the Conversation field set at sync intake; None -> unknown.
+    client_kind = resolve_client_kind(x_app_platform=getattr(conversation, 'client_platform', None), user_agent=None)
+    if processed_conversation.discarded:
+        if not already_sync_processed:
+            record_client_journey_terminal('conversation_finalization', client_kind, 'cancelled', elapsed)
+    elif not already_visible_finalized:
+        record_client_journey_accepted('conversation_finalization', client_kind)
+        record_client_journey_terminal('conversation_finalization', client_kind, 'success', elapsed)
 
     # Limitless uploads commonly begin as a short discarded fragment and only
     # become a real conversation after later WAL segments are merged. The

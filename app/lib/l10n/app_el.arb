@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Προηχογραφημένο",
     "pendantRecordingSyncBlocked": "Το Pendant εξακολουθεί να ηχογραφεί, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την ηχογράφηση και συγχρονίστε ξανά.",
     "pendantFullSyncBlocked": "Ο αποθηκευτικός χώρος του Pendant είναι πλήρης και βρίσκεται ακόμα σε λειτουργία εγγραφής, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την εγγραφή και μετά συγχρονίστε ξανά.",
-    "conversationsNotCapturedCount": "Δεν καταγράφηκε ({count})",
     "transcriptionNoAudio": "Η μεταγραφή δεν λαμβάνει ήχο",
     "chatBlockTask": "Εργασία",
     "chatBlockGoal": "Στόχος",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Όσο περιμένετε, σας αρέσει να χρησιμοποιείτε το Omi;",
     "onboardingRatingPromptBody": "Μια βαθμολογία 5 αστέρων μας βοηθά πραγματικά ❤️",
     "onboardingRatingPromptYes": "Ναι, θέλω να σας στηρίξω!",
-    "onboardingRatingPromptNo": "Όχι ακριβώς"
+    "onboardingRatingPromptNo": "Όχι ακριβώς",
+    "partialRecording": "Μερική ηχογράφηση"
 }

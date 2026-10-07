@@ -1223,6 +1223,7 @@ export interface Conversation {
   audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
+  capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
   client_device_id?: string | null;
   client_platform?: string | null;
@@ -1411,6 +1412,7 @@ export interface ConversationSearchItem {
   audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
+  capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
   client_device_id?: string | null;
   client_platform?: string | null;
@@ -13272,7 +13274,7 @@ export async function get_conversation_analytics_v1_conversations__conversation_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch(path: { conversation_id: string, speaker_id: number }, query: { assign_type: string, value?: string | null, use_for_speech_training?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: BulkAssignSegmentsRequest | null, init?: OmiApiClientInit): Promise<Conversation> {
+export async function set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch(path: { conversation_id: string, speaker_id: number }, query: { assign_type: string, value?: string | null, use_for_speech_training?: boolean, start?: number | null, end?: number | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: BulkAssignSegmentsRequest | null, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/assign-speaker/${path.speaker_id}`;
   const _params = query ? Object.entries(query)

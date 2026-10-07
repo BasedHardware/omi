@@ -131,10 +131,13 @@ overlay:
         STT_ROUTING_MODE:
           value: 'on'
         # 2026-10-06: sticky-UID ON ramp, gated per step on the
-        # omi_stt_routing_cohort_* counters (GATES.md): 5% held 76 min clean,
-        # this commit advances to 25%.
+        # omi_stt_routing_cohort_* counters (GATES.md): 5%/25%/50% holds were
+        # clean; this commit completes the ramp at 100%.
         STT_ROUTING_ON_PERCENT:
-          value: '25'
+          value: '100'
+        STT_NO_TEXT_RESCUE_ENABLED:
+          value: 'true'
+          category: rollout
         SONIOX_MONTHLY_CEILING_USD:
           value: '10000'
         # 2026-09-28: learn each user's expected languages from observed output. About 75% of
@@ -1129,9 +1132,13 @@ overlay:
             version: latest
         env:
           REDIS_DB_HOST:
-            value: redis-10797.c62.us-east-1-4.ec2.redns.redis-cloud.com
+            value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
           REDIS_DB_PORT:
-            value: '10797'
+            value: '13151'
+          # The canonical intake fence reads MEMORY_ENABLED; without it the job's
+          # memory writes 503 with 'globally paused'.
+          MEMORY_ENABLED:
+            value: 'on'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           PINECONE_INDEX_NAME:

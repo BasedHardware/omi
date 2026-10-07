@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Prednahraté",
     "pendantRecordingSyncBlocked": "Pendant stále nahráva, takže uložený zvuk nie je možné preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom synchronizujte znova.",
     "pendantFullSyncBlocked": "Úložisko Pendantu je plné a stále je v režime nahrávania, takže uložený zvuk nemožno preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom znova synchronizujte.",
-    "conversationsNotCapturedCount": "Nezaznamenané ({count})",
     "transcriptionNoAudio": "Transkripcia neprijíma zvuk",
     "chatBlockTask": "Úloha",
     "chatBlockGoal": "Cieľ",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Kým čakáte, páči sa vám používanie Omi?",
     "onboardingRatingPromptBody": "Hodnotenie 5 hviezdičiek nám naozaj veľmi pomáha ❤️",
     "onboardingRatingPromptYes": "Áno, chcem vás podporiť!",
-    "onboardingRatingPromptNo": "Nie celkom"
+    "onboardingRatingPromptNo": "Nie celkom",
+    "partialRecording": "Čiastočná nahrávka"
 }

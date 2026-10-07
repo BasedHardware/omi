@@ -3229,7 +3229,6 @@
     "prerecordedTranscript": "Önceden kaydedilmiş",
     "pendantRecordingSyncBlocked": "Pendant hâlâ kayıt yapıyor, bu yüzden depolanan ses aktarılamıyor. Kaydı durdurmak için Pendant'ın düğmesine basın, ardından yeniden senkronize edin.",
     "pendantFullSyncBlocked": "Pendant'ın depolama alanı dolu ve hâlâ kayıt modunda olduğu için kayıtlı ses aktarılamıyor. Kaydı durdurmak için Pendant'ın düğmesine basın, ardından yeniden senkronize edin.",
-    "conversationsNotCapturedCount": "Kaydedilmedi ({count})",
     "transcriptionNoAudio": "Transkripsiyon ses almıyor",
     "chatBlockTask": "Görev",
     "chatBlockGoal": "Hedef",
@@ -3886,5 +3885,6 @@
     "onboardingRatingPromptTitle": "Beklerken, Omi'yi kullanmak hoşunuza gitti mi?",
     "onboardingRatingPromptBody": "5 yıldız vermeniz bize gerçekten çok yardımcı olur ❤️",
     "onboardingRatingPromptYes": "Evet, size destek olmak istiyorum!",
-    "onboardingRatingPromptNo": "Pek değil"
+    "onboardingRatingPromptNo": "Pek değil",
+    "partialRecording": "Kısmi kayıt"
 }

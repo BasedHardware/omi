@@ -106,6 +106,8 @@ def carried_receipt(conversation: Mapping[str, Any], active_scope: Optional[str]
         if len({_identity(decision) for decision in winners}) != 1:
             continue
         decision = winners[0]
+        if decision.get('segment_only'):
+            continue
         entry: Dict[str, Any] = {
             'generation': 1,
             'source': 'carried',

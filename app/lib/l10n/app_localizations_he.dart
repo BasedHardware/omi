@@ -9842,11 +9842,6 @@ class AppLocalizationsHe extends AppLocalizations {
       'האחסון של ה-Pendant מלא והוא עדיין במצב הקלטה, ולכן לא ניתן להעביר את השמע השמור. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ולאחר מכן סנכרנו שוב.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'לא הוקלט ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'פרופיל הקול של $name';
   }
@@ -12361,4 +12356,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'לא ממש';
+
+  @override
+  String get partialRecording => 'הקלטה חלקית';
 }

@@ -3290,7 +3290,6 @@
     "prerecordedTranscript": "Előre rögzített",
     "pendantRecordingSyncBlocked": "A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.",
     "pendantFullSyncBlocked": "A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.",
-    "conversationsNotCapturedCount": "Nincs rögzítve ({count})",
     "transcriptionNoAudio": "Az átírás nem kap hangot",
     "chatBlockTask": "Feladat",
     "chatBlockGoal": "Cél",
@@ -3947,5 +3946,6 @@
     "onboardingRatingPromptTitle": "Amíg vársz, jó élmény volt az Omi használata?",
     "onboardingRatingPromptBody": "Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️",
     "onboardingRatingPromptYes": "Igen, szeretnék támogatni titeket!",
-    "onboardingRatingPromptNo": "Nem igazán"
+    "onboardingRatingPromptNo": "Nem igazán",
+    "partialRecording": "Részleges felvétel"
 }

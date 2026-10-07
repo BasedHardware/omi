@@ -9924,11 +9924,6 @@ class AppLocalizationsFi extends AppLocalizations {
       'Pendantin muisti on täynnä ja se on yhä äänitystilassa, joten tallennettua ääntä ei voi siirtää. Pysäytä äänitys painamalla Pendantin painiketta ja synkronoi sitten uudelleen.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Ei tallennettu ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Käyttäjän $name ääniprofiili';
   }
@@ -12456,4 +12451,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Ei oikeastaan';
+
+  @override
+  String get partialRecording => 'Osittainen tallenne';
 }

@@ -18459,12 +18459,6 @@ abstract class AppLocalizations {
   /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
   String get pendantFullSyncBlocked;
 
-  /// Header for the calendar capture-gap group in the conversations list
-  ///
-  /// In en, this message translates to:
-  /// **'Not captured ({count})'**
-  String conversationsNotCapturedCount(int count);
-
   /// Title shown on the speech profile page when the user already has a speech profile set up
   ///
   /// In en, this message translates to:
@@ -22298,6 +22292,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not really'**
   String get onboardingRatingPromptNo;
+
+  /// Conversation detail badge shown when capture evidence says the recording is incomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Partial recording'**
+  String get partialRecording;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -1,7 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/widgets.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/calendar_capture_telemetry.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
+import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
@@ -121,6 +126,18 @@ CaptureProvider composeProductionCaptureProvider({
     throw UnsupportedError('composeProductionCaptureProvider refuses FLUTTER_TEST');
   }
   final provider = CaptureProvider(
+    calendarGapMonitor: CalendarCaptureGapMonitor(
+      localMeetings: GoogleCalendarService.knownMeetings,
+      ownerKey: () =>
+          SharedPreferencesUtil().getBool('google_calendar_connected') && SharedPreferencesUtil().uid.isNotEmpty
+              ? GoogleCalendarService.meetingCacheOwner
+              : '',
+      load: (start, end) async => switch (await fetchCalendarCaptureWindows(start, end)) {
+        ApiSuccess(:final data) => data,
+        ApiFailure() => null, // Unavailable evidence is never an empty-success claim.
+      },
+      emit: (fields) => AnalyticsManager().track('Calendar Capture Gap Detected', properties: fields),
+    ),
     sessionOwner: CaptureSessionOwner(
       coordinator: RecordingTransferCoordinator.instance,
       startForeground: () async {
@@ -137,6 +154,12 @@ CaptureProvider composeProductionCaptureProvider({
     // An Omi phone call pauses a streaming pendant and gives it back when it ends.
     omiCallState: PhoneCallProvider.callStateListenable,
   );
+  final lifecycle = AppLifecycleListener(onStateChange: provider.onAppLifecycleChanged);
+  provider.lifetime.own(lifecycle.dispose);
+  final initialLifecycle = WidgetsBinding.instance.lifecycleState;
+  if (initialLifecycle != null && initialLifecycle != AppLifecycleState.resumed) {
+    provider.onAppLifecycleChanged(initialLifecycle);
+  }
   if (Platform.isIOS) {
     // Presentation failure must never stop capture.
     unawaited(CaptureSystemSurface(provider, LiveActivityBridge()).start());

@@ -42,6 +42,7 @@
     "pretest": "node scripts/check-node-version.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "capture:evidence": "node scripts/capture-evidence.mjs",
     "fixtures:audio": "node scripts/gen-audio-fixtures.mjs",
     "gen:tray-icons": "node scripts/gen-tray-icons.mjs",
     "gen:app-icon": "node scripts/gen-app-icon.mjs",

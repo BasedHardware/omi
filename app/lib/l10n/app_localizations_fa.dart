@@ -9919,11 +9919,6 @@ class AppLocalizationsFa extends AppLocalizations {
       'حافظه Pendant پر است و همچنان در حالت ضبط قرار دارد، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'ثبت نشده ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'نمایهٔ صوتی $name';
   }
@@ -12450,4 +12445,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'نه چندان';
+
+  @override
+  String get partialRecording => 'ضبط ناقص';
 }

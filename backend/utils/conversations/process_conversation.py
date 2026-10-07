@@ -128,6 +128,7 @@ from utils.metrics import (
     record_memory_owner_jev,
     record_jev_shadow_outcome,
 )
+from utils.observability.capture_loss import record_capture_loss
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
@@ -2850,6 +2851,8 @@ def process_conversation(
         completed: Conversation | None = None,
         derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
     ) -> None:
+        if current and completed is not None:
+            record_capture_loss(completed)
         if persistence_observer is not None:
             persistence_observer(current)
         if derived_effects_disposition_observer is not None:

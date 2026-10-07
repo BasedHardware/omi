@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Išankstinis įrašas",
     "pendantRecordingSyncBlocked": "Pendant vis dar įrašinėja, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite dar kartą.",
     "pendantFullSyncBlocked": "Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.",
-    "conversationsNotCapturedCount": "Neįrašyta ({count})",
     "transcriptionNoAudio": "Transkripcija negauna garso",
     "chatBlockTask": "Užduotis",
     "chatBlockGoal": "Tikslas",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Kol laukiate, ar Omi buvo malonu naudoti?",
     "onboardingRatingPromptBody": "5 žvaigždučių įvertinimas mums labai padeda ❤️",
     "onboardingRatingPromptYes": "Taip, noriu jus palaikyti!",
-    "onboardingRatingPromptNo": "Ne visai"
+    "onboardingRatingPromptNo": "Ne visai",
+    "partialRecording": "Dalinis įrašas"
 }

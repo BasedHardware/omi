@@ -9969,11 +9969,6 @@ class AppLocalizationsTe extends AppLocalizations {
       'Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'రికార్డ్ కాలేదు ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name వాయిస్ ప్రొఫైల్';
   }
@@ -12503,4 +12498,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'అంతగా లేదు';
+
+  @override
+  String get partialRecording => 'పాక్షిక రికార్డింగ్';
 }

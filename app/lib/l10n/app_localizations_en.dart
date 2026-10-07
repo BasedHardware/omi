@@ -9912,11 +9912,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Not captured ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name\'s Speech Profile';
   }
@@ -12440,4 +12435,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Not really';
+
+  @override
+  String get partialRecording => 'Partial recording';
 }

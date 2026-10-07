@@ -9933,11 +9933,6 @@ class AppLocalizationsUr extends AppLocalizations {
       'Pendant کی اسٹوریج بھر گئی ہے اور یہ ابھی بھی ریکارڈنگ موڈ میں ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'ریکارڈ نہیں ہوا ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name کی صوتی پروفائل';
   }
@@ -12465,4 +12460,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'زیادہ نہیں';
+
+  @override
+  String get partialRecording => 'جزوی ریکارڈنگ';
 }

@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "事前録音",
     "pendantRecordingSyncBlocked": "Pendantはまだ録音中のため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。",
     "pendantFullSyncBlocked": "Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。",
-    "conversationsNotCapturedCount": "未記録 ({count})",
     "transcriptionNoAudio": "文字起こしが音声を受信していません",
     "chatBlockTask": "タスク",
     "chatBlockGoal": "目標",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "お待ちの間に、Omiは使いやすいですか？",
     "onboardingRatingPromptBody": "星5つの評価は私たちの大きな励みになります ❤️",
     "onboardingRatingPromptYes": "はい、応援します！",
-    "onboardingRatingPromptNo": "あまり"
+    "onboardingRatingPromptNo": "あまり",
+    "partialRecording": "一部のみの録音"
 }

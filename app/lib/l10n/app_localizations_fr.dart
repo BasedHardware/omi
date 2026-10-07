@@ -10009,11 +10009,6 @@ class AppLocalizationsFr extends AppLocalizations {
       'Le stockage de votre Pendant est plein et il est encore en mode enregistrement, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Non capturé ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profil vocal de $name';
   }
@@ -12554,4 +12549,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Pas vraiment';
+
+  @override
+  String get partialRecording => 'Enregistrement partiel';
 }

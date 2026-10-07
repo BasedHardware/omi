@@ -33,6 +33,7 @@ from utils.manual_speaker_assignments import (
     replay_receipt_commits,
     apply_manual_assignments,
     donor_selected_ids,
+    validate_assignment_range,
     manual_assignment,
     merge_live_segments,
     normalize_rejection,
@@ -2791,11 +2792,13 @@ def assign_conversation_speaker(
     firestore_client=None,
     rejection=None,
     owner_segment_ids=None,
+    time_range=None,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
     from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
     from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
 
+    validate_assignment_range(time_range)
     rejection = normalize_rejection(rejection)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
@@ -2831,6 +2834,7 @@ def assign_conversation_speaker(
                 speaker_id=speaker_id,
                 segment_index=segment_index,
                 strict_speaker=rejection is not None,
+                time_range=time_range,
             )
             selected_speaker_id = selected_segment_index = None
         current = copy.deepcopy(raw)
@@ -2855,6 +2859,8 @@ def assign_conversation_speaker(
             segment_index=selected_segment_index,
             use_for_speech_training=use_for_speech_training,
             rejection=rejection,
+            time_range=time_range if source_segments is None else None,
+            segment_only=time_range is not None,
         )
         removed, relabeled = persist_assignment_effects(
             transaction,

@@ -9927,11 +9927,6 @@ class AppLocalizationsCs extends AppLocalizations {
       'Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Nezaznamenáno ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Hlasový profil: $name';
   }
@@ -12456,4 +12451,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Moc ne';
+
+  @override
+  String get partialRecording => 'Částečná nahrávka';
 }

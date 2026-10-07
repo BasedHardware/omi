@@ -11772,15 +11772,6 @@
     "@pendantFullSyncBlocked": {
         "description": "Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped"
     },
-    "conversationsNotCapturedCount": "Not captured ({count})",
-    "@conversationsNotCapturedCount": {
-        "description": "Header for the calendar capture-gap group in the conversations list",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "speechProfileOwnerTitle": "{name}'s Speech Profile",
     "@speechProfileOwnerTitle": {
         "description": "Title shown on the speech profile page when the user already has a speech profile set up",
@@ -14892,5 +14883,9 @@
     "onboardingRatingPromptNo": "Not really",
     "@onboardingRatingPromptNo": {
         "description": "Store rating pre-prompt: decline"
+    },
+    "partialRecording": "Partial recording",
+    "@partialRecording": {
+        "description": "Conversation detail badge shown when capture evidence says the recording is incomplete."
     }
 }

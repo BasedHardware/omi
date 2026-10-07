@@ -8,7 +8,10 @@ image tool uses.
 
 from __future__ import annotations
 
+import asyncio
 import json
+
+import pytest
 
 from utils.llm import desktop_gemini_gateway as dgg
 from utils.llm.vertex_pt_routing import DESKTOP_TEXT_LANES
@@ -188,6 +191,42 @@ def test_streaming_tool_fragments_assemble_into_one_function_call():
     assert terminal is None  # no terminal chunk yet: nothing emitted for fragments
     final = dgg.openai_sse_payload_to_gemini_event({'choices': [{'delta': {}, 'finish_reason': 'stop'}]}, pending)
     assert final['candidates'][0]['content']['parts'] == [{'functionCall': {'name': 'take_photo', 'args': {'q': 'x'}}}]
+
+
+class _TricklingGateway:
+    """A gateway body that keeps the socket busy without ever finishing."""
+
+    async def post(self, *args, **kwargs):
+        await asyncio.sleep(30)
+        raise AssertionError('gateway call ran past the wall-clock deadline')
+
+
+@pytest.mark.asyncio
+async def test_nonstreaming_gateway_calls_stop_at_the_wall_clock_deadline(monkeypatch):
+    monkeypatch.setattr(dgg, 'DESKTOP_GATEWAY_TIMEOUT_SECONDS', 0.05)
+    monkeypatch.setattr(dgg, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
+    monkeypatch.setattr(dgg, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(dgg, 'llm_gateway_headers', lambda **kwargs: {})
+    monkeypatch.setattr(dgg, 'get_llm_gateway_client', lambda: _TricklingGateway())
+    attribution = dict(
+        uid='synthetic-user',
+        request_id='11111111-1111-1111-1111-111111111111',
+        product_lane='focus',
+        client_platform='macos',
+    )
+
+    with pytest.raises(TimeoutError):
+        await dgg.gateway_desktop_chat(
+            b'{"contents":[{"parts":[{"text":"hi"}]}]}',
+            model='gemini-2.5-flash',
+            action='generateContent',
+            **attribution,
+        )
+    with pytest.raises(TimeoutError):
+        await dgg.gateway_desktop_embed_content(
+            b'{"content":{"parts":[{"text":"hi"}]}}',
+            **attribution,
+        )
 
 
 def test_lane_selection_covers_every_desktop_text_model():

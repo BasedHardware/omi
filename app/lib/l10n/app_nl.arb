@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Vooraf opgenomen",
     "pendantRecordingSyncBlocked": "Je Pendant is nog aan het opnemen, dus de opgeslagen audio kan niet worden overgezet. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer opnieuw.",
     "pendantFullSyncBlocked": "De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw.",
-    "conversationsNotCapturedCount": "Niet opgenomen ({count})",
     "transcriptionNoAudio": "Transcriptie ontvangt geen audio",
     "chatBlockTask": "Taak",
     "chatBlockGoal": "Doel",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Terwijl je wacht: vind je Omi fijn om te gebruiken?",
     "onboardingRatingPromptBody": "5 sterren helpen ons echt enorm ❤️",
     "onboardingRatingPromptYes": "Ja, ik wil jullie steunen!",
-    "onboardingRatingPromptNo": "Niet echt"
+    "onboardingRatingPromptNo": "Niet echt",
+    "partialRecording": "Gedeeltelijke opname"
 }

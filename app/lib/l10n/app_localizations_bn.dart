@@ -9924,11 +9924,6 @@ class AppLocalizationsBn extends AppLocalizations {
       'Pendant-এর স্টোরেজ পূর্ণ এবং এটি এখনও রেকর্ডিং মোডে আছে, তাই সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'রেকর্ড করা হয়নি ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name-এর ভয়েস প্রোফাইল';
   }
@@ -12452,4 +12447,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'তেমন না';
+
+  @override
+  String get partialRecording => 'আংশিক রেকর্ডিং';
 }

@@ -9979,11 +9979,6 @@ class AppLocalizationsIt extends AppLocalizations {
       'La memoria del Pendant è piena ed è ancora in modalità registrazione, quindi l\'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Non registrato ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profilo vocale di $name';
   }
@@ -12521,4 +12516,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Non proprio';
+
+  @override
+  String get partialRecording => 'Registrazione parziale';
 }

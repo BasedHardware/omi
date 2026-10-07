@@ -9929,11 +9929,6 @@ class AppLocalizationsMr extends AppLocalizations {
       'Pendant चे स्टोरेज भरले आहे आणि ते अजूनही रेकॉर्डिंग मोडमध्ये आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'रेकॉर्ड झाले नाही ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name यांची व्हॉइस प्रोफाइल';
   }
@@ -12459,4 +12454,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'फारसं नाही';
+
+  @override
+  String get partialRecording => 'अंशतः रेकॉर्डिंग';
 }

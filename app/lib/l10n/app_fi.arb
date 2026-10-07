@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Esitallenne",
     "pendantRecordingSyncBlocked": "Pendant tallentaa edelleen, joten tallennettua ääntä ei voi siirtää. Pysäytä tallennus painamalla Pendantin painiketta ja synkronoi sitten uudelleen.",
     "pendantFullSyncBlocked": "Pendantin muisti on täynnä ja se on yhä äänitystilassa, joten tallennettua ääntä ei voi siirtää. Pysäytä äänitys painamalla Pendantin painiketta ja synkronoi sitten uudelleen.",
-    "conversationsNotCapturedCount": "Ei tallennettu ({count})",
     "transcriptionNoAudio": "Transkriptio ei vastaanota ääntä",
     "chatBlockTask": "Tehtävä",
     "chatBlockGoal": "Tavoite",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Odotellessasi: onko Omin käyttö ollut mukavaa?",
     "onboardingRatingPromptBody": "5 tähteä auttaa meitä todella paljon ❤️",
     "onboardingRatingPromptYes": "Kyllä, haluan tukea teitä!",
-    "onboardingRatingPromptNo": "Ei oikeastaan"
+    "onboardingRatingPromptNo": "Ei oikeastaan",
+    "partialRecording": "Osittainen tallenne"
 }

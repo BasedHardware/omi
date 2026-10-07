@@ -21,19 +21,10 @@ CaptureTransition _reduceUplinkSilence(
   UplinkSilenceElapsed event,
   CaptureEnvironment env,
 ) {
-  if (state.phase != CapturePhase.pendantLive ||
-      env.policyMuted ||
-      !env.uplinkSilenceExpired ||
-      state.active?.recordingId != event.recordingId) {
-    return CaptureTransition(state, const []);
-  }
-  return CaptureTransition(state.copyWith(phase: CapturePhase.pendantPaused), const [
-    PolicyWrite(true),
-    RunStage(SilencePauseMarkerStage(true)),
-    RunStage(PauseDeviceTailStage()),
-    WalFinalize(),
-    RunStage(ProcessConversationStage()),
-  ]);
+  // INV-CAP-1: current live-mode firmware discards queued frames when a
+  // connected phone unsubscribes. No shipped retention capability authorizes
+  // this automatic pause; even a queued timer event must leave capture live.
+  return CaptureTransition(state, const []);
 }
 
 CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnvironment env) {

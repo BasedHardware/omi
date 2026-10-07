@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "บันทึกไว้ล่วงหน้า",
     "pendantRecordingSyncBlocked": "Pendant ยังบันทึกอยู่ จึงไม่สามารถถ่ายโอนเสียงที่จัดเก็บไว้ได้ กดปุ่มของ Pendant เพื่อหยุดบันทึก แล้วซิงค์อีกครั้ง",
     "pendantFullSyncBlocked": "พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง",
-    "conversationsNotCapturedCount": "ไม่ได้บันทึก ({count})",
     "transcriptionNoAudio": "การถอดเสียงไม่ได้รับเสียง",
     "chatBlockTask": "งาน",
     "chatBlockGoal": "เป้าหมาย",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "ระหว่างรอ Omi ใช้งานแล้วถูกใจไหม",
     "onboardingRatingPromptBody": "การให้ 5 ดาวช่วยเราได้มากจริงๆ ❤️",
     "onboardingRatingPromptYes": "ใช่ ฉันอยากสนับสนุนคุณ!",
-    "onboardingRatingPromptNo": "ไม่ค่อย"
+    "onboardingRatingPromptNo": "ไม่ค่อย",
+    "partialRecording": "การบันทึกบางส่วน"
 }
