@@ -1363,6 +1363,7 @@ def _load_sync_router_for_fast_path():
     transcription_mod.record_sync_intake_outcome = MagicMock()
     journeys_mod = types.ModuleType('utils.observability.journeys')
     journeys_mod.record_client_journey_accepted = MagicMock()
+    journeys_mod.record_client_journey_terminal = MagicMock()
     journeys_mod.record_journey_accepted = MagicMock()
     shape_mod = types.ModuleType('utils.conversation_shape')
     shape_mod.observe_completed_conversation_shape = MagicMock()
