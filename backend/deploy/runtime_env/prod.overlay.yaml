@@ -134,7 +134,7 @@ overlay:
         # omi_stt_routing_cohort_* counters (GATES.md): 5% 76min and 25% 75min
         # held clean; this commit advances to 50%.
         STT_ROUTING_ON_PERCENT:
-          value: '50'
+          value: '100'
         SONIOX_MONTHLY_CEILING_USD:
           value: '10000'
         # 2026-09-28: learn each user's expected languages from observed output. About 75% of
