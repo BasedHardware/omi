@@ -80,13 +80,14 @@ def test_old_client_list_price_is_never_promoted_and_overflow_is_capped():
     )
 
 
-def test_thinking_level_survives_bff_then_adapts_on_fallback():
+def test_luna_gateway_translation_drops_gemini_thinking_but_keeps_vertex_policy_helpers():
     body = {
         'contents': [{'parts': [{'text': 'test'}]}],
         'generationConfig': {'thinkingConfig': {'thinkingLevel': 'low'}},
     }
-    request = gemini_body_to_openai_chat(body, lane_id='omi:auto:desktop-vertex-flash-38', stream=False)
-    assert request['google'] == {'thinking_config': {'thinking_level': 'low'}}
+    request = gemini_body_to_openai_chat(body, lane_id='omi:auto:desktop-luna', stream=False)
+    assert request['model'] == 'omi:auto:desktop-luna'
+    assert 'google' not in request
     target = ptr.model_payload(body, ptr.PT_MODEL_TARGET)
     fallback = ptr.model_payload(body, 'gemini-2.5-flash-lite')
     assert target['generationConfig']['thinkingConfig'] == {'thinkingLevel': 'low'}
@@ -113,32 +114,17 @@ def test_bounded_gate_metadata_and_direct_model_adaptation():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('location', ['us', 'us-central1', 'global'])
-async def test_direct_kill_switch_uses_same_declared_location_and_old_client_capacity(monkeypatch, location):
-
+async def test_byok_keeps_direct_ai_studio_route_when_vertex_reservation_is_configured(monkeypatch):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    monkeypatch.setenv(ptr.PT_TARGET_LOCATION_ENV, location)
-    monkeypatch.setattr(proxy._vertex_tokens, 'get_access_token', _token)
-    proxy._reservation_snapshot.set({ptr.PT_MODEL_TARGET: State.ACTIVE})
-    monkeypatch.setattr(proxy, 'get_byok_key', lambda name: None)
+    monkeypatch.setenv(ptr.PT_TARGET_LOCATION_ENV, 'us')
+    monkeypatch.setattr(proxy, 'get_byok_key', lambda name: 'user-owned-gemini-key')
     route = await proxy._upstream(
         f'models/{ptr.PT_MODEL_TARGET}:generateContent', ptr.PT_MODEL_TARGET, 'generateContent', {}
     )
-    assert f'/locations/{location}/' in route.url
-    assert route.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
-    assert proxy._recovery_plan(
-        ptr.PT_MODEL_TARGET, 429, 'No provisioned throughput order configured', capacity='dedicated'
-    )[0] == (ptr.PT_MODEL_TARGET, 'shared')
-    proxy._reservation_snapshot.set({proxy.VERTEX_PT_TARGET_MODEL: State.ACTIVE, proxy.VERTEX_PT_MODEL: State.INACTIVE})
-    old = await proxy._upstream(
-        f'models/{ptr.PT_MODEL_CURRENT}:generateContent', ptr.PT_MODEL_CURRENT, 'generateContent', {}
-    )
-    assert '/locations/us-central1/' in old.url
-    assert old.headers[ptr.REQUEST_TYPE_HEADER] == 'shared'
-    assert all(
-        ptr.model_within_origin_price(model, ptr.PT_MODEL_TARGET)
-        for model, _ in proxy._overflow_plan(ptr.PT_MODEL_TARGET)
-    )
+    assert route.provider == 'ai_studio_byok'
+    assert route.url.startswith('https://generativelanguage.googleapis.com/')
+    assert route.params == {'key': 'user-owned-gemini-key'}
+    assert ptr.REQUEST_TYPE_HEADER not in route.headers
 
 
 # Captured from a real dedicated gemini-3.8-flash request on locations/us,
@@ -199,16 +185,21 @@ async def test_only_successful_dedicated_target_response_with_valid_traffic_prom
 
 
 @pytest.mark.asyncio
-async def test_inactive_override_never_probes_with_customer_content_in_either_path(monkeypatch):
+async def test_inactive_override_keeps_vertex_provider_shared_and_forbids_paid_direct_route(monkeypatch):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', json.dumps({ptr.PT_MODEL_TARGET: 'inactive'}))
-    monkeypatch.setattr(proxy._vertex_tokens, 'get_access_token', _token)
+
+    async def forbidden_token():
+        pytest.fail('paid direct Gemini route must not request Vertex credentials')
+
+    monkeypatch.setattr(proxy._vertex_tokens, 'get_access_token', forbidden_token)
     monkeypatch.setattr(proxy, 'get_byok_key', lambda name: None)
     proxy._reservation_snapshot.set({})
-    route = await proxy._upstream(
-        f'models/{ptr.PT_MODEL_TARGET}:generateContent', ptr.PT_MODEL_TARGET, 'generateContent', {}
-    )
-    assert route.headers[ptr.REQUEST_TYPE_HEADER] == 'shared'
+    with pytest.raises(proxy.RoutingFailure) as error:
+        await proxy._upstream(
+            f'models/{ptr.PT_MODEL_TARGET}:generateContent', ptr.PT_MODEL_TARGET, 'generateContent', {}
+        )
+    assert error.value.code == 'routing_gateway_required'
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _: httpx.Response(200, json=_response()))
     ) as client:

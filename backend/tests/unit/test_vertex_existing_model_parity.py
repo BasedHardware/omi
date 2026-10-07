@@ -294,13 +294,16 @@ def held_discovery_leases_for_request_matrix(monkeypatch):
 
 
 @pytest.mark.parametrize('thinking', [{'thinkingBudget': 0}, {'thinkingLevel': 'high'}])
-def test_bff_to_vertex_wire_accepts_explicit_zero_budget_and_flash_lite_level(thinking):
+def test_luna_bff_translation_omits_gemini_only_thinking_config(thinking):
     body = {
         'contents': [{'role': 'user', 'parts': [{'text': 'synthetic'}]}],
         'generationConfig': {'thinkingConfig': thinking},
     }
-    translated = gemini_body_to_openai_chat(body, lane_id='omi:auto:desktop-vertex-flash-lite', stream=False)
-    assert _vertex_request(translated)['generationConfig']['thinkingConfig'] == thinking
+    translated = gemini_body_to_openai_chat(body, lane_id='omi:auto:desktop-luna', stream=False)
+
+    assert translated['model'] == 'omi:auto:desktop-luna'
+    assert 'google' not in translated
+    assert 'generationConfig' not in _vertex_request(translated)
 
 
 @pytest.mark.asyncio

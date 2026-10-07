@@ -751,6 +751,7 @@ class ProxyEnvelope:
     timeout_phase: Any
     client_disconnected: Any
     provider_unavailable_retry_after: int
+    stream_observation_factory: Any
 
 
 def company_paid_via_gateway(model: str, action: str) -> bool:
@@ -838,10 +839,17 @@ async def proxy_company_paid_via_gateway(
         if streaming:
 
             async def stream_gateway():
+                observation = envelope.stream_observation_factory()
                 try:
                     async for chunk in gateway_desktop_chat_stream(body, model=model, uid=uid, **attribution):
+                        observation.observe(chunk)
                         yield chunk
-                    telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+                    if observation.has_error or not observation.has_terminal:
+                        code = 'provider_response_error' if observation.has_error else 'incomplete_stream'
+                        telemetry.complete(outcome=code, status_code=502, retryable=False, phase='gateway')
+                        yield envelope.stream_error_event(code=code, phase='gateway', telemetry=telemetry)
+                    else:
+                        telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
                 except DesktopGeminiGatewayError as error:
                     status_code = 503 if error.status_code >= 500 else error.status_code
                     telemetry.complete(

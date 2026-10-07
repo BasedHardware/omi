@@ -1062,6 +1062,7 @@ def _gateway_envelope() -> desktop_gemini_gateway.ProxyEnvelope:
         timeout_phase=_timeout_phase,
         client_disconnected=ClientDisconnected,
         provider_unavailable_retry_after=_PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS,
+        stream_observation_factory=_DesktopProactivityStreamOutcome,
     )
 
 
