@@ -124,6 +124,7 @@ static void update_mtu(struct bt_conn *conn);
 static void update_conn_params(struct bt_conn *conn);
 static void schedule_mtu_recheck(void);
 static void mtu_recheck_work_handler(struct k_work *work);
+static void adv_name_update_work_handler(struct k_work *work);
 static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_exchange_params *params);
 
 // --- GATT Exchange MTU Params ---
@@ -325,16 +326,11 @@ static struct bt_data bt_sd[] = {
     BT_DATA(BT_DATA_NAME_COMPLETE, adv_device_name, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
-static void update_advertising_name(const char *name)
+static struct k_work adv_name_update_work;
+
+static void adv_name_update_work_handler(struct k_work *work)
 {
-    if (name != NULL && strlen(name) > 0) {
-        strncpy(adv_device_name, name, sizeof(adv_device_name) - 1);
-        adv_device_name[sizeof(adv_device_name) - 1] = '\0';
-    } else {
-        strncpy(adv_device_name, CONFIG_BT_DEVICE_NAME, sizeof(adv_device_name) - 1);
-        adv_device_name[sizeof(adv_device_name) - 1] = '\0';
-    }
-    bt_sd[1].data_len = strlen(adv_device_name);
+    ARG_UNUSED(work);
 
 #if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
     bt_set_name(adv_device_name);
@@ -346,6 +342,25 @@ static void update_advertising_name(const char *name)
     } else {
         LOG_INF("Updated advertising device name: %s", adv_device_name);
     }
+}
+
+static void update_advertising_name(const char *name)
+{
+    if (name != NULL && strlen(name) > 0) {
+        strncpy(adv_device_name, name, sizeof(adv_device_name) - 1);
+        adv_device_name[sizeof(adv_device_name) - 1] = '\0';
+    } else {
+        strncpy(adv_device_name, CONFIG_BT_DEVICE_NAME, sizeof(adv_device_name) - 1);
+        adv_device_name[sizeof(adv_device_name) - 1] = '\0';
+    }
+    bt_sd[1].data_len = strlen(adv_device_name);
+
+    /*
+     * Defer HCI calls (bt_set_name / bt_le_adv_update_data) to system workqueue
+     * so they do not execute directly within Bluetooth RX / workqueue context,
+     * mitigating potential deadlock/livelock risks under congestion.
+     */
+    k_work_submit(&adv_name_update_work);
 }
 
 //
@@ -1480,6 +1495,7 @@ int transport_start()
 #endif
 
     // Start advertising
+    k_work_init(&adv_name_update_work, adv_name_update_work_handler);
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&settings_service);
     bt_gatt_service_register(&features_service);
