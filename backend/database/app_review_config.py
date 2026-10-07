@@ -59,13 +59,16 @@ def get_review_config(platform: str, firestore_client: Any = None) -> dict[str, 
 
 def invalidate_review_config_cache(platform: Optional[str] = None) -> None:
     """Invalidate memory cache for a specific platform or all supported platforms."""
-    cache = get_memory_cache()
-    platforms = [platform] if platform else list(_SUPPORTED_PLATFORMS)
-    for p in platforms:
-        try:
-            cache.delete(f"{_CACHE_KEY_PREFIX}{p}")
-        except Exception:
-            pass
+    try:
+        cache = get_memory_cache()
+        platforms = [platform] if platform else list(_SUPPORTED_PLATFORMS)
+        for p in platforms:
+            try:
+                cache.delete(f"{_CACHE_KEY_PREFIX}{p}")
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f"Failed to invalidate review config cache: {e}")
 
 
 def should_hide_subscription_ui(

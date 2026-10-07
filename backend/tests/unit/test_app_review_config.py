@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from database.app_review_config import (
     _SUPPORTED_PLATFORMS,
@@ -7,11 +7,18 @@ from database.app_review_config import (
     invalidate_review_config_cache,
     should_hide_subscription_ui,
 )
+from database.cache_manager import InMemoryCacheManager
 
 
 class TestAppReviewConfig(unittest.TestCase):
     def setUp(self):
+        self._fake_cache = InMemoryCacheManager(max_memory_mb=10)
+        self._cache_patch = patch("database.app_review_config.get_memory_cache", return_value=self._fake_cache)
+        self._cache_patch.start()
         invalidate_review_config_cache()
+
+    def tearDown(self):
+        self._cache_patch.stop()
 
     def test_supported_platforms_contains_android_ios_macos(self):
         self.assertIn("ios", _SUPPORTED_PLATFORMS)
