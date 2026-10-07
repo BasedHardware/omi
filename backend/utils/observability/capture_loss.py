@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 import math
 from prometheus_client import Counter
+from pydantic import BaseModel
 
 CAPTURE_FINALIZED_TOTAL = Counter(
     'omi_capture_finalized_total',
@@ -31,8 +32,8 @@ def _timestamp(value: Any) -> float | None:
 
 def coverage_accounting(conversation: Any) -> tuple[str, float | None, float | None]:
     evidence = getattr(conversation, 'capture_evidence', None)
-    if evidence is not None and hasattr(evidence, 'dict'):
-        evidence = evidence.dict()
+    if isinstance(evidence, BaseModel):
+        evidence = evidence.model_dump()
     evidence = evidence if isinstance(evidence, dict) else {}
     coverage = evidence.get('coverage')
     coverage = coverage if coverage in {'incomplete', 'mapped', 'unknown'} else 'unknown'

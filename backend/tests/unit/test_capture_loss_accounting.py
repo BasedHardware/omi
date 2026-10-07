@@ -90,7 +90,7 @@ def test_invalid_bounds_and_metric_failure_never_block_finalize(monkeypatch):
     metrics.record_capture_loss(item)
 
 
-def test_processing_hook_counts_only_accepted_persistence():
+def persistence_hook(record):
     # Execute the production nested hook without importing LLM/DB providers.
     tree = ast.parse((Path(__file__).parents[2] / 'utils/conversations/process_conversation.py').read_text())
     process = next(
@@ -103,7 +103,6 @@ def test_processing_hook_counts_only_accepted_persistence():
         body=[ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0), hook],
         type_ignores=[],
     )
-    record = MagicMock()
     namespace = {
         'record_capture_loss': record,
         'persistence_observer': None,
@@ -112,9 +111,39 @@ def test_processing_hook_counts_only_accepted_persistence():
         'defer_derived_effects': True,
     }
     exec(compile(ast.fix_missing_locations(module), '<production persistence hook>', 'exec'), namespace)
+    return namespace['report_persistence']
+
+
+def test_processing_hook_counts_only_accepted_persistence():
+    record = MagicMock()
+    report = persistence_hook(record)
     item = conversation(runs=[run(0, 10)])
-    namespace['report_persistence'](False, completed=item)
-    namespace['report_persistence'](True)
+    report(False, completed=item)
+    report(True)
     record.assert_not_called()
-    namespace['report_persistence'](True, completed=item)
+    report(True, completed=item)
     record.assert_called_once_with(item)
+
+
+def test_pydantic_internal_evidence_survives_wire_exclusion_for_finalize_accounting(monkeypatch):
+    from models.conversation import CaptureEvidenceMetadata, Conversation
+
+    item = Conversation(
+        id='synthetic-pydantic-evidence',
+        created_at=START,
+        started_at=START,
+        finished_at=START + timedelta(minutes=70),
+        structured={},
+        capture_evidence={'capability': 'source_position', 'coverage': 'incomplete', 'runs': [run(0, 90)]},
+    )
+    assert isinstance(item.capture_evidence, CaptureEvidenceMetadata)
+    assert 'capture_evidence' not in item.model_dump()
+    total, seconds = MagicMock(), MagicMock()
+    monkeypatch.setattr(metrics, 'CAPTURE_FINALIZED_TOTAL', total)
+    monkeypatch.setattr(metrics, 'CAPTURE_FINALIZED_SECONDS', seconds)
+    report = persistence_hook(metrics.record_capture_loss)
+    report(False, completed=item)
+    total.labels.assert_not_called()
+    report(True, completed=item)
+    total.labels.assert_called_once_with(coverage='incomplete', span_measurement='known')
+    assert [call.args[0] for call in seconds.labels.return_value.inc.call_args_list] == [4200, 90]
