@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from config.speaker_prior import pinned_speaker_prior_enabled
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.audio import AudioRingBuffer
+from utils.live_speaker_collapse import LiveSpeakerCollapseMonitor
 from utils.live_speaker_suggestions import reconcile_pinned_suggestion
 from utils.log_sanitizer import sanitize
 from utils.executors import storage_executor, sync_executor, run_blocking
@@ -37,7 +38,7 @@ from utils.stt.speaker_match import (
 )
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
 from utils.transcribe_store import conversations_db, get_user_name, user_db
-from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL
+from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL, OMI_LIVE_SPEAKER_COLLAPSE_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ class SpeakerMatcher:
         self._speaker_locks: Dict[int, asyncio.Lock] = {}
         self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
         self._generation = 0
+        self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self.tasks: set[asyncio.Task[Any]] = set()
         self._profile_conversation_id: Optional[str] = None
         self._profile_lock = asyncio.Lock()
@@ -243,6 +245,18 @@ class SpeakerMatcher:
                 self._record_exit('already_mapped' if speaker_id in self.speaker_to_person else 'too_short', speaker_id)
         state.speaker_id_done.set()
 
+    def observe_segment(self, speaker_id: int, scope: str, segment_id: str) -> None:
+        if self.collapse_monitor.observe(speaker_id, scope, segment_id):
+            self._record_collapse()
+
+    def _record_collapse(self) -> None:
+        OMI_LIVE_SPEAKER_COLLAPSE_TOTAL.inc()
+        logger.warning(
+            'event=live_speaker_collapse consecutive_segments=%d rejected_matches=%d',
+            self.collapse_monitor.consecutive_segments,
+            self.collapse_monitor.rejected_matches,
+        )
+
     def _session_log_id(self) -> Any:
         """Recording session id for speaker-ID log attribution; never the uid."""
         return getattr(self.host, 'recording_session_id', None)
@@ -352,7 +366,7 @@ class SpeakerMatcher:
         candidates += [
             entry
             for entry in (receipt.get('segments') or {}).values()
-            if isinstance(entry, Mapping) and entry.get('speaker_id') == speaker_id
+            if isinstance(entry, Mapping) and not entry.get('segment_only') and entry.get('speaker_id') == speaker_id
         ]
         positive = [entry for entry in candidates if not entry.get('rejection')]
         if not positive:
@@ -546,6 +560,10 @@ class SpeakerMatcher:
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return
+            if decision is not None and self.collapse_monitor.match(
+                speaker_id, segment.get('speaker_id_scope') or '', segment['id'], accepted=decision.accepted
+            ):
+                self._record_collapse()
             # No awaits between arbitration and publishing the maps: another
             # speaker may finish embedding concurrently, but cannot publish a
             # decision based on a stale set of owner claims.
@@ -681,6 +699,7 @@ class SpeakerMatcher:
 
     def clear(self) -> None:
         self._generation += 1
+        self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self._profile_conversation_id = None
         self._named_speakers_allowed = None
         self._covered_audio.clear()

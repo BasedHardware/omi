@@ -12445,4 +12445,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'نه چندان';
+
+  @override
+  String get partialRecording => 'ضبط ناقص';
 }

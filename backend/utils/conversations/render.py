@@ -185,6 +185,8 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     # serialized into an integration response.
     _strip_match_scores(conv)
     conv.pop('geolocation', None)
+    # Server-computed capture badge stays on app views, outside the integration contract.
+    conv.pop('capture_coverage', None)
     for field in PROJECTION_FAMILY_FIELDS:
         conv.pop(field, None)
     # Where the live receiver heard each segment is internal placement evidence, not transcript.

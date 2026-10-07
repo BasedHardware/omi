@@ -11407,5 +11407,6 @@
     "onboardingRatingPromptTitle": "वाट पाहत असताना सांगा, Omi वापरायला छान वाटतंय का?",
     "onboardingRatingPromptBody": "५ स्टार रेटिंग दिल्याने आम्हाला खरोखर खूप मदत होते ❤️",
     "onboardingRatingPromptYes": "हो, मला तुम्हाला पाठिंबा द्यायचा आहे!",
-    "onboardingRatingPromptNo": "फारसं नाही"
+    "onboardingRatingPromptNo": "फारसं नाही",
+    "partialRecording": "अंशतः रेकॉर्डिंग"
 }

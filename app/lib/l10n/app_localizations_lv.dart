@@ -12475,4 +12475,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Ne gluži';
+
+  @override
+  String get partialRecording => 'Daļējs ieraksts';
 }

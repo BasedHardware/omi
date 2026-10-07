@@ -12531,4 +12531,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'அவ்வளவாக இல்லை';
+
+  @override
+  String get partialRecording => 'பகுதியளவு பதிவு';
 }

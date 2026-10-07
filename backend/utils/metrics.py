@@ -299,6 +299,11 @@ for _mode in ('legacy', 'v2'):
 # bounded reason (enumerated in routers/listen/speakers.py). The reason is the
 # only label — never uid, session, or conversation identifiers; those travel on
 # the paired log line instead, which is how a single user report is attributed.
+OMI_LIVE_SPEAKER_COLLAPSE_TOTAL = Counter(
+    'omi_live_speaker_collapse_total',
+    'Single-voice live segment runs with repeated rejected voice matches (observational)',
+)
+
 OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
     'omi_speaker_id_match_exits_total',
     'Live speaker-ID detections that returned before a match decision, by bounded reason',

@@ -12430,4 +12430,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'ज़्यादा नहीं';
+
+  @override
+  String get partialRecording => 'आंशिक रिकॉर्डिंग';
 }

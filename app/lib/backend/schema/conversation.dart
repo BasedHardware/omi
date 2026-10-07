@@ -414,6 +414,9 @@ class ServerConversation {
   /// model ran and found nothing to summarize.
   final bool summaryRetryable;
 
+  /// Coverage projected from the server capture receipt; absent on legacy rows.
+  final String? captureCoverage;
+
   // local label
   bool isNew = false;
 
@@ -446,10 +449,15 @@ class ServerConversation {
     this.captureGroup,
     this.speakerResolution,
     this.summaryRetryable = false,
+    this.captureCoverage,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final normalized = Map<String, dynamic>.from(json);
+    final captureEvidence = json['capture_evidence'];
+    if (captureEvidence is Map && captureEvidence['coverage'] is String) {
+      normalized['capture_coverage'] = captureEvidence['coverage'];
+    }
     final structured = json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null;
     if (structured != null) {
       normalized['structured'] = structured.toGenerated().toJson();
@@ -532,6 +540,7 @@ class ServerConversation {
       speakerResolution:
           generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
       summaryRetryable: generated.summaryRetryable == true,
+      captureCoverage: generated.captureCoverage,
     );
   }
 
@@ -567,6 +576,7 @@ class ServerConversation {
       'capture_group': captureGroup?.toJson(),
       'speaker_resolution': speakerResolution?.toJson(),
       if (summaryRetryable) 'summary_retryable': true,
+      if (captureCoverage != null) 'capture_coverage': captureCoverage,
     };
   }
 
@@ -599,6 +609,7 @@ class ServerConversation {
       captureGroup: captureGroup?.toGenerated(),
       speakerResolution: speakerResolution?.toGenerated(),
       summaryRetryable: summaryRetryable ? true : null,
+      captureCoverage: captureCoverage,
     );
   }
 

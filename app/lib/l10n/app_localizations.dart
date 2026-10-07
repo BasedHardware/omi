@@ -22292,6 +22292,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not really'**
   String get onboardingRatingPromptNo;
+
+  /// Conversation detail badge shown when capture evidence says the recording is incomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Partial recording'**
+  String get partialRecording;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

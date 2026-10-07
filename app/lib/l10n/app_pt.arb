@@ -3885,5 +3885,6 @@
     "onboardingRatingPromptTitle": "Enquanto você espera, o Omi tem sido legal de usar?",
     "onboardingRatingPromptBody": "Avaliar com 5 estrelas nos ajuda muito ❤️",
     "onboardingRatingPromptYes": "Sim, quero apoiar vocês!",
-    "onboardingRatingPromptNo": "Nem tanto"
+    "onboardingRatingPromptNo": "Nem tanto",
+    "partialRecording": "Gravação parcial"
 }

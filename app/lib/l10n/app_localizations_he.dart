@@ -12356,4 +12356,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'לא ממש';
+
+  @override
+  String get partialRecording => 'הקלטה חלקית';
 }

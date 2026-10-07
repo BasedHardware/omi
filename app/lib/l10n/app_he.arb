@@ -11407,5 +11407,6 @@
     "onboardingRatingPromptTitle": "בזמן שמחכים, נעים לכם להשתמש ב-Omi?",
     "onboardingRatingPromptBody": "דירוג של 5 כוכבים עוזר לנו מאוד ❤️",
     "onboardingRatingPromptYes": "כן, אני רוצה לתמוך בכם!",
-    "onboardingRatingPromptNo": "לא ממש"
+    "onboardingRatingPromptNo": "לא ממש",
+    "partialRecording": "הקלטה חלקית"
 }

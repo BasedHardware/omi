@@ -3850,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Kým čakáte, páči sa vám používanie Omi?",
     "onboardingRatingPromptBody": "Hodnotenie 5 hviezdičiek nám naozaj veľmi pomáha ❤️",
     "onboardingRatingPromptYes": "Áno, chcem vás podporiť!",
-    "onboardingRatingPromptNo": "Nie celkom"
+    "onboardingRatingPromptNo": "Nie celkom",
+    "partialRecording": "Čiastočná nahrávka"
 }

@@ -12460,4 +12460,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'زیادہ نہیں';
+
+  @override
+  String get partialRecording => 'جزوی ریکارڈنگ';
 }

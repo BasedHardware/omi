@@ -11407,5 +11407,6 @@
     "onboardingRatingPromptTitle": "Habang naghihintay, masarap bang gamitin ang Omi?",
     "onboardingRatingPromptBody": "Malaking tulong sa amin ang 5 stars ❤️",
     "onboardingRatingPromptYes": "Oo, gusto ko kayong suportahan!",
-    "onboardingRatingPromptNo": "Hindi masyado"
+    "onboardingRatingPromptNo": "Hindi masyado",
+    "partialRecording": "Bahagyang pagrekord"
 }

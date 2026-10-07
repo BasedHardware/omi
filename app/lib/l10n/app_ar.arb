@@ -3850,5 +3850,6 @@
     "onboardingRatingPromptTitle": "بينما تنتظر، هل كان استخدام Omi ممتعًا؟",
     "onboardingRatingPromptBody": "تقييمك لنا بخمس نجوم يساعدنا كثيرًا ❤️",
     "onboardingRatingPromptYes": "نعم، أريد أن أدعمكم!",
-    "onboardingRatingPromptNo": "ليس تمامًا"
+    "onboardingRatingPromptNo": "ليس تمامًا",
+    "partialRecording": "تسجيل جزئي"
 }

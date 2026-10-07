@@ -397,3 +397,24 @@ def test_owner_teaching_drops_receipt_changed_during_verification(monkeypatch, c
     assert asyncio.run(service.store_owner_voice_sample(UID, CONV, ['a'])) == 'stale_assignment'
     assert store.rows[('users', UID)]['speaker_embedding'] == [1.0, 0.0]
     assert 'owner_voice_confirmations' not in store.rows[('users', UID)]
+
+
+def test_speaker_endpoint_forwards_optional_range(world):
+    _set_assign_result(world, [_segment('s1', 1, 2)], resolved=['s1'])
+    response = world.client.patch(
+        f'/v1/conversations/{CONV}/assign-speaker/0',
+        params={'assign_type': 'person_id', 'value': 'p1', 'start': 1, 'end': 2},
+    )
+    assert response.status_code == 200
+    assert world.assignments[0]['time_range'] == (1, 2)
+    assert world.assignments[0]['speaker_id'] == 0
+    assert world.scheduled['person'][0]['segment_ids'] == ['s1']
+
+
+@pytest.mark.parametrize('params', [{'start': 0}, {'end': 2}])
+def test_speaker_endpoint_requires_both_range_boundaries(world, params):
+    response = world.client.patch(
+        f'/v1/conversations/{CONV}/assign-speaker/0', params={'assign_type': 'person_id', 'value': 'p1', **params}
+    )
+    assert response.status_code == 422
+    assert not world.assignments

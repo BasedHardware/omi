@@ -12465,4 +12465,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Nem tanto';
+
+  @override
+  String get partialRecording => 'Gravação parcial';
 }

@@ -12442,4 +12442,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Không hẳn';
+
+  @override
+  String get partialRecording => 'Bản ghi một phần';
 }

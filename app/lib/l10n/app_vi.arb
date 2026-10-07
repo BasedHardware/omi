@@ -3850,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Trong lúc chờ, bạn thấy dùng Omi có thích không?",
     "onboardingRatingPromptBody": "Đánh giá 5 sao thực sự giúp ích cho chúng tôi rất nhiều ❤️",
     "onboardingRatingPromptYes": "Có, tôi muốn ủng hộ các bạn!",
-    "onboardingRatingPromptNo": "Không hẳn"
+    "onboardingRatingPromptNo": "Không hẳn",
+    "partialRecording": "Bản ghi một phần"
 }

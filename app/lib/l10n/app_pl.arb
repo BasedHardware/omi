@@ -3885,5 +3885,6 @@
     "onboardingRatingPromptTitle": "Skoro czekasz, czy Omi dobrze Ci się sprawdza?",
     "onboardingRatingPromptBody": "Ocena 5 gwiazdek naprawdę nam pomaga ❤️",
     "onboardingRatingPromptYes": "Tak, chcę Was wesprzeć!",
-    "onboardingRatingPromptNo": "Niezbyt"
+    "onboardingRatingPromptNo": "Niezbyt",
+    "partialRecording": "Częściowe nagranie"
 }

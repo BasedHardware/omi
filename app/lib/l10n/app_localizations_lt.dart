@@ -12469,4 +12469,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Ne visai';
+
+  @override
+  String get partialRecording => 'Dalinis įrašas';
 }
