@@ -9923,11 +9923,6 @@ class AppLocalizationsSv extends AppLocalizations {
       'Lagringen på din Pendant är full och den är fortfarande i inspelningsläge, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera sedan igen.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Inte fångat ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Röstprofil för $name';
   }
@@ -12420,4 +12415,41 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'Visa på låsskärmen';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Det här kontot håller på att raderas. Logga in med ett annat konto, eller vänta några minuter och försök igen.';
+
+  @override
+  String get onboardingSetupTitle => 'Din Omi ställs in';
+
+  @override
+  String get onboardingSetupSubtitle => 'Ge Omi en stund att anpassa sig';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Din arbetsyta förbereds';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Transkriberingen anpassas till ditt språk';
+
+  @override
+  String get onboardingSetupStepMemory => 'Ditt minne ställs in';
+
+  @override
+  String get onboardingSetupStepDevices => 'Dina enheter ansluts';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Din upplevelse anpassas';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Medan du väntar, har Omi varit trevlig att använda?';
+
+  @override
+  String get onboardingRatingPromptBody => '5 stjärnor hjälper oss verkligen mycket ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'Ja, jag vill stötta er!';
+
+  @override
+  String get onboardingRatingPromptNo => 'Inte direkt';
 }

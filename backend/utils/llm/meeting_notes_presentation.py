@@ -45,7 +45,7 @@ def _record_fallback(*, reason: str) -> None:
     )
 
 
-def _has_content(structured: Structured) -> bool:
+def has_note_content(structured: Structured) -> bool:
     return bool(
         structured.title.strip()
         or structured.overview.strip()
@@ -82,7 +82,7 @@ def enforce_conversation_note_presentation(
         try:
             revised_response = extraction_parser.parse(_response_text(model.invoke(revision_messages)))
             revised_structured = revised_response.to_structured()
-            if _has_content(structured) and not _has_content(revised_structured):
+            if has_note_content(structured) and not has_note_content(revised_structured):
                 raise ValueError('presentation revision returned an empty note')
             structured = revised_structured
             if post_parse_validator:

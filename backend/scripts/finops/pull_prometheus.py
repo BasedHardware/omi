@@ -32,6 +32,12 @@ DAILY = {
 
 
 def load_env() -> tuple[str, str]:
+    if os.environ.get("FINOPS_AUTH") == "cloudrun":
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        from cloudrun import secret
+
+        ep = os.environ.get("OMI_PROMETHEUS_ENDPOINT", "https://monitor.omi.me").rstrip("/")
+        return ep + "/api/datasources/proxy/uid/prometheus/api/v1", secret("prometheus")
     for line in ENV.read_text().splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:

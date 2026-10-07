@@ -26,7 +26,7 @@ import google.auth.credentials  # noqa: F401,E402
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant  # noqa: E402
 from testing.import_isolation import stub_modules  # noqa: E402
 from utils.conversations import screen_frame_evidence as evidence_mod  # noqa: E402
-from utils.conversations.meeting_context_pack import (  # noqa: E402
+from utils.conversations.meeting_context_render import (
     MAX_CONTEXT_PACK_CHARACTERS,
     MeetingContextPack,
     render_meeting_context_pack,
@@ -157,7 +157,7 @@ class TestSpeakerBindingWithScreenRoster:
     """conversation_prompt_prefix binds the one remote voice to the one remote human."""
 
     def _prefix(self, names, extra_participants=()):
-        from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+        from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
         context = with_screen_frame_participants(
             (
@@ -353,7 +353,7 @@ def _image_urls(message) -> list[str]:
 class TestImagesReachTheProvider:
     def _notes(self, monkeypatch, *, screen_frames, rich=True):
         from utils.llm import conversation_processing
-        from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+        from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
         captured: dict = {}
 
@@ -433,15 +433,18 @@ class TestWiringFlags:
         loaded: list[str] = []
         monkeypatch.setattr(wiring, 'load_screen_frame_evidence', lambda uid, cid: loaded.append(cid) or evidence)
         monkeypatch.setattr(wiring, 'load_notes_frame_images', lambda *a: FRAMES)
-        monkeypatch.setattr(wiring, 'load_people_documents', lambda uid: [])
-        monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David Zhang', ('david@example.com',)))
         captured: dict = {}
 
         def pack(uid, conversation, roster, **kwargs):
             captured.update(kwargs)
             return None
 
-        monkeypatch.setattr(wiring, 'gather_meeting_context_pack', pack)
+        sources = SimpleNamespace(
+            load_people_documents=lambda uid: [],
+            resolve_owner_identity=lambda uid: ('David Zhang', ('david@example.com',)),
+            gather_meeting_context_pack=pack,
+        )
+        monkeypatch.setattr(wiring, 'meeting_context_sources', lambda: sources)
         conversation = SimpleNamespace(
             id='conv-1',
             source='desktop',

@@ -100,12 +100,15 @@ async def _get_button_event_send_lock(uid: str, device_id: str) -> asyncio.Lock:
 
 
 def _is_valid_audio_bytes_webhook_url(url: str) -> bool:
-    if not url:
+    if not url or not isinstance(url, str):
         return False
     candidate = url.strip()
     if not _HTTP_WEBHOOK_URL_RE.fullmatch(candidate):
         return False
-    parts = urlsplit(candidate)
+    try:
+        parts = urlsplit(candidate)
+    except ValueError:
+        return False
     if parts.scheme not in ('http', 'https') or not parts.netloc:
         return False
     if parts.hostname and ':' in parts.hostname:

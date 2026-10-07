@@ -1,7 +1,12 @@
+import logging
 import re
 from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+
+from pydantic.json_schema import SkipJsonSchema
+
+import config.speaker_match_scores as match_scores
 
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
@@ -21,6 +26,8 @@ from models.conversation_enums import (
 )
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
+from models.note_claims import compact_claim_projection, current_note_claims
+from pydantic import field_serializer
 from models.other import Person
 from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
@@ -449,6 +456,14 @@ class Conversation(BaseModel):
     uses_custom_stt: bool = False
 
     structured: Structured
+
+    @field_serializer('structured', mode='wrap')
+    def _serialize_current_note_claims(self, structured, handler):
+        data = handler(structured)
+        if isinstance(data, dict) and isinstance(data.get('note_claims'), list):
+            data['note_claims'] = compact_claim_projection(current_note_claims(data))
+        return data
+
     # Untrusted client-authored display projection. Sibling of structured, never
     # inside it or external_data. Display only — never an input to intelligence.
     client_processing: Optional[ClientProcessing] = None
@@ -477,6 +492,45 @@ class Conversation(BaseModel):
     capture_evidence: Optional[CaptureEvidenceMetadata] = Field(default=None, exclude=True)
     # Absent on conversations processed before speakers were resolved: count no ids as people.
     speaker_resolution: Optional[ConversationSpeakers] = None
+    speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
+
+    @field_validator('speaker_match_scores', mode='before')
+    @classmethod
+    def _validate_match_scores(cls, value):
+        # Some mutation owners return a stored document with a readable
+        # transcript. Without a uid this model must omit, never decrypt, its
+        # optional raw score blob. Covers factory and direct model callers.
+        if value is None:
+            return None
+        try:
+            return match_scores.normalize(value)
+        except Exception:
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+            return None
+
+    @model_validator(mode='after')
+    def _collect_match_scores(self):
+        try:
+            updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
+            if updates and match_scores.enabled():
+                self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
+        except Exception:
+            self.speaker_match_scores = None
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+        return self
+
+    @model_serializer(mode='wrap')
+    def _serialize_match_scores(self, handler, info):
+        data = handler(self)
+        if info.mode == 'python' and self.speaker_match_scores is not None:
+            excluded = info.exclude or ()
+            included = info.include
+            if 'speaker_match_scores' not in excluded and (included is None or 'speaker_match_scores' in included):
+                try:
+                    data['speaker_match_scores'] = match_scores.merge(None, self.speaker_match_scores)
+                except Exception:
+                    match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+        return data
 
     # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
     # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read

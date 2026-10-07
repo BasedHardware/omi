@@ -12,9 +12,17 @@ from models.other import Person
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
+from models.note_claims import current_note_claims
 from utils.conversations.summary_selection import select_primary_summary
 
 logger = logging.getLogger(__name__)
+
+
+def _omit_list_note_claims(conv: Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(conv.get('structured'), dict) and 'note_claims' in conv['structured']:
+        conv['structured'] = dict(conv['structured'])
+        conv['structured'].pop('note_claims', None)
+    return conv
 
 
 def resolve_display_tz(tz: Optional[str]) -> Any:
@@ -127,10 +135,21 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
 # sinks (persist strip, transcript-edit clear, in-memory drop) still hardcode
 # a single name today; the trust-boundary suite requires they actually clear
 # every member of this set.
+def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
+    """Voice calibration evidence stays inside backend persistence and processing."""
+    conv.pop('speaker_match_scores', None)
+    for segment in conv.get('transcript_segments') or []:
+        if isinstance(segment, dict):
+            segment.pop('speaker_match_scores', None)
+    return conv
+
+
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
+    _strip_match_scores(conv)
     if not conv.get('is_locked', False):
-        return conv
+        return _omit_list_note_claims(conv)
+    _omit_list_note_claims(conv)
     if 'structured' in conv:
         conv['structured'] = (
             dict(conv['structured']) if not isinstance(conv['structured'], dict) else conv['structured']
@@ -143,7 +162,7 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv['transcript_segments'] = []
     # Search may attach transcript match_snippets before list redaction; never leak evidence for locked rows.
     conv['match_snippets'] = []
-    return conv
+    return _omit_list_note_claims(conv)
 
 
 def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
@@ -164,6 +183,7 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     # Geolocation is private capture metadata and is not part of the public
     # integration contract. Strip it before either locked or unlocked data is
     # serialized into an integration response.
+    _strip_match_scores(conv)
     conv.pop('geolocation', None)
     for field in PROJECTION_FAMILY_FIELDS:
         conv.pop(field, None)
@@ -183,6 +203,8 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
         conv['structured']['overview'] = ''
         conv['structured']['action_items'] = []
         conv['structured']['events'] = []
+        if isinstance(conv['structured'].get('note_claims'), list):
+            conv['structured']['note_claims'] = current_note_claims(conv['structured'])
     conv['apps_results'] = []
     conv['plugins_results'] = []
     conv['suggested_summarization_apps'] = []
@@ -297,7 +319,7 @@ def serialize_datetimes(obj: Any) -> Any:
 
 def conversation_to_dict(conversation: Conversation) -> Dict[str, Any]:
     """Convert a Conversation to a JSON-safe dict with ISO datetime strings."""
-    return serialize_datetimes(conversation.model_dump())
+    return _strip_match_scores(serialize_datetimes(conversation.model_dump()))
 
 
 # Allowlisted citation-card fields. A denylist cannot protect a field added

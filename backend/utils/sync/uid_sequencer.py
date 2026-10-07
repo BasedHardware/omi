@@ -11,7 +11,7 @@ from database import sync_backfill_sequencer as registry
 from database.sync_jobs import (
     TERMINAL_STATUSES,
     SyncLedgerFenceMode,
-    get_raw_sync_job,
+    get_sync_job,
     get_sync_ledger_fence_mode,
     sync_job_run_lock_present,
 )
@@ -154,7 +154,7 @@ def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = Non
         )
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         return 'lock_held'
-    job = get_raw_sync_job(job_id)
+    job = get_sync_job(job_id)
     if job and job.get('status') in TERMINAL_STATUSES:
         outcome = 'terminal_cleanup'
     elif job is None:

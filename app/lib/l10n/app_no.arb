@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Forhåndsinnspilt",
     "pendantRecordingSyncBlocked": "Pendant tar fortsatt opp, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.",
     "pendantFullSyncBlocked": "Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.",
-    "conversationsNotCapturedCount": "Ikke fanget opp ({count})",
     "transcriptionNoAudio": "Transkripsjon mottar ikke lyd",
     "chatBlockTask": "Oppgave",
     "chatBlockGoal": "Mål",
@@ -3839,5 +3838,17 @@
     "dismiss": "Avvis",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Vis på låseskjermen"
+    "showOnLockScreen": "Vis på låseskjermen",
+    "accountDeletionInProgressSignInAgain": "Denne kontoen slettes. Logg inn med en annen konto, eller vent noen minutter og prøv igjen.",
+    "onboardingSetupTitle": "Setter opp Omi",
+    "onboardingSetupSubtitle": "Gi Omi et øyeblikk til å tilpasse seg",
+    "onboardingSetupStepWorkspace": "Forbereder arbeidsområdet ditt",
+    "onboardingSetupStepLanguage": "Tilpasser transkripsjonen til språket ditt",
+    "onboardingSetupStepMemory": "Setter opp minnet ditt",
+    "onboardingSetupStepDevices": "Kobler til enhetene dine",
+    "onboardingSetupStepPersonalize": "Tilpasser opplevelsen din",
+    "onboardingRatingPromptTitle": "Mens du venter, har Omi vært fin å bruke?",
+    "onboardingRatingPromptBody": "5 stjerner hjelper oss virkelig mye ❤️",
+    "onboardingRatingPromptYes": "Ja, jeg vil støtte dere!",
+    "onboardingRatingPromptNo": "Ikke egentlig"
 }

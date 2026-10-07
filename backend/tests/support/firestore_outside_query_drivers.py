@@ -643,7 +643,6 @@ DRIVERS['utils.task_intelligence.chat_first_materialization_health._documents'] 
 _driver(
     'utils.x_connector.run_x_sync_job',
     neutrals={'job_started_at': (None, 'model budget clock only')},
-    patchers=(_stub('database.redis_db.try_acquire_x_sync_window_lock', True),),
     profile='scheduled-x-sync',
 )
 

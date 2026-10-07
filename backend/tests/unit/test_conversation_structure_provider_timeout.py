@@ -52,7 +52,7 @@ from langchain_core.runnables import RunnableLambda  # noqa: E402
 from models.app import App  # noqa: E402
 import utils.llm.conversation_processing as processing  # noqa: E402
 import utils.llm.model_config as model_config  # noqa: E402
-from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix  # noqa: E402
+from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 from utils.llm.gateway_resilience import DEFAULT_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS  # noqa: E402
 
 # What the provider actually needs to answer a whole-transcript structuring prompt. Longer than the

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:omi/services/wals/periodic_recording_sync.dart';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/app_globals.dart';
@@ -50,6 +52,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   final Future<void> Function() _startRecovery;
   final Future<void> Function(WakeTrigger trigger) _wakeTransfer;
   final SyncTransferKeepAlive _keepAlive;
+  PeriodicRecordingSync? _periodicSync;
   final CaptureWedgeMonitor _captureWedgeMonitor;
 
   /// Completes after WAL loading and startup fair-use reconciliation finish.
@@ -484,6 +487,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         onTransferFinished: _keepAlive.release,
         onConnectivityRestored: _walService.getSyncs().phone.resetExhaustedAutoRetries,
       );
+      _periodicSync?.dispose();
+      _periodicSync = PeriodicRecordingSync(
+        coordinator: RecordingTransferCoordinator.instance,
+        cancel: () => _walService.getSyncs().cancelSync(),
+      );
+      unawaited(_periodicSync!.start());
       unawaited(_startRecovery());
     } catch (e) {
       Logger.debug('SyncProvider: attach recording transfer coordinator failed: $e');
@@ -1187,6 +1196,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   @override
   void dispose() {
+    _periodicSync?.dispose();
     _isDisposed = true;
     _sessionGeneration++;
     _admittedWorkGeneration = -1;

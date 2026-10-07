@@ -175,6 +175,16 @@ void main() {
     expect(presentation.snapshot['source'], 'pendant');
   }
 
+  test('silence timeout does not publish a false pause to the Live Activity', () async {
+    await recordWithPendant();
+    await world.elapse(const Duration(seconds: 120));
+    await world.controller.pendingSourceSwitch;
+    await world.settle();
+    expect(presentation.snapshot['paused'], false);
+    expect(presentation.snapshot['status'], 'listening');
+    expect(presentation.snapshot['canPause'], true);
+  });
+
   test('an Omi call holding the pendant reads as an interruption, without Stop or Start', () async {
     await recordWithPendant();
     world.omiCall.value = PhoneCallState.active;
@@ -241,17 +251,19 @@ void main() {
   });
 
   test('Finish processes phone conversation and stops its native capture', () async {
-    world.controller.segments.add(TranscriptSegment(
-      id: 'segment',
-      text: 'A recording to finish',
-      speaker: 'SPEAKER_00',
-      speakerId: 0,
-      isUser: false,
-      personId: null,
-      start: 0,
-      end: 1,
-      translations: [],
-    ));
+    world.controller.segments.add(
+      TranscriptSegment(
+        id: 'segment',
+        text: 'A recording to finish',
+        speaker: 'SPEAKER_00',
+        speakerId: 0,
+        isUser: false,
+        personId: null,
+        start: 0,
+        end: 1,
+        translations: [],
+      ),
+    );
     final finish = request('finish');
     await sink.action(finish);
     await world.settle();

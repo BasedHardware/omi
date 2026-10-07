@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "บันทึกไว้ล่วงหน้า",
     "pendantRecordingSyncBlocked": "Pendant ยังบันทึกอยู่ จึงไม่สามารถถ่ายโอนเสียงที่จัดเก็บไว้ได้ กดปุ่มของ Pendant เพื่อหยุดบันทึก แล้วซิงค์อีกครั้ง",
     "pendantFullSyncBlocked": "พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง",
-    "conversationsNotCapturedCount": "ไม่ได้บันทึก ({count})",
     "transcriptionNoAudio": "การถอดเสียงไม่ได้รับเสียง",
     "chatBlockTask": "งาน",
     "chatBlockGoal": "เป้าหมาย",
@@ -3839,5 +3838,17 @@
     "dismiss": "ปิด",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "แสดงบนหน้าจอล็อก"
+    "showOnLockScreen": "แสดงบนหน้าจอล็อก",
+    "accountDeletionInProgressSignInAgain": "บัญชีนี้กำลังถูกลบ ลงชื่อเข้าใช้ด้วยบัญชีอื่น หรือรอสักครู่แล้วลองอีกครั้ง",
+    "onboardingSetupTitle": "กำลังตั้งค่า Omi ของคุณ",
+    "onboardingSetupSubtitle": "ขอเวลา Omi สักครู่เพื่อปรับให้เหมาะกับคุณ",
+    "onboardingSetupStepWorkspace": "กำลังเตรียมพื้นที่ทำงานของคุณ",
+    "onboardingSetupStepLanguage": "กำลังปรับการถอดเสียงให้เข้ากับภาษาของคุณ",
+    "onboardingSetupStepMemory": "กำลังตั้งค่าความจำของคุณ",
+    "onboardingSetupStepDevices": "กำลังเชื่อมต่ออุปกรณ์ของคุณ",
+    "onboardingSetupStepPersonalize": "กำลังปรับแต่งประสบการณ์ของคุณ",
+    "onboardingRatingPromptTitle": "ระหว่างรอ Omi ใช้งานแล้วถูกใจไหม",
+    "onboardingRatingPromptBody": "การให้ 5 ดาวช่วยเราได้มากจริงๆ ❤️",
+    "onboardingRatingPromptYes": "ใช่ ฉันอยากสนับสนุนคุณ!",
+    "onboardingRatingPromptNo": "ไม่ค่อย"
 }

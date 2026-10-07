@@ -20,8 +20,11 @@ class ScriptedDeviceConnection implements DeviceConnection {
 
   /// A BLE audio packet: a 3-byte header then [payloadLength] bytes of [value].
   void emitAudio({int value = 7, int payloadLength = 80}) {
-    _audio.add([0, 0, 0, ...List<int>.filled(payloadLength, value)]);
+    emitRawAudio([0, 0, 0, ...List<int>.filled(payloadLength, value)]);
   }
+
+  /// Emit a caller-owned packet so capture tests can exercise buffer reuse.
+  void emitRawAudio(List<int> packet) => _audio.add(packet);
 
   @override
   Future<StreamSubscription?> getBleAudioBytesListener({required void Function(List<int>) onAudioBytesReceived}) async {

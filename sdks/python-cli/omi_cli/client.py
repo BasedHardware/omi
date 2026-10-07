@@ -40,6 +40,7 @@ from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError
 
 USER_AGENT = f"omi-cli/{__version__} (+https://github.com/BasedHardware/omi)"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+CHAT_STREAM_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 MAX_RETRY_ATTEMPTS = 4
 # Maximum server-supplied Retry-After the CLI will wait before retrying. When
 # the hint exceeds this, automatic retries stop and the caller gets the mapped
@@ -117,6 +118,36 @@ class OmiClient:
 
     def delete(self, path: str) -> Any:
         return self._request("DELETE", path)
+
+    def stream_post_lines(
+        self,
+        path: str,
+        *,
+        json_body: Mapping[str, Any],
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> Iterator[str]:
+        """Stream one POST response without replaying a possibly accepted chat turn.
+
+        Unlike ordinary reads, retrying after a stream disconnect could send the
+        user's message twice. The caller owns parsing the application protocol.
+        """
+        try:
+            with self._http.stream(
+                "POST", path, json=json_body, headers=headers, timeout=CHAT_STREAM_TIMEOUT
+            ) as response:
+                if self._verbose:
+                    import sys
+
+                    sys.stderr.write(f"[debug] POST {path} → {response.status_code} (stream)\n")
+                if not 200 <= response.status_code < 300:
+                    response.read()
+                    raise self._error_from_response(response)
+                yield from response.iter_lines()
+        except (httpx.TransportError, httpx.DecodingError) as exc:
+            raise TransportError(
+                message="Chat connection interrupted",
+                detail="The message may have reached Omi. Check `omi chat --history` before sending it again.",
+            ) from exc
 
     # ------------------------------------------------------------------
     # Internals

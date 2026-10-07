@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Předem nahráno",
     "pendantRecordingSyncBlocked": "Pendant stále nahrává, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu nahrávání zastavte a poté synchronizujte znovu.",
     "pendantFullSyncBlocked": "Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.",
-    "conversationsNotCapturedCount": "Nezaznamenáno ({count})",
     "transcriptionNoAudio": "Transkripce nepřijímá zvuk",
     "chatBlockTask": "Úkol",
     "chatBlockGoal": "Cíl",
@@ -3839,5 +3838,17 @@
     "dismiss": "Skrýt",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
-    "showOnLockScreen": "Zobrazit na zamčené obrazovce"
+    "showOnLockScreen": "Zobrazit na zamčené obrazovce",
+    "accountDeletionInProgressSignInAgain": "Tento účet se maže. Přihlaste se jiným účtem, nebo počkejte několik minut a zkuste to znovu.",
+    "onboardingSetupTitle": "Nastavujeme váš Omi",
+    "onboardingSetupSubtitle": "Dejte Omi chvilku na přizpůsobení",
+    "onboardingSetupStepWorkspace": "Připravujeme váš pracovní prostor",
+    "onboardingSetupStepLanguage": "Ladíme přepis na váš jazyk",
+    "onboardingSetupStepMemory": "Nastavujeme vaši paměť",
+    "onboardingSetupStepDevices": "Připojujeme vaše zařízení",
+    "onboardingSetupStepPersonalize": "Přizpůsobujeme váš zážitek",
+    "onboardingRatingPromptTitle": "Než to doběhne, líbí se vám Omi?",
+    "onboardingRatingPromptBody": "Hodnocení 5 hvězdiček nám opravdu hodně pomůže ❤️",
+    "onboardingRatingPromptYes": "Ano, chci vás podpořit!",
+    "onboardingRatingPromptNo": "Moc ne"
 }

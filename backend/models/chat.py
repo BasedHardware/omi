@@ -716,6 +716,12 @@ class SendMessageRequest(BaseModel):
     context: Optional[PageContext] = None
     time_zone: Optional[str] = None
 
+    # Tools this client can execute on the device itself. Declared per request
+    # because it depends on the device in hand: an iPad with no messaging
+    # service, or a denied Contacts grant, advertises fewer than an iPhone.
+    # A tool the client did not declare is never offered to the model.
+    device_tools: Optional[List[str]] = None
+
     @field_validator("time_zone", mode="before")
     @classmethod
     def _validate_time_zone(cls, value: Any) -> Optional[str]:
@@ -731,6 +737,18 @@ class SendMessageRequest(BaseModel):
         except Exception as exc:
             raise ValueError("time_zone must be a valid IANA timezone") from exc
         return stripped
+
+
+class DeviceToolResultRequest(BaseModel):
+    """A client's result for one in-flight device tool call."""
+
+    result: Dict[str, Any]
+
+
+class DeviceToolResultResponse(BaseModel):
+    """Acknowledgement that a device tool result was handed over."""
+
+    status: str
 
 
 class GenerateReplyTurn(BaseModel):

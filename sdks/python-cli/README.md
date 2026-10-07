@@ -54,6 +54,34 @@ omi action-item list --open
 omi goal list
 ```
 
+## Terminal chat
+
+Sign in with your Omi account, then chat on your current default Omi cloud
+chat thread:
+
+```bash
+omi auth login --browser
+omi chat                        # interactive; replies stream as they arrive
+omi chat "What did we decide?"  # one message, then exit
+omi chat --history --limit 20   # recent shared messages
+omi chat --clear                 # asks before deleting shared chat history
+omi chat --clear --yes           # explicit non-interactive reset
+omi --json chat "Summarize today"  # one final response as JSON
+```
+
+Interactive commands: `/history`, `/clear`, `/tasks`, `/task add TEXT`,
+`/task done ID`, `/help`, and `/quit`. `/clear` removes the shared cloud chat
+history across clients, not just terminal output. It always asks first.
+The terminal does not keep a second transcript on disk. If a stream disconnects,
+check `omi chat --history` before resending because the server may have saved the turn.
+
+This uses the cloud chat backend and its synced memories, conversations, and
+tasks. It does **not** grant the terminal live access to the Mac's private
+screen or the desktop-only agent context; use the desktop app for those.
+Developer API keys cannot authenticate the user chat endpoint, so `omi chat`
+requires browser sign-in. `omi ask` remains available for scoped, one-shot
+developer API-key questions.
+
 Pass `--json` to any command (as a global flag, before the verb) to get
 machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 

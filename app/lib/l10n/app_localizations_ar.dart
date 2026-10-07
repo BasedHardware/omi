@@ -9861,11 +9861,6 @@ class AppLocalizationsAr extends AppLocalizations {
       'ذاكرة Pendant ممتلئة وما زال في وضع التسجيل، لذا لا يمكن نقل الصوت المخزّن. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'لم يتم التسجيل ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'الملف الصوتي لـ $name';
   }
@@ -12344,4 +12339,41 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get showOnLockScreen => 'إظهار على شاشة القفل';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'يجري حذف هذا الحساب. سجّل الدخول بحساب آخر، أو انتظر بضع دقائق ثم حاول مرة أخرى.';
+
+  @override
+  String get onboardingSetupTitle => 'إعداد Omi الخاص بك';
+
+  @override
+  String get onboardingSetupSubtitle => 'امنح Omi لحظة للتخصيص';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'تجهيز مساحة عملك';
+
+  @override
+  String get onboardingSetupStepLanguage => 'ضبط النسخ النصي على لغتك';
+
+  @override
+  String get onboardingSetupStepMemory => 'إعداد ذاكرتك';
+
+  @override
+  String get onboardingSetupStepDevices => 'توصيل أجهزتك';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'تخصيص تجربتك';
+
+  @override
+  String get onboardingRatingPromptTitle => 'بينما تنتظر، هل كان استخدام Omi ممتعًا؟';
+
+  @override
+  String get onboardingRatingPromptBody => 'تقييمك لنا بخمس نجوم يساعدنا كثيرًا ❤️';
+
+  @override
+  String get onboardingRatingPromptYes => 'نعم، أريد أن أدعمكم!';
+
+  @override
+  String get onboardingRatingPromptNo => 'ليس تمامًا';
 }

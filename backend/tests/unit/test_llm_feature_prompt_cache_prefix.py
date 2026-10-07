@@ -48,7 +48,7 @@ def _breakpoint(message):
 
 def _notes_call(monkeypatch, *, transcript: str, started_at: datetime, tz: str, language: str = 'en'):
     from utils.llm import conversation_processing as conv_proc
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     captured: dict = {}
 
@@ -126,7 +126,7 @@ def test_conv_structure_static_prefix_is_byte_identical_across_per_call_inputs(m
 
 
 def test_memories_static_prefix_is_byte_identical_across_transcripts():
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
     from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
 
     captured: list = []
@@ -180,7 +180,7 @@ def test_memories_static_prefix_is_byte_identical_across_transcripts():
 
 def test_conv_apps_prefix_path_static_instructions_are_byte_identical_across_conversations(monkeypatch):
     from utils.llm import conversation_processing as conv_proc
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     recorded: list[dict] = []
     long_task = 'summarize the meeting and list every decision. ' * 120
