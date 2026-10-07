@@ -1133,11 +1133,14 @@ def rotate_refresh_token(
         transaction.set(grant_ref, {"last_used_at": now}, merge=True)
         return _token_pair_response(access_token, new_refresh_token, requested_scopes)
 
+    # Typed-unbound fix: every loop exit either breaks with a result or re-raises,
+    # so None can never actually flow out of the retry loop.
+    token_pair: Optional[Dict[str, Any]] = None
     for attempt in range(3):
         try:
             # Disable the SDK's same-transaction Aborted retries; this boundary
             # owns the three-attempt budget and always starts a fresh object.
-            token_pair: Optional[Dict[str, Any]] = _rotate(db.transaction(max_attempts=1))
+            token_pair = _rotate(db.transaction(max_attempts=1))
             break
         except (InvalidArgument, Aborted, ServiceUnavailable, DeadlineExceeded, ValueError) as error:
             # Firestore wraps exhausted Aborted commits in ValueError.
