@@ -240,32 +240,6 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-/// Fetch calendar events in [start, end] that have no recorded conversation.
-/// Returns capture-gap rows (never conversations) and whether the read
-/// answered, so a failed read is not read as "nothing to show".
-Future<({List<CalendarCaptureGap> items, bool ok})> getCalendarCaptureGaps({
-  required DateTime start,
-  required DateTime end,
-}) async {
-  final url =
-      '${Env.apiBaseUrl}v1/calendar/capture-gaps?start=${start.toUtc().toIso8601String()}&end=${end.toUtc().toIso8601String()}';
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return (items: const <CalendarCaptureGap>[], ok: false);
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    final gaps = (jsonDecode(body) as List<dynamic>)
-        .map(
-          (row) =>
-              CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>)),
-        )
-        .toList();
-    return (items: gaps, ok: true);
-  }
-  debugPrint('getCalendarCaptureGaps: ${response.statusCode} - ${response.body}');
-  // 400 means no connected calendar — nothing was captured, so nothing to show.
-  return (items: const <CalendarCaptureGap>[], ok: response.statusCode == 400);
-}
-
 Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',

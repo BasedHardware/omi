@@ -9980,11 +9980,6 @@ class AppLocalizationsCa extends AppLocalizations {
       'L\'emmagatzematge del Pendant és ple i encara està en mode de gravació, així que l\'àudio desat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'No enregistrat ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Perfil de veu de $name';
   }
