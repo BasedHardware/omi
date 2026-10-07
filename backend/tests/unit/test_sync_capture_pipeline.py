@@ -239,6 +239,9 @@ def test_empty_retry_event_carries_bounded_correlation(pipeline, caplog, second_
         )
     retry_events = [r.getMessage() for r in caplog.records if 'sync_transcription_empty_retry' in r.getMessage()]
     expected = ['started', {'words': 'recovered', 'empty': 'still_empty'}.get(second_pass)]
+    if second_pass == 'words':
+        # A recovered segment must confirm persistence with durable_recovered.
+        expected.append('durable_recovered')
     if expected[1] is None:
         expected.pop()
         assert outcome['phase'] == 'provider_call' and outcome['exception_type'] == 'RuntimeError'
