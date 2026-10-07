@@ -392,3 +392,5 @@ tests/unit/test_shaped_agent.py::test_notes_transport_is_owned_per_worker_loop
 # First sync journey test in the file pays the utils.sync.pipeline import under file
 # isolation. Measured 0.38s CPU quiet and 0.62s during pre-push (2026-10-07).
 tests/unit/test_mobile_client_journeys.py::test_sync_visible_conversation_accepts_conversation_finalization_once
+# First test in file amortizes utils.retrieval.tools.conversation_tools / langchain import graph into its call.
+tests/unit/test_person_deserialization_llm_retrieval.py::TestPersonDeserializationLLMRetrieval::test_conversation_tools_get_conversations_safe_person_deserialization
