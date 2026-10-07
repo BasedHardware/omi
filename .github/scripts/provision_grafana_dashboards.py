@@ -104,21 +104,28 @@ def main() -> int:
             failures.append(f"{label}: POST returned {body}")
             continue
 
+        # Read-back guards against silent no-ops. Assert the served version
+        # is >= the POSTed version (equality is too strict: a concurrent
+        # legitimate save in the UI advances the version past ours, which is
+        # still proof the board is live and writable). A 404 during
+        # propagation is retried, not fatal.
         served_version = None
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             try:
                 served_version = _get_dashboard(base, token, uid).get("version")
             except urllib.error.HTTPError as exc:
+                if exc.code == 404 and time.monotonic() < deadline - 5:
+                    time.sleep(1.5)
+                    continue
                 failures.append(f"{label}: read-back failed HTTP {exc.code}")
                 break
-            # Grafana may briefly serve the previous version after the POST.
-            if served_version == body.get("version"):
+            if isinstance(served_version, int) and served_version >= body.get("version", 0):
                 break
             time.sleep(1.5)
-        if served_version != body.get("version"):
+        if not isinstance(served_version, int) or served_version < body.get("version", 0):
             failures.append(
-                f"{label}: read-back version {served_version} != POST version {body.get('version')}"
+                f"{label}: read-back version {served_version} did not advance past POST version {body.get('version')}"
             )
             continue
         print(f"OK {label}: uid={uid} version={served_version}")
