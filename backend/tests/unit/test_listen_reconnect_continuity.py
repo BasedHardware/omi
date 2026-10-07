@@ -1,17 +1,23 @@
 """Replays of the stable-client-ID reconnect shape, through real lifecycle decisions."""
 
 from copy import deepcopy
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from database import listen_continuations
+from models.calendar_context import CalendarMeetingContext
+from models.conversation import Conversation
+from models.structured import Structured
+from models.transcript_segment import TranscriptSegment
 from routers.listen import conversations as controller_module
 from routers.listen.conversations import LiveConversationController
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.conversations import process_conversation as pc
 
 
 @pytest.fixture
@@ -132,6 +138,76 @@ class CaptureHarness:
         controller = LiveConversationController(host, clock=lambda: self.now)
         controller.on_conversation_processed = lambda cid: None
         return controller
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('title_fields', [{'title': 'Planning sync'}, {}, {'title': None}, {'title': ''}])
+async def test_live_meeting_stamp_reaches_finalization_and_meeting_aware_summary(monkeypatch, title_fields):
+    harness = CaptureHarness(monkeypatch)
+    harness.meetings = [
+        {
+            'id': 'meeting-doc',
+            'calendar_event_id': 'event-1',
+            'calendar_source': 'system_calendar',
+            'start_time': harness.now - timedelta(minutes=30),
+            'end_time': harness.now + timedelta(minutes=30),
+            'duration_minutes': 60,
+            **title_fields,
+        }
+    ]
+    controller = harness.connect()
+    await controller.prepare()
+    row = harness.rows[controller.host.state.current_conversation_id]
+    expected_title = title_fields.get('title') or ''
+    stamped = CalendarMeetingContext(**row['external_data']['calendar_meeting_context'])
+    assert stamped.title == expected_title
+    assert row['external_data']['calendar_meeting_context']['end_time'] == harness.meetings[0]['end_time']
+
+    # Re-load the persisted live row as finalization does, with enough captured speech.
+    conversation = Conversation(**row)
+    conversation.finished_at = harness.now + timedelta(minutes=6)
+    conversation.transcript_segments = [
+        TranscriptSegment(
+            id='seg-1',
+            text='We agreed to launch the project next week and review progress on Friday.',
+            speaker='SPEAKER_00',
+            speaker_id=0,
+            is_user=True,
+            start=0,
+            end=360,
+        )
+    ]
+    assert pc._stored_meeting_context(conversation) == stamped
+    # The stamp must stand on its own even without a subsequent provider read.
+    monkeypatch.setattr(pc, '_stored_meeting_lookup_enabled', lambda: False)
+    monkeypatch.setattr(pc, '_calendar_context_read_enabled', lambda: False)
+    monkeypatch.setattr(pc, '_ocr_meeting_context_enabled', lambda: False)
+    pc._enrich_meeting_context('u', conversation)
+    assert pc._stored_meeting_context(conversation) == stamped
+
+    monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
+    monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+    transcript = conversation.transcript_segments[0].text
+    monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *args: (transcript, transcript, {0: 'David'}))
+    monkeypatch.setattr(pc, 'track_usage', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(pc, '_conversation_notes_v2_enabled', lambda: True)
+    monkeypatch.setattr(pc, '_meeting_notes_episode_evidence_enabled', lambda uid: False)
+    monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: False)
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *args: [])
+    monkeypatch.setattr(pc, 'submit_relevance_shadow', lambda **kwargs: None)
+    notes = Mock(return_value=Structured(title='Project launch', overview='Launch next week; review on Friday.'))
+    monkeypatch.setattr(pc, 'get_conversation_notes', notes)
+    prefix_builder = Mock(wraps=pc.build_conversation_prompt_prefix)
+    monkeypatch.setattr(pc, 'build_conversation_prompt_prefix', prefix_builder)
+
+    structured, discarded = pc._get_structured('u', 'en', conversation, user_kept=True)
+
+    assert not discarded
+    assert structured.title == 'Project launch'
+    assert structured.overview
+    assert prefix_builder.call_args.kwargs['calendar_context'] == stamped
+    notes.assert_called_once()
+    assert f'- Meeting title: {expected_title}' in notes.call_args.args[0].context
 
 
 @pytest.mark.anyio

@@ -12,6 +12,10 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
+The live calendar stamp includes the meeting title (an empty string when absent)
+so it is a valid `CalendarMeetingContext` for finalization and summarization even
+when its scheduled window makes continuity hydration unnecessary.
+
 Live calendar-backed conversations with content retain their conversation across
 silence until the stored `external_data.calendar_meeting_context.start_time` +
 `duration_minutes` + 120 seconds of grace. The stored calendar event id owns this

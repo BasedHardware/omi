@@ -510,6 +510,9 @@ class LiveConversationController:
                 for key in ('calendar_event_id', 'calendar_source', 'start_time', 'end_time', 'duration_minutes')
                 if key in meeting
             }
+            # Finalization parses the stamp as CalendarMeetingContext even when
+            # its window means continuity hydration has nothing left to fetch.
+            external_data['calendar_meeting_context']['title'] = meeting.get('title') or ''
         conversation = Conversation(
             id=conversation_id,
             created_at=self.clock(),
