@@ -917,6 +917,9 @@ def test_provider_internal_error_stays_terminal(monkeypatch):
 async def test_proxy_reports_upstream_unavailable_as_retryable(monkeypatch):
     """The whole non-stream route, from dispatch to the headers the client sees."""
 
+    async def passthrough(_request, awaitable):
+        return await awaitable
+
     class UnavailableClient:
         async def post(self, *args, **kwargs):
             return httpx.Response(
@@ -929,12 +932,23 @@ async def test_proxy_reports_upstream_unavailable_as_retryable(monkeypatch):
         return path
 
     async def route(path, _model, _action, _query, **_kwargs):
-        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "ai_studio", "server_key", "global")
+        return desktop_proxy.UpstreamRoute(
+            f"https://generativelanguage.googleapis.com/v1beta/{path}",
+            {},
+            {"key": "user-key"},
+            "ai_studio_byok",
+            "byok",
+            "global",
+        )
 
     monkeypatch.setattr(desktop_proxy.sys, "stdout", io.StringIO())
     _set_gemini_byok(monkeypatch, 'user-key')
     monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
     monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    # This test checks provider error mapping, not request-disconnect polling.
+    # A bare synthetic Request has no disconnect event, so keep the transport
+    # cancellation seam deterministic as in the neighboring route tests.
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", passthrough)
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_client", lambda: UnavailableClient())
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
 
