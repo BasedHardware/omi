@@ -23,6 +23,9 @@ def _stub_phone_call_plan_guards(monkeypatch):
         MagicMock(return_value=SimpleNamespace(has_access=True, is_paid=False, max_duration_seconds=None)),
     )
     monkeypatch.setattr('routers.phone_calls.check_destination_allowed', MagicMock())
+    from utils.other.endpoints import cached
+
+    cached.clear()
 
 
 def _make_app():
@@ -198,6 +201,67 @@ def test_check_verification_no_pending_record(mock_check, mock_db, client):
     assert resp.status_code == 200
     assert resp.json()['verified'] is False
     mock_db.upsert_phone_number.assert_not_called()
+
+
+@patch('routers.phone_calls.phone_calls_db')
+@patch('routers.phone_calls.start_caller_id_verification')
+def test_verify_phone_number_sanitizes_twilio_exception(mock_start, mock_db, client):
+    from twilio.base.exceptions import TwilioRestException
+
+    mock_db.get_phone_number_by_number.return_value = None
+    sensitive_token = "dummy_secret_auth_token_9876543210"
+    mock_start.side_effect = TwilioRestException(
+        status=500,
+        uri="https://api.twilio.com",
+        code=50000,
+        msg=f"Internal Twilio failure with credentials {sensitive_token}",
+    )
+
+    with patch('routers.phone_calls.logger.error') as mock_logger:
+        resp = client.post('/v1/phone/numbers/verify', json={'phone_number': '+15551234567'})
+        assert resp.status_code == 500
+        assert resp.json()['detail'] == "Failed to start verification. Please try again later."
+        assert sensitive_token not in resp.text
+        mock_logger.assert_called_once()
+        log_msg = mock_logger.call_args[0][0]
+        assert sensitive_token not in log_msg  # sanitized by sanitize()
+
+
+@patch('routers.phone_calls.phone_calls_db')
+@patch('routers.phone_calls.start_caller_id_verification')
+def test_verify_phone_number_sanitizes_generic_exception(mock_start, mock_db, client):
+    mock_db.get_phone_number_by_number.return_value = None
+    sensitive_db_url = "postgres://root:supersecretpass123@db.internal:5432/omi"
+    mock_start.side_effect = RuntimeError(f"Database error at {sensitive_db_url}")
+
+    with patch('routers.phone_calls.logger.error') as mock_logger:
+        resp = client.post('/v1/phone/numbers/verify', json={'phone_number': '+15551234567'})
+        assert resp.status_code == 500
+        assert resp.json()['detail'] == "Failed to start verification. Please try again later."
+        assert "supersecretpass123" not in resp.text
+        mock_logger.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/phone/token
+# ---------------------------------------------------------------------------
+
+
+@patch('routers.phone_calls.phone_calls_db')
+@patch('routers.phone_calls.generate_access_token')
+def test_get_phone_token_sanitizes_exception(mock_generate, mock_db, client):
+    mock_db.get_primary_phone_number.return_value = {'phone_number': '+15551234567'}
+    sensitive_key = "dummy_service_account_secret_12345678"
+    mock_generate.side_effect = RuntimeError(f"Twilio token generation crashed with auth {sensitive_key}")
+
+    with patch('routers.phone_calls.logger.error') as mock_logger:
+        resp = client.post('/v1/phone/token')
+        assert resp.status_code == 500
+        assert resp.json()['detail'] == "Failed to generate token. Please try again later."
+        assert sensitive_key not in resp.text
+        mock_logger.assert_called_once()
+        log_msg = mock_logger.call_args[0][0]
+        assert sensitive_key not in log_msg
 
 
 # ---------------------------------------------------------------------------
