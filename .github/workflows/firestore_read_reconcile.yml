@@ -41,7 +41,7 @@ jobs:
       # aborts. Authorize the account layer from the WIF-minted credential
       # file, exactly as a key file would be.
       - name: Credential the gcloud account layer for bq
-        run: gcloud auth login --cred-file="$GOOGLE_APPLICATION_CREDENTIALS"
+        run: gcloud auth login --cred-file="$GOOGLE_APPLICATION_CREDENTIALS" --force
 
       - name: Reconcile closed UTC day
         env:
