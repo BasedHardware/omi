@@ -40,6 +40,11 @@ void sd_request_power(bool on);
 
 uint32_t write_to_file(uint8_t *data, uint32_t length);
 
+/* Synchronous durable frame commit in the batch ring. Success includes media
+ * sync of audio + metadata. captured_s may have bit 31 set for unsynced uptime. */
+int sd_ring_write_retained(const uint8_t *payload, uint32_t captured_s);
+bool sd_retention_ready(void);
+
 int sd_ring_get_info(sd_ring_info_t *info);
 int sd_ring_read(uint64_t start_seq, uint8_t *buf, uint32_t max_bytes, uint32_t *bytes_read, uint32_t *packets_read);
 int sd_ring_advance(uint64_t new_read_seq);

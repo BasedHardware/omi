@@ -1,0 +1,3 @@
+---
+BasedOnStyle: InheritParentConfig
+Standard: c++20

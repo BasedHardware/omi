@@ -356,6 +356,15 @@ int main(void)
 #endif
 
         set_led_state();
+#ifdef CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET
+        /* Charger changes are owned by the existing battery worker. Notify only
+         * on transitions; the AAD worker remains event-driven during silence. */
+        static bool aad_was_charging;
+        if (aad_was_charging != is_charging) {
+            aad_was_charging = is_charging;
+            mic_aad_policy_changed();
+        }
+#endif
         k_msleep(1000);
     }
 

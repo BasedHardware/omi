@@ -16,23 +16,26 @@
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/random/random.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/ring_buffer.h>
 
 #include "accel.h"
 #include "button.h"
 #include "config.h"
+#include "connected_retention.h"
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
 #endif
+#include "lib/core/sd_card.h"
+#include "lib/core/storage.h"
 #include "rtc.h"
-#include "sd_card.h"
 #include "settings.h"
-#include "storage.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -42,7 +45,6 @@ static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
 extern bool storage_is_on;
-static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
@@ -50,8 +52,86 @@ extern bool is_connected;
 extern bool is_charging;
 #endif
 static atomic_t pusher_stop_flag;
+static atomic_t audio_connected;
+static atomic_t audio_subscribed;
+static uint32_t capture_boot_id; /* exposed alongside capability; stable until reset */
+static atomic_t audio_live_mode; /* 0: continuous (safe default); 1: live AAD */
+
+bool transport_audio_connected(void)
+{
+    return atomic_get(&audio_connected) != 0;
+}
+
+bool transport_is_audio_subscribed(void)
+{
+    return transport_audio_connected() && atomic_get(&audio_subscribed) != 0;
+}
+
+bool transport_audio_live_mode(void)
+{
+    return atomic_get(&audio_live_mode) != 0;
+}
+
+#if defined(CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET) || defined(CONFIG_OMI_ENABLE_CONNECTED_RETENTION)
+/* Draft session mode, appended to audio service without shifting audio attrs.
+ * Never persist the mode selection: a reconnect must opt in again, protecting batch
+ * writers that use the same audio CCC as live transcription. */
+static struct bt_uuid_128 audio_capture_mode_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10004, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t
+capture_mode_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    uint8_t mode = transport_audio_live_mode() ? 1 : 0;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &mode, sizeof(mode));
+}
+
+static ssize_t capture_mode_write(struct bt_conn *conn,
+                                  const struct bt_gatt_attr *attr,
+                                  const void *buf,
+                                  uint16_t len,
+                                  uint16_t offset,
+                                  uint8_t flags)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(attr);
+    if (offset != 0 || (flags & BT_GATT_WRITE_FLAG_PREPARE)) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+    if (len != 1) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    uint8_t mode = *(const uint8_t *) buf;
+    if (mode > 1) {
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+    atomic_set(&audio_live_mode, mode);
+    mic_aad_policy_changed();
+    return len;
+}
+#endif
 
 struct bt_conn *current_connection = NULL;
+static struct k_spinlock audio_connection_lock;
+
+/* Pusher holds this reference across SD commits. Detach on disconnect under
+ * the same lock so a concurrent phone pause/reconnect cannot ref freed memory. */
+static struct bt_conn *audio_connection_ref(void)
+{
+    k_spinlock_key_t key = k_spin_lock(&audio_connection_lock);
+    struct bt_conn *conn = current_connection ? bt_conn_ref(current_connection) : NULL;
+    k_spin_unlock(&audio_connection_lock, key);
+    return conn;
+}
+
+static struct bt_conn *audio_connection_detach(void)
+{
+    k_spinlock_key_t key = k_spin_lock(&audio_connection_lock);
+    struct bt_conn *conn = current_connection;
+    current_connection = NULL;
+    k_spin_unlock(&audio_connection_lock, key);
+    return conn;
+}
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
 
@@ -166,6 +246,14 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
 #endif
 
+#if defined(CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET) || defined(CONFIG_OMI_ENABLE_CONNECTED_RETENTION)
+    BT_GATT_CHARACTERISTIC(&audio_capture_mode_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT,
+                           capture_mode_read,
+                           capture_mode_write,
+                           NULL),
+#endif
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
@@ -310,6 +398,12 @@ static const struct bt_data bt_sd[] = {
 
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
+    /* This callback also serves the optional speaker CCC; only audio owns
+     * capture policy. Zephyr passes the CCC attribute at index 3. */
+    if (attr == &audio_service.attrs[3]) {
+        atomic_set(&audio_subscribed, value == BT_GATT_CCC_NOTIFY);
+        mic_aad_policy_changed();
+    }
     if (value == BT_GATT_CCC_NOTIFY) {
         LOG_INF("Client subscribed for notifications");
     } else if (value == 0) {
@@ -490,7 +584,15 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
     // Mic gain control is always enabled.
     features |= OMI_FEATURE_MIC_GAIN;
 
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &features, sizeof(features));
+    /* Existing performGetFeatures reads only the first LE uint32. Byte 4 is
+     * an independent capability namespace; no feature bits are overloaded. */
+    uint8_t payload[9] = {0};
+    sys_put_le32(features, payload);
+    sys_put_le32(capture_boot_id, payload + 5);
+#ifdef CONFIG_OMI_ENABLE_CONNECTED_RETENTION
+    payload[4] = cq_capability(true, sd_retention_ready());
+#endif
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, payload, sizeof(payload));
 }
 
 // --- MTU Update Callback ---
@@ -605,7 +707,11 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     }
 
     LOG_INF("bluetooth activated");
+    atomic_clear(&audio_live_mode);
+    atomic_clear(&audio_subscribed);
+    k_spinlock_key_t connection_key = k_spin_lock(&audio_connection_lock);
     current_connection = bt_conn_ref(conn);
+    k_spin_unlock(&audio_connection_lock, connection_key);
     uint16_t mtu = bt_gatt_get_mtu(conn);
     current_mtu = mtu;
 
@@ -614,6 +720,12 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
      * it is mounted well before the app fires its one-shot sync command. */
     sd_request_power(true);
 #endif
+
+    /* Publish policy only after the connection and SD power request exist.
+     * A reconnect can wake offline AAD immediately: its first PCM must not
+     * reach an unpowered SD while current_connection is still NULL. */
+    atomic_set(&audio_connected, 1);
+    mic_aad_policy_changed();
 
     LOG_INF("Transport connected");
 
@@ -672,6 +784,10 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     mtu_recheck_attempts = 0;
 
     is_connected = false;
+    atomic_clear(&audio_connected);
+    atomic_clear(&audio_subscribed);
+    atomic_clear(&audio_live_mode);
+    mic_aad_policy_changed();
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         shell_bt_nus_disable();
@@ -690,9 +806,9 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 
     LOG_INF("Transport disconnected");
 
-    if (current_connection != NULL) {
-        bt_conn_unref(current_connection);
-        current_connection = NULL;
+    struct bt_conn *previous_connection = audio_connection_detach();
+    if (previous_connection) {
+        bt_conn_unref(previous_connection);
     }
     current_mtu = 0;
     charging_status_last_notified = -1;
@@ -971,7 +1087,7 @@ static int ensure_local_ble_identity(void)
 //
 
 #define NET_BUFFER_HEADER_SIZE 3
-#define RING_BUFFER_HEADER_SIZE 2
+#define RING_BUFFER_HEADER_SIZE 10 /* length:u16 + codec-capture clock:u64 */
 static uint8_t tx_queue[NETWORK_RING_BUF_SIZE * (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)];
 static uint8_t tx_buffer[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
 static uint8_t tx_buffer_2[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
@@ -986,13 +1102,18 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     monitor_inc_tx_queue_write();
 #endif
 
-    if (size > CODEC_OUTPUT_MAX_BYTES) {
+    if (size == 0 || size > CODEC_OUTPUT_MAX_BYTES) {
         return false;
     }
 
     // Copy data (TODO: Avoid this copy)
     tx_buffer_2[0] = size & 0xFF;
     tx_buffer_2[1] = (size >> 8) & 0xFF;
+    uint64_t captured_ms = rtc_get_utc_time_ms();
+    if (!captured_ms) {
+        captured_ms = (uint64_t) k_uptime_get() | (UINT64_C(1) << 63);
+    }
+    memcpy(tx_buffer_2 + 2, &captured_ms, sizeof(captured_ms));
     memcpy(tx_buffer_2 + RING_BUFFER_HEADER_SIZE, data, size);
 
     // Write to ring buffer
@@ -1057,7 +1178,14 @@ void transport_bulk_tx_release(void)
 // Thread
 K_THREAD_STACK_DEFINE(pusher_stack, 4096);
 static struct k_thread pusher_thread;
+/* Fragment IDs cover every real frame, including retained-only audio. AAD
+ * sleep samples no frames; wake and reconnect never reset these counters.
+ * Natural uint16 wrap is unchanged. CQ01 also carries a boot-scoped u64 frame
+ * counter so the phone can resolve long retained gaps and fragment wraps. */
 static uint16_t packet_next_index = 0;
+static struct cq_frame current_frame;
+static uint16_t current_fragment_payload;
+static uint64_t capture_next_sequence;
 
 // Define buffer sizes based on configuration and potential MTU
 #define MAX_POSSIBLE_MTU 517
@@ -1072,14 +1200,16 @@ static bool push_to_gatt(struct bt_conn *conn)
     const int max_retries = 3;
 
     while (offset < tx_buffer_size) {
-        uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+        uint32_t packet_size = MIN(current_fragment_payload, tx_buffer_size - offset);
 
-        // Block until a throttle slot is available. This preserves every audio
-        // packet while still guaranteeing AUDIO_TX_RESERVED_SLOTS remain free
-        // for battery/diagnostic/status notifications at all times.
-        k_sem_take(&audio_tx_sem, K_FOREVER);
+        // Bound the live-send attempt. Retention owns the durable copy; a
+        // stalled central must not prevent the pusher from consuming more audio.
+        // Reserved slots still remain free for short control notifications.
+        if (k_sem_take(&audio_tx_sem, K_NO_WAIT) != 0) {
+            return false; /* Keep pusher draining into SD when the central stalls. */
+        }
 
-        uint32_t id = packet_next_index++;
+        uint32_t id = (uint16_t) (current_frame.first_fragment + index);
         pusher_temp_data[0] = id & 0xFF;
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
@@ -1132,14 +1262,16 @@ static bool push_to_gatt(struct bt_conn *conn)
 
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
-static uint32_t offset = 0;
+/* Preserve partial SD packet assembly across AAD. SD's own write_seq/read_seq
+ * and WAL advance only on real writes. Its packet timestamps use get_utc_time()
+ * at write time, so a sleep creates a wall-clock gap, never synthesized audio. */
 static uint16_t buffer_offset = 0;
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 bool write_to_storage(void)
 {
-    uint8_t *buffer = tx_buffer + 2;
+    uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
 
     // buffer_offset = buffer_offset+amount_to_fill;
@@ -1148,7 +1280,9 @@ bool write_to_storage(void)
 
         storage_temp_data[buffer_offset] = tx_buffer_size;
         uint8_t *write_ptr = storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
+        if (write_to_file(write_ptr, MAX_WRITE_SIZE) != MAX_WRITE_SIZE) {
+            return false;
+        }
 
         buffer_offset = packet_size;
         storage_temp_data[0] = tx_buffer_size;
@@ -1158,9 +1292,11 @@ bool write_to_storage(void)
         // exact frame needed
         storage_temp_data[buffer_offset] = tx_buffer_size;
         memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
-        buffer_offset = 0;
         uint8_t *write_ptr = (uint8_t *) storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
+        if (write_to_file(write_ptr, MAX_WRITE_SIZE) != MAX_WRITE_SIZE) {
+            return false;
+        }
+        buffer_offset = 0;
     } else {
         storage_temp_data[buffer_offset] = tx_buffer_size;
         memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
@@ -1174,42 +1310,44 @@ bool write_to_storage(void)
 }
 #endif
 
-static bool use_storage = true;
-#define MAX_FILES 10
-#define MAX_AUDIO_FILE_SIZE 300000
-static int recent_file_size_updated = 0;
-static uint8_t heartbeat_count = 0;
-
-void test_pusher(void)
+static int retain_current_frame(void *context, bool durable)
 {
-    uint32_t runs_count = 0;
-    while (1) {
-        k_sleep(K_MSEC(1));
-        struct bt_conn *conn = current_connection;
-        if (conn) {
-            conn = bt_conn_ref(conn);
-        }
-        bool valid = true;
-        if (current_mtu < MINIMAL_PACKET_SIZE) {
-            valid = false;
-        } else if (!conn) {
-            valid = false;
-        } else if (runs_count % 100 == 0) {
-            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
-        }
-        if (valid) {
-            // Expected 100 packages per seconds
-            bool sent = push_to_gatt(conn);
-            if (!sent) {
-                // k_sleep(K_MSEC(50));
+    ARG_UNUSED(context);
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    if (durable) {
+        /* Publish any older legacy partial packet first. No padding from an
+         * earlier packet may become phantom Opus frames. */
+        if (buffer_offset) {
+            memset(storage_temp_data + buffer_offset, 0, MAX_WRITE_SIZE - buffer_offset);
+            if (write_to_file(storage_temp_data, MAX_WRITE_SIZE) != MAX_WRITE_SIZE) {
+                return -EAGAIN;
             }
+            buffer_offset = 0;
         }
-        if (conn) {
-            bt_conn_unref(conn);
+        uint8_t payload[CQ_PAYLOAD_BYTES];
+        int err = cq_pack(payload, tx_buffer + RING_BUFFER_HEADER_SIZE, tx_buffer_size, &current_frame);
+        if (err) {
+            return err;
         }
-        runs_count++;
-        k_yield();
+        uint32_t captured_s = (uint32_t) (current_frame.captured_ms / 1000U);
+        if (current_frame.flags & 1U) {
+            captured_s |= 0x80000000U;
+        }
+        return sd_ring_write_retained(payload, captured_s);
     }
+    if (is_sd_on()) {
+        return write_to_storage() ? 0 : -EAGAIN;
+    }
+    return -EAGAIN;
+#else
+    ARG_UNUSED(durable);
+    return 0; /* Storage absent: capability byte stays zero; phone must not pause. */
+#endif
+}
+
+static int notify_current_frame(void *context)
+{
+    return push_to_gatt(context) ? 0 : -EAGAIN;
 }
 
 void pusher(void)
@@ -1222,33 +1360,47 @@ void pusher(void)
         }
 
         while (read_from_tx_queue()) {
-            struct bt_conn *conn = current_connection;
+            struct bt_conn *conn = audio_connection_ref();
             bool is_subscribed = false;
             if (conn) {
-                conn = bt_conn_ref(conn);
                 if (current_mtu >= MINIMAL_PACKET_SIZE) {
                     is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
                 }
             }
+            /* Reserve IDs for the whole encoded frame before selecting its
+             * destination. Stored-only frames consume exactly the same IDs;
+             * retry/CCC changes do not allocate again. Account for ATT's 3 bytes. */
+            uint16_t mtu = current_mtu >= MINIMAL_PACKET_SIZE ? current_mtu : MINIMAL_PACKET_SIZE;
+            current_fragment_payload = mtu - 3U - NET_BUFFER_HEADER_SIZE;
+            current_frame.first_fragment = packet_next_index;
+            current_frame.fragments = (tx_buffer_size + current_fragment_payload - 1U) / current_fragment_payload;
+            packet_next_index += current_frame.fragments;
+            current_frame.sequence = capture_next_sequence++;
+            current_frame.boot_id = capture_boot_id;
+            memcpy(&current_frame.captured_ms, tx_buffer + 2, sizeof(current_frame.captured_ms));
+            current_frame.flags = (current_frame.captured_ms >> 63) ? 1U : 0U;
+            current_frame.captured_ms &= ~(UINT64_C(1) << 63);
 
-            if (conn && is_subscribed) {
-                push_to_gatt(conn);
-                bt_conn_unref(conn);
-            } else if (!conn) {
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-                if (is_sd_on()) {
-                    storage_full_warned = false;
-                    write_to_storage();
-                } else {
-                    if (!storage_full_warned) {
-                        LOG_WRN("Offline storage unavailable");
-                        storage_full_warned = true;
-                    }
+            struct cq_inputs inputs = {
+                .enabled = IS_ENABLED(CONFIG_OMI_ENABLE_CONNECTED_RETENTION),
+                .connected = conn != NULL,
+                .subscribed = is_subscribed,
+                .live = transport_audio_live_mode(),
+                .quiet = transport_audio_live_mode() && mic_in_aad_sleep(),
+            };
+            int err;
+            while ((err = cq_route(&inputs, retain_current_frame, notify_current_frame, conn)) != 0) {
+                LOG_ERR("Audio retention failed (%d); holding frame %llu for retry",
+                        err,
+                        (unsigned long long) current_frame.sequence);
+                if (atomic_get(&pusher_stop_flag)) {
+                    break;
                 }
-#endif
-            } else {
+                /* Do not discard the failed frame or claim a successful store. */
+                k_msleep(20);
+            }
+            if (conn) {
                 bt_conn_unref(conn);
-                k_sleep(K_MSEC(10));
             }
         }
     }
@@ -1267,10 +1419,10 @@ int transport_off()
     }
 
     // First disconnect any active connections
-    if (current_connection != NULL) {
-        bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-        bt_conn_unref(current_connection);
-        current_connection = NULL;
+    struct bt_conn *previous_connection = audio_connection_detach();
+    if (previous_connection) {
+        bt_conn_disconnect(previous_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        bt_conn_unref(previous_connection);
     }
 
     // Stop advertising
@@ -1308,6 +1460,9 @@ int transport_off()
 int transport_start()
 {
     int err = 0;
+    if (capture_boot_id == 0) {
+        capture_boot_id = sys_rand32_get() | 1U;
+    }
 
     // Pull the nfsw control high
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL

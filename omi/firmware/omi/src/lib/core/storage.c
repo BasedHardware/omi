@@ -12,6 +12,7 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
 
+#include "connected_retention.h"
 #include "rtc.h"
 #include "sd_card.h"
 #include "transport.h"
@@ -119,6 +120,7 @@ static uint64_t pending_start_seq;
 static uint32_t pending_packet_count;
 static uint64_t pending_advance_seq;
 
+static bool retained_transfer; /* requires explicit app ADVANCE, not BLE TX completion */
 static bool transfer_active;
 static bool read_begin_sent;
 static bool done_pending;
@@ -370,6 +372,7 @@ static int send_ring_info_response(struct bt_conn *conn)
 static void reset_transfer_state(void)
 {
     transfer_active = false;
+    retained_transfer = false;
     read_begin_sent = false;
     done_pending = false;
     transfer_start_seq = 0;
@@ -413,6 +416,9 @@ static void sync_status_account_freed(uint64_t delta)
  * pointer is persisted before the transfer tears down. */
 static void sync_checkpoint_advance(bool force)
 {
+    if (retained_transfer) {
+        return; /* Phone persists a WAL before CMD_RING_ADVANCE. */
+    }
     uint64_t confirmed = sync_confirmed_seq();
     if (confirmed <= sync_checkpoint_seq) {
         return;
@@ -475,6 +481,7 @@ static int start_pending_read(struct bt_conn *conn)
     }
 
     transfer_active = true;
+    retained_transfer = false;
     read_begin_sent = false;
     done_pending = false;
     transfer_start_seq = pending_start_seq;
@@ -559,6 +566,15 @@ static void write_to_gatt(struct bt_conn *conn)
             return;
         }
 
+        /* Identify retained records before their first DATA notification so
+         * a concurrent disconnect cannot reclaim them based on TX callbacks. */
+        for (uint32_t i = 0; i < packets_read; ++i) {
+            struct cq_frame frame;
+            if (cq_unpack(storage_buffer + i * RAW_AUDIO_PACKET_BYTES + RAW_AUDIO_TIMESTAMP_BYTES, &frame)) {
+                retained_transfer = true;
+                break;
+            }
+        }
         uint32_t bytes_sent = 0;
         while (bytes_sent < bytes_read) {
             if (consume_stop_request()) {

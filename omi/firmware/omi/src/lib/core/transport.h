@@ -38,6 +38,12 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size);
  */
 struct bt_conn *get_current_connection();
 
+/* Atomic audio-policy snapshot; avoids borrowing current_connection across
+ * the AAD worker and BLE callbacks. Continuous mode is the safe session default. */
+bool transport_audio_connected(void);
+bool transport_is_audio_subscribed(void);
+bool transport_audio_live_mode(void);
+
 /**
  * @brief Acquire / release a shared BLE TX-throttle slot.
  *

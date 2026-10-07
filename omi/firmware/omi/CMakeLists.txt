@@ -5,6 +5,7 @@ enable_language(C ASM) # OPUS
 project(omi)
 
 file(GLOB app_sources
+    src/connected_retention.c
     src/main.c
     src/mic.c
     src/battery.c
@@ -18,6 +19,11 @@ file(GLOB app_sources
     src/rtc.c
     src/imu.c
 )
+
+if(CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET)
+    # Reuse the bounded pre-roll implementation from PR #14156.
+    list(APPEND app_sources src/software_vad.c)
+endif()
 
 if(CONFIG_OMI_ENABLE_T5838_AAD)
     # Hardware AAD is integrated into mic.c; t5838_aad.c is the low-level driver.

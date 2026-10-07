@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-connected-live-audio-unsubscribed-discard",
+  "status": "open",
+  "violated_contract": "While a pendant is connected and the user has not explicitly paused or powered it off, live-mode audio frames with no active GATT subscriber must be durably retained, not dropped. The pusher wrote to device storage only when no BLE connection existed or in non-live modes, so a phone-side power policy that unsubscribes the audio characteristic (tiered silence pause, background eviction) made the pendant silently discard sampled speech. Frames the user spoke were lost with no user action and no UI indication, violating INV-CAP-1.",
+  "canonical_prevention": "Commit live-mode frames to the device ring/SD writer before or regardless of GATT notification delivery whenever a connection exists but the audio CCC is absent or stalled; advertise a retention capability bit (features 19B10021 byte 4 bit 0) plus a minimum firmware version so phone-side policies can gate unsubscribe-style pauses on verified device retention; drain retained frames through the existing ring WAL INFO/READ/DATA/ADVANCE protocol and expose eviction counts instead of silently overflowing.",
+  "evidence_prs": [],
+  "scope_hints": ["omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/storage.c"]
+}
