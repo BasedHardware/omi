@@ -154,6 +154,50 @@ memory and latency rather than capability. Nobody has yet measured whether the
 model would have chosen the right tool, because the phone could not keep it alive
 long enough to ask.
 
+### FunctionGemma 270M — passes on speed, unmeasurable on accuracy
+
+The 275 MB model was already on the device, so it went first. It clears every
+performance threshold Gemma 4 E2B failed:
+
+| | Value | Threshold | |
+|---|---|---|---|
+| Engine load | **10,208 ms** | < 5 s | **2x over** |
+| Peak RSS at load | 956 MB | — | fits |
+| Peak RSS after tool phase | 1,458 MB | < 2,800 MB | fits |
+| TTFT (median) | **428 ms** | — | fine |
+| Decode | **21.4 tok/s** | >= 8 | **passes** |
+| Tool accuracy | **unmeasurable** | >= 80% | — |
+
+21.4 tok/s on a 1.6 GHz Cortex-A53 pair matches the Pi 5's published 35 tok/s
+closer than the Pi 4's 1.7, so the decode hardware is far less of a constraint
+than the earlier extrapolation assumed. **The LLM tier's problem on this phone is
+memory residency, not arithmetic.**
+
+The accuracy number does not exist yet, and the reason is specific:
+
+```
+TOOL_SUMMARY correct=0 total=15 accuracy=0.0 no_output=0
+```
+
+`no_output=0` is the load-bearing part. The model answered every case — it just
+never answered in the requested shape. Asked to reply with
+`{"tool":"<name>","arguments":{}}`, it says:
+
+> I am FunctionGemma, a model optimized for function calls. I can only assist with
+> requests...
+
+FunctionGemma is fine-tuned for a native function-calling format and refuses
+prose-format tool calling outright. Scoring that 0/15 as "wrong tool" would be
+measuring the harness, not the model.
+
+Measuring it properly means implementing LiteRT-LM's `ToolSet`, whose only method
+is name-mangled (`provideTools$third_party_odml_...`) in 0.16.0. That is a
+deliberate cost: an internal API that can change without notice, in exchange for
+the one number that decides whether the tier exists.
+
+The earlier router benchmark put FunctionGemma at 22% accuracy with 72% refusals,
+but under a different harness, so it is a prior rather than an answer.
+
 ### Vendor numbers on other hardware
 
 For reference only — none of these are the SM-A145F:
