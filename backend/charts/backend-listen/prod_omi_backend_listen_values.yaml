@@ -459,6 +459,8 @@ env:
     value: "0.08"
   - name: STT_NO_TEXT_SECONDS
     value: "30"
+  - name: STT_NO_TEXT_RESCUE_ENABLED
+    value: "true"
   - name: SONIOX_MONTHLY_CEILING_USD
     value: "10000"
   - name: SONIOX_ESTIMATED_USD_PER_HOUR

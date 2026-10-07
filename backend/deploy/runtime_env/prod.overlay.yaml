@@ -135,6 +135,9 @@ overlay:
         # clean; this commit completes the ramp at 100%.
         STT_ROUTING_ON_PERCENT:
           value: '100'
+        STT_NO_TEXT_RESCUE_ENABLED:
+          value: 'true'
+          category: rollout
         SONIOX_MONTHLY_CEILING_USD:
           value: '10000'
         # 2026-09-28: learn each user's expected languages from observed output. About 75% of
