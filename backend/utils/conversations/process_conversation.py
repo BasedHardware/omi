@@ -3566,7 +3566,7 @@ def retrieve_in_progress_conversation(uid: str) -> Optional[Dict[str, Any]]:
         existing = conversations_db.get_conversation(
             uid, conversation_id, read_site=FirestoreReadSite.PROCESS_CONVERSATION_RETRIEVE_IN_PROGRESS
         )
-        if existing and existing['status'] != 'in_progress':
+        if existing and (existing.get('status') != 'in_progress' or conversations_db.is_soft_deleted(existing)):
             existing = None
 
     if not existing:
