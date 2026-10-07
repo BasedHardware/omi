@@ -474,6 +474,10 @@ environment_shared:
       LLM_GATEWAY_ACCOUNTING_ENABLED:
         value: 'true'
         category: rollout
+      FIRESTORE_READ_LEDGER:
+        value: '1'
+      FIRESTORE_READ_LEDGER_SERVICE:
+        value: desktop-backend
     secrets:
       GEMINI_API_KEY:
         secret: GEMINI_API_KEY
