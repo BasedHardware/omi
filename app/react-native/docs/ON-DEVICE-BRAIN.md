@@ -173,30 +173,44 @@ closer than the Pi 4's 1.7, so the decode hardware is far less of a constraint
 than the earlier extrapolation assumed. **The LLM tier's problem on this phone is
 memory residency, not arithmetic.**
 
-The accuracy number does not exist yet, and the reason is specific:
+### Tool calling, measured properly — still 0%
+
+The prompted test above was unreadable: FunctionGemma answers a JSON-format request
+with "I am FunctionGemma, a model optimized for function calls. I can only assist
+with requests...", which is a refusal of the *format*, not a wrong tool. So the
+tools were registered through LiteRT-LM's native path and `Message.toolCalls` read
+directly.
+
+The registration is proven, not assumed. The benchmark logs what it hands the
+model before scoring:
 
 ```
-TOOL_SUMMARY correct=0 total=15 accuracy=0.0 no_output=0
+NATIVE_OFFERED tools=7
+NATIVE_OFFERED_SAMPLE {"type":"function","function":{"name":"get_current_time", ...}}
 ```
 
-`no_output=0` is the load-bearing part. The model answered every case — it just
-never answered in the requested shape. Asked to reply with
-`{"tool":"<name>","arguments":{}}`, it says:
+Seven tools, valid schema, `automaticToolCalling` off so nothing is executed behind
+the scoring. **And the model emits zero tool calls in all 15 cases**, across three
+variants:
 
-> I am FunctionGemma, a model optimized for function calls. I can only assist with
-> requests...
+| Variant | Result | What it says |
+|---|---|---|
+| Prompted JSON, no system instruction | 0/15 | "I am FunctionGemma, a model optimized for function calls" |
+| Native tools, no system instruction | 0/15 | "I am sorry, but I do not have a tool available" |
+| Native tools + "always call a tool when one is available" | 0/15 | same |
 
-FunctionGemma is fine-tuned for a native function-calling format and refuses
-prose-format tool calling outright. Scoring that 0/15 as "wrong tool" would be
-measuring the harness, not the model.
+The last row is the one that settles it. Seven tools listed, an explicit
+instruction to use them, and the model still claims it has none — or asks the
+user to supply the parameters it was supposed to fill in. Registration is correct
+and the model declines anyway.
 
-Measuring it properly means implementing LiteRT-LM's `ToolSet`, whose only method
-is name-mangled (`provideTools$third_party_odml_...`) in 0.16.0. That is a
-deliberate cost: an internal API that can change without notice, in exchange for
-the one number that decides whether the tier exists.
+This matches the earlier router benchmark's 22% accuracy / 72% refusals, and now
+the refusal rate has a mechanism behind it rather than being a loose correlation.
 
-The earlier router benchmark put FunctionGemma at 22% accuracy with 72% refusals,
-but under a different harness, so it is a prior rather than an answer.
+Cost note: `ToolProvider`'s only abstract method is name-mangled
+(`provideTools$third_party_odml_...`) and Kotlin refuses to override it, so the
+provider is written in Java. An upstream rename breaks the build rather than
+silently registering nothing — the right way for that to fail.
 
 ### Vendor numbers on other hardware
 
