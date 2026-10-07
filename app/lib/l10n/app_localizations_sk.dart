@@ -9916,11 +9916,6 @@ class AppLocalizationsSk extends AppLocalizations {
       'Úložisko Pendantu je plné a stále je v režime nahrávania, takže uložený zvuk nemožno preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom znova synchronizujte.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Nezaznamenané ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Hlasový profil: $name';
   }

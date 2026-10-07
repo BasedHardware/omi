@@ -9863,11 +9863,6 @@ class AppLocalizationsTh extends AppLocalizations {
       'พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'ไม่ได้บันทึก ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'โปรไฟล์เสียงของ $name';
   }

@@ -9931,11 +9931,6 @@ class AppLocalizationsId extends AppLocalizations {
       'Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Tidak direkam ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profil Suara $name';
   }
