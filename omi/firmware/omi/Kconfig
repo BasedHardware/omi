@@ -14,6 +14,16 @@ config OMI_ENABLE_OFFLINE_STORAGE
         "Enable the offline storage support. Requires a SD Card."
 	default n
 
+config OMI_ENABLE_CONNECTED_RETENTION
+    bool "Durable connected audio retention v1"
+    depends on OMI_ENABLE_OFFLINE_STORAGE
+    default y
+    help
+        Retain connected live audio before BLE transmission in the existing
+        old-data-evicting raw SD ring. Unsubscribed live frames use the same
+        durable writer; continuous/batch packing stays on its existing path. Adds features payload byte 4, bit 0, advertised
+        only while the ring is ready. Requires app firmware gate >=3.0.22.
+
 config OMI_ENABLE_ACCELEROMETER
     bool "Accelerometer Support"
     help
@@ -91,9 +101,10 @@ config OMI_ENABLE_AAD_CONNECTED_QUIET
     default n
     help
         Allow T5838 hardware sleep in explicitly selected live capture mode
-        while BLE remains connected and audio CCC remains subscribed. Reuses
-        a 500 ms software pre-roll while PDM runs; forwards hardware wake
-        immediately without debounce. Audio during hardware sleep cannot be
+        while BLE remains connected. With connected retention, audio CCC
+        may be absent and every sampled awake PCM block is forwarded to the
+        durable writer. Without retention, require CCC and reuse the 500 ms
+        software pre-roll while PDM runs. Hardware wake has no debounce. Audio during hardware sleep cannot be
         recovered. Requires hardware qualification before shipping.
         Sessions default to continuous recording to protect Transcribe Later;
         the draft encrypted audio-mode characteristic must opt live mode in.

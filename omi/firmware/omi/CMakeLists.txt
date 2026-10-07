@@ -5,6 +5,7 @@ enable_language(C ASM) # OPUS
 project(omi)
 
 file(GLOB app_sources
+    src/connected_retention.c
     src/main.c
     src/mic.c
     src/battery.c

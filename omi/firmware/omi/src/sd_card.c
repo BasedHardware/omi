@@ -13,6 +13,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 
+#include "raw_ring_policy.h"
 #include "rtc.h"
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
@@ -124,6 +125,8 @@ typedef struct {
         struct {
             uint8_t buf[MAX_WRITE_SIZE];
             size_t len;
+            uint32_t captured_s;
+            struct status_resp *resp; /* non-NULL: commit + media sync before ACK */
         } write;
         struct {
             uint64_t start_seq;
@@ -157,6 +160,7 @@ static struct k_thread sd_worker_thread_data;
 static k_tid_t sd_worker_tid;
 
 static atomic_t sd_boot_ready;
+static atomic_t retention_fault;
 static atomic_t sd_io_low_power = ATOMIC_INIT(0);
 static atomic_t sd_dev_pm_supported = ATOMIC_INIT(1);
 static atomic_t pending_flush_on_ble_connect;
@@ -510,22 +514,13 @@ static int flush_current_batch(bool sync_requested)
         return -EIO;
     }
 
-    uint64_t new_write_seq = current_batch_base_seq + current_batch_packets;
-
-    if (ring_state.write_seq <= current_batch_base_seq && current_batch_base_seq >= ring_state.capacity_packets) {
-        uint64_t overwritten_end_seq = current_batch_base_seq - ring_state.capacity_packets + RAW_PACKETS_PER_BATCH;
-        if (ring_state.read_seq < overwritten_end_seq) {
-            ring_state.dropped_packets += overwritten_end_seq - ring_state.read_seq;
-            ring_state.read_seq = overwritten_end_seq;
-        }
-    }
-
-    if ((new_write_seq - ring_state.read_seq) > ring_state.capacity_packets) {
-        uint64_t overflow = (new_write_seq - ring_state.read_seq) - ring_state.capacity_packets;
-        ring_state.read_seq += overflow;
-        ring_state.dropped_packets += overflow;
-    }
-    ring_state.write_seq = new_write_seq;
+    raw_ring_commit_window(current_batch_base_seq,
+                           current_batch_packets,
+                           RAW_PACKETS_PER_BATCH,
+                           ring_state.capacity_packets,
+                           &ring_state.read_seq,
+                           &ring_state.write_seq,
+                           &ring_state.dropped_packets);
 
     ret = persist_ring_metadata();
     if (ret < 0) {
@@ -533,7 +528,10 @@ static int flush_current_batch(bool sync_requested)
     }
 
     if (sync_requested) {
-        (void) sync_media();
+        ret = sync_media();
+        if (ret != 0) {
+            return ret; /* Preserve dirty tail for retry; never ACK RAM-only data. */
+        }
     }
 
     current_batch_dirty = false;
@@ -666,31 +664,33 @@ static int advance_read_seq_internal(uint64_t new_read_seq, bool sync_requested)
     return 0;
 }
 
-static void process_write_data_req(const sd_req_t *req)
+static int process_write_data_req(const sd_req_t *req)
 {
-    if (sd_write_blocked || sd_write_paused || !req) {
-        return;
+    if (sd_write_blocked || sd_write_paused || !is_mounted || !req) {
+        return -EIO;
     }
-
     if (req->u.write.len != MAX_WRITE_SIZE) {
-        LOG_WRN("unexpected write size %u", (unsigned) req->u.write.len);
-        return;
+        return -EINVAL;
     }
 
-    if (!rtc_is_valid()) {
-        return;
+    bool durable = req->u.write.resp != NULL;
+    uint32_t timestamp = durable ? req->u.write.captured_s : get_utc_time();
+    if (!durable && (!rtc_is_valid() || timestamp < 1700000000U)) {
+        return -ENODATA; /* Legacy batch behavior unchanged. */
     }
 
-    uint32_t timestamp = get_utc_time();
-    if (timestamp == 0U || timestamp < 1700000000U) {
-        return;
+    /* A media-sync failure left the appended tail dirty. Retry its commit,
+     * rather than appending the same retained frame a second time. */
+    if (durable && current_batch_loaded && current_batch_dirty && current_batch_packets > 0) {
+        size_t tail = RAW_BATCH_HEADER_BYTES + ((size_t) (current_batch_packets - 1U) * RAW_AUDIO_PACKET_BYTES);
+        if (memcmp(current_batch + tail + RAW_AUDIO_TIMESTAMP_BYTES, req->u.write.buf, MAX_WRITE_SIZE) == 0) {
+            sd_set_io_low_power(false);
+            int ret = flush_current_batch(true);
+            sd_set_io_low_power(true);
+            return ret;
+        }
     }
-
-    if (!current_batch_loaded) {
-        start_empty_batch(ring_state.write_seq);
-    }
-
-    if (current_batch_packets >= RAW_PACKETS_PER_BATCH) {
+    if (!current_batch_loaded || current_batch_packets >= RAW_PACKETS_PER_BATCH) {
         start_empty_batch(ring_state.write_seq);
     }
 
@@ -703,10 +703,23 @@ static void process_write_data_req(const sd_req_t *req)
     format_timestamp_name(timestamp, compat_current_name, sizeof(compat_current_name));
 
     bool queue_pressure_high = k_msgq_num_used_get(&sd_msgq) >= (SD_REQ_QUEUE_MSGS / 3);
-    if (current_batch_packets >= RAW_PACKETS_PER_BATCH || queue_pressure_high) {
+    if (durable || current_batch_packets >= RAW_PACKETS_PER_BATCH || queue_pressure_high) {
         sd_set_io_low_power(false);
-        (void) flush_current_batch(false);
+        int ret = flush_current_batch(durable);
         sd_set_io_low_power(true);
+        return ret;
+    }
+    return 0;
+}
+
+static void complete_write_req(const sd_req_t *req)
+{
+    int ret = process_write_data_req(req);
+    if (req->u.write.resp) {
+        atomic_set(&retention_fault, ret != 0);
+        req->u.write.resp->res = ret;
+        k_sem_give(&req->u.write.resp->sem);
+        release_resp_busy(req->u.write.resp->busy_flag);
     }
 }
 
@@ -719,7 +732,7 @@ static void drain_pending_write_queue_for_shutdown(void)
         }
 
         if (pending_req.type == REQ_WRITE_DATA) {
-            process_write_data_req(&pending_req);
+            complete_write_req(&pending_req);
         }
     }
 }
@@ -962,7 +975,7 @@ void sd_worker_thread(void)
                 gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
                 (void) sd_mount();
             }
-            process_write_data_req(&req);
+            complete_write_req(&req);
             for (int i = 0; i < WRITE_DRAIN_BURST; i++) {
                 if (k_msgq_num_used_get(&sd_prio_msgq) > 0) {
                     break;
@@ -974,22 +987,21 @@ void sd_worker_thread(void)
                 }
 
                 if (next_req.type == REQ_WRITE_DATA) {
-                    process_write_data_req(&next_req);
+                    complete_write_req(&next_req);
                 }
             }
             break;
 
-        case REQ_GET_RING_INFO:
-            if (current_batch_dirty) {
-                (void) flush_current_batch(false);
-            }
+        case REQ_GET_RING_INFO: {
+            int info_ret = current_batch_dirty ? flush_current_batch(false) : 0;
             if (req.u.info.resp) {
                 req.u.info.resp->info = ring_state;
-                req.u.info.resp->res = 0;
+                req.u.info.resp->res = info_ret;
                 k_sem_give(&req.u.info.resp->sem);
                 release_resp_busy(req.u.info.resp->busy_flag);
             }
             break;
+        }
 
         case REQ_READ_PACKETS:
             if (req.u.read.resp) {
@@ -1277,6 +1289,47 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     }
 
     return length;
+}
+
+bool sd_retention_ready(void)
+{
+    return atomic_get(&sd_boot_ready) && is_mounted && !sd_shutdown_in_progress && !sd_write_paused &&
+           !sd_write_blocked && !atomic_get(&retention_fault);
+}
+
+int sd_ring_write_retained(const uint8_t *payload, uint32_t captured_s)
+{
+    static struct status_resp resp;
+    static atomic_t retained_in_flight;
+    if (!payload || !atomic_get(&sd_boot_ready) || sd_shutdown_in_progress || sd_write_paused || sd_write_blocked) {
+        return -EAGAIN;
+    }
+    if (!atomic_cas(&retained_in_flight, 0, 1)) {
+        return -EBUSY;
+    }
+    k_sem_init(&resp.sem, 0, 1);
+    resp.busy_flag = &retained_in_flight;
+    sd_req_t req = {0};
+    req.type = REQ_WRITE_DATA;
+    memcpy(req.u.write.buf, payload, MAX_WRITE_SIZE);
+    req.u.write.len = MAX_WRITE_SIZE;
+    req.u.write.captured_s = captured_s;
+    req.u.write.resp = &resp;
+    /* Same ordered write queue and raw WAL as batch. A prio FLUSH could
+     * overtake this write, so the write itself commits and acknowledges. */
+    int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(500));
+    if (ret != 0) {
+        resp.busy_flag = NULL;
+        atomic_clear(&retained_in_flight);
+        atomic_set(&retention_fault, 1);
+        return ret;
+    }
+    ret = wait_for_sd_worker_response(&resp.sem, 5000, "sd_ring_write_retained");
+    if (ret != 0) {
+        atomic_set(&retention_fault, 1);
+        return ret;
+    }
+    return resp.res;
 }
 
 int sd_ring_get_info(sd_ring_info_t *info)

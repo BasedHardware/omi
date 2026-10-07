@@ -109,6 +109,9 @@ static int64_t aad_silence_timeout(void)
         .connected_quiet_enabled = IS_ENABLED(CONFIG_OMI_ENABLE_AAD_CONNECTED_QUIET),
         .connected = transport_audio_connected(),
         .subscribed = transport_is_audio_subscribed(),
+#ifdef CONFIG_OMI_ENABLE_CONNECTED_RETENTION
+        .retention_enabled = true,
+#endif
         .live_mode = transport_audio_live_mode(),
         .charging = is_charging,
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
@@ -179,13 +182,20 @@ static void aad_forward_pcm(int16_t *samples, size_t frames)
         software_vad_on_hardware_wake(&aad_vad, k_uptime_get());
         aad_vad_generation = generation;
     }
-    if (transport_audio_connected() && transport_is_audio_subscribed() && transport_audio_live_mode() && !is_charging) {
+    bool preserve_samples = false;
+#ifdef CONFIG_OMI_ENABLE_CONNECTED_RETENTION
+    preserve_samples = true; /* INV-CAP-1: never discard sampled quiet PCM. */
+#endif
+    if (!preserve_samples && transport_audio_connected() && transport_is_audio_subscribed() &&
+        transport_audio_live_mode() && !is_charging) {
         int ret = software_vad_process(&aad_vad, samples, frames, k_uptime_get(), aad_emit_pcm, NULL);
         if (ret) {
             LOG_ERR("AAD pre-roll failed: %d", ret);
         }
     } else {
-        /* Continuous/batch recording and charging bypass the software gate. */
+        /* Retention builds forward every sampled block, including quiet PCM.
+         * This also bypasses wake debounce and avoids replaying duplicates.
+         * Legacy continuous/batch recording and charging still bypass the gate. */
         software_vad_on_hardware_wake(&aad_vad, k_uptime_get());
         (void) aad_emit_pcm(samples, frames, NULL);
     }

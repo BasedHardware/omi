@@ -4,6 +4,7 @@
 
 /* Compile and exercise the production mic module through a controllable seam. */
 #include "../../src/mic.c"
+#include "connected_retention.h"
 
 int64_t test_now;
 unsigned test_starts, test_stops, test_freed;
@@ -13,6 +14,22 @@ bool is_connected, is_charging;
 static bool subscribed, live_mode, transfer;
 static unsigned hw_entries, sd_requests, delivered, read_count;
 static bool pause_timeout;
+#ifdef CONFIG_OMI_ENABLE_CONNECTED_RETENTION
+static unsigned retained_blocks;
+static int retain_block(void *context, bool durable)
+{
+    ARG_UNUSED(context);
+    assert(durable);
+    ++retained_blocks;
+    return 0;
+}
+static int block_notify(void *context)
+{
+    ARG_UNUSED(context);
+    assert(false); /* No audio subscriber on the wake-retention test. */
+    return 0;
+}
+#endif
 static int16_t pcm[MAX_FRAMES * CHANNELS];
 static jmp_buf mic_step, aad_step;
 
@@ -92,6 +109,12 @@ static void capture(int16_t *samples)
 {
     assert(samples[0] == pcm[0]);
     ++delivered;
+#ifdef CONFIG_OMI_ENABLE_CONNECTED_RETENTION
+    if (is_connected && !subscribed && live_mode) {
+        const struct cq_inputs in = {.enabled = true, .connected = true, .live = true};
+        assert(cq_route(&in, retain_block, block_notify, NULL) == 0);
+    }
+#endif
 }
 
 static void reset(void)
@@ -99,6 +122,9 @@ static void reset(void)
     test_now = 120000;
     test_starts = test_stops = test_freed = 0;
     hw_entries = sd_requests = delivered = 0;
+#ifdef CONFIG_OMI_ENABLE_CONNECTED_RETENTION
+    retained_blocks = 0;
+#endif
     is_connected = subscribed = live_mode = true;
     is_charging = transfer = pause_timeout = false;
     test_wake_level = 0;
@@ -174,8 +200,26 @@ int main(void)
     subscribed = false;
     mic_aad_policy_changed();
     run_aad_event();
+#ifdef CONFIG_OMI_ENABLE_CONNECTED_RETENTION
+    assert(!mic_running && mic_in_aad_sleep()); /* CCC-off does not lose AAD wake. */
+    aad_wake_isr(&test_device, &aad_wake_cb, BIT(2));
+    run_aad_event();
+    for (size_t i = 0; i < MAX_FRAMES * CHANNELS; ++i)
+        pcm[i] = 2000;
+    process_audio_buffer(pcm, sizeof(pcm));
+    assert(mic_running && !mic_in_aad_sleep() && delivered == 2);
+    assert(retained_blocks == 1);   /* first speech block has a durable route */
+    assert(!atomic_get(&aad_woke)); /* first speech block forwarded with no CCC */
+#else
     assert(mic_running && !mic_in_aad_sleep());
+#endif
 
+#ifdef CONFIG_OMI_ENABLE_CONNECTED_RETENTION
+    reset();
+    test_now = 20000;
+    process_audio_buffer(pcm, sizeof(pcm));
+    assert(delivered == 1); /* sampled quiet survives instead of software discard */
+#endif
     reset();
     mic_aad_policy_changed();
     assert(!aad_sleep_due()); /* stale requests cannot cross a mode generation */

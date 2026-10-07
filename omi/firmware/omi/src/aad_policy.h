@@ -6,6 +6,7 @@
 
 struct aad_policy_inputs {
     bool connected_quiet_enabled;
+    bool retention_enabled;
     bool connected;
     bool subscribed;
     bool live_mode;
@@ -16,7 +17,8 @@ struct aad_policy_inputs {
 /* Behavior matrix (audio only; never changes BLE parameters or subscriptions):
  * disconnected: existing offline AAD hold;
  * connected/live/subscribed: speech resets the timer, quiet uses the long hold;
- * connected/continuous recording or unsubscribed: no hardware sleep;
+ * connected/continuous recording: no hardware sleep;
+ * connected/live/unsubscribed: long hold only with durable retention;
  * charging: existing AAD policy, independent of this opt-in feature;
  * storage sync: existing veto in every mode.
  * CCC alone cannot distinguish phone-side Transcribe Later from live capture.
@@ -31,7 +33,7 @@ static inline int64_t aad_policy_timeout(const struct aad_policy_inputs *in, int
     if (!in->connected_quiet_enabled || in->charging || !in->connected) {
         return offline_ms;
     }
-    return in->subscribed && in->live_mode ? live_ms : 0;
+    return in->live_mode && (in->subscribed || in->retention_enabled) ? live_ms : 0;
 }
 
 #endif
