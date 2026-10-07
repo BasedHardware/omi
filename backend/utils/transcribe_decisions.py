@@ -5,7 +5,7 @@ from typing import Any, Mapping, Optional, Sequence
 from models.conversation_enums import ConversationSource
 from utils import conversation_continuity
 
-MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
+MAX_CONVERSATION_TIMEOUT_SECONDS = conversation_continuity.MAX_CONVERSATION_TIMEOUT_SECONDS
 MIN_CONVERSATION_TIMEOUT_SECONDS = conversation_continuity.DEFAULT_GAP_SECONDS
 TARGET_SAMPLE_RATE = 16000
 USER_SELF_PERSON_ID = 'user'
