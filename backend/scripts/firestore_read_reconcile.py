@@ -187,23 +187,23 @@ WHERE _PARTITIONTIME >= TIMESTAMP_SUB(TIMESTAMP('{start}'), INTERVAL 2 DAY)
   AND sku.description = 'Cloud Firestore Read Ops'
   AND usage.unit = 'requests'"""
     try:
-        # BigQuery REST jobs.query with a token minted from the ambient
-        # credential (auth@v3's env credential under WIF, a key file
-        # otherwise). The `bq` CLI is unusable from a federated CI identity:
-        # it ignores GOOGLE_APPLICATION_CREDENTIALS, and without a
-        # credentialed gcloud *account* it enters a first-run prompt a
-        # non-TTY runner aborts (FC-bq-federated-quota-project: six
-        # dispatches across --billing_project/--headless/--force attempts).
-        # The REST path has no account layer at all. timeoutMs is raised to
-        # the full HTTP budget: jobs.query answers HTTP 200 with
-        # jobComplete=false and no rows when the aggregate outlives the
+        # BigQuery REST jobs.query with a token minted in-process from the
+        # ambient credential via google-auth, which reads
+        # GOOGLE_APPLICATION_CREDENTIALS natively — including auth@v3's WIF
+        # external-account credential. The `bq` CLI AND gcloud's own
+        # print-access-token are unusable accountlessly here: both resolve an
+        # "already authenticated account" from an interactive-session config
+        # that federated CI never has (FC-bq-federated-quota-project: seven
+        # dispatches). The REST path plus google-auth has no account layer.
+        # timeoutMs is raised to the HTTP budget: jobs.query answers HTTP 200
+        # with jobComplete=false and no rows when the aggregate outlives the
         # default 10s server wait, which would read as a zero bill.
-        token = subprocess.run(
-            ["gcloud", "auth", "print-access-token"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        import google.auth
+        import google.auth.transport.requests
+
+        credentials, _ = google.auth.default(scopes=("https://www.googleapis.com/auth/cloud-platform",))
+        credentials.refresh(google.auth.transport.requests.Request())
+        token = credentials.token
         endpoint = f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT_ID}/queries"
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
         body = json.dumps({"query": sql, "useLegacySql": False, "timeoutMs": 120000}).encode()
