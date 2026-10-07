@@ -343,6 +343,44 @@ class LiveConversationController:
         epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
         return getattr(epoch, 'current_scope', None)
 
+    async def _active_calendar_meeting(self) -> dict[str, Any] | None:
+        now = self.clock()
+        try:
+            meetings = await self.host.persistence.call(
+                calendar_db.get_meetings_in_time_range,
+                self.host.request.uid,
+                now - timedelta(minutes=2),
+                now + timedelta(minutes=2),
+            )
+            candidates = []
+            for meeting in meetings or []:
+                if meeting.get('calendar_source') == 'screen_activity':
+                    continue
+                start = persisted_started_seconds(meeting.get('start_time'))
+                end = persisted_started_seconds(meeting.get('end_time'))
+                duration = meeting.get('duration_minutes')
+                if (
+                    end is None
+                    and start is not None
+                    and isinstance(duration, (int, float))
+                    and not isinstance(duration, bool)
+                ):
+                    end = start + duration * 60
+                if meeting.get('id') and start is not None and end is not None and start <= now.timestamp() < end:
+                    candidates.append((start, meeting))
+            return max(candidates, key=lambda item: item[0])[1] if candidates else None
+        except Exception as error:
+            logger.warning('Live calendar lookup unavailable exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='other',
+                from_mode='calendar_continuity',
+                to_mode='silence_boundary',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            return None
+
     async def create_new_in_progress_conversation(self, *, rollover: bool = False) -> None:
         request = self.host.request
         carry_from: Optional[tuple[str, str]] = None
@@ -449,7 +487,7 @@ class LiveConversationController:
             return
 
         context = self.host.client_device_context
-        external_data = {
+        external_data: dict[str, Any] = {
             'conversation_role': request.conversation_role,
             'recording_session_id': self.host.recording_session_id,
         }
@@ -465,6 +503,13 @@ class LiveConversationController:
             # decision; request.source and request.onboarding_mode are client
             # input and are intentionally not used as provenance.
             external_data['onboarding_session_id'] = onboarding_session_id
+        meeting = await self._active_calendar_meeting()
+        if meeting and meeting.get('calendar_event_id') and meeting['calendar_event_id'] != 'screen-activity':
+            external_data['calendar_meeting_context'] = {
+                key: meeting[key]
+                for key in ('calendar_event_id', 'calendar_source', 'start_time', 'end_time', 'duration_minutes')
+                if key in meeting
+            }
         conversation = Conversation(
             id=conversation_id,
             created_at=self.clock(),
@@ -530,25 +575,8 @@ class LiveConversationController:
                 )
                 return
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
-        if source == ConversationSource.desktop:
-            now = datetime.now(timezone.utc)
-            meetings = await self.host.persistence.call(
-                calendar_db.get_meetings_in_time_range,
-                request.uid,
-                now - timedelta(minutes=2),
-                now + timedelta(minutes=2),
-            )
-            if meetings:
-                now_ts = now.timestamp()
-                candidates = []
-                for meeting in meetings:
-                    meeting_id = meeting.get('id')
-                    started_seconds = persisted_started_seconds(meeting.get('start_time'))
-                    if meeting_id and started_seconds is not None:
-                        candidates.append((meeting_id, started_seconds))
-                if candidates:
-                    closest_id, _ = min(candidates, key=lambda candidate: abs(candidate[1] - now_ts))
-                    await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest_id)
+        if source == ConversationSource.desktop and meeting:
+            await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, meeting['id'])
         self.host.state.current_conversation_id = conversation_id
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.

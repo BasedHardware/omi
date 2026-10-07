@@ -35,6 +35,7 @@ class CaptureHarness:
         }
         self.events: list[Any] = []
         self.creates = 0
+        self.meetings = []
         self.deleted: list[str] = []
         self.pointer: str | None = None
         monkeypatch.setattr(listen_continuations, 'get_firestore_client', lambda: self.store)
@@ -89,6 +90,8 @@ class CaptureHarness:
             self.rows[row['id']] = row
             self.store.rows[('users', 'u', 'conversations', row['id'])] = row
             return True
+        if name == 'get_meetings_in_time_range':
+            return deepcopy(self.meetings)
         if name == 'set_in_progress_conversation_id':
             self.pointer = args[1]
             return None
@@ -540,3 +543,38 @@ async def test_controller_hydrates_calendar_id_before_resume_and_live_timeout(mo
     reconnect.host.wait = AsyncMock(side_effect=[False, True])
     await reconnect.lifecycle_loop()
     assert harness.creates == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('meeting_state', ['active', 'none', 'expired', 'future', 'screen'])
+async def test_live_created_row_honors_active_calendar_window(monkeypatch, meeting_state):
+    harness = CaptureHarness(monkeypatch)
+    if meeting_state != 'none':
+        start = harness.now - timedelta(minutes=30)
+        if meeting_state == 'future':
+            start = harness.now + timedelta(minutes=1)
+        harness.meetings = [
+            {
+                'id': 'meeting-doc',
+                'calendar_event_id': 'event-1',
+                'calendar_source': 'screen_activity' if meeting_state == 'screen' else 'system_calendar',
+                'start_time': start,
+                'duration_minutes': 120,
+                'end_time': (
+                    harness.now - timedelta(minutes=1) if meeting_state == 'expired' else start + timedelta(minutes=120)
+                ),
+            }
+        ]
+    controller = harness.connect()
+    await controller.prepare()
+    cid = controller.host.state.current_conversation_id
+    row = harness.rows[cid]
+    assert ('calendar_meeting_context' in row['external_data']) is (meeting_state == 'active')
+    row.update(has_content=True, transcript_segments=[{'text': 'kept'}])
+    controller.process_conversation = AsyncMock(return_value=True)
+    # Active meeting survives fifteen quiet minutes; all other captures split at exactly 120 seconds.
+    harness.now += timedelta(seconds=900 if meeting_state == 'active' else 120)
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert (controller.host.state.current_conversation_id == cid) is (meeting_state == 'active')
+    assert harness.creates == (1 if meeting_state == 'active' else 2)
