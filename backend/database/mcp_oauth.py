@@ -53,6 +53,10 @@ ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "
 AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
 MCP_OAUTH_REPLAY_GRACE_SECONDS = int(os.getenv("MCP_OAUTH_REPLAY_GRACE_SECONDS", "120"))
+# Grace bounds the WINDOW of benign concurrent replays; this bounds the COUNT.
+# A replayed refresh token may mint at most this many replacement pairs before
+# the grant is treated as hostile and revoked (replay replay-detection).
+MCP_OAUTH_REPLAY_REISSUE_LIMIT = int(os.getenv("MCP_OAUTH_REPLAY_REISSUE_LIMIT", "2"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
 PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
@@ -1099,6 +1103,11 @@ def rotate_refresh_token(
             replay_grace = (
                 isinstance(used_at, datetime) and 0 <= (now - used_at).total_seconds() <= MCP_OAUTH_REPLAY_GRACE_SECONDS
             )
+            if replay_grace and int(data.get("replay_reissue_count") or 0) >= MCP_OAUTH_REPLAY_REISSUE_LIMIT:
+                # The window bounds duration; this bound caps how many durable
+                # pairs one replayed token can mint before the grant is treated
+                # as hostile and revoked.
+                replay_grace = False
             if not replay_grace:
                 replay_grant_id = data.get("grant_id")
                 # Record intent only. Revoke AFTER the mandatory Redis marker
@@ -1126,7 +1135,13 @@ def rotate_refresh_token(
         transaction.set(refresh_ref, refresh_data)
         if replay_grace:
             # Keep the original used_at: repeated reissues never extend grace.
-            transaction.set(ref, {"replayed_at": now}, merge=True)
+            # Increment the per-source-token reissue count in the same
+            # transaction so concurrent replays cannot each stay under the cap.
+            transaction.set(
+                ref,
+                {"replayed_at": now, "replay_reissue_count": int(data.get("replay_reissue_count") or 0) + 1},
+                merge=True,
+            )
             grace_grant_id = data.get("grant_id")
         else:
             transaction.update(ref, {"used_at": now, "replaced_by": hash_secret(new_refresh_token)})
@@ -1158,15 +1173,20 @@ def rotate_refresh_token(
             time.sleep((0.1, 0.3)[attempt])
     outcome = "rotated" if token_pair else "invalid"
     if replay_grant_id:
-        # Grant document ids embed uid; hash them for safe log correlation.
+        # Grant document ids embed uid and client ids can embed account data;
+        # log stable hashes for correlation without identifying material.
         logger.warning(
-            "MCP OAuth refresh replay revoke client_id=%s grant_id=%s", client_id, hash_secret(replay_grant_id)
+            "MCP OAuth refresh replay revoke client_id=%s grant_id=%s",
+            hash_secret(str(client_id))[:16],
+            hash_secret(replay_grant_id)[:16],
         )
         revoke_grant(replay_grant_id, replay_detected=True)
         outcome = "replay_revoked"
     elif grace_grant_id:
         logger.warning(
-            "MCP OAuth refresh replay grace reissue client_id=%s grant_id=%s", client_id, hash_secret(grace_grant_id)
+            "MCP OAuth refresh replay grace reissue client_id=%s grant_id=%s",
+            hash_secret(str(client_id))[:16],
+            hash_secret(grace_grant_id)[:16],
         )
         outcome = "replay_grace_reissued"
     if on_outcome is not None:

@@ -1226,6 +1226,37 @@ def test_refresh_replay_grace_rejects_scope_escalation():
     assert mcp_oauth.get_active_grant(grant['id']) is not None
 
 
+def test_refresh_replay_grace_reissues_are_count_capped_then_revoke_grant():
+    # The window bounds duration; the reissue cap bounds count. One replayed
+    # token must never mint unbounded durable pairs (review finding).
+    grant = mcp_oauth.create_or_update_grant(
+        'grace-cap', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None)
+
+    outcomes: list = []
+    reissues = [
+        mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append)
+        for _ in range(mcp_oauth.MCP_OAUTH_REPLAY_REISSUE_LIMIT)
+    ]
+    assert outcomes == ['replay_grace_reissued'] * mcp_oauth.MCP_OAUTH_REPLAY_REISSUE_LIMIT
+    assert all(reissued is not None for reissued in reissues)
+    # The issued pairs are distinct: each reissue is a real usable pair.
+    assert len({reissued['refresh_token'] for reissued in reissues}) == mcp_oauth.MCP_OAUTH_REPLAY_REISSUE_LIMIT
+    for reissued in reissues:
+        assert mcp_oauth.validate_access_token(reissued['access_token']) is not None
+
+    # One replay past the cap: same window, same source token → revoke.
+    outcomes.clear()
+    assert (
+        mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append)
+        is None
+    )
+    assert outcomes == ['replay_revoked']
+    assert mcp_oauth.get_active_grant(grant['id']) is None
+
+
 def test_revoke_user_grant_invalidates_tokens():
     scopes = ['memories.read']
     grant = mcp_oauth.create_or_update_grant('user-3', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
