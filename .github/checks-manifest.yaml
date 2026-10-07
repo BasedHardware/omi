@@ -149,6 +149,11 @@ checks:
     triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13928: holiday API error payloads, whitespace country codes, missing lifespan clients, and malformed holiday fields must return clean chat-tool responses without uncaught exceptions"
+  - id: pubmed-app-tests
+    command: ["python3", "plugins/omi-pubmed-app/test_main.py"]
+    triggers: ["plugins/omi-pubmed-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PubMed search, article detail, and related lookup endpoints require lifespan client pooling, defensive payload parsing, exception sanitization, and hermetic CI coverage"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]
