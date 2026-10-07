@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
@@ -126,6 +127,10 @@ class CaptureController extends ChangeNotifier
   final CalendarCaptureGapMonitor? _calendarGapMonitor;
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
   bool _livenessCheckRunning = false;
+  int _livenessEpoch = 0;
+  bool _appSuspended = false;
+  DateTime? _appSuspendedAt;
+  DateTime? _appResumedAt;
   Timer? _calendarGapTimer;
   Timer? _captureHealthTimer;
 
@@ -497,7 +502,7 @@ class CaptureController extends ChangeNotifier
     _calendarGapTimer?.cancel();
     _calendarGapTimer = null;
     final monitor = _calendarGapMonitor;
-    if (_captureControllerDisposed || monitor == null) return;
+    if (_captureControllerDisposed || _appSuspended || monitor == null) return;
     final now = _now();
     final due = monitor.nextCheckAt(now, captureOwns: _calendarCaptureOwns);
     if (due == null) return;
@@ -518,11 +523,12 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _checkCaptureLiveness() async {
-    if (_captureControllerDisposed || _livenessCheckRunning) return;
+    if (_captureControllerDisposed || _appSuspended || _livenessCheckRunning) return;
     final failure = _livenessWatchdog.check(
       _capture.state,
       _now(),
       socketReady: _socket?.state == SocketServiceState.connected && _transcriptServiceReady,
+      observationEpoch: _livenessEpoch,
     );
     if (failure == null) return;
     _livenessCheckRunning = true;
@@ -557,8 +563,33 @@ class CaptureController extends ChangeNotifier
   /// Native `appBecameActive` owns dead-engine rebuild. Dart only soft-rearms
   /// the stall clock so suspended timers don't false-trigger stop→start (which
   /// would race native recovery and restart a healthy session).
-  void onAppResumed() {
+  void onAppLifecycleChanged(AppLifecycleState state) {
+    if (_captureControllerDisposed) return;
+    if (state == AppLifecycleState.resumed) {
+      onAppResumed();
+      return;
+    }
+    if (!_appSuspended) {
+      _appSuspended = true;
+      _appSuspendedAt = _now();
+      _appResumedAt = null;
+      _invalidateLivenessObservations();
+      _syncCalendarGapTimer();
+    }
+  }
+
+  void _invalidateLivenessObservations() {
+    _livenessEpoch++;
     _livenessWatchdog.reset();
+    _captureInstance?.clearPendingLivenessFailures();
+  }
+
+  void onAppResumed() {
+    if (_captureControllerDisposed) return;
+    _appSuspended = false;
+    _appResumedAt = _now();
+    // Do this before enqueueing foreground work: the queue may be blocked.
+    _invalidateLivenessObservations();
     _syncCalendarGapTimer();
     unawaited(_resumeSilenceLogged());
     unawaited(_dispatchLogged(const AppForegrounded()));
@@ -4049,6 +4080,10 @@ class CaptureController extends ChangeNotifier
   }
 
   CaptureEnvironment _readCaptureEnvironment() => CaptureEnvironment(
+        livenessEpoch: _livenessEpoch,
+        appSuspended: _appSuspended,
+        appSuspendedAt: _appSuspendedAt,
+        appResumedAt: _appResumedAt,
         policyMuted: _preferences.capturePolicy.muted,
         silencePaused: silencePaused,
         uplinkSilenceExpired: _uplinkSilence.expired,

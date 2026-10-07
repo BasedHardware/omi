@@ -22,8 +22,16 @@ CaptureEnvironment environment(
   bool call = false,
   String? cardRecordingId,
   int cardRevision = 0,
+  int livenessEpoch = 0,
+  bool appSuspended = false,
+  DateTime? appSuspendedAt,
+  DateTime? appResumedAt,
 }) =>
     CaptureEnvironment(
+      livenessEpoch: livenessEpoch,
+      appSuspended: appSuspended,
+      appSuspendedAt: appSuspendedAt,
+      appResumedAt: appResumedAt,
       policyMuted: muted,
       paused: muted,
       batchModeEnabled: batch,

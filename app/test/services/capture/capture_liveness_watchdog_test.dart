@@ -1,12 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
+import 'dart:async';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/capture/capture_liveness_watchdog.dart';
 
-import 'capture_coordinator_test.dart' show environment;
+import 'capture_coordinator_test.dart' show environment, HarnessPorts;
 import '../../support/capture/capture_replay_world.dart';
 
 CaptureCoordinatorState live({String key = 'phone-1', CapturePhase phase = CapturePhase.phoneLive}) =>
@@ -52,12 +55,22 @@ void main() {
     }
   });
   test('queued recovery cannot act on a successor session', () {
-    const failure = CaptureLivenessFailure(sessionKey: 'phone-1', reason: CaptureLivenessReason.noFrames);
+    final failure = CaptureLivenessFailure(
+        sessionKey: 'phone-1',
+        reason: CaptureLivenessReason.noFrames,
+        gapStartedAt: start,
+        observedAt: start.add(const Duration(seconds: 45)),
+        observationEpoch: 0);
     final successor = live(key: 'phone-2');
     expect(transitionCapture(successor, failure, environment(successor)).effects, isEmpty);
   });
   test('paused, interrupted, batch and pendant phases never get live recovery effects', () {
-    const failure = CaptureLivenessFailure(sessionKey: 'phone-1', reason: CaptureLivenessReason.noFrames);
+    final failure = CaptureLivenessFailure(
+        sessionKey: 'phone-1',
+        reason: CaptureLivenessReason.noFrames,
+        gapStartedAt: start,
+        observedAt: start.add(const Duration(seconds: 45)),
+        observationEpoch: 0);
     for (final phase in CapturePhase.values.where((p) => p != CapturePhase.phoneLive)) {
       final state = live(phase: phase);
       expect(transitionCapture(state, failure, environment(state)).effects, isEmpty, reason: phase.name);
@@ -77,6 +90,84 @@ void main() {
     watchdog.reset();
     expect(watchdog.check(live(), start.add(const Duration(hours: 1)), socketReady: true), isNull);
   });
+  test('observed stall window overlapping suspension is discarded by the reducer', () {
+    final watchdog = CaptureLivenessWatchdog();
+    watchdog.check(live(), start, socketReady: true);
+    final failure = watchdog.check(live(), start.add(const Duration(seconds: 75)), socketReady: true)!;
+    expect(failure.gapStartedAt, start);
+    expect(failure.observedAt, start.add(const Duration(seconds: 75)));
+    final env = environment(live(),
+        appSuspendedAt: start.add(const Duration(seconds: 10)), appResumedAt: start.add(const Duration(seconds: 74)));
+    expect(transitionCapture(live(), failure, env).effects, isEmpty);
+    expect(transitionCapture(live(), failure, environment(live(), appSuspended: true)).effects, isEmpty);
+  });
+
+  test('resume during WAL persistence invalidates the not-yet-issued mic recovery', () async {
+    final fake = HarnessPorts();
+    var epoch = 0;
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+        ports: fake.ports, readEnvironment: () => environment(coordinator.state, livenessEpoch: epoch));
+    addTearDown(coordinator.dispose);
+    await coordinator.dispatch(const PhoneStartRequested());
+    final watchdog = CaptureLivenessWatchdog();
+    watchdog.check(coordinator.state, start, socketReady: true);
+    final failure = watchdog.check(coordinator.state, start.add(const Duration(seconds: 75)), socketReady: true)!;
+    fake.log.clear();
+    final held = Completer<void>();
+    final recovery = coordinator.dispatch(failure);
+    fake.hold = held; // The synchronous flush started; hold the next WAL write.
+    await Future<void>.delayed(Duration.zero);
+    expect(fake.log, ['stage:FlushPhoneFramesStage', 'wal:finalize']);
+    epoch++;
+    held.complete();
+    await recovery;
+    expect(fake.log, ['stage:FlushPhoneFramesStage', 'wal:finalize']);
+    expect(coordinator.state.phase, CapturePhase.phoneLive);
+  });
+
+  test('check queued during a 75-second freeze then onAppResumed never restarts the mic', () async {
+    final dir = await Directory.systemTemp.createTemp('watchdog_freeze_');
+    addTearDown(() => dir.delete(recursive: true));
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    addTearDown(world.dispose);
+    await world.startLiveCapture();
+    // Hold an existing reconnect so the watchdog observation queues behind it.
+    world.controller.updateRecordingState(RecordingState.interrupted);
+    final held = world.hostApi.holdNextStart = Completer<void>();
+    world.controller.onConnected();
+    await world.settle();
+    final starts = world.hostApi.startCalls;
+    final stops = world.hostApi.stopCalls;
+    // No running event: the native three-second timer is unarmed. The real
+    // independent watchdog queues check() after the frozen wall-clock gap.
+    await world.elapse(const Duration(seconds: 75));
+    world.controller.onAppResumed();
+    held.complete();
+    await world.controller.pendingSourceSwitch;
+    await world.settle();
+    expect(world.hostApi.startCalls, starts, reason: 'the queued freeze observation is retired before application');
+    expect(world.hostApi.stopCalls, stops);
+    expect(world.controller.liveCaptureSource, 'phone');
+  });
+
+  test('lifecycle suspension preserves native capture and foreground gives fresh grace', () async {
+    final dir = await Directory.systemTemp.createTemp('watchdog_lifecycle_');
+    addTearDown(() => dir.delete(recursive: true));
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    addTearDown(world.dispose);
+    await world.startLiveCapture();
+    final starts = world.hostApi.startCalls;
+    final stops = world.hostApi.stopCalls;
+    world.controller.onAppLifecycleChanged(AppLifecycleState.paused);
+    await world.elapse(const Duration(seconds: 75));
+    world.controller.onAppLifecycleChanged(AppLifecycleState.resumed);
+    await world.controller.pendingSourceSwitch;
+    await world.elapse(const Duration(seconds: 30));
+    expect(world.hostApi.startCalls, starts);
+    expect(world.hostApi.stopCalls, stops);
+  });
+
   test('real socket-down watchdog makes flowing phone audio durable without stopping the mic', () async {
     final dir = await Directory.systemTemp.createTemp('audio_loss_socket_');
     addTearDown(() => dir.delete(recursive: true));

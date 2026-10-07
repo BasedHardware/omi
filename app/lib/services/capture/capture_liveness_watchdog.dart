@@ -22,7 +22,8 @@ class CaptureLivenessWatchdog {
     _lastRecoveryAt = null;
   }
 
-  CaptureLivenessFailure? check(CaptureCoordinatorState state, DateTime now, {required bool socketReady}) {
+  CaptureLivenessFailure? check(CaptureCoordinatorState state, DateTime now,
+      {required bool socketReady, int observationEpoch = 0}) {
     if (state.phase != CapturePhase.phoneLive || state.micInterrupted || state.active == null) {
       reset();
       return null;
@@ -40,6 +41,9 @@ class CaptureLivenessWatchdog {
     _lastRecoveryAt = now;
     return CaptureLivenessFailure(
       sessionKey: _sessionKey!,
+      gapStartedAt: stalled ? _lastFrameAt! : _socketDownAt!,
+      observedAt: now,
+      observationEpoch: observationEpoch,
       reason: stalled ? CaptureLivenessReason.noFrames : CaptureLivenessReason.socketDown,
     );
   }

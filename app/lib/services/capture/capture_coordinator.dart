@@ -533,6 +533,10 @@ class CaptureEnvironment {
     this.systemAudioRecording = false,
     this.systemSurfaceRecordingId,
     this.systemSurfaceConversationRevision = 0,
+    this.livenessEpoch = 0,
+    this.appSuspended = false,
+    this.appSuspendedAt,
+    this.appResumedAt,
   });
 
   /// `_preferences.capturePolicy.muted`.
@@ -551,6 +555,12 @@ class CaptureEnvironment {
   final bool phoneMicSupportsBatch;
   final bool transcriptReady;
   final bool socketConnected;
+
+  /// Ephemeral lifecycle mirror; never a capture admission or uplink policy.
+  final int livenessEpoch;
+  final bool appSuspended;
+  final DateTime? appSuspendedAt;
+  final DateTime? appResumedAt;
 
   /// `recordingDeviceServiceReady` — device present or a mic lane active.
   final bool deviceServiceReady;
@@ -703,9 +713,18 @@ enum CaptureLivenessReason { noFrames, socketDown }
 
 /// A bounded watchdog observation tied to the session that was sampled.
 class CaptureLivenessFailure extends CaptureEvent {
-  const CaptureLivenessFailure({required this.sessionKey, required this.reason});
+  const CaptureLivenessFailure({
+    required this.sessionKey,
+    required this.reason,
+    required this.gapStartedAt,
+    required this.observedAt,
+    required this.observationEpoch,
+  });
   final String sessionKey;
   final CaptureLivenessReason reason;
+  final DateTime gapStartedAt;
+  final DateTime observedAt;
+  final int observationEpoch;
 }
 
 /// `onAppResumed`.
@@ -1376,6 +1395,16 @@ class CaptureCoordinator {
     return done.future;
   }
 
+  /// Lifecycle invalidation is synchronous, so resume cannot sit behind the
+  /// stale watchdog event it must retire. Already-issued WAL writes may finish.
+  void clearPendingLivenessFailures() {
+    _queue.removeWhere((item) {
+      if (item.event is! CaptureLivenessFailure) return false;
+      if (!item.done.isCompleted) item.done.complete(CaptureDispatchOutcome.denied(_state));
+      return true;
+    });
+  }
+
   /// Deny new dispatches; in-flight effects drain on their own.
   void dispose() {
     _disposed = true;
@@ -1451,6 +1480,11 @@ class CaptureCoordinator {
       Object? result = transition.result;
       for (var i = 0; i < transition.effects.length; i++) {
         try {
+          // Resume may arrive while a WAL boundary awaits disk. Revalidate
+          // before the next effect, especially before restarting the mic.
+          if (event is CaptureLivenessFailure && !_livenessFailureIsCurrent(_state, event, _readEnvironment())) {
+            return CaptureDispatchOutcome.completed(state: _state);
+          }
           final value = await _execute(transition.effects[i]);
           if (transition.effects[i] is CheckPhonePermission) {
             if (value != true) {
@@ -1695,7 +1729,7 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       CallStateChanged() => _reduceCall(state, env),
       MicInterruptionChanged() => _reduceMicInterruption(state, event),
       NativeMicStalled() => _reduceMicStalled(state),
-      CaptureLivenessFailure() => _reduceLivenessFailure(state, event),
+      CaptureLivenessFailure() => _reduceLivenessFailure(state, event, env),
       AppForegrounded() => _reduceAppForegrounded(state),
       SocketClosed() => CaptureTransition(state, [RunStage(SocketClosedStage(closeCode: event.closeCode))]),
       SocketConnected() => CaptureTransition(state, const [RunStage(SocketConnectedStage())]),
@@ -2662,8 +2696,28 @@ CaptureTransition _reduceMicInterruption(CaptureCoordinatorState state, MicInter
   ]);
 }
 
-CaptureTransition _reduceLivenessFailure(CaptureCoordinatorState state, CaptureLivenessFailure event) {
-  if (state.phase != CapturePhase.phoneLive || state.micInterrupted || state.active?.sessionKey != event.sessionKey) {
+bool _livenessFailureIsCurrent(CaptureCoordinatorState state, CaptureLivenessFailure event, CaptureEnvironment env) {
+  if (state.phase != CapturePhase.phoneLive ||
+      state.micInterrupted ||
+      state.active?.sessionKey != event.sessionKey ||
+      env.appSuspended ||
+      event.observationEpoch != env.livenessEpoch ||
+      event.gapStartedAt.isAfter(event.observedAt)) {
+    return false;
+  }
+  final suspendedAt = env.appSuspendedAt;
+  final resumedAt = env.appResumedAt;
+  if (suspendedAt != null &&
+      !suspendedAt.isAfter(event.observedAt) &&
+      (resumedAt == null || !resumedAt.isBefore(event.gapStartedAt))) {
+    return false;
+  }
+  return true;
+}
+
+CaptureTransition _reduceLivenessFailure(
+    CaptureCoordinatorState state, CaptureLivenessFailure event, CaptureEnvironment env) {
+  if (!_livenessFailureIsCurrent(state, event, env)) {
     return CaptureTransition(state, const []);
   }
   return CaptureTransition(state, [

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/widgets.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/calendar_capture_telemetry.dart';
@@ -153,6 +154,12 @@ CaptureProvider composeProductionCaptureProvider({
     // An Omi phone call pauses a streaming pendant and gives it back when it ends.
     omiCallState: PhoneCallProvider.callStateListenable,
   );
+  final lifecycle = AppLifecycleListener(onStateChange: provider.onAppLifecycleChanged);
+  provider.lifetime.own(lifecycle.dispose);
+  final initialLifecycle = WidgetsBinding.instance.lifecycleState;
+  if (initialLifecycle != null && initialLifecycle != AppLifecycleState.resumed) {
+    provider.onAppLifecycleChanged(initialLifecycle);
+  }
   if (Platform.isIOS) {
     // Presentation failure must never stop capture.
     unawaited(CaptureSystemSurface(provider, LiveActivityBridge()).start());
