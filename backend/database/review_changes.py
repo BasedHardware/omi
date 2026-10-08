@@ -88,6 +88,10 @@ def record_agent_change(
     """
     store.require_enabled()
     if memory_edit is not None:
+        if getattr(memory_edit, 'duplicate_memory_id', None):
+            from database.review_memory_merges import record_merge
+
+            return record_merge(uid, change, memory_edit, edit_key)
         from database.review_memory_changes import record_memory_change
 
         return record_memory_change(uid, change, memory_edit, edit_key)
@@ -243,6 +247,10 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     if data and data.get('memory_edit'):
         if data['created_at'] < now - WINDOW:
             raise store.ReviewNotFound('Change is outside the 30-day undo window')
+        if data.get('memory_merge'):
+            from database.review_memory_merges import set_undone as set_memory_merge_undone
+
+            return set_memory_merge_undone(uid, change_id, undone, data)
         from database.review_memory_changes import set_memory_undone
 
         return set_memory_undone(uid, change_id, undone, data)

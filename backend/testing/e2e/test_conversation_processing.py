@@ -49,33 +49,20 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "trigger_conversation_apps", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_goal_progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "submit_with_context", run_selected_postprocess)
-    monkeypatch.setattr(
-        process_module,
-        "get_transcript_structure",
-        lambda *args, **kwargs: Structured(
-            title="Hermetic Conversation Lifecycle",
+
+    def notes_result(prefix, **_kwargs):
+        reprocess = "Remember to ship" in prefix.context
+        return Structured(
+            title=("Hermetic Conversation Lifecycle Reprocessed" if reprocess else "Hermetic Conversation Lifecycle"),
             overview="A deterministic processing result created by the E2E harness.",
             emoji="🧪",
             category="work",
-        ),
-    )
-    monkeypatch.setattr(
-        process_module,
-        "get_reprocess_transcript_structure",
-        lambda *args, **kwargs: Structured(
-            title="Hermetic Conversation Lifecycle Reprocessed",
-            overview="A deterministic reprocess result created by the E2E harness.",
-            emoji="🧪",
-            category="work",
-        ),
-    )
-    monkeypatch.setattr(
-        process_module,
-        "extract_action_items",
-        lambda *args, **kwargs: [
-            ActionItem(description="Ship deterministic conversation lifecycle coverage", completed=False)
-        ],
-    )
+            action_items=[
+                ActionItem(description="Ship deterministic conversation lifecycle coverage", completed=False)
+            ],
+        )
+
+    monkeypatch.setattr(process_module, "get_conversation_notes", notes_result)
 
     def extract_canonical_candidates(_uid, _source_id, segments, **_kwargs):
         return [

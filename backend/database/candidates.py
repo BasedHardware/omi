@@ -3,6 +3,7 @@
 import hashlib
 import json
 from dataclasses import dataclass
+from database.dream_dirty import after_write
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
@@ -489,6 +490,7 @@ def stored_candidate_has_lapsed(candidate: dict[str, Any], *, now: datetime) -> 
     )
 
 
+@after_write('candidates')
 def create_candidate(
     uid: str,
     proposal: CandidateCreate,

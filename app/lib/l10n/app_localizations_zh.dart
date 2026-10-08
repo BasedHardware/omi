@@ -12250,4 +12250,201 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => '无法导入此类型的文件。';
+
+  @override
+  String get reviewTitle => '审核';
+
+  @override
+  String get reviewEntryTitle => '给你的问题';
+
+  @override
+  String reviewRemaining(int count) {
+    return '还剩 $count 个';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => '这是谁说的？';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return '和“$name”是同一个人吗？';
+  }
+
+  @override
+  String get reviewQuestionSpelling => '这个怎么拼写？';
+
+  @override
+  String get reviewPlayClip => '播放片段';
+
+  @override
+  String get reviewStopClip => '停止播放片段';
+
+  @override
+  String get reviewOpenDetailsHint => '打开详情';
+
+  @override
+  String get reviewAnswerMe => '我';
+
+  @override
+  String get reviewAnswerOther => '其他';
+
+  @override
+  String get reviewAddTask => '添加任务';
+
+  @override
+  String get reviewAnswerFailed => '无法保存你的回答，请重试。';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return '此回答将标记 $count 段对话';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => '未知说话人';
+
+  @override
+  String get reviewNewPersonName => '他们的名字';
+
+  @override
+  String get reviewSomeoneElse => '其他人…';
+
+  @override
+  String get reviewConfirm => '确认';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return '确认$name';
+  }
+
+  @override
+  String get reviewNotSure => '不确定';
+
+  @override
+  String get reviewOpenConversation => '对话';
+
+  @override
+  String get reviewTaskField => '任务';
+
+  @override
+  String get reviewDue => '截止日期';
+
+  @override
+  String get reviewNoDate => '无';
+
+  @override
+  String get reviewProject => '项目';
+
+  @override
+  String get reviewReasonAlreadyDone => '已完成';
+
+  @override
+  String get reviewReasonNotMine => '不是我的';
+
+  @override
+  String get reviewReasonNotUseful => '没有用';
+
+  @override
+  String get reviewYesMerge => '是，合并';
+
+  @override
+  String reviewConversationCount(int count) {
+    return '对话：$count';
+  }
+
+  @override
+  String get reviewSpellingCustom => '手动输入';
+
+  @override
+  String get reviewLoadFailed => '无法加载你的问题。';
+
+  @override
+  String get reviewCaughtUpTitle => '没有需要回答的问题';
+
+  @override
+  String get reviewCaughtUpBody => '只有需要你时，Omi 才会在这里提问。';
+
+  @override
+  String get reviewRecentChanges => '最近更改';
+
+  @override
+  String get reviewChangesIntro => '过去 30 天内 Omi 自行做出的更改。看起来不对的都可以撤销。';
+
+  @override
+  String get reviewChangeUndone => '已撤销。Omi 不会自行再次这样做。';
+
+  @override
+  String get reviewChangeFailed => '无法更新此更改，请重试。';
+
+  @override
+  String get reviewChangesLoadFailed => '无法加载最近更改。';
+
+  @override
+  String get reviewNoChangesTitle => '暂无更改';
+
+  @override
+  String get reviewNoChangesBody => 'Omi 整理你的笔记后，更改会显示在这里。';
+
+  @override
+  String get reviewShowMore => '显示更多';
+
+  @override
+  String get entityKeptCurrent => '由 Omi 保持最新';
+
+  @override
+  String get entityNotRight => '不对？';
+
+  @override
+  String get entityCorrectionTitle => '哪里不对？';
+
+  @override
+  String get entityCorrectionHint => '告诉 Omi 需要修正什么';
+
+  @override
+  String get entityCorrectionSaved => '谢谢，Omi 会修正。';
+
+  @override
+  String get entityCorrectionFailed => '无法发送你的更正，请重试。';
+
+  @override
+  String get entityLoadFailed => '无法加载此页面。';
+
+  @override
+  String get entityProject => '项目';
+
+  @override
+  String get entityProjects => '项目';
+
+  @override
+  String get entityDecisions => '决定';
+
+  @override
+  String get entityOpenTasks => '未完成的任务';
+
+  @override
+  String get entityOpenThreads => '未解决的事项';
+
+  @override
+  String entityWaitingOn(String name) {
+    return '等待$name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return '截止日期：$date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Omi 知道的内容';
+
+  @override
+  String get entityRecentConversations => '最近的对话';
+
+  @override
+  String get tasksNoProject => '无项目';
+
+  @override
+  String get tasksGroupByProject => '按项目分组';
+
+  @override
+  String get tasksGroupByDate => '按日期分组';
 }

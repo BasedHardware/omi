@@ -472,7 +472,6 @@ class TestCacheRouting:
             clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('memories') is client
         create_client.assert_called_once()
@@ -491,7 +490,6 @@ class TestCacheRouting:
             clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('memories', streaming=True) is client
         create_client.assert_called_once()
@@ -529,7 +527,6 @@ class TestCacheRouting:
             clients, 'get_byok_key', lambda provider: 'sk-legacy-openai' if provider == 'openai' else None
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('followup') is not None
         args = create_client.call_args.args
@@ -556,7 +553,6 @@ class TestCacheRouting:
             ),
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('followup') is not None
         args = create_client.call_args.args

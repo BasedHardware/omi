@@ -98,24 +98,7 @@ def slow_provider(monkeypatch):
         return RunnableLambda(_invoke)
 
     monkeypatch.setattr(processing, "get_llm", _get_llm)
-    # The shadow comparison hands the same prompt to a second client on a background executor; it is
-    # not part of the deadline contract under test.
-    monkeypatch.setattr(processing, "_should_run_conversation_structure_shadow", lambda *a, **k: False)
     return resolved
-
-
-def _structure():
-    return processing.get_transcript_structure(
-        TRANSCRIPT,
-        STARTED_AT,
-        'en',
-        'UTC',
-        'test-uid',
-    )
-
-
-def _reprocess_structure():
-    return processing.get_reprocess_transcript_structure(TRANSCRIPT, STARTED_AT, 'en', 'UTC')
 
 
 def _conversation_notes():
@@ -151,7 +134,7 @@ TEMPLATE_APP = App(
 
 
 def _app_result_with_notes_prefix():
-    """POST /reprocess?app_id= with CONVERSATION_NOTES_V2_ENABLED, which is how prod runs."""
+    """POST /reprocess?app_id= with the notes prefix used in production."""
     prefix = build_conversation_prompt_prefix(
         conversation_id='277d188e-9563-4fd1-bf1b-8a6bbcbe4b94',
         transcript=TRANSCRIPT,
@@ -177,8 +160,6 @@ def _returns_app_content(result) -> None:
 
 
 SUMMARY_CALLS = [
-    pytest.param(_structure, _summarizes, id='get_transcript_structure'),
-    pytest.param(_reprocess_structure, _summarizes, id='get_reprocess_transcript_structure'),
     pytest.param(_conversation_notes, _summarizes, id='get_conversation_notes'),
     pytest.param(_app_result_with_notes_prefix, _returns_app_content, id='get_app_result_notes_prefix'),
     pytest.param(_app_result_legacy_prompt, _returns_app_content, id='get_app_result_legacy_prompt'),

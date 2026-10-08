@@ -5392,25 +5392,21 @@ public enum OmiAPI {
 
   public struct TaskWorkflowControl: Codable {
     public let accountGeneration: Int?
-    public let chatFirstUi: Bool?
     public let workflowMode: TaskWorkflowMode?
 
     private enum CodingKeys: String, CodingKey {
       case accountGeneration = "account_generation"
-      case chatFirstUi = "chat_first_ui"
       case workflowMode = "workflow_mode"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
-      chatFirstUi = try c.decodeIfPresent(Bool.self, forKey: .chatFirstUi)
       workflowMode = try c.decodeIfPresent(TaskWorkflowMode.self, forKey: .workflowMode)
     }
 
-    public init(accountGeneration: Int? = nil, chatFirstUi: Bool? = nil, workflowMode: TaskWorkflowMode? = nil) {
+    public init(accountGeneration: Int? = nil, workflowMode: TaskWorkflowMode? = nil) {
       self.accountGeneration = accountGeneration
-      self.chatFirstUi = chatFirstUi
       self.workflowMode = workflowMode
     }
   }
@@ -16659,6 +16655,32 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func recordChannelV1UsersReleaseChannelPut(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> Void {
+    let _path = "/v1/users/release-channel"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PUT"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
   public static func getChatMessageCountV1UsersStatsChatMessagesGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/stats/chat-messages"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -18822,5 +18844,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 489 Swift client methods generated.
+  // Total: 490 Swift client methods generated.
 }
